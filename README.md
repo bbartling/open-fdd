@@ -35,8 +35,6 @@ Functions within Zip break the dataset down to individual daily datasets where a
 ###### DEMAND PLOTS BY MONTH
 ![Alt text](https://github.com/bbartling/zip/blob/master/images/9.PNG)
 
-###### CHANGE POINT ALGORITHM PLOT ON MAX DEMAND DAY
-![Alt text](https://github.com/bbartling/zip/blob/master/images/8.PNG)
 
 
 
@@ -97,7 +95,7 @@ Once your prepped utility provider file is in the `sample_data` directory, open 
 
 Zip data analysis uses the `ruptures` package to calculate changepoints in the electricity interval data. See https://github.com/deepcharles/ruptures for more detail about the change point process. Zip uses the dynamic programming method provided by Ruptures. See the `static_main` folder directory to view image files of the change point algorithm process used to rank days in the dataset. This is a visualation only to verify change point algorithm accuracy on the dataset.
 
-
+![Alt text](https://github.com/bbartling/zip/blob/master/images/8.PNG)
 
 
 Please send me some feedback on how this tool can be improved! bbartling@slipstreaminc.org
