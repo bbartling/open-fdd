@@ -66,10 +66,16 @@ All packages can be installed at once with the `requirements.txt` file. On Windo
  
  
 (6) Next type `py -3.7 main.py City_Library_2019` in the command prompt with the name of the CSV file to analyze and hit `ENTER`. Note this is the name of the CSV file without the .csv extension. CSV files are a requirement see note 7 for pre data processing in Excel prior to using Zip. All data files must be placed in the `sample_data` directory prior to running the script `main.py`.
+
  ![Alt text](https://github.com/bbartling/zip/blob/master/images/app.PNG)
  
 
-(7) NOTE - Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes an `_` character instead of a ` ` (space) character. The Excel CSV file needs to be formatted that the time stamp column is named `Date` and the electricity column is named `kW` as demonstrated below. 
+(7) NOTE - Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes an `_` character instead of a ` ` (space) character. 
+
+For example a filed named `School 2014 2015 KW` needs to be renamed something like `School_2014_2015_KW` with no spaces in the name of the file.
+
+
+The Excel CSV files need to be formatted that the time stamp column is named `Date` and the electricity column is named `kW` as demonstrated below. Zip looks for a columns named `Date` and `kW` anything different the script will resort to an exception eroor. 
 
 ![Alt text](https://github.com/bbartling/zip/blob/master/images/excel.PNG)
 
