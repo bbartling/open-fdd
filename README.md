@@ -1,4 +1,4 @@
-# Welcome 
+# zip 
 ###### Electricity dataset analysis in a Zip...!
 
 This project is a Python script that runs to visualize electricity datasets and complile the results into a Microsoft Word document.
