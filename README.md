@@ -3,7 +3,7 @@
 
 This project is a Python script that runs to visualize electricity datasets and complile the results into a Microsoft Word document.
 
-# REPORTING PROCESS Examples
+# Microsoft Word Document Report Plot Examples
 
 Your Microsoft Word Doc Report will contain all the following information:
 ###### PLOT OF ENTIRE DATASET
