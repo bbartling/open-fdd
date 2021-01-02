@@ -70,18 +70,23 @@ All packages can be installed at once with the `requirements.txt` file. On Windo
  ![Alt text](https://github.com/bbartling/zip/blob/master/images/app.PNG)
  
 
-(7) NOTE - Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes an `_` character instead of a ` ` (space) character. 
+(7) NOTE - Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes a `_` character instead of a ` ` (space) character. 
 
 For example a filed named `School 2014 2015 KW` needs to be renamed something like `School_2014_2015_KW` with no spaces in the name of the file.
 
 
-The Excel CSV files need to be formatted that the time stamp column is named `Date` and the electricity column is named `kW` as demonstrated below. Zip looks for a columns named `Date` and `kW` anything different the script will resort to an exception eroor. 
+The Excel CSV files need to be formatted that the time stamp column is named `Date` and the electricity column is named `kW` as exactly demonstrated below. Zip looks for a columns named `Date` and `kW` anything different the script will resort to an exception error. 
 
 ![Alt text](https://github.com/bbartling/zip/blob/master/images/excel.PNG)
 
-If your utility provider dataset has the time and date stamp in seperate columns use this as a reference for combining date and time into one column.
+If your utility provider dataset has the time and date stamp in seperate columns use this as a reference for combining date and time into one column. 
+
+Create an additional column in Excel with this code to combine date and time into one column name `Date`
+`=TEXT(A2,"m/dd/yy ")&TEXT(B2,"hh:mm:ss")`
 
 https://www.extendoffice.com/documents/excel/1538-excel-combine-date-and-time.html
+
+Delete all other columns as necessary so your file looks like the screen shot above.
 
 The file format requires a CSV file type extentions, make sure in Excel to save the file as a CSV as shown below.
 
