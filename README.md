@@ -63,6 +63,8 @@ All packages can be installed at once with the `requirements.txt` file. On Windo
  ![Alt text](https://github.com/bbartling/zip/blob/master/images/cmd.PNG)
  
  
+ *** If you are passed the pip install and Python package setup procede to step 6 below to run a report from the command prompt!
+ 
 (6) Next type `py -3.7 main.py City_Library_2019` in the command prompt with the name of the CSV file to analyze and hit `ENTER`. Note this is the name of the CSV file without the .csv extension. CSV files are a requirement see note 7 for pre data processing in Excel prior to using Zip. All data files must be placed in the `sample_data` directory prior to running the script `main.py`.
 
  ![Alt text](https://github.com/bbartling/zip/blob/master/images/app.PNG)
