@@ -1,76 +1,15 @@
 # zip 
-###### Electricity dataset analysis in a Zip...!
-
-This project is a Python script that runs to visualize electricity datasets and complile the results into a Microsoft Word document.
-
-# Microsoft Word Document Report Plot Examples
-
-Your Microsoft Word Doc Report will contain all the following information:
-###### PLOT OF ENTIRE DATASET
-![Alt text](https://github.com/bbartling/zip/blob/master/images/1.PNG)
-
-###### SUMMARY STATISTICS
-![Alt text](https://github.com/bbartling/zip/blob/master/images/2.PNG)
-
-###### BOX PLOTS PER MONTH
-![Alt text](https://github.com/bbartling/zip/blob/master/images/10.PNG)
-
-###### POWER CONSUMPTION TRENDS
-![Alt text](https://github.com/bbartling/zip/blob/master/images/11.PNG)
-
-###### HIGHEST RANKED CHANGES FOUND IN DAILY ELECTRICAL LOAD PROFILES
-Functions within Zip break the dataset down to individual daily datasets where a Python package called `ruptures` is utilized to compute changepoints found in each daily electrical load profile. The `pandas` computing library is then used to rank the top 15 days in the datatset.
-
-![Alt text](https://github.com/bbartling/zip/blob/master/images/3.PNG)
-
-###### DAILY UPPER AND LOWER QUANTILES (ELECTRICITY HIGH & BASELOAD LOAD VALUES)
-![Alt text](https://github.com/bbartling/zip/blob/master/images/4.PNG)
-
-###### DAILY MAX DEMAND AND HOUR
-![Alt text](https://github.com/bbartling/zip/blob/master/images/5.PNG)
-
-###### ROLLING KWH 7 DAY AVERAGE
-![Alt text](https://github.com/bbartling/zip/blob/master/images/7.PNG)
-
-###### DEMAND PLOTS BY MONTH
-![Alt text](https://github.com/bbartling/zip/blob/master/images/9.PNG)
-
-
-
-
-
-###### How do I get started with Zip for my electricity dataset analysis? 
-(1) Git clone the Zip repo. For anyone not familiar with Github see this tutorial.
-https://packaging.python.org/tutorials/installing-packages/
-
-
-(2) Download and install Python. I have tested the scripts out on Windows 10 environment on Python 3.7.
-https://www.python.org/downloads/
-
-
-(3) Make sure that you `pip` install all necessary packages to run Zip. Anyone not familiar with `pip` see this tutorial.
-https://packaging.python.org/tutorials/installing-packages/
-
-All packages can be installed at once with the `requirements.txt` file. On Windows in the Zip folder directory from the command prompt run:
-`py -m pip install -r requirements.txt`,
-
-
-(4) A tip on how to open up the command prompt in the Zip folder directory with a Windows 10 environment:
- ![Alt text](https://github.com/bbartling/zip/blob/master/images/One.PNG)
+###### Pandas tool to chart daily electrical load profiles into Microsoft Word docs
  
  
-(5) Type `cmd` and hit `ENTER`:
- ![Alt text](https://github.com/bbartling/zip/blob/master/images/cmd.PNG)
+Notes:
  
- 
- *** If you are passed the pip install and Python package setup procede to step 6 below to run a report from the command prompt! Step six is an example of how to run a report on a CSV file named `City_Library_2019`.
- 
-(6) Next type `py -3.7 main.py City_Library_2019` in the command prompt (the name of the CSV file to analyze which was placed in the `sample_data` directory) and hit `ENTER`. Note this is the name of the CSV file without the .csv extension. CSV files are a requirement see note 7 for pre data processing in Excel prior to using Zip. All data files must be placed in the `sample_data` directory prior to running the script `main.py`.
+run `py -3.7 main.py City_Library_2019` in the command prompt (the name of the CSV file to analyze which was placed in the `sample_data` directory) and hit `ENTER`. Note this is the name of the CSV file without the .csv extension. CSV files are a requirement see note 7 for pre data processing in Excel prior to using Zip. All data files must be placed in the `sample_data` directory prior to running the script `main.py`.
 
  ![Alt text](https://github.com/bbartling/zip/blob/master/images/app.PNG)
  
 
-(7) NOTE - Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes a `_` character instead of a ` ` (space) character. 
+Modify as necessary in Excel your utility provider supplied data files prior to running the script `main.py`. Only run 1 year of data at a time with Zip. Make the name of the CSV file simple that utilizes a `_` character instead of a ` ` (space) character. 
 
 For example a filed named `School 2014 2015 KW` needs to be renamed something like `School_2014_2015_KW` with no spaces in the name of the file.
 
@@ -100,5 +39,19 @@ Zip data analysis uses the `ruptures` package to calculate changepoints in the e
 ![Alt text](https://github.com/bbartling/zip/blob/master/images/8.PNG)
 
 
-Please send me some feedback on how this tool can be improved! bbartling@slipstreaminc.org
-Thank you for using zip. Feel free to send me an email if you are new to Python and would like some help getting setup.
+
+## Author
+
+[linkedin](https://www.linkedin.com/in/ben-bartling-cem-cmvp-510a0961/)
+
+## Licence
+
+【MIT License】
+
+Copyright 2021 Ben Bartling
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
