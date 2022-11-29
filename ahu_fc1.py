@@ -1,6 +1,4 @@
-
-
-import operator
+import operator, time
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -167,7 +165,7 @@ document.add_heading('Suggestions based on data analysis', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 
-if percent_true < 50:
+if percent_true < 15:
 
     paragraph.add_run('The percent True of time in the dataset for when the variable fan is running at maximum speed and generating very little duct pressure is very low. This fan system appears to operate well from a perspective that the fan adiquelty meets a duct pressure setpoint.')
 
@@ -180,11 +178,14 @@ paragraph.style = 'List Bullet'
 
 print('df.duct_static_setpoint.std: ',df.duct_static_setpoint.std())
 if df.duct_static_setpoint.std() == 0:
-    
-    paragraph.add_run('The control programming doesnt appear to have a duct pressure reset strategy implemented as the standard deviation of the duct pressure setpoint data equals zero. It would be recommended to hire a consulting engineer to properly design, implement, and validate a duct pressure reset strategy implemented by a controls contractor. A duct pressure reset can potentially save fan electrical energy consumption.')
+    paragraph.add_run('The control programming doesnt appear to have a duct pressure reset strategy implemented as the standard deviation of the duct pressure setpoint data equals zero. It would be recommended to hire a consulting engineer to properly design, oversee, and validate a duct pressure reset strategy implemented by a controls contractor. A duct pressure reset can potentially save fan electrical energy consumption.')
 
 else:
     paragraph.add_run('The control programming appears to have a duct pressure reset strategy implemented as the standard deviation of the duct pressure setpoint data does not equal zero. No further action maybe necessary if the faults are low and the fan system is delivering enough air under all conditions to VAV boxes.')
-    
+
+paragraph = document.add_paragraph()
+run = paragraph.add_run(f'Report generated: {time.ctime()}')
+run.style = 'Emphasis'
+
 document.save('./final_report/ahu_fc1_report.docx')
 print('All Done')
