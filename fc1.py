@@ -101,14 +101,24 @@ minutes_alldata = (seconds_alldata//60) % 60
 total_hours_calc = days_alldata * 24 + hours_alldata
 df["timedelta_fddflag"] = df.index.to_series().diff().where(df["fc1_flag"] == 1)
 percent_true = round(df.fc1_flag.mean() * 100, 2)
-percent_false = round((1 - percent_true) * 100, 2)
+percent_false = round((100 - percent_true), 2)
 
 
 # make hist plots
 df['hour_of_the_day'] = df.index.hour.where(df["fc1_flag"] == 1)
-df.hour_of_the_day.plot.hist(
+
+'''df.hour_of_the_day.plot.hist(
     title='Hour Of Day When Flag is TRUE', figsize=(25, 8))
-plt.savefig('./static/ahu_fc1_histogram.png')
+plt.savefig('./static/ahu_fc1_histogram.png')'''
+
+# make hist plots fc3
+fig, ax = plt.subplots(tight_layout=True, figsize=(25,8))
+ax.hist(df.hour_of_the_day)
+ax.set_xlabel('24 Hour Number in Day')
+ax.set_ylabel('Frequency')
+ax.set_title(f'Hour-Of-Day When Fault Flag 1 is TRUE')
+fig.savefig('./static/ahu_fc1_histogram.png')
+
 
 flag_true_duct_pressure = round(
     df.duct_static.where(df["fc1_flag"] == 1).mean(), 2)
@@ -130,11 +140,17 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when the Fault FLAG is True: {percent_true}%')
+    f'Percent of time in the dataset when the Fault flag is True: {percent_true}%')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when FLAG is False: {percent_false}%')
+    f'Percent of time in the dataset when flag is False: {percent_false}%')
+
+paragraph = document.add_paragraph()
+# ADD HIST Plots
+document.add_heading('Time-of-day Histogram Plots', level=2)
+document.add_picture('./static/ahu_fc1_histogram.png', width=Inches(6))
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
