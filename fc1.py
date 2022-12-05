@@ -18,8 +18,8 @@ DUCT_STATIC_INCHES_ERR_THRES = .1
 
 
 def fault_condition_one(dataframe):
-    return operator.and_(dataframe.duct_static < dataframe.duct_static_setpoint - dataframe.duct_static_inches_err_thres,
-                         dataframe.supply_vfd_speed >= dataframe.vfd_speed_percent_max - dataframe.vfd_speed_percent_err_thres)
+    return operator.and_(dataframe.duct_static < (dataframe.duct_static_setpoint - dataframe.duct_static_inches_err_thres),
+                         dataframe.supply_vfd_speed >= (dataframe.vfd_speed_percent_max - dataframe.vfd_speed_percent_err_thres))
 
 
 duct_pressure = pd.read_csv(
@@ -96,20 +96,19 @@ document.add_heading('Dataset Statistics', level=2)
 df["timedelta_alldata"] = df.index.to_series().diff()
 seconds_alldata = df.timedelta_alldata.sum().seconds
 days_alldata = df.timedelta_alldata.sum().days
-hours_alldata = seconds_alldata//3600
-minutes_alldata = (seconds_alldata//60) % 60
-total_hours_calc = days_alldata * 24 + hours_alldata
+
+hours_alldata = round(seconds_alldata/3600,2)
+minutes_alldata = round((seconds_alldata/60) % 60,2)
+total_hours_calc = days_alldata * 24.0 + hours_alldata
+
 df["timedelta_fddflag"] = df.index.to_series().diff().where(df["fc1_flag"] == 1)
+seconds_fc1_mode = df.timedelta_fddflag.sum().seconds
+hours_fc1_mode = round(seconds_fc1_mode/3600,2)
 percent_true = round(df.fc1_flag.mean() * 100, 2)
 percent_false = round((100 - percent_true), 2)
 
-
 # make hist plots
 df['hour_of_the_day'] = df.index.hour.where(df["fc1_flag"] == 1)
-
-'''df.hour_of_the_day.plot.hist(
-    title='Hour Of Day When Flag is TRUE', figsize=(25, 8))
-plt.savefig('./static/ahu_fc1_histogram.png')'''
 
 # make hist plots fc3
 fig, ax = plt.subplots(tight_layout=True, figsize=(25,8))
@@ -136,7 +135,7 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time for when FDD flag is True: {df.timedelta_fddflag.sum()}')
+    f'Total time in hours for when FDD flag is True: {hours_fc1_mode}')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(

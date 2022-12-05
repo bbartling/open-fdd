@@ -107,22 +107,31 @@ document.add_heading('Dataset Statistics', level=2)
 df["timedelta_alldata"] = df.index.to_series().diff()
 seconds_alldata = df.timedelta_alldata.sum().seconds
 days_alldata = df.timedelta_alldata.sum().days
-hours_alldata = seconds_alldata//3600
-minutes_alldata = (seconds_alldata//60) % 60
-total_hours_calc = days_alldata * 24 + hours_alldata
+
+hours_alldata = round(seconds_alldata/3600,2)
+minutes_alldata = round((seconds_alldata/60) % 60,2)
+total_hours_calc = days_alldata * 24.0 + hours_alldata
 
 # fc2 stats for histogram plot
 df["timedelta_fddflag_fc2"] = df.index.to_series().diff().where(df["fc2_flag"] == 1)
+seconds_fc2_mode = df.timedelta_fddflag_fc2.sum().seconds
+hours_fc2_mode = round(seconds_fc2_mode/3600,2)
+
 percent_true_fc2 = round(df.fc2_flag.mean() * 100, 2)
 percent_false_fc2 = round((100 - percent_true_fc2), 2)
+
 df['hour_of_the_day_fc2'] = df.index.hour.where(df["fc2_flag"] == 1)
 flag_true_fc2 = round(
     df.mat.where(df["fc2_flag"] == 1).mean(), 2)
 
 # fc3 stats for histogram plot
 df["timedelta_fddflag_fc3"] = df.index.to_series().diff().where(df["fc3_flag"] == 1)
+seconds_fc3_mode = df.timedelta_fddflag_fc3.sum().seconds
+hours_fc3_mode = round(seconds_fc3_mode/3600,2)
+
 percent_true_fc3 = round(df.fc3_flag.mean() * 100, 2)
 percent_false_fc3 = round((100 - percent_true_fc3), 2)
+
 df['hour_of_the_day_fc3'] = df.index.hour.where(df["fc3_flag"] == 1)
 flag_true_fc3 = round(
     df.mat.where(df["fc3_flag"] == 1).mean(), 2)
@@ -155,12 +164,12 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time for when FDD flag 2 is True: {df.timedelta_fddflag_fc2.sum()}')
+    f'Total time in hours for when FDD flag 2 is True: {hours_fc2_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time for when FDD flag 3 is True: {df.timedelta_fddflag_fc3.sum()}')
+    f'Total time in hours for when FDD flag 3 is True: {hours_fc3_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
@@ -226,8 +235,6 @@ if percent_true_fc2 < 5 and percent_true_fc3 < 5:
 else:
     paragraph.add_run('The percent True of time in the dataset for when the mixing air temperature is out of theoretical range is very high which indicates hardware problems associated with the HVAC controls. The electronic inputs on the HVAC controller could be corrupt or the sensor may need to be replaced. Mixing temperature sensors are supposed to be a long (often 20’) precisely installed averaging type sensor where it takes a good instalation to get a good actual averaged mixed air temperature reading versus return and discharge air sensors where quite often these are just short probe type sensors installed into the AHU duct work. To troubleshoot sensor values, try in the field to use testing probes inserted into the air stream of the AHU when it is running. Make sure to use high precision calibrated 3rd party tools are higher accuracy than the BAS controller sensors. Good commissioning agents from a A/E firms that specialize in field calibration of BAS can potentially be used to validate sensor readings as well. Another thing to watch out for is control system programming (quite often a service bandage on something broken) can also be utilized to override sensor values of field level device I/O in the cases where data plots look unusual and when high fault flags occur.')
 
-paragraph = document.add_paragraph()
-paragraph.style = 'List Bullet'
 
 print('df.mat.std: ', df.mat.std())
 print('df.mat.min: ', df.mat.min())
