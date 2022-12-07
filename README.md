@@ -6,7 +6,7 @@
 
 ## Author
 
-[linkedin](https://www.linkedin.com/in/ben-bartling-cem-cmvp-510a0961/)
+[linkedin](https://www.linkedin.com/in/ben-bartling-510a0961/)
 
 ## Licence
 
