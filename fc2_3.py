@@ -10,7 +10,24 @@ import matplotlib.patches as mpatches
 
 from docx import Document
 from docx.shared import Inches
+import argparse
 
+# python 3.10 on Windows 10
+# py .\fc2_3.py -i ./ahu_data/hvac_random_fake_data/fc2_3_fake_data1.csv -o 1_ahu_fc2_3_report
+
+parser = argparse.ArgumentParser(add_help=False)
+args = parser.add_argument_group('Options')
+
+args.add_argument('-h', '--help', action='help', help='Show this help message and exit.')
+args.add_argument('-i', '--input', required=True, type=str,
+                    help='CSV File Input')
+args.add_argument('-o', '--output', required=True, type=str,
+                    help='Word File Output Name')
+'''
+args.add_argument('--use-flask', default=False, action='store_true')
+args.add_argument('--no-flask', dest='use-flask', action='store_false')
+'''
+args = parser.parse_args()
 
 # required params taken from the screenshot above
 OUTDOOR_DEGF_ERR_THRES = .05
@@ -27,7 +44,7 @@ def fault_condition_three_(dataframe):
     return ((dataframe.mat - dataframe.mix_degf_err_thres) > np.maximum((dataframe.rat + dataframe.return_degf_err_thres),
                                                                         (dataframe.oat + dataframe.outdoor_degf_err_thres)))
 
-
+'''
 mat = pd.read_csv(
     './ahu_data/MA-T.csv',
     index_col='Date',
@@ -51,6 +68,12 @@ vfd_speed_avg = rat.rolling('5T').mean()
 
 mat_rat = mat.join(rat)
 df = mat_rat.join(oat)
+'''
+
+df = pd.read_csv(args.input,
+    index_col='Date',
+    parse_dates=True).rolling('5T').mean()
+
 
 # make an entire column out of these params in the Pandas Dataframe
 df['outdoor_degf_err_thres'] = OUTDOOR_DEGF_ERR_THRES
@@ -80,9 +103,26 @@ df2 = df2.drop(['outdoor_degf_err_thres',
 
 print(df2)
 
-df2.plot(figsize=(25, 8), subplots=True,
-         title='AHU Mix, Return, And Outside Air Temps Subplots')
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25,8))
+plt.title('Fault Conditions 2 and 3 Plots')
 
+plot1a, = ax1.plot(df2.index, df2.mat, color='r') # red
+plot1b, = ax1.plot(df2.index, df2.rat, color='b') # blue
+plot1c, = ax1.plot(df2.index, df2.oat, color='g') # green
+ax1.set_ylabel('AHU Temp Sensors')
+
+ax2.plot(df2.index, df2.fc2_flag, color='c') # cyan
+ax2.plot(df2.index, df2.fc3_flag, color='m') # purple
+ax2.set_xlabel('Date')
+ax2.set_ylabel('Fault Flags')
+
+red_patch = mpatches.Patch(color='red', label='MAT')
+blue_patch = mpatches.Patch(color='blue', label='RAT')
+green_patch = mpatches.Patch(color='green', label='OAT')
+cyan_patch = mpatches.Patch(color='cyan', label='fc2_flag')
+purple_patch = mpatches.Patch(color='purple', label='fc3_flag')
+plt.legend(handles=[red_patch,blue_patch,green_patch,cyan_patch,purple_patch])
+plt.tight_layout()
 plt.savefig('./static/ahu_fc2_fans_plot.png')
 #plt.show()
 
@@ -100,46 +140,48 @@ document.add_heading('Dataset Plot', level=2)
 
 # ADD IN SUBPLOTS SECTION
 document.add_picture('./static/ahu_fc2_fans_plot.png', width=Inches(6))
-
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
-df["timedelta_alldata"] = df.index.to_series().diff()
-seconds_alldata = df.timedelta_alldata.sum().seconds
-days_alldata = df.timedelta_alldata.sum().days
+df2["timedelta_alldata"] = df2.index.to_series().diff()
+seconds_alldata = df2.timedelta_alldata.sum().seconds
+days_alldata = df2.timedelta_alldata.sum().days
 
 hours_alldata = round(seconds_alldata/3600,2)
 minutes_alldata = round((seconds_alldata/60) % 60,2)
 total_hours_calc = days_alldata * 24.0 + hours_alldata
 
 # fc2 stats for histogram plot
-df["timedelta_fddflag_fc2"] = df.index.to_series().diff().where(df["fc2_flag"] == 1)
-seconds_fc2_mode = df.timedelta_fddflag_fc2.sum().seconds
+df2["timedelta_fddflag_fc2"] = df2.index.to_series().diff().where(df2["fc2_flag"] == 1)
+seconds_fc2_mode = df2.timedelta_fddflag_fc2.sum().seconds
 hours_fc2_mode = round(seconds_fc2_mode/3600,2)
 
-percent_true_fc2 = round(df.fc2_flag.mean() * 100, 2)
+percent_true_fc2 = round(df2.fc2_flag.mean() * 100, 2)
 percent_false_fc2 = round((100 - percent_true_fc2), 2)
 
-df['hour_of_the_day_fc2'] = df.index.hour.where(df["fc2_flag"] == 1)
+df2['hour_of_the_day_fc2'] = df2.index.hour.where(df2["fc2_flag"] == 1)
 flag_true_fc2 = round(
-    df.mat.where(df["fc2_flag"] == 1).mean(), 2)
+    df2.mat.where(df2["fc2_flag"] == 1).mean(), 2)
 
 # fc3 stats for histogram plot
-df["timedelta_fddflag_fc3"] = df.index.to_series().diff().where(df["fc3_flag"] == 1)
-seconds_fc3_mode = df.timedelta_fddflag_fc3.sum().seconds
+df2["timedelta_fddflag_fc3"] = df2.index.to_series().diff().where(df2["fc3_flag"] == 1)
+seconds_fc3_mode = df2.timedelta_fddflag_fc3.sum().seconds
 hours_fc3_mode = round(seconds_fc3_mode/3600,2)
 
-percent_true_fc3 = round(df.fc3_flag.mean() * 100, 2)
+percent_true_fc3 = round(df2.fc3_flag.mean() * 100, 2)
 percent_false_fc3 = round((100 - percent_true_fc3), 2)
 
-df['hour_of_the_day_fc3'] = df.index.hour.where(df["fc3_flag"] == 1)
+df2['hour_of_the_day_fc3'] = df2.index.hour.where(df2["fc3_flag"] == 1)
 flag_true_fc3 = round(
-    df.mat.where(df["fc3_flag"] == 1).mean(), 2)
+    df2.mat.where(df2["fc3_flag"] == 1).mean(), 2)
+
+print('UNIQUE DF2 HOUR OF DAY: ',df2.hour_of_the_day_fc2.unique())
+print('UNIQUE DF3 HOUR OF DAY: ',df2.hour_of_the_day_fc3.unique())
 
 # make hist plots fc3
 fig, axs = plt.subplots(1, 2, sharey=True, tight_layout=True, figsize=(25,8))
-axs[0].hist(df.hour_of_the_day_fc2)
-axs[1].hist(df.hour_of_the_day_fc3)
+axs[0].hist(df2.hour_of_the_day_fc2.dropna())
+axs[1].hist(df2.hour_of_the_day_fc3.dropna())
 
 fc = 2
 for ax in axs:
@@ -155,7 +197,7 @@ fig.savefig('./static/ahu_fc23_histogram.png')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time calculated in dataset: {df.timedelta_alldata.sum()}')
+    f'Total time calculated in dataset: {df2.timedelta_alldata.sum()}')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
@@ -230,20 +272,21 @@ paragraph.style = 'List Bullet'
 
 if percent_true_fc2 < 5 and percent_true_fc3 < 5:
 
-    paragraph.add_run('The percent True of time in the dataset for when the mixing air temperature is out of theoretical range is very low less than 5%. The sensors on this AHU appear to be within operational tollerances but its always recommended to compare locally installed outside air temperature hardware sensors to weather data from the web. Typically web weather from weather stations at air ports can be higher precision equipment Vs a BAS outside air temperature sensors in best practice are to be installed on the North end of buildings in the shade.')
-
+    paragraph.add_run('The percent True of time is very high indicating the AHU temperature sensors are out of calibration')
+                      
 else:
-    paragraph.add_run('The percent True of time in the dataset for when the mixing air temperature is out of theoretical range is very high which indicates hardware problems associated with the HVAC controls. The electronic inputs on the HVAC controller could be corrupt or the sensor may need to be replaced. Mixing temperature sensors are supposed to be a long (often 20’) precisely installed averaging type sensor where it takes a good instalation to get a good actual averaged mixed air temperature reading versus return and discharge air sensors where quite often these are just short probe type sensors installed into the AHU duct work. To troubleshoot sensor values, try in the field to use testing probes inserted into the air stream of the AHU when it is running. Make sure to use high precision calibrated 3rd party tools are higher accuracy than the BAS controller sensors. Good commissioning agents from a A/E firms that specialize in field calibration of BAS can potentially be used to validate sensor readings as well. Another thing to watch out for is control system programming (quite often a service bandage on something broken) can also be utilized to override sensor values of field level device I/O in the cases where data plots look unusual and when high fault flags occur.')
+    paragraph.add_run('The percent True of time is low inidicating the AHU temperature sensors are within calibration')
 
-
-print('df.mat.std: ', df.mat.std())
-print('df.mat.min: ', df.mat.min())
-print('df.mat.max: ', df.mat.max())
+print('df2.mat.std: ', df2.mat.std())
+print('df2.mat.min: ', df2.mat.min())
+print('df2.mat.max: ', df2.mat.max())
 
 
 paragraph = document.add_paragraph()
 run = paragraph.add_run(f'Report generated: {time.ctime()}')
 run.style = 'Emphasis'
 
-document.save('./final_report/ahu_fc2_3_report.docx')
+document.save(f'./final_report/{args.output}.docx')
 print('All Done')
+
+#df2.to_csv('test1.csv')
