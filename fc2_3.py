@@ -18,11 +18,12 @@ import argparse
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group('Options')
 
-args.add_argument('-h', '--help', action='help', help='Show this help message and exit.')
+args.add_argument('-h', '--help', action='help',
+                  help='Show this help message and exit.')
 args.add_argument('-i', '--input', required=True, type=str,
-                    help='CSV File Input')
+                  help='CSV File Input')
 args.add_argument('-o', '--output', required=True, type=str,
-                    help='Word File Output Name')
+                  help='Word File Output Name')
 '''
 args.add_argument('--use-flask', default=False, action='store_true')
 args.add_argument('--no-flask', dest='use-flask', action='store_false')
@@ -43,6 +44,7 @@ def fault_condition_two_(dataframe):
 def fault_condition_three_(dataframe):
     return ((dataframe.mat - dataframe.mix_degf_err_thres) > np.maximum((dataframe.rat + dataframe.return_degf_err_thres),
                                                                         (dataframe.oat + dataframe.outdoor_degf_err_thres)))
+
 
 '''
 mat = pd.read_csv(
@@ -71,22 +73,19 @@ df = mat_rat.join(oat)
 '''
 
 df = pd.read_csv(args.input,
-    index_col='Date',
-    parse_dates=True).rolling('5T').mean()
-
+                 index_col='Date',
+                 parse_dates=True).rolling('5T').mean()
 
 # make an entire column out of these params in the Pandas Dataframe
 df['outdoor_degf_err_thres'] = OUTDOOR_DEGF_ERR_THRES
 df['mix_degf_err_thres'] = MIX_DEGF_ERR_THRES
 df['return_degf_err_thres'] = RETURN_DEGF_ERR_THRES
 
-
 start = df.head(1).index.date
 print('Dataset start: ', start)
 
 end = df.tail(1).index.date
 print('Dataset end: ', end)
-
 print('COLUMNS: ', print(df.columns))
 
 df['fc2_flag'] = fault_condition_two_(df)
@@ -103,16 +102,16 @@ df2 = df2.drop(['outdoor_degf_err_thres',
 
 print(df2)
 
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25,8))
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
 plt.title('Fault Conditions 2 and 3 Plots')
 
-plot1a, = ax1.plot(df2.index, df2.mat, color='r') # red
-plot1b, = ax1.plot(df2.index, df2.rat, color='b') # blue
-plot1c, = ax1.plot(df2.index, df2.oat, color='g') # green
+plot1a, = ax1.plot(df2.index, df2.mat, color='r')  # red
+plot1b, = ax1.plot(df2.index, df2.rat, color='b')  # blue
+plot1c, = ax1.plot(df2.index, df2.oat, color='g')  # green
 ax1.set_ylabel('AHU Temp Sensors')
 
-ax2.plot(df2.index, df2.fc2_flag, color='c') # cyan
-ax2.plot(df2.index, df2.fc3_flag, color='m') # purple
+ax2.plot(df2.index, df2.fc2_flag, color='c')  # cyan
+ax2.plot(df2.index, df2.fc3_flag, color='m')  # purple
 ax2.set_xlabel('Date')
 ax2.set_ylabel('Fault Flags')
 
@@ -121,10 +120,11 @@ blue_patch = mpatches.Patch(color='blue', label='RAT')
 green_patch = mpatches.Patch(color='green', label='OAT')
 cyan_patch = mpatches.Patch(color='cyan', label='fc2_flag')
 purple_patch = mpatches.Patch(color='purple', label='fc3_flag')
-plt.legend(handles=[red_patch,blue_patch,green_patch,cyan_patch,purple_patch])
+plt.legend(handles=[red_patch, blue_patch,
+           green_patch, cyan_patch, purple_patch])
 plt.tight_layout()
 plt.savefig('./static/ahu_fc2_fans_plot.png')
-#plt.show()
+# plt.show()
 
 print("Starting ahu fc2 docx report")
 document = Document()
@@ -134,7 +134,8 @@ p = document.add_paragraph(
     'Fault condition two and three of ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition 2 flags mixing air temperatures that are too low and fault condition 3 flags mixing temperatures that are too high when in comparision to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges. Fault condition two equation as defined by ASHRAE:')
 document.add_picture('./images/fc2_definition.png', width=Inches(6))
 
-p = document.add_paragraph('Fault condition three equation as defined by ASHRAE:')
+p = document.add_paragraph(
+    'Fault condition three equation as defined by ASHRAE:')
 document.add_picture('./images/fc3_definition.png', width=Inches(6))
 document.add_heading('Dataset Plot', level=2)
 
@@ -147,14 +148,15 @@ df2["timedelta_alldata"] = df2.index.to_series().diff()
 seconds_alldata = df2.timedelta_alldata.sum().seconds
 days_alldata = df2.timedelta_alldata.sum().days
 
-hours_alldata = round(seconds_alldata/3600,2)
-minutes_alldata = round((seconds_alldata/60) % 60,2)
+hours_alldata = round(seconds_alldata/3600, 2)
+minutes_alldata = round((seconds_alldata/60) % 60, 2)
 total_hours_calc = days_alldata * 24.0 + hours_alldata
 
 # fc2 stats for histogram plot
-df2["timedelta_fddflag_fc2"] = df2.index.to_series().diff().where(df2["fc2_flag"] == 1)
+df2["timedelta_fddflag_fc2"] = df2.index.to_series(
+).diff().where(df2["fc2_flag"] == 1)
 seconds_fc2_mode = df2.timedelta_fddflag_fc2.sum().seconds
-hours_fc2_mode = round(seconds_fc2_mode/3600,2)
+hours_fc2_mode = round(seconds_fc2_mode/3600, 2)
 
 percent_true_fc2 = round(df2.fc2_flag.mean() * 100, 2)
 percent_false_fc2 = round((100 - percent_true_fc2), 2)
@@ -164,9 +166,10 @@ flag_true_fc2 = round(
     df2.mat.where(df2["fc2_flag"] == 1).mean(), 2)
 
 # fc3 stats for histogram plot
-df2["timedelta_fddflag_fc3"] = df2.index.to_series().diff().where(df2["fc3_flag"] == 1)
+df2["timedelta_fddflag_fc3"] = df2.index.to_series(
+).diff().where(df2["fc3_flag"] == 1)
 seconds_fc3_mode = df2.timedelta_fddflag_fc3.sum().seconds
-hours_fc3_mode = round(seconds_fc3_mode/3600,2)
+hours_fc3_mode = round(seconds_fc3_mode/3600, 2)
 
 percent_true_fc3 = round(df2.fc3_flag.mean() * 100, 2)
 percent_false_fc3 = round((100 - percent_true_fc3), 2)
@@ -175,11 +178,11 @@ df2['hour_of_the_day_fc3'] = df2.index.hour.where(df2["fc3_flag"] == 1)
 flag_true_fc3 = round(
     df2.mat.where(df2["fc3_flag"] == 1).mean(), 2)
 
-print('UNIQUE DF2 HOUR OF DAY: ',df2.hour_of_the_day_fc2.unique())
-print('UNIQUE DF3 HOUR OF DAY: ',df2.hour_of_the_day_fc3.unique())
+print('UNIQUE DF2 HOUR OF DAY: ', df2.hour_of_the_day_fc2.unique())
+print('UNIQUE DF3 HOUR OF DAY: ', df2.hour_of_the_day_fc3.unique())
 
 # make hist plots fc3
-fig, axs = plt.subplots(1, 2, sharey=True, tight_layout=True, figsize=(25,8))
+fig, axs = plt.subplots(1, 2, sharey=True, tight_layout=True, figsize=(25, 8))
 axs[0].hist(df2.hour_of_the_day_fc2.dropna())
 axs[1].hist(df2.hour_of_the_day_fc3.dropna())
 
@@ -190,8 +193,6 @@ for ax in axs:
     ax.set_title(f'Hour-Of-Day When Fault Flag {fc} is TRUE')
     fc += 1
 fig.savefig('./static/ahu_fc23_histogram.png')
-
-
 
 # add calcs to word doc
 paragraph = document.add_paragraph()
@@ -206,30 +207,30 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours for when FDD flag 2 is True: {hours_fc2_mode}')
+    f'Total time in hours for when fault flag 2 is True: {hours_fc2_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours for when FDD flag 3 is True: {hours_fc3_mode}')
+    f'Total time in hours for when fault flag 3 is True: {hours_fc3_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when the Fault flag 2 is True: {percent_true_fc2}%')
+    f'Percent of time in the dataset when the fault flag 2 is True: {percent_true_fc2}%')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when the Fault flag 3 is True: {percent_true_fc3}%')
+    f'Percent of time in the dataset when the fault flag 3 is True: {percent_true_fc3}%')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when flag 2 is False: {percent_false_fc2}%')
+    f'Percent of time in the dataset when fault flag 2 is False: {percent_false_fc2}%')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when flag 3 is False: {percent_false_fc3}%')
+    f'Percent of time in the dataset when fault flag 3 is False: {percent_false_fc3}%')
 
 paragraph = document.add_paragraph()
 # ADD HIST Plots
@@ -272,15 +273,16 @@ paragraph.style = 'List Bullet'
 
 if percent_true_fc2 < 5 and percent_true_fc3 < 5:
 
-    paragraph.add_run('The percent True of time is very high indicating the AHU temperature sensors are out of calibration')
-                      
+    paragraph.add_run(
+        'The percent True of time is very high indicating the AHU temperature sensors are out of calibration')
+
 else:
-    paragraph.add_run('The percent True of time is low inidicating the AHU temperature sensors are within calibration')
+    paragraph.add_run(
+        'The percent True of time is low inidicating the AHU temperature sensors are within calibration')
 
 print('df2.mat.std: ', df2.mat.std())
 print('df2.mat.min: ', df2.mat.min())
 print('df2.mat.max: ', df2.mat.max())
-
 
 paragraph = document.add_paragraph()
 run = paragraph.add_run(f'Report generated: {time.ctime()}')
@@ -289,4 +291,4 @@ run.style = 'Emphasis'
 document.save(f'./final_report/{args.output}.docx')
 print('All Done')
 
-#df2.to_csv('test1.csv')
+# df2.to_csv('test1.csv')

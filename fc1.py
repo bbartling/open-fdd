@@ -10,6 +10,24 @@ import matplotlib.patches as mpatches
 from docx import Document
 from docx.shared import Inches
 
+import argparse
+
+# python 3.10 on Windows 10
+# py .\fc1.py -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
+
+parser = argparse.ArgumentParser(add_help=False)
+args = parser.add_argument_group('Options')
+
+args.add_argument('-h', '--help', action='help', help='Show this help message and exit.')
+args.add_argument('-i', '--input', required=True, type=str,
+                    help='CSV File Input')
+args.add_argument('-o', '--output', required=True, type=str,
+                    help='Word File Output Name')
+'''
+args.add_argument('--use-flask', default=False, action='store_true')
+args.add_argument('--no-flask', dest='use-flask', action='store_false')
+'''
+args = parser.parse_args()
 
 # required params taken from the screenshot above
 VFD_SPEED_PERCENT_ERR_THRES = .05
@@ -19,9 +37,9 @@ DUCT_STATIC_INCHES_ERR_THRES = .1
 
 def fault_condition_one(dataframe):
     return operator.and_(dataframe.duct_static < (dataframe.duct_static_setpoint - dataframe.duct_static_inches_err_thres),
-                         dataframe.supply_vfd_speed >= (dataframe.vfd_speed_percent_max - dataframe.vfd_speed_percent_err_thres))
-
-
+                         dataframe.supply_vfd_speed > (dataframe.vfd_speed_percent_max - dataframe.vfd_speed_percent_err_thres))
+ 
+'''
 duct_pressure = pd.read_csv(
     './ahu_data/DA-P.csv',
     index_col='Date',
@@ -40,8 +58,13 @@ vfd_speed_avg = vfd_speed.rolling('5T').mean()
 
 # combine duct pressure and fan speed datasets
 df = duct_pressure_avg.join(vfd_speed_avg)
-df['duct_static_setpoint'] = 1
+'''
 
+df = pd.read_csv(args.input,
+    index_col='Date',
+    parse_dates=True).rolling('5T').mean()
+
+df['duct_static_setpoint'] = 1
 
 start = df.head(1).index.date
 print('Dataset start: ', start)
@@ -55,9 +78,12 @@ df['vfd_speed_percent_err_thres'] = VFD_SPEED_PERCENT_ERR_THRES
 df['duct_static_inches_err_thres'] = DUCT_STATIC_INCHES_ERR_THRES
 df['vfd_speed_percent_max'] = VFD_SPEED_PERCENT_MAX
 
+for col in df.columns:
+    print('df column: ',col, 'max len: ', df[col].size)
+    
 df['fc1_flag'] = fault_condition_one(df)
 
-df2 = df.copy()
+df2 = df.copy().dropna()
 df2['fc1_flag'] = df2['fc1_flag'].astype(int)
 
 # drop params column for better plot
@@ -68,15 +94,29 @@ df2 = df2.drop(['vfd_speed_percent_err_thres',
 print(df2.columns)
 print(df2.fc1_flag)
 
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25,8))
+plt.title('Fault Conditions 1 Plots')
 
-df2.plot(figsize=(25, 8), subplots=True,
-         title='Duct Static Pressure and Setpoint Subplots')
+ax1b = ax1.twinx() 
+plot1a, = ax1.plot(df2.index, df2.duct_static, color='r') # red
+plot1b, = ax1b.plot(df2.index, df2.supply_vfd_speed, color='b') # blue
+ax1.set_ylabel('Duct Static Pressure and Setpoint Subplots')
 
+ax1.set_ylabel('Duct Static')
+ax1b.set_ylabel('Fan Speed')
 
+ax2.plot(df2.index, df2.fc1_flag, color='g') # green
+ax2.set_xlabel('Date')
+ax2.set_ylabel('Fault Flag')
+
+red_patch = mpatches.Patch(color='red', label='Duct Static')
+blue_patch = mpatches.Patch(color='blue', label='Supply Fan Speed')
+green_patch = mpatches.Patch(color='green', label='FC1 Flag')
+plt.legend(handles=[red_patch,blue_patch,green_patch])
+plt.tight_layout()
 plt.savefig('./static/ahu_fc1_fans_plot.png')
 
-
-print("Starting ahu fc1 docx report")
+print(f"Starting {args.output} docx report!")
 document = Document()
 document.add_heading('Fault Condition One Report', 0)
 
@@ -84,35 +124,33 @@ p = document.add_paragraph(
     'Fault condition one of ASHRAE Guideline 36 is related to flagging poor performance of a AHU variable supply fan attempting to control to a duct pressure setpoint. Fault condition equation as defined by ASHRAE:')
 
 document.add_picture('./images/fc1_definition.png', width=Inches(6))
-
 document.add_heading('Dataset Plot', level=2)
 
 # ADD IN SUBPLOTS SECTION
 document.add_picture('./static/ahu_fc1_fans_plot.png', width=Inches(6))
-
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
-df["timedelta_alldata"] = df.index.to_series().diff()
-seconds_alldata = df.timedelta_alldata.sum().seconds
-days_alldata = df.timedelta_alldata.sum().days
+df2["timedelta_alldata"] = df2.index.to_series().diff()
+seconds_alldata = df2.timedelta_alldata.sum().seconds
+days_alldata = df2.timedelta_alldata.sum().days
 
 hours_alldata = round(seconds_alldata/3600,2)
 minutes_alldata = round((seconds_alldata/60) % 60,2)
 total_hours_calc = days_alldata * 24.0 + hours_alldata
 
-df["timedelta_fddflag"] = df.index.to_series().diff().where(df["fc1_flag"] == 1)
-seconds_fc1_mode = df.timedelta_fddflag.sum().seconds
+df2["timedelta_fddflag"] = df2.index.to_series().diff().where(df2["fc1_flag"] == 1)
+seconds_fc1_mode = df2.timedelta_fddflag.sum().seconds
 hours_fc1_mode = round(seconds_fc1_mode/3600,2)
-percent_true = round(df.fc1_flag.mean() * 100, 2)
+percent_true = round(df2.fc1_flag.mean() * 100, 2)
 percent_false = round((100 - percent_true), 2)
 
 # make hist plots
-df['hour_of_the_day'] = df.index.hour.where(df["fc1_flag"] == 1)
+df2['hour_of_the_day'] = df2.index.hour.where(df2["fc1_flag"] == 1)
 
 # make hist plots fc3
 fig, ax = plt.subplots(tight_layout=True, figsize=(25,8))
-ax.hist(df.hour_of_the_day)
+ax.hist(df2.hour_of_the_day)
 ax.set_xlabel('24 Hour Number in Day')
 ax.set_ylabel('Frequency')
 ax.set_title(f'Hour-Of-Day When Fault Flag 1 is TRUE')
@@ -120,14 +158,14 @@ fig.savefig('./static/ahu_fc1_histogram.png')
 
 
 flag_true_duct_pressure = round(
-    df.duct_static.where(df["fc1_flag"] == 1).mean(), 2)
+    df2.duct_static.where(df2["fc1_flag"] == 1).mean(), 2)
 
 
 # add calcs to word doc
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time calculated in dataset: {df.timedelta_alldata.sum()}')
+    f'Total time calculated in dataset: {df2.timedelta_alldata.sum()}')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
@@ -135,15 +173,15 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours for when FDD flag is True: {hours_fc1_mode}')
+    f'Total time in hours for when fault flag is True: {hours_fc1_mode}')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when the Fault flag is True: {percent_true}%')
+    f'Percent of time in the dataset when the fault flag is True: {percent_true}%')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when flag is False: {percent_false}%')
+    f'Percent of time in the dataset when the fault flag is False: {percent_false}%')
 
 paragraph = document.add_paragraph()
 # ADD HIST Plots
@@ -182,25 +220,24 @@ paragraph.style = 'List Bullet'
 
 if percent_true < 15:
 
-    paragraph.add_run('The percent True of time in the dataset for when the variable fan is running at maximum speed and generating very little duct pressure is very low. This fan system appears to operate well from a perspective that the fan adiquelty meets a duct pressure setpoint.')
+    paragraph.add_run('Fan is running at high speeds appearing to not generate good duct static pressure (BAD)')
 
 else:
-    paragraph.add_run('The percent True of time in the dataset for when the variable fan is running at maximum speed and generating very little duct pressure is very high. This fan system appears to struggle and it could be recommended to further troubleshoot the system with a consulting engineer. A consulting engineer could be hired to redesign ventilation rates for the VAV system which can then be passed to a testing, adjusting, and balancing contractor (TAB) to implement where the TAB contractor would be responsible for any necessary mechanical adjustments for making the fan system operate to design.')
-
+    paragraph.add_run('Fan is appears to generate good duct static pressure (GOOD)')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 
-print('df.duct_static_setpoint.std: ',df.duct_static_setpoint.std())
-if df.duct_static_setpoint.std() == 0:
-    paragraph.add_run('The control programming doesnt appear to have a duct pressure reset strategy implemented as the standard deviation of the duct pressure setpoint data equals zero. It would be recommended to hire a consulting engineer to properly design, oversee, and validate a duct pressure reset strategy implemented by a controls contractor. A duct pressure reset can potentially save fan electrical energy consumption.')
+print('df2.duct_static_setpoint.std: ',df2.duct_static_setpoint.std())
+if df2.duct_static_setpoint.std() == 0:
+    paragraph.add_run('No duct pressure setpoint reset detected (BAD)')
 
 else:
-    paragraph.add_run('The control programming appears to have a duct pressure reset strategy implemented as the standard deviation of the duct pressure setpoint data does not equal zero. No further action maybe necessary if the faults are low and the fan system is delivering enough air under all conditions to VAV boxes.')
+    paragraph.add_run('Duct pressure reset detected (Good)')
 
 paragraph = document.add_paragraph()
 run = paragraph.add_run(f'Report generated: {time.ctime()}')
 run.style = 'Emphasis'
 
-document.save('./final_report/ahu_fc1_report.docx')
+document.save(f'./final_report/{args.output}.docx')
 print('All Done')

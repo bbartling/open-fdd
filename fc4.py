@@ -11,11 +11,31 @@ import matplotlib.patches as mpatches
 from docx import Document
 from docx.shared import Inches
 
+import argparse
+
+# python 3.10 on Windows 10
+# py .\fc4.py -i ./ahu_data/hvac_random_fake_data/fc4_fake_data1.csv -o fake1_ahu_fc4_report
+
+parser = argparse.ArgumentParser(add_help=False)
+args = parser.add_argument_group('Options')
+
+args.add_argument('-h', '--help', action='help', help='Show this help message and exit.')
+args.add_argument('-i', '--input', required=True, type=str,
+                    help='CSV File Input')
+args.add_argument('-o', '--output', required=True, type=str,
+                    help='Word File Output Name')
+'''
+args.add_argument('--use-flask', default=False, action='store_true')
+args.add_argument('--no-flask', dest='use-flask', action='store_false')
+'''
+args = parser.parse_args()
 
 # required params taken from the screenshot above
 AHU_MIN_OA = 20
 DELTA_OS_MAX = 7.
 
+
+'''
 cooling_sig = pd.read_csv(
     './ahu_data/CLG-O.csv',
     index_col='Date',
@@ -36,11 +56,17 @@ economizer_sig = economizer_sig.rolling('5T').mean()
 
 clg_htg = cooling_sig.join(heating_sig)
 df = economizer_sig.join(clg_htg)
+'''
+
+
+df = pd.read_csv(args.input,
+    index_col='Date',
+    parse_dates=True).rolling('5T').mean()
 
 print(df)
 df_copy = df.copy()
 
-df_copy.plot(figsize=(25, 8), subplots=True,
+df_copy.plot(figsize=(25, 8),
          title='AHU Heating, Cooling, and OA Damper Signals')
 plt.savefig('./static/ahu_fc4_signals.png')
 
@@ -221,17 +247,17 @@ if flag4_max_val != 0:
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'Total time for when FDD flag 2 is True: {df.timedelta_fddflag_fc4.sum()}')
+        f'Total time for when fault flag 4 is True: {df.timedelta_fddflag_fc4.sum()}')
 
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'Percent of time in the dataset when the Fault flag 4 is True: {percent_true_fc4}%')
+        f'Percent of time in the dataset when the fault flag 4 is True: {percent_true_fc4}%')
 
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'Percent of time in the dataset when flag 4 is False: {percent_false_fc4}%')
+        f'Percent of time in the dataset when fault flag 4 is False: {percent_false_fc4}%')
 
     paragraph = document.add_paragraph()
     # ADD HIST Plots
@@ -295,5 +321,5 @@ paragraph = document.add_paragraph()
 run = paragraph.add_run(f'Report generated: {time.ctime()}')
 run.style = 'Emphasis'
 
-document.save('./final_report/ahu_fc4_report.docx')
-print('All Done')
+document.save(f'./final_report/{args.output}.docx')
+print('All Done WITH: ',args.output)
