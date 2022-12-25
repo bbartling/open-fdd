@@ -10,7 +10,7 @@ import matplotlib.patches as mpatches
 
 from docx import Document
 from docx.shared import Inches
-import argparse
+import argparse, math
 
 # python 3.10 on Windows 10
 # py .\fc2_3.py -i ./ahu_data/hvac_random_fake_data/fc2_3_fake_data1.csv -o 1_ahu_fc2_3_report
@@ -31,9 +31,9 @@ args.add_argument('--no-flask', dest='use-flask', action='store_false')
 args = parser.parse_args()
 
 # required params taken from the screenshot above
-OUTDOOR_DEGF_ERR_THRES = .05
-MIX_DEGF_ERR_THRES = .05
-RETURN_DEGF_ERR_THRES = .05
+OUTDOOR_DEGF_ERR_THRES = 5
+MIX_DEGF_ERR_THRES = 5
+RETURN_DEGF_ERR_THRES = 2
 
 
 def fault_condition_two_(dataframe):
@@ -137,46 +137,52 @@ document.add_picture('./images/fc2_definition.png', width=Inches(6))
 p = document.add_paragraph(
     'Fault condition three equation as defined by ASHRAE:')
 document.add_picture('./images/fc3_definition.png', width=Inches(6))
-document.add_heading('Dataset Plot', level=2)
 
 # ADD IN SUBPLOTS SECTION
+document.add_heading('Dataset Plot', level=2)
 document.add_picture('./static/ahu_fc2_fans_plot.png', width=Inches(6))
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
-df2["timedelta_alldata"] = df2.index.to_series().diff()
-seconds_alldata = df2.timedelta_alldata.sum().seconds
-days_alldata = df2.timedelta_alldata.sum().days
-
-hours_alldata = round(seconds_alldata/3600, 2)
-minutes_alldata = round((seconds_alldata/60) % 60, 2)
-total_hours_calc = days_alldata * 24.0 + hours_alldata
+delta = df2.index.to_series().diff()
+total_days = round(delta.sum() / pd.Timedelta(days=1),2)
+print('DAYS ALL DATA: ',total_days)
+total_hours = delta.sum() / pd.Timedelta(hours=1)
+print('TOTAL HOURS: ',total_hours)
 
 # fc2 stats for histogram plot
-df2["timedelta_fddflag_fc2"] = df2.index.to_series(
-).diff().where(df2["fc2_flag"] == 1)
-seconds_fc2_mode = df2.timedelta_fddflag_fc2.sum().seconds
-hours_fc2_mode = round(seconds_fc2_mode/3600, 2)
-
+hours_fc2_mode = (delta * df2["fc2_flag"]).sum() / pd.Timedelta(hours=1)
+print('FALT FLAG TRUE TOTAL HOURS: ',hours_fc2_mode)
 percent_true_fc2 = round(df2.fc2_flag.mean() * 100, 2)
+print('PERCENT TIME WHEN FLAG IS TRUE: ',percent_true_fc2,'%')
 percent_false_fc2 = round((100 - percent_true_fc2), 2)
+print('PERCENT TIME WHEN FLAG 5 FALSE: ',percent_false_fc2,'%')
 
 df2['hour_of_the_day_fc2'] = df2.index.hour.where(df2["fc2_flag"] == 1)
-flag_true_fc2 = round(
+
+flag_true_fc2_mat = round(
     df2.mat.where(df2["fc2_flag"] == 1).mean(), 2)
+flag_true_fc2_oat = round(
+    df2.oat.where(df2["fc2_flag"] == 1).mean(), 2)
+flag_true_fc2_rat = round(
+    df2.rat.where(df2["fc2_flag"] == 1).mean(), 2)
 
 # fc3 stats for histogram plot
-df2["timedelta_fddflag_fc3"] = df2.index.to_series(
-).diff().where(df2["fc3_flag"] == 1)
-seconds_fc3_mode = df2.timedelta_fddflag_fc3.sum().seconds
-hours_fc3_mode = round(seconds_fc3_mode/3600, 2)
-
+hours_fc3_mode = (delta * df2["fc3_flag"]).sum() / pd.Timedelta(hours=1)
+print('FALT FLAG TRUE TOTAL HOURS: ',hours_fc3_mode)
 percent_true_fc3 = round(df2.fc3_flag.mean() * 100, 2)
+print('PERCENT TIME WHEN FLAG IS TRUE: ',percent_true_fc3,'%')
 percent_false_fc3 = round((100 - percent_true_fc3), 2)
+print('PERCENT TIME WHEN FLAG 5 FALSE: ',percent_false_fc3,'%')
 
 df2['hour_of_the_day_fc3'] = df2.index.hour.where(df2["fc3_flag"] == 1)
-flag_true_fc3 = round(
+
+flag_true_fc3_mat = round(
     df2.mat.where(df2["fc3_flag"] == 1).mean(), 2)
+flag_true_fc3_oat = round(
+    df2.oat.where(df2["fc3_flag"] == 1).mean(), 2)
+flag_true_fc3_rat = round(
+    df2.rat.where(df2["fc3_flag"] == 1).mean(), 2)
 
 print('UNIQUE DF2 HOUR OF DAY: ', df2.hour_of_the_day_fc2.unique())
 print('UNIQUE DF3 HOUR OF DAY: ', df2.hour_of_the_day_fc3.unique())
@@ -198,11 +204,12 @@ fig.savefig('./static/ahu_fc23_histogram.png')
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time calculated in dataset: {df2.timedelta_alldata.sum()}')
+    f'Total time in days calculated in dataset: {total_days}')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours calculated in dataset: {total_hours_calc}')
+    f'Total time in hours calculated in dataset: {total_hours}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
@@ -218,6 +225,7 @@ paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
     f'Percent of time in the dataset when the fault flag 2 is True: {percent_true_fc2}%')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
@@ -237,16 +245,20 @@ paragraph = document.add_paragraph()
 document.add_heading('Time-of-day Histogram Plots', level=2)
 document.add_picture('./static/ahu_fc23_histogram.png', width=Inches(6))
 
-paragraph = document.add_paragraph()
-paragraph.style = 'List Bullet'
-paragraph.add_run(
-    f'Average mix air temp for when in fault condition 2 is True (mixing temp is LOW outside the ranges of return and outside temp): {flag_true_fc2} °F')
-paragraph = document.add_paragraph()
-paragraph.style = 'List Bullet'
-paragraph.add_run(
-    f'Average mix air temp for when in fault condition 3 is True (mixing temp is HIGH and outside the ranges of return and outside temp): {flag_true_fc3} °F')
-paragraph = document.add_paragraph()
+if not math.isnan(flag_true_fc2_mat):
+    paragraph = document.add_paragraph()
+    paragraph.style = 'List Bullet'
+    paragraph.add_run(
+        f'When fault condition 2 is True the average mix air temp is {flag_true_fc2_mat}°F, outside air temp is {flag_true_fc2_oat}°F, and return air temp is {flag_true_fc2_rat}°F. This could possibly help with pin pointing AHU operating conditions for when this fault is True.')
 
+if not math.isnan(flag_true_fc3_mat):
+    paragraph = document.add_paragraph()
+    paragraph.style = 'List Bullet'
+    paragraph.add_run(
+        f'When fault condition 2 is True the average mix air temp is {flag_true_fc3_mat}°F, outside air temp is {flag_true_fc3_oat}°F, and return air temp is {flag_true_fc3_rat}°F. This could possibly help with pin pointing AHU operating conditions for when this fault is True.')
+
+
+paragraph = document.add_paragraph()
 
 # ADD in Summary Statistics
 document.add_heading('Mix Temp Statistics', level=2)
@@ -271,10 +283,10 @@ document.add_heading('Suggestions based on data analysis', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 
-if percent_true_fc2 < 5 and percent_true_fc3 < 5:
+if percent_true_fc2 < 5 or percent_true_fc3 < 5:
 
     paragraph.add_run(
-        'The percent True of time is very high indicating the AHU temperature sensors are out of calibration')
+        'The percent True of time in fault condition 2 or 3 is high indicating the AHU temperature sensors are out of calibration')
 
 else:
     paragraph.add_run(
@@ -291,4 +303,4 @@ run.style = 'Emphasis'
 document.save(f'./final_report/{args.output}.docx')
 print('All Done')
 
-# df2.to_csv('test1.csv')
+

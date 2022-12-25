@@ -64,11 +64,6 @@ df = pd.read_csv(args.input,
     parse_dates=True).rolling('5T').mean()
 
 print(df)
-df_copy = df.copy()
-
-df_copy.plot(figsize=(25, 8),
-         title='AHU Heating, Cooling, and OA Damper Signals')
-plt.savefig('./static/ahu_fc4_signals.png')
 
 # make an entire column out of these params in the Pandas Dataframe
 df['delta_os_max'] = AHU_MIN_OA
@@ -84,12 +79,19 @@ print('COLUMNS: ', print(df.columns))
 
 df['heating_mode'] = df['heating_sig'].gt(0.)
 df['econ_mode'] = df['economizer_sig'].gt(df['ahu_min_oa']) & df['cooling_sig'].eq(0.)
-df['econplusmech_cooling_mode'] = df['economizer_sig'].gt(df['ahu_min_oa']) & df['cooling_sig'].gt(0.)
+df['econ_cooling_mode'] = df['economizer_sig'].gt(df['ahu_min_oa']) & df['cooling_sig'].gt(0.)
 df['mech_cooling_mode'] = df['economizer_sig'].eq(df['ahu_min_oa']) & df['cooling_sig'].gt(0.)
 
-df = df[['heating_mode','econ_mode','econplusmech_cooling_mode','mech_cooling_mode']]
+
+df_to_plot = df[['heating_mode','econ_mode','econ_cooling_mode','mech_cooling_mode',
+                 'heating_sig', 'economizer_sig', 'cooling_sig']]
+df = df[['heating_mode','econ_mode','econ_cooling_mode','mech_cooling_mode']]
 
 df = df.astype(int)
+df_to_plot.heating_mode = df_to_plot.heating_mode.astype(int)
+df_to_plot.econ_mode = df_to_plot.econ_mode.astype(int)
+df_to_plot.econ_cooling_mode = df_to_plot.econ_cooling_mode.astype(int)
+df_to_plot.mech_cooling_mode = df_to_plot.mech_cooling_mode.astype(int)
 
 # calc changes per hour for modes
 # https://stackoverflow.com/questions/69979832/pandas-consecutive-boolean-event-rollup-time-series
@@ -106,8 +108,32 @@ print(df.fc4_flag.describe())
 flag4_max_val = df.fc4_flag.max()
 print('df.fc4_flag.max = ',flag4_max_val)
 
-df.plot(figsize=(25, 8), subplots=True,
-         title='AHU Operating States')
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+plt.title('Fault Conditions 4 Plots')
+
+plot1a, = ax1.plot(df_to_plot.index, df_to_plot.heating_sig, color='r')  # red
+plot1b, = ax1.plot(df_to_plot.index, df_to_plot.cooling_sig, color='b')  # blue
+plot1c, = ax1.plot(df_to_plot.index, df_to_plot.economizer_sig, color='g')  # green
+ax1.set_ylabel('AHU Output Signals In %')
+
+ax2.plot(df_to_plot.index, df_to_plot.heating_mode, color='orange')  # orange
+ax2.plot(df_to_plot.index, df_to_plot.econ_mode, color='olive')  # olive
+ax2.plot(df_to_plot.index, df_to_plot.econ_cooling_mode, color='c')  # cyan
+ax2.plot(df_to_plot.index, df_to_plot.mech_cooling_mode, color='m')  # black
+
+ax2.set_xlabel('Date')
+ax2.set_ylabel('Calculated AHU Operating States')
+
+red_patch = mpatches.Patch(color='red', label='Heating Signal')
+blue_patch = mpatches.Patch(color='blue', label='Cooling Signal')
+green_patch = mpatches.Patch(color='green', label='Economizer Signal')
+orange_patch = mpatches.Patch(color='orange', label='Heating Mode')
+olive_patch = mpatches.Patch(color='olive', label='Econ Mode')
+cyan_patch = mpatches.Patch(color='cyan', label='Econ + Mech Cooling Mode')
+black_patch = mpatches.Patch(color='black', label='Mech Cooling Mode')
+plt.legend(handles=[red_patch, blue_patch, green_patch,
+           orange_patch, olive_patch, cyan_patch, black_patch])
+plt.tight_layout()
 plt.savefig('./static/ahu_fc4_oper_states.png')
 
 
@@ -116,11 +142,8 @@ document = Document()
 document.add_heading('Fault Condition Four Report', 0)
 
 p = document.add_paragraph(
-    'Fault condition four of ASHRAE Guideline 36 is related to flagging control programming that is hunting causing excessive oscilating between heating, economizing, economizing plus mechanical cooling, and mechanical cooling operating states. Fault condition four equation as defined by ASHRAE:')
+    'Fault condition four of ASHRAE Guideline 36 is related to flagging AHU control programming that is hunting between heating, economizing, economizing plus mechanical cooling, and mechanical cooling operating states. This fault diagnostic does NOT flag simultaneous heating and cooling, just excessive cycling between the states or operating modes the AHU maybe going in and out of. Fault condition four equation as defined by ASHRAE:')
 document.add_picture('./images/fc4_definition.png', width=Inches(6))
-
-document.add_heading('Heating, Cooling, and OA Damper Signal Plot', level=2)
-document.add_picture('./static/ahu_fc4_signals.png', width=Inches(6))
 
 document.add_heading('Calculated Operating States Plot', level=2)
 document.add_picture('./static/ahu_fc4_oper_states.png', width=Inches(6))
@@ -128,84 +151,90 @@ document.add_picture('./static/ahu_fc4_oper_states.png', width=Inches(6))
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
-df["timedelta_alldata"] = df.index.to_series().diff()
-seconds_alldata = df.timedelta_alldata.sum().seconds
-days_alldata = df.timedelta_alldata.sum().days
-hours_alldata = round(seconds_alldata/3600,2)
-minutes_alldata = round((seconds_alldata/60) % 60,2)
-total_hours_calc = days_alldata * 24.0 + hours_alldata
+delta_all_data = df.index.to_series().diff()
+total_days_all_data = round(delta_all_data.sum() / pd.Timedelta(days=1),2)
+print('DAYS ALL DATA: ',total_days_all_data)
+total_hours_all_data = delta_all_data.sum() / pd.Timedelta(hours=1)
+print('HOURS ALL DATA: ',total_hours_all_data)
 
-# calculate time statistics while in different modes
-df["timedelta_heating_mode"] = df.index.to_series().diff().where(df["heating_mode"] == 1)
-seconds_htg_mode = df.timedelta_heating_mode.sum().seconds
-hours_htg_mode = round(seconds_htg_mode/3600,2)
-percent_true_heating_mode = round(df.heating_mode.mean() * 100, 2)
+# heating mode runtime stats
+delta_heating = df.heating_mode.index.to_series().diff()
+total_hours_heating = (delta_heating * df["heating_mode"]).sum() / pd.Timedelta(hours=1)
+print('HOURS HEATING MODE: ',total_hours_heating)
+percent_heating = round(df.heating_mode.mean() * 100, 2)
+print('PERCENT TIME HEATING MODE: ',percent_heating,'%')
 
-df["timedelta_econ_mode"] = df.index.to_series().diff().where(df["econ_mode"] == 1)
-seconds_econ_mode = df.timedelta_econ_mode.sum().seconds
-hours_econ_mode = round(seconds_econ_mode/3600,2)
-percent_true_econ_mode = round(df.econ_mode.mean() * 100, 2)
+# econ mode runtime stats
+delta_econ = df.econ_mode.index.to_series().diff()
+total_hours_econ = (delta_econ * df["econ_mode"]).sum() / pd.Timedelta(hours=1)
+print('HOURS ECON MODE: ',total_hours_econ)
+percent_econ = round(df.econ_mode.mean() * 100, 2)
+print('PERCENT TIME ECON MODE: ',percent_econ,'%')
 
-df["timedelta_econplusmech_cooling_mode"] = df.index.to_series().diff().where(df["econplusmech_cooling_mode"] == 1)
-seconds_econplusmech_cooling_mode = df.timedelta_econplusmech_cooling_mode.sum().seconds
-hours_econplusmech_cooling = round(seconds_econplusmech_cooling_mode/3600,2)
-percent_true_econplusmech_cooling_mode = round(df.econplusmech_cooling_mode.mean() * 100, 2)
+# econ plus mech cooling mode runtime stats
+delta_econ_clg = df.econ_cooling_mode.index.to_series().diff()
+total_hours_econ_clg = (delta_econ_clg * df["econ_cooling_mode"]).sum() / pd.Timedelta(hours=1)
+print('HOURS ECON AND MECH CLG MODE: ',total_hours_econ_clg)
+percent_econ_clg = round(df.econ_cooling_mode.mean() * 100, 2)
+print('PERCENT TIME ECON AND MECH CLG MODE: ',percent_econ_clg,'%')
 
-df["timedelta_mech_cooling_mode"] = df.index.to_series().diff().where(df["mech_cooling_mode"] == 1)
-seconds_mech_cooling_mode = df.timedelta_mech_cooling_mode.sum().seconds
-hours_mech_cooling_mode = round(seconds_mech_cooling_mode/3600,2)
-percent_true_mech_cooling_mode = round(df.mech_cooling_mode.mean() * 100, 2)
+# mech clg mode runtime stats
+delta_clg = df.mech_cooling_mode.index.to_series().diff()
+total_hours_clg = (delta_clg * df["mech_cooling_mode"]).sum() / pd.Timedelta(hours=1)
+print('HOURS MECH CLG MODE: ',total_hours_clg)
+percent_clg = round(df.mech_cooling_mode.mean() * 100, 2)
+print('PERCENT TIME MECH CLG MODE: ',percent_clg,'%')
 
 # add calcs to word doc
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time calculated in dataset: {df.timedelta_alldata.sum()}')
+    f'Total time in days calculated in dataset: {total_days_all_data}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours calculated in dataset: {total_hours_calc}')
+    f'Total time in hours calculated in dataset: {total_hours_all_data}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours while AHU is in a heating mode: {hours_htg_mode}')
+    f'Total time in hours while AHU is in a heating mode: {total_hours_heating}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total percent time in while AHU is in a heating mode: {percent_true_heating_mode}%')
+    f'Total percent time in while AHU is in a heating mode: {percent_heating}%')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours while AHU is in a economizing mode: {hours_econ_mode}')
+    f'Total time in hours while AHU is in a economizing mode: {total_hours_econ}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total percent time in while AHU is in a economizing mode: {percent_true_econ_mode}%')
+    f'Total percent time in while AHU is in a economizing mode: {percent_econ}%')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours while AHU is in a economizing plus mechanical cooling mode: {hours_econplusmech_cooling}')
+    f'Total time in hours while AHU is in a economizing plus mechanical cooling mode: {total_hours_econ_clg}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total percent time in while AHU is in a economizing plus mechanical cooling mode: {percent_true_econplusmech_cooling_mode}%')
+    f'Total percent time in while AHU is in a economizing plus mechanical cooling mode: {percent_econ_clg}%')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours while AHU is in a mechanical cooling mode: {hours_mech_cooling_mode}')
+    f'Total time in hours while AHU is in a mechanical cooling mode: {total_hours_clg}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total percent time in while AHU is in a mechanical cooling mode: {hours_mech_cooling_mode}%')
+    f'Total percent time in while AHU is in a mechanical cooling mode: {percent_clg}%')
 
 # skip calculating statistics if there is no fault 4's
 # Pandas calcs alot of NaNs and errors out
@@ -223,8 +252,8 @@ if flag4_max_val != 0:
         df.heating_mode.where(df["fc4_flag"] == 1).mean(), 2)
     flag_true_econ_mode = round(
         df.econ_mode.where(df["fc4_flag"] == 1).mean(), 2)
-    flag_true_econplusmech_cooling_mode = round(
-        df.econplusmech_cooling_mode.where(df["fc4_flag"] == 1).mean(), 2)
+    flag_true_econ_cooling_mode = round(
+        df.econ_cooling_mode.where(df["fc4_flag"] == 1).mean(), 2)
     flag_true_mech_cooling_mode = round(
         df.mech_cooling_mode.where(df["fc4_flag"] == 1).mean(), 2)
 
@@ -279,7 +308,7 @@ if flag4_max_val != 0:
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'Control system in a economizer and mechanical cooling mode while fault condition 4 is True: {flag_true_econplusmech_cooling_mode} °F')
+        f'Control system in a economizer and mechanical cooling mode while fault condition 4 is True: {flag_true_econ_cooling_mode} °F')
     paragraph = document.add_paragraph()
 
     paragraph = document.add_paragraph()
@@ -302,19 +331,19 @@ else:
 document.add_heading('Heating Signal Statistics', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
-paragraph.add_run(str(df_copy.heating_sig.describe()))
+paragraph.add_run(str(df_to_plot.heating_sig.describe()))
 
 # ADD in Summary Statistics
 document.add_heading('Cooling Signal Statistics', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
-paragraph.add_run(str(df_copy.cooling_sig.describe()))
+paragraph.add_run(str(df_to_plot.cooling_sig.describe()))
 
 # ADD in Summary Statistics
 document.add_heading('Economizer Free Cooling Statistics', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
-paragraph.add_run(str(df_copy.economizer_sig.describe()))
+paragraph.add_run(str(df_to_plot.economizer_sig.describe()))
 
 
 paragraph = document.add_paragraph()

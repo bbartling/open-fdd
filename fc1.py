@@ -10,7 +10,7 @@ import matplotlib.patches as mpatches
 from docx import Document
 from docx.shared import Inches
 
-import argparse
+import argparse, math
 
 # python 3.10 on Windows 10
 # py .\fc1.py -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
@@ -131,53 +131,52 @@ document.add_picture('./static/ahu_fc1_fans_plot.png', width=Inches(6))
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
-df2["timedelta_alldata"] = df2.index.to_series().diff()
-seconds_alldata = df2.timedelta_alldata.sum().seconds
-days_alldata = df2.timedelta_alldata.sum().days
-
-hours_alldata = round(seconds_alldata/3600,2)
-minutes_alldata = round((seconds_alldata/60) % 60,2)
-total_hours_calc = days_alldata * 24.0 + hours_alldata
-
-df2["timedelta_fddflag"] = df2.index.to_series().diff().where(df2["fc1_flag"] == 1)
-seconds_fc1_mode = df2.timedelta_fddflag.sum().seconds
-hours_fc1_mode = round(seconds_fc1_mode/3600,2)
+delta = df2.index.to_series().diff()
+total_days = round(delta.sum() / pd.Timedelta(days=1),2)
+print('DAYS ALL DATA: ',total_days)
+total_hours = delta.sum() / pd.Timedelta(hours=1)
+print('TOTAL HOURS: ',total_hours)
+hours_fc1_mode = (delta * df2["fc1_flag"]).sum() / pd.Timedelta(hours=1)
+print('FALT FLAG TRUE TOTAL HOURS: ',hours_fc1_mode)
 percent_true = round(df2.fc1_flag.mean() * 100, 2)
+print('PERCENT TIME WHEN FLAG IS TRUE: ',percent_true,'%')
 percent_false = round((100 - percent_true), 2)
+print('PERCENT TIME WHEN FLAG 5 FALSE: ',percent_false,'%')
+df2['hour_of_the_day_fc1'] = df2.index.hour.where(df2["fc1_flag"] == 1)
+flag_true_duct_static = round(
+    df2.duct_static.where(df2["fc1_flag"] == 1).mean(), 2)
 
-# make hist plots
-df2['hour_of_the_day'] = df2.index.hour.where(df2["fc1_flag"] == 1)
 
 # make hist plots fc3
 fig, ax = plt.subplots(tight_layout=True, figsize=(25,8))
-ax.hist(df2.hour_of_the_day)
+ax.hist(df2.hour_of_the_day_fc1.dropna())
 ax.set_xlabel('24 Hour Number in Day')
 ax.set_ylabel('Frequency')
 ax.set_title(f'Hour-Of-Day When Fault Flag 1 is TRUE')
 fig.savefig('./static/ahu_fc1_histogram.png')
 
 
-flag_true_duct_pressure = round(
-    df2.duct_static.where(df2["fc1_flag"] == 1).mean(), 2)
-
-
 # add calcs to word doc
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time calculated in dataset: {df2.timedelta_alldata.sum()}')
+    f'Total time in days calculated in dataset: {total_days}')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours calculated in dataset: {total_hours_calc}')
+    f'Total time in hours calculated in dataset: {total_hours}')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
     f'Total time in hours for when fault flag is True: {hours_fc1_mode}')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
     f'Percent of time in the dataset when the fault flag is True: {percent_true}%')
+
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
@@ -188,12 +187,14 @@ paragraph = document.add_paragraph()
 document.add_heading('Time-of-day Histogram Plots', level=2)
 document.add_picture('./static/ahu_fc1_histogram.png', width=Inches(6))
 
-paragraph = document.add_paragraph()
-paragraph.style = 'List Bullet'
-paragraph.add_run(
-    f'Average duct system pressure for when in fault condition (fan VFD speed > 95%): {flag_true_duct_pressure}"WC')
-paragraph = document.add_paragraph()
+if not math.isnan(flag_true_duct_static):
+    paragraph = document.add_paragraph()
+    paragraph.style = 'List Bullet'
+    paragraph.add_run(
+        f'Average duct system pressure for when in fault condition (fan VFD speed > 95%): {flag_true_duct_static}"WC')
 
+
+paragraph = document.add_paragraph()
 
 # ADD in Summary Statistics of fan operation
 document.add_heading('VFD Speed Statistics', level=2)
@@ -217,13 +218,15 @@ paragraph.add_run(str(df2.duct_static_setpoint.describe()))
 document.add_heading('Suggestions based on data analysis', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
-
-if percent_true < 15:
-
-    paragraph.add_run('Fan is running at high speeds appearing to not generate good duct static pressure (BAD)')
+    
+if percent_true > 5.0:
+    paragraph.add_run(
+        'The percent True metric that represents the amount of time for when the fault flag is True is high indicating the fan is running at high speeds and appearing to not generate good duct static pressure')
 
 else:
-    paragraph.add_run('Fan is appears to generate good duct static pressure (GOOD)')
+    paragraph.add_run(
+        'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the fan appears to generate good duct static pressure')
+
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
