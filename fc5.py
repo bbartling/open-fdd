@@ -97,7 +97,7 @@ document = Document()
 document.add_heading('Fault Condition Five Report', 0)
 
 p = document.add_paragraph(
-    'Fault condition five of ASHRAE Guideline 36 is related to flagging supply air temperatures that are out of acceptable ranges based on the mix air temperature and an assumption for heat created by the AHU supply fan in the air stream. Fault condition five equation as defined by ASHRAE:')
+    'Fault condition five of ASHRAE Guideline 36 is (an AHU heating mode or winter time conditions only fault equation) related to flagging supply air temperatures that are out of acceptable ranges based on the mix air temperature and an assumption for heat created by the AHU supply fan in the air stream. Fault condition five equation as defined by ASHRAE:')
 document.add_picture('./images/fc5_definition.png', width=Inches(6))
 
 # ADD IN SUBPLOTS SECTION
