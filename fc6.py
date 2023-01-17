@@ -66,7 +66,7 @@ df['oat_degf_err_thres'] = OAT_DEGF_ERR_THRES
 df['rat_degf_err_thres'] = RAT_DEGF_ERR_THRES
 
 df['oat_rat_delta_min'] = DELTA_TEMP_MIN
-df['rat_minus_oat'] = df['rat'] - df['oat']
+df['rat_minus_oat'] = abs(df['rat'] - df['oat'])
 
 df['percent_oa_calc'] = (df['mat'] - df['rat']) / (df['oat'] - df['rat'])
 df['percent_oa_calc'] = df['percent_oa_calc'].apply(lambda x : x if x > 0 else 0)
@@ -74,7 +74,7 @@ df['percent_oa_calc'] = df['percent_oa_calc'].apply(lambda x : x if x > 0 else 0
 #df['actual_oa_calc'] = (df['percent_oa_calc']/100) * df['vav_total_flow']
 #df['actual_oa_calc'] = (df['percent_oa_calc']) * df['vav_total_flow']
 df['perc_OAmin'] = AHU_MIN_CFM_STP / df['vav_total_flow']
-df['percent_oa_calc_minus_perc_OAmin'] = df['percent_oa_calc'] - df['perc_OAmin']
+df['percent_oa_calc_minus_perc_OAmin'] = abs(df['percent_oa_calc'] - df['perc_OAmin'])
 
 
 print('percent_oa_calc: ', df.percent_oa_calc)
