@@ -17,7 +17,7 @@ import argparse
 import math
 
 # python 3.10 on Windows 10
-# py .\fc9.py -i ./ahu_data/hvac_random_fake_data/fc9_fake_data1.csv -o fake1_ahu_fc9_report
+# py .\fc11.py -i ./ahu_data/hvac_random_fake_data/fc11_fake_data1.csv -o fake1_ahu_fc11_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group('Options')
@@ -35,8 +35,8 @@ args.add_argument('--no-flask', dest='use-flask', action='store_false')
 args = parser.parse_args()
 
 
-def fault_condition_nine(df):
-    return df.oat_minus_oaterror > df.satsp_delta_saterr
+def fault_condition_eleven(df):
+    return df.oat_minus_oaterror < df.satsp_delta_saterr
 
 
 df = pd.read_csv(args.input,
@@ -48,7 +48,7 @@ df_copy = df.copy()
 
 df_copy.plot(figsize=(25, 8),
              title='AHU Temp Sensors')
-plt.savefig('./static/ahu_fc9_signals.png')
+plt.savefig('./static/ahu_fc11_signals.png')
 
 # make an entire column out of these params in the Pandas Dataframe
 # required params taken from the screenshot above
@@ -74,10 +74,10 @@ end = df.tail(1).index.date
 print('Dataset end: ', end)
 print('COLUMNS: ', print(df.columns))
 
-df['fc9_flag'] = fault_condition_nine(df)
+df['fc11_flag'] = fault_condition_eleven(df)
 
 df2 = df.copy().dropna()
-df2['fc9_flag'] = df2['fc9_flag'].astype(int)
+df2['fc11_flag'] = df2['fc11_flag'].astype(int)
 
 # drop params column for better plot
 df2 = df2.drop([
@@ -89,34 +89,34 @@ df2 = df2.drop([
 print(df2)
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
-plt.title('Fault Conditions 9 Plot')
+plt.title('Fault Conditions 11 Plot')
 
 plot1a, = ax1.plot(df2.index, df2.oat, label="OAT")
 plot1b, = ax1.plot(df2.index, df2.supply_air_setpoint, label="SATSP")
 ax1.legend(loc='best')
 ax1.set_ylabel('AHU Supply & Mix Temps °F')
 
-ax2.plot(df2.index, df2.fc9_flag, label="Fault", color="k")
+ax2.plot(df2.index, df2.fc11_flag, label="Fault", color="k")
 ax2.set_xlabel('Date')
 ax2.set_ylabel('Fault Flags')
 ax2.legend(loc='best')
 
 plt.legend()
 plt.tight_layout()
-plt.savefig('./static/ahu_fc9_fans_plot.png')
+plt.savefig('./static/ahu_fc11_fans_plot.png')
 # plt.show()
 
-print("Starting ahu fc9 docx report")
+print("Starting ahu fc11 docx report")
 document = Document()
 document.add_heading('Fault Condition Nine Report', 0)
 
 p = document.add_paragraph(
-    'Fault condition nine of ASHRAE Guideline 36 is an AHU economizing mode only fault equation with an attempt at verifying an AHU sensor error on the outside and supply air temperature sensors. A fault would get flagged if outdoor temperature is too high for economizing. Fault condition nine equation as defined by ASHRAE:')
-document.add_picture('./images/fc9_definition.png', width=Inches(6))
+    'Fault condition nine of ASHRAE Guideline 36 is an AHU economizing plus mechanical cooling mode (very similar to fault 9) only fault equation with an attempt at verifying an AHU sensor error on the outside and supply air temperature sensors. A fault would get flagged if the AHU is in an economizing and mechanical cooling mode the outside air temperature is too low. Fault condition nine equation as defined by ASHRAE:')
+document.add_picture('./images/fc11_definition.png', width=Inches(6))
 
 # ADD IN SUBPLOTS SECTION
 document.add_heading('Dataset Plot', level=2)
-document.add_picture('./static/ahu_fc9_fans_plot.png', width=Inches(6))
+document.add_picture('./static/ahu_fc11_fans_plot.png', width=Inches(6))
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
@@ -125,25 +125,25 @@ total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
 print('DAYS ALL DATA: ', total_days)
 total_hours = delta.sum() / pd.Timedelta(hours=1)
 print('TOTAL HOURS: ', total_hours)
-hours_fc9_mode = (delta * df2["fc9_flag"]).sum() / pd.Timedelta(hours=1)
-print('FALT FLAG TRUE TOTAL HOURS: ', hours_fc9_mode)
-percent_true = round(df2.fc9_flag.mean() * 100, 2)
-print('PERCENT TIME WHEN Flag 9 TRUE: ', percent_true, '%')
+hours_fc11_mode = (delta * df2["fc11_flag"]).sum() / pd.Timedelta(hours=1)
+print('FALT FLAG TRUE TOTAL HOURS: ', hours_fc11_mode)
+percent_true = round(df2.fc11_flag.mean() * 100, 2)
+print('PERCENT TIME WHEN Flag 11 TRUE: ', percent_true, '%')
 percent_false = round((100 - percent_true), 2)
-print('PERCENT TIME WHEN Flag 9 FALSE: ', percent_false, '%')
-df2['hour_of_the_day_fc9'] = df2.index.hour.where(df2["fc9_flag"] == 1)
+print('PERCENT TIME WHEN Flag 11 FALSE: ', percent_false, '%')
+df2['hour_of_the_day_fc11'] = df2.index.hour.where(df2["fc11_flag"] == 1)
 
 flag_true_oat = round(
-    df2.oat.where(df2["fc9_flag"] == 1).mean(), 2)
+    df2.oat.where(df2["fc11_flag"] == 1).mean(), 2)
 print('FLAG TRUE SAT DEGF: ', flag_true_oat)
 
-# make hist plots fc9
+# make hist plots fc11
 fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
-ax.hist(df2.hour_of_the_day_fc9.dropna())
+ax.hist(df2.hour_of_the_day_fc11.dropna())
 ax.set_xlabel('24 Hour Number in Day')
 ax.set_ylabel('Frequency')
-ax.set_title(f'Hour-Of-Day When Fault Flag 9 is TRUE')
-fig.savefig('./static/ahu_fc9_histogram.png')
+ax.set_title(f'Hour-Of-Day When Fault Flag 11 is TRUE')
+fig.savefig('./static/ahu_fc11_histogram.png')
 
 # add calcs to word doc
 paragraph = document.add_paragraph()
@@ -159,7 +159,7 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours for when fault Flag 10 is True: {hours_fc9_mode}')
+    f'Total time in hours for when fault Flag 10 is True: {hours_fc11_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
@@ -172,17 +172,17 @@ paragraph.add_run(
     f'Percent of time in the dataset when fault Flag 10 is False: {percent_false}%')
 
 
-if hours_fc9_mode != float(0):
+if hours_fc11_mode != float(0):
     paragraph = document.add_paragraph()
     # ADD HIST Plots
     document.add_heading('Time-of-day Histogram Plots', level=2)
-    document.add_picture('./static/ahu_fc9_histogram.png', width=Inches(6))
+    document.add_picture('./static/ahu_fc11_histogram.png', width=Inches(6))
 
 if not math.isnan(flag_true_oat):
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'When fault condition 9 is True the average supply temperature is {flag_true_oat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
+        f'When fault condition 11 is True the average supply temperature is {flag_true_oat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
 
 paragraph = document.add_paragraph()
 
@@ -221,4 +221,4 @@ run.style = 'Emphasis'
 document.save(f'./final_report/{args.output}.docx')
 print('All Done')
 
-# df2.to_csv('testdf2_fc9.csv')
+# df2.to_csv('testdf2_fc11.csv')
