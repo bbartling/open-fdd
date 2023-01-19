@@ -78,7 +78,7 @@ df2 = df2.drop(['sat_degf_err_thres'], axis=1)
 print(df2)
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
-plt.title('Fault Conditions 6 Plot')
+plt.title('Fault Conditions 7 Plot')
 
 plot1a, = ax1.plot(df2.index, df2.sat, label="SAT")
 plot1b, = ax1.plot(df2.index, df2.satsp, label="SATsp")
@@ -176,7 +176,7 @@ if not math.isnan(flag_true_sat):
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'When fault condition 6 is True the AHU heating valve is greater or equal to 99% and the average supply temperature is {flag_true_sat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
+        f'When fault condition 7 is True the average supply temperature is {flag_true_sat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
 
 paragraph = document.add_paragraph()
 
