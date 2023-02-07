@@ -16,7 +16,7 @@
 * a histagram representing the hour of the day for when the fault equation is `True`.
 * sensor summary statistics
 
-###### Caveats in the present moment is the fault equations expect a pandas dataframe with the corresponding data frame column names unique to each fault equation and in °F. Future version can include degrees °C is there is the use case. For example, the fault equation 6 function is:
+###### Caveats in the present moment is the fault equations expect a pandas dataframe with the corresponding data frame column names unique to each fault equation and in °F. Future version to include °C. For example, the fault equation 6 function is:
 
 ```shell
 def fault_condition_six_(df):
@@ -25,12 +25,12 @@ def fault_condition_six_(df):
                          )
 ```
 
-###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested with `12/22/2022  7:40:00 AM`:
+###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
 ###### fc1.py
 * `duct_static` (duct static pressure °F)
 * `supply_vfd_speed` (suppy fan VFD speed reference %)
-- note this equation assumes 1" of static pressure setpoint. Script should be to modified include the AHU duct pressure setpoint if it is fixed or another variable should be created for duct pressure setpoint if the data exists.
+- note this equation assumes 1" of AHU duct static pressure setpoint. Script should be to modified include the AHU duct pressure setpoint if it is fixed or if another variable is available that represents actual duct pressure setpoint if the data exists.
 
 ###### fc2_3.py 
 * `mat` (mixing air temperature °F)
