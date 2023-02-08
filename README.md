@@ -27,58 +27,65 @@ def fault_condition_six_(df):
 
 ###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
-###### fc1.py
+###### fc1.py - Supply fan not meeting duct static setpoint near 100% fan speed
 * `duct_static` (duct static pressure °F)
 * `supply_vfd_speed` (suppy fan VFD speed reference %)
 - note this equation assumes 1" of AHU duct static pressure setpoint. Script should be to modified include the AHU duct pressure setpoint if it is fixed or if another variable is available that represents actual duct pressure setpoint if the data exists.
 
-###### fc2_3.py 
+###### fc2_3.py - Mixing temp too high or low
 * `mat` (mixing air temperature °F)
 * `rat` (return air temperature °F)
 * `oat` (outside air temperature °F)
 
-###### fc4.py
+###### fc4.py - Control system excesses operating state changes
 * `heating_sig` (heating valve position or command %)
 * `economizer_sig` (mixing air damper position or command %)
 * `cooling_sig` (cooling valve position or command %)
 
-###### fc5.py
-* `heating_sig` (heating valve position or command %)
-* `economizer_sig` (mixing air damper position or command %)
-* `cooling_sig` (cooling valve position or command %)
+###### fc5.py - Suppy air temp too low
+-note this is an AHU heating mode only fault to run only when the heating signal is active
+* `mat` (mixing air temperature °F)
+* `sat`	(supply air temperature °F)
 
-###### fc6.py
+###### fc6.py - OA fraction too high
 * `mat` (mixing air temperature °F)
 * `rat` (return air temperature °F)
 * `oat` (outside air temperature °F)
 * `vav_total_flow` (totalized vav box air flows CFM)
 
-###### fc7.py
+###### fc7.py - Supply air temp too low
+-note this is an AHU heating mode only fault to run only when the heating signal is active
 * `sat`	(supply air temperature °F)
 * `satsp` (supply air temperature setpoint °F)
 * `htg` (heating valve position or command %)
 
-###### fc8.py
+###### fc8.py - Supply and mix air should be approx equal
+-note this is an AHU economizer mode only fault to run only when the mix damper signal is active and both heating and cooling signals are inactive
 * `mat` (mixing air temperature °F)
 * `sat`	(supply air temperature °F)
 
-###### fc9.py
+###### fc9.py - Outside air temp too high for free cooling without additional mechanical cooling
+-note this is an AHU economizer mode only fault to run only when the mix damper signal is active and both heating and cooling signals are inactive
 * `sat`	(supply air temperature °F)
 * `oat` (outside air temperature °F)
 
-###### fc10.py
+###### fc10.py - Outside and mix air temp should be approx equal
+-note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper and cooling signal is active and the heating signal is inactive
 * `oat` (outside air temperature °F)
 * `mat` (mixing air temperature °F)
 
-###### fc11.py
+###### fc11.py - Outside air temp too low for 100% OA cooling
+-note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper and cooling signal is active and the heating signal is inactive
 * `sat`	(supply air temperature °F)
 * `oat` (outside air temperature °F)
 
-###### fc12.py
+###### fc12.py - Supply air too high; should be less than mix air temp
+-note this is an AHU economizer mode or economizer + mechanical cooling mode only fault to run only when the mix damper or mix damper and cooling signal is active and the heating signal is inactive
 * `sat`	(supply air temperature °F)
 * `mat` (mixing air temperature °F)
 
-###### fc13.py
+###### fc13.py - Supply air temp too high in full cooling
+-note this is an AHU economizer mode or economizer + mechanical cooling mode only fault to run only when the mix damper or mix damper and cooling signal is active and the heating signal is inactive
 * `sat`	(supply air temperature °F)
 * `satsp` (supply air temperature setpoint °F)
 * `clg` (cooling valve position or command %)
@@ -90,7 +97,7 @@ df = pd.read_csv(args.input,
                  index_col='Date',
                  parse_dates=True).rolling('5T').mean()
 ```
-### More to come to incorporate G36 central cooling and heating plants (See PDF 2021 G36 that includes these equations in the PDF folder). Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote HVAC optimization and building carbon reduction.
+### More to come to incorporate G36 central cooling and heating plants (See PDF 2021 G36 that includes these equations in the PDF folder). Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote ASHRAE, HVAC optimization, and building carbon reduction.
 
 ## Author
 
