@@ -25,8 +25,15 @@ args.add_argument('-i', '--input', required=True, type=str,
 args.add_argument('-o', '--output', required=True, type=str,
                   help='Word File Output Name')
 '''
-args.add_argument('--use-flask', default=False, action='store_true')
-args.add_argument('--no-flask', dest='use-flask', action='store_false')
+FUTURE 
+ * incorporate an arg for SI units 
+ * °C on temp sensors
+ * piping pressure sensor PSI conversion
+ * air flow CFM conversion
+ * AHU duct static pressure "WC
+
+args.add_argument('--use-SI-units', default=False, action='store_true')
+args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 '''
 args = parser.parse_args()
 
@@ -36,47 +43,21 @@ MIX_DEGF_ERR_THRES = 5
 RETURN_DEGF_ERR_THRES = 2
 
 
-def fault_condition_two_(dataframe):
-    return ((dataframe.mat + dataframe.mix_degf_err_thres) < np.minimum((dataframe.rat - dataframe.return_degf_err_thres),
-                                                                        (dataframe.oat - dataframe.outdoor_degf_err_thres)))
+def fault_condition_two_(df):
+    return ((df.mat + df.mix_degf_err_thres) < np.minimum((df.rat - df.return_degf_err_thres),
+                                                                        (df.oat - df.outdoor_degf_err_thres)))
 
 
-def fault_condition_three_(dataframe):
-    return ((dataframe.mat - dataframe.mix_degf_err_thres) > np.maximum((dataframe.rat + dataframe.return_degf_err_thres),
-                                                                        (dataframe.oat + dataframe.outdoor_degf_err_thres)))
+def fault_condition_three_(df):
+    return ((df.mat - df.mix_degf_err_thres) > np.maximum((df.rat + df.return_degf_err_thres),
+                                                                        (df.oat + df.outdoor_degf_err_thres)))
 
-
-'''
-mat = pd.read_csv(
-    './ahu_data/MA-T.csv',
-    index_col='Date',
-    parse_dates=True).fillna(method='ffill').fillna(method='bfill').dropna()
-#print(mat)
-mat = mat.rolling('5T').mean()
-
-rat = pd.read_csv(
-    './ahu_data/RA-T.csv',
-    index_col='Date',
-    parse_dates=True).fillna(method='ffill').fillna(method='bfill').dropna()
-#print(rat)
-vfd_speed_avg = rat.rolling('5T').mean()
-
-oat = pd.read_csv(
-    './ahu_data/OA-T.csv',
-    index_col='Date',
-    parse_dates=True).fillna(method='ffill').fillna(method='bfill').dropna()
-#print(oat)
-vfd_speed_avg = rat.rolling('5T').mean()
-
-mat_rat = mat.join(rat)
-df = mat_rat.join(oat)
-'''
 
 df = pd.read_csv(args.input,
                  index_col='Date',
                  parse_dates=True).rolling('5T').mean()
 
-# make an entire column out of these params in the Pandas Dataframe
+# make an entire column out of these params in the Pandas df
 df['outdoor_degf_err_thres'] = OUTDOOR_DEGF_ERR_THRES
 df['mix_degf_err_thres'] = MIX_DEGF_ERR_THRES
 df['return_degf_err_thres'] = RETURN_DEGF_ERR_THRES

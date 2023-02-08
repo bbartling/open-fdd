@@ -24,8 +24,15 @@ args.add_argument('-i', '--input', required=True, type=str,
 args.add_argument('-o', '--output', required=True, type=str,
                     help='Word File Output Name')
 '''
-args.add_argument('--use-flask', default=False, action='store_true')
-args.add_argument('--no-flask', dest='use-flask', action='store_false')
+FUTURE 
+ * incorporate an arg for SI units 
+ * °C on temp sensors
+ * piping pressure sensor PSI conversion
+ * air flow CFM conversion
+ * AHU duct static pressure "WC
+
+args.add_argument('--use-SI-units', default=False, action='store_true')
+args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 '''
 args = parser.parse_args()
 
@@ -35,30 +42,11 @@ VFD_SPEED_PERCENT_MAX = .99
 DUCT_STATIC_INCHES_ERR_THRES = .1
 
 
-def fault_condition_one(dataframe):
-    return operator.and_(dataframe.duct_static < (dataframe.duct_static_setpoint - dataframe.duct_static_inches_err_thres),
-                         dataframe.supply_vfd_speed > (dataframe.vfd_speed_percent_max - dataframe.vfd_speed_percent_err_thres))
+def fault_condition_one(df):
+    return operator.and_(df.duct_static < (df.duct_static_setpoint - df.duct_static_inches_err_thres),
+                         df.supply_vfd_speed > (df.vfd_speed_percent_max - df.vfd_speed_percent_err_thres))
  
-'''
-duct_pressure = pd.read_csv(
-    './ahu_data/DA-P.csv',
-    index_col='Date',
-    parse_dates=True).fillna(method='ffill').dropna()
-print(duct_pressure)
-duct_pressure_avg = duct_pressure.rolling('5T').mean()
 
-
-vfd_speed = pd.read_csv(
-    './ahu_data/SF-O.csv',
-    index_col='Date',
-    parse_dates=True).fillna(method='ffill').dropna()
-print(vfd_speed)
-vfd_speed_avg = vfd_speed.rolling('5T').mean()
-
-
-# combine duct pressure and fan speed datasets
-df = duct_pressure_avg.join(vfd_speed_avg)
-'''
 
 df = pd.read_csv(args.input,
     index_col='Date',

@@ -29,8 +29,15 @@ args.add_argument('-i', '--input', required=True, type=str,
 args.add_argument('-o', '--output', required=True, type=str,
                   help='Word File Output Name')
 '''
-args.add_argument('--use-flask', default=False, action='store_true')
-args.add_argument('--no-flask', dest='use-flask', action='store_false')
+FUTURE 
+ * incorporate an arg for SI units 
+ * °C on temp sensors
+ * piping pressure sensor PSI conversion
+ * air flow CFM conversion
+ * AHU duct static pressure "WC
+
+args.add_argument('--use-SI-units', default=False, action='store_true')
+args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 '''
 args = parser.parse_args()
 

@@ -28,7 +28,7 @@ def fault_condition_six_(df):
 ###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
 ###### fc1.py - Supply fan not meeting duct static setpoint near 100% fan speed
-* `duct_static` (duct static pressure °F)
+* `duct_static` (duct static pressure Inches WC)
 * `supply_vfd_speed` (suppy fan VFD speed reference %)
 - note this equation assumes 1" of AHU duct static pressure setpoint. Script should be to modified include the AHU duct pressure setpoint if it is fixed or if another variable is available that represents actual duct pressure setpoint if the data exists.
 
@@ -70,27 +70,27 @@ def fault_condition_six_(df):
 * `oat` (outside air temperature °F)
 
 ###### fc10.py - Outside and mix air temp should be approx equal
--note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper and cooling signal is active and the heating signal is inactive
+-note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper is 100% OPEN and the cooling signal is active and the heating signal is inactive
 * `oat` (outside air temperature °F)
 * `mat` (mixing air temperature °F)
 
 ###### fc11.py - Outside air temp too low for 100% OA cooling
--note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper and cooling signal is active and the heating signal is inactive
+-note this is an AHU economizer + mechanical cooling mode only fault to run only when the mix damper is 100% OPEN and the cooling signal is active and the heating signal is inactive
 * `sat`	(supply air temperature °F)
 * `oat` (outside air temperature °F)
 
 ###### fc12.py - Supply air too high; should be less than mix air temp
--note this is an AHU economizer mode or economizer + mechanical cooling mode only fault to run only when the mix damper or mix damper and cooling signal is active and the heating signal is inactive
+-note this is an AHU economizer AND economizer + mechanical cooling mode only fault to run only when the mix damper is 100% OPEN and the cooling signal is active and the heating signal is inactive OR if just the cooling signal is active
 * `sat`	(supply air temperature °F)
 * `mat` (mixing air temperature °F)
 
 ###### fc13.py - Supply air temp too high in full cooling
--note this is an AHU economizer mode or economizer + mechanical cooling mode only fault to run only when the mix damper or mix damper and cooling signal is active and the heating signal is inactive
+-note this is an AHU economizer AND economizer + mechanical cooling mode only fault to run only when the mix damper is 100% OPEN and the cooling signal is active and the heating signal is inactive OR if just the cooling signal is active
 * `sat`	(supply air temperature °F)
 * `satsp` (supply air temperature setpoint °F)
 * `clg` (cooling valve position or command %)
 
-### Other caveats is G36 expects data to be on one minute intervals and that a 5 minute rolling average be used in the analysis. The rolling average is handled by the Pandas computing library:
+### Other caveats is G36 does not mention anything about if the AHU is running or not. It could be wise to ignore any faults created when the AHU is not running or fan status/command equals `False` or fan VFD speeds equal 0%. G36 also expects data to be on one minute intervals and that a 5 minute rolling average be used in the analysis. The rolling average is handled by the Pandas computing library when the data file in CSV format is read into memory:
 
 ```shell
 df = pd.read_csv(args.input,
