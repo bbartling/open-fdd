@@ -1,12 +1,12 @@
 # open-fdd
 
-## Python based HVAC system fault detection reporting for air handling units (AHU) based on ASHRAE Guideline 36 2018, see PDF subfolder.
+## Python based HVAC system fault detection reporting for variable volume (VAV) air handling units (AHU) based on ASHRAE Guideline 36 2018, see PDF subfolder.
 
 ###### G36 for AHU's has 15 fault equations the first 13 of which are broken into seperate .py files with the exception of combined fault 2 and 3. Fault equations 14 and 15 are ommitted for the time being as these are for AHU systems with heating cooling coil leaving temperature sensors that maybe not typical AHU type systems.
 
 ###### Run the .py files in this fashion with specifying a data input argument `i` and a output argument `o` which will be the name of the report Word document that can be retrieved from the `final_report` directory after the script executes. Fault equation 6 is used as example:
 
-`$python .\fc6.py -i ./ahu_data/hvac_random_fake_data/fc6_fake_data1.csv -o fake1_ahu_fc6_report`
+`$ python ./fc6.py -i ./ahu_data/hvac_random_fake_data/fc6_fake_data1.csv -o fake1_ahu_fc6_report`
 
 ###### The final report should look like the following, currently tested on a months worth of data.
 * a description of the fault equation
@@ -97,7 +97,7 @@ df = pd.read_csv(args.input,
                  index_col='Date',
                  parse_dates=True).rolling('5T').mean()
 ```
-### More to come to incorporate G36 central cooling and heating plants (See PDF 2021 G36 that includes these equations in the PDF folder). Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote ASHRAE, HVAC optimization, and building carbon reduction.
+### More to come to incorporate G36 central cooling and heating plants (See PDF 2021 G36 that includes these equations in the PDF folder). Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote ASHRAE, HVAC optimization, and building carbon reduction efforts.
 
 ## Author
 

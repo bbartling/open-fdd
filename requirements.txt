@@ -1,10 +1,6 @@
 docutils
 docxcompose
-numpy
 pandas
 python-docx
-ruptures
-statsmodels
-seaborn
 matplotlib
 argparse
