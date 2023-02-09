@@ -1,8 +1,11 @@
 import operator
+
 import pandas as pd
 
 
 class FaultConditionOne:
+    """Class provides the definitions for Fault Condition 1."""
+
     def __init__(
         self,
         vfd_speed_percent_err_thres: float,
@@ -11,7 +14,6 @@ class FaultConditionOne:
         duct_static_col: str,
         supply_vfd_speed_col: str,
         duct_static_setpoint_col: str,
-
     ):
         self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
         self.vfd_speed_percent_max = vfd_speed_percent_max
