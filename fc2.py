@@ -3,11 +3,11 @@ import os
 
 import pandas as pd
 
-from faults import FaultConditionOne
-from reports import FaultCodeOneReport
+from faults import FaultConditionTwo
+from reports import FaultCodeTwoReport
 
 # python 3.10 on Windows 10
-# py .\fc1.py -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
+# py .\fc2.py -i ./ahu_data/hvac_random_fake_data/fc2_3_fake_data1.csv -o fake1_ahu_fc2_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -32,32 +32,31 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
-# required params taken from the screenshot above
-VFD_SPEED_PERCENT_ERR_THRES = 0.05
-VFD_SPEED_PERCENT_MAX = 0.99
-DUCT_STATIC_INCHES_ERR_THRES = 0.1
 
-_fc1 = FaultConditionOne(
-    VFD_SPEED_PERCENT_ERR_THRES,
-    VFD_SPEED_PERCENT_MAX,
-    DUCT_STATIC_INCHES_ERR_THRES,
-    "duct_static",
-    "supply_vfd_speed",
-    "duct_static_setpoint",
+OUTDOOR_DEGF_ERR_THRES = 5.
+MIX_DEGF_ERR_THRES = 5.
+RETURN_DEGF_ERR_THRES = 2.
+
+
+_fc2 = FaultConditionTwo(
+    OUTDOOR_DEGF_ERR_THRES,
+    MIX_DEGF_ERR_THRES,
+    RETURN_DEGF_ERR_THRES,
+    "mat",
+    "rat",
+    "oat",
 )
-_fc1_report = FaultCodeOneReport(
-    VFD_SPEED_PERCENT_ERR_THRES,
-    VFD_SPEED_PERCENT_MAX,
-    DUCT_STATIC_INCHES_ERR_THRES,
-    "duct_static",
-    "supply_vfd_speed",
-    "duct_static_setpoint",
+_fc2_report = FaultCodeTwoReport(
+    OUTDOOR_DEGF_ERR_THRES,
+    MIX_DEGF_ERR_THRES,
+    RETURN_DEGF_ERR_THRES,
+    "mat",
+    "rat",
+    "oat",
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
-
-df["duct_static_setpoint"] = 1
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -68,14 +67,14 @@ print("Dataset end: ", end)
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
 
-# df['fc1_flag'] = fault_condition_one(df)
-df["fc1_flag"] = _fc1.apply(df)
+# df['fc2_flag'] = fault_condition_one(df)
+df["fc2_flag"] = _fc2.apply(df)
 
 df2 = df.copy().dropna()
 
 print(df2.columns)
-print(df2.fc1_flag)
-document = _fc1_report.create_report(args.output, df2)
+print(df2.fc2_flag)
+document = _fc2_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")
 if not os.path.exists(path):
     os.makedirs(path)
