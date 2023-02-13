@@ -81,10 +81,10 @@ class FaultConditionThree:
 
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return (df[self.mat_col] - df[self.mix_degf_err_thres] 
-                > np.minimum(df[self.rat_col] + df[self.return_degf_err_thres]),
-                (df[self.oat_col] + df[self.outdoor_degf_err_thres])
-                )
+        return (df[self.mat_col] - self.mix_degf_err_thres
+                > np.minimum(df[self.rat_col] + self.return_degf_err_thres,
+                df[self.oat_col] + self.outdoor_degf_err_thres)
+        )
 
 
 

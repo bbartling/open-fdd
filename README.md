@@ -2,7 +2,7 @@
 
 ## Python based HVAC system fault detection reporting for variable volume (VAV) air handling units (AHU) based on ASHRAE Guideline 36 2018, see PDF subfolder.
 
-###### G36 for AHU's has 15 fault equations the first 13 of which are broken into seperate .py files with the exception of combined fault 2 and 3. Fault equations 14 and 15 are ommitted for the time being as these are for AHU systems with heating cooling coil leaving temperature sensors that maybe not typical AHU type systems.
+###### G36 for AHU's has 15 fault equations the first 13 of which are broken into seperate .py files. Fault equations 14 and 15 are ommitted for the time being as these are for AHU systems with heating cooling coil leaving temperature sensors that maybe not typical AHU type systems.
 
 ###### Run the .py files in this fashion with specifying a data input argument `i` and a output argument `o` which will be the name of the report Word document that can be retrieved from the `final_report` directory after the script executes. Fault equation 6 is used as example:
 
