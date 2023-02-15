@@ -118,12 +118,15 @@ total_days = round(delta.sum() / pd.Timedelta(days=1),2)
 print('DAYS ALL DATA: ',total_days)
 total_hours = delta.sum() / pd.Timedelta(hours=1)
 print('TOTAL HOURS: ',total_hours)
+
 hours_fc5_mode = (delta * df2["fc5_flag"]).sum() / pd.Timedelta(hours=1)
 print('FALT FLAG TRUE TOTAL HOURS: ',hours_fc5_mode)
 percent_true = round(df2.fc5_flag.mean() * 100, 2)
 print('PERCENT TIME WHEN FLAG 5 TRUE: ',percent_true,'%')
 percent_false = round((100 - percent_true), 2)
 print('PERCENT TIME WHEN FLAG 5 FALSE: ',percent_false,'%')
+
+
 df2['hour_of_the_day_fc5'] = df2.index.hour.where(df2["fc5_flag"] == 1)
 flag_true_mat = round(
     df2.mat.where(df2["fc5_flag"] == 1).mean(), 2)

@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 
 
-
 class FaultConditionOne:
     """Class provides the definitions for Fault Condition 1."""
 
@@ -32,7 +31,6 @@ class FaultConditionOne:
         )
 
 
-
 class FaultConditionTwo:
     """Class provides the definitions for Fault Condition 2."""
 
@@ -56,9 +54,8 @@ class FaultConditionTwo:
         return (df[self.mat_col] + self.mix_degf_err_thres
                 < np.minimum(df[self.rat_col] - self.return_degf_err_thres,
                 df[self.oat_col] - self.outdoor_degf_err_thres)
-        )
-        
-        
+                )
+
 
 class FaultConditionThree:
     """Class provides the definitions for Fault Condition 3."""
@@ -79,13 +76,11 @@ class FaultConditionThree:
         self.rat_col = rat_col
         self.oat_col = oat_col
 
-
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         return (df[self.mat_col] - self.mix_degf_err_thres
                 > np.minimum(df[self.rat_col] + self.return_degf_err_thres,
                 df[self.oat_col] + self.outdoor_degf_err_thres)
-        )
-
+                )
 
 
 class FaultConditionFour:
@@ -105,16 +100,65 @@ class FaultConditionFour:
         self.heating_sig_col = heating_sig_col
         self.cooling_sig_col = cooling_sig_col
         
-    def os_state_change_calcs(self,df):
-        df['heating_mode'] = df['heating_sig'].gt(0.)
-        df['econ_mode'] = df['economizer_sig'].gt(df['ahu_min_oa']) & df['cooling_sig'].eq(0.)
-        df['econ_cooling_mode'] = df['economizer_sig'].gt(df['ahu_min_oa']) & df['cooling_sig'].gt(0.)
-        df['mech_cooling_mode'] = df['economizer_sig'].eq(df['ahu_min_oa']) & df['cooling_sig'].gt(0.)
+    def __init__(
+        self,
+        delta_os_max: float,
+        ahu_min_oa: float,
+        economizer_sig_col: str,
+        heating_sig_col: str,
+        cooling_sig_col: str,
+    ):
+        
+        self.delta_os_max = delta_os_max
+        self.ahu_min_oa = ahu_min_oa
+        self.economizer_sig_col = economizer_sig_col
+        self.heating_sig_col = heating_sig_col
+        self.cooling_sig_col = cooling_sig_col
+
+    # adds in these boolean columns to the dataframe
+    def os_state_change_calcs(self, df):
+
+        # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
+        df['heating_mode'] = df[self.heating_sig_col].gt(0.) \
+            & df[self.cooling_sig_col].eq(0.) \
+            & df[self.economizer_sig_col].eq(self.ahu_min_oa)
+
+        # AHU econ only mode based on OA damper modulating and clg htg = zero
+        df['econ_only_cooling_mode'] = df[self.economizer_sig_col].gt(self.ahu_min_oa) \
+            & df[self.cooling_sig_col].eq(0.) \
+            & df[self.heating_sig_col].eq(0.)
+
+        # AHU econ+mech clg mode based on OA damper modulating for cooling and clg pid/vlv modulating
+        df['econ_plus_mech_cooling_mode'] = df[self.economizer_sig_col].gt(90.) \
+            & df[self.cooling_sig_col].gt(0.) \
+            & df[self.heating_sig_col].eq(0.)
+
+        # AHU mech mode based on OA damper @ min OA and clg pid/vlv modulating
+        df['mech_cooling_only_mode'] = df[self.economizer_sig_col].eq(self.ahu_min_oa) \
+            & df[self.cooling_sig_col].gt(0.) \
+            & df[self.heating_sig_col].eq(0.)
+
+        df = df[[
+            'heating_mode',
+            'econ_only_cooling_mode',
+            'econ_plus_mech_cooling_mode',
+            'mech_cooling_only_mode'
+            ]]
+        
+        df = df.astype(int)
+        
+        # calc changes per hour for modes
+        # https://stackoverflow.com/questions/69979832/pandas-consecutive-boolean-event-rollup-time-series
+        
+        df = df.resample('H').apply(
+            lambda x: (x.eq(1) & x.shift().ne(1)).sum())
+
+        df["fc4_flag"] = df[df.columns].gt(self.delta_os_max).any(1).astype(int)
         return df
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return self.os_state_change_calcs(df)
-
+        df = self.os_state_change_calcs(df)
+        return df
 
 
 class FaultConditionFive:
@@ -134,13 +178,11 @@ class FaultConditionFive:
         self.mat_col = mat_col
         self.sat_col = sat_col
 
-
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return ((df[self.sat_col] + df[self.supply_degf_err_thres]) 
+        return ((df[self.sat_col] + df[self.supply_degf_err_thres])
                 <= (df[self.mat_col] - df[self.mix_degf_err_thres] + df[self.delta_t_supply_fan])
                 )
-        
-        
+
 
 class FaultConditionSix:
     """Class provides the definitions for Fault Condition 6.
@@ -171,18 +213,20 @@ class FaultConditionSix:
         self.rat_col = rat_col
 
         # additional calculations
-    def additional_pandas_calcs(self,df):
+    def additional_pandas_calcs(self, df):
         df['rat_minus_oat'] = abs(df['rat'] - df['oat'])
-        df['percent_oa_calc'] = (df['mat'] - df['rat']) / (df['oat'] - df['rat'])
-        df['percent_oa_calc'] = df['percent_oa_calc'].apply(lambda x : x if x > 0 else 0)
+        df['percent_oa_calc'] = (df['mat'] - df['rat']) / \
+            (df['oat'] - df['rat'])
+        df['percent_oa_calc'] = df['percent_oa_calc'].apply(
+            lambda x: x if x > 0 else 0)
         df['perc_OAmin'] = self.airflow_err_thres / df['vav_total_flow']
-        df['percent_oa_calc_minus_perc_OAmin'] = abs(df['percent_oa_calc'] - df['perc_OAmin'])
+        df['percent_oa_calc_minus_perc_OAmin'] = abs(
+            df['percent_oa_calc'] - df['perc_OAmin'])
         return df
-        
-        
+
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.additional_pandas_calcs(df)
         return operator.and_(df[self.rat_minus_oat] >= df[self.oat_rat_delta_min],
-                            df[self.percent_oa_calc_minus_perc_OAmin] 
-                            > df[self.airflow_err_thres]
-                            )
+                             df[self.percent_oa_calc_minus_perc_OAmin]
+                             > df[self.airflow_err_thres]
+                             )

@@ -67,7 +67,6 @@ print("Dataset end: ", end)
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
 
-# df['fc3_flag'] = fault_condition_one(df)
 df["fc3_flag"] = _fc3.apply(df)
 
 df2 = df.copy().dropna()
