@@ -179,8 +179,8 @@ class FaultConditionFive:
         self.sat_col = sat_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return ((df[self.sat_col] + df[self.supply_degf_err_thres])
-                <= (df[self.mat_col] - df[self.mix_degf_err_thres] + df[self.delta_t_supply_fan])
+        return ((df[self.sat_col] + self.supply_degf_err_thres)
+                <= (df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan)
                 )
 
 

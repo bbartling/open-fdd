@@ -32,12 +32,14 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# G36 params COULD need adjusting
+# default OS MAX state changes is 7
+# which seems high, could be worth adjusting 
+# down to 4 to see what the faults look like
+DELTA_OS_MAX = 7
 
-
-# G36 definition of max control sys allowed state
-# changes per hour between htg, cool, & econ modes
-DELTA_OS_MAX = 7.
-AHU_MIN_OA = 20.
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
 
 
 _fc4 = FaultConditionFour(
@@ -73,7 +75,7 @@ control sys operating state changes as cols
 '''
 df2 = _fc4.apply(df)
 print(df2.head())
-
+print(df2.describe())
 
 document = _fc4_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")
