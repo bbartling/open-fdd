@@ -212,21 +212,32 @@ class FaultConditionSix:
         self.oat_col = oat_col
         self.rat_col = rat_col
 
-        # additional calculations
     def additional_pandas_calcs(self, df):
         df['rat_minus_oat'] = abs(df['rat'] - df['oat'])
         df['percent_oa_calc'] = (df['mat'] - df['rat']) / \
             (df['oat'] - df['rat'])
         df['percent_oa_calc'] = df['percent_oa_calc'].apply(
             lambda x: x if x > 0 else 0)
-        df['perc_OAmin'] = self.airflow_err_thres / df['vav_total_flow']
+        df['perc_OAmin'] = (self.ahu_min_cfm_stp / df['vav_total_flow']) * 100
         df['percent_oa_calc_minus_perc_OAmin'] = abs(
             df['percent_oa_calc'] - df['perc_OAmin'])
+        
+        print("DF6: ",df)
+        df['fc6_flag'] = operator.and_(df['rat_minus_oat'] >= self.oat_rat_delta_min,
+                             df['percent_oa_calc_minus_perc_OAmin']
+                             > self.airflow_err_thres
+                             ).astype(int)
+        
+        df = df[[
+            "percent_oa_calc",
+            "perc_OAmin",
+            self.vav_total_flow,
+            "fc6_flag"
+            ]]
+        
         return df
 
+        
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.additional_pandas_calcs(df)
-        return operator.and_(df[self.rat_minus_oat] >= df[self.oat_rat_delta_min],
-                             df[self.percent_oa_calc_minus_perc_OAmin]
-                             > df[self.airflow_err_thres]
-                             )
+        return df

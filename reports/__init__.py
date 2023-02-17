@@ -1110,7 +1110,7 @@ class FaultCodeFiveReport:
         df[output_col] = df[output_col].astype(int)
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
-        plt.title('Fault Conditions 2 Plot')
+        plt.title('Fault Conditions 5 Plot')
 
         plot1a, = ax1.plot(df.index, df[self.mat_col],
                            color='r', label="Mix Temp")  # red
@@ -1318,6 +1318,240 @@ class FaultCodeFiveReport:
         else:
             paragraph.add_run(
                 'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the AHU temperature sensors are within calibration')
+
+        paragraph = document.add_paragraph()
+        run = paragraph.add_run(f"Report generated: {time.ctime()}")
+        run.style = "Emphasis"
+        return document
+
+
+class FaultCodeSixReport:
+    """Class provides the definitions for Fault Code 5 Report."""
+
+    def __init__(
+        self,
+        vav_total_flow: str,
+    ):
+	
+        self.vav_total_flow = vav_total_flow
+        self.perc_OAmin = 'perc_OAmin'
+        self.percent_oa_calc = 'percent_oa_calc'
+        self.fc6_flag = 'fc6_flag'
+
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+        if output_col is None:
+            output_col = "fc6_flag"
+
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
+        plt.title('Fault Conditions 6 Plot')
+
+        plot1a, = ax1.plot(df.index, df[self.perc_OAmin],
+                           color='r', label="OA Actual Calc")  # red
+        plot1b, = ax1.plot(df.index, df[self.percent_oa_calc],
+                           color='b', label="OA Frac Calc")  # blue
+        
+        ax1.legend(loc='best')
+        ax1.set_ylabel("% OA")
+        
+        ax2.plot(df.index, df[self.vav_total_flow], label="Total Air Flow", color="g")
+        ax2.set_xlabel('Date')
+        ax2.set_ylabel('CFM')
+        ax2.legend(loc='best')
+
+        ax3.plot(df.index, df[output_col], label="Fault", color="k")
+        ax3.set_xlabel('Date')
+        ax3.set_ylabel('Fault Flags')
+        ax3.legend(loc='best')
+
+        plt.legend()
+        plt.tight_layout()
+
+        return fig
+
+    def summarize_fault_times(self, df: pd.DataFrame, output_col: str = None) -> str:
+        if output_col is None:
+            output_col = "fc6_flag"
+            
+        delta = df.index.to_series().diff()
+        total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
+
+        total_hours = delta.sum() / pd.Timedelta(hours=1)
+
+        hours_fc5_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+
+        percent_true = round(df[output_col].mean() * 100, 2)
+        percent_false = round((100 - percent_true), 2)
+
+
+        flag_true_vav_total_flow = round(
+            df[self.vav_total_flow].where(df[output_col] == 1).mean(), 2
+        )
+        flag_true_percent_oa_calc = round(
+            df[self.percent_oa_calc].where(df[output_col] == 1).mean(), 2
+        )
+
+        return (
+            total_days,
+            total_hours,
+            hours_fc5_mode,
+            percent_true,
+            percent_false,
+            flag_true_vav_total_flow,
+            flag_true_percent_oa_calc,
+        )
+
+    def create_hist_plot(
+        self, df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None
+    ) -> plt:
+
+        if output_col is None:
+            output_col = "fc6_flag"
+
+        # calculate dataset statistics
+        df["hour_of_the_day_fc6"] = df.index.hour.where(df[output_col] == 1)
+
+        # make hist plots fc6
+        fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
+        ax.hist(df.hour_of_the_day_fc6.dropna())
+        ax.set_xlabel("24 Hour Number in Day")
+        ax.set_ylabel("Frequency")
+        ax.set_title(f"Hour-Of-Day When Fault Flag 6 is TRUE")
+        return fig
+
+    def create_report(
+        self,
+        path: str,
+        df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None,
+        flag_true_vav_total_flow: bool = None,
+    ) -> None:
+
+        if output_col is None:
+            output_col = "fc6_flag"
+
+        print(f"Starting {path} docx report!")
+        document = Document()
+        document.add_heading("Fault Condition Six Report", 0)
+
+        p = document.add_paragraph(
+            """Fault condition six of ASHRAE Guideline 36 is an attempt at verifying that AHU design minimum outside air is close to the calculated outside air fraction through the outside, mix, and return air temperature sensors. The plot below attempts to show the outside air fraction calculation between the return, mix, and outside air temperature sensors Vs an actual outside air flow through the AHU based on the total outdoor air calculation minus the design outdoor air expressed as a percentage. A fault will get flagged if the OA fraction is too low or too high. Fault condition six equation as defined by ASHRAE:"""
+        )
+
+        document.add_picture(
+            os.path.join(os.path.curdir, "images", "fc6_definition.png"),
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Plot", level=2)
+
+        fig = self.create_plot(df, output_col=output_col)
+        fan_plot_image = BytesIO()
+        fig.savefig(fan_plot_image, format="png")
+        fan_plot_image.seek(0)
+
+        # ADD IN SUBPLOTS SECTION
+        document.add_picture(
+            fan_plot_image,
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Statistics", level=2)
+
+        (
+            total_days,
+            total_hours,
+            hours_fc6_mode,
+            percent_true,
+            percent_false,
+            flag_true_vav_total_flow,
+            flag_true_percent_oa_calc,
+
+        ) = self.summarize_fault_times(df, output_col=output_col)
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in days calculated in dataset: {total_days}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours calculated in dataset: {total_hours}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours for when fault flag is True: {hours_fc6_mode}"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is True: {percent_true}%"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+
+        paragraph = document.add_paragraph()
+
+        # if there is no faults skip the histogram plot
+        fc_max_faults_found = df[output_col].max()
+        if fc_max_faults_found != 0:
+
+            # ADD HIST Plots
+            document.add_heading("Time-of-day Histogram Plots", level=2)
+            histogram_plot_image = BytesIO()
+            histogram_plot = self.create_hist_plot(df, output_col=output_col)
+            histogram_plot.savefig(histogram_plot_image, format="png")
+            histogram_plot_image.seek(0)
+            document.add_picture(
+                histogram_plot_image,
+                width=Inches(6),
+            )
+
+            paragraph = document.add_paragraph()
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'When fault condition 6 is True the average AHU total air flow is {flag_true_vav_total_flow} in CFM and the outside air calculation is {flag_true_percent_oa_calc} in %. This could possibly help with pin pointing AHU operating conditions for when this AHU is drawing in excessive outside air.')
+
+        else:
+            print("NO FAULTS FOUND - For report skipping time-of-day Histogram plot")
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'No faults were found in this given dataset for the equation defined by ASHRAE.')
+
+        paragraph = document.add_paragraph()
+
+        # ADD in Summary Statistics
+        document.add_heading('AHU Total Air Flow Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.vav_total_flow].describe()))
+
+        # ADD in Summary Statistics
+        document.add_heading('OA Calculation Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.percent_oa_calc].describe()))
+
+        document.add_heading("Suggestions based on data analysis", level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+
+        if percent_true > 5.0:
+            paragraph.add_run(
+                'The percent true metric maybe yeilding sensors are out of calibration either on the AHU outside, mix, or return air temperature sensors that handle the OA fraction calculation or the totalized air flow calculation handled by a totalizing all VAV box air flows or AHU AFMS. Air flow and/or AHU temperature sensor may require recalibration.')
+
+        else:
+            paragraph.add_run(
+                'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the sensors are within calibration')
 
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
