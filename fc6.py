@@ -86,7 +86,7 @@ print("Dataset end: ", end)
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
 
-# return a whole new dataframe with fault flag 6 as new col
+# return a whole new dataframe with fault flag as new col
 df2 = _fc6.apply(df)
 print(df2.head())
 print(df2.describe())

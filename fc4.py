@@ -66,13 +66,8 @@ for col in df.columns:
 
 print(df.describe())
 
-
-'''
-note - _fc4.apply(df) returns a
-new df with the fault flag added 
-the data is hourly averged w counts of
-control sys operating state changes as cols
-'''
+# return a whole new dataframe with fault flag as new col
+# data is resampled for hourly averages in df2
 df2 = _fc4.apply(df)
 print(df2.head())
 print(df2.describe())

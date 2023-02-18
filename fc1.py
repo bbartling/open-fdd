@@ -68,10 +68,12 @@ print("Dataset end: ", end)
 
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
+    
 
-df["fc1_flag"] = _fc1.apply(df)
-
-print(df.describe())
+# return a whole new dataframe with fault flag as new col
+df2 = _fc1.apply(df)
+print(df2.head())
+print(df2.describe())
 
 document = _fc1_report.create_report(args.output, df)
 path = os.path.join(os.path.curdir, "final_report")

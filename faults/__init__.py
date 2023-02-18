@@ -23,12 +23,12 @@ class FaultConditionOne:
         self.duct_static_setpoint_col = duct_static_setpoint_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return operator.and_(
+        df["fc1_flag"] = operator.and_(
             df[self.duct_static_col]
             < (df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres),
             df[self.supply_vfd_speed_col]
-            > (self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres),
-        )
+            > (self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres))
+        return df
 
 
 class FaultConditionTwo:
@@ -51,10 +51,10 @@ class FaultConditionTwo:
         self.oat_col = oat_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return (df[self.mat_col] + self.mix_degf_err_thres
+        df["fc2_flag"] = (df[self.mat_col] + self.mix_degf_err_thres
                 < np.minimum(df[self.rat_col] - self.return_degf_err_thres,
-                df[self.oat_col] - self.outdoor_degf_err_thres)
-                )
+                df[self.oat_col] - self.outdoor_degf_err_thres)).astype(int)
+        return df
 
 
 class FaultConditionThree:
@@ -77,10 +77,10 @@ class FaultConditionThree:
         self.oat_col = oat_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return (df[self.mat_col] - self.mix_degf_err_thres
+        df["fc3_flag"] = (df[self.mat_col] - self.mix_degf_err_thres
                 > np.minimum(df[self.rat_col] + self.return_degf_err_thres,
-                df[self.oat_col] + self.outdoor_degf_err_thres)
-                )
+                df[self.oat_col] + self.outdoor_degf_err_thres)).astype(int)
+        return df
 
 
 class FaultConditionFour:
@@ -179,9 +179,9 @@ class FaultConditionFive:
         self.sat_col = sat_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        return ((df[self.sat_col] + self.supply_degf_err_thres)
-                <= (df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan)
-                )
+        df["fc5_flag"] = ((df[self.sat_col] + self.supply_degf_err_thres)
+                <= (df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan))
+        return df
 
 
 class FaultConditionSix:
@@ -197,7 +197,7 @@ class FaultConditionSix:
         oat_degf_err_thres: float,
         rat_degf_err_thres: float,
         oat_rat_delta_min: float,
-        vav_total_flow: float,
+        vav_total_flow_col: float,
         mat_col: str,
         oat_col: str,
         rat_col: str,
@@ -207,22 +207,21 @@ class FaultConditionSix:
         self.oat_degf_err_thres = oat_degf_err_thres
         self.rat_degf_err_thres = rat_degf_err_thres
         self.oat_rat_delta_min = oat_rat_delta_min
-        self.vav_total_flow = vav_total_flow
+        self.vav_total_flow_col = vav_total_flow_col
         self.mat_col = mat_col
         self.oat_col = oat_col
         self.rat_col = rat_col
 
     def additional_pandas_calcs(self, df):
-        df['rat_minus_oat'] = abs(df['rat'] - df['oat'])
-        df['percent_oa_calc'] = (df['mat'] - df['rat']) / \
-            (df['oat'] - df['rat'])
+        df['rat_minus_oat'] = abs(df[self.rat_col] - df[self.oat_col])
+        df['percent_oa_calc'] = (df[self.mat_col] - df[self.rat_col]) / \
+            (df[self.oat_col] - df[self.rat_col])
         df['percent_oa_calc'] = df['percent_oa_calc'].apply(
             lambda x: x if x > 0 else 0)
-        df['perc_OAmin'] = (self.ahu_min_cfm_stp / df['vav_total_flow']) * 100
+        df['perc_OAmin'] = (self.ahu_min_cfm_stp / df[self.vav_total_flow_col]) * 100
         df['percent_oa_calc_minus_perc_OAmin'] = abs(
             df['percent_oa_calc'] - df['perc_OAmin'])
         
-        print("DF6: ",df)
         df['fc6_flag'] = operator.and_(df['rat_minus_oat'] >= self.oat_rat_delta_min,
                              df['percent_oa_calc_minus_perc_OAmin']
                              > self.airflow_err_thres
@@ -231,7 +230,7 @@ class FaultConditionSix:
         df = df[[
             "percent_oa_calc",
             "perc_OAmin",
-            self.vav_total_flow,
+            self.vav_total_flow_col,
             "fc6_flag"
             ]]
         
@@ -241,3 +240,52 @@ class FaultConditionSix:
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.additional_pandas_calcs(df)
         return df
+
+
+class FaultConditionSeven:
+    """Class provides the definitions for Fault Condition 7.
+        Very similar to FC 13 but uses heating valve
+    """
+
+    def __init__(
+        self,
+        sat_degf_err_thres: float,
+        sat_col: str,
+        satsp_col: str,	
+        htg_col: str,
+    ):
+        self.sat_degf_err_thres = sat_degf_err_thres
+        self.sat_col = sat_col
+        self.satsp_col = satsp_col
+        self.htg_col = htg_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["fc7_flag"] = operator.and_(df[self.sat_col] 
+                            < df[self.satsp_col] - self.sat_degf_err_thres,
+                            df[self.htg_col] >= 99).astype(int)
+        return df
+    
+    
+class FaultConditionThirteen:
+    """Class provides the definitions for Fault Condition 13.
+        Very similar to FC 13 but uses cooling valve
+    """
+
+    def __init__(
+        self,
+        sat_degf_err_thres: float,
+        sat_col: str,
+        satsp_col: str,	
+        clg_col: str,
+    ):
+        self.sat_degf_err_thres = sat_degf_err_thres
+        self.sat_col = sat_col
+        self.satsp_col = satsp_col
+        self.clg_col = clg_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df["fc13_flag"] = operator.and_(df[self.sat_col] 
+                            < df[self.satsp_col] + self.sat_degf_err_thres,
+                            df[self.clg_col] >= 99).astype(int)
+        return df
+		

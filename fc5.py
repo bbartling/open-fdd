@@ -69,12 +69,13 @@ print("Dataset end: ", end)
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
 
-df["fc5_flag"] = _fc5.apply(df)
-print(df.head())
-print(df.describe())
+# return a whole new dataframe with fault flag as new col
+df2 = _fc5.apply(df)
+print(df2.head())
+print(df2.describe())
 
 
-document = _fc5_report.create_report(args.output, df)
+document = _fc5_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")
 if not os.path.exists(path):
     os.makedirs(path)
