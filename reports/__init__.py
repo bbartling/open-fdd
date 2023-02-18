@@ -1795,7 +1795,453 @@ class FaultCodeSevenReport:
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
         return document
-    
+
+
+class FaultCodeElevenReport:
+    """Class provides the definitions for Fault Code 11 Report."""
+
+    def __init__(
+        self,
+        sat_sp_col: str,
+        oat_col: str,
+    ):
+        self.sat_sp_col = sat_sp_col
+        self.oat_col = oat_col
+
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+        
+        if output_col is None:
+            output_col = "fc11_flag"
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        plt.title('Fault Conditions 11 Plot')
+
+        plot1a, = ax1.plot(df.index, df[self.sat_sp_col], label="SATSP")
+        plot1b, = ax1.plot(df.index, df[self.oat_col], label="OAT")
+        ax1.legend(loc='best')
+        ax1.set_ylabel('AHU Temps °F')
+
+        ax2.plot(df.index, df.fc11_flag, label="Fault", color="k")
+        ax2.set_xlabel('Date')
+        ax2.set_ylabel('Fault Flags')
+        ax2.legend(loc='best')
+
+        plt.legend()
+        plt.tight_layout()
+
+        return fig
+
+    def summarize_fault_times(self, df: pd.DataFrame, output_col: str = None) -> str:
+        if output_col is None:
+            output_col = "fc11_flag"
+
+        delta = df.index.to_series().diff()
+        total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
+
+        total_hours = delta.sum() / pd.Timedelta(hours=1)
+
+        hours_fc11_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+
+        percent_true = round(df[output_col].mean() * 100, 2)
+        percent_false = round((100 - percent_true), 2)
+
+        flag_true_oat = round(
+            df[self.oat_col].where(df[output_col] == 1).mean(), 2
+        )
+        flag_true_sat_sp = round(
+            df[self.sat_sp_col].where(df[output_col] == 1).mean(), 2
+        )
+
+        return (
+            total_days,
+            total_hours,
+            hours_fc11_mode,
+            percent_true,
+            percent_false,
+            flag_true_oat,
+            flag_true_sat_sp,
+        )
+
+    def create_hist_plot(
+        self, df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None
+    ) -> plt:
+
+        if output_col is None:
+            output_col = "fc11_flag"
+
+        # calculate dataset statistics
+        df["hour_of_the_day_fc11"] = df.index.hour.where(df[output_col] == 1)
+
+        # make hist plots fc11
+        fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
+        ax.hist(df.hour_of_the_day_fc11.dropna())
+        ax.set_xlabel("24 Hour Number in Day")
+        ax.set_ylabel("Frequency")
+        ax.set_title(f"Hour-Of-Day When Fault Flag 11 is TRUE")
+        return fig
+
+    def create_report(
+        self,
+        path: str,
+        df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None,
+        flag_true_oat: bool = None,
+    ) -> None:
+
+        if output_col is None:
+            output_col = "fc11_flag"
+
+        print(f"Starting {path} docx report!")
+        document = Document()
+        document.add_heading("Fault Condition Eleven Report", 0)
+
+        p = document.add_paragraph(
+            """Fault condition eleven of ASHRAE Guideline 36 is an AHU economizer + mechanical cooling mode only with an attempt at flagging conditions where the outside air temperature is too low for 100% outside air AHU operating mode. Fault condition Eleven equation as defined by ASHRAE:"""
+        )
+
+        document.add_picture(
+            os.path.join(os.path.curdir, "images", "fc11_definition.png"),
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Plot", level=2)
+
+        fig = self.create_plot(df, output_col=output_col)
+        fan_plot_image = BytesIO()
+        fig.savefig(fan_plot_image, format="png")
+        fan_plot_image.seek(0)
+
+        # ADD IN SUBPLOTS SECTION
+        document.add_picture(
+            fan_plot_image,
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Statistics", level=2)
+
+        (
+            total_days,
+            total_hours,
+            hours_fc11_mode,
+            percent_true,
+            percent_false,
+            flag_true_oat,
+            flag_true_sat_sp,
+
+        ) = self.summarize_fault_times(df, output_col=output_col)
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in days calculated in dataset: {total_days}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours calculated in dataset: {total_hours}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours for when fault flag is True: {hours_fc11_mode}"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is True: {percent_true}%"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+
+        paragraph = document.add_paragraph()
+
+        # if there is no faults skip the histogram plot
+        fc_max_faults_found = df[output_col].max()
+        if fc_max_faults_found != 0:
+
+            # ADD HIST Plots
+            document.add_heading("Time-of-day Histogram Plots", level=2)
+            histogram_plot_image = BytesIO()
+            histogram_plot = self.create_hist_plot(df, output_col=output_col)
+            histogram_plot.savefig(histogram_plot_image, format="png")
+            histogram_plot_image.seek(0)
+            document.add_picture(
+                histogram_plot_image,
+                width=Inches(6),
+            )
+
+            paragraph = document.add_paragraph()
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'When fault condition 11 is True the average AHU mix air is {flag_true_oat} in °F and the supply air temperature is {flag_true_sat_sp} in °F.')
+
+        else:
+            print("NO FAULTS FOUND - For report skipping time-of-day Histogram plot")
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'No faults were found in this given dataset for the equation defined by ASHRAE.')
+
+        paragraph = document.add_paragraph()
+
+        # ADD in Summary Statistics
+        document.add_heading('Supply Air Temp Setpoint Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.sat_sp_col].describe()))
+
+        # ADD in Summary Statistics
+        document.add_heading('Outside Air Temp Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.oat_col].describe()))
+
+        document.add_heading("Suggestions based on data analysis", level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+
+        if percent_true > 5.0:
+            paragraph.add_run(
+                'The percent True metric that represents the amount of time for when the fault flag is True is high indicating temperature sensor error or the heating coil could be leaking potentially creating simultenious heating/cooling scenorio which can be an energy penalty for running the AHU in this fashion. Also visually verify with the AHU off via lock-out-tag-out that the mixing dampers operates effectively. To do this have one person the BAS sending operator override commands to drive the damper back and forth. The other person should put on eyes on the operation of the actuator motor driving the OA dampers 100 percent open and then closed and visually verify the dampers rotate effectively per BAS command where to also visually verify the dampers have a good seal when in the closed position. Also consider looking into BAS programming that may need tuning or parameter adjustments for the staging between OS state changes between AHU modes of operation.')
+        else:
+            paragraph.add_run(
+                'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the AHU components are within calibration for this fault equation Ok.')
+
+        paragraph = document.add_paragraph()
+        run = paragraph.add_run(f"Report generated: {time.ctime()}")
+        run.style = "Emphasis"
+        return document
+
+
+class FaultCodeTwelveReport:
+    """Class provides the definitions for Fault Code 12 Report."""
+
+    def __init__(
+        self,
+        sat_col: str,
+        mat_col: str,
+    ):
+        self.sat_col = sat_col
+        self.mat_col = mat_col
+
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+        
+        if output_col is None:
+            output_col = "fc12_flag"
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        plt.title('Fault Conditions 12 Plot')
+
+        plot1a, = ax1.plot(df.index, df[self.sat_col], label="SAT")
+        plot1b, = ax1.plot(df.index, df[self.mat_col], label="MAT")
+        ax1.legend(loc='best')
+        ax1.set_ylabel('AHU Temps °F')
+
+        ax2.plot(df.index, df.fc12_flag, label="Fault", color="k")
+        ax2.set_xlabel('Date')
+        ax2.set_ylabel('Fault Flags')
+        ax2.legend(loc='best')
+
+        plt.legend()
+        plt.tight_layout()
+
+        return fig
+
+    def summarize_fault_times(self, df: pd.DataFrame, output_col: str = None) -> str:
+        if output_col is None:
+            output_col = "fc12_flag"
+
+        delta = df.index.to_series().diff()
+        total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
+
+        total_hours = delta.sum() / pd.Timedelta(hours=1)
+
+        hours_fc12_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+
+        percent_true = round(df[output_col].mean() * 100, 2)
+        percent_false = round((100 - percent_true), 2)
+
+        flag_true_mat = round(
+            df[self.mat_col].where(df[output_col] == 1).mean(), 2
+        )
+        flag_true_sat = round(
+            df[self.sat_col].where(df[output_col] == 1).mean(), 2
+        )
+
+        return (
+            total_days,
+            total_hours,
+            hours_fc12_mode,
+            percent_true,
+            percent_false,
+            flag_true_mat,
+            flag_true_sat,
+        )
+
+    def create_hist_plot(
+        self, df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None
+    ) -> plt:
+
+        if output_col is None:
+            output_col = "fc12_flag"
+
+        # calculate dataset statistics
+        df["hour_of_the_day_fc12"] = df.index.hour.where(df[output_col] == 1)
+
+        # make hist plots fc12
+        fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
+        ax.hist(df.hour_of_the_day_fc12.dropna())
+        ax.set_xlabel("24 Hour Number in Day")
+        ax.set_ylabel("Frequency")
+        ax.set_title(f"Hour-Of-Day When Fault Flag 12 is TRUE")
+        return fig
+
+    def create_report(
+        self,
+        path: str,
+        df: pd.DataFrame,
+        output_col: str = None,
+        vav_total_flow: str = None,
+        flag_true_mat: bool = None,
+    ) -> None:
+
+        if output_col is None:
+            output_col = "fc12_flag"
+
+        print(f"Starting {path} docx report!")
+        document = Document()
+        document.add_heading("Fault Condition Twelve Report", 0)
+
+        p = document.add_paragraph(
+            """Fault condition Twelve of ASHRAE Guideline 36 is an AHU economizer + mechanical cooling mode and AHU mechanical cooling mode only with an attempt at flagging conditions when the AHU mixing air temperature is warmer than the supply air temperature. Fault condition Twelve equation as defined by ASHRAE:"""
+        )
+
+        document.add_picture(
+            os.path.join(os.path.curdir, "images", "fc12_definition.png"),
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Plot", level=2)
+
+        fig = self.create_plot(df, output_col=output_col)
+        fan_plot_image = BytesIO()
+        fig.savefig(fan_plot_image, format="png")
+        fan_plot_image.seek(0)
+
+        # ADD IN SUBPLOTS SECTION
+        document.add_picture(
+            fan_plot_image,
+            width=Inches(6),
+        )
+        document.add_heading("Dataset Statistics", level=2)
+
+        (
+            total_days,
+            total_hours,
+            hours_fc12_mode,
+            percent_true,
+            percent_false,
+            flag_true_mat,
+            flag_true_sat,
+
+        ) = self.summarize_fault_times(df, output_col=output_col)
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in days calculated in dataset: {total_days}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours calculated in dataset: {total_hours}")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Total time in hours for when fault flag is True: {hours_fc12_mode}"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is True: {percent_true}%"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+
+        paragraph = document.add_paragraph()
+
+        # if there is no faults skip the histogram plot
+        fc_max_faults_found = df[output_col].max()
+        if fc_max_faults_found != 0:
+
+            # ADD HIST Plots
+            document.add_heading("Time-of-day Histogram Plots", level=2)
+            histogram_plot_image = BytesIO()
+            histogram_plot = self.create_hist_plot(df, output_col=output_col)
+            histogram_plot.savefig(histogram_plot_image, format="png")
+            histogram_plot_image.seek(0)
+            document.add_picture(
+                histogram_plot_image,
+                width=Inches(6),
+            )
+
+            paragraph = document.add_paragraph()
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'When fault condition 12 is True the average AHU mix air is {flag_true_mat} in °F and the supply air temperature is {flag_true_sat} in °F.')
+
+        else:
+            print("NO FAULTS FOUND - For report skipping time-of-day Histogram plot")
+
+            paragraph.style = 'List Bullet'
+            paragraph.add_run(
+                f'No faults were found in this given dataset for the equation defined by ASHRAE.')
+
+        paragraph = document.add_paragraph()
+
+        # ADD in Summary Statistics
+        document.add_heading('Supply Air Temp Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.sat_col].describe()))
+
+        # ADD in Summary Statistics
+        document.add_heading('Mix Air Temp Statistics', level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = 'List Bullet'
+        paragraph.add_run(str(df[self.mat_col].describe()))
+
+        document.add_heading("Suggestions based on data analysis", level=2)
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+
+        if percent_true > 5.0:
+            paragraph.add_run(
+                'The percent True metric that represents the amount of time for when the fault flag is True is high indicating temperature sensor error or the heating/cooling coils are leaking potentially creating simultenious heating/cooling which can be an energy penalty for running the AHU in this fashion. Verify AHU mix/supply temperature sensor calibration in addition to a potential mechanical issue of a leaking valve. A leaking valve can be troubleshot by verifying delta temperature of the fluid entering and leaving the coil when the AHU is running with a valve in a BAS operator override in a 100 percent closed command.')
+        else:
+            paragraph.add_run(
+                'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the AHU components are within calibration for this fault equation Ok.')
+
+        paragraph = document.add_paragraph()
+        run = paragraph.add_run(f"Report generated: {time.ctime()}")
+        run.style = "Emphasis"
+        return document
+
     
 class FaultCodeThirteenReport:
     """Class provides the definitions for Fault Code 13 Report.
@@ -1826,7 +2272,7 @@ class FaultCodeThirteenReport:
         ax1.set_ylabel('AHU Supply Temps °F')
 
         ax2.plot(df.index, df[self.clg_col], color="g",
-                    label="AHU Heat Vlv")
+                    label="AHU Cool Vlv")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
 
@@ -1855,10 +2301,10 @@ class FaultCodeThirteenReport:
         percent_false = round((100 - percent_true), 2)
 
         flag_true_satsp = round(
-            df[self.sat_col].where(df[output_col] == 1).mean(), 2
+            df[self.satsp_col].where(df[output_col] == 1).mean(), 2
         )
         flag_true_sat = round(
-            df[self.satsp_col].where(df[output_col] == 1).mean(), 2
+            df[self.sat_col].where(df[output_col] == 1).mean(), 2
         )
 
         return (
@@ -2034,4 +2480,5 @@ class FaultCodeThirteenReport:
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
         return document
-
+    
+    

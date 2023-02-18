@@ -99,7 +99,7 @@ class FaultConditionFour:
         self.economizer_sig_col = economizer_sig_col
         self.heating_sig_col = heating_sig_col
         self.cooling_sig_col = cooling_sig_col
-        
+
     def __init__(
         self,
         delta_os_max: float,
@@ -108,7 +108,7 @@ class FaultConditionFour:
         heating_sig_col: str,
         cooling_sig_col: str,
     ):
-        
+
         self.delta_os_max = delta_os_max
         self.ahu_min_oa = ahu_min_oa
         self.economizer_sig_col = economizer_sig_col
@@ -144,16 +144,17 @@ class FaultConditionFour:
             'econ_plus_mech_cooling_mode',
             'mech_cooling_only_mode'
             ]]
-        
+
         df = df.astype(int)
-        
+
         # calc changes per hour for modes
         # https://stackoverflow.com/questions/69979832/pandas-consecutive-boolean-event-rollup-time-series
-        
+
         df = df.resample('H').apply(
             lambda x: (x.eq(1) & x.shift().ne(1)).sum())
 
-        df["fc4_flag"] = df[df.columns].gt(self.delta_os_max).any(1).astype(int)
+        df["fc4_flag"] = df[df.columns].gt(
+            self.delta_os_max).any(1).astype(int)
         return df
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -186,7 +187,7 @@ class FaultConditionFive:
 
 class FaultConditionSix:
     """Class provides the definitions for Fault Condition 6.
-        Requires an externally calculated VAV box air flow summation 
+        Requires an externally calculated VAV box air flow summation
         read from each VAV box air flow transmitter or supply fan AFMS
     """
 
@@ -218,25 +219,25 @@ class FaultConditionSix:
             (df[self.oat_col] - df[self.rat_col])
         df['percent_oa_calc'] = df['percent_oa_calc'].apply(
             lambda x: x if x > 0 else 0)
-        df['perc_OAmin'] = (self.ahu_min_cfm_stp / df[self.vav_total_flow_col]) * 100
+        df['perc_OAmin'] = (self.ahu_min_cfm_stp /
+                            df[self.vav_total_flow_col]) * 100
         df['percent_oa_calc_minus_perc_OAmin'] = abs(
             df['percent_oa_calc'] - df['perc_OAmin'])
-        
+
         df['fc6_flag'] = operator.and_(df['rat_minus_oat'] >= self.oat_rat_delta_min,
                              df['percent_oa_calc_minus_perc_OAmin']
                              > self.airflow_err_thres
                              ).astype(int)
-        
+
         df = df[[
             "percent_oa_calc",
             "perc_OAmin",
             self.vav_total_flow_col,
             "fc6_flag"
             ]]
-        
+
         return df
 
-        
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df = self.additional_pandas_calcs(df)
         return df
@@ -251,7 +252,7 @@ class FaultConditionSeven:
         self,
         sat_degf_err_thres: float,
         sat_col: str,
-        satsp_col: str,	
+        satsp_col: str,
         htg_col: str,
     ):
         self.sat_degf_err_thres = sat_degf_err_thres
@@ -260,9 +261,74 @@ class FaultConditionSeven:
         self.htg_col = htg_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["fc7_flag"] = operator.and_(df[self.sat_col] 
+        df["fc7_flag"] = operator.and_(df[self.sat_col]
                             < df[self.satsp_col] - self.sat_degf_err_thres,
                             df[self.htg_col] >= 99).astype(int)
+        return df
+
+
+class FaultConditionEleven:
+    """Class provides the definitions for Fault Condition 11."""
+
+    def __init__(
+        self,
+		delta_supply_fan: float,
+		oat_err_thres: float,
+		supply_err_thres: float,
+		satsp_col: str,
+        oat_col: str,
+    ):
+        self.delta_supply_fan = delta_supply_fan
+        self.oat_err_thres = oat_err_thres
+        self.supply_err_thres = supply_err_thres
+        self.satsp_col = satsp_col
+        self.oat_col = oat_col
+
+        
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['oat_minus_oaterror'] = df[self.oat_col] - self.oat_err_thres
+        df['satsp_delta_saterr'] = df[self.satsp_col] - \
+            self.delta_supply_fan - self.supply_err_thres
+
+        df['fc11_flag'] = (df.oat_minus_oaterror 
+            < df.satsp_delta_saterr).astype(int)
+
+        df = df[[
+            'satsp',
+            'oat',
+            'fc11_flag'
+        ]]
+        return df
+
+
+class FaultConditionTwelve:
+    """Class provides the definitions for Fault Condition 12."""
+
+    def __init__(
+        self,
+		delta_supply_fan: float,
+		mix_err_thres: float,
+		supply_err_thres: float,
+        sat_col: str,
+        mat_col: str,
+    ):
+        self.delta_supply_fan = delta_supply_fan
+        self.mix_err_thres = mix_err_thres
+        self.supply_err_thres = supply_err_thres
+        self.sat_col = sat_col
+        self.mat_col = mat_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['sat_minus_saterr_delta_supply_fan'] = df[self.sat_col] - \
+            self.supply_err_thres - self.delta_supply_fan
+        df['mat_plus_materr'] = df[self.mat_col] + self.mix_err_thres
+        df["fc12_flag"] = (df['sat_minus_saterr_delta_supply_fan']
+            >= df['mat_plus_materr']).astype(int)
+        df = df[[
+            self.sat_col,
+            self.mat_col,
+            "fc12_flag"
+        ]]
         return df
     
     
@@ -275,7 +341,7 @@ class FaultConditionThirteen:
         self,
         sat_degf_err_thres: float,
         sat_col: str,
-        satsp_col: str,	
+        satsp_col: str,
         clg_col: str,
     ):
         self.sat_degf_err_thres = sat_degf_err_thres
@@ -284,7 +350,7 @@ class FaultConditionThirteen:
         self.clg_col = clg_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["fc13_flag"] = operator.and_(df[self.sat_col] 
+        df["fc13_flag"] = operator.and_(df[self.sat_col]
                             < df[self.satsp_col] + self.sat_degf_err_thres,
                             df[self.clg_col] >= 99).astype(int)
         return df
