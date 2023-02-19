@@ -52,8 +52,8 @@ class FaultConditionTwo:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc2_flag"] = (df[self.mat_col] + self.mix_degf_err_thres
-                < np.minimum(df[self.rat_col] - self.return_degf_err_thres,
-                df[self.oat_col] - self.outdoor_degf_err_thres)).astype(int)
+                          < np.minimum(df[self.rat_col] - self.return_degf_err_thres,
+                                       df[self.oat_col] - self.outdoor_degf_err_thres)).astype(int)
         return df
 
 
@@ -78,8 +78,8 @@ class FaultConditionThree:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc3_flag"] = (df[self.mat_col] - self.mix_degf_err_thres
-                > np.minimum(df[self.rat_col] + self.return_degf_err_thres,
-                df[self.oat_col] + self.outdoor_degf_err_thres)).astype(int)
+                          > np.minimum(df[self.rat_col] + self.return_degf_err_thres,
+                                       df[self.oat_col] + self.outdoor_degf_err_thres)).astype(int)
         return df
 
 
@@ -143,7 +143,7 @@ class FaultConditionFour:
             'econ_only_cooling_mode',
             'econ_plus_mech_cooling_mode',
             'mech_cooling_only_mode'
-            ]]
+        ]]
 
         df = df.astype(int)
 
@@ -181,7 +181,7 @@ class FaultConditionFive:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc5_flag"] = ((df[self.sat_col] + self.supply_degf_err_thres)
-                <= (df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan))
+                          <= (df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan))
         return df
 
 
@@ -225,16 +225,16 @@ class FaultConditionSix:
             df['percent_oa_calc'] - df['perc_OAmin'])
 
         df['fc6_flag'] = operator.and_(df['rat_minus_oat'] >= self.oat_rat_delta_min,
-                             df['percent_oa_calc_minus_perc_OAmin']
-                             > self.airflow_err_thres
-                             ).astype(int)
+                                       df['percent_oa_calc_minus_perc_OAmin']
+                                       > self.airflow_err_thres
+                                       ).astype(int)
 
         df = df[[
             "percent_oa_calc",
             "perc_OAmin",
             self.vav_total_flow_col,
             "fc6_flag"
-            ]]
+        ]]
 
         return df
 
@@ -262,20 +262,53 @@ class FaultConditionSeven:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc7_flag"] = operator.and_(df[self.sat_col]
-                            < df[self.satsp_col] - self.sat_degf_err_thres,
-                            df[self.htg_col] >= 99).astype(int)
+                                       < df[self.satsp_col] - self.sat_degf_err_thres,
+                                       df[self.htg_col] >= 99).astype(int)
         return df
 
 
-class FaultConditionEleven:
-    """Class provides the definitions for Fault Condition 11."""
+class FaultConditionEight:
+    """Class provides the definitions for Fault Condition 8."""
 
     def __init__(
         self,
-		delta_supply_fan: float,
-		oat_err_thres: float,
-		supply_err_thres: float,
-		satsp_col: str,
+        delta_supply_fan: str,
+        mix_err_thres: str,
+        supply_err_thres: str,
+        mat_col: str,
+        sat_col: str,
+    ):
+        self.delta_supply_fan = delta_supply_fan
+        self.mix_err_thres = mix_err_thres
+        self.supply_err_thres = supply_err_thres
+        self.mat_col = mat_col
+        self.sat_col = sat_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['sat_fan_mat'] = abs(
+            df[self.sat_col] - self.delta_supply_fan - df[self.mat_col])
+        df['sat_mat_sqrted'] = np.sqrt(
+            self.supply_err_thres**2 + self.mix_err_thres**2)
+
+        df['fc8_flag'] = (df['sat_fan_mat'] > df['sat_mat_sqrted']).astype(int)
+
+        df = df[[
+            self.mat_col,
+            self.sat_col,
+            'fc8_flag'
+        ]]
+        return df
+
+
+class FaultConditionNine:
+    """Class provides the definitions for Fault Condition 9."""
+
+    def __init__(
+        self,
+        delta_supply_fan: float,
+        oat_err_thres: float,
+        supply_err_thres: float,
+        satsp_col: str,
         oat_col: str,
     ):
         self.delta_supply_fan = delta_supply_fan
@@ -284,18 +317,81 @@ class FaultConditionEleven:
         self.satsp_col = satsp_col
         self.oat_col = oat_col
 
-        
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df['oat_minus_oaterror'] = df[self.oat_col] - self.oat_err_thres
         df['satsp_delta_saterr'] = df[self.satsp_col] - \
-            self.delta_supply_fan - self.supply_err_thres
+            self.delta_supply_fan + self.supply_err_thres
 
-        df['fc11_flag'] = (df.oat_minus_oaterror 
-            < df.satsp_delta_saterr).astype(int)
+        df['fc9_flag'] = (df.oat_minus_oaterror
+                          > df.satsp_delta_saterr).astype(int)
 
         df = df[[
-            'satsp',
-            'oat',
+            self.satsp_col,
+            self.oat_col,
+            'fc9_flag'
+        ]]
+        return df
+
+
+class FaultConditionTen:
+    """Class provides the definitions for Fault Condition 10."""
+
+    def __init__(
+        self,
+        oat_err_thres: float,
+        mat_err_thres: float,
+        oat_col: str,
+        mat_col: str,
+    ):
+
+        self.oat_err_thres = oat_err_thres
+        self.mat_err_thres = mat_err_thres
+        self.oat_col = oat_col
+        self.mat_col = mat_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['abs_mat_minus_oat'] = abs(df[self.mat_col] - df[self.oat_col])
+        df['mat_oat_sqrted'] = np.sqrt(
+            self.mat_err_thres ** 2 + self.oat_err_thres ** 2)
+        df['fc10_flag'] = (df.abs_mat_minus_oat >
+                           df.mat_oat_sqrted).astype(int)
+
+        df = df[[
+            self.oat_col,
+            self.mat_col,
+            'fc10_flag'
+        ]]
+        return df
+
+
+class FaultConditionEleven:
+    """Class provides the definitions for Fault Condition 11. Very similar to FC11."""
+
+    def __init__(
+        self,
+        delta_supply_fan: float,
+        oat_err_thres: float,
+        supply_err_thres: float,
+        satsp_col: str,
+        oat_col: str,
+    ):
+        self.delta_supply_fan = delta_supply_fan
+        self.oat_err_thres = oat_err_thres
+        self.supply_err_thres = supply_err_thres
+        self.satsp_col = satsp_col
+        self.oat_col = oat_col
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['oat_plus_oaterror'] = df[self.oat_col] + self.oat_err_thres
+        df['satsp_delta_saterr'] = df[self.satsp_col] - \
+            self.delta_supply_fan - self.supply_err_thres
+
+        df['fc11_flag'] = (df.oat_plus_oaterror
+                           < df.satsp_delta_saterr).astype(int)
+
+        df = df[[
+            self.satsp_col,
+            self.oat_col,
             'fc11_flag'
         ]]
         return df
@@ -306,9 +402,9 @@ class FaultConditionTwelve:
 
     def __init__(
         self,
-		delta_supply_fan: float,
-		mix_err_thres: float,
-		supply_err_thres: float,
+        delta_supply_fan: float,
+        mix_err_thres: float,
+        supply_err_thres: float,
         sat_col: str,
         mat_col: str,
     ):
@@ -323,15 +419,15 @@ class FaultConditionTwelve:
             self.supply_err_thres - self.delta_supply_fan
         df['mat_plus_materr'] = df[self.mat_col] + self.mix_err_thres
         df["fc12_flag"] = (df['sat_minus_saterr_delta_supply_fan']
-            >= df['mat_plus_materr']).astype(int)
+                           >= df['mat_plus_materr']).astype(int)
         df = df[[
             self.sat_col,
             self.mat_col,
             "fc12_flag"
         ]]
         return df
-    
-    
+
+
 class FaultConditionThirteen:
     """Class provides the definitions for Fault Condition 13.
         Very similar to FC 13 but uses cooling valve
@@ -351,7 +447,6 @@ class FaultConditionThirteen:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc13_flag"] = operator.and_(df[self.sat_col]
-                            < df[self.satsp_col] + self.sat_degf_err_thres,
-                            df[self.clg_col] >= 99).astype(int)
+                                        < df[self.satsp_col] + self.sat_degf_err_thres,
+                                        df[self.clg_col] >= 99).astype(int)
         return df
-		

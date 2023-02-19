@@ -17,7 +17,7 @@ import argparse
 import math
 
 # python 3.10 on Windows 10
-# py .\fc11.py -i ./ahu_data/hvac_random_fake_data/fc11_fake_data1.csv -o fake1_ahu_fc11_report
+# py .\fc8.py -i ./ahu_data/hvac_random_fake_data/fc8_fake_data1.csv -o fake1_ahu_fc8_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group('Options')
@@ -42,8 +42,8 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 args = parser.parse_args()
 
 
-def fault_condition_eleven(df):
-    return df.oat_minus_oaterror < df.satsp_delta_saterr
+def fault_condition_eight(df):
+    return df.sat_fan_mat > df.sat_mat_sqrted
 
 
 df = pd.read_csv(args.input,
@@ -55,23 +55,17 @@ df_copy = df.copy()
 
 df_copy.plot(figsize=(25, 8),
              title='AHU Temp Sensors')
-plt.savefig('./static/ahu_fc11_signals.png')
+plt.savefig('./static/ahu_fc8_signals.png')
 
 # make an entire column out of these params in the Pandas Dataframe
-# required params taken from the screenshot above
-
 DELTA_SUPPLY_FAN = 2
-OAT_DEGF_ERR_THRES = 5
+MIX_DEGF_ERR_THRES = 5
 SUPPLY_DEGF_ERR_THRES = 2
-SUPPLY_AIR_SETPOINT = 55
-
 df['delta_supply_fan'] = DELTA_SUPPLY_FAN
-df['oat_err_thres'] = OAT_DEGF_ERR_THRES
+df['mix_err_thres'] = MIX_DEGF_ERR_THRES
 df['supply_err_thres'] = SUPPLY_DEGF_ERR_THRES
-df['supply_air_setpoint'] = SUPPLY_AIR_SETPOINT
-df['oat_minus_oaterror'] = df.oat - df.oat_err_thres
-df['satsp_delta_saterr'] = df.supply_air_setpoint - \
-    df.delta_supply_fan - df.supply_err_thres
+df['sat_fan_mat'] = abs(df.sat - df.delta_supply_fan - df.mat)
+df['sat_mat_sqrted'] = np.sqrt(df.supply_err_thres**2 + df.mix_err_thres**2)
 
 
 start = df.head(1).index.date
@@ -81,49 +75,47 @@ end = df.tail(1).index.date
 print('Dataset end: ', end)
 print('COLUMNS: ', print(df.columns))
 
-df['fc11_flag'] = fault_condition_eleven(df)
+df['fc8_flag'] = fault_condition_eight(df)
 
 df2 = df.copy().dropna()
-df2['fc11_flag'] = df2['fc11_flag'].astype(int)
+df2['fc8_flag'] = df2['fc8_flag'].astype(int)
 
 # drop params column for better plot
-df2 = df2.drop([
-    'delta_supply_fan',
-    'oat_err_thres',
-    'supply_err_thres',
-], axis=1)
+df2 = df2.drop(['delta_supply_fan',
+                'mix_err_thres',
+                'supply_err_thres'], axis=1)
 
 print(df2)
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
-plt.title('Fault Conditions 11 Plot')
+plt.title('Fault Conditions 8 Plot')
 
-plot1a, = ax1.plot(df2.index, df2.oat, label="OAT")
-plot1b, = ax1.plot(df2.index, df2.supply_air_setpoint, label="SATSP")
+plot1a, = ax1.plot(df2.index, df2.sat, label="SAT")
+plot1b, = ax1.plot(df2.index, df2.mat, label="MAT")
 ax1.legend(loc='best')
 ax1.set_ylabel('AHU Supply & Mix Temps °F')
 
-ax2.plot(df2.index, df2.fc11_flag, label="Fault", color="k")
+ax2.plot(df2.index, df2.fc8_flag, label="Fault", color="k")
 ax2.set_xlabel('Date')
 ax2.set_ylabel('Fault Flags')
 ax2.legend(loc='best')
 
 plt.legend()
 plt.tight_layout()
-plt.savefig('./static/ahu_fc11_fans_plot.png')
+plt.savefig('./static/ahu_fc8_fans_plot.png')
 # plt.show()
 
-print("Starting ahu fc11 docx report")
+print("Starting ahu fc8 docx report")
 document = Document()
-document.add_heading('Fault Condition Nine Report', 0)
+document.add_heading('Fault Condition Eight Report', 0)
 
 p = document.add_paragraph(
-    'Fault condition nine of ASHRAE Guideline 36 is an AHU economizing plus mechanical cooling mode (very similar to fault 9) only fault equation with an attempt at verifying an AHU sensor error on the outside and supply air temperature sensors. A fault would get flagged if the AHU is in an economizing and mechanical cooling mode the outside air temperature is too low. Fault condition nine equation as defined by ASHRAE:')
-document.add_picture('./images/fc11_definition.png', width=Inches(6))
+    'Fault condition eight of ASHRAE Guideline 36 is an AHU economizing mode only fault equation with an attempt at verifying an AHU heating or cooling valve is not stuck or leaking by verifying AHU supply temperature to supply temperature setpoint. Fault condition eight equation as defined by ASHRAE:')
+document.add_picture('./images/fc8_definition.png', width=Inches(6))
 
 # ADD IN SUBPLOTS SECTION
 document.add_heading('Dataset Plot', level=2)
-document.add_picture('./static/ahu_fc11_fans_plot.png', width=Inches(6))
+document.add_picture('./static/ahu_fc8_fans_plot.png', width=Inches(6))
 document.add_heading('Dataset Statistics', level=2)
 
 # calculate dataset statistics
@@ -132,25 +124,25 @@ total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
 print('DAYS ALL DATA: ', total_days)
 total_hours = delta.sum() / pd.Timedelta(hours=1)
 print('TOTAL HOURS: ', total_hours)
-hours_fc11_mode = (delta * df2["fc11_flag"]).sum() / pd.Timedelta(hours=1)
-print('FALT FLAG TRUE TOTAL HOURS: ', hours_fc11_mode)
-percent_true = round(df2.fc11_flag.mean() * 100, 2)
-print('PERCENT TIME WHEN Flag 11 TRUE: ', percent_true, '%')
+hours_fc8_mode = (delta * df2["fc8_flag"]).sum() / pd.Timedelta(hours=1)
+print('FALT FLAG TRUE TOTAL HOURS: ', hours_fc8_mode)
+percent_true = round(df2.fc8_flag.mean() * 100, 2)
+print('PERCENT TIME WHEN Flag 8 TRUE: ', percent_true, '%')
 percent_false = round((100 - percent_true), 2)
-print('PERCENT TIME WHEN Flag 11 FALSE: ', percent_false, '%')
-df2['hour_of_the_day_fc11'] = df2.index.hour.where(df2["fc11_flag"] == 1)
+print('PERCENT TIME WHEN Flag 8 FALSE: ', percent_false, '%')
+df2['hour_of_the_day_fc8'] = df2.index.hour.where(df2["fc8_flag"] == 1)
 
-flag_true_oat = round(
-    df2.oat.where(df2["fc11_flag"] == 1).mean(), 2)
-print('FLAG TRUE SAT DEGF: ', flag_true_oat)
+flag_true_sat = round(
+    df2.sat.where(df2["fc8_flag"] == 1).mean(), 2)
+print('FLAG TRUE SAT DEGF: ', flag_true_sat)
 
-# make hist plots fc11
+# make hist plots fc8
 fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
-ax.hist(df2.hour_of_the_day_fc11.dropna())
+ax.hist(df2.hour_of_the_day_fc8.dropna())
 ax.set_xlabel('24 Hour Number in Day')
 ax.set_ylabel('Frequency')
-ax.set_title(f'Hour-Of-Day When Fault Flag 11 is TRUE')
-fig.savefig('./static/ahu_fc11_histogram.png')
+ax.set_title(f'Hour-Of-Day When Fault Flag 8 is TRUE')
+fig.savefig('./static/ahu_fc8_histogram.png')
 
 # add calcs to word doc
 paragraph = document.add_paragraph()
@@ -166,30 +158,30 @@ paragraph.add_run(
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Total time in hours for when fault Flag 10 is True: {hours_fc11_mode}')
+    f'Total time in hours for when fault Flag 8 is True: {hours_fc8_mode}')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when the fault Flag 10 is True: {percent_true}%')
+    f'Percent of time in the dataset when the fault Flag 8 is True: {percent_true}%')
 
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
 paragraph.add_run(
-    f'Percent of time in the dataset when fault Flag 10 is False: {percent_false}%')
+    f'Percent of time in the dataset when fault Flag 8 is False: {percent_false}%')
 
 
-if hours_fc11_mode != float(0):
+if hours_fc8_mode != float(0):
     paragraph = document.add_paragraph()
     # ADD HIST Plots
     document.add_heading('Time-of-day Histogram Plots', level=2)
-    document.add_picture('./static/ahu_fc11_histogram.png', width=Inches(6))
+    document.add_picture('./static/ahu_fc8_histogram.png', width=Inches(6))
 
-if not math.isnan(flag_true_oat):
+if not math.isnan(flag_true_sat):
     paragraph = document.add_paragraph()
     paragraph.style = 'List Bullet'
     paragraph.add_run(
-        f'When fault condition 11 is True the average supply temperature is {flag_true_oat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
+        f'When fault condition 8 is True the average supply temperature is {flag_true_sat}°F. This data along with time-of-day could possibly help with pin pointing AHU operating conditions for when this fault is True.')
 
 paragraph = document.add_paragraph()
 
@@ -200,10 +192,10 @@ paragraph.style = 'List Bullet'
 paragraph.add_run(str(df2.sat.describe()))
 
 # ADD in Summary Statistics
-document.add_heading('Supply Setpoint Temp Statistics', level=2)
+document.add_heading('Mix Temp Statistics', level=2)
 paragraph = document.add_paragraph()
 paragraph.style = 'List Bullet'
-paragraph.add_run(str(df2.supply_air_setpoint.describe()))
+paragraph.add_run(str(df2.mat.describe()))
 
 document.add_heading('Suggestions based on data analysis', level=2)
 paragraph = document.add_paragraph()
@@ -228,4 +220,4 @@ run.style = 'Emphasis'
 document.save(f'./final_report/{args.output}.docx')
 print('All Done')
 
-# df2.to_csv('testdf2_fc11.csv')
+# df2.to_csv('testdf2_fc8.csv')

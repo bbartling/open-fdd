@@ -37,7 +37,6 @@ args = parser.parse_args()
 DELTA_SUPPLY_FAN = 2
 OAT_DEGF_ERR_THRES = 5
 SUPPLY_DEGF_ERR_THRES = 2
-# SUPPLY_AIR_SETPOINT = 55
 
 _fc11 = FaultConditionEleven(
     DELTA_SUPPLY_FAN,
