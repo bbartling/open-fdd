@@ -4,3 +4,4 @@ pandas
 python-docx
 matplotlib
 argparse
+pytest
