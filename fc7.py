@@ -40,14 +40,16 @@ _fc7 = FaultConditionSeven(
     SAT_DEGF_ERR_THRES,
     "sat",
     "satsp",	
-    "htg"
+    "htg",
+    "supply_vfd_speed"
 )
 
 
 _fc7_report = FaultCodeSevenReport(    
     "sat",
     "satsp",	
-    "htg"
+    "htg",
+    "supply_vfd_speed"
 )
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()

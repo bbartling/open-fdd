@@ -32,6 +32,9 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
+
 # G36 params shouldnt need adjusting
 # error threshold parameters
 DELTA_SUPPLY_FAN = 2
@@ -42,14 +45,20 @@ _fc12 = FaultConditionTwelve(
     DELTA_SUPPLY_FAN,
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
+    AHU_MIN_OA,
     "sat",
-    "mat"
+    "mat",
+    "clg",
+    "economizer_sig"
 )
 
 
 _fc12_report = FaultCodeTwelveReport(    
     "sat",
-    "mat"
+    "mat",
+    "clg",
+    "economizer_sig",
+    "supply_vfd_speed"
 )
 
 

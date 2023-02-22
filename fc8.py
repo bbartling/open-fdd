@@ -43,13 +43,17 @@ _fc8 = FaultConditionEight(
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     "mat",
-    "sat"
+    "sat",
+    "supply_vfd_speed",
+    "economizer_sig"
 )
 
 
 _fc8_report = FaultCodeEightReport(    
     "mat",
-    "sat"
+    "sat",
+    "supply_vfd_speed",
+    "economizer_sig"
 )
 
 

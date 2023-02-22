@@ -48,6 +48,7 @@ _fc4 = FaultConditionFour(
     "economizer_sig",
     "heating_sig",
     "cooling_sig",
+    "supply_vfd_speed"
 )
 
 

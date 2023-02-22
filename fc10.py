@@ -32,22 +32,32 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
+
 # G36 params shouldnt need adjusting
 # error threshold parameters
 OAT_DEGF_ERR_THRES = 5
 MAT_DEGF_ERR_THRES = 5
 
+
+
 _fc10 = FaultConditionTen(
     OAT_DEGF_ERR_THRES,
     MAT_DEGF_ERR_THRES,
     "mat",
-    "oat"
+    "oat",
+    "clg",
+    "economizer_sig",
 )
 
 
 _fc10_report = FaultCodeTenReport(    
     "mat",
-    "oat"
+    "oat",
+    "clg",
+    "economizer_sig",
+    "supply_vfd_speed"
 )
 
 

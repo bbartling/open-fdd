@@ -44,15 +44,17 @@ _fc9 = FaultConditionNine(
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     "satsp",
-    "oat"
+    "oat",
+    "supply_vfd_speed",
+    "economizer_sig"
 )
-
 
 _fc9_report = FaultCodeNineReport(    
     "satsp",
-    "oat"
+    "oat",
+    "supply_vfd_speed",
+    "economizer_sig"
 )
-
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()

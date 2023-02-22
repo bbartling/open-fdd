@@ -68,11 +68,18 @@ _fc6 = FaultConditionSix(
     "vav_total_flow",
     "mat",
     "oat",
-    "rat"
+    "rat",
+    "supply_vfd_speed"
 )
 
 
-_fc6_report = FaultCodeSixReport("vav_total_flow")
+_fc6_report = FaultCodeSixReport(
+    "vav_total_flow",
+    "mat",
+    "oat",
+    "rat",
+    "supply_vfd_speed"
+)
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()

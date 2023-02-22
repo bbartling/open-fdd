@@ -2,6 +2,7 @@ import math
 import os
 import time
 from io import BytesIO
+import numpy as np
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -28,8 +29,8 @@ class FaultCodeOneReport:
         self.vfd_speed_percent_max = vfd_speed_percent_max
         self.duct_static_inches_err_thres = duct_static_inches_err_thres
         self.duct_static_col = duct_static_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.duct_static_setpoint_col = duct_static_setpoint_col
+        self.fan_vfd_speed_col = supply_vfd_speed_col
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
@@ -44,7 +45,7 @@ class FaultCodeOneReport:
         ax1.legend(loc='best')
         ax1.set_ylabel("Inch WC")
 
-        ax2.plot(df.index, df[self.supply_vfd_speed_col],
+        ax2.plot(df.index, df[self.fan_vfd_speed_col],
                  color="g", label="FAN")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
@@ -64,18 +65,26 @@ class FaultCodeOneReport:
             output_col = "fc1_flag"
         delta = df.index.to_series().diff()
         total_days = round(delta.sum() / pd.Timedelta(days=1), 2)
-        # print("DAYS ALL DATA: ", total_days)
+
         total_hours = delta.sum() / pd.Timedelta(hours=1)
-        # print("TOTAL HOURS: ", total_hours)
+
         hours_fc1_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
-        # print("FALT FLAG TRUE TOTAL HOURS: ", hours_fc1_mode)
+
         percent_true = round(df[output_col].mean() * 100, 2)
-        # print("PERCENT TIME WHEN FLAG IS TRUE: ", percent_true, "%")
+
         percent_false = round((100 - percent_true), 2)
-        # print("PERCENT TIME WHEN FLAG 5 FALSE: ", percent_false, "%")
+
         flag_true_duct_static = round(
             df[self.duct_static_col].where(df[output_col] == 1).mean(), 2
         )
+
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+
         return (
             total_days,
             total_hours,
@@ -83,6 +92,8 @@ class FaultCodeOneReport:
             percent_true,
             percent_false,
             flag_true_duct_static,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -107,9 +118,7 @@ class FaultCodeOneReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        duct_static_col: str = None,
-        flag_true_duct_static: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -149,6 +158,8 @@ class FaultCodeOneReport:
             percent_true,
             percent_false,
             flag_true_duct_static,
+            hours_motor_runtime,
+            df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
@@ -176,6 +187,12 @@ class FaultCodeOneReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
         )
 
         paragraph = document.add_paragraph()
@@ -208,25 +225,29 @@ class FaultCodeOneReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics of fan operation
-        document.add_heading("VFD Speed Statistics", level=2)
+        document.add_heading("VFD Speed", level=3)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
-        paragraph.add_run(str(df[self.supply_vfd_speed_col].describe()))
+        paragraph.add_run(
+            str(df_motor_on_filtered[self.fan_vfd_speed_col].describe()))
 
         # ADD in Summary Statistics of duct pressure
-        document.add_heading("Duct Pressure Statistics", level=2)
+        document.add_heading("Duct Pressure", level=3)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
-        paragraph.add_run(str(df[self.duct_static_col].describe()))
+        paragraph.add_run(
+            str(df_motor_on_filtered[self.duct_static_col].describe()))
 
         # ADD in Summary Statistics of duct pressure
-        document.add_heading("Duct Pressure Setpoints Statistics", level=2)
+        document.add_heading("Duct Pressure Setpoint", level=3)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
-        paragraph.add_run(str(df[self.duct_static_setpoint_col].describe()))
+        paragraph.add_run(
+            str(df_motor_on_filtered[self.duct_static_setpoint_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -268,6 +289,7 @@ class FaultCodeTwoReport:
         mat_col: str,
         rat_col: str,
         oat_col: str,
+        fan_vfd_speed_col: str,
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.return_degf_err_thres = return_degf_err_thres
@@ -275,6 +297,7 @@ class FaultCodeTwoReport:
         self.mat_col = mat_col
         self.rat_col = rat_col
         self.oat_col = oat_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
@@ -331,6 +354,12 @@ class FaultCodeTwoReport:
         flag_true_rat = round(
             df[self.rat_col].where(df[output_col] == 1).mean(), 2
         )
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
         return (
             total_days,
             total_hours,
@@ -339,7 +368,9 @@ class FaultCodeTwoReport:
             percent_false,
             flag_true_mat,
             flag_true_oat,
-            flag_true_rat
+            flag_true_rat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -369,9 +400,7 @@ class FaultCodeTwoReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        mat_col: str = None,
-        flag_true_mat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -413,7 +442,9 @@ class FaultCodeTwoReport:
             percent_false,
             flag_true_mat,
             flag_true_oat,
-            flag_true_rat
+            flag_true_rat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
         paragraph = document.add_paragraph()
@@ -445,6 +476,12 @@ class FaultCodeTwoReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -473,25 +510,26 @@ class FaultCodeTwoReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Mix Temp Statistics', level=2)
+        document.add_heading('Mix Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Return Temp Statistics', level=2)
+        document.add_heading('Return Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.rat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.rat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Outside Temp Statistics', level=2)
+        document.add_heading('Outside Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.oat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -523,6 +561,7 @@ class FaultCodeThreeReport:
         mat_col: str,
         rat_col: str,
         oat_col: str,
+        fan_vfd_speed_col: str,
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.return_degf_err_thres = return_degf_err_thres
@@ -530,6 +569,7 @@ class FaultCodeThreeReport:
         self.mat_col = mat_col
         self.rat_col = rat_col
         self.oat_col = oat_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
@@ -586,6 +626,14 @@ class FaultCodeThreeReport:
         flag_true_rat = round(
             df[self.rat_col].where(df[output_col] == 1).mean(), 2
         )
+
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+
         return (
             total_days,
             total_hours,
@@ -594,7 +642,9 @@ class FaultCodeThreeReport:
             percent_false,
             flag_true_mat,
             flag_true_oat,
-            flag_true_rat
+            flag_true_rat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -624,9 +674,7 @@ class FaultCodeThreeReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        mat_col: str = None,
-        flag_true_mat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -666,7 +714,9 @@ class FaultCodeThreeReport:
             percent_false,
             flag_true_mat,
             flag_true_oat,
-            flag_true_rat
+            flag_true_rat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
         paragraph = document.add_paragraph()
@@ -695,6 +745,12 @@ class FaultCodeThreeReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
         )
 
         paragraph = document.add_paragraph()
@@ -727,25 +783,26 @@ class FaultCodeThreeReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Mix Temp Statistics', level=2)
+        document.add_heading('Mix Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Return Temp Statistics', level=2)
+        document.add_heading('Return Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.rat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.rat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Outside Temp Statistics', level=2)
+        document.add_heading('Outside Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.oat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -918,7 +975,7 @@ class FaultCodeFourReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
+        output_col: str = None
     ) -> None:
         if output_col is None:
             output_col = "fc4_flag"
@@ -1096,35 +1153,42 @@ class FaultCodeFiveReport:
         delta_t_supply_fan: float,
         mat_col: str,
         sat_col: str,
+        htg_vlv_col: str,
+        fan_vfd_speed_col: str
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.supply_degf_err_thres = supply_degf_err_thres
         self.delta_t_supply_fan = delta_t_supply_fan
         self.mat_col = mat_col
         self.sat_col = sat_col
+        self.htg_vlv_col = htg_vlv_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
             output_col = "fc5_flag"
 
-        df[output_col] = df[output_col].astype(int)
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
         plt.title('Fault Conditions 5 Plot')
 
         plot1a, = ax1.plot(df.index, df[self.mat_col],
-                           color='r', label="Mix Temp")  # red
+                           color='g', label="Mix Temp")
 
         plot1b, = ax1.plot(df.index, df[self.sat_col],
-                           color='b', label="Supply Temp")  # blue
+                           color='b', label="Supply Temp")
 
         ax1.legend(loc='best')
         ax1.set_ylabel("°F")
 
-        ax2.plot(df.index, df[output_col], label="Fault", color="k")
+        ax2.plot(df.index, df[self.htg_vlv_col], label="Htg Valve", color="r")
         ax2.set_xlabel('Date')
-        ax2.set_ylabel('Fault Flags')
+        ax2.set_ylabel('%')
         ax2.legend(loc='best')
+
+        ax3.plot(df.index, df[output_col], label="Fault", color="k")
+        ax3.set_xlabel('Date')
+        ax3.set_ylabel('Fault Flags')
+        ax3.legend(loc='best')
 
         plt.legend()
         plt.tight_layout()
@@ -1152,6 +1216,13 @@ class FaultCodeFiveReport:
             df[self.sat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+
         return (
             total_days,
             total_hours,
@@ -1160,6 +1231,8 @@ class FaultCodeFiveReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -1189,9 +1262,7 @@ class FaultCodeFiveReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        mat_col: str = None,
-        flag_true_mat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -1231,6 +1302,8 @@ class FaultCodeFiveReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -1263,6 +1336,12 @@ class FaultCodeFiveReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -1292,19 +1371,19 @@ class FaultCodeFiveReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
-
         # ADD in Summary Statistics
-        document.add_heading('Mix Temp Statistics', level=2)
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
+        document.add_heading('Mix Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Temp Statistics', level=2)
+        document.add_heading('Supply Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -1330,13 +1409,18 @@ class FaultCodeSixReport:
     def __init__(
         self,
         vav_total_flow: str,
+        mat_col: str,
+        oat_col: str,
+        rat_col: str,
+        fan_vfd_speed_col: str
     ):
 
         self.vav_total_flow = vav_total_flow
-        self.perc_OAmin = 'perc_OAmin'
-        self.percent_oa_calc = 'percent_oa_calc'
-        self.fc6_flag = 'fc6_flag'
-
+        self.mat_col = mat_col
+        self.oat_col = oat_col
+        self.rat_col = rat_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
+        
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
             output_col = "fc6_flag"
@@ -1344,16 +1428,20 @@ class FaultCodeSixReport:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
         plt.title('Fault Conditions 6 Plot')
 
-        plot1a, = ax1.plot(df.index, df[self.perc_OAmin],
-                           color='r', label="OA Actual Calc")  # red
-        plot1b, = ax1.plot(df.index, df[self.percent_oa_calc],
-                           color='b', label="OA Frac Calc")  # blue
+        plot1a, = ax1.plot(df.index, df[self.mat_col],
+                        label="Mix Temp")
+
+        plot1b, = ax1.plot(df.index, df[self.oat_col],
+                        label="Out Temp")
+        
+        plot1c, = ax1.plot(df.index, df[self.rat_col],
+                        label="Return Temp")
 
         ax1.legend(loc='best')
-        ax1.set_ylabel("% OA")
-
+        ax1.set_ylabel("°F")
+        
         ax2.plot(df.index, df[self.vav_total_flow],
-                 label="Total Air Flow", color="g")
+                 label="Total Air Flow", color="r")
         ax2.set_xlabel('Date')
         ax2.set_ylabel('CFM')
         ax2.legend(loc='best')
@@ -1382,21 +1470,35 @@ class FaultCodeSixReport:
         percent_true = round(df[output_col].mean() * 100, 2)
         percent_false = round((100 - percent_true), 2)
 
-        flag_true_vav_total_flow = round(
-            df[self.vav_total_flow].where(df[output_col] == 1).mean(), 2
+        flag_true_mat = round(
+            df[self.mat_col].where(df[output_col] == 1).mean(), 2
         )
-        flag_true_percent_oa_calc = round(
-            df[self.percent_oa_calc].where(df[output_col] == 1).mean(), 2
+        flag_true_rat = round(
+            df[self.rat_col].where(df[output_col] == 1).mean(), 2
+        )
+        
+        flag_true_oat = round(
+            df[self.oat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
             hours_fc5_mode,
             percent_true,
             percent_false,
-            flag_true_vav_total_flow,
-            flag_true_percent_oa_calc,
+            flag_true_mat,
+            flag_true_rat,
+            flag_true_oat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -1423,9 +1525,7 @@ class FaultCodeSixReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_vav_total_flow: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -1436,7 +1536,7 @@ class FaultCodeSixReport:
         document.add_heading("Fault Condition Six Report", 0)
 
         p = document.add_paragraph(
-            """Fault condition six of ASHRAE Guideline 36 is an attempt at verifying that AHU design minimum outside air is close to the calculated outside air fraction through the outside, mix, and return air temperature sensors. The plot below attempts to show the outside air fraction calculation between the return, mix, and outside air temperature sensors Vs an actual outside air flow through the AHU based on the total outdoor air calculation minus the design outdoor air expressed as a percentage. A fault will get flagged if the OA fraction is too low or too high. Fault condition six equation as defined by ASHRAE:"""
+            """Fault condition six of ASHRAE Guideline 36 is an attempt at verifying that AHU design minimum outside air is close to the calculated outside air fraction through the outside, mix, and return air temperature sensors. A fault will get flagged if the OA fraction is too low or too high as to compared to design OA. Fault condition six equation as defined by ASHRAE:"""
         )
 
         document.add_picture(
@@ -1463,9 +1563,11 @@ class FaultCodeSixReport:
             hours_fc6_mode,
             percent_true,
             percent_false,
-            flag_true_vav_total_flow,
-            flag_true_percent_oa_calc,
-
+            flag_true_mat,
+            flag_true_rat,
+            flag_true_oat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
         paragraph = document.add_paragraph()
@@ -1497,6 +1599,12 @@ class FaultCodeSixReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+        
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -1517,7 +1625,7 @@ class FaultCodeSixReport:
 
             paragraph.style = 'List Bullet'
             paragraph.add_run(
-                f'When fault condition 6 is True the average AHU total air flow is {flag_true_vav_total_flow} in CFM and the outside air calculation is {flag_true_percent_oa_calc} in %. This could possibly help with pin pointing AHU operating conditions for when this AHU is drawing in excessive outside air.')
+                f'When fault condition 6 is True the average AHU mix air temperature {flag_true_mat}°F, outside air temperature is {flag_true_oat}°F, and the return air temperature is {flag_true_rat}°F. This could possibly help with pin pointing AHU operating conditions for when this AHU is drawing in excessive outside air.')
 
         else:
             print("NO FAULTS FOUND - For report skipping time-of-day Histogram plot")
@@ -1526,19 +1634,21 @@ class FaultCodeSixReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('AHU Total Air Flow Statistics', level=2)
+        document.add_heading('Mix Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.vav_total_flow].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('OA Calculation Statistics', level=2)
+        document.add_heading('Outside Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.percent_oa_calc].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -1568,13 +1678,15 @@ class FaultCodeSevenReport:
         sat_col: str,
         satsp_col: str,
         htg_col: str,
+        fan_vfd_speed_col: str
     ):
         self.sat_col = sat_col
         self.satsp_col = satsp_col
         self.htg_col = htg_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
-        
+
         if output_col is None:
             output_col = "fc7_flag"
 
@@ -1586,8 +1698,8 @@ class FaultCodeSevenReport:
         ax1.legend(loc='best')
         ax1.set_ylabel('AHU Supply Temps °F')
 
-        ax2.plot(df.index, df[self.htg_col], color="g",
-                    label="AHU Heat Vlv")
+        ax2.plot(df.index, df[self.htg_col], color="r",
+                 label="AHU Heat Vlv")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
 
@@ -1621,7 +1733,14 @@ class FaultCodeSevenReport:
         flag_true_sat = round(
             df[self.satsp_col].where(df[output_col] == 1).mean(), 2
         )
+        
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
 
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -1630,6 +1749,8 @@ class FaultCodeSevenReport:
             percent_false,
             flag_true_satsp,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -1656,9 +1777,7 @@ class FaultCodeSevenReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_satsp: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -1698,6 +1817,8 @@ class FaultCodeSevenReport:
             percent_false,
             flag_true_satsp,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -1727,6 +1848,12 @@ class FaultCodeSevenReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+        
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
         )
 
         paragraph = document.add_paragraph()
@@ -1759,25 +1886,27 @@ class FaultCodeSevenReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Statistics', level=2)
+        document.add_heading('Supply Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Setpoint Statistics', level=2)
+        document.add_heading('Supply Air Temp Setpoint', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.satsp_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.satsp_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Heating Coil Valve Statistics', level=2)
+        document.add_heading('Heating Coil Valve', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.htg_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.htg_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -1804,12 +1933,16 @@ class FaultCodeEightReport:
         self,
         sat_col: str,
         mat_col: str,
+        fan_vfd_speed_col: str,
+        economizer_sig_col: str,
     ):
         self.sat_col = sat_col
         self.mat_col = mat_col
-
-    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.economizer_sig_col = economizer_sig_col
         
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+
         if output_col is None:
             output_col = "fc8_flag"
 
@@ -1852,6 +1985,13 @@ class FaultCodeEightReport:
             df[self.sat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -1860,6 +2000,8 @@ class FaultCodeEightReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -1886,9 +2028,7 @@ class FaultCodeEightReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_mat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -1928,6 +2068,8 @@ class FaultCodeEightReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -1957,6 +2099,12 @@ class FaultCodeEightReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+        
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
         )
 
         paragraph = document.add_paragraph()
@@ -1989,19 +2137,20 @@ class FaultCodeEightReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Statistics', level=2)
+        document.add_heading('Supply Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Mix Air Temp Statistics', level=2)
+        document.add_heading('Mix Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -2025,15 +2174,19 @@ class FaultCodeNineReport:
 
     def __init__(
         self,
-		satsp_col: str,
+        satsp_col: str,
         oat_col: str,
+        fan_vfd_speed_col: str,
+        economizer_sig_col: str,
     ):
 
         self.satsp_col = satsp_col
         self.oat_col = oat_col
-		
+        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.economizer_sig_col = economizer_sig_col
+
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
-        
+
         if output_col is None:
             output_col = "fc9_flag"
 
@@ -2076,6 +2229,13 @@ class FaultCodeNineReport:
             df[self.satsp_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -2084,6 +2244,8 @@ class FaultCodeNineReport:
             percent_false,
             flag_true_oat,
             flag_true_satsp,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -2110,9 +2272,7 @@ class FaultCodeNineReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_oat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -2152,6 +2312,8 @@ class FaultCodeNineReport:
             percent_false,
             flag_true_oat,
             flag_true_satsp,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -2181,6 +2343,12 @@ class FaultCodeNineReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             f"Percent of time in the dataset when the fault flag is False: {percent_false}%"
+        )
+        
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
         )
 
         paragraph = document.add_paragraph()
@@ -2213,19 +2381,21 @@ class FaultCodeNineReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Setpoint Statistics', level=2)
+        document.add_heading('Supply Air Temp Setpoint', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.satsp_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.satsp_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Outside Air Temp Statistics', level=2)
+        document.add_heading('Outside Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.oat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -2250,30 +2420,43 @@ class FaultCodeTenReport:
 
     def __init__(
         self,
-		oat_col: str,
+        oat_col: str,
         mat_col: str,
+        clg_col: str,
+        economizer_sig_col: str,
+        fan_vfd_speed_col: str,
     ):
-
         self.oat_col = oat_col
         self.mat_col = mat_col
+        self.clg_col = clg_col
+        self.economizer_sig_col = economizer_sig_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
+
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
-        
+
         if output_col is None:
             output_col = "fc10_flag"
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
         plt.title('Fault Conditions 10 Plot')
 
         plot1a, = ax1.plot(df.index, df[self.mat_col], label="MAT")
         plot1b, = ax1.plot(df.index, df[self.oat_col], label="OAT")
         ax1.legend(loc='best')
         ax1.set_ylabel('AHU Temps °F')
-
-        ax2.plot(df.index, df.fc10_flag, label="Fault", color="k")
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Fault Flags')
+        
+        plot2a, = ax2.plot(
+            df.index, df[self.clg_col], label="AHU Cool Vlv", color="r")
+        plot2b, = ax2.plot(
+            df.index, df[self.economizer_sig_col], label="AHU Dpr Cmd", color="g")
         ax2.legend(loc='best')
+        ax2.set_ylabel('%')
+
+        ax3.plot(df.index, df.fc10_flag, label="Fault", color="k")
+        ax3.set_xlabel('Date')
+        ax3.set_ylabel('Fault Flags')
+        ax3.legend(loc='best')
 
         plt.legend()
         plt.tight_layout()
@@ -2289,7 +2472,8 @@ class FaultCodeTenReport:
 
         total_hours = delta.sum() / pd.Timedelta(hours=1)
 
-        hours_fc10_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+        hours_fc10_mode = (delta * df[output_col]
+                           ).sum() / pd.Timedelta(hours=1)
 
         percent_true = round(df[output_col].mean() * 100, 2)
         percent_false = round((100 - percent_true), 2)
@@ -2301,6 +2485,13 @@ class FaultCodeTenReport:
             df[self.mat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -2309,6 +2500,8 @@ class FaultCodeTenReport:
             percent_false,
             flag_true_oat,
             flag_true_mat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -2335,9 +2528,7 @@ class FaultCodeTenReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_oat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -2377,7 +2568,8 @@ class FaultCodeTenReport:
             percent_false,
             flag_true_oat,
             flag_true_mat,
-
+            hours_motor_runtime,
+            df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
         paragraph = document.add_paragraph()
@@ -2409,6 +2601,12 @@ class FaultCodeTenReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+        
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -2438,19 +2636,21 @@ class FaultCodeTenReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Mixing Air Temp Statistics', level=2)
+        document.add_heading('Mixing Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Outside Air Temp Statistics', level=2)
+        document.add_heading('Outside Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.oat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -2477,16 +2677,22 @@ class FaultCodeElevenReport:
         self,
         sat_sp_col: str,
         oat_col: str,
+        clg_col: str,
+        economizer_sig_col: str,
+        fan_vfd_speed_col: str,
     ):
         self.sat_sp_col = sat_sp_col
         self.oat_col = oat_col
+        self.clg_col = clg_col
+        self.economizer_sig_col = economizer_sig_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
-        
+
         if output_col is None:
             output_col = "fc11_flag"
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
         plt.title('Fault Conditions 11 Plot')
 
         plot1a, = ax1.plot(df.index, df[self.sat_sp_col], label="SATSP")
@@ -2494,10 +2700,17 @@ class FaultCodeElevenReport:
         ax1.legend(loc='best')
         ax1.set_ylabel('AHU Temps °F')
 
-        ax2.plot(df.index, df.fc11_flag, label="Fault", color="k")
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Fault Flags')
+        plot2a, = ax2.plot(
+            df.index, df[self.clg_col], label="AHU Cool Vlv", color="r")
+        plot2b, = ax2.plot(
+            df.index, df[self.economizer_sig_col], label="AHU Dpr Cmd", color="g")
         ax2.legend(loc='best')
+        ax2.set_ylabel('%')
+
+        ax3.plot(df.index, df.fc11_flag, label="Fault", color="k")
+        ax3.set_xlabel('Date')
+        ax3.set_ylabel('Fault Flags')
+        ax3.legend(loc='best')
 
         plt.legend()
         plt.tight_layout()
@@ -2513,7 +2726,8 @@ class FaultCodeElevenReport:
 
         total_hours = delta.sum() / pd.Timedelta(hours=1)
 
-        hours_fc11_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+        hours_fc11_mode = (delta * df[output_col]
+                           ).sum() / pd.Timedelta(hours=1)
 
         percent_true = round(df[output_col].mean() * 100, 2)
         percent_false = round((100 - percent_true), 2)
@@ -2525,6 +2739,13 @@ class FaultCodeElevenReport:
             df[self.sat_sp_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -2533,6 +2754,8 @@ class FaultCodeElevenReport:
             percent_false,
             flag_true_oat,
             flag_true_sat_sp,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -2559,9 +2782,7 @@ class FaultCodeElevenReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_oat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -2601,6 +2822,8 @@ class FaultCodeElevenReport:
             percent_false,
             flag_true_oat,
             flag_true_sat_sp,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -2633,6 +2856,12 @@ class FaultCodeElevenReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+        
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -2662,19 +2891,21 @@ class FaultCodeElevenReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Setpoint Statistics', level=2)
+        document.add_heading('Supply Air Temp Setpoint', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_sp_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_sp_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Outside Air Temp Statistics', level=2)
+        document.add_heading('Outside Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.oat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.oat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -2700,16 +2931,22 @@ class FaultCodeTwelveReport:
         self,
         sat_col: str,
         mat_col: str,
+        clg_col: str,
+        economizer_sig_col: str,
+        fan_vfd_speed_col: str,
     ):
         self.sat_col = sat_col
         self.mat_col = mat_col
-
-    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+        self.clg_col = clg_col
+        self.economizer_sig_col = economizer_sig_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
         
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+
         if output_col is None:
             output_col = "fc12_flag"
 
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
         plt.title('Fault Conditions 12 Plot')
 
         plot1a, = ax1.plot(df.index, df[self.sat_col], label="SAT")
@@ -2717,10 +2954,17 @@ class FaultCodeTwelveReport:
         ax1.legend(loc='best')
         ax1.set_ylabel('AHU Temps °F')
 
-        ax2.plot(df.index, df.fc12_flag, label="Fault", color="k")
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Fault Flags')
+        plot2a, = ax2.plot(
+            df.index, df[self.clg_col], label="AHU Cool Vlv", color="r")
+        plot2b, = ax2.plot(
+            df.index, df[self.economizer_sig_col], label="AHU Dpr Cmd", color="g")
         ax2.legend(loc='best')
+        ax2.set_ylabel('%')
+
+        ax3.plot(df.index, df.fc12_flag, label="Fault", color="k")
+        ax3.set_xlabel('Date')
+        ax3.set_ylabel('Fault Flags')
+        ax3.legend(loc='best')
 
         plt.legend()
         plt.tight_layout()
@@ -2736,7 +2980,8 @@ class FaultCodeTwelveReport:
 
         total_hours = delta.sum() / pd.Timedelta(hours=1)
 
-        hours_fc12_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+        hours_fc12_mode = (delta * df[output_col]
+                           ).sum() / pd.Timedelta(hours=1)
 
         percent_true = round(df[output_col].mean() * 100, 2)
         percent_false = round((100 - percent_true), 2)
@@ -2748,6 +2993,13 @@ class FaultCodeTwelveReport:
             df[self.sat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+        
         return (
             total_days,
             total_hours,
@@ -2756,6 +3008,8 @@ class FaultCodeTwelveReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -2782,9 +3036,7 @@ class FaultCodeTwelveReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_mat: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -2824,6 +3076,8 @@ class FaultCodeTwelveReport:
             percent_false,
             flag_true_mat,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -2856,6 +3110,12 @@ class FaultCodeTwelveReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+        
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -2885,19 +3145,21 @@ class FaultCodeTwelveReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        # ADD in Summary Statistics
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Statistics', level=2)
+        document.add_heading('Supply Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Mix Air Temp Statistics', level=2)
+        document.add_heading('Mix Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.mat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.mat_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -2915,7 +3177,7 @@ class FaultCodeTwelveReport:
         run.style = "Emphasis"
         return document
 
-    
+
 class FaultCodeThirteenReport:
     """Class provides the definitions for Fault Code 13 Report.
         Verify similar to FC 7 but uses cooling valve
@@ -2926,13 +3188,17 @@ class FaultCodeThirteenReport:
         sat_col: str,
         satsp_col: str,
         clg_col: str,
+        economizer_sig_col: str,
+        fan_vfd_speed_col: str
     ):
         self.sat_col = sat_col
         self.satsp_col = satsp_col
         self.clg_col = clg_col
+        self.economizer_sig_col = economizer_sig_col
+        self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
-        
+
         if output_col is None:
             output_col = "fc13_flag"
 
@@ -2944,8 +3210,10 @@ class FaultCodeThirteenReport:
         ax1.legend(loc='best')
         ax1.set_ylabel('AHU Supply Temps °F')
 
-        ax2.plot(df.index, df[self.clg_col], color="g",
-                    label="AHU Cool Vlv")
+        plot2a, = ax2.plot(
+            df.index, df[self.clg_col], label="AHU Cool Vlv", color="r")
+        plot2b, = ax2.plot(
+            df.index, df[self.economizer_sig_col], label="AHU Dpr Cmd", color="g")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
 
@@ -2968,7 +3236,8 @@ class FaultCodeThirteenReport:
 
         total_hours = delta.sum() / pd.Timedelta(hours=1)
 
-        hours_fc13_mode = (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+        hours_fc13_mode = (delta * df[output_col]
+                           ).sum() / pd.Timedelta(hours=1)
 
         percent_true = round(df[output_col].mean() * 100, 2)
         percent_false = round((100 - percent_true), 2)
@@ -2980,6 +3249,13 @@ class FaultCodeThirteenReport:
             df[self.sat_col].where(df[output_col] == 1).mean(), 2
         )
 
+        motor_on = df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        hours_motor_runtime = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
+
+        # for summary stats on I/O data to make useful
+        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 1.0]
+
         return (
             total_days,
             total_hours,
@@ -2988,6 +3264,8 @@ class FaultCodeThirteenReport:
             percent_false,
             flag_true_satsp,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
         )
 
     def create_hist_plot(
@@ -3014,9 +3292,7 @@ class FaultCodeThirteenReport:
         self,
         path: str,
         df: pd.DataFrame,
-        output_col: str = None,
-        vav_total_flow: str = None,
-        flag_true_satsp: bool = None,
+        output_col: str = None
     ) -> None:
 
         if output_col is None:
@@ -3056,6 +3332,8 @@ class FaultCodeThirteenReport:
             percent_false,
             flag_true_satsp,
             flag_true_sat,
+            hours_motor_runtime,
+            df_motor_on_filtered
 
         ) = self.summarize_fault_times(df, output_col=output_col)
 
@@ -3088,6 +3366,12 @@ class FaultCodeThirteenReport:
         )
 
         paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
+        )
+
+        paragraph = document.add_paragraph()
 
         # if there is no faults skip the histogram plot
         fc_max_faults_found = df[output_col].max()
@@ -3117,25 +3401,26 @@ class FaultCodeThirteenReport:
             paragraph.add_run(
                 f'No faults were found in this given dataset for the equation defined by ASHRAE.')
 
-        paragraph = document.add_paragraph()
+        document.add_heading(
+            'Summary Statistics filtered for when the AHU is running', level=1)
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Statistics', level=2)
+        document.add_heading('Supply Air Temp', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.sat_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.sat_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Supply Air Temp Setpoint Statistics', level=2)
+        document.add_heading('Supply Air Temp Setpoint', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.satsp_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.satsp_col].describe()))
 
         # ADD in Summary Statistics
-        document.add_heading('Cooling Coil Valve Statistics', level=2)
+        document.add_heading('Cooling Coil Valve', level=3)
         paragraph = document.add_paragraph()
         paragraph.style = 'List Bullet'
-        paragraph.add_run(str(df[self.clg_col].describe()))
+        paragraph.add_run(str(df_motor_on_filtered[self.clg_col].describe()))
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
@@ -3153,5 +3438,3 @@ class FaultCodeThirteenReport:
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
         return document
-    
-    

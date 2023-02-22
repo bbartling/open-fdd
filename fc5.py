@@ -40,22 +40,40 @@ DELTA_T_SUPPLY_FAN = 2.
 SUPPLY_DEGF_ERR_THRES = 2.
 MIX_DEGF_ERR_THRES = 5.
 
-
+'''
+REQUIRED INPUT To MAKE FAULTS
+Supply air sensor	
+Mix air sensor	
+heating valve cmd - this is htg mode only fault
+fan VFD speed cmd % - falt is only active
+when fan is operational
+'''
 _fc5 = FaultConditionFive(
     DELTA_T_SUPPLY_FAN,
     SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     "sat",
-    "mat"
+    "mat",
+    "htg_vlv",
+    "supply_vfd_speed"
 )
 
-
+'''
+REQUIRED INPUT To MAKE REPORT
+Supply air sensor	
+Mix air sensor	
+heating valve cmd % - this is htg mode only fault
+fan VFD speed cmd % - filter data for summary statistics
+for when the fan is running
+'''
 _fc5_report = FaultCodeFiveReport(
     DELTA_T_SUPPLY_FAN,
     SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     "sat",
-    "mat"
+    "mat",
+    "htg_vlv",
+    "supply_vfd_speed"
 )
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()

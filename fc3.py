@@ -46,6 +46,7 @@ _fc3 = FaultConditionThree(
     "mat",
     "rat",
     "oat",
+    "supply_vfd_speed"
 )
 _fc3_report = FaultCodeThreeReport(
     OUTDOOR_DEGF_ERR_THRES,
@@ -54,6 +55,7 @@ _fc3_report = FaultCodeThreeReport(
     "mat",
     "rat",
     "oat",
+    "supply_vfd_speed"
 )
 
 

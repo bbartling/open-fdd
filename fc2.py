@@ -46,6 +46,7 @@ _fc2 = FaultConditionTwo(
     "mat",
     "rat",
     "oat",
+    "supply_vfd_speed"
 )
 _fc2_report = FaultCodeTwoReport(
     OUTDOOR_DEGF_ERR_THRES,
@@ -54,6 +55,7 @@ _fc2_report = FaultCodeTwoReport(
     "mat",
     "rat",
     "oat",
+    "supply_vfd_speed"
 )
 
 

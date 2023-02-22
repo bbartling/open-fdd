@@ -43,13 +43,18 @@ _fc11 = FaultConditionEleven(
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     "satsp",
-    "oat"
+    "oat",
+    "clg",
+    "economizer_sig"
 )
 
 
 _fc11_report = FaultCodeElevenReport(    
     "satsp",
-    "oat"
+    "oat",
+    "clg",
+    "economizer_sig",
+    "supply_vfd_speed"
 )
 
 

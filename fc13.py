@@ -32,22 +32,29 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
+
 # G36 params shouldnt need adjusting
 # error threshold parameters
 SAT_DEGF_ERR_THRES = 2
 
 _fc13 = FaultConditionThirteen(
     SAT_DEGF_ERR_THRES,
+    AHU_MIN_OA,
     "sat",
     "satsp",	
-    "clg"
+    "clg",
+    "economizer_sig",
 )
 
 
 _fc13_report = FaultCodeThirteenReport(    
     "sat",
     "satsp",	
-    "clg"
+    "clg",
+    "economizer_sig",
+    "supply_vfd_speed"
 )
 
 

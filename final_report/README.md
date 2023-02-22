@@ -1,0 +1,1 @@
+## directory for Word doc report outputs. The git ignore is setup to not push word docs to Github

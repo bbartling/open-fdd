@@ -9,7 +9,7 @@ import click
 
 
 # python 3.10 on Windows 10
-# py .\fc1.py -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
+# py .\g36_fdd.py check-fault-one -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
 
 
 @click.group()
@@ -89,7 +89,8 @@ def check_fault_one(
         duct_static_setpoint_col,
     )
 
-    df = pd.read_csv(input, index_col="Date", parse_dates=True).rolling("5T").mean()
+    df = pd.read_csv(input, index_col="Date",
+                     parse_dates=True).rolling("5T").mean()
 
     df[duct_static_setpoint_col] = 1
 
@@ -123,7 +124,15 @@ def check_fault_one(
 @click.option("--outdoor-temp-f-col", default="oat", type=str, help="Outdoor DegF Column Name")
 @click.option("--mix-temp-f-col", default="mat", type=str, help="Mix DegF Column Name")
 @click.option("--return-temp-f-col", default="rat", type=str, help="Return DegF Column Name")
-def check_fault_two( input, output, outdoor_degf_err_thres, mix_degf_err_thres, return_degf_err_thres, outdoor_temp_f_col, mix_temp_f_col, return_temp_f_col):
+def check_fault_two(input, 
+                    output, 
+                    outdoor_degf_err_thres, 
+                    mix_degf_err_thres, 
+                    return_degf_err_thres, 
+                    outdoor_temp_f_col, 
+                    mix_temp_f_col, 
+                    return_temp_f_col):
+    
     """
     FUTURE 
     * incorporate an arg for SI units 
@@ -153,8 +162,8 @@ def check_fault_two( input, output, outdoor_degf_err_thres, mix_degf_err_thres, 
         outdoor_temp_f_col,
     )
 
-
-    df = pd.read_csv(input, index_col="Date", parse_dates=True).rolling("5T").mean()
+    df = pd.read_csv(input, index_col="Date",
+                     parse_dates=True).rolling("5T").mean()
 
     start = df.head(1).index.date
     print("Dataset start: ", start)
@@ -164,7 +173,6 @@ def check_fault_two( input, output, outdoor_degf_err_thres, mix_degf_err_thres, 
 
     for col in df.columns:
         print("df column: ", col, "- max len: ", df[col].size)
-        
 
     # return a whole new dataframe with fault flag as new col
     df2 = _fc2.apply(df)
@@ -176,6 +184,8 @@ def check_fault_two( input, output, outdoor_degf_err_thres, mix_degf_err_thres, 
     if not os.path.exists(path):
         os.makedirs(path)
     document.save(os.path.join(path, f"{output}.docx"))
+
+
 
 
 if __name__ == "__main__":
