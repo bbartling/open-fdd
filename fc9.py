@@ -38,15 +38,18 @@ DELTA_SUPPLY_FAN = 2
 OAT_DEGF_ERR_THRES = 5
 SUPPLY_DEGF_ERR_THRES = 2
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
 
 _fc9 = FaultConditionNine(
     DELTA_SUPPLY_FAN,
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
+    AHU_MIN_OA,
     "satsp",
     "oat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "economizer_sig",
+    "cooling_sig"
 )
 
 _fc9_report = FaultCodeNineReport(    

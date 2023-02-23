@@ -10,16 +10,12 @@
 
 ###### Each fc.py file contains a `FaultCondition` and a `FaultCodeReport` class. The `FaultCondition` class returns a new Pandas dataframe with the fault flag as a new column. Some faults as defined by ASHRAE are only active in certain AHU operating states like an AHU heating (OS #1), economizer (OS #2), economizer + mechanical cooling (OS #3), or a mechanical cooling mode (OS #4). This Python library (to be available on Pypi in the future) internally handles to ignore fault flags if the given fault flag is only to be active in a given AHU operating state (OS) or a combinations of OS modes.
 
-###### Under the hood of a `FaultCondition` class a method (Python function inside a class) looks like this below as an example shown for the fault condition 1 which returns the boolean flag if the fault condition is present:
+###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
 ```shell
 def apply(self, df: pd.DataFrame) -> pd.DataFrame:
     df["fc1_flag"] = (
-        (df[self.duct_static_col]
-            < (df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres))
-
-        & (df[self.supply_vfd_speed_col]
-            > (self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres))
-
+        (df[self.duct_static_col]).lt(df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
+        & (df[self.supply_vfd_speed_col]).gt(self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
         & (df[self.supply_vfd_speed_col]).gt(1.)
     ).astype(int)
     return df

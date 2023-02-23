@@ -38,14 +38,18 @@ DELTA_SUPPLY_FAN = 2
 MIX_DEGF_ERR_THRES = 5
 SUPPLY_DEGF_ERR_THRES = 2
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
+
 _fc8 = FaultConditionEight(
     DELTA_SUPPLY_FAN,
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
+    AHU_MIN_OA,
     "mat",
     "sat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "economizer_sig",
+    "cooling_sig"
 )
 
 

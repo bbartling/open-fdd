@@ -51,13 +51,11 @@ AIRFLOW_ERR_THRES = .3
 # the AHU along with all other output params for
 # how the AHU was sized to meet all the engineers
 # mechanical requirements
-
 AHU_MIN_CFM_STP = 3000
 
+# ADJUST this param for the AHU MIN OA damper stp
+AHU_MIN_OA = 20
 
-# required inpouts are outside mix, and return air temperature
-# AND calculated system air flow from totalizing all VAV 
-# air flows or the supply fan AFMS in CFM
 
 _fc6 = FaultConditionSix(
     AIRFLOW_ERR_THRES,
@@ -65,11 +63,15 @@ _fc6 = FaultConditionSix(
     OAT_DEGF_ERR_THRES,
     RAT_DEGF_ERR_THRES,
     DELTA_TEMP_MIN,
+    AHU_MIN_OA,
     "vav_total_flow",
     "mat",
     "oat",
     "rat",
-    "supply_vfd_speed"
+    "supply_vfd_speed",
+    "economizer_sig",
+    "heating_sig",
+    "cooling_sig",
 )
 
 
@@ -97,7 +99,7 @@ for col in df.columns:
 df2 = _fc6.apply(df)
 print(df2.head())
 print(df2.describe())
-
+print(df2.columns)
 
 document = _fc6_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")

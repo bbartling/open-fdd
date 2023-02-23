@@ -24,13 +24,9 @@ class FaultConditionOne:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc1_flag"] = (
-            (df[self.duct_static_col]
-             < (df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres))
-
-            & (df[self.supply_vfd_speed_col]
-               > (self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres))
-
-            & (df[self.supply_vfd_speed_col]).gt(1.)
+            (df[self.duct_static_col]).lt(
+                df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
+            & (df[self.supply_vfd_speed_col]).gt(self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
         ).astype(int)
         return df
 
@@ -63,6 +59,8 @@ class FaultConditionTwo:
              ).lt(np.minimum(df[self.rat_col] - self.return_degf_err_thres,
                              df[self.oat_col] - self.outdoor_degf_err_thres))
 
+            # this fault is supposed to contain OS state 5
+            # confirm with G36 fault author adding in fan status okay
             & (df[self.fan_vfd_speed_col]).gt(1.)
         ).astype(int)
         return df
@@ -90,12 +88,16 @@ class FaultConditionThree:
         self.fan_vfd_speed_col = fan_vfd_speed_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["fc3_flag"] = (df[self.mat_col] - self.mix_degf_err_thres
-                          ).gt(np.minimum(df[self.rat_col] + self.return_degf_err_thres,
-                                          df[self.oat_col] +
-                                          self.outdoor_degf_err_thres
-                                          )) \
-            & df[self.fan_vfd_speed_col].gt(1.).astype(int)
+        df["fc3_flag"] = (
+            (df[self.mat_col] - self.mix_degf_err_thres
+            
+            ).gt(np.maximum(df[self.rat_col] + self.return_degf_err_thres,
+                            df[self.oat_col] + self.outdoor_degf_err_thres))
+            
+            # this fault is supposed to contain OS state 5
+            # confirm with G36 fault author adding in fan status okay
+            & (df[self.fan_vfd_speed_col]).gt(1.)
+            ).astype(int)
         return df
 
 
@@ -189,9 +191,12 @@ class FaultConditionFive:
         df["fc5_flag"] = (
             ((df[self.sat_col] + self.supply_degf_err_thres)
              ).le((df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan))
+            
+            # this is to make fault only active in OS1 for htg mode only
+            # and fan is running. Some control programming may use htg
+            # vlv when AHU is off to prevent low limit freeze alarms
             & df[self.htg_vlv_col].gt(1.)
             & df[self.fan_vfd_speed_col].gt(1.)
-
         ).astype(int)
         return df
 
@@ -209,43 +214,75 @@ class FaultConditionSix:
         oat_degf_err_thres: float,
         rat_degf_err_thres: float,
         oat_rat_delta_min: float,
+        ahu_min_oa: float,
         vav_total_flow_col: float,
         mat_col: str,
         oat_col: str,
         rat_col: str,
-        fan_vfd_speed_col: str
+        fan_vfd_speed_col: str,
+        economizer_sig_col: str,
+        heating_sig_col: str,
+        cooling_sig_col: str
     ):
         self.airflow_err_thres = airflow_err_thres
         self.ahu_min_cfm_stp = ahu_min_cfm_stp
         self.oat_degf_err_thres = oat_degf_err_thres
         self.rat_degf_err_thres = rat_degf_err_thres
         self.oat_rat_delta_min = oat_rat_delta_min
+        self.ahu_min_oa = ahu_min_oa
         self.vav_total_flow_col = vav_total_flow_col
         self.mat_col = mat_col
         self.oat_col = oat_col
         self.rat_col = rat_col
         self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.economizer_sig_col = economizer_sig_col
+        self.heating_sig_col = heating_sig_col
+        self.cooling_sig_col = cooling_sig_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        rat_minus_oat = abs(df[self.rat_col] - df[self.oat_col])
 
-        percent_oa_calc = (df[self.mat_col] - df[self.rat_col]) / \
+        # create helper columns
+        df['rat_minus_oat'] = abs(df[self.rat_col] - df[self.oat_col])
+        df['percent_oa_calc'] = (df[self.mat_col] - df[self.rat_col]) / \
             (df[self.oat_col] - df[self.rat_col])
+            
+        # weed out any negative values
+        df['percent_oa_calc'] = df['percent_oa_calc'].apply(
+            lambda x: x if x > 0 else 0)
+        
+        df['perc_OAmin'] = (self.ahu_min_cfm_stp /
+                            df[self.vav_total_flow_col]) * 100
+        
+        df['percent_oa_calc_minus_perc_OAmin'] = abs(
+            df['percent_oa_calc'] - df['perc_OAmin'])
 
-        if percent_oa_calc.any() < 0:
-            percent_oa_calc = 0
+        df['fc6_flag'] = operator.or_(
+            # OS 1 htg mode
+            (df['rat_minus_oat']).ge(self.oat_rat_delta_min)
+            & (df['percent_oa_calc_minus_perc_OAmin']
+               ).gt(self.airflow_err_thres)
+            
+            # verify ahu is running in OS 1 htg mode in min OA
+            & df[self.economizer_sig_col].eq(self.ahu_min_oa)
+            & df[self.heating_sig_col].gt(0.)
+            & df[self.cooling_sig_col].eq(0.),
 
-        perc_OAmin = (self.ahu_min_cfm_stp /
-                      df[self.vav_total_flow_col]) * 100
+            # OS 4 mech clg mode
+            (df['rat_minus_oat']).ge(self.oat_rat_delta_min)
+            & (df['percent_oa_calc_minus_perc_OAmin']
+               ).gt(self.airflow_err_thres)
+            
+            # verify ahu is running in OS 4 clg mode in min OA
+            & df[self.economizer_sig_col].eq(self.ahu_min_oa)
+            & df[self.heating_sig_col].eq(0)
+            & df[self.cooling_sig_col].gt(0)
+        ).astype(int)
 
-        percent_oa_calc_minus_perc_OAmin = abs(
-            percent_oa_calc - perc_OAmin)
-
-        df['fc6_flag'] = ((rat_minus_oat).ge(self.oat_rat_delta_min)
-                          & (percent_oa_calc_minus_perc_OAmin
-                             ).gt(self.airflow_err_thres)
-                          & df[self.fan_vfd_speed_col].gt(1.)
-                          ).astype(int)
+        # drop helper columns
+        del df['rat_minus_oat']
+        del df['percent_oa_calc']
+        del df['perc_OAmin']
+        del df['percent_oa_calc_minus_perc_OAmin']
         return df
 
 
@@ -270,7 +307,9 @@ class FaultConditionSeven:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fc7_flag"] = ((df[self.sat_col]).lt(df[self.satsp_col] - self.sat_degf_err_thres)
-                          & df[self.htg_col].gt(98)
+                          
+                          # verify ahu is running in OS 1 at near full heat
+                          & df[self.htg_col].gt(90.)
                           & df[self.fan_vfd_speed_col].gt(1.)
                           ).astype(int)
         return df
@@ -284,30 +323,38 @@ class FaultConditionEight:
         delta_supply_fan: str,
         mix_err_thres: str,
         supply_err_thres: str,
+        ahu_min_oa: float,
         mat_col: str,
         sat_col: str,
-        fan_vfd_speed_col: str,
         economizer_sig_col: str,
+        cooling_sig_col: str,
     ):
         self.delta_supply_fan = delta_supply_fan
         self.mix_err_thres = mix_err_thres
         self.supply_err_thres = supply_err_thres
+        self.ahu_min_oa = ahu_min_oa
         self.mat_col = mat_col
         self.sat_col = sat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
         self.economizer_sig_col = economizer_sig_col
-
+        self.cooling_sig_col = cooling_sig_col
+        
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        sat_fan_mat = abs(
+        df['sat_fan_mat'] = abs(
             df[self.sat_col] - self.delta_supply_fan - df[self.mat_col])
-        sat_mat_sqrted = np.sqrt(
+
+        df['sat_mat_sqrted'] = np.sqrt(
             self.supply_err_thres**2 + self.mix_err_thres**2)
 
-        df['fc8_flag'] = ((sat_fan_mat).gt(sat_mat_sqrted)
-                          & df[self.economizer_sig_col].gt(1.)
-                          & df[self.fan_vfd_speed_col].gt(1.)
+        df['fc8_flag'] = ((df['sat_fan_mat']).gt(df['sat_mat_sqrted'])
+                          
+                          # verify AHU is in OS2 only free cooling mode obly
+                          & df[self.economizer_sig_col].gt(self.ahu_min_oa)
+                          & df[self.cooling_sig_col].eq(0.)
                           ).astype(int)
 
+        # drop helper columns
+        del df['sat_fan_mat']
+        del df['sat_mat_sqrted']
         return df
 
 
@@ -319,28 +366,36 @@ class FaultConditionNine:
         delta_supply_fan: float,
         oat_err_thres: float,
         supply_err_thres: float,
+        ahu_min_oa: float,
         satsp_col: str,
         oat_col: str,
-        fan_vfd_speed_col: str,
+        cooling_sig_col: str,
         economizer_sig_col: str,
     ):
         self.delta_supply_fan = delta_supply_fan
         self.oat_err_thres = oat_err_thres
         self.supply_err_thres = supply_err_thres
+        self.ahu_min_oa = ahu_min_oa
         self.satsp_col = satsp_col
         self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.cooling_sig_col = cooling_sig_col
         self.economizer_sig_col = economizer_sig_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        oat_minus_oaterror = df[self.oat_col] - self.oat_err_thres
-        satsp_delta_saterr = df[self.satsp_col] - \
+        df['oat_minus_oaterror'] = df[self.oat_col] - self.oat_err_thres
+        df['satsp_delta_saterr'] = df[self.satsp_col] - \
             self.delta_supply_fan + self.supply_err_thres
 
-        df['fc9_flag'] = ((oat_minus_oaterror).gt(satsp_delta_saterr)
-                          & df[self.economizer_sig_col].gt(1.)
-                          & df[self.fan_vfd_speed_col].gt(1.)
+        df['fc9_flag'] = ((df['oat_minus_oaterror']).gt(df['satsp_delta_saterr'])
+                          
+                          # verify AHU is in OS2 only free cooling mode obly
+                          & df[self.economizer_sig_col].gt(self.ahu_min_oa)
+                          & df[self.cooling_sig_col].eq(0.)
                           ).astype(int)
+
+        # drop helper columns
+        del df['oat_minus_oaterror']
+        del df['satsp_delta_saterr']
         return df
 
 
@@ -365,15 +420,20 @@ class FaultConditionTen:
         self.economizer_sig_col = economizer_sig_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        abs_mat_minus_oat = abs(df[self.mat_col] - df[self.oat_col])
-        mat_oat_sqrted = np.sqrt(
+        df['abs_mat_minus_oat'] = abs(df[self.mat_col] - df[self.oat_col])
+        df['mat_oat_sqrted'] = np.sqrt(
             self.mat_err_thres ** 2 + self.oat_err_thres ** 2)
 
-        # OS3 AHU state clg @ 100% OA
-        df['fc10_flag'] = ((abs_mat_minus_oat).lt(mat_oat_sqrted)
+        df['fc10_flag'] = ((df['abs_mat_minus_oat']).gt(df['mat_oat_sqrted'])
+                           
+                           # verify OS3 AHU state clg @ 100% OA
                            & (df[self.clg_col].gt(0.))
-                           & (df[self.economizer_sig_col].ge(95.))
+                           & (df[self.economizer_sig_col].gt(90.))
                            ).astype(int)
+
+        # drop helper columns
+        del df['abs_mat_minus_oat']
+        del df['mat_oat_sqrted']
         return df
 
 
@@ -399,17 +459,20 @@ class FaultConditionEleven:
         self.economizer_sig_col = economizer_sig_col
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-
-        oat_plus_oaterror = df[self.oat_col] + self.oat_err_thres
-        satsp_delta_saterr = df[self.satsp_col] - \
+        df['oat_plus_oaterror'] = df[self.oat_col] + self.oat_err_thres
+        df['satsp_delta_saterr'] = df[self.satsp_col] - \
             self.delta_supply_fan - self.supply_err_thres
 
-        # OS3 AHU state clg @ 100% OA
-        df['fc11_flag'] = ((oat_plus_oaterror < satsp_delta_saterr)
+        df['fc11_flag'] = ((df['oat_plus_oaterror']).lt(df['satsp_delta_saterr'])
+                           
+                           # verify OS3 AHU state clg @ 100% OA
                            & (df[self.clg_col].gt(0.))
-                           & (df[self.economizer_sig_col].ge(95.))
+                           & (df[self.economizer_sig_col].gt(90.))
                            ).astype(int)
 
+        # drop helper columns
+        del df['oat_plus_oaterror']
+        del df['satsp_delta_saterr']
         return df
 
 
@@ -435,26 +498,29 @@ class FaultConditionTwelve:
         self.mat_col = mat_col
         self.clg_col = clg_col
         self.economizer_sig_col = economizer_sig_col
-        
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        sat_minus_saterr_delta_supply_fan = df[self.sat_col] - \
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        df['sat_minus_saterr_delta_supply_fan'] = df[self.sat_col] - \
             self.supply_err_thres - self.delta_supply_fan
-        mat_plus_materr = df[self.mat_col] + self.mix_err_thres
+        df['mat_plus_materr'] = df[self.mat_col] + self.mix_err_thres
 
         df["fc12_flag"] = operator.or_(
-                        # OS4 AHU state clg @ min OA
-                        (sat_minus_saterr_delta_supply_fan).ge(mat_plus_materr)
-                        & (df[self.clg_col].gt(0.))
-                        & (df[self.economizer_sig_col].eq(self.ahu_min_oa)),
+            # OS4 AHU state clg @ min OA
+            (df['sat_minus_saterr_delta_supply_fan']).ge(
+                df['mat_plus_materr'])
+            & (df[self.clg_col].gt(0.))
+            & (df[self.economizer_sig_col].eq(self.ahu_min_oa)),
 
-                        # OS3 AHU state clg @ 100% OA
-                        (sat_minus_saterr_delta_supply_fan).ge(
-                        mat_plus_materr)
-                        & (df[self.clg_col].gt(0.))
-                        & (df[self.economizer_sig_col].ge(95.))
-                        ).astype(int)
+            # OS3 AHU state clg @ 100% OA
+            (df['sat_minus_saterr_delta_supply_fan']).ge(
+                df['mat_plus_materr'])
+            & (df[self.clg_col].gt(0.))
+            & (df[self.economizer_sig_col].gt(90.))
+        ).astype(int)
 
+        # drop helper columns
+        del df['sat_minus_saterr_delta_supply_fan']
+        del df['mat_plus_materr']
         return df
 
 
@@ -483,16 +549,16 @@ class FaultConditionThirteen:
 
         df["fc13_flag"] = operator.or_(
             # OS4 AHU state clg @ min OA
-            (df[self.sat_col].lt(df[self.satsp_col]) +
+            (df[self.sat_col].gt(df[self.satsp_col]) +
              self.sat_degf_err_thres)
-            & (df[self.clg_col].gt(0.))
+            & (df[self.clg_col].gt(90.))
             & (df[self.economizer_sig_col].eq(self.ahu_min_oa)),
 
             # OS3 AHU state clg @ 100% OA
-            (df[self.sat_col].lt(df[self.satsp_col]) +
+            (df[self.sat_col].gt(df[self.satsp_col]) +
              self.sat_degf_err_thres)
-            & (df[self.clg_col].gt(0.))
-            & (df[self.economizer_sig_col].ge(95.))
+            & (df[self.clg_col].gt(90.))
+            & (df[self.economizer_sig_col].gt(90.))
         ).astype(int)
 
         return df
