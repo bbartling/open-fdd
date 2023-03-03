@@ -535,7 +535,7 @@ class FaultCodeTwoReport:
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
 
-        if percent_true < 5:
+        if percent_true > 5:
 
             paragraph.add_run(
                 'The percent True of time in fault condition 2 or 3 is high indicating the AHU temperature sensors are out of calibration')
@@ -808,7 +808,7 @@ class FaultCodeThreeReport:
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
 
-        if percent_true < 5:
+        if percent_true > 5:
 
             paragraph.add_run(
                 'The percent True of time in fault condition 2 or 3 is high indicating the AHU temperature sensors are out of calibration')
