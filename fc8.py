@@ -46,16 +46,16 @@ _fc8 = FaultConditionEight(
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     AHU_MIN_OA,
-    "mat",
     "sat",
+    "mat",
     "economizer_sig",
     "cooling_sig"
 )
 
 
 _fc8_report = FaultCodeEightReport(    
-    "mat",
     "sat",
+    "mat",
     "supply_vfd_speed",
     "economizer_sig"
 )
