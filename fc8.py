@@ -8,7 +8,6 @@ from reports import FaultCodeEightReport
 
 # python 3.10 on Windows 10
 # py .\fc8.py -i ./ahu_data/hvac_random_fake_data/fc8_fake_data1.csv -o fake1_ahu_fc8_report
-# py .\fc8.py -i ./ahu_data/ahu2.csv -o mnb_ahu2_fc8_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -47,19 +46,18 @@ _fc8 = FaultConditionEight(
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     AHU_MIN_OA,
-    "AHU2_MATemp",
-    "AHU2_DAT",
-    "AHU2_MA_RA_DamperAO",
-    "AHU2_CW_ValveAO",
-    troubleshoot=True
+    "sat",
+    "mat",
+    "economizer_sig",
+    "cooling_sig"
 )
 
 
 _fc8_report = FaultCodeEightReport(    
-    "AHU2_MATemp",
-    "AHU2_DAT",
-    "AHU2_SaFanSpeedAO_value",
-    "AHU2_MA_RA_DamperAO"
+    "sat",
+    "mat",
+    "supply_vfd_speed",
+    "economizer_sig"
 )
 
 
@@ -79,7 +77,6 @@ df2 = _fc8.apply(df)
 print(df2.head())
 print(df2.describe())
 
-#df.to_csv("fc8_troubleshoot.csv")
 
 document = _fc8_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")
