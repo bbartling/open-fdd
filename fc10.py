@@ -8,6 +8,8 @@ from reports import FaultCodeTenReport
 
 # python 3.10 on Windows 10
 # py .\fc10.py -i ./ahu_data/hvac_random_fake_data/fc10_fake_data1.csv -o fake1_ahu_fc10_report
+# py .\fc10.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc10_report
+
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -45,23 +47,29 @@ MAT_DEGF_ERR_THRES = 5
 _fc10 = FaultConditionTen(
     OAT_DEGF_ERR_THRES,
     MAT_DEGF_ERR_THRES,
-    "mat",
-    "oat",
-    "clg",
-    "economizer_sig",
+    "AHU1_MATemp",
+    "HourlyDryBulbTemp",
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
+    troubleshoot=True
 )
 
-
 _fc10_report = FaultCodeTenReport(    
-    "mat",
-    "oat",
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
+    "AHU1_MATemp",
+    "HourlyDryBulbTemp",
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
+    "AHU1_SaFanSpeedAO_value"
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+# weather data from a different source
+oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
+df = oat.join(df)
+df = df.ffill().bfill()
+print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -76,6 +84,8 @@ for col in df.columns:
 df2 = _fc10.apply(df)
 print(df2.head())
 print(df2.describe())
+
+df.to_csv("fc10_troubleshoot.csv")
 
 
 document = _fc10_report.create_report(args.output, df2)

@@ -8,6 +8,8 @@ from reports import FaultCodeSixReport
 
 # python 3.10 on Windows 10
 # py .\fc6.py -i ./ahu_data/hvac_random_fake_data/fc6_fake_data1.csv -o fake1_ahu_fc6_report
+# py .\fc6.py -i ./ahu_data/ahu2.csv -o mnb_ahu2_fc6_report
+
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -51,40 +53,50 @@ AIRFLOW_ERR_THRES = .3
 # the AHU along with all other output params for
 # how the AHU was sized to meet all the engineers
 # mechanical requirements
-AHU_MIN_CFM_STP = 3000
+AHU_MIN_CFM_DESIGN = 2500
 
 # ADJUST this param for the AHU MIN OA damper stp
-AHU_MIN_OA = 20
+# To verify AHU is operating in Min OA OS1 & OS4 states only
+AHU_MIN_OA_DPR = 20
 
 
 _fc6 = FaultConditionSix(
     AIRFLOW_ERR_THRES,
-    AHU_MIN_CFM_STP,
+    AHU_MIN_CFM_DESIGN,
     OAT_DEGF_ERR_THRES,
     RAT_DEGF_ERR_THRES,
     DELTA_TEMP_MIN,
-    AHU_MIN_OA,
-    "vav_total_flow",
-    "mat",
-    "oat",
-    "rat",
-    "supply_vfd_speed",
-    "economizer_sig",
+    AHU_MIN_OA_DPR,
+    "AHU2_SaFanFlow_value",
+    "AHU2_MATemp",
+    "HourlyDryBulbTemp",
+    "AHU2_RATemp_value",
+    "AHU2_SaFanSpeedAO_value",
+    "AHU2_MA_RA_DamperAO",
     "heating_sig",
-    "cooling_sig",
+    "AHU2_CW_ValveAO",
+    troubleshoot=False
 )
 
 
 _fc6_report = FaultCodeSixReport(
-    "vav_total_flow",
-    "mat",
-    "oat",
-    "rat",
-    "supply_vfd_speed"
+    "AHU2_SaFanFlow_value",
+    "AHU2_MATemp",
+    "HourlyDryBulbTemp",
+    "AHU2_RATemp_value",
+    "AHU2_SaFanSpeedAO_value"
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+df["heating_sig"] = 0
+
+# weather data from a different source
+oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
+df = oat.join(df)
+df = df.ffill().bfill()
+print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -100,6 +112,8 @@ df2 = _fc6.apply(df)
 print(df2.head())
 print(df2.describe())
 print(df2.columns)
+
+#df.to_csv('fc6_troubleshoot.csv')
 
 document = _fc6_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")

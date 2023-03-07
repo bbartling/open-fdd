@@ -8,6 +8,7 @@ from reports import FaultCodeFourReport
 
 # python 3.10 on Windows 10
 # py .\fc4.py -i ./ahu_data/hvac_random_fake_data/fc4_fake_data1.csv -o fake1_ahu_fc4_report
+# py .\fc4.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc4_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -39,16 +40,16 @@ args = parser.parse_args()
 DELTA_OS_MAX = 7
 
 # ADJUST this param for the AHU MIN OA damper stp
-AHU_MIN_OA = 20
+AHU_MIN_OA = .20
 
 
 _fc4 = FaultConditionFour(
     DELTA_OS_MAX,
     AHU_MIN_OA,
-    "economizer_sig",
+    "AHU1_MA_RA_DamperAO",
     "heating_sig",
-    "cooling_sig",
-    "supply_vfd_speed"
+    "AHU1_CW_ValveAO",
+    "AHU1_SaFanSpeedAO_value"
 )
 
 

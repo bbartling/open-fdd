@@ -8,6 +8,7 @@ from reports import FaultCodeNineReport
 
 # python 3.10 on Windows 10
 # py .\fc9.py -i ./ahu_data/hvac_random_fake_data/fc9_fake_data1.csv -o fake1_ahu_fc9_report
+# py .\fc9.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc9_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -47,20 +48,30 @@ _fc9 = FaultConditionNine(
     SUPPLY_DEGF_ERR_THRES,
     AHU_MIN_OA,
     "satsp",
-    "oat",
-    "economizer_sig",
-    "cooling_sig"
+    "HourlyDryBulbTemp",
+    "AHU1_SaFanSpeedAO_value",
+    "AHU1_CW_ValveAO",
+    troubleshoot=True
 )
 
 _fc9_report = FaultCodeNineReport(    
     "satsp",
-    "oat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "HourlyDryBulbTemp",
+    "AHU1_SaFanSpeedAO_value",
+    "AHU1_MA_RA_DamperAO"
 )
 
 
+
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+df['satsp'] = 61
+
+# weather data from a different source
+oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
+df = oat.join(df)
+df = df.ffill().bfill()
+print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -76,6 +87,7 @@ df2 = _fc9.apply(df)
 print(df2.head())
 print(df2.describe())
 
+df.to_csv("fc9_troubleshoot.csv")
 
 document = _fc9_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")

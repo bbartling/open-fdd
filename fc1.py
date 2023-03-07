@@ -8,6 +8,8 @@ from reports import FaultCodeOneReport
 
 # python 3.10 on Windows 10
 # py .\fc1.py -i ./ahu_data/hvac_random_fake_data/fc1_fake_data1.csv -o fake1_ahu_fc1_report
+# py .\fc1.py -i ./ahu_data/ahu2.csv -o mnb_ahu2_fc1_report
+
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -38,27 +40,36 @@ VFD_SPEED_PERCENT_ERR_THRES = 0.05
 VFD_SPEED_PERCENT_MAX = 0.99
 DUCT_STATIC_INCHES_ERR_THRES = 0.1
 
+'''
+In This Order
+
+duct_static_col
+supply_vfd_speed_col
+duct_static_setpoint_col
+'''
+
+
 _fc1 = FaultConditionOne(
     VFD_SPEED_PERCENT_ERR_THRES,
     VFD_SPEED_PERCENT_MAX,
     DUCT_STATIC_INCHES_ERR_THRES,
-    "duct_static",
-    "supply_vfd_speed",
-    "duct_static_setpoint",
+    "AHU2_SaStatic_value",
+    "AHU2_SaFanSpeedAO_value",
+    "duct_static_setpoint"
 )
 _fc1_report = FaultCodeOneReport(
     VFD_SPEED_PERCENT_ERR_THRES,
     VFD_SPEED_PERCENT_MAX,
     DUCT_STATIC_INCHES_ERR_THRES,
-    "duct_static",
-    "supply_vfd_speed",
+    "AHU2_SaStatic_value",
+    "AHU2_SaFanSpeedAO_value",
     "duct_static_setpoint",
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
 
-df["duct_static_setpoint"] = 1
+df["duct_static_setpoint"] = .8
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

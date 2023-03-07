@@ -348,8 +348,9 @@ class FaultConditionSix:
 
         else:
             # drop helper columns
-            del df['percent_oa_calc']
-            del df['perc_OAmin']
+            #del df['percent_oa_calc']
+            #del df['perc_OAmin']
+            pass
 
         return df
 

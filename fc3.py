@@ -8,6 +8,7 @@ from reports import FaultCodeThreeReport
 
 # python 3.10 on Windows 10
 # py .\fc3.py -i ./ahu_data/hvac_random_fake_data/fc2_3_fake_data1.csv -o fake1_ahu_fc3_report
+# py .\fc3.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc3_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -43,23 +44,30 @@ _fc3 = FaultConditionThree(
     OUTDOOR_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     RETURN_DEGF_ERR_THRES,
-    "mat",
-    "rat",
-    "oat",
-    "supply_vfd_speed"
+    "AHU1_MATemp",
+    "AHU1_RATemp_value",
+    "HourlyDryBulbTemp",
+    "AHU1_SaFanSpeedAO_value",
+    troubleshoot=False
 )
 _fc3_report = FaultCodeThreeReport(
     OUTDOOR_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     RETURN_DEGF_ERR_THRES,
-    "mat",
-    "rat",
-    "oat",
-    "supply_vfd_speed"
+    "AHU1_MATemp",
+    "AHU1_RATemp_value",
+    "HourlyDryBulbTemp",
+    "AHU1_SaFanSpeedAO_value",
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+# weather data from a different source
+oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
+df = oat.join(df)
+df = df.ffill().bfill()
+print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

@@ -8,6 +8,7 @@ from reports import FaultCodeElevenReport
 
 # python 3.10 on Windows 10
 # py .\fc11.py -i ./ahu_data/hvac_random_fake_data/fc11_fake_data1.csv -o fake1_ahu_fc11_report
+# py .\fc11.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc11_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -43,23 +44,28 @@ _fc11 = FaultConditionEleven(
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     "satsp",
-    "oat",
-    "clg",
-    "economizer_sig"
+    "HourlyDryBulbTemp",
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
+    troubleshoot=True
 )
 
 
 _fc11_report = FaultCodeElevenReport(    
     "satsp",
-    "oat",
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
+    "HourlyDryBulbTemp",
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
+    "AHU1_SaFanSpeedAO_value"
 )
 
-
-
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+# weather data from a different source
+oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
+df = oat.join(df)
+df = df.ffill().bfill()
+print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

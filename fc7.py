@@ -8,6 +8,7 @@ from reports import FaultCodeSevenReport
 
 # python 3.10 on Windows 10
 # py .\fc7.py -i ./ahu_data/hvac_random_fake_data/fc7_fake_data1.csv -o fake1_ahu_fc7_report
+# py .\fc7.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc7_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -38,18 +39,18 @@ SAT_DEGF_ERR_THRES = 2
 
 _fc7 = FaultConditionSeven(
     SAT_DEGF_ERR_THRES,
-    "sat",
+    "AHU1_DAT",
     "satsp",	
-    "htg",
-    "supply_vfd_speed"
+    "heating_sig",
+    "AHU1_SaFanSpeedAO_value"
 )
 
 
 _fc7_report = FaultCodeSevenReport(    
-    "sat",
+    "AHU1_DAT",
     "satsp",	
-    "htg",
-    "supply_vfd_speed"
+    "heating_sig",
+    "AHU1_SaFanSpeedAO_value"
 )
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()

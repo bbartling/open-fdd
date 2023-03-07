@@ -8,6 +8,7 @@ from reports import FaultCodeThirteenReport
 
 # python 3.10 on Windows 10
 # py .\fc13.py -i ./ahu_data/hvac_random_fake_data/fc13_fake_data1.csv -o fake1_ahu_fc13_report
+# py .\fc13.py -i ./ahu_data/AHU1Copy.csv -o mnb_ahu1_fc13_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -42,19 +43,19 @@ SAT_DEGF_ERR_THRES = 2
 _fc13 = FaultConditionThirteen(
     SAT_DEGF_ERR_THRES,
     AHU_MIN_OA,
-    "sat",
+    "AHU1_DAT",
     "satsp",	
-    "clg",
-    "economizer_sig",
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
 )
 
 
 _fc13_report = FaultCodeThirteenReport(    
-    "sat",
+    "AHU1_DAT",
     "satsp",	
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
+    "AHU1_CW_ValveAO",
+    "AHU1_MA_RA_DamperAO",
+    "AHU1_SaFanSpeedAO_value"
 )
 
 

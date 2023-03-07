@@ -8,6 +8,8 @@ from reports import FaultCodeFiveReport
 
 # python 3.10 on Windows 10
 # py .\fc5.py -i ./ahu_data/hvac_random_fake_data/fc5_fake_data1.csv -o fake1_ahu_fc5_report
+# py .\fc5.py -i ./ahu_data/ahu2.csv -o mnb_ahu2_fc5_report
+
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -52,11 +54,13 @@ _fc5 = FaultConditionFive(
     DELTA_T_SUPPLY_FAN,
     SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
-    "sat",
-    "mat",
-    "htg_vlv",
-    "supply_vfd_speed"
+    "AHU2_DAT",
+    "AHU2_MATemp",
+    "heating_sig",
+    "AHU2_SaFanSpeedAO_value",
+    troubleshoot=False
 )
+
 
 '''
 REQUIRED INPUT To MAKE REPORT
@@ -70,13 +74,15 @@ _fc5_report = FaultCodeFiveReport(
     DELTA_T_SUPPLY_FAN,
     SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
-    "sat",
-    "mat",
-    "htg_vlv",
-    "supply_vfd_speed"
+    "AHU2_DAT",
+    "AHU2_MATemp",
+    "heating_sig",
+    "AHU2_SaFanSpeedAO_value",
 )
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+
+df["heating_sig"] = 0
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
