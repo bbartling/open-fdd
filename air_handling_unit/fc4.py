@@ -7,8 +7,9 @@ from faults import FaultConditionFour
 from reports import FaultCodeFourReport
 
 # python 3.10 on Windows 10
-# py .\fc4.py -i ./ahu_data/hvac_random_fake_data/fc4_fake_data1.csv -o fake1_ahu_fc4_report
-
+# py .\fc4.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc4_report
+# py .\fc4.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc4_report
+# py .\fc4.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc4_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -46,12 +47,11 @@ AHU_MIN_OA = .20
 _fc4 = FaultConditionFour(
     DELTA_OS_MAX,
     AHU_MIN_OA,
-    "economizer_sig",
-    "heating_sig",
-    "cooling_sig",
-    "supply_vfd_speed"
+    "AHU: Outdoor Air Damper Control Signal",
+    "AHU: Heating Coil Valve Control Signal",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
-
 
 _fc4_report = FaultCodeFourReport(DELTA_OS_MAX)
 

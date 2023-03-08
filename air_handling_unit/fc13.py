@@ -7,8 +7,9 @@ from faults import FaultConditionThirteen
 from reports import FaultCodeThirteenReport
 
 # python 3.10 on Windows 10
-# py .\fc13.py -i ./ahu_data/hvac_random_fake_data/fc13_fake_data1.csv -o fake1_ahu_fc13_report
-
+# py .\fc13.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc13_report
+# py .\fc13.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc13_report
+# py .\fc13.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc13_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -43,18 +44,19 @@ SAT_DEGF_ERR_THRES = 2
 _fc13 = FaultConditionThirteen(
     SAT_DEGF_ERR_THRES,
     AHU_MIN_OA,
-    "sat",
-    "satsp",	
-    "clg",
-    "economizer_sig",
+    "AHU: Supply Air Temperature",
+    "AHU: Supply Air Temperature Set Point",	
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal",
 )
 
+        
 _fc13_report = FaultCodeThirteenReport(    
-    "sat",
-    "satsp",	
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
+    "AHU: Supply Air Temperature",
+    "AHU: Supply Air Temperature Set Point",	
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
 
 

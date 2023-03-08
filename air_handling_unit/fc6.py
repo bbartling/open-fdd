@@ -65,13 +65,17 @@ _fc6 = FaultConditionSix(
     OAT_DEGF_ERR_THRES,
     RAT_DEGF_ERR_THRES,
     DELTA_TEMP_MIN,
+    AHU_MIN_OA_DPR,
     "vav_total_flow",
     "mat",
     "oat",
     "rat",
-    "supply_vfd_speed"
+    "supply_vfd_speed",
+    "economizer_sig",
+    "heating_sig",
+    "cooling_sig"
 )
-
+        
 _fc6_report = FaultCodeSixReport(
     "vav_total_flow",
     "mat",
@@ -82,14 +86,6 @@ _fc6_report = FaultCodeSixReport(
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
-
-df["heating_sig"] = 0
-
-# weather data from a different source
-oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
-df = oat.join(df)
-df = df.ffill().bfill()
-print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -106,7 +102,6 @@ print(df2.head())
 print(df2.describe())
 print(df2.columns)
 
-#df.to_csv('fc6_troubleshoot.csv')
 
 document = _fc6_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")

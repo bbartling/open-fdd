@@ -1,6 +1,6 @@
 # open-fdd
 
-## Python based HVAC system fault detection reporting for variable volume (VAV) air handling units (AHU) based on ASHRAE Guideline 36 2018, see PDF subfolder.
+## This is a Python based educational tool for studying fault equations defined by ASHRAE Guideline 36 for HVAC systems.
 
 ###### G36 for AHU's has 15 fault equations the first 13 of which are broken into seperate .py files. Fault equations 14 and 15 are ommitted for the time being as these are for AHU systems with heating cooling coil leaving temperature sensors that maybe not typical AHU type systems.
 
@@ -13,14 +13,14 @@
 ###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
 ```shell
 def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-    df["fc1_flag"] = (
-        (df[self.duct_static_col]).lt(df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
-        & (df[self.supply_vfd_speed_col]).gt(self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
-        & (df[self.supply_vfd_speed_col]).gt(1.)
-    ).astype(int)
-    return df
-```
+    df['static_check_'] = (
+        df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
+    df['fan_check_'] = (df[self.supply_vfd_speed_col] >=
+                        self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
 
+    df["fc1_flag"] = (df['static_check_'] & df['fan_check_']).astype(int)
+```
+	
 ###### The final report from passing data into the `FaultCodeReport` class will output a Word document to a directory containing the following info, currently tested on a months worth of data.
 * a description of the fault equation
 * a snip of the fault equation as defined by ASHRAE
@@ -206,15 +206,19 @@ AHU_MIN_CFM_STP = 3000
 
 _fc6 = FaultConditionSix(
     AIRFLOW_ERR_THRES,
-    AHU_MIN_CFM_STP,
+    AHU_MIN_CFM_DESIGN,
     OAT_DEGF_ERR_THRES,
     RAT_DEGF_ERR_THRES,
     DELTA_TEMP_MIN,
+    AHU_MIN_OA_DPR,
     "vav_total_flow",
     "mat",
     "oat",
     "rat",
-    "supply_vfd_speed"
+    "supply_vfd_speed",
+    "economizer_sig",
+    "heating_sig",
+    "cooling_sig"
 )
 
 _fc6_report = FaultCodeSixReport(
@@ -272,8 +276,8 @@ _fc8 = FaultConditionEight(
     SUPPLY_DEGF_ERR_THRES,
     "mat",
     "sat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "economizer_sig",
+    "cooling_sig"
 )
 
 _fc8_report = FaultCodeEightReport(    
@@ -303,8 +307,8 @@ _fc9 = FaultConditionNine(
     SUPPLY_DEGF_ERR_THRES,
     "satsp",
     "oat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "cooling_sig",
+    "economizer_sig",
 )
 
 _fc9_report = FaultCodeNineReport(    

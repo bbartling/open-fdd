@@ -50,6 +50,8 @@ _fc1 = FaultConditionOne(
     "AHU: Supply Air Fan Speed Control Signal",
     "AHU: Supply Air Duct Static Pressure Set Point",
 )
+
+
 _fc1_report = FaultCodeOneReport(
     VFD_SPEED_PERCENT_ERR_THRES,
     VFD_SPEED_PERCENT_MAX,
@@ -72,8 +74,6 @@ print("Dataset end: ", end)
 for col in df.columns:
     print("df column: ", col, "- max len: ", df[col].size)
     
-#'AHU: Supply Air Duct Static Pressure'
-#'AHU: Supply Air Duct Static Pressure'
 
 # return a whole new dataframe with fault flag as new col
 df2 = _fc1.apply(df)

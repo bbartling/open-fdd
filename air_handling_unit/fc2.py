@@ -43,18 +43,19 @@ RETURN_DEGF_ERR_THRES = 2.
 
 
 _fc2 = FaultConditionTwo(
-    OUTDOOR_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     RETURN_DEGF_ERR_THRES,
+    OUTDOOR_DEGF_ERR_THRES,
     "AHU: Mixed Air Temperature",
     "AHU: Return Air Temperature",
     "AHU: Outdoor Air Temperature",
     "AHU: Supply Air Fan Speed Control Signal"
 )
+
 _fc2_report = FaultCodeTwoReport(
-    OUTDOOR_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
     RETURN_DEGF_ERR_THRES,
+    OUTDOOR_DEGF_ERR_THRES,
     "AHU: Mixed Air Temperature",
     "AHU: Return Air Temperature",
     "AHU: Outdoor Air Temperature",

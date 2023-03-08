@@ -7,7 +7,9 @@ from faults import FaultConditionNine
 from reports import FaultCodeNineReport
 
 # python 3.10 on Windows 10
-# py .\fc9.py -i ./ahu_data/hvac_random_fake_data/fc9_fake_data1.csv -o fake1_ahu_fc9_report
+# py .\fc9.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc9_report
+# py .\fc9.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc9_report
+# py .\fc9.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc9_report
 
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -46,29 +48,24 @@ _fc9 = FaultConditionNine(
     DELTA_SUPPLY_FAN,
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
-    "satsp",
-    "oat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    AHU_MIN_OA,
+    "AHU: Supply Air Temperature Set Point",
+    "AHU: Outdoor Air Temperature",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal"
 )
 
+
 _fc9_report = FaultCodeNineReport(    
-    "satsp",
-    "oat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "AHU: Supply Air Temperature Set Point",
+    "AHU: Outdoor Air Temperature",
+    "AHU: Supply Air Fan Speed Control Signal",
+    "AHU: Outdoor Air Damper Control Signal"
 )
 
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
 
-df['satsp'] = 61
-
-# weather data from a different source
-oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
-df = oat.join(df)
-df = df.ffill().bfill()
-print(df)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
@@ -84,7 +81,6 @@ df2 = _fc9.apply(df)
 print(df2.head())
 print(df2.describe())
 
-df.to_csv("fc9_troubleshoot.csv")
 
 document = _fc9_report.create_report(args.output, df2)
 path = os.path.join(os.path.curdir, "final_report")

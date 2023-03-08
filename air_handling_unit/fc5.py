@@ -7,8 +7,9 @@ from faults import FaultConditionFive
 from reports import FaultCodeFiveReport
 
 # python 3.10 on Windows 10
-# py .\fc5.py -i ./ahu_data/hvac_random_fake_data/fc5_fake_data1.csv -o fake1_ahu_fc5_report
-
+# py .\fc5.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc5_report
+# py .\fc5.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc5_report
+# py .\fc5.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc5_report
 
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -44,29 +45,29 @@ MIX_DEGF_ERR_THRES = 5.
 
 
 _fc5 = FaultConditionFive(
-    DELTA_T_SUPPLY_FAN,
-    SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
-    "sat",
-    "mat",
-    "htg_vlv",
-    "supply_vfd_speed"
+    SUPPLY_DEGF_ERR_THRES,
+    DELTA_T_SUPPLY_FAN,
+    "AHU: Mixed Air Temperature",
+    "AHU: Supply Air Temperature",
+    "AHU: Heating Coil Valve Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
 
 
 _fc5_report = FaultCodeFiveReport(
-    DELTA_T_SUPPLY_FAN,
-    SUPPLY_DEGF_ERR_THRES,
     MIX_DEGF_ERR_THRES,
-    "sat",
-    "mat",
-    "htg_vlv",
-    "supply_vfd_speed"
+    SUPPLY_DEGF_ERR_THRES,
+    DELTA_T_SUPPLY_FAN,
+    "AHU: Mixed Air Temperature",
+    "AHU: Supply Air Temperature",
+    "AHU: Heating Coil Valve Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
+
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
 
-df["heating_sig"] = 0
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

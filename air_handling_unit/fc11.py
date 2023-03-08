@@ -7,8 +7,9 @@ from faults import FaultConditionEleven
 from reports import FaultCodeElevenReport
 
 # python 3.10 on Windows 10
-# py .\fc11.py -i ./ahu_data/hvac_random_fake_data/fc11_fake_data1.csv -o fake1_ahu_fc11_report
-
+# py .\fc11.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc11_report
+# py .\fc11.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc11_report
+# py .\fc11.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc11_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -43,29 +44,23 @@ _fc11 = FaultConditionEleven(
     DELTA_SUPPLY_FAN,
     OAT_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
-    "satsp",
-    "oat",
-    "clg",
-    "economizer_sig"
+    "AHU: Supply Air Temperature Set Point",
+    "AHU: Outdoor Air Temperature",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal"
+)
+        
+_fc11_report = FaultCodeElevenReport(    
+    "AHU: Supply Air Temperature Set Point",
+    "AHU: Outdoor Air Temperature",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
 
-_fc11_report = FaultCodeElevenReport(    
-    "satsp",
-    "oat",
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
-)
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
 
-'''
-# weather data from a different source
-oat = pd.read_csv('./ahu_data/oat.csv', index_col="Date", parse_dates=True).rolling("5T").mean()
-df = oat.join(df)
-df = df.ffill().bfill()
-print(df)
-'''
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

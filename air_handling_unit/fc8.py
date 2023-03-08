@@ -7,8 +7,9 @@ from faults import FaultConditionEight
 from reports import FaultCodeEightReport
 
 # python 3.10 on Windows 10
-# py .\fc8.py -i ./ahu_data/hvac_random_fake_data/fc8_fake_data1.csv -o fake1_ahu_fc8_report
-
+# py .\fc8.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc8_report
+# py .\fc8.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc8_report
+# py .\fc8.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc8_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -46,17 +47,18 @@ _fc8 = FaultConditionEight(
     DELTA_SUPPLY_FAN,
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
-    "mat",
-    "sat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    AHU_MIN_OA,
+    "AHU: Mixed Air Temperature",
+    "AHU: Supply Air Temperature",
+    "AHU: Outdoor Air Damper Control Signal",
+    "AHU: Cooling Coil Valve Control Signal"
 )
 
 _fc8_report = FaultCodeEightReport(    
-    "mat",
-    "sat",
-    "supply_vfd_speed",
-    "economizer_sig"
+    "AHU: Mixed Air Temperature",
+    "AHU: Supply Air Temperature",
+    "AHU: Supply Air Fan Speed Control Signal",
+    "AHU: Outdoor Air Damper Control Signal"
 )
 
 

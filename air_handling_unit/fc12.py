@@ -7,8 +7,9 @@ from faults import FaultConditionTwelve
 from reports import FaultCodeTwelveReport
 
 # python 3.10 on Windows 10
-# py .\fc12.py -i ./ahu_data/hvac_random_fake_data/fc12_fake_data1.csv -o fake1_ahu_fc12_report
-
+# py .\fc12.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc12_report
+# py .\fc12.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc12_report
+# py .\fc12.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc12_report
 
 parser = argparse.ArgumentParser(add_help=False)
 args = parser.add_argument_group("Options")
@@ -47,18 +48,19 @@ _fc12 = FaultConditionTwelve(
     MIX_DEGF_ERR_THRES,
     SUPPLY_DEGF_ERR_THRES,
     AHU_MIN_OA,
-    "sat",
-    "mat",
-    "clg",
-    "economizer_sig"
+    "AHU: Supply Air Temperature",
+    "AHU: Mixed Air Temperature",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal"
 )
 
+
 _fc12_report = FaultCodeTwelveReport(    
-    "sat",
-    "mat",
-    "clg",
-    "economizer_sig",
-    "supply_vfd_speed"
+    "AHU: Supply Air Temperature",
+    "AHU: Mixed Air Temperature",
+    "AHU: Cooling Coil Valve Control Signal",
+    "AHU: Outdoor Air Damper Control Signal",
+    "AHU: Supply Air Fan Speed Control Signal"
 )
 
 
