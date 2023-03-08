@@ -1,0 +1,9 @@
+inputs:
+  supply_vfd_speed:
+    low: 10
+    high: 100
+    data_type: int
+  duct_static:
+    low:  0.01
+    high: 2
+    data_type: float

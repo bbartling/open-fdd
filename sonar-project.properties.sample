@@ -1,0 +1,5 @@
+ sonar.projectKey=your-project-key
+sonar.sources=.
+sonar.host.url=http://your-sonar-server-url:9000
+sonar.login=your-sonar-token
+sonar.python.coverage.reportPaths=coverage.xml

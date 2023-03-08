@@ -6,3 +6,6 @@ matplotlib
 argparse
 pytest
 click
+pylint
+pytest-cov
+pyyaml

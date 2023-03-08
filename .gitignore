@@ -148,3 +148,7 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+.scannerwork
+private.mdx
+sonar-project.properties
