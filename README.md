@@ -19,6 +19,15 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
                         self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
 
     df["fc1_flag"] = (df['static_check_'] & df['fan_check_']).astype(int)
+
+    if self.troubleshoot:
+        print("Troubleshoot mode enabled - not removing helper columns")
+
+    else:
+        del df['static_check_']
+        del df['fan_check_']
+
+    return df
 ```
 	
 ###### The final report from passing data into the `FaultCodeReport` class will output a Word document to a directory containing the following info, currently tested on a months worth of data.
