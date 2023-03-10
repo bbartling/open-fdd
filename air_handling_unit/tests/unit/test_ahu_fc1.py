@@ -61,9 +61,9 @@ def test_failing(failing_df):
         TEST_DUCT_STATIC_SETPOINT_COL,
     )
     results = fc1.apply(failing_df)
-    print("FAIL ",results)
+    print("FC1 FAIL ",results)
     flag_mean = results["fc1_flag"].mean()
-    print("FAIL flag_mean",flag_mean)
+    print("FC1 FAIL flag_mean",flag_mean)
     assert flag_mean > 0.4
 
 
@@ -77,7 +77,7 @@ def test_passing(passing_df):
         TEST_DUCT_STATIC_SETPOINT_COL,
     )
     results = fc1.apply(passing_df)
-    print("PASS ",results)
+    print("FC1 PASS ",results)
     flag_mean = results["fc1_flag"].mean()
-    print("FAIL flag_mean",flag_mean)
+    print("FC1 FAIL flag_mean",flag_mean)
     assert flag_mean < 0.2
