@@ -1,4 +1,4 @@
-from faults import FaultConditionTwo
+from faults import FaultConditionThree
 import random
 import pandas as pd
 import pytest
@@ -24,10 +24,10 @@ TEST_OUT_TEMP_COL = "out_air_temp"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
 
 
-# mix air temp lower than out temp
+# mix air temp higher than out temp
 def fail_row() -> dict:
     data = {
-        TEST_MIX_TEMP_COL : 40.,
+        TEST_MIX_TEMP_COL : 85.,
         TEST_RETURN_TEMP_COL : 72.,
         TEST_OUT_TEMP_COL : 55.,
         TEST_SUPPLY_VFD_SPEED_COL : .8,
@@ -67,7 +67,7 @@ def passing_df() -> pd.DataFrame:
 
 
 def test_failing(failing_df):
-    fc2 = FaultConditionTwo(
+    fc3 = FaultConditionThree(
     TEST_MIX_DEGF_ERR_THRES,
     TEST_RETURN_DEGF_ERR_THRES,
     TEST_OUTDOOR_DEGF_ERR_THRES,
@@ -76,17 +76,17 @@ def test_failing(failing_df):
     TEST_OUT_TEMP_COL,
     TEST_SUPPLY_VFD_SPEED_COL,
     )
-    results = fc2.apply(failing_df)
-    print("FC2 FAIL ",results)
-    flag_mean = results["fc2_flag"].mean()
-    print("FC2 FAIL flag_mean",flag_mean)
-    flag_describe = results["fc2_flag"].describe()
-    print("FC2 FAIL describe",flag_describe)
+    results = fc3.apply(failing_df)
+    print("FC3 FAIL ",results)
+    flag_mean = results["fc3_flag"].mean()
+    print("FC3 FAIL flag_mean",flag_mean)
+    flag_describe = results["fc3_flag"].describe()
+    print("FC3 FAIL describe",flag_describe)
     assert flag_mean >= 0.89
 
 
 def test_passing(passing_df):
-    fc1 = FaultConditionTwo(
+    fc3 = FaultConditionThree(
     TEST_MIX_DEGF_ERR_THRES,
     TEST_RETURN_DEGF_ERR_THRES,
     TEST_OUTDOOR_DEGF_ERR_THRES,
@@ -95,10 +95,10 @@ def test_passing(passing_df):
     TEST_OUT_TEMP_COL,
     TEST_SUPPLY_VFD_SPEED_COL,
     )
-    results = fc1.apply(passing_df)
-    print("FC2 PASSING ",results)
-    flag_mean = results["fc2_flag"].mean()
-    print("FC2 PASSING flag_mean",flag_mean)
-    flag_describe = results["fc2_flag"].describe()
-    print("FC2 PASSING describe",flag_describe)
+    results = fc3.apply(passing_df)
+    print("FC3 PASSING ",results)
+    flag_mean = results["fc3_flag"].mean()
+    print("FC3 PASSING flag_mean",flag_mean)
+    flag_describe = results["fc3_flag"].describe()
+    print("FC3 PASSING describe",flag_describe)
     assert flag_mean <= 0.11
