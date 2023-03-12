@@ -77,16 +77,14 @@ def test_failing(failing_df):
     TEST_SUPPLY_VFD_SPEED_COL,
     )
     results = fc2.apply(failing_df)
-    print("FC2 FAIL ",results)
-    flag_mean = results["fc2_flag"].mean()
-    print("FC2 FAIL flag_mean",flag_mean)
-    flag_describe = results["fc2_flag"].describe()
-    print("FC2 FAIL describe",flag_describe)
-    assert flag_mean >= 0.89
+    actual = results["fc2_flag"].mean()
+    expected = 0.89
+    message = f"fc2 FAIL actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
 
 
 def test_passing(passing_df):
-    fc1 = FaultConditionTwo(
+    fc2 = FaultConditionTwo(
     TEST_MIX_DEGF_ERR_THRES,
     TEST_RETURN_DEGF_ERR_THRES,
     TEST_OUTDOOR_DEGF_ERR_THRES,
@@ -95,10 +93,8 @@ def test_passing(passing_df):
     TEST_OUT_TEMP_COL,
     TEST_SUPPLY_VFD_SPEED_COL,
     )
-    results = fc1.apply(passing_df)
-    print("FC2 PASSING ",results)
-    flag_mean = results["fc2_flag"].mean()
-    print("FC2 PASSING flag_mean",flag_mean)
-    flag_describe = results["fc2_flag"].describe()
-    print("FC2 PASSING describe",flag_describe)
-    assert flag_mean <= 0.11
+    results = fc2.apply(passing_df)
+    actual = results["fc2_flag"].mean()
+    expected = 0.11
+    message = f"fc2 PASS actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message

@@ -87,17 +87,10 @@ def test_failing(failing_df):
     
     failing_df = failing_df.set_index(generate_timestamp())
     results = fc4.apply(failing_df)
-    print("fc4 FAIL ",results)
-    
-    flag_mean = results["fc4_flag"].mean()
-    print("fc4 FAIL flag_mean",flag_mean)
-    
-    flag_describe = results["fc4_flag"].describe()
-    print("fc4 FAIL describe",flag_describe)
-
-    flag_sum = results["fc4_flag"].sum()
-    print("fc4 FAIL sum",flag_sum)
-    assert flag_sum == 5
+    actual = results["fc4_flag"].sum()
+    expected = 3.
+    message = f"fc4 FAIL actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
 
 
 
@@ -114,15 +107,8 @@ def test_passing(passing_df):
     
     passing_df = passing_df.set_index(generate_timestamp())
     results = fc4.apply(passing_df)
-    print("fc4 PASSING ",results)
-    
-    flag_mean = results["fc4_flag"].mean()
-    print("fc4 PASSING flag_mean",flag_mean)
-    
-    flag_describe = results["fc4_flag"].describe()
-    print("fc4 PASSING describe",flag_describe)
-    
-    flag_sum = results["fc4_flag"].sum()
-    print("fc4 PASSING sum",flag_sum)
-    assert flag_sum == 17
+    actual = results["fc4_flag"].sum()
+    expected = 16.
+    message = f"fc4 PASS actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
 

@@ -5,7 +5,7 @@ import pytest
 
 '''
 to see print statements in pytest run with
-$ pytest -rP
+$ pytest tests/unit/test_ahu_fc3.py -rP
 
 random seed set every time random.random()
 is called so the results to be exact same
@@ -77,12 +77,10 @@ def test_failing(failing_df):
     TEST_SUPPLY_VFD_SPEED_COL,
     )
     results = fc3.apply(failing_df)
-    print("FC3 FAIL ",results)
-    flag_mean = results["fc3_flag"].mean()
-    print("FC3 FAIL flag_mean",flag_mean)
-    flag_describe = results["fc3_flag"].describe()
-    print("FC3 FAIL describe",flag_describe)
-    assert flag_mean >= 0.89
+    actual = results["fc3_flag"].mean()
+    expected = 0.89
+    message = f"fc3 FAIL actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
 
 
 def test_passing(passing_df):
@@ -96,9 +94,7 @@ def test_passing(passing_df):
     TEST_SUPPLY_VFD_SPEED_COL,
     )
     results = fc3.apply(passing_df)
-    print("FC3 PASSING ",results)
-    flag_mean = results["fc3_flag"].mean()
-    print("FC3 PASSING flag_mean",flag_mean)
-    flag_describe = results["fc3_flag"].describe()
-    print("FC3 PASSING describe",flag_describe)
-    assert flag_mean <= 0.11
+    actual = results["fc3_flag"].mean()
+    expected = 0.11
+    message = f"fc3 PASS actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message

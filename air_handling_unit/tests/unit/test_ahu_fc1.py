@@ -5,7 +5,7 @@ import pytest
 
 '''
 to see print statements in pytest run with
-$ pytest -rP
+$ pytest tests/unit/test_ahu_fc2.py -rP
 
 random seed set every time random.random()
 is called so the results to be exact same
@@ -71,11 +71,12 @@ def test_failing(failing_df):
         TEST_SUPPLY_VFD_SPEED_COL,
         TEST_DUCT_STATIC_SETPOINT_COL,
     )
+    
     results = fc1.apply(failing_df)
-    print("FC1 FAIL ",results)
-    flag_mean = results["fc1_flag"].mean()
-    print("FC1 FAIL flag_mean",flag_mean)
-    assert flag_mean >= 0.89
+    actual = results["fc1_flag"].mean()
+    expected = 0.89
+    message = f"FC1 FAIL actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
 
 
 def test_passing(passing_df):
@@ -87,8 +88,9 @@ def test_passing(passing_df):
         TEST_SUPPLY_VFD_SPEED_COL,
         TEST_DUCT_STATIC_SETPOINT_COL,
     )
+    
     results = fc1.apply(passing_df)
-    print("FC1 PASS ",results)
-    flag_mean = results["fc1_flag"].mean()
-    print("FC1 PASS flag_mean",flag_mean)
-    assert flag_mean <= 0.11
+    actual = results["fc1_flag"].mean()
+    expected = 0.11
+    message = f"FC1 PASS actual is {actual} and expected is {expected}"
+    assert actual == pytest.approx(expected), message
