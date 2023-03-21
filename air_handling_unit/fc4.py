@@ -55,7 +55,7 @@ _fc4 = FaultConditionFour(
 
 _fc4_report = FaultCodeFourReport(DELTA_OS_MAX)
 
-df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+df = pd.read_csv(args.input, index_col="Date", parse_dates=True)
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

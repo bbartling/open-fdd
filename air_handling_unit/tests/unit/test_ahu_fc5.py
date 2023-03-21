@@ -1,5 +1,4 @@
-from faults import FaultConditionFive
-import random
+from faults import FaultConditionFive, HelperUtils
 import pandas as pd
 import pytest
 
@@ -7,11 +6,18 @@ import pytest
 to see print statements in pytest run with
 $ pytest tests/unit/test_ahu_fc5.py -rP
 
-random seed set every time random.random()
-is called so the results to be exact same
-every time for the flag mean col output.
+SAT too low; should be higher than MAT in HTG MODE
+'''
 
-Future compare to ML FDD Vs rule based FDD
+'''
+def float_int_check_err(col):
+    err_str = " column failed with a check that the data is a float"
+    return str(col) + err_str
+
+
+def float_max_check_err(col):
+    err_str = " column failed with a check that the data is a float between 0.0 and 1.0"
+    return str(col) + err_str
 '''
 
 TEST_MIX_DEGF_ERR_THRES = 2.
@@ -23,84 +29,122 @@ TEST_HEATING_COIL_SIG_COL = "heating_sig_col"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
 
 
-# mix air temp higher than out temp
-def fail_row() -> dict:
-    data = {
-        TEST_MIX_DEGF_ERR_THRES: 2.,
-        TEST_SUPPLY_DEGF_ERR_THRES: 2.,
-        TEST_DELTA_T_SUPPLY_FAN: 5.,
-        TEST_MIX_TEMP_COL: 80.,
-        TEST_SUPPLY_TEMP_COL: 40.,
-        TEST_HEATING_COIL_SIG_COL: 55.,
-        TEST_SUPPLY_VFD_SPEED_COL: 55.,
-    }
-    return data
+fc5 = FaultConditionFive(
+    TEST_MIX_DEGF_ERR_THRES,
+    TEST_SUPPLY_DEGF_ERR_THRES,
+    TEST_DELTA_T_SUPPLY_FAN,
+    TEST_MIX_TEMP_COL,
+    TEST_SUPPLY_TEMP_COL,
+    TEST_HEATING_COIL_SIG_COL,
+    TEST_SUPPLY_VFD_SPEED_COL
+)
 
 
-def pass_row() -> dict:
-    data = {
-        TEST_MIX_DEGF_ERR_THRES: 2.,
-        TEST_SUPPLY_DEGF_ERR_THRES: 2.,
-        TEST_DELTA_T_SUPPLY_FAN: 5.,
-        TEST_MIX_TEMP_COL: 40.,
-        TEST_SUPPLY_TEMP_COL: 80.,
-        TEST_HEATING_COIL_SIG_COL: 55.,
-        TEST_SUPPLY_VFD_SPEED_COL: 55.,
-    }
-    return data
+class TestNoFaultinHtg(object):
+
+    def no_fault_df_in_htg(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [40.],
+            TEST_SUPPLY_TEMP_COL: [80.],
+            TEST_HEATING_COIL_SIG_COL: [0.55],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.55],
+        }
+        return pd.DataFrame(data)
+
+    def test_no_fault_in_htg(self):
+        results = fc5.apply(self.no_fault_df_in_htg())
+        actual = results.loc[0, 'fc5_flag']
+        expected = 0.0
+        message = f"fc5 no_fault_df_in_htg actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
 
-def generate_data(fail_portion: float, samples: int) -> pd.DataFrame:
-    data = []
-    for _ in range(samples):
-        random.seed(_)
-        if random.random() < fail_portion:
-            data.append(fail_row())
-        else:
-            data.append(pass_row())
-    return pd.DataFrame(data)
+class TestFaultInHtg(object):
+
+    def fault_df_in_htg(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [80.],
+            TEST_SUPPLY_TEMP_COL: [40.],
+            TEST_HEATING_COIL_SIG_COL: [0.55],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.55],
+        }
+        return pd.DataFrame(data)
+
+    def test_fault_in_htg(self):
+        results = fc5.apply(self.fault_df_in_htg())
+        actual = results.loc[0, 'fc5_flag']
+        expected = 1.0
+        message = f"fc5 fault_df_in_htg actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
 
-@pytest.fixture
-def failing_df() -> pd.DataFrame:
-    return generate_data(0.9, 100)
+class TestNoFaultNoHtg(object):
+
+    def no_fault_df_no_htg(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [40.],
+            TEST_SUPPLY_TEMP_COL: [80.],
+            TEST_HEATING_COIL_SIG_COL: [0.0],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.55],
+        }
+        return pd.DataFrame(data)
+
+    def test_no_fault_no_htg(self):
+        results = fc5.apply(self.no_fault_df_no_htg())
+        actual = results.loc[0, 'fc5_flag']
+        expected = 0.0
+        message = f"fc5 test_no_fault_no_htg actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
 
-@pytest.fixture
-def passing_df() -> pd.DataFrame:
-    return generate_data(0.1, 100)
+class TestFaultNoHtg(object):
+
+    def fault_df_no_htg(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [80.],
+            TEST_SUPPLY_TEMP_COL: [40.],
+            TEST_HEATING_COIL_SIG_COL: [0.],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.55],
+        }
+        return pd.DataFrame(data)
+
+    def test_fault_no_htg(self):
+        results = fc5.apply(self.fault_df_no_htg())
+        actual = results.loc[0, 'fc5_flag']
+        expected = 1.0
+        message = f"fc5 fault_df_no_htg actual is {actual} and expected is {expected}"
+        assert actual != expected, message
 
 
-def test_failing(failing_df):
-    fc5 = FaultConditionFive(
-        TEST_MIX_DEGF_ERR_THRES,
-        TEST_SUPPLY_DEGF_ERR_THRES,
-        TEST_DELTA_T_SUPPLY_FAN,
-        TEST_MIX_TEMP_COL,
-        TEST_SUPPLY_TEMP_COL,
-        TEST_HEATING_COIL_SIG_COL,
-        TEST_SUPPLY_VFD_SPEED_COL,
-    )
-    results = fc5.apply(failing_df)
-    actual = results["fc5_flag"].mean()
-    expected = 0.89
-    message = f"fc5 FAIL actual is {actual} and expected is {expected}"
-    assert actual == pytest.approx(expected), message
+class TestFaultOnInt(object):
+
+    def fault_df_on_output_int(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [80.],
+            TEST_SUPPLY_TEMP_COL: [40.],
+            TEST_HEATING_COIL_SIG_COL: [0.55],
+            TEST_SUPPLY_VFD_SPEED_COL: [55],
+        }
+        return pd.DataFrame(data)
+
+    def test_fault_on_int(self):
+        with pytest.raises(TypeError, 
+                           match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+            fc5.apply(self.fault_df_on_output_int())
 
 
-def test_passing(passing_df):
-    fc5 = FaultConditionFive(
-        TEST_MIX_DEGF_ERR_THRES,
-        TEST_SUPPLY_DEGF_ERR_THRES,
-        TEST_DELTA_T_SUPPLY_FAN,
-        TEST_MIX_TEMP_COL,
-        TEST_SUPPLY_TEMP_COL,
-        TEST_HEATING_COIL_SIG_COL,
-        TEST_SUPPLY_VFD_SPEED_COL,
-    )
+class TestFaultOnFloatGreaterThanOne(object):
 
-    results = fc5.apply(passing_df)
-    actual = results["fc5_flag"].mean()
-    expected = 0.11
-    message = f"PASS actual is {actual} and expected is {expected}"
-    assert actual == pytest.approx(expected), message
+    def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
+        data = {
+            TEST_MIX_TEMP_COL: [80.],
+            TEST_SUPPLY_TEMP_COL: [40.],
+            TEST_HEATING_COIL_SIG_COL: [0.55],
+            TEST_SUPPLY_VFD_SPEED_COL: [55.0],
+        }
+        return pd.DataFrame(data)
+
+    def test_fault_on_float_greater_than_one(self):
+        with pytest.raises(TypeError,
+                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+            fc5.apply(self.fault_df_on_output_greater_than_one())

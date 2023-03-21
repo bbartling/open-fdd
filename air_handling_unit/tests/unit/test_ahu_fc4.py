@@ -1,19 +1,15 @@
-from faults import FaultConditionFour
-import random
+from faults import FaultConditionFour, HelperUtils
 import pandas as pd
 import pytest
-import datetime
+from datetime import datetime, timezone
 
 '''
 to see print statements in pytest run with
 $ pytest -rP
 $ pytest tests/unit/test_ahu_fc4.py -rP
 
-random seed set every time random.random()
-is called so the results to be exact same
-every time for the flag mean col output.
-
-Future compare to ML FDD Vs rule based FDD
+to much hunting in control system
+OS state changes greater than 7 in an hour
 '''
 
 
@@ -24,91 +20,143 @@ TEST_HEATING_COIL_SIG_COL = "heating_sig_col"
 TEST_COOLING_COIL_SIG_COL = "cooling_sig_col"
 TEST_SUPPLY_VFD_SPEED_COL = "fan_vfd_speed_col"
 
-DATASET_ROWS = 1000
+TEST_DATASET_ROWS = 60
+
+
+fc4 = FaultConditionFour(
+    DELTA_OS_MAX,
+    AHU_MIN_OA,
+    TEST_MIX_AIR_DAMPER_COL,
+    TEST_HEATING_COIL_SIG_COL,
+    TEST_COOLING_COIL_SIG_COL,
+    TEST_SUPPLY_VFD_SPEED_COL
+)
+
 
 def generate_timestamp() -> pd.Series:
     df = pd.DataFrame()
     date_range = pd.period_range(
-        start=datetime.datetime.today(), periods=DATASET_ROWS, freq='1T')
+        # make a time stamp starting at top of
+        # the hour with one min intervals
+        start=datetime(2022, 6, 6, 14, 30, 0, 0, tzinfo=timezone.utc),
+        periods=TEST_DATASET_ROWS, freq='min')
     df['Date'] = [x.to_timestamp() for x in date_range]
     return df['Date']
 
-# mix air temp higher than out temp
-def fail_row() -> dict:
+
+def econ_plus_mech_clg_row() -> dict:
     data = {
-        TEST_MIX_AIR_DAMPER_COL : .6,
-        TEST_HEATING_COIL_SIG_COL : 0,
-        TEST_COOLING_COIL_SIG_COL : .6,
-        TEST_SUPPLY_VFD_SPEED_COL : .8,
+        TEST_MIX_AIR_DAMPER_COL: 0.6,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 0.8,
     }
     return data
 
 
-def pass_row() -> dict:
+def mech_clg_row() -> dict:
     data = {
-        TEST_MIX_AIR_DAMPER_COL : 0,
-        TEST_HEATING_COIL_SIG_COL : 0,
-        TEST_COOLING_COIL_SIG_COL : .6,
-        TEST_SUPPLY_VFD_SPEED_COL : .8,
+        TEST_MIX_AIR_DAMPER_COL: 0.0,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 0.8,
     }
     return data
 
 
-def generate_data(fail_portion: float, samples: int) -> pd.DataFrame:
-    data = []
-    for _ in range(samples):
-        random.seed(_)
-        if random.random() < fail_portion:
-            data.append(fail_row())
-        else:
-            data.append(pass_row())
-    return pd.DataFrame(data)
+def econ_plus_mech_clg_row_int() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: 0.6,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 88,
+    }
+    return data
 
 
-@pytest.fixture
-def failing_df() -> pd.DataFrame:
-    return generate_data(0.9, DATASET_ROWS)
+def econ_plus_mech_clg_row_float_greater_than_one() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: .6,
+        TEST_HEATING_COIL_SIG_COL: 0.,
+        TEST_COOLING_COIL_SIG_COL: .6,
+        TEST_SUPPLY_VFD_SPEED_COL: 88.8,
+    }
+    return data
 
 
-@pytest.fixture
-def passing_df() -> pd.DataFrame:
-    return generate_data(0.5, DATASET_ROWS)
+class TestFault(object):
+
+    def fault_df(self) -> pd.DataFrame:
+        data = []
+        counter = 0
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0 and counter < 11:
+                data.append(econ_plus_mech_clg_row())
+                counter += 1  # only simulate 10 OS changes
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
+
+    def test_fault(self):
+        fault_df = self.fault_df().set_index(generate_timestamp())
+        results = fc4.apply(fault_df)
+        actual = results["fc4_flag"].sum()
+        expected = 1
+        message = f"fc4 fault_df actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
 
-def test_failing(failing_df):
-    fc4 = FaultConditionFour(
-    DELTA_OS_MAX,
-    AHU_MIN_OA,
-    TEST_MIX_AIR_DAMPER_COL,
-    TEST_HEATING_COIL_SIG_COL,
-    TEST_COOLING_COIL_SIG_COL,
-    TEST_SUPPLY_VFD_SPEED_COL,
-    )
-    
-    failing_df = failing_df.set_index(generate_timestamp())
-    results = fc4.apply(failing_df)
-    actual = results["fc4_flag"].sum()
-    expected = 3.
-    message = f"fc4 FAIL actual is {actual} and expected is {expected}"
-    assert actual == pytest.approx(expected), message
+class TestNoFault(object):
+
+    def no_fault_df(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            data.append(mech_clg_row())
+        return pd.DataFrame(data)
+
+    def test_no_fault(self):
+        no_fault_df = self.no_fault_df().set_index(generate_timestamp())
+        results = fc4.apply(no_fault_df)
+        actual = results["fc4_flag"].sum()
+        expected = 0
+        message = f"fc4 no_fault_df actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
 
+class TestFaultOnInt(object):
 
-def test_passing(passing_df):
-    fc4 = FaultConditionFour(
-    DELTA_OS_MAX,
-    AHU_MIN_OA,
-    TEST_MIX_AIR_DAMPER_COL,
-    TEST_HEATING_COIL_SIG_COL,
-    TEST_COOLING_COIL_SIG_COL,
-    TEST_SUPPLY_VFD_SPEED_COL,
-    TEST_SUPPLY_VFD_SPEED_COL,
-    )
-    
-    passing_df = passing_df.set_index(generate_timestamp())
-    results = fc4.apply(passing_df)
-    actual = results["fc4_flag"].sum()
-    expected = 16.
-    message = f"fc4 PASS actual is {actual} and expected is {expected}"
-    assert actual == pytest.approx(expected), message
+    def fault_df_on_output_int(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0:
+                data.append(econ_plus_mech_clg_row_int())
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
 
+    def test_fault_on_int(self):
+        fault_df_on_output_int = self.fault_df_on_output_int().set_index(
+            generate_timestamp())
+        with pytest.raises(TypeError,
+                           match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+            fc4.apply(fault_df_on_output_int)
+
+
+class TestFaultOnFloatGreaterThanOne(object):
+
+    def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0:
+                data.append(econ_plus_mech_clg_row_float_greater_than_one())
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
+
+    def test_fault_on_float_greater_than_one(self):
+
+        fault_df_on_output_greater_than_one = self.fault_df_on_output_greater_than_one().set_index(
+            generate_timestamp())
+        with pytest.raises(TypeError,
+                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+            fc4.apply(fault_df_on_output_greater_than_one)

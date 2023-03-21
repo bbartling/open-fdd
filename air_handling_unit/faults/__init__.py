@@ -1,6 +1,31 @@
 import operator
 import pandas as pd
 import numpy as np
+import pandas.api.types as pdtypes
+
+
+class HelperUtils():
+    def float_int_check_err(self,col):
+        err_str = " column failed with a check that the data is a float"
+        return str(col) + err_str
+
+    def float_max_check_err(self,col):
+        err_str = " column failed with a check that the data is a float between 0.0 and 1.0"
+        return str(col) + err_str
+
+    def isfloat(self,num):
+        try:
+            float(num)
+            return True
+        except:
+            return False
+        
+    def isLessThanOnePointOne(self,num):
+        try:
+            if num <= 1.0:
+                return True
+        except:
+            return False
 
 
 class FaultConditionOne:
@@ -25,6 +50,17 @@ class FaultConditionOne:
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.supply_vfd_speed_col
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(HelperUtils().float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(HelperUtils().float_max_check_err(col))
+
         df['static_check_'] = (
             df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
         df['fan_check_'] = (df[self.supply_vfd_speed_col] >=
@@ -53,7 +89,7 @@ class FaultConditionTwo:
         mat_col: str,
         rat_col: str,
         oat_col: str,
-        fan_vfd_speed_col: str,
+        supply_vfd_speed_col: str,
         troubleshoot=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
@@ -62,10 +98,20 @@ class FaultConditionTwo:
         self.mat_col = mat_col
         self.rat_col = rat_col
         self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.supply_vfd_speed_col
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(HelperUtils().float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(HelperUtils().float_max_check_err(col))
 
         df['mat_check'] = df[self.mat_col] + self.mix_degf_err_thres
         df['temp_min_check'] = np.minimum(df[self.rat_col] - self.return_degf_err_thres,
@@ -76,7 +122,7 @@ class FaultConditionTwo:
 
             # this fault is supposed to contain OS state 5
             # confirm with G36 fault author adding in fan status okay
-            & (df[self.fan_vfd_speed_col] > .01)
+            & (df[self.supply_vfd_speed_col] > .01)
         ).astype(int)
 
         if self.troubleshoot:
@@ -100,7 +146,7 @@ class FaultConditionThree:
         mat_col: str,
         rat_col: str,
         oat_col: str,
-        fan_vfd_speed_col: str,
+        supply_vfd_speed_col: str,
         troubleshoot=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
@@ -109,10 +155,20 @@ class FaultConditionThree:
         self.mat_col = mat_col
         self.rat_col = rat_col
         self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.supply_vfd_speed_col
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(HelperUtils().float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(HelperUtils().float_max_check_err(col))
 
         df['mat_check'] = df[self.mat_col] - self.mix_degf_err_thres
         df['temp_min_check'] = np.maximum(df[self.rat_col] + self.return_degf_err_thres,
@@ -123,7 +179,7 @@ class FaultConditionThree:
 
             # this fault is supposed to contain OS state 5
             # confirm with G36 fault author adding in fan status okay
-            & (df[self.fan_vfd_speed_col] > .01)
+            & (df[self.supply_vfd_speed_col] > .01)
         ).astype(int)
 
         if self.troubleshoot:
@@ -142,54 +198,76 @@ class FaultConditionFour:
     def __init__(
         self,
         delta_os_max: float,
-        ahu_min_oa: float,
+        ahu_min_oa_dpr: float,
         economizer_sig_col: str,
         heating_sig_col: str,
         cooling_sig_col: str,
-        fan_vfd_speed_col: str,
+        supply_vfd_speed_col: str,
         troubleshoot=False
     ):
         self.delta_os_max = delta_os_max
-        self.ahu_min_oa = ahu_min_oa
+        self.ahu_min_oa_dpr = ahu_min_oa_dpr
         self.economizer_sig_col = economizer_sig_col
         self.heating_sig_col = heating_sig_col
         self.cooling_sig_col = cooling_sig_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.troubleshoot = troubleshoot
 
     # adds in these boolean columns to the dataframe
     def os_state_change_calcs(self, df):
 
+        
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.heating_sig_col,
+            self.cooling_sig_col,
+            self.supply_vfd_speed_col,
+            self.ahu_min_oa_dpr
+        ]:
+            if col == self.ahu_min_oa_dpr:
+                if not HelperUtils().isfloat(col):
+                    raise TypeError(HelperUtils().float_int_check_err(col))
+                    
+                if not HelperUtils().isLessThanOnePointOne(col):
+                    raise TypeError(HelperUtils().float_max_check_err(col))
+            else:
+                if not pdtypes.is_float_dtype(df[col]):
+                    raise TypeError(HelperUtils().float_int_check_err(col))
+
+                if df[col].max() > 1.0:
+                    raise TypeError(HelperUtils().float_max_check_err(col))
+            
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
         df['heating_mode'] = (
             (df[self.heating_sig_col] > 0)
             & (df[self.cooling_sig_col] == 0)
-            & (df[self.fan_vfd_speed_col] > 0)
-            & (df[self.economizer_sig_col] == self.ahu_min_oa)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         )
 
         # AHU econ only mode based on OA damper modulating and clg htg = zero
         df['econ_only_cooling_mode'] = (
             (df[self.heating_sig_col] == 0)
             & (df[self.cooling_sig_col] == 0)
-            & (df[self.fan_vfd_speed_col] > 0)
-            & (df[self.economizer_sig_col] > self.ahu_min_oa)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
         )
 
         # AHU econ+mech clg mode based on OA damper modulating for cooling and clg pid/vlv modulating
         df['econ_plus_mech_cooling_mode'] = (
             (df[self.heating_sig_col] == 0)
             & (df[self.cooling_sig_col] > 0)
-            & (df[self.fan_vfd_speed_col] > 0)
-            & (df[self.economizer_sig_col] > self.ahu_min_oa)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
         )
 
         # AHU mech mode based on OA damper @ min OA and clg pid/vlv modulating
         df['mech_cooling_only_mode'] = (
             (df[self.heating_sig_col] == 0)
             & (df[self.cooling_sig_col] > 0)
-            & (df[self.fan_vfd_speed_col] > 0)
-            & (df[self.economizer_sig_col] == self.ahu_min_oa)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         )
 
         df = df.astype(int)
@@ -223,8 +301,8 @@ class FaultConditionFive:
         delta_t_supply_fan: float,
         mat_col: str,
         sat_col: str,
-        htg_vlv_col: str,
-        fan_vfd_speed_col: str,
+        heating_sig_col: str,
+        supply_vfd_speed_col: str,
         troubleshoot=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
@@ -232,13 +310,24 @@ class FaultConditionFive:
         self.delta_t_supply_fan = delta_t_supply_fan
         self.mat_col = mat_col
         self.sat_col = sat_col
-        self.htg_vlv_col = htg_vlv_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.heating_sig_col = heating_sig_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.troubleshoot = troubleshoot
 
     # fault only active if fan is running and htg vlv is modulating
     # OS 1 is heating mode only fault
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.supply_vfd_speed_col,
+            self.heating_sig_col
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(HelperUtils().float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(HelperUtils().float_max_check_err(col))
 
         df['sat_check'] = df[self.sat_col] + self.supply_degf_err_thres
         df['mat_check'] = df[self.mat_col] - \
@@ -250,8 +339,8 @@ class FaultConditionFive:
             # this is to make fault only active in OS1 for htg mode only
             # and fan is running. Some control programming may use htg
             # vlv when AHU is off to prevent low limit freeze alarms
-            & (df[self.htg_vlv_col] > .01)
-            & (df[self.fan_vfd_speed_col] > .01)
+            & (df[self.heating_sig_col] > .01)
+            & (df[self.supply_vfd_speed_col] > .01)
         ).astype(int)
 
         if self.troubleshoot:
@@ -282,7 +371,7 @@ class FaultConditionSix:
         mat_col: str,
         oat_col: str,
         rat_col: str,
-        fan_vfd_speed_col: str,
+        supply_vfd_speed_col: str,
         economizer_sig_col: str,
         heating_sig_col: str,
         cooling_sig_col: str,
@@ -298,7 +387,7 @@ class FaultConditionSix:
         self.mat_col = mat_col
         self.oat_col = oat_col
         self.rat_col = rat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.economizer_sig_col = economizer_sig_col
         self.heating_sig_col = heating_sig_col
         self.cooling_sig_col = cooling_sig_col
@@ -306,6 +395,28 @@ class FaultConditionSix:
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.ahu_min_oa_dpr,
+            self.supply_vfd_speed_col,
+            self.economizer_sig_col,
+            self.heating_sig_col,
+            self.cooling_sig_col,
+        ]:
+            if col == self.ahu_min_oa_dpr:
+                if not HelperUtils().isfloat(col):
+                    raise TypeError(HelperUtils().float_int_check_err(col))
+                    
+                if not HelperUtils().isLessThanOnePointOne(col):
+                    raise TypeError(HelperUtils().float_max_check_err(col))
+            else:
+                if not pdtypes.is_float_dtype(df[col]):
+                    raise TypeError(HelperUtils().float_int_check_err(col))
+
+                if df[col].max() > 1.0:
+                    raise TypeError(HelperUtils().float_max_check_err(col))
+                
         # create helper columns
         df['rat_minus_oat'] = abs(df[self.rat_col] - df[self.oat_col])
         df['percent_oa_calc'] = (df[self.mat_col] - df[self.rat_col]) / \
@@ -329,7 +440,7 @@ class FaultConditionSix:
             &  # verify ahu is running in OS 1 htg mode in min OA
             ((df[self.heating_sig_col] > 0)
              & (df[self.cooling_sig_col] == 0)
-             & (df[self.fan_vfd_speed_col] > 0)
+             & (df[self.supply_vfd_speed_col] > 0)
              & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)),  # OR
 
             # OS 4 mech clg mode
@@ -339,7 +450,7 @@ class FaultConditionSix:
             &  # verify ahu is running in OS 4 clg mode in min OA
             (df[self.heating_sig_col] == 0)
             & (df[self.cooling_sig_col] > 0)
-            & (df[self.fan_vfd_speed_col] > 0)
+            & (df[self.supply_vfd_speed_col] > 0)
             & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         ).astype(int)
 
@@ -365,24 +476,36 @@ class FaultConditionSeven:
         sat_degf_err_thres: float,
         sat_col: str,
         satsp_col: str,
-        htg_col: str,
-        fan_vfd_speed_col: str,
+        heating_sig_col: str,
+        supply_vfd_speed_col: str,
         troubleshoot=False
     ):
         self.sat_degf_err_thres = sat_degf_err_thres
         self.sat_col = sat_col
         self.satsp_col = satsp_col
-        self.htg_col = htg_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+        self.heating_sig_col = heating_sig_col
+        self.supply_vfd_speed_col = supply_vfd_speed_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.supply_vfd_speed_col,
+            self.heating_sig_col
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df["fc7_flag"] = (
             ((df[self.sat_col]).lt(df[self.satsp_col] - self.sat_degf_err_thres))
 
             # verify ahu is running in OS 1 at near full heat
-            & (df[self.htg_col] > 90.)
-            & (df[self.fan_vfd_speed_col] > 0)
+            & (df[self.heating_sig_col] > 90.)
+            & (df[self.supply_vfd_speed_col] > 0)
         ).astype(int)
 
         if self.troubleshoot:
@@ -399,7 +522,7 @@ class FaultConditionEight:
         delta_supply_fan: str,
         mix_err_thres: str,
         supply_err_thres: str,
-        ahu_min_oa: float,
+        ahu_min_oa_dpr: float,
         mat_col: str,
         sat_col: str,
         economizer_sig_col: str,
@@ -409,7 +532,7 @@ class FaultConditionEight:
         self.delta_supply_fan = delta_supply_fan
         self.mix_err_thres = mix_err_thres
         self.supply_err_thres = supply_err_thres
-        self.ahu_min_oa = ahu_min_oa
+        self.ahu_min_oa_dpr = ahu_min_oa_dpr
         self.mat_col = mat_col
         self.sat_col = sat_col
         self.economizer_sig_col = economizer_sig_col
@@ -417,6 +540,19 @@ class FaultConditionEight:
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+            self.ahu_min_oa_dpr
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df['sat_fan_mat'] = abs(
             df[self.sat_col] - self.delta_supply_fan - df[self.mat_col])
 
@@ -450,7 +586,7 @@ class FaultConditionNine:
         delta_supply_fan: float,
         oat_err_thres: float,
         supply_err_thres: float,
-        ahu_min_oa: float,
+        ahu_min_oa_dpr: float,
         satsp_col: str,
         oat_col: str,
         cooling_sig_col: str,
@@ -460,7 +596,7 @@ class FaultConditionNine:
         self.delta_supply_fan = delta_supply_fan
         self.oat_err_thres = oat_err_thres
         self.supply_err_thres = supply_err_thres
-        self.ahu_min_oa = ahu_min_oa
+        self.ahu_min_oa_dpr = ahu_min_oa_dpr
         self.satsp_col = satsp_col
         self.oat_col = oat_col
         self.cooling_sig_col = cooling_sig_col
@@ -468,6 +604,19 @@ class FaultConditionNine:
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+            self.ahu_min_oa_dpr
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df['oat_minus_oaterror'] = df[self.oat_col] - self.oat_err_thres
         df['satsp_delta_saterr'] = df[self.satsp_col] - \
             self.delta_supply_fan + self.supply_err_thres
@@ -500,7 +649,7 @@ class FaultConditionTen:
         mat_err_thres: float,
         oat_col: str,
         mat_col: str,
-        clg_col: str,
+        cooling_sig_col: str,
         economizer_sig_col: str,
         troubleshoot=False
     ):
@@ -509,11 +658,23 @@ class FaultConditionTen:
         self.mat_err_thres = mat_err_thres
         self.oat_col = oat_col
         self.mat_col = mat_col
-        self.clg_col = clg_col
+        self.cooling_sig_col = cooling_sig_col
         self.economizer_sig_col = economizer_sig_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df['abs_mat_minus_oat'] = abs(df[self.mat_col] - df[self.oat_col])
         df['mat_oat_sqrted'] = np.sqrt(
             self.mat_err_thres ** 2 + self.oat_err_thres ** 2)
@@ -522,7 +683,7 @@ class FaultConditionTen:
             (df['abs_mat_minus_oat'] > df['mat_oat_sqrted'])
 
             # verify ahu is running in OS 3 clg mode in min OA
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] > 90.)
         ).astype(int)
 
@@ -547,7 +708,7 @@ class FaultConditionEleven:
         supply_err_thres: float,
         satsp_col: str,
         oat_col: str,
-        clg_col: str,
+        cooling_sig_col: str,
         economizer_sig_col: str,
         troubleshoot=False
     ):
@@ -556,11 +717,23 @@ class FaultConditionEleven:
         self.supply_err_thres = supply_err_thres
         self.satsp_col = satsp_col
         self.oat_col = oat_col
-        self.clg_col = clg_col
+        self.cooling_sig_col = cooling_sig_col
         self.economizer_sig_col = economizer_sig_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df['oat_plus_oaterror'] = df[self.oat_col] + self.oat_err_thres
         df['satsp_delta_saterr'] = df[self.satsp_col] - \
             self.delta_supply_fan - self.supply_err_thres
@@ -569,7 +742,7 @@ class FaultConditionEleven:
             (df['oat_plus_oaterror'] < df['satsp_delta_saterr'])
 
             # verify ahu is running in OS 3 clg mode in 100 OA
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] > 90.)
         ).astype(int)
 
@@ -595,7 +768,7 @@ class FaultConditionTwelve:
         ahu_min_oa_dpr: float,
         sat_col: str,
         mat_col: str,
-        clg_col: str,
+        cooling_sig_col: str,
         economizer_sig_col: str,
         troubleshoot=False
     ):
@@ -605,11 +778,24 @@ class FaultConditionTwelve:
         self.ahu_min_oa_dpr = ahu_min_oa_dpr
         self.sat_col = sat_col
         self.mat_col = mat_col
-        self.clg_col = clg_col
+        self.cooling_sig_col = cooling_sig_col
         self.economizer_sig_col = economizer_sig_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+            self.ahu_min_oa_dpr
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df['sat_minus_saterr_delta_supply_fan'] = df[self.sat_col] - \
             self.supply_err_thres - self.delta_supply_fan
         df['mat_plus_materr'] = df[self.mat_col] + self.mix_err_thres
@@ -618,12 +804,12 @@ class FaultConditionTwelve:
             # OS4 AHU state clg @ min OA
             (df['sat_minus_saterr_delta_supply_fan'] > df['mat_plus_materr'])
 
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
             (df['sat_minus_saterr_delta_supply_fan'] > df['mat_plus_materr'])
 
             # verify ahu is running in OS 3 clg mode in 100 OA
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] > 90.)
         ).astype(int)
 
@@ -649,7 +835,7 @@ class FaultConditionThirteen:
         ahu_min_oa_dpr: float,
         sat_col: str,
         satsp_col: str,
-        clg_col: str,
+        cooling_sig_col: str,
         economizer_sig_col: str,
         troubleshoot=False
     ):
@@ -657,20 +843,32 @@ class FaultConditionThirteen:
         self.ahu_min_oa_dpr = ahu_min_oa_dpr
         self.sat_col = sat_col
         self.satsp_col = satsp_col
-        self.clg_col = clg_col
+        self.cooling_sig_col = cooling_sig_col
         self.economizer_sig_col = economizer_sig_col
         self.troubleshoot = troubleshoot
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 
+        # check analog ouputs [data with units of %] are floats only
+        for col in [
+            self.economizer_sig_col,
+            self.cooling_sig_col,
+            self.ahu_min_oa_dpr
+        ]:
+            if not pdtypes.is_float_dtype(df[col]):
+                raise TypeError(float_int_check_err(col))
+
+            if df[col].max() > 1.0:
+                raise TypeError(float_max_check_err(col))
+
         df["fc13_flag"] = operator.or_(
             ((df[self.sat_col] > df[self.satsp_col]) + self.sat_degf_err_thres)
             # OS4 AHU state clg @ min OA
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
             ((df[self.sat_col] > df[self.satsp_col]) + self.sat_degf_err_thres)
             # OS3 AHU state clg @ 100% OA
-            & (df[self.clg_col] > 0)
+            & (df[self.cooling_sig_col] > 0)
             & (df[self.economizer_sig_col] > 90.)
         ).astype(int)
 
