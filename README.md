@@ -1,8 +1,14 @@
 # open-fdd
 
-## This is a Python based educational tool for studying fault equations defined by ASHRAE Guideline 36 for HVAC systems.
+## This is a Python based FDD tool for running fault equations defined by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing
+library. G36 for air handling units (AHU's) there are 15 fault equations the first 13 of which are broken into seperate .py files, see ahu sub folder.
 
-###### G36 for AHU's has 15 fault equations the first 13 of which are broken into seperate .py files. Fault equations 14 and 15 are ommitted for the time being as these are for AHU systems with heating cooling coil leaving temperature sensors that maybe not typical AHU type systems.
+###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. 
+Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system 
+binary commands the fault equation expects an integer of 0 for Off and 1 for On.
+
+## Reference AHU fault equations here defined by ASHRAE Guideline 36:
+https://github.com/bbartling/open-fdd/tree/master/air_handling_unit/images
 
 ###### To get started git clone this repo and run the .py files in this fashion with specifying a data input argument `i` and a output argument `o` which will be the name of the report Word document that can be retrieved from the `final_report` directory after the script executes. Fault equation 6 is used as example on how to run a script:
 
@@ -11,7 +17,7 @@
 ###### Each fc.py file contains a `FaultCondition` and a `FaultCodeReport` class. The `FaultCondition` class returns a new Pandas dataframe with the fault flag as a new column. Some faults as defined by ASHRAE are only active in certain AHU operating states like an AHU heating (OS #1), economizer (OS #2), economizer + mechanical cooling (OS #3), or a mechanical cooling mode (OS #4). This Python library (to be available on Pypi in the future) internally handles to ignore fault flags if the given fault flag is only to be active in a given AHU operating state (OS) or a combinations of OS modes.
 
 ###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
-```shell
+```python
 def apply(self, df: pd.DataFrame) -> pd.DataFrame:
     df['static_check_'] = (
         df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
@@ -30,7 +36,7 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
     return df
 ```
 	
-###### The final report from passing data into the `FaultCodeReport` class will output a Word document to a directory containing the following info, currently tested on a months worth of data.
+###### A report is generated using the Python docx library from passing data into the `FaultCodeReport` class will output a Word document to a directory containing the following info, currently tested on a months worth of data.
 * a description of the fault equation
 * a snip of the fault equation as defined by ASHRAE
 * a plot of the data created with matplotlib with sublots
@@ -38,12 +44,13 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 * a histagram representing the hour of the day for when the fault equation is `True`.
 * sensor summary statistics filtered for when the AHU fan is running
 
-###### Caveats in the present moment is updating the repo to include °C and other metric system units currently only support imperial units but will incorporate this in future updates.
+###### For metric unit datasets reference the `params` screenshots inside the `images` directory link shown above. ERR_THRESHOLD parameters in the example.py files need to
+modified accordlingly for metric units as defined in the `param` screenshots.
 
 ###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
 ###### fc1.py - Supply fan not meeting duct static setpoint near 100% fan speed. The strings passed into the `FaultConditionOne` and `FaultCodeOneReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1 through OS# 5.
-```shell
+```python
 from faults import FaultConditionOne
 from reports import FaultCodeOneReport
 
@@ -72,7 +79,7 @@ _fc1_report = FaultCodeOneReport(
 df2 = _fc1.apply(df)
 ```
 ###### fc2.py - Mixing temp too high. The strings passed into the `FaultConditionTwo` and `FaultCodeTwoReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1 through OS# 5.
-```shell
+```python
 from faults import FaultConditionTwo
 from reports import FaultCodeTwoReport
 
@@ -104,7 +111,7 @@ _fc2_report = FaultCodeTwoReport(
 df2 = _fc2.apply(df)
 ```
 ###### fc3.py - Mixing temp too high. The strings passed into the `FaultConditionTwo` and `FaultCodeTwoReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1 through OS# 5.
-```shell
+```python
 from faults import FaultConditionThree
 from reports import FaultCodeThreeReport
 
@@ -138,14 +145,15 @@ df2 = _fc3.apply(df)
 ```
 
 ###### fc4.py - Control system excesses operating state. The Pandas library computes AHU control system state changes per hour based on the data that is driving the AHU outputs, like heating/cooling valves and air damper analog commands. The strings passed into the `FaultConditionFour` and `FaultCodeFourReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1 through OS# 5.
-```shell
+```python
 from faults import FaultConditionFour
 from reports import FaultCodeFourReport
 
 # G36 error thresold params
 DELTA_OS_MAX = 7
 
-# ADJUST this param for the AHU MIN OA damper stp
+# ADJUST this param for the AHU MIN OA damper setpoint
+# found on building automation system
 AHU_MIN_OA = 20
 
 _fc4 = FaultConditionFour(
@@ -165,7 +173,7 @@ df2 = _fc4.apply(df)
 ```
 
 ###### fc5.py - Suppy air temp too low. The strings passed into the `FaultConditionFive` and `FaultCodeFiveReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1.
-```shell
+```python
 from faults import FaultConditionFive
 from reports import FaultCodeFiveReport
 
@@ -199,8 +207,10 @@ _fc5_report = FaultCodeFiveReport(
 df2 = _fc5.apply(df)
 ```
 
-###### fc6.py - OA fraction too high. The strings passed into the `FaultConditionSix` and `FaultCodeSixReport` represent the csv file column names and required inputs for the given fault code.  Applies to OS# 1 and OS# 4.
-```shell
+###### fc6.py - OA fraction too high. The strings passed into the `FaultConditionSix` and `FaultCodeSixReport` represent the csv file column names and required inputs for the given fault code. 
+Applies to OS# 1 and OS# 4. Note this equation requires calculating total supply air flow from all VAV boxes in the AHU system if the AHU doesnt have an air flow measuring
+station (AFMS). Also input design outdoor air found from blue print mechanical schedules for parameter `AHU_MIN_CFM_STP `.
+```python
 from faults import FaultConditionSix
 from reports import FaultCodeSixReport
 
@@ -211,6 +221,7 @@ DELTA_TEMP_MIN = 10
 AIRFLOW_ERR_THRES = .3
 
 # OA design ventilation setpoint in CFM
+# NEEDS to be modified from blue prints
 AHU_MIN_CFM_STP = 3000
 
 _fc6 = FaultConditionSix(
@@ -243,7 +254,7 @@ df2 = _fc6.apply(df)
 ```
 
 ###### fc7.py - Supply air temp too low. The strings passed into the `FaultConditionSeven` and `FaultCodeSevenReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1.
-```shell
+```python
 from faults import FaultConditionSeven
 from reports import FaultCodeSevenReport
 
@@ -270,7 +281,7 @@ df2 = _fc7.apply(df)
 ```
 
 ###### fc8.py - Supply and mix air should be approx equal. The strings passed into the `FaultConditionEight` and `FaultCodeEightReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 2.
-```shell
+```python
 from faults import FaultConditionEight
 from reports import FaultCodeEightReport
 
@@ -301,7 +312,7 @@ df2 = _fc8.apply(df)
 ```
 
 ###### fc9.py - Outside air temp too high for free cooling without additional mechanical cooling. The strings passed into the `FaultConditionNine` and `FaultCodeNineReport` represent the csv file column names and required inputs for the given fault code.  Applies to OS# 2.
-```shell
+```python
 from faults import FaultConditionNine
 from reports import FaultCodeNineReport
 
@@ -332,11 +343,12 @@ df2 = _fc9.apply(df)
 ```
 
 ###### fc10.py - Outside and mix air temp should be approx equal. The strings passed into the `FaultConditionTen` and `FaultCodeTenReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 3.
-```shell
+```python
 from faults import FaultConditionTen
 from reports import FaultCodeTenReport
 
-# ADJUST this param for the AHU MIN OA damper stp
+# ADJUST this param for the AHU MIN OA damper setpoint
+# found on building automation system
 AHU_MIN_OA = 20
 
 # G36 error thresold params
@@ -365,7 +377,7 @@ df2 = _fc10.apply(df)
 ```
 
 ###### fc11.py - Outside air temp too low for 100% OA cooling. The strings passed into the `FaultConditionEleven` and `FaultCodeElevenReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 3.
-```shell
+```python
 from faults import FaultConditionEleven
 from reports import FaultCodeElevenReport
 
@@ -397,11 +409,12 @@ df2 = _fc11.apply(df)
 ```
 
 ###### fc12.py - Supply air too high; should be less than mix air temp. The strings passed into the `FaultConditionTwelve` and `FaultCodeTwelveReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 3 and OS#4.
-```shell
+```python
 from faults import FaultConditionTwelve
 from reports import FaultCodeTwelveReport
 
-# ADJUST this param for the AHU MIN OA damper stp
+# ADJUST this param for the AHU MIN OA damper setpoint
+# found on building automation system
 AHU_MIN_OA = 20
 
 # G36 error thresold params
@@ -433,11 +446,12 @@ df2 = _fc12.apply(df)
 ```
 
 ###### fc13.py - Supply air temp too high in full cooling. The strings passed into the `FaultConditionTwelve` and `FaultCodeTwelveReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 3 and OS#4.
-```shell
+```python
 from faults import FaultConditionThirteen
 from reports import FaultCodeThirteenReport
 
-# ADJUST this param for the AHU MIN OA damper stp
+# ADJUST this param for the AHU MIN OA damper setpoint
+# found on building automation system
 AHU_MIN_OA = 20
 
 # G36 error thresold params
@@ -466,7 +480,7 @@ df2 = _fc13.apply(df)
 
 ### Other caveats is G36 does not mention anything about if the AHU is running or not. It could be wise to ignore any faults created when the AHU is not running or fan status/command equals `False` or fan VFD speeds equal 0%. G36 also expects data to be on one minute intervals and that a 5 minute rolling average be used in the analysis. The rolling average is handled by the Pandas computing library when the data file in CSV format is read into memory:
 
-```shell
+```python
 df = pd.read_csv(args.input,
                  index_col='Date',
                  parse_dates=True).rolling('5T').mean()
