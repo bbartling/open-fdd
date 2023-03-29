@@ -1,11 +1,8 @@
 # open-fdd
 
-## This is a Python based FDD tool for running fault equations defined by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing
-library. G36 for air handling units (AHU's) there are 15 fault equations the first 13 of which are broken into seperate .py files, see ahu sub folder.
+## This is a Python based FDD tool for running fault equations defined by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. G36 for air handling units (AHU's) there are 15 fault equations the first 13 of which are broken into seperate .py files, see ahu sub folder.
 
-###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. 
-Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system 
-binary commands the fault equation expects an integer of 0 for Off and 1 for On.
+###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system binary commands the fault equation expects an integer of 0 for Off and 1 for On.
 
 ## Reference AHU fault equations here defined by ASHRAE Guideline 36:
 https://github.com/bbartling/open-fdd/tree/master/air_handling_unit/images
@@ -44,8 +41,7 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 * a histagram representing the hour of the day for when the fault equation is `True`.
 * sensor summary statistics filtered for when the AHU fan is running
 
-###### For metric unit datasets reference the `params` screenshots inside the `images` directory link shown above. ERR_THRESHOLD parameters in the example.py files need to
-modified accordlingly for metric units as defined in the `param` screenshots.
+###### For metric unit datasets reference the `params` screenshots inside the `images` directory link shown above. ERR_THRESHOLD parameters in the example.py files need to modified accordlingly for metric units as defined in the `param` screenshots.
 
 ###### Required inputs in addition to a column name `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
@@ -207,9 +203,7 @@ _fc5_report = FaultCodeFiveReport(
 df2 = _fc5.apply(df)
 ```
 
-###### fc6.py - OA fraction too high. The strings passed into the `FaultConditionSix` and `FaultCodeSixReport` represent the csv file column names and required inputs for the given fault code. 
-Applies to OS# 1 and OS# 4. Note this equation requires calculating total supply air flow from all VAV boxes in the AHU system if the AHU doesnt have an air flow measuring
-station (AFMS). Also input design outdoor air found from blue print mechanical schedules for parameter `AHU_MIN_CFM_STP `.
+###### fc6.py - OA fraction too high. The strings passed into the `FaultConditionSix` and `FaultCodeSixReport` represent the csv file column names and required inputs for the given fault code. Applies to OS# 1 and OS# 4. Note this equation requires calculating total supply air flow from all VAV boxes in the AHU system if the AHU doesnt have an air flow measuring station (AFMS). Also input design outdoor air found from blue print mechanical schedules for parameter `AHU_MIN_CFM_STP `.
 ```python
 from faults import FaultConditionSix
 from reports import FaultCodeSixReport
