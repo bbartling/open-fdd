@@ -72,7 +72,7 @@ end = df.tail(1).index.date
 print("Dataset end: ", end)
 
 for col in df.columns:
-    print("df column: ", col, "- max len: ", df[col].size)
+    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
     
 
 # return a whole new dataframe with fault flag as new col

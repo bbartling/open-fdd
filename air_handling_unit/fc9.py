@@ -42,7 +42,7 @@ OAT_DEGF_ERR_THRES = 5
 SUPPLY_DEGF_ERR_THRES = 2
 
 # ADJUST this param for the AHU MIN OA damper stp
-AHU_MIN_OA = 20
+AHU_MIN_OA = .20
 
 _fc9 = FaultConditionNine(
     DELTA_SUPPLY_FAN,
@@ -74,7 +74,7 @@ end = df.tail(1).index.date
 print("Dataset end: ", end)
 
 for col in df.columns:
-    print("df column: ", col, "- max len: ", df[col].size)
+    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
 
 # return a whole new dataframe with fault flag as new col
 df2 = _fc9.apply(df)

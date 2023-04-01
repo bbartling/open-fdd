@@ -35,7 +35,7 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 args = parser.parse_args()
 
 # ADJUST this param for the AHU MIN OA damper stp
-AHU_MIN_OA = 20
+AHU_MIN_OA = .20
 
 # G36 params shouldnt need adjusting
 # error threshold parameters
@@ -73,7 +73,7 @@ end = df.tail(1).index.date
 print("Dataset end: ", end)
 
 for col in df.columns:
-    print("df column: ", col, "- max len: ", df[col].size)
+    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
 
 # return a whole new dataframe with fault flag as new col
 df2 = _fc12.apply(df)

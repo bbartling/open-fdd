@@ -17,26 +17,18 @@ args = parser.add_argument_group("Options")
 args.add_argument(
     "-h", "--help", action="help", help="Show this help message and exit."
 )
-args.add_argument("-i", "--input", required=True, type=str, help="CSV File Input")
+
+args.add_argument("-i", "--input", required=True,
+                  type=str, help="CSV File Input")
 args.add_argument(
     "-o", "--output", required=True, type=str, help="Word File Output Name"
 )
-"""
-FUTURE 
- * incorporate an arg for SI units 
- * °C on temp sensors
- * piping pressure sensor PSI conversion
- * air flow CFM conversion
- * AHU duct static pressure "WC
 
-args.add_argument('--use-SI-units', default=False, action='store_true')
-args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
-"""
 args = parser.parse_args()
 
 # G36 params COULD need adjusting
 # default OS MAX state changes is 7
-# which seems high, could be worth adjusting 
+# which seems high, could be worth adjusting
 # down to 4 to see what the faults look like
 DELTA_OS_MAX = 7
 
@@ -53,6 +45,7 @@ _fc4 = FaultConditionFour(
     "AHU: Supply Air Fan Speed Control Signal"
 )
 
+
 _fc4_report = FaultCodeFourReport(DELTA_OS_MAX)
 
 df = pd.read_csv(args.input, index_col="Date", parse_dates=True)
@@ -64,9 +57,12 @@ end = df.tail(1).index.date
 print("Dataset end: ", end)
 
 for col in df.columns:
-    print("df column: ", col, "- max len: ", df[col].size)
+    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
 
 print(df.describe())
+
+df["AHU: Heating Coil Valve Control Signal"] = df["AHU: Heating Coil Valve Control Signal"].astype(
+    float)
 
 # return a whole new dataframe with fault flag as new col
 # data is resampled for hourly averages in df2

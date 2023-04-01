@@ -56,7 +56,7 @@ AHU_MIN_CFM_DESIGN = 2500
 
 # ADJUST this param for the AHU MIN OA damper stp
 # To verify AHU is operating in Min OA OS1 & OS4 states only
-AHU_MIN_OA_DPR = 20
+AHU_MIN_OA_DPR = .20
 
 
 _fc6 = FaultConditionSix(
@@ -94,7 +94,7 @@ end = df.tail(1).index.date
 print("Dataset end: ", end)
 
 for col in df.columns:
-    print("df column: ", col, "- max len: ", df[col].size)
+    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
 
 # return a whole new dataframe with fault flag as new col
 df2 = _fc6.apply(df)
