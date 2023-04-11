@@ -35,6 +35,9 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# timestamp column name
+INDEX_COL_NAME = "Date"
+
 # ADJUST this param for the AHU MIN OA damper stp
 AHU_MIN_OA = .20
 
@@ -63,7 +66,7 @@ _fc10_report = FaultCodeTenReport(
 )
 
 
-df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True).rolling("5T").mean()
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

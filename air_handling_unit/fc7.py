@@ -34,6 +34,9 @@ args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
 """
 args = parser.parse_args()
 
+# timestamp column name
+INDEX_COL_NAME = "Date"
+
 # G36 params shouldnt need adjusting
 # error threshold parameters
 SAT_DEGF_ERR_THRES = 2
@@ -55,7 +58,7 @@ _fc7_report = FaultCodeSevenReport(
 )
 
 
-df = pd.read_csv(args.input, index_col="Date", parse_dates=True).rolling("5T").mean()
+df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True).rolling("5T").mean()
 
 start = df.head(1).index.date
 print("Dataset start: ", start)

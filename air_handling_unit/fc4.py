@@ -26,6 +26,9 @@ args.add_argument(
 
 args = parser.parse_args()
 
+# timestamp column name
+INDEX_COL_NAME = "Date"
+
 # G36 params COULD need adjusting
 # default OS MAX state changes is 7
 # which seems high, could be worth adjusting
@@ -48,7 +51,7 @@ _fc4 = FaultConditionFour(
 
 _fc4_report = FaultCodeFourReport(DELTA_OS_MAX)
 
-df = pd.read_csv(args.input, index_col="Date", parse_dates=True)
+df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True).rolling("5T").mean()
 
 start = df.head(1).index.date
 print("Dataset start: ", start)
