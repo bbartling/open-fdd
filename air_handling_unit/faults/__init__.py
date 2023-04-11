@@ -39,7 +39,7 @@ class FaultConditionOne:
         duct_static_col: str,
         supply_vfd_speed_col: str,
         duct_static_setpoint_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
         self.vfd_speed_percent_max = vfd_speed_percent_max
@@ -90,7 +90,7 @@ class FaultConditionTwo:
         rat_col: str,
         oat_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.return_degf_err_thres = return_degf_err_thres
@@ -147,7 +147,7 @@ class FaultConditionThree:
         rat_col: str,
         oat_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.return_degf_err_thres = return_degf_err_thres
@@ -203,7 +203,7 @@ class FaultConditionFour:
         heating_sig_col: str,
         cooling_sig_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_os_max = delta_os_max
         self.ahu_min_oa_dpr = ahu_min_oa_dpr
@@ -302,7 +302,7 @@ class FaultConditionFive:
         sat_col: str,
         heating_sig_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.mix_degf_err_thres = mix_degf_err_thres
         self.supply_degf_err_thres = supply_degf_err_thres
@@ -374,7 +374,7 @@ class FaultConditionSix:
         economizer_sig_col: str,
         heating_sig_col: str,
         cooling_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.airflow_err_thres = airflow_err_thres
         self.ahu_min_cfm_design = ahu_min_cfm_design
@@ -474,7 +474,7 @@ class FaultConditionSeven:
         satsp_col: str,
         heating_sig_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.sat_degf_err_thres = sat_degf_err_thres
         self.sat_col = sat_col
@@ -515,15 +515,15 @@ class FaultConditionEight:
 
     def __init__(
         self,
-        delta_supply_fan: str,
-        mix_err_thres: str,
-        supply_err_thres: str,
+        delta_supply_fan: float,
+        mix_err_thres: float,
+        supply_err_thres: float,
         ahu_min_oa_dpr: float,
         mat_col: str,
         sat_col: str,
         economizer_sig_col: str,
         cooling_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.mix_err_thres = mix_err_thres
@@ -594,7 +594,7 @@ class FaultConditionNine:
         oat_col: str,
         cooling_sig_col: str,
         economizer_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.oat_err_thres = oat_err_thres
@@ -661,7 +661,7 @@ class FaultConditionTen:
         mat_col: str,
         cooling_sig_col: str,
         economizer_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
 
         self.oat_err_thres = oat_err_thres
@@ -720,7 +720,7 @@ class FaultConditionEleven:
         oat_col: str,
         cooling_sig_col: str,
         economizer_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.oat_err_thres = oat_err_thres
@@ -780,7 +780,7 @@ class FaultConditionTwelve:
         mat_col: str,
         cooling_sig_col: str,
         economizer_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.mix_err_thres = mix_err_thres
@@ -853,7 +853,7 @@ class FaultConditionThirteen:
         satsp_col: str,
         cooling_sig_col: str,
         economizer_sig_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.sat_degf_err_thres = sat_degf_err_thres
         self.ahu_min_oa_dpr = ahu_min_oa_dpr
@@ -915,7 +915,7 @@ class FaultConditionFourteen:
         heating_sig_col: str,
         economizer_sig_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.coil_temp_enter_err_thres = coil_temp_enter_err_thres
@@ -996,7 +996,7 @@ class FaultConditionFifteen:
         heating_sig_col: str,
         economizer_sig_col: str,
         supply_vfd_speed_col: str,
-        troubleshoot=False
+        troubleshoot: bool=False
     ):
         self.delta_supply_fan = delta_supply_fan
         self.coil_temp_enter_err_thres = coil_temp_enter_err_thres

@@ -1984,7 +1984,7 @@ class FaultCodeSevenReport:
 
 
 class FaultCodeEightReport:
-    """Class provides the definitions for Fault Code 12 Report."""
+    """Class provides the definitions for Fault Code 8 Report."""
 
     def __init__(
         self,
