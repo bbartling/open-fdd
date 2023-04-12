@@ -77,5 +77,3 @@ if samples is not None:
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
         )
-
-        st.write(report.report)
