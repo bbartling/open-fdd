@@ -1,8 +1,8 @@
 
 import subprocess,sys
 
-# tested on Windows 10
-# python 3.10.6
+# tested on Windows 10 python 3.10.6
+# py -3.10 run_all.py
 
 runs = [
     'py ./fc1.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc1_report',

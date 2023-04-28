@@ -8,6 +8,8 @@ import streamlit as st
 import faults
 import reports
 
+# streamlit run .\ahu_web_interface.py
+
 st.title("G36 Fault Condition Analysis")
 st.subheader("Select a rule to check and upload a CSV file to run the analysis")
 
