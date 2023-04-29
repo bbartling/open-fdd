@@ -8,7 +8,6 @@ from reports import *
 
 import run_all_config
 
-# py -3.10 ./run_all.py -i ./ahu_data/Report_AHU7_Winter.csv -e 6
 
 AHU_NAME = run_all_config.AHU_NAME
 INDEX_COL_NAME = run_all_config.INDEX_COL_NAME
@@ -336,15 +335,17 @@ def apply_faults_and_generate_reports(df, excludes):
             counter += 1
 
         else:
-            copied_df = df.copy()
-            # if not excludes:
-            df2 = fault.apply(copied_df)
-            print("Success on fault ", counter)
-            report_maker(report, counter, df2)
-            print("Success on report ", counter)
-            counter += 1
+            try:
+                copied_df = df.copy()
+                df2 = fault.apply(copied_df)
+                print("Success on fault ", counter)
+                report_maker(report, counter, df2)
+                print("Success on report ", counter)
+                counter += 1
+            except Exception as e:
+                print(f"Error on fault rule {counter}! - {e}")
 
-    print("ALL DONE!!")
+    print("SUCCESS!!")
 
 
 if __name__ == "__main__":
@@ -361,16 +362,19 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    df = (
-        pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True)
-        .rolling("5T")
-        .mean()
-    )
+
+    df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True)
+    time_diff = df.index.to_series().diff().iloc[1:]
+    max_diff = time_diff.max()
+
+    if max_diff > pd.Timedelta(minutes=5):
+        print(f"Warning: Maximum time difference between consecutive timestamps is {max_diff}.")
+        print("SKIPPING 5 MINUTE ROLLING AVERAGE COMPUTATION OF DATA")
+    else:
+        df = df.rolling("5T").mean()
 
     if CONSTANT_LEAVE_TEMP_SP:
         df[SUPPLY_AIR_TEMP_SETPOINT_COL] = CONSTANT_LEAVE_TEMP_SP_VAL
-
-    print(df.head())
 
     # Apply fault conditions and generate reports
     apply_faults_and_generate_reports(df, excludes=args.exclude)

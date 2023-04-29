@@ -26,7 +26,7 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 * sensor summary statistics filtered for when the AHU fan is running
 
 
-###### To run all AHU rules
+###### To run all AHU rules:
 ```bash
 $ git clone https://github.com/bbartling/open-fdd.git
 $ cd open-fdd
