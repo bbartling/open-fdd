@@ -1,9 +1,8 @@
 # open-fdd
 
-## This is a Python based FDD tool for running fault equations defined by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. G36 for air handling units (AHU's) there are 15 fault equations the first 13 of which are broken into seperate .py files, see ahu sub folder.
-
-## Reference AHU fault equations here defined by ASHRAE Guideline 36:
-https://github.com/bbartling/open-fdd/tree/master/air_handling_unit/images
+## This is a Python based FDD tool for running fault equations defined by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. G36 for air handling units (AHU's) there are 15 fault equations the first 13 of which are broken into seperate .py files, see ahu sub folder. 
+Reference AHU fault equations and algorithm threshold parameters that are dependent on engineering units (I.E., Imperial Vs SI) here in your CSV file here:
+* https://github.com/bbartling/open-fdd/tree/master/air_handling_unit/images
 
 ###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
 ```python
@@ -29,11 +28,13 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 
 ###### To run all AHU rules
 ```bash
+$ git clone https://github.com/bbartling/open-fdd.git
+$ cd open-fdd
 $ pip install -r requirements.txt
 $ cd air_handling_unit
 ```
 
-###### Modify with text editor run_all_config.py for proper column names in your CSV file, G36 fault equation threshold parameters for proper units your CSV file contains (reference params images), and any necessary Boolean flag for troubleshooting.
+###### Modify with text editor `run_all_config.py` for proper column names in your CSV file, G36 fault equation threshold parameters for proper units your CSV file contains (reference params images), and any necessary Boolean flag for troubleshooting.
 ```python
 """
 input CSV file is the -i arg
@@ -44,7 +45,7 @@ Tested on Windows 10 Python 3.10.6
 Run like this to exclude fault 6 4 and 9 for example
 $ py -3.10 ./run_all.py -i ./ahu_data/Report_AHU7_Winter.csv -e 6 4 9
 
-Output reports will be in the final_report directory
+Output Word Doc reports will be in the final_report directory
 """
 ```
 
