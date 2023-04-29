@@ -64,8 +64,6 @@ for col in df.columns:
 
 print(df.describe())
 
-df["AHU: Heating Coil Valve Control Signal"] = df["AHU: Heating Coil Valve Control Signal"].astype(
-    float)
 
 # return a whole new dataframe with fault flag as new col
 # data is resampled for hourly averages in df2

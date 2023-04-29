@@ -9,17 +9,6 @@ $ pytest tests/unit/test_ahu_fc5.py -rP
 SAT too low; should be higher than MAT in HTG MODE
 '''
 
-'''
-def float_int_check_err(col):
-    err_str = " column failed with a check that the data is a float"
-    return str(col) + err_str
-
-
-def float_max_check_err(col):
-    err_str = " column failed with a check that the data is a float between 0.0 and 1.0"
-    return str(col) + err_str
-'''
-
 TEST_MIX_DEGF_ERR_THRES = 2.
 TEST_SUPPLY_DEGF_ERR_THRES = 2.
 TEST_DELTA_T_SUPPLY_FAN = 5.

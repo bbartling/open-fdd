@@ -11,7 +11,7 @@ mix air temp higher than out temp
 
 
 TEST_OUTDOOR_DEGF_ERR_THRES = 5.
-TEST_MIX_DEGF_ERR_THRES = 5.
+TEST_MIX_DEGF_ERR_THRES = 2.
 TEST_RETURN_DEGF_ERR_THRES = 2.
 TEST_MIX_TEMP_COL = "mix_air_temp"
 TEST_RETURN_TEMP_COL = "return_air_temp"
