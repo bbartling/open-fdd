@@ -435,34 +435,41 @@ class Report:
         self.document.save(self.path)
 
 
-# to run an example of this, run the following:
+# # in the old version of the repo, this would produce a report:
 
-# ADJUST this param for the AHU MIN OA damper stp
-AHU_MIN_OA = 20
+# import os
 
-# G36 params shouldnt need adjusting
-# error threshold parameters
-OAT_DEGF_ERR_THRES = 5
-MAT_DEGF_ERR_THRES = 5
+# from faults import FaultConditionTen
+# from reports_init_rewrite import Report
 
-from faults import FaultConditionTen
+# # ADJUST this param for the AHU MIN OA damper stp
+# AHU_MIN_OA = 20
 
-_fc10 = FaultConditionTen(
-    OAT_DEGF_ERR_THRES,
-    MAT_DEGF_ERR_THRES,
-    "mat",
-    "oat",
-    "clg",
-    "economizer_sig",
-)
+# # G36 params shouldnt need adjusting
+# # error threshold parameters
+# OAT_DEGF_ERR_THRES = 5
+# MAT_DEGF_ERR_THRES = 5
 
-FAULT_NUM = 10
+# from faults import FaultConditionTen
 
-df = pd.read_csv(f'fc{FAULT_NUM}_data.csv')
+# _fc10 = FaultConditionTen(
+#     OAT_DEGF_ERR_THRES,
+#     MAT_DEGF_ERR_THRES,
+#     "mat",
+#     "oat",
+#     "clg",
+#     "economizer_sig",
+# )
 
-path = os.path.join(os.path.curdir, "final_report")
-if not os.path.exists(path):
-    os.makedirs(path)
+# FAULT_NUM = 10
 
-report = Report(FAULT_NUM, df2, os.path.join(path, f"test_fc{FAULT_NUM}.docx"))
-report.save_report()
+# df = pd.read_csv(f'fc{FAULT_NUM}_fake_data.csv')
+
+# df2 = _fc10.apply(df)
+
+# path = os.path.join(os.path.curdir, "final_report")
+# if not os.path.exists(path):
+#     os.makedirs(path)
+
+# report = Report(FAULT_NUM, df2, os.path.join(path, f"test_fc{FAULT_NUM}.docx"))
+# report.save_report()
