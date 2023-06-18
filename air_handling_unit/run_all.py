@@ -329,9 +329,9 @@ def apply_faults_and_generate_reports(df, excludes):
         print(f"Starting Fault Equation {counter}")
 
         if counter in excludes:
-            print("**************************")
+            print()
             print("SKIPPING FAULT EQUATION ", counter)
-            print("**************************")
+            print()
             counter += 1
 
         else:
@@ -344,6 +344,7 @@ def apply_faults_and_generate_reports(df, excludes):
                 counter += 1
             except Exception as e:
                 print(f"Error on fault rule {counter}! - {e}")
+                counter += 1
 
     print("SUCCESS!!")
 
@@ -358,6 +359,7 @@ if __name__ == "__main__":
         required=False,
         nargs="+",
         type=int,
+        default=[],
         help="Fault(s) to ignore",
     )
     args = parser.parse_args()

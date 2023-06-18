@@ -29,6 +29,13 @@ class HelperUtils:
         except:
             return False
 
+    def convert_to_float(self, df, col):
+        if not pdtypes.is_float_dtype(df[col]):
+            try:
+                df[col] = df[col].astype(float)
+            except ValueError:
+                raise TypeError(self.float_int_check_err(col))
+        return df
 
 class FaultConditionOne:
     """Class provides the definitions for Fault Condition 1."""
@@ -64,12 +71,16 @@ class FaultConditionOne:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.supply_vfd_speed_col]:
+        columns_to_check = [self.supply_vfd_speed_col]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["static_check_"] = (
             df[self.duct_static_col]
@@ -126,12 +137,16 @@ class FaultConditionTwo:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.supply_vfd_speed_col]:
+        columns_to_check = [self.supply_vfd_speed_col]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["mat_check"] = df[self.mat_col] + self.mix_degf_err_thres
         df["temp_min_check"] = np.minimum(
@@ -190,12 +205,16 @@ class FaultConditionThree:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.supply_vfd_speed_col]:
+        columns_to_check = [self.supply_vfd_speed_col]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["mat_check"] = df[self.mat_col] - self.mix_degf_err_thres
         df["temp_min_check"] = np.maximum(
@@ -251,28 +270,34 @@ class FaultConditionFour:
                     df[col].max(),
                     "- col type: ",
                     df[col].dtypes,
+                    "- Pandas is float check: ",
+                    pdtypes.is_float_dtype(df[col])
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.economizer_sig_col,
             self.heating_sig_col,
             self.cooling_sig_col,
             self.supply_vfd_speed_col,
             self.ahu_min_oa_dpr,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
+        print("Compiling data in Pandas this one takes a while to run...")
+        
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
         df["heating_mode"] = (
             (df[self.heating_sig_col] > 0)
@@ -349,13 +374,17 @@ class FaultConditionFive:
                     "- col type: ",
                     df[col].dtypes,
                 )
-        # check analog ouputs [data with units of %] are floats only
-        for col in [self.supply_vfd_speed_col, self.heating_sig_col]:
+        # check analog ouputs [data with units of %] are floats only            
+        columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["sat_check"] = df[self.sat_col] + self.supply_degf_err_thres
         df["mat_check"] = (
@@ -433,25 +462,27 @@ class FaultConditionSix:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.ahu_min_oa_dpr,
             self.supply_vfd_speed_col,
             self.economizer_sig_col,
             self.heating_sig_col,
             self.cooling_sig_col,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         # create helper columns
         df["rat_minus_oat"] = abs(df[self.rat_col] - df[self.oat_col])
@@ -529,12 +560,16 @@ class FaultConditionSeven:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.supply_vfd_speed_col, self.heating_sig_col]:
+        columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["fc7_flag"] = (
             (df[self.sat_col] < df[self.satsp_col] - self.sat_degf_err_thres)
@@ -587,19 +622,25 @@ class FaultConditionEight:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.economizer_sig_col, self.cooling_sig_col, self.ahu_min_oa_dpr]:
+        columns_to_check = [
+            self.economizer_sig_col, 
+            self.cooling_sig_col, 
+            self.ahu_min_oa_dpr
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["sat_fan_mat"] = abs(
             df[self.sat_col] - self.delta_supply_fan - df[self.mat_col]
@@ -663,19 +704,25 @@ class FaultConditionNine:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.economizer_sig_col, self.cooling_sig_col, self.ahu_min_oa_dpr]:
+        columns_to_check = [
+            self.economizer_sig_col, 
+            self.cooling_sig_col, 
+            self.ahu_min_oa_dpr
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["oat_minus_oaterror"] = df[self.oat_col] - self.oat_err_thres
         df["satsp_delta_saterr"] = (
@@ -732,15 +779,19 @@ class FaultConditionTen:
                     df[col].dtypes,
                 )
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.economizer_sig_col,
             self.cooling_sig_col,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["abs_mat_minus_oat"] = abs(df[self.mat_col] - df[self.oat_col])
         df["mat_oat_sqrted"] = np.sqrt(
@@ -800,15 +851,19 @@ class FaultConditionEleven:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.economizer_sig_col,
             self.cooling_sig_col,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if not pdtypes.is_float_dtype(df[col]):
-                raise TypeError(HelperUtils().float_int_check_err(col))
+                df = helper.convert_to_float(df, col)
 
             if df[col].max() > 1.0:
-                raise TypeError(HelperUtils().float_max_check_err(col))
+                raise TypeError(helper.float_max_check_err(col))
 
         df["oat_plus_oaterror"] = df[self.oat_col] + self.oat_err_thres
         df["satsp_delta_saterr"] = (
@@ -870,19 +925,25 @@ class FaultConditionTwelve:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.economizer_sig_col, self.cooling_sig_col, self.ahu_min_oa_dpr]:
+        columns_to_check = [
+            self.economizer_sig_col, 
+            self.cooling_sig_col, 
+            self.ahu_min_oa_dpr
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["sat_minus_saterr_delta_supply_fan"] = (
             df[self.sat_col] - self.supply_err_thres - self.delta_supply_fan
@@ -945,19 +1006,25 @@ class FaultConditionThirteen:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [self.economizer_sig_col, self.cooling_sig_col, self.ahu_min_oa_dpr]:
+        columns_to_check = [
+            self.economizer_sig_col, 
+            self.cooling_sig_col, 
+            self.ahu_min_oa_dpr
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["sat_greater_than_sp_calc"] = (
             df[self.sat_col] > df[self.satsp_col] + self.sat_degf_err_thres
@@ -1023,24 +1090,26 @@ class FaultConditionFourteen:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.ahu_min_oa_dpr,
             self.cooling_sig_col,
             self.heating_sig_col,
             self.economizer_sig_col,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["clg_delta_temp"] = (
             df[self.clg_coil_enter_temp_col] - df[self.clg_coil_leave_temp_col]
@@ -1115,24 +1184,26 @@ class FaultConditionFifteen:
                 )
 
         # check analog ouputs [data with units of %] are floats only
-        for col in [
+        columns_to_check = [
             self.ahu_min_oa_dpr,
             self.cooling_sig_col,
             self.heating_sig_col,
             self.economizer_sig_col,
-        ]:
+        ]
+
+        helper = HelperUtils()
+
+        for col in columns_to_check:
             if col == self.ahu_min_oa_dpr:
-                if not HelperUtils().isfloat(col):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
+                if not helper.isfloat(col):
+                    raise TypeError(helper.float_int_check_err(col))
 
-                if not HelperUtils().isLessThanOnePointOne(col):
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                if not helper.isLessThanOnePointOne(col):
+                    raise TypeError(helper.float_max_check_err(col))
             else:
-                if not pdtypes.is_float_dtype(df[col]):
-                    raise TypeError(HelperUtils().float_int_check_err(col))
-
+                df = helper.convert_to_float(df, col)
                 if df[col].max() > 1.0:
-                    raise TypeError(HelperUtils().float_max_check_err(col))
+                    raise TypeError(helper.float_max_check_err(col))
 
         df["htg_delta_temp"] = (
             df[self.htg_coil_enter_temp_col] - df[self.htg_coil_leave_temp_col]
