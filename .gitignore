@@ -8,6 +8,10 @@
 *.docx
 *.csv
 
+*.pkl
+/air_handling_unit/ml_experiment/*.pkl
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
