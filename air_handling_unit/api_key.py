@@ -1,0 +1,1 @@
+API_KEY = 'paste_in_chatgpt_api_key_here'

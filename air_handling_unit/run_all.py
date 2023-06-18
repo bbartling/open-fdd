@@ -1,11 +1,11 @@
 import argparse
 import os
-
 import pandas as pd
 
 from faults import *
 from reports import *
 
+from api_key import API_KEY
 import run_all_config
 
 
@@ -346,7 +346,7 @@ def apply_faults_and_generate_reports(df, excludes):
                 print(f"Error on fault rule {counter}! - {e}")
                 counter += 1
 
-    print("SUCCESS!!")
+    print("All Done...")
 
 
 if __name__ == "__main__":

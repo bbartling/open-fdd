@@ -1,16 +1,12 @@
-import math
 import os
 import time
 from io import BytesIO
-import numpy as np
-
-import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import pandas as pd
 from docx import Document
 from docx.shared import Inches
 
-from faults import FaultConditionOne
+
 
 
 class FaultCodeOneReport:
@@ -24,6 +20,7 @@ class FaultCodeOneReport:
         duct_static_col: str,
         supply_vfd_speed_col: str,
         duct_static_setpoint_col: str,
+        api_key: str
     ):
         self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
         self.vfd_speed_percent_max = vfd_speed_percent_max
@@ -31,6 +28,7 @@ class FaultCodeOneReport:
         self.duct_static_col = duct_static_col
         self.duct_static_setpoint_col = duct_static_setpoint_col
         self.fan_vfd_speed_col = supply_vfd_speed_col
+        self.api_key = api_key
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
