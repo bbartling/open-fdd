@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from docx import Document
 from docx.shared import Inches
+import openai
 
 
-
-
+        
 class FaultCodeOneReport:
     """Class provides the definitions for Fault Code 1 Report."""
 
@@ -29,6 +29,74 @@ class FaultCodeOneReport:
         self.duct_static_setpoint_col = duct_static_setpoint_col
         self.fan_vfd_speed_col = supply_vfd_speed_col
         self.api_key = api_key
+        openai.api_key = self.api_key
+        self.max_tokens = 3000
+        
+    @staticmethod
+    def generate_text(prompt, max_tokens):
+        response = openai.Completion.create(
+            engine='text-davinci-003',
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=0.7,
+            n=1,
+            stop=None,
+            timeout=10
+        )
+        return response.choices[0].text.strip()
+    
+    def generate_insights(self,
+                        total_days,
+                        total_hours,
+                        hours_fc1_mode,
+                        percent_true,
+                        percent_false,
+                        flag_true_duct_static,
+                        hours_motor_runtime,
+                        fan_vfd_speed_describe,
+                        duct_static_describe,
+                        duct_static_setpoint_describe
+                        ):
+        insights_prompt = '''
+        The fault detection dataset tables an air handling unit (AHU) supply fan and duct static pressure. The fault was generated in the dataset when the fan is
+        running near 100 percent speed and the duct static pressure in the duct system is not meeting setpoint. 
+        Analyzing the data allows us to identify use patterns in how the air handling unit operates over time as well as any potential mechanical issues.
+
+        total days of data: {total_days}
+        total hours of data: {total_hours}
+        percent of time when fault is true: {percent_true}
+        percent of time when fault is false: {percent_false}
+        averaged duct static pressure when the fault is true: {flag_true_duct_static}
+        calculated fan motor run time: {hours_motor_runtime}
+        summary statistics of fan speed in percent data: {fan_vfd_speed_describe}
+        summary statistics of duct static pressure in engineering units: {duct_static_describe}
+        summary statistics of duct static pressure setpoint in engineering units: {duct_static_setpoint_describe}
+
+        Provide a paragraph of written insights into how a virtual AI-powered analyst that specializes in the HVAC systems operations might 
+        describe the air handling unit operations in as well as trends provided in the faults calculated and summary statistics of the sensor data. Assume the reader
+        does not know anything about HVAC and needs to be described how a variable fan controls to a duct static pressure sensor at beginner level of understanding.
+        If the faults are high, recommend this AHU may have mechanical issues of not being duct static pressure setpoint else if there is
+        good data and faults are low, recommend this AHU appears to operate fine meeting duct static pressure requirements. If total_hours is approximately equal
+        to the hours_motor_runtime, recommend a schedule placed on the AHU fan could save electrical energy consumption. If the duct_static_setpoint_col
+        summary statistics reveal the duct static setpoint not changing, recommend a duct static pressure reset to save electrical energy
+        from the fan motor consumption.
+        '''
+
+        insights = self.generate_text(insights_prompt.format(
+            total_days=total_days,
+            total_hours=total_hours,
+            hours_fc1_mode=hours_fc1_mode,
+            percent_true=percent_true,
+            percent_false=percent_false,
+            flag_true_duct_static=flag_true_duct_static,
+            hours_motor_runtime=hours_motor_runtime,
+            fan_vfd_speed_describe=fan_vfd_speed_describe,
+            duct_static_describe=duct_static_describe,
+            duct_static_setpoint_describe=duct_static_setpoint_describe
+        ), max_tokens=self.max_tokens)
+        print(insights)
+        return insights
+    
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
@@ -144,7 +212,7 @@ class FaultCodeOneReport:
             width=Inches(6),
         )
         document.add_heading("Dataset Statistics", level=2)
-
+        
         (
             total_days,
             total_hours,
@@ -155,6 +223,24 @@ class FaultCodeOneReport:
             hours_motor_runtime,
             df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
+
+        fan_vfd_speed_describe = str(df_motor_on_filtered[self.fan_vfd_speed_col].describe())
+        duct_static_describe = str(df_motor_on_filtered[self.duct_static_col].describe())
+        duct_static_setpoint_describe = str(df_motor_on_filtered[self.duct_static_setpoint_col].describe())
+
+        insights = self.generate_insights(
+            total_days=total_days,
+            total_hours=total_hours,
+            hours_fc1_mode=hours_fc1_mode,
+            percent_true=percent_true,
+            percent_false=percent_false,
+            flag_true_duct_static=flag_true_duct_static,
+            hours_motor_runtime=hours_motor_runtime,
+            fan_vfd_speed_describe=fan_vfd_speed_describe,
+            duct_static_describe=duct_static_describe,
+            duct_static_setpoint_describe=duct_static_setpoint_describe
+        )
+        
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
@@ -235,45 +321,37 @@ class FaultCodeOneReport:
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
-            str(df_motor_on_filtered[self.fan_vfd_speed_col].describe()))
+            fan_vfd_speed_describe
+            )
 
         # ADD in Summary Statistics of duct pressure
         document.add_heading("Duct Pressure", level=3)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
-            str(df_motor_on_filtered[self.duct_static_col].describe()))
+            duct_static_describe
+            )
 
         # ADD in Summary Statistics of duct pressure
         document.add_heading("Duct Pressure Setpoint", level=3)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
-            str(df_motor_on_filtered[self.duct_static_setpoint_col].describe()))
+            duct_static_setpoint_describe
+            )
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
 
-        if percent_true > 5.0:
+        try:
             paragraph.add_run(
-                "The percent True metric that represents the amount of time for when the fault flag is True is high indicating the fan is running at high speeds and appearing to not generate good duct static pressure"
+                f"{insights}"
             )
-
-        else:
+        except Exception as e:
             paragraph.add_run(
-                "The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the fan appears to generate good duct static pressure"
+                f"Failed to connect to AI service for suggestions - {e}."
             )
-
-        paragraph = document.add_paragraph()
-        paragraph.style = "List Bullet"
-
-        if df[self.duct_static_setpoint_col].std() < 0.1:
-            paragraph.add_run(
-                "No duct static pressure setpoint reset detected consider implementing a reset strategy to save AHU fan energy ")
-
-        else:
-            paragraph.add_run("Duct pressure reset detected (Good)")
 
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")

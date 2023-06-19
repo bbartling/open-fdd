@@ -72,6 +72,7 @@ def apply_faults_and_generate_reports(df, excludes):
         DUCT_STATIC_COL,
         SUPPLY_VFD_SPEED_COL,
         DUCT_STATIC_SETPOINT_COL,
+        API_KEY
     )
 
     _fc2 = FaultConditionTwo(
@@ -335,6 +336,14 @@ def apply_faults_and_generate_reports(df, excludes):
             counter += 1
 
         else:
+            
+            copied_df = df.copy()
+            df2 = fault.apply(copied_df)
+            print("Success on fault ", counter)
+            report_maker(report, counter, df2)
+            print("Success on report ", counter)
+            counter += 1
+            '''
             try:
                 copied_df = df.copy()
                 df2 = fault.apply(copied_df)
@@ -345,7 +354,8 @@ def apply_faults_and_generate_reports(df, excludes):
             except Exception as e:
                 print(f"Error on fault rule {counter}! - {e}")
                 counter += 1
-
+            '''
+            
     print("All Done...")
 
 
