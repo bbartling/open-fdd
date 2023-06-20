@@ -7,8 +7,6 @@ from docx import Document
 from docx.shared import Inches
 import openai
 
-
-        
 class FaultCodeOneReport:
     """Class provides the definitions for Fault Code 1 Report."""
 
@@ -31,32 +29,28 @@ class FaultCodeOneReport:
         self.api_key = api_key
         openai.api_key = self.api_key
         self.max_tokens = 3000
-        
-    @staticmethod
-    def generate_text(prompt, max_tokens):
-        response = openai.Completion.create(
-            engine='text-davinci-003',
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=0.7,
-            n=1,
-            stop=None,
-            timeout=10
+        self.completion_model = 'gpt-3.5-turbo'
+
+    def get_completion(self, messages):
+        response = openai.ChatCompletion.create(
+            model=self.completion_model,
+            messages=messages,
+            temperature=0
         )
-        return response.choices[0].text.strip()
-    
+        return response.choices[0].message['content']
+
     def generate_insights(self,
-                        total_days,
-                        total_hours,
-                        hours_fc1_mode,
-                        percent_true,
-                        percent_false,
-                        flag_true_duct_static,
-                        hours_motor_runtime,
-                        fan_vfd_speed_describe,
-                        duct_static_describe,
-                        duct_static_setpoint_describe
-                        ):
+                          total_days,
+                          total_hours,
+                          hours_fc1_mode,
+                          percent_true,
+                          percent_false,
+                          flag_true_duct_static,
+                          hours_motor_runtime,
+                          fan_vfd_speed_describe,
+                          duct_static_describe,
+                          duct_static_setpoint_describe
+                          ):
         insights_prompt = '''
         The fault detection dataset tables an air handling unit (AHU) supply fan and duct static pressure. The fault was generated in the dataset when the fan is
         running near 100 percent speed and the duct static pressure in the duct system is not meeting setpoint. 
@@ -82,21 +76,28 @@ class FaultCodeOneReport:
         from the fan motor consumption.
         '''
 
-        insights = self.generate_text(insights_prompt.format(
-            total_days=total_days,
-            total_hours=total_hours,
-            hours_fc1_mode=hours_fc1_mode,
-            percent_true=percent_true,
-            percent_false=percent_false,
-            flag_true_duct_static=flag_true_duct_static,
-            hours_motor_runtime=hours_motor_runtime,
-            fan_vfd_speed_describe=fan_vfd_speed_describe,
-            duct_static_describe=duct_static_describe,
-            duct_static_setpoint_describe=duct_static_setpoint_describe
-        ), max_tokens=self.max_tokens)
+        messages = [
+            {"role": "system", "content": "You are an AI powered HVAC specialist."},
+            {"role": "user", "content": insights_prompt.format(
+                total_days=total_days,
+                total_hours=total_hours,
+                hours_fc1_mode=hours_fc1_mode,
+                percent_true=percent_true,
+                percent_false=percent_false,
+                flag_true_duct_static=flag_true_duct_static,
+                hours_motor_runtime=hours_motor_runtime,
+                fan_vfd_speed_describe=fan_vfd_speed_describe,
+                duct_static_describe=duct_static_describe,
+                duct_static_setpoint_describe=duct_static_setpoint_describe
+            )}
+        ]
+
+        response = self.get_completion(messages)
+        start_index = response.find('AI:')
+        insights = response[start_index + 4:].strip()
+
         print(insights)
         return insights
-    
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
@@ -192,14 +193,34 @@ class FaultCodeOneReport:
         document = Document()
         document.add_heading("Fault Condition One Report", 0)
 
-        p = document.add_paragraph(
-            """Fault condition one of ASHRAE Guideline 36 is related to flagging poor performance of a AHU variable supply fan attempting to control to a duct pressure setpoint. Fault condition equation as defined by ASHRAE:"""
+        document.add_paragraph(
+            """Duct static pressure too low with fan at full speed."""
         )
 
         document.add_picture(
             os.path.join(os.path.curdir, "images", "fc1_definition.png"),
             width=Inches(6),
         )
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"DSP: Duct Static Pressure")
+
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"DPSP: Duct Static Pressure Setpoint")
+        
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"VFDSPD: VFD Speed Reference in Percent")
+        
+        paragraph = document.add_paragraph()
+        paragraph.style = "List Bullet"
+        paragraph.add_run(
+            f"eVFDSPD: VFD Speed Reference Error Threshold")
+        
         document.add_heading("Dataset Plot", level=2)
 
         fig = self.create_fan_plot(df, output_col=output_col)
@@ -212,7 +233,7 @@ class FaultCodeOneReport:
             width=Inches(6),
         )
         document.add_heading("Dataset Statistics", level=2)
-        
+
         (
             total_days,
             total_hours,
@@ -240,7 +261,7 @@ class FaultCodeOneReport:
             duct_static_describe=duct_static_describe,
             duct_static_setpoint_describe=duct_static_setpoint_describe
         )
-        
+
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
@@ -322,7 +343,7 @@ class FaultCodeOneReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             fan_vfd_speed_describe
-            )
+        )
 
         # ADD in Summary Statistics of duct pressure
         document.add_heading("Duct Pressure", level=3)
@@ -330,7 +351,7 @@ class FaultCodeOneReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             duct_static_describe
-            )
+        )
 
         # ADD in Summary Statistics of duct pressure
         document.add_heading("Duct Pressure Setpoint", level=3)
@@ -338,7 +359,7 @@ class FaultCodeOneReport:
         paragraph.style = "List Bullet"
         paragraph.add_run(
             duct_static_setpoint_describe
-            )
+        )
 
         document.add_heading("Suggestions based on data analysis", level=2)
         paragraph = document.add_paragraph()

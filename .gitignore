@@ -5,12 +5,11 @@
 
 /__pycache__
 
-*.docx
+# *.docx
 *.csv
 
 *.pkl
 /air_handling_unit/ml_experiment/*.pkl
-
 /air_handling_unit/api_key.py
 
 # Byte-compiled / optimized / DLL files
