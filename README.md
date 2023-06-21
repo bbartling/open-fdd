@@ -3,23 +3,7 @@
 ## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
 
-* NEW JUNE 2023 - AI powered suggestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions as the prompt engineering is a work in progress! See example string returned from Chat GPT for fault equation one which is also in the directory `air_handling_unit/final_reports`.
-
-### Example report
-![Alt text](/air_handling_unit/images/fc1_report_screenshot.png)
-
-### Example Chat GPT AI response
-```python
-
-'''
-an AI-powered HVAC specialist, I have analyzed the data provided on the air handling unit (AHU) supply fan and duct static pressure. The AHU operates by controlling the speed of the supply fan to maintain a set duct static pressure. The dataset shows that the AHU has been operating for a total of 322 days, with a total of 7727.98 hours of data. The fault detection dataset shows that the fault occurs when the fan is running near 100 percent speed and the duct static pressure in the duct system is not meeting setpoint. 
-
-The summary statistics of the fan speed in percent data show that the fan speed ranges from 62% to 100%, with an average of 71.67%. The summary statistics of the duct static pressure in engineering units show that the duct static pressure ranges from -0.01 to 0.12, with an average of 0.05. The summary statistics of the duct static pressure setpoint in engineering units show that the setpoint is constant at 0.04.
-
-Based on the data, if the faults are high, it may indicate that the AHU has mechanical issues and is not meeting the duct static pressure setpoint. On the other hand, if the faults are low, it suggests that the AHU is operating fine and meeting the duct static pressure requirements. If the total hours of operation are approximately equal to the hours of motor runtime, it may be recommended to schedule the AHU fan to save electrical energy consumption. Additionally, if the duct static setpoint is not changing, it may be recommended to reset the duct static pressure to save electrical energy from the fan motor consumption. Overall, analyzing the data allows us to identify usage patterns in how the AHU operates over time and any potential mechanical issues.
-'''
-```
-
+* NEW JUNE 2023 - AI powered suggestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions as the prompt engineering is a work in progress! See example reports in the directory `air_handling_unit/final_reports` where Chat GPT AI is providing all of the `Suggestions based on data analysis` on the bottom of the report bodys.
 
 ###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
 ```python
@@ -42,8 +26,12 @@ def apply(self, df: pd.DataFrame) -> pd.DataFrame:
 * a histagram representing the hour of the day for when the fault equation is `True`.
 * sensor summary statistics filtered for when the AHU fan is running
 
+### Example Word Doc Report
+![Alt text](/air_handling_unit/images/fc1_report_screenshot1.png)
+![Alt text](/air_handling_unit/images/fc1_report_screenshot2.png)
+![Alt text](/air_handling_unit/images/fc1_report_screenshot3.png)
 
-###### To run all AHU rules:
+### Get Setup
 ```bash
 $ git clone https://github.com/bbartling/open-fdd.git
 $ cd open-fdd
@@ -51,21 +39,17 @@ $ pip install -r requirements.txt
 $ cd air_handling_unit
 ```
 
-###### Modify with text editor `run_all_config.py` for proper column names in your CSV file, G36 fault equation threshold parameters for proper units your CSV file contains (reference params images), and any necessary Boolean flag for troubleshooting.
+### Modify with text editor `run_all_config.py`
+* set proper column names in your CSV file 
+* threshold params need to be engineering unit specific for Imperial or SI units, see `params` screenshot in the images directory
+* input arg for CSV file path is `-i`
+* input arg for 'do' is `-d` which represents which fault to 'do'
+* tested on Windows 10 and Ubuntu 20 LTS on Python 3.10
+* output Word Doc reports will be in the final_report directory
+
 ```python
-"""
-input CSV file is the -i arg
-'do' is an arg used with -d to specify which fault rules and reports you want generated
-
-Tested on Windows 10 and Ubuntu 20 LTS on Python 3.10
-
-Run like this to 'do' fault 1 and 2 for example
-"""
+# 'do' fault 1 and 2 for example
 $ python ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 1 2
-
-"""
-Output Word Doc reports will be in the final_report directory
-"""
 ```
 
 ## Fault equation descriptions
