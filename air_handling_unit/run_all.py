@@ -5,9 +5,13 @@ import pandas as pd
 from faults import *
 from reports import *
 
+from reports.report_fc1 import FaultCodeOneReport
+from reports.report_fc2 import FaultCodeTwoReport
+from reports.report_fc3 import FaultCodeThreeReport
+from reports.report_fc4 import FaultCodeFourReport
+
 from api_key import API_KEY
 import run_all_config
-
 
 AHU_NAME = run_all_config.AHU_NAME
 INDEX_COL_NAME = run_all_config.INDEX_COL_NAME
@@ -44,17 +48,19 @@ TROUBLESHOOT_MODE = run_all_config.TROUBLESHOOT_MODE
 def fault_applier(_fc, df):
     return _fc.apply(df)
 
-
 def report_maker(report, counter, df):
+    print("report maker called", report, counter)
     report_name = f"{AHU_NAME}_fc{str(counter)}_report"
     document = report.create_report(report_name, df)
     path = os.path.join(os.path.curdir, "final_report")
     if not os.path.exists(path):
         os.makedirs(path)
     document.save(os.path.join(path, f"{report_name}.docx"))
+    print(f"Success on report maker {report_name}")
+    return counter + 1  # Update the counter and return the updated value
 
 
-def apply_faults_and_generate_reports(df, excludes):
+def apply_faults_and_generate_reports(df, to_do):
     _fc1 = FaultConditionOne(
         VFD_SPEED_PERCENT_ERR_THRES,
         VFD_SPEED_PERCENT_MAX,
@@ -72,7 +78,7 @@ def apply_faults_and_generate_reports(df, excludes):
         DUCT_STATIC_COL,
         SUPPLY_VFD_SPEED_COL,
         DUCT_STATIC_SETPOINT_COL,
-        API_KEY
+        API_KEY,
     )
 
     _fc2 = FaultConditionTwo(
@@ -94,6 +100,7 @@ def apply_faults_and_generate_reports(df, excludes):
         RETURN_AIR_TEMP_COL,
         OUTSIDE_AIR_TEMP_COL,
         SUPPLY_VFD_SPEED_COL,
+        API_KEY,
     )
 
     _fc3 = FaultConditionThree(
@@ -115,6 +122,7 @@ def apply_faults_and_generate_reports(df, excludes):
         RETURN_AIR_TEMP_COL,
         OUTSIDE_AIR_TEMP_COL,
         SUPPLY_VFD_SPEED_COL,
+        API_KEY,
     )
 
     _fc4 = FaultConditionFour(
@@ -127,7 +135,7 @@ def apply_faults_and_generate_reports(df, excludes):
         troubleshoot=TROUBLESHOOT_MODE,
     )
 
-    _fc4_report = FaultCodeFourReport(DELTA_OS_MAX)
+    _fc4_report = FaultCodeFourReport(DELTA_OS_MAX, API_KEY)
 
     _fc5 = FaultConditionFive(
         MIX_AIR_TEMP_ERR_THRES,
@@ -322,40 +330,30 @@ def apply_faults_and_generate_reports(df, excludes):
         (_fc13, _fc13_report),
     ]
 
-    print("EXCLUDES ", excludes)
+    counter = 1  # Initialize the counter
+    max_do = max(to_do)
+    print("MAX DO:", max_do)
+    print("TO DO: ", to_do)
 
-    counter = 1
-    # Loop through each fault condition and report together
-    for fault, report in faults_and_reports:
-        print(f"Starting Fault Equation {counter}")
+    if max_do < 15 and to_do:
+        indexes = [index - 1 for index in to_do]  # Convert to 0-based indexes
+        for index in indexes:
+            if 0 <= index < len(faults_and_reports):
+                fault, report = faults_and_reports[index]
+                print(f"Starting Fault Equation {index + 1}")
+                try:
+                    copied_df = df.copy()
+                    df2 = fault.apply(copied_df)
+                    print("Success on fault", index + 1)
+                    counter = report_maker(report, counter, df2)  # Pass the counter and update its value
+                    print("Success on report", index + 1)
+                except Exception as e:
+                    print(f"Error on fault rule {index + 1}! - {e}")
+            else:
+                print(f"Invalid tuple index: {index + 1}")
+    else:
+        print("Incorrect args, the maximum is 15 for -d")
 
-        if counter in excludes:
-            print()
-            print("SKIPPING FAULT EQUATION ", counter)
-            print()
-            counter += 1
-
-        else:
-            
-            copied_df = df.copy()
-            df2 = fault.apply(copied_df)
-            print("Success on fault ", counter)
-            report_maker(report, counter, df2)
-            print("Success on report ", counter)
-            counter += 1
-            '''
-            try:
-                copied_df = df.copy()
-                df2 = fault.apply(copied_df)
-                print("Success on fault ", counter)
-                report_maker(report, counter, df2)
-                print("Success on report ", counter)
-                counter += 1
-            except Exception as e:
-                print(f"Error on fault rule {counter}! - {e}")
-                counter += 1
-            '''
-            
     print("All Done...")
 
 
@@ -364,23 +362,24 @@ if __name__ == "__main__":
     args = parser.add_argument_group("Options")
     args.add_argument("-i", "--input", required=True, type=str, help="CSV File Input")
     parser.add_argument(
-        "-e",
-        "--exclude",
+        "-d",
+        "--do",
         required=False,
         nargs="+",
         type=int,
         default=[],
-        help="Fault(s) to ignore",
+        help="Fault(s) to do or run-only",
     )
     args = parser.parse_args()
-
 
     df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True)
     time_diff = df.index.to_series().diff().iloc[1:]
     max_diff = time_diff.max()
 
     if max_diff > pd.Timedelta(minutes=5):
-        print(f"Warning: Maximum time difference between consecutive timestamps is {max_diff}.")
+        print(
+            f"Warning: Maximum time difference between consecutive timestamps is {max_diff}."
+        )
         print("SKIPPING 5 MINUTE ROLLING AVERAGE COMPUTATION OF DATA")
     else:
         df = df.rolling("5T").mean()
@@ -389,4 +388,4 @@ if __name__ == "__main__":
         df[SUPPLY_AIR_TEMP_SETPOINT_COL] = CONSTANT_LEAVE_TEMP_SP_VAL
 
     # Apply fault conditions and generate reports
-    apply_faults_and_generate_reports(df, excludes=args.exclude)
+    apply_faults_and_generate_reports(df, to_do=args.do)

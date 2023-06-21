@@ -12,6 +12,8 @@
 /air_handling_unit/ml_experiment/*.pkl
 /air_handling_unit/api_key.py
 
+*api_key.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
