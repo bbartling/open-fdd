@@ -1,10 +1,16 @@
 # open-fdd
 
-## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library.
+## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
+
 
 * NEW JUNE 2023 - AI powered suggestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions as the prompt engineering is a work in progress! See example string returned from Chat GPT for fault equation one which is also in the directory `air_handling_unit/final_reports`.
 
+### Example report
+![Alt text](/air_handling_unit/images/fc1_report_screenshot.png)
+
+### Example Chat GPT AI response
 ```python
+
 '''
 an AI-powered HVAC specialist, I have analyzed the data provided on the air handling unit (AHU) supply fan and duct static pressure. The AHU operates by controlling the speed of the supply fan to maintain a set duct static pressure. The dataset shows that the AHU has been operating for a total of 322 days, with a total of 7727.98 hours of data. The fault detection dataset shows that the fault occurs when the fan is running near 100 percent speed and the duct static pressure in the duct system is not meeting setpoint. 
 
