@@ -2,7 +2,7 @@
 
 ## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library.
 
-* NEW JUNE 2023 - AI powered sugestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions the prompt engineering is a work in progress! See example string returned from Chat GPT for fault equation one which is also in the directory `air_handling_unit/final_reports`.
+* NEW JUNE 2023 - AI powered suggestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions as the prompt engineering is a work in progress! See example string returned from Chat GPT for fault equation one which is also in the directory `air_handling_unit/final_reports`.
 
 ```python
 '''
@@ -49,7 +49,7 @@ $ cd air_handling_unit
 ```python
 """
 input CSV file is the -i arg
-'do' is an arg used with -d
+'do' is an arg used with -d to specify which fault rules and reports you want generated
 
 Tested on Windows 10 and Ubuntu 20 LTS on Python 3.10
 
@@ -81,7 +81,7 @@ Output Word Doc reports will be in the final_report directory
 
 ###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system binary commands the fault equation expects an integer of 0 for Off and 1 for On. A column in your CSV file needs to be named `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
-### More to come to incorporate G36 central cooling and heating plants. Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote ASHRAE, HVAC optimization, and building carbon reduction efforts.
+### More to come to incorporate AHU zone level faults, fuel meters, central cooling and heating plants. Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote better buildings, commissioning professionals, HVAC optimization, and building carbon reduction efforts.
 
 ## Author
 
