@@ -1,1 +1,0 @@
-API_KEY = 'paste_api_key_here'
