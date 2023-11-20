@@ -5,10 +5,10 @@ import pandas as pd
 from faults import *
 from reports import *
 
-from reports.report_fc1 import FaultCodeOneReport
-from reports.report_fc2 import FaultCodeTwoReport
-from reports.report_fc3 import FaultCodeThreeReport
-from reports.report_fc4 import FaultCodeFourReport
+from reports.open_ai_report_fc1 import FaultCodeOneReport
+from reports.open_ai_report_fc2 import FaultCodeTwoReport
+from reports.open_ai_report_fc3 import FaultCodeThreeReport
+from reports.open_ai_report_fc4 import FaultCodeFourReport
 
 from api_key import API_KEY
 import run_all_config
