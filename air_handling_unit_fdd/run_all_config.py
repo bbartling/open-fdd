@@ -42,7 +42,7 @@ config_dict = {
     'VFD_SPEED_PERCENT_MAX': 0.99,
     'DUCT_STATIC_INCHES_ERR_THRES': 0.1,
     'OUTDOOR_DEGF_ERR_THRES': 5.0,
-    'MIX_DEGF_ERR_THRES': 2.0,  # mixed air temp error threshold
+    'MIX_DEGF_ERR_THRES': 2.0,  # aka mixed air temp error threshold
     'RETURN_DEGF_ERR_THRES': 2.0,  # etc
     'SUPPLY_DEGF_ERR_THRES': 2.0,  # etc
     'DELTA_T_SUPPLY_FAN': 2.0,  # aka Fan Delta Temp Err Thres
@@ -58,14 +58,16 @@ config_dict = {
 
     # FC6 min diff between return and outside air
     # temp to evalulate econ error conditions
-    'DELTA_TEMP_MIN': 10,
+    'OAT_RAT_DELTA_MIN': 10,     # aka Delta Temp Min
 
     # FC6 paramto compare design percent OA to actual
     'AIRFLOW_ERR_THRES': 0.3,
 
     # FC6 DESIGN OA FROM BLUE PRINTS CAUTION
     # ABOUT BEING CORRECT IN UNITS FOR AIR VOLUME
-    'AHU_DESIGN_OA': 2500,
+    'AHU_MIN_OA_CFM_DESIGN': 2500,  # aka AHU Design OA
+    # ToDo: sure you can load this from prints, but in actuality it will be set by the balancing contractor after
+    #  construction and before turn-over. Review this in GL36.
 
     # this will produce extra print statements
     'TROUBLESHOOT_MODE': True

@@ -48,31 +48,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc5 = FaultConditionFive(config_dict)
     _fc5_report = FaultCodeFiveReport(config_dict)
 
-    _fc6 = FaultConditionSix(
-        AIRFLOW_ERR_THRES,
-        AHU_DESIGN_OA,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        DELTA_TEMP_MIN,
-        AHU_MIN_OA,
-        SUPPLY_FAN_AIR_VOLUME_COL,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        HEAT_VALVE_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc6_report = FaultCodeSixReport(
-        SUPPLY_FAN_AIR_VOLUME_COL,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc6 = FaultConditionSix(config_dict)
+    _fc6_report = FaultCodeSixReport(config_dict)
 
     _fc7 = FaultConditionSeven(
         SUPPLY_AIR_TEMP_ERR_THRES,

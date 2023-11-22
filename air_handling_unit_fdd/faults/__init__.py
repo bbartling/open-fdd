@@ -402,39 +402,29 @@ class FaultConditionSix:
     read from each VAV box air flow transmitter or supply fan AFMS
     """
 
-    def __init__(
-            self,
-            airflow_err_thres: float,
-            ahu_min_cfm_design: float,
-            oat_degf_err_thres: float,
-            rat_degf_err_thres: float,
-            oat_rat_delta_min: float,
-            ahu_min_oa_dpr: float,
-            vav_total_flow_col: float,
-            mat_col: str,
-            oat_col: str,
-            rat_col: str,
-            supply_vfd_speed_col: str,
-            economizer_sig_col: str,
-            heating_sig_col: str,
-            cooling_sig_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.airflow_err_thres = airflow_err_thres
-        self.ahu_min_cfm_design = ahu_min_cfm_design
-        self.oat_degf_err_thres = oat_degf_err_thres
-        self.rat_degf_err_thres = rat_degf_err_thres
-        self.oat_rat_delta_min = oat_rat_delta_min
-        self.ahu_min_oa_dpr = ahu_min_oa_dpr
-        self.vav_total_flow_col = vav_total_flow_col
-        self.mat_col = mat_col
-        self.oat_col = oat_col
-        self.rat_col = rat_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.economizer_sig_col = economizer_sig_col
-        self.heating_sig_col = heating_sig_col
-        self.cooling_sig_col = cooling_sig_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'airflow_err_thres': float,
+            'ahu_min_oa_cfm_design': float,
+            'outdoor_degf_err_thres': float,
+            'return_degf_err_thres': float,
+            'oat_rat_delta_min': float,
+            'ahu_min_oa_dpr': float,
+            'supply_fan_air_volume_col': float,  # this appears to be a proxy for external VAV cfm summation. See class
+            # def. Default config dict passes this as a string.
+            'mat_col': str,
+            'oat_col': str,
+            'rat_col': str,
+            'supply_vfd_speed_col': str,
+            'economizer_sig_col': str,
+            'heating_sig_col': str,
+            'cooling_sig_col': str,
+            'troubleshoot_mode': bool  # default should be False,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

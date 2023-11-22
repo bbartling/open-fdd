@@ -1423,21 +1423,18 @@ class FaultCodeFiveReport:
 class FaultCodeSixReport:
     """Class provides the definitions for Fault Code 5 Report."""
 
-    def __init__(
-        self,
-        vav_total_flow_col: str,
-        mat_col: str,
-        oat_col: str,
-        rat_col: str,
-        fan_vfd_speed_col: str
-    ):
-        self.vav_total_flow_col = vav_total_flow_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
-        self.mat_col = mat_col
-        self.oat_col = oat_col
-        self.rat_col = rat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
-
+    def __init__(self, dict_):
+        attributes_dict = {
+            'supply_fan_air_volume_col': str,
+            'mat_col': str,
+            'oat_col': str,
+            'rat_col': str,
+            'supply_vfd_speed_col': str
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
             output_col = "fc6_flag"
