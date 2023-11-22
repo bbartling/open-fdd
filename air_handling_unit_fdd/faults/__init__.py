@@ -332,25 +332,21 @@ class FaultConditionFour:
 class FaultConditionFive:
     """Class provides the definitions for Fault Condition 5."""
 
-    def __init__(
-            self,
-            mix_degf_err_thres: float,
-            supply_degf_err_thres: float,
-            delta_t_supply_fan: float,
-            mat_col: str,
-            sat_col: str,
-            heating_sig_col: str,
-            supply_vfd_speed_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.mix_degf_err_thres = mix_degf_err_thres
-        self.supply_degf_err_thres = supply_degf_err_thres
-        self.delta_t_supply_fan = delta_t_supply_fan
-        self.mat_col = mat_col
-        self.sat_col = sat_col
-        self.heating_sig_col = heating_sig_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'mix_degf_err_thres': float,
+            'supply_degf_err_thres': float,
+            'delta_t_supply_fan': float,
+            'mat_col': str,
+            'sat_col': str,
+            'heating_sig_col': str,
+            'supply_vfd_speed_col': str,
+            'troubleshoot_mode':  bool  # default should be False
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     # fault only active if fan is running and htg vlv is modulating
     # OS 1 is heating mode only fault

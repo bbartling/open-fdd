@@ -1158,23 +1158,20 @@ class FaultCodeFourReport:
 class FaultCodeFiveReport:
     """Class provides the definitions for Fault Code 5 Report."""
 
-    def __init__(
-        self,
-        mix_degf_err_thres: float,
-        supply_degf_err_thres: float,
-        delta_t_supply_fan: float,
-        mat_col: str,
-        sat_col: str,
-        htg_vlv_col: str,
-        fan_vfd_speed_col: str
-    ):
-        self.mix_degf_err_thres = mix_degf_err_thres
-        self.supply_degf_err_thres = supply_degf_err_thres
-        self.delta_t_supply_fan = delta_t_supply_fan
-        self.mat_col = mat_col
-        self.sat_col = sat_col
-        self.htg_vlv_col = htg_vlv_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'mix_degf_err_thres': float,
+            'supply_degf_err_thres': float,
+            'delta_t_supply_fan': float,
+            'mat_col': str,
+            'sat_col': str,
+            'heating_sig_col': str,
+            'supply_vfd_speed_col': str
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:

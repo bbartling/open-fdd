@@ -45,7 +45,7 @@ config_dict = {
     'MIX_DEGF_ERR_THRES': 2.0,  # mixed air temp error threshold
     'RETURN_DEGF_ERR_THRES': 2.0,  # etc
     'SUPPLY_DEGF_ERR_THRES': 2.0,  # etc
-    'FAN_DELTA_TEMP_ERR_THRES': 2.0,
+    'DELTA_T_SUPPLY_FAN': 2.0,  # aka Fan Delta Temp Err Thres
 
     # FC4 max AHU state changes per hour
     'DELTA_OS_MAX': 7,

@@ -45,26 +45,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc4 = FaultConditionFour(config_dict)
     _fc4_report = FaultCodeFourReport(config_dict, API_KEY)
 
-    _fc5 = FaultConditionFive(
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        HEAT_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc5_report = FaultCodeFiveReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        HEAT_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc5 = FaultConditionFive(config_dict)
+    _fc5_report = FaultCodeFiveReport(config_dict)
 
     _fc6 = FaultConditionSix(
         AIRFLOW_ERR_THRES,
