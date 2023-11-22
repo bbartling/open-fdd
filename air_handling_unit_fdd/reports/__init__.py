@@ -288,23 +288,20 @@ class FaultCodeOneReport:
 class FaultCodeTwoReport:
     """Class provides the definitions for Fault Code 2 Report."""
 
-    def __init__(
-        self,
-        mix_degf_err_thres: float,
-        return_degf_err_thres: float,
-        outdoor_degf_err_thres: float,
-        mat_col: str,
-        rat_col: str,
-        oat_col: str,
-        fan_vfd_speed_col: str,
-    ):
-        self.mix_degf_err_thres = mix_degf_err_thres
-        self.return_degf_err_thres = return_degf_err_thres
-        self.outdoor_degf_err_thres = outdoor_degf_err_thres
-        self.mat_col = mat_col
-        self.rat_col = rat_col
-        self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'mix_degf_err_thres': float,
+            'return_degf_err_thres': float,
+            'outdoor_degf_err_thres': float,
+            'mat_col': str,
+            'rat_col': str,
+            'oat_col': str,
+            'fan_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:

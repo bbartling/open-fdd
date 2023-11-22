@@ -21,10 +21,10 @@ config_dict = {
     'DUCT_STATIC_COL': "AHU: Supply Air Duct Static Pressure",
     'DUCT_STATIC_SETPOINT_COL': "AHU: Supply Air Duct Static Pressure Set Point",
     'SUPPLY_VFD_SPEED_COL': "AHU: Supply Air Fan Speed Control Signal",
-    'MIX_AIR_TEMP_COL': "AHU: Mixed Air Temperature",
-    'OUTSIDE_AIR_TEMP_COL': "AHU: Outdoor Air Damper Control Signal",
-    'SUPPLY_AIR_TEMP_COL': "AHU: Supply Air Temperature",
-    'RETURN_AIR_TEMP_COL': "AHU: Return Air Temperature",
+    'MAT_COL': "AHU: Mixed Air Temperature",
+    'OAT_COL': "AHU: Outdoor Air Damper Control Signal",
+    'SAT_COL': "AHU: Supply Air Temperature",
+    'RAT_COL': "AHU: Return Air Temperature",
     'HEAT_VALVE_COMMAND_COL': "AHU: Heating Coil Valve Control Signal",
     'COOL_VALVE_COMMAND_COL': "AHU: Cooling Coil Valve Control Signal",
     'OUTSIDE_AIR_DAMPER_COMMAND_COL': "AHU: Outdoor Air Damper Control Signal",
@@ -41,10 +41,10 @@ config_dict = {
     'VFD_SPEED_PERCENT_ERR_THRES': 0.05,
     'VFD_SPEED_PERCENT_MAX': 0.99,
     'DUCT_STATIC_INCHES_ERR_THRES': 0.1,
-    'OUTSIDE_AIR_TEMP_ERR_THRES': 5.0,
+    'OUTDOOR_DEGF_ERR_THRES': 5.0,
     'MIX_DEGF_ERR_THRES': 2.0,  # mixed air temp error threshold
-    'RETURN_AIR_TEMP_ERR_THRES': 2.0,
-    'SUPPLY_AIR_TEMP_ERR_THRES': 2.0,
+    'RETURN_DEGF_ERR_THRES': 2.0,  # etc
+    'SUPPLY_DEGF_ERR_THRES': 2.0,  # etc
     'FAN_DELTA_TEMP_ERR_THRES': 2.0,
 
     # FC4 max AHU state changes per hour
