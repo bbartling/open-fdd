@@ -42,17 +42,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc3 = FaultConditionThree(config_dict)
     _fc3_report = FaultCodeThreeReport(config_dict, api_key=API_KEY)
 
-    _fc4 = FaultConditionFour(
-        DELTA_OS_MAX,
-        AHU_MIN_OA,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        HEAT_VALVE_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc4_report = FaultCodeFourReport(DELTA_OS_MAX, API_KEY)
+    _fc4 = FaultConditionFour(config_dict)
+    _fc4_report = FaultCodeFourReport(config_dict, API_KEY)
 
     _fc5 = FaultConditionFive(
         MIX_AIR_TEMP_ERR_THRES,

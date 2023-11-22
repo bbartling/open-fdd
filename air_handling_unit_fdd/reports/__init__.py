@@ -840,10 +840,11 @@ class FaultCodeFourReport:
 
     """
 
-    def __init__(self,
-                 delta_os_max: float
-                 ):
-        self.delta_os_max = delta_os_max
+    def __init__(self, dict_):
+        attributes_dict = {  # for reference only - not used because there's only one attribute from the dict
+            'delta_os_max': float
+        }
+        self.delta_os_max = dict_['delta_os_max']
         self.heating_mode_calc_col = 'heating_mode'
         self.econ_only_cooling_mode_calc_col = 'econ_only_cooling_mode'
         self.econ_plus_mech_cooling_mode_calc_col = 'econ_plus_mech_cooling_mode'

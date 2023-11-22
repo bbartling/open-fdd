@@ -25,9 +25,9 @@ config_dict = {
     'OAT_COL': "AHU: Outdoor Air Damper Control Signal",
     'SAT_COL': "AHU: Supply Air Temperature",
     'RAT_COL': "AHU: Return Air Temperature",
-    'HEAT_VALVE_COMMAND_COL': "AHU: Heating Coil Valve Control Signal",
-    'COOL_VALVE_COMMAND_COL': "AHU: Cooling Coil Valve Control Signal",
-    'OUTSIDE_AIR_DAMPER_COMMAND_COL': "AHU: Outdoor Air Damper Control Signal",
+    'HEATING_SIG_COL': "AHU: Heating Coil Valve Control Signal",  # aka Heat Valve Command Col
+    'COOLING_SIG_COL': "AHU: Cooling Coil Valve Control Signal",  # aka Cool Valve Command Col
+    'ECONOMIZER_SIG_COL': "AHU: Outdoor Air Damper Control Signal",    # aka Outside Air Damper Command Col
     'SUPPLY_FAN_AIR_VOLUME_COL': "vav_total_flow", # not provided in default data set
 
     'SUPPLY_AIR_TEMP_SETPOINT_COL': "AHU: Supply Air Temperature Set Point",
@@ -53,7 +53,8 @@ config_dict = {
     # BAS setpoint for MIN OA DPR setpoint
     # set as a float 20% MIN OA would
     # be 0.20
-    'AHU_MIN_OA': 0.20,
+    'AHU_MIN_OA_DPR': 0.20,
+    # Note: this (min damper position) is NOT the same as min oa ratio
 
     # FC6 min diff between return and outside air
     # temp to evalulate econ error conditions

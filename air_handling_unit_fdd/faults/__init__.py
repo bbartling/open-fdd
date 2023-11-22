@@ -235,23 +235,20 @@ class FaultConditionThree:
 class FaultConditionFour:
     """Class provides the definitions for Fault Condition 4."""
 
-    def __init__(
-            self,
-            delta_os_max: float,
-            ahu_min_oa_dpr: float,
-            economizer_sig_col: str,
-            heating_sig_col: str,
-            cooling_sig_col: str,
-            supply_vfd_speed_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.delta_os_max = delta_os_max
-        self.ahu_min_oa_dpr = ahu_min_oa_dpr
-        self.economizer_sig_col = economizer_sig_col
-        self.heating_sig_col = heating_sig_col
-        self.cooling_sig_col = cooling_sig_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'delta_os_max': float,
+            'ahu_min_oa_dpr': float,
+            'economizer_sig_col': str,
+            'heating_sig_col': str,
+            'cooling_sig_col': str,
+            'supply_vfd_speed_col': str,
+            'troubleshoot_mode': bool  # default should be False
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     # adds in these boolean columns to the dataframe
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
