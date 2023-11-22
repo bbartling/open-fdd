@@ -171,25 +171,21 @@ class FaultConditionTwo:
 class FaultConditionThree:
     """Class provides the definitions for Fault Condition 3."""
 
-    def __init__(
-            self,
-            mix_degf_err_thres: float,
-            return_degf_err_thres: float,
-            outdoor_degf_err_thres: float,
-            mat_col: str,
-            rat_col: str,
-            oat_col: str,
-            supply_vfd_speed_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.mix_degf_err_thres = mix_degf_err_thres
-        self.return_degf_err_thres = return_degf_err_thres
-        self.outdoor_degf_err_thres = outdoor_degf_err_thres
-        self.mat_col = mat_col
-        self.rat_col = rat_col
-        self.oat_col = oat_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'mix_degf_err_thres': float,
+            'return_degf_err_thres': float,
+            'outdoor_degf_err_thres': float,
+            'mat_col': str,
+            'rat_col': str,
+            'oat_col': str,
+            'supply_vfd_speed_col': str,
+            'troubleshoot_mode': bool  # default to False,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

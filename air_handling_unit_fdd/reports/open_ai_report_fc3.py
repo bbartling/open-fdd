@@ -11,26 +11,21 @@ import openai
 class FaultCodeThreeReport:
     """Class provides the definitions for Fault Code 3 Report."""
 
-    def __init__(
-        self,
-        mix_degf_err_thres: float,
-        return_degf_err_thres: float,
-        outdoor_degf_err_thres: float,
-        mat_col: str,
-        rat_col: str,
-        oat_col: str,
-        fan_vfd_speed_col: str,
-        api_key: str,
-    ):
-        self.mix_degf_err_thres = mix_degf_err_thres
-        self.return_degf_err_thres = return_degf_err_thres
-        self.outdoor_degf_err_thres = outdoor_degf_err_thres
-        self.mat_col = mat_col
-        self.rat_col = rat_col
-        self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
-        self.api_key = api_key
-        openai.api_key = self.api_key
+    def __init__(self, dict_, api_key):
+        attributes_dict = {
+            'mix_degf_err_thres': float,
+            'return_degf_err_thres': float,
+            'outdoor_degf_err_thres': float,
+            'mat_col': str,
+            'rat_col': str,
+            'oat_col': str,
+            'supply_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
+        openai.api_key = api_key
         self.max_tokens = 3000
         self.completion_model = "gpt-3.5-turbo"
 

@@ -39,27 +39,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc2 = FaultConditionTwo(config_dict)
     _fc2_report = FaultCodeTwoReport(config_dict, api_key=API_KEY)
 
-    _fc3 = FaultConditionThree(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc3_report = FaultCodeThreeReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        API_KEY,
-    )
+    _fc3 = FaultConditionThree(config_dict)
+    _fc3_report = FaultCodeThreeReport(config_dict, api_key=API_KEY)
 
     _fc4 = FaultConditionFour(
         DELTA_OS_MAX,
