@@ -13,44 +13,15 @@ from reports.open_ai_report_fc4 import FaultCodeFourReport
 from api_key import API_KEY
 import run_all_config
 
-AHU_NAME = run_all_config.AHU_NAME
-INDEX_COL_NAME = run_all_config.INDEX_COL_NAME
-DUCT_STATIC_COL = run_all_config.DUCT_STATIC_COL
-DUCT_STATIC_SETPOINT_COL = run_all_config.DUCT_STATIC_SETPOINT_COL
-SUPPLY_VFD_SPEED_COL = run_all_config.SUPPLY_VFD_SPEED_COL
-MIX_AIR_TEMP_COL = run_all_config.MIX_AIR_TEMP_COL
-OUTSIDE_AIR_TEMP_COL = run_all_config.OUTSIDE_AIR_TEMP_COL
-SUPPLY_AIR_TEMP_COL = run_all_config.SUPPLY_AIR_TEMP_COL
-RETURN_AIR_TEMP_COL = run_all_config.RETURN_AIR_TEMP_COL
-HEAT_VALVE_COMMAND_COL = run_all_config.HEAT_VALVE_COMMAND_COL
-COOL_VALVE_COMMAND_COL = run_all_config.COOL_VALVE_COMMAND_COL
-OUTSIDE_AIR_DAMPER_COMMAND_COL = run_all_config.OUTSIDE_AIR_DAMPER_COMMAND_COL
-SUPPLY_FAN_AIR_VOLUME_COL = run_all_config.SUPPLY_FAN_AIR_VOLUME_COL
-SUPPLY_AIR_TEMP_SETPOINT_COL = run_all_config.SUPPLY_AIR_TEMP_SETPOINT_COL
-CONSTANT_LEAVE_TEMP_SP = run_all_config.CONSTANT_LEAVE_TEMP_SP
-CONSTANT_LEAVE_TEMP_SP_VAL = run_all_config.CONSTANT_LEAVE_TEMP_SP_VAL
-VFD_SPEED_PERCENT_ERR_THRES = run_all_config.VFD_SPEED_PERCENT_ERR_THRES
-VFD_SPEED_PERCENT_MAX = run_all_config.VFD_SPEED_PERCENT_MAX
-DUCT_STATIC_PRESS_ERR_THRES = run_all_config.DUCT_STATIC_PRESS_ERR_THRES
-OUTSIDE_AIR_TEMP_ERR_THRES = run_all_config.OUTSIDE_AIR_TEMP_ERR_THRES
-MIX_AIR_TEMP_ERR_THRES = run_all_config.MIX_AIR_TEMP_ERR_THRES
-RETURN_AIR_TEMP_ERR_THRES = run_all_config.RETURN_AIR_TEMP_ERR_THRES
-SUPPLY_AIR_TEMP_ERR_THRES = run_all_config.SUPPLY_AIR_TEMP_ERR_THRES
-FAN_DELTA_TEMP_ERR_THRES = run_all_config.FAN_DELTA_TEMP_ERR_THRES
-DELTA_OS_MAX = run_all_config.DELTA_OS_MAX
-AHU_MIN_OA = run_all_config.AHU_MIN_OA
-DELTA_TEMP_MIN = run_all_config.DELTA_TEMP_MIN
-AIRFLOW_ERR_THRES = run_all_config.AIRFLOW_ERR_THRES
-AHU_DESIGN_OA = run_all_config.AHU_DESIGN_OA
-TROUBLESHOOT_MODE = run_all_config.TROUBLESHOOT_MODE
-
+# instead of explicitly naming the above vars, import the config variables from config file as a single dictionary
+config_dict = run_all_config.config_dict
 
 def fault_applier(_fc, df):
     return _fc.apply(df)
 
 def report_maker(report, counter, df):
     print("report maker called", report, counter)
-    report_name = f"{AHU_NAME}_fc{str(counter)}_report"
+    report_name = f"{config_dict['AHU_NAME']}_fc{str(counter)}_report"
     document = report.create_report(report_name, df)
     path = os.path.join(os.path.curdir, "final_report")
     if not os.path.exists(path):
@@ -61,47 +32,12 @@ def report_maker(report, counter, df):
 
 
 def apply_faults_and_generate_reports(df, to_do):
-    _fc1 = FaultConditionOne(
-        VFD_SPEED_PERCENT_ERR_THRES,
-        VFD_SPEED_PERCENT_MAX,
-        DUCT_STATIC_PRESS_ERR_THRES,
-        DUCT_STATIC_COL,
-        SUPPLY_VFD_SPEED_COL,
-        DUCT_STATIC_SETPOINT_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
 
-    _fc1_report = FaultCodeOneReport(
-        VFD_SPEED_PERCENT_ERR_THRES,
-        VFD_SPEED_PERCENT_MAX,
-        DUCT_STATIC_PRESS_ERR_THRES,
-        DUCT_STATIC_COL,
-        SUPPLY_VFD_SPEED_COL,
-        DUCT_STATIC_SETPOINT_COL,
-        API_KEY,
-    )
+    _fc1 = FaultConditionOne(config_dict)
+    _fc1_report = FaultCodeOneReport(config_dict, api_key=API_KEY)
 
-    _fc2 = FaultConditionTwo(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc2_report = FaultCodeTwoReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        API_KEY,
-    )
+    _fc2 = FaultConditionTwo(config_dict)
+    _fc2_report = FaultCodeTwoReport(config_dict, api_key=API_KEY)
 
     _fc3 = FaultConditionThree(
         MIX_AIR_TEMP_ERR_THRES,
@@ -371,8 +307,11 @@ if __name__ == "__main__":
         help="Fault(s) to do or run-only",
     )
     args = parser.parse_args()
-
-    df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True)
+    df = pd.read_csv(
+        args.input,
+        index_col=config_dict['INDEX_COL_NAME'],
+        parse_dates=True
+    )
     time_diff = df.index.to_series().diff().iloc[1:]
     max_diff = time_diff.max()
 
@@ -384,8 +323,8 @@ if __name__ == "__main__":
     else:
         df = df.rolling("5T").mean()
 
-    if CONSTANT_LEAVE_TEMP_SP:
-        df[SUPPLY_AIR_TEMP_SETPOINT_COL] = CONSTANT_LEAVE_TEMP_SP_VAL
+    if config_dict['CONSTANT_LEAVE_TEMP_SP']:
+        df[config_dict['SUPPLY_AIR_TEMP_SETPOINT_COL']] = config_dict['CONSTANT_LEAVE_TEMP_SP_VAL']
 
     # Apply fault conditions and generate reports
     apply_faults_and_generate_reports(df, to_do=args.do)

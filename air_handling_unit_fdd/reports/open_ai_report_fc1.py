@@ -12,24 +12,25 @@ from docx.shared import Pt
 class FaultCodeOneReport:
     """Class provides the definitions for Fault Code 1 Report."""
 
-    def __init__(
-        self,
-        vfd_speed_percent_err_thres: float,
-        vfd_speed_percent_max: float,
-        duct_static_inches_err_thres: float,
-        duct_static_col: str,
-        supply_vfd_speed_col: str,
-        duct_static_setpoint_col: str,
-        api_key: str
-    ):
-        self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
-        self.vfd_speed_percent_max = vfd_speed_percent_max
-        self.duct_static_inches_err_thres = duct_static_inches_err_thres
-        self.duct_static_col = duct_static_col
-        self.duct_static_setpoint_col = duct_static_setpoint_col
-        self.fan_vfd_speed_col = supply_vfd_speed_col
-        self.api_key = api_key
-        openai.api_key = self.api_key
+    def __init__(self, dict_, api_key):
+        """Passes dictionary into initialization of class instance, then uses the attributes called out below in
+        attributes_dict to set only the attributes that match from dict_.
+
+        :param dict_: dictionary of all possible class attributes (loaded from config file)
+        """
+        attributes_dict = {
+            'vfd_speed_percent_err_thres': float,
+            'vfd_speed_percent_max': float,
+            'duct_static_inches_err_thres': float,
+            'duct_static_col': str,
+            'supply_vfd_speed_col': str,
+            'duct_static_setpoint_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
+        openai.api_key = api_key
         self.max_tokens = 3000
         self.completion_model = 'gpt-3.5-turbo'
 

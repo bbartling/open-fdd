@@ -16,21 +16,23 @@ from faults import FaultConditionOne
 class FaultCodeOneReport:
     """Class provides the definitions for Fault Code 1 Report."""
 
-    def __init__(
-        self,
-        vfd_speed_percent_err_thres: float,
-        vfd_speed_percent_max: float,
-        duct_static_inches_err_thres: float,
-        duct_static_col: str,
-        supply_vfd_speed_col: str,
-        duct_static_setpoint_col: str,
-    ):
-        self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
-        self.vfd_speed_percent_max = vfd_speed_percent_max
-        self.duct_static_inches_err_thres = duct_static_inches_err_thres
-        self.duct_static_col = duct_static_col
-        self.duct_static_setpoint_col = duct_static_setpoint_col
-        self.fan_vfd_speed_col = supply_vfd_speed_col
+    def __init__(self, dict_):
+        """Passes entire configuration dictionary into initialization of class instance, then uses the attributes
+        called out in attributes_dict to set the attributes.
+
+        :param dict_: dictionary of all possible class attributes (loaded from config file)
+        """
+        attributes_dict = {
+            'vfd_speed_percent_err_thres': float,
+            'vfd_speed_percent_max': float,
+            'duct_static_inches_err_thres': float,
+            'duct_static_col': str,
+            'supply_vfd_speed_col': str,
+            'duct_static_setpoint_col': str,
+        }
+        for attribute in attributes_dict:
+            value = dict_[attribute]
+            self.__setattr__(attribute, value)
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
