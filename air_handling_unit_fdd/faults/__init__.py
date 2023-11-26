@@ -563,27 +563,22 @@ class FaultConditionSeven:
 class FaultConditionEight:
     """Class provides the definitions for Fault Condition 8."""
 
-    def __init__(
-            self,
-            delta_supply_fan: float,
-            mix_err_thres: float,
-            supply_err_thres: float,
-            ahu_min_oa_dpr: float,
-            mat_col: str,
-            sat_col: str,
-            economizer_sig_col: str,
-            cooling_sig_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.delta_supply_fan = delta_supply_fan
-        self.mix_err_thres = mix_err_thres
-        self.supply_err_thres = supply_err_thres
-        self.ahu_min_oa_dpr = ahu_min_oa_dpr
-        self.mat_col = mat_col
-        self.sat_col = sat_col
-        self.economizer_sig_col = economizer_sig_col
-        self.cooling_sig_col = cooling_sig_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'delta_t_supply_fan': float,
+            'mix_degf_err_thres': float,
+            'supply_degf_err_thres': float,
+            'ahu_min_oa_dpr': float,
+            'mat_col': str,
+            'sat_col': str,
+            'economizer_sig_col': str,
+            'cooling_sig_col': str,
+            'troubleshoot_mode': bool  # default should be False
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:
@@ -645,27 +640,22 @@ class FaultConditionEight:
 class FaultConditionNine:
     """Class provides the definitions for Fault Condition 9."""
 
-    def __init__(
-            self,
-            delta_supply_fan: float,
-            oat_err_thres: float,
-            supply_err_thres: float,
-            ahu_min_oa_dpr: float,
-            satsp_col: str,
-            oat_col: str,
-            cooling_sig_col: str,
-            economizer_sig_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.delta_supply_fan = delta_supply_fan
-        self.oat_err_thres = oat_err_thres
-        self.supply_err_thres = supply_err_thres
-        self.ahu_min_oa_dpr = ahu_min_oa_dpr
-        self.satsp_col = satsp_col
-        self.oat_col = oat_col
-        self.cooling_sig_col = cooling_sig_col
-        self.economizer_sig_col = economizer_sig_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'delta_t_supply_fan': float,
+            'outdoor_degf_err_thres': float,
+            'supply_degf_err_thres': float,
+            'ahu_min_oa_dpr': float,
+            'sat_setpoint_col': str,
+            'oat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'troubleshoot_mode': bool  # should default to False,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

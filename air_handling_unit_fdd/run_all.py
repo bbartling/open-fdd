@@ -54,43 +54,11 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc7 = FaultConditionSeven(config_dict)
     _fc7_report = FaultCodeSevenReport(config_dict)
 
-    _fc8 = FaultConditionEight(
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc8 = FaultConditionEight(config_dict)
+    _fc8_report = FaultCodeEightReport(config_dict)
 
-    _fc8_report = FaultCodeEightReport(
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
-
-    _fc9 = FaultConditionNine(
-        FAN_DELTA_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc9_report = FaultCodeNineReport(
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
+    _fc9 = FaultConditionNine(config_dict)
+    _fc9_report = FaultCodeNineReport(config_dict)
 
     _fc10 = FaultConditionTen(
         OUTSIDE_AIR_TEMP_ERR_THRES,

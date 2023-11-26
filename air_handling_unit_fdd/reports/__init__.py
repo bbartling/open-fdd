@@ -1974,17 +1974,17 @@ class FaultCodeSevenReport:
 class FaultCodeEightReport:
     """Class provides the definitions for Fault Code 8 Report."""
 
-    def __init__(
-        self,
-        sat_col: str,
-        mat_col: str,
-        fan_vfd_speed_col: str,
-        economizer_sig_col: str,
-    ):
-        self.sat_col = sat_col
-        self.mat_col = mat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
-        self.economizer_sig_col = economizer_sig_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'sat_col': str,
+            'mat_col': str,
+            'supply_vfd_speed_col': str,
+            'economizer_sig_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 
@@ -2225,18 +2225,17 @@ class FaultCodeEightReport:
 class FaultCodeNineReport:
     """Class provides the definitions for Fault Code 9 Report."""
 
-    def __init__(
-        self,
-        satsp_col: str,
-        oat_col: str,
-        fan_vfd_speed_col: str,
-        economizer_sig_col: str,
-    ):
-
-        self.satsp_col = satsp_col
-        self.oat_col = oat_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
-        self.economizer_sig_col = economizer_sig_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'sat_setpoint_col': str,
+            'oat_col': str,
+            'supply_vfd_speed_col': str,
+            'economizer_sig_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 
