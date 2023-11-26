@@ -62,7 +62,7 @@ class FaultConditionOne:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -96,7 +96,7 @@ class FaultConditionOne:
 
         df["fc1_flag"] = (df["static_check_"] & df["fan_check_"]).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             del df["static_check_"]
             del df["fan_check_"]
@@ -124,7 +124,7 @@ class FaultConditionTwo:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -160,7 +160,7 @@ class FaultConditionTwo:
                 & (df[self.supply_vfd_speed_col] > 0.01)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             del df["mat_check"]
             del df["temp_min_check"]
@@ -188,7 +188,7 @@ class FaultConditionThree:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -224,7 +224,7 @@ class FaultConditionThree:
                 & (df[self.supply_vfd_speed_col] > 0.01)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             del df["mat_check"]
             del df["temp_min_check"]
@@ -252,7 +252,7 @@ class FaultConditionFour:
 
     # adds in these boolean columns to the dataframe
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -351,7 +351,7 @@ class FaultConditionFive:
     # fault only active if fan is running and htg vlv is modulating
     # OS 1 is heating mode only fault
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -388,7 +388,7 @@ class FaultConditionFive:
                 & (df[self.supply_vfd_speed_col] > 0.01)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             del df["mat_check"]
             del df["sat_check"]
@@ -427,7 +427,7 @@ class FaultConditionSix:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -524,7 +524,7 @@ class FaultConditionSeven:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -554,7 +554,7 @@ class FaultConditionSeven:
                 & (df[self.supply_vfd_speed_col] > 0)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("No troubleshooting feature yet for FC4")
 
         return df
@@ -581,7 +581,7 @@ class FaultConditionEight:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -628,7 +628,7 @@ class FaultConditionEight:
                 & (df[self.cooling_sig_col] < 0.1)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             # drop helper columns
             del df["sat_fan_mat"]
@@ -658,7 +658,7 @@ class FaultConditionNine:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -702,7 +702,7 @@ class FaultConditionNine:
                 & (df[self.cooling_sig_col] < 0.1)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             # drop helper columns
             del df["oat_minus_oaterror"]
@@ -731,7 +731,7 @@ class FaultConditionTen:
 
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -769,7 +769,7 @@ class FaultConditionTen:
                 & (df[self.economizer_sig_col] > 0.9)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             # drop helper columns
             del df["abs_mat_minus_oat"]
@@ -798,7 +798,7 @@ class FaultConditionEleven:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -837,7 +837,7 @@ class FaultConditionEleven:
                 & (df[self.economizer_sig_col] > 0.9)
         ).astype(int)
 
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             # drop helper columns
             del df["oat_plus_oaterror"]
@@ -867,7 +867,7 @@ class FaultConditionTwelve:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -916,7 +916,7 @@ class FaultConditionTwelve:
             & (df[self.cooling_sig_col] > 0.01) & (df[self.economizer_sig_col] > 0.9),
         ).astype(int)
 
-        if not self.troubleshoot:
+        if not self.troubleshoot_mode:
             # drop helper columns
             del df["sat_minus_saterr_delta_supply_fan"]
             del df["mat_plus_materr"]
@@ -945,7 +945,7 @@ class FaultConditionThirteen:
             self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot:
+        if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
             for col in df.columns:
                 print(
@@ -992,7 +992,7 @@ class FaultConditionThirteen:
             & (df[self.cooling_sig_col] > 0.01) & (df[self.economizer_sig_col] > 0.9),
         ).astype(int)
 
-        if not self.troubleshoot:
+        if not self.troubleshoot_mode:
             # drop helper columns
             del df["sat_greater_than_sp_calc"]
 
@@ -1002,31 +1002,23 @@ class FaultConditionThirteen:
 class FaultConditionFourteen:
     """Class provides the definitions for Fault Condition 14."""
 
-    def __init__(
-            self,
-            delta_supply_fan: float,
-            coil_temp_enter_err_thres: float,
-            coil_temp_leav_err_thres: float,
-            ahu_min_oa_dpr: float,
-            clg_coil_enter_temp_col: str,
-            clg_coil_leave_temp_col: str,
-            cooling_sig_col: str,
-            heating_sig_col: str,
-            economizer_sig_col: str,
-            supply_vfd_speed_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.delta_supply_fan = delta_supply_fan
-        self.coil_temp_enter_err_thres = coil_temp_enter_err_thres
-        self.coil_temp_leav_err_thres = coil_temp_leav_err_thres
-        self.clg_coil_enter_temp_col = clg_coil_enter_temp_col
-        self.clg_coil_leave_temp_col = clg_coil_leave_temp_col
-        self.ahu_min_oa_dpr = ahu_min_oa_dpr
-        self.cooling_sig_col = cooling_sig_col
-        self.heating_sig_col = heating_sig_col
-        self.economizer_sig_col = economizer_sig_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        self.delta_t_supply_fan = float
+        self.coil_temp_enter_err_thres = float
+        self.coil_temp_leav_err_thres = float
+        self.clg_coil_enter_temp_col = str
+        self.clg_coil_leave_temp_col = str
+        self.ahu_min_oa_dpr = float
+        self.cooling_sig_col = str
+        self.heating_sig_col = str
+        self.economizer_sig_col = str
+        self.supply_vfd_speed_col = str
+        self.troubleshoot_mode = bool  # default to False
+
+        for attribute in self.__dict__:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(attribute, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

@@ -72,6 +72,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc13 = FaultConditionThirteen(config_dict)
     _fc13_report = FaultCodeThirteenReport(config_dict)
 
+    _fc14 = FaultConditionFourteen(config_dict)
+
     # Combine fault conditions and reports into tuples
     faults_and_reports = [
         (_fc1, _fc1_report),
