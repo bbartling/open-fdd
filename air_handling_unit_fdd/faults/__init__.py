@@ -714,23 +714,21 @@ class FaultConditionNine:
 class FaultConditionTen:
     """Class provides the definitions for Fault Condition 10."""
 
-    def __init__(
-            self,
-            oat_err_thres: float,
-            mat_err_thres: float,
-            oat_col: str,
-            mat_col: str,
-            cooling_sig_col: str,
-            economizer_sig_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.oat_err_thres = oat_err_thres
-        self.mat_err_thres = mat_err_thres
-        self.oat_col = oat_col
-        self.mat_col = mat_col
-        self.cooling_sig_col = cooling_sig_col
-        self.economizer_sig_col = economizer_sig_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'outdoor_degf_err_thres': float,
+            'mix_degf_err_thres': float,
+            'oat_col': str,
+            'mat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'troubleshoot_mode': bool,  # default False,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
+
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:
@@ -783,25 +781,21 @@ class FaultConditionTen:
 class FaultConditionEleven:
     """Class provides the definitions for Fault Condition 11. Very similar to FC11."""
 
-    def __init__(
-            self,
-            delta_supply_fan: float,
-            oat_err_thres: float,
-            supply_err_thres: float,
-            satsp_col: str,
-            oat_col: str,
-            cooling_sig_col: str,
-            economizer_sig_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.delta_supply_fan = delta_supply_fan
-        self.oat_err_thres = oat_err_thres
-        self.supply_err_thres = supply_err_thres
-        self.satsp_col = satsp_col
-        self.oat_col = oat_col
-        self.cooling_sig_col = cooling_sig_col
-        self.economizer_sig_col = economizer_sig_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'delta_t_supply_fan': float,
+            'outdoor_degf_err_thres': float,
+            'supply_degf_err_thres': float,
+            'sat_setpoint_col': str,
+            'oat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'troubleshoot_mode':  bool,  # default to False,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

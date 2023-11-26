@@ -2478,19 +2478,18 @@ class FaultCodeNineReport:
 class FaultCodeTenReport:
     """Class provides the definitions for Fault Code 10 Report."""
 
-    def __init__(
-        self,
-        oat_col: str,
-        mat_col: str,
-        clg_col: str,
-        economizer_sig_col: str,
-        fan_vfd_speed_col: str,
-    ):
-        self.oat_col = oat_col
-        self.mat_col = mat_col
-        self.clg_col = clg_col
-        self.economizer_sig_col = economizer_sig_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'oat_col': str,
+            'mat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'supply_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 
@@ -2740,19 +2739,18 @@ class FaultCodeTenReport:
 class FaultCodeElevenReport:
     """Class provides the definitions for Fault Code 11 Report."""
 
-    def __init__(
-        self,
-        sat_sp_col: str,
-        oat_col: str,
-        clg_col: str,
-        economizer_sig_col: str,
-        fan_vfd_speed_col: str,
-    ):
-        self.sat_sp_col = sat_sp_col
-        self.oat_col = oat_col
-        self.clg_col = clg_col
-        self.economizer_sig_col = economizer_sig_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'sat_setpoint_col': str,
+            'oat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'supply_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 

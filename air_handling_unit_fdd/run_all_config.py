@@ -26,7 +26,7 @@ config_dict = {
     'SAT_COL': "AHU: Supply Air Temperature",
     'RAT_COL': "AHU: Return Air Temperature",
     'HEATING_SIG_COL': "AHU: Heating Coil Valve Control Signal",  # aka Heat Valve Command Col
-    'COOLING_SIG_COL': "AHU: Cooling Coil Valve Control Signal",  # aka Cool Valve Command Col
+    'COOLING_SIG_COL': "AHU: Cooling Coil Valve Control Signal",  # aka Cool Valve Command Col or clg_col
     'ECONOMIZER_SIG_COL': "AHU: Outdoor Air Damper Control Signal",    # aka Outside Air Damper Command Col
     'SUPPLY_FAN_AIR_VOLUME_COL': "vav_total_flow", # not provided in default data set
 
@@ -45,7 +45,7 @@ config_dict = {
     'MIX_DEGF_ERR_THRES': 2.0,  # aka mixed air temp error threshold
     'RETURN_DEGF_ERR_THRES': 2.0,  # etc
     'SUPPLY_DEGF_ERR_THRES': 2.0,  # etc
-    'DELTA_T_SUPPLY_FAN': 2.0,  # aka Fan Delta Temp Err Thres, also aka "delta_supply_fan" (FC8).
+    'DELTA_T_SUPPLY_FAN': 2.0,  # aka Fan Delta Temp Err Thres, also aka "delta_supply_fan" (FC8, 11).
 
     # FC4 max AHU state changes per hour
     'DELTA_OS_MAX': 7,

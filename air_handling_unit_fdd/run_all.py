@@ -60,42 +60,11 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc9 = FaultConditionNine(config_dict)
     _fc9_report = FaultCodeNineReport(config_dict)
 
-    _fc10 = FaultConditionTen(
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc10 = FaultConditionTen(config_dict)
+    _fc10_report = FaultCodeTenReport(config_dict)
 
-    _fc10_report = FaultCodeTenReport(
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
-
-    _fc11 = FaultConditionEleven(
-        FAN_DELTA_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc11_report = FaultCodeElevenReport(
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc11 = FaultConditionEleven(config_dict)
+    _fc11_report = FaultCodeElevenReport(config_dict)
 
     _fc12 = FaultConditionTwelve(
         FAN_DELTA_TEMP_ERR_THRES,
