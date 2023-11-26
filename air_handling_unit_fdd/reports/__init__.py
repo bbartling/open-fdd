@@ -3001,19 +3001,18 @@ class FaultCodeElevenReport:
 class FaultCodeTwelveReport:
     """Class provides the definitions for Fault Code 12 Report."""
 
-    def __init__(
-        self,
-        sat_col: str,
-        mat_col: str,
-        clg_col: str,
-        economizer_sig_col: str,
-        fan_vfd_speed_col: str,
-    ):
-        self.sat_col = sat_col
-        self.mat_col = mat_col
-        self.clg_col = clg_col
-        self.economizer_sig_col = economizer_sig_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'sat_col': str,
+            'mat_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'supply_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 
@@ -3265,19 +3264,18 @@ class FaultCodeThirteenReport:
         Verify similar to FC 7 but uses cooling valve
     """
 
-    def __init__(
-        self,
-        sat_col: str,
-        satsp_col: str,
-        clg_col: str,
-        economizer_sig_col: str,
-        fan_vfd_speed_col: str
-    ):
-        self.sat_col = sat_col
-        self.satsp_col = satsp_col
-        self.clg_col = clg_col
-        self.economizer_sig_col = economizer_sig_col
-        self.fan_vfd_speed_col = fan_vfd_speed_col
+    def __init__(self, dict_):
+        attributes_dict = {
+            'sat_col': str,
+            'sat_setpoint_col': str,
+            'cooling_sig_col': str,
+            'economizer_sig_col': str,
+            'supply_vfd_speed_col': str,
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 

@@ -66,43 +66,11 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc11 = FaultConditionEleven(config_dict)
     _fc11_report = FaultCodeElevenReport(config_dict)
 
-    _fc12 = FaultConditionTwelve(
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_COL,
-        MIX_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc12 = FaultConditionTwelve(config_dict)
+    _fc12_report = FaultCodeTwelveReport(config_dict)
 
-    _fc12_report = FaultCodeTwelveReport(
-        SUPPLY_AIR_TEMP_COL,
-        MIX_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
-
-    _fc13 = FaultConditionThirteen(
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc13_report = FaultCodeThirteenReport(
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc13 = FaultConditionThirteen(config_dict)
+    _fc13_report = FaultCodeThirteenReport(config_dict)
 
     # Combine fault conditions and reports into tuples
     faults_and_reports = [
