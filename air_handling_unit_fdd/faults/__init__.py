@@ -509,21 +509,19 @@ class FaultConditionSeven:
     Very similar to FC 13 but uses heating valve
     """
 
-    def __init__(
-            self,
-            sat_degf_err_thres: float,
-            sat_col: str,
-            satsp_col: str,
-            heating_sig_col: str,
-            supply_vfd_speed_col: str,
-            troubleshoot: bool = False,
-    ):
-        self.sat_degf_err_thres = sat_degf_err_thres
-        self.sat_col = sat_col
-        self.satsp_col = satsp_col
-        self.heating_sig_col = heating_sig_col
-        self.supply_vfd_speed_col = supply_vfd_speed_col
-        self.troubleshoot = troubleshoot
+    def __init__(self, dict_):
+        attributes_dict = {
+            'supply_degf_err_thres': float,
+            'sat_col': str,
+            'sat_setpoint_col': str,
+            'heating_sig_col': str,
+            'supply_vfd_speed_col': str,
+            'troubleshoot_mode': bool,  # should default to False
+        }
+        for attribute in attributes_dict:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(upper, value)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot:

@@ -51,21 +51,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc6 = FaultConditionSix(config_dict)
     _fc6_report = FaultCodeSixReport(config_dict)
 
-    _fc7 = FaultConditionSeven(
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        HEAT_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc7_report = FaultCodeSevenReport(
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        HEAT_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
+    _fc7 = FaultConditionSeven(config_dict)
+    _fc7_report = FaultCodeSevenReport(config_dict)
 
     _fc8 = FaultConditionEight(
         FAN_DELTA_TEMP_ERR_THRES,

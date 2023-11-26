@@ -30,7 +30,7 @@ config_dict = {
     'ECONOMIZER_SIG_COL': "AHU: Outdoor Air Damper Control Signal",    # aka Outside Air Damper Command Col
     'SUPPLY_FAN_AIR_VOLUME_COL': "vav_total_flow", # not provided in default data set
 
-    'SUPPLY_AIR_TEMP_SETPOINT_COL': "AHU: Supply Air Temperature Set Point",
+    'SAT_SETPOINT_COL': "AHU: Supply Air Temperature Set Point",
     # Leaving air temp setpoint constant value
     # If there is no data and but constant value
     'CONSTANT_LEAVE_TEMP_SP': False,
