@@ -22,16 +22,16 @@ class FaultCodeOneReport:
 
         :param dict_: dictionary of all possible class attributes (loaded from config file)
         """
-        attributes_dict = {
-            'vfd_speed_percent_err_thres': float,
-            'vfd_speed_percent_max': float,
-            'duct_static_inches_err_thres': float,
-            'duct_static_col': str,
-            'supply_vfd_speed_col': str,
-            'duct_static_setpoint_col': str,
-        }
-        for attribute in attributes_dict:
-            value = dict_[attribute]
+        self.vfd_speed_percent_err_thres = float,
+        self.vfd_speed_percent_max = float,
+        self.duct_static_inches_err_thres = float,
+        self.duct_static_col = str,
+        self.supply_vfd_speed_col = str,
+        self.duct_static_setpoint_col = str,
+
+        for attribute in self.__dict__:
+            upper = attribute.upper()
+            value = dict_[upper]
             self.__setattr__(attribute, value)
 
     def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
@@ -3265,17 +3265,16 @@ class FaultCodeThirteenReport:
     """
 
     def __init__(self, dict_):
-        attributes_dict = {
-            'sat_col': str,
-            'sat_setpoint_col': str,
-            'cooling_sig_col': str,
-            'economizer_sig_col': str,
-            'supply_vfd_speed_col': str,
-        }
-        for attribute in attributes_dict:
+        self.sat_col = str,
+        self.sat_setpoint_col = str,
+        self.cooling_sig_col = str,
+        self.economizer_sig_col = str,
+        self.supply_vfd_speed_col = str,
+
+        for attribute in self.__dict__:
             upper = attribute.upper()
             value = dict_[upper]
-            self.__setattr__(upper, value)
+            self.__setattr__(attribute, value)
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
 
