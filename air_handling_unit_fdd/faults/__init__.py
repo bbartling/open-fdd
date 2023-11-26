@@ -38,16 +38,59 @@ class HelperUtils:
         return df
 
 
-class FaultConditionOne:
-    """Class provides the definitions for Fault Condition 1."""
+class FaultCondition:
+    """Parent class for Fault Conditions. Methods are inherited to all children.
 
-    def __init__(self, dict_):
+    """
+    def set_attributes(self, dict_):
         """Passes dictionary into initialization of class instance, then uses the attributes called out below in
         attributes_dict to set only the attributes that match from dict_.
 
         :param dict_: dictionary of all possible class attributes (loaded from config file)
         """
+        for attribute in self.__dict__:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(attribute, value)
 
+    def troubleshoot_cols(self, df):
+        """print troubleshoot columns mapping
+
+        :param df:
+        :return:
+        """
+        print("Troubleshoot mode enabled - not removing helper columns")
+        for col in df.columns:
+            print(
+                "df column: ",
+                col,
+                "- max: ",
+                df[col].max(),
+                "- col type: ",
+                df[col].dtypes,
+            )
+
+    def check_analog_pct(self, columns):
+        """check analog outputs [data with units of %] are floats only
+
+        :param columns:
+        :return:
+        """
+        helper = HelperUtils()
+        for col in columns:
+            if not pdtypes.is_float_dtype(df[col]):
+                df = helper.convert_to_float(df, col)
+            if df[col].max() > 1.0:
+                raise TypeError(helper.float_max_check_err(col))
+
+class FaultConditionOne(FaultCondition):
+    """Class provides the definitions for Fault Condition 1."""
+
+    def __init__(self, dict_):
+        """
+
+        :param dict_:
+        """
         self.vfd_speed_percent_err_thres = float,
         self.vfd_speed_percent_max = float,
         self.duct_static_inches_err_thres = float,
@@ -56,34 +99,15 @@ class FaultConditionOne:
         self.duct_static_setpoint_col = str,
         self.troubleshoot_mode = bool,  # default should be False
 
-        for attribute in self.__dict__:
-            upper = attribute.upper()
-            value = dict_[upper]
-            self.__setattr__(attribute, value)
+        self.set_attributes(dict_)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
-            for col in df.columns:
-                print(
-                    "df column: ",
-                    col,
-                    "- max: ",
-                    df[col].max(),
-                    "- col type: ",
-                    df[col].dtypes,
-                )
+            self.troubleshoot_cols(df)
+
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col]
-
-        helper = HelperUtils()
-
-        for col in columns_to_check:
-            if not pdtypes.is_float_dtype(df[col]):
-                df = helper.convert_to_float(df, col)
-
-            if df[col].max() > 1.0:
-                raise TypeError(helper.float_max_check_err(col))
+        self.check_analog_pct(columns_to_check)
 
         df["static_check_"] = (
                 df[self.duct_static_col]
@@ -104,49 +128,34 @@ class FaultConditionOne:
         return df
 
 
-class FaultConditionTwo:
+class FaultConditionTwo(FaultCondition):
     """Class provides the definitions for Fault Condition 2."""
 
     def __init__(self, dict_):
-        attributes_dict = {
-            'mix_degf_err_thres': float,
-            'return_degf_err_thres': float,
-            'outdoor_degf_err_thres': float,
-            'mat_col': str,
-            'rat_col': str,
-            'oat_col': str,
-            'supply_vfd_speed_col': str,
-            'troubleshoot_mode': bool,  # default to False,
-        }
-        for attribute in attributes_dict:
-            upper = attribute.upper()
-            value = dict_[upper]
-            self.__setattr__(upper, value)
+        """
+
+        :param dict_:
+        """
+        self.mix_degf_err_thres = float,
+        self.return_degf_err_thres = float,
+        self.outdoor_degf_err_thres = float,
+        self.mat_col = str,
+        self.rat_col = str,
+        self.oat_col = str,
+        self.supply_vfd_speed_col = str,
+        self.troubleshoot_mode = bool,  # default to False,
+
+        self.set_attributes(dict_)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
-            for col in df.columns:
-                print(
-                    "df column: ",
-                    col,
-                    "- max: ",
-                    df[col].max(),
-                    "- col type: ",
-                    df[col].dtypes,
-                )
+            self.troubleshoot_cols(df)
+
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col]
+        self.check_analog_pct(columns_to_check)
 
-        helper = HelperUtils()
-
-        for col in columns_to_check:
-            if not pdtypes.is_float_dtype(df[col]):
-                df = helper.convert_to_float(df, col)
-
-            if df[col].max() > 1.0:
-                raise TypeError(helper.float_max_check_err(col))
-
+        # fault condition-specific checks / flags
         df["mat_check"] = df[self.mat_col] + self.mix_degf_err_thres
         df["temp_min_check"] = np.minimum(
             df[self.rat_col] - self.return_degf_err_thres,
@@ -168,49 +177,30 @@ class FaultConditionTwo:
         return df
 
 
-class FaultConditionThree:
+class FaultConditionThree(FaultCondition):
     """Class provides the definitions for Fault Condition 3."""
 
     def __init__(self, dict_):
-        attributes_dict = {
-            'mix_degf_err_thres': float,
-            'return_degf_err_thres': float,
-            'outdoor_degf_err_thres': float,
-            'mat_col': str,
-            'rat_col': str,
-            'oat_col': str,
-            'supply_vfd_speed_col': str,
-            'troubleshoot_mode': bool  # default to False,
-        }
-        for attribute in attributes_dict:
-            upper = attribute.upper()
-            value = dict_[upper]
-            self.__setattr__(upper, value)
+        self.mix_degf_err_thres = float,
+        self.return_degf_err_thres = float,
+        self.outdoor_degf_err_thres = float,
+        self.mat_col = str,
+        self.rat_col = str,
+        self.oat_col = str,
+        self.supply_vfd_speed_col = str,
+        self.troubleshoot_mode = bool  # default to False,
+
+        self.set_attributes(dict_)
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
-            for col in df.columns:
-                print(
-                    "df column: ",
-                    col,
-                    "- max: ",
-                    df[col].max(),
-                    "- col type: ",
-                    df[col].dtypes,
-                )
+            self.troubleshoot_cols(df)
+
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col]
+        self.check_analog_pct(columns_to_check)
 
-        helper = HelperUtils()
-
-        for col in columns_to_check:
-            if not pdtypes.is_float_dtype(df[col]):
-                df = helper.convert_to_float(df, col)
-
-            if df[col].max() > 1.0:
-                raise TypeError(helper.float_max_check_err(col))
-
+        # fault condition-specific checks / flags
         df["mat_check"] = df[self.mat_col] - self.mix_degf_err_thres
         df["temp_min_check"] = np.maximum(
             df[self.rat_col] + self.return_degf_err_thres,
@@ -232,39 +222,25 @@ class FaultConditionThree:
         return df
 
 
-class FaultConditionFour:
+class FaultConditionFour(FaultCondition):
     """Class provides the definitions for Fault Condition 4."""
 
     def __init__(self, dict_):
-        attributes_dict = {
-            'delta_os_max': float,
-            'ahu_min_oa_dpr': float,
-            'economizer_sig_col': str,
-            'heating_sig_col': str,
-            'cooling_sig_col': str,
-            'supply_vfd_speed_col': str,
-            'troubleshoot_mode': bool  # default should be False
-        }
-        for attribute in attributes_dict:
-            upper = attribute.upper()
-            value = dict_[upper]
-            self.__setattr__(upper, value)
+        self.delta_os_max = float,
+        self.ahu_min_oa_dpr = float,
+        self.economizer_sig_col = str,
+        self.heating_sig_col = str,
+        self.cooling_sig_col = str,
+        self.supply_vfd_speed_col = str,
+        self.troubleshoot_mode = bool  # default should be False
+
+        self.set_attributes(dict_)
 
     # adds in these boolean columns to the dataframe
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
-            for col in df.columns:
-                print(
-                    "df column: ",
-                    col,
-                    "- max: ",
-                    df[col].max(),
-                    "- col type: ",
-                    df[col].dtypes,
-                    "- Pandas is float check: ",
-                    pdtypes.is_float_dtype(df[col])
-                )
+            self.troubleshoot_cols(df)
+
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [
             self.economizer_sig_col,
