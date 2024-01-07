@@ -113,7 +113,7 @@ class FaultCodeOneReport:
         ax1.legend(loc='best')
         ax1.set_ylabel("Inch WC")
 
-        ax2.plot(df.index, df[self.fan_vfd_speed_col],
+        ax2.plot(df.index, df[self.supply_vfd_speed_col],
                  color="g", label="FAN")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
@@ -146,12 +146,12 @@ class FaultCodeOneReport:
             df[self.duct_static_col].where(df[output_col] == 1).mean(), 2
         )
 
-        motor_on = df[self.fan_vfd_speed_col].gt(.01).astype(int)
+        motor_on = df[self.supply_vfd_speed_col].gt(.01).astype(int)
         hours_motor_runtime = round(
             (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
 
         # for summary stats on I/O data to make useful
-        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 0.1]
+        df_motor_on_filtered = df[df[self.supply_vfd_speed_col] > 0.1]
 
         return (
             total_days,
@@ -249,7 +249,7 @@ class FaultCodeOneReport:
             df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
-        fan_vfd_speed_describe = str(df_motor_on_filtered[self.fan_vfd_speed_col].describe())
+        fan_vfd_speed_describe = str(df_motor_on_filtered[self.supply_vfd_speed_col].describe())
         duct_static_describe = str(df_motor_on_filtered[self.duct_static_col].describe())
         duct_static_setpoint_describe = str(df_motor_on_filtered[self.duct_static_setpoint_col].describe())
 

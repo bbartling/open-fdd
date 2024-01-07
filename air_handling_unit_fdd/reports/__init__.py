@@ -45,7 +45,7 @@ class FaultCodeOneReport:
         ax1.legend(loc='best')
         ax1.set_ylabel("Inch WC")
 
-        ax2.plot(df.index, df[self.fan_vfd_speed_col],
+        ax2.plot(df.index, df[self.supply_vfd_speed_col],
                  color="g", label="FAN")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
@@ -78,12 +78,12 @@ class FaultCodeOneReport:
             df[self.duct_static_col].where(df[output_col] == 1).mean(), 2
         )
 
-        motor_on = df[self.fan_vfd_speed_col].gt(.01).astype(int)
+        motor_on = df[self.supply_vfd_speed_col].gt(.01).astype(int)
         hours_motor_runtime = round(
             (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
 
         # for summary stats on I/O data to make useful
-        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 0.1]
+        df_motor_on_filtered = df[df[self.supply_vfd_speed_col] > 0.1]
 
         return (
             total_days,
@@ -239,7 +239,7 @@ class FaultCodeOneReport:
         paragraph = document.add_paragraph()
         paragraph.style = "List Bullet"
         paragraph.add_run(
-            str(df_motor_on_filtered[self.fan_vfd_speed_col].describe()))
+            str(df_motor_on_filtered[self.supply_vfd_speed_col].describe()))
 
         # ADD in Summary Statistics of duct pressure
         document.add_heading("Duct Pressure", level=3)
@@ -296,7 +296,7 @@ class FaultCodeTwoReport:
             'mat_col': str,
             'rat_col': str,
             'oat_col': str,
-            'fan_vfd_speed_col': str,
+            'supply_vfd_speed_col': str,
         }
         for attribute in attributes_dict:
             upper = attribute.upper()
@@ -569,7 +569,7 @@ class FaultCodeThreeReport:
             'mat_col': str,
             'rat_col': str,
             'oat_col': str,
-            'fan_vfd_speed_col': str,
+            'supply_vfd_speed_col': str,
         }
         for attribute in attributes_dict:
             upper = attribute.upper()
@@ -844,7 +844,7 @@ class FaultCodeFourReport:
         attributes_dict = {  # for reference only - not used because there's only one attribute from the dict
             'delta_os_max': float
         }
-        self.delta_os_max = dict_['delta_os_max']
+        self.delta_os_max = dict_['DELTA_OS_MAX']
         self.heating_mode_calc_col = 'heating_mode'
         self.econ_only_cooling_mode_calc_col = 'econ_only_cooling_mode'
         self.econ_plus_mech_cooling_mode_calc_col = 'econ_plus_mech_cooling_mode'

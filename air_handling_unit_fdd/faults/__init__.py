@@ -70,7 +70,7 @@ class FaultCondition:
                 df[col].dtypes,
             )
 
-    def check_analog_pct(self, columns):
+    def check_analog_pct(self, df, columns):
         """check analog outputs [data with units of %] are floats only
 
         :param columns:
@@ -107,7 +107,7 @@ class FaultConditionOne(FaultCondition):
 
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col]
-        self.check_analog_pct(columns_to_check)
+        self.check_analog_pct(df, columns_to_check)
 
         df["static_check_"] = (
                 df[self.duct_static_col]

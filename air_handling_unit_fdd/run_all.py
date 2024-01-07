@@ -5,10 +5,11 @@ import pandas as pd
 from faults import *
 from reports import *
 
-from reports.open_ai_report_fc1 import FaultCodeOneReport
-from reports.open_ai_report_fc2 import FaultCodeTwoReport
-from reports.open_ai_report_fc3 import FaultCodeThreeReport
-from reports.open_ai_report_fc4 import FaultCodeFourReport
+## Disabling openai for now because I have "exceeded my current quota" and have no billing plan.
+# from reports.open_ai_report_fc1 import FaultCodeOneReport
+# from reports.open_ai_report_fc2 import FaultCodeTwoReport
+# from reports.open_ai_report_fc3 import FaultCodeThreeReport
+# from reports.open_ai_report_fc4 import FaultCodeFourReport
 
 from api_key import API_KEY
 import run_all_config
@@ -34,16 +35,16 @@ def report_maker(report, counter, df):
 def apply_faults_and_generate_reports(df, to_do):
 
     _fc1 = FaultConditionOne(config_dict)
-    _fc1_report = FaultCodeOneReport(config_dict, api_key=API_KEY)
+    _fc1_report = FaultCodeOneReport(config_dict)#, api_key=API_KEY)
 
     _fc2 = FaultConditionTwo(config_dict)
-    _fc2_report = FaultCodeTwoReport(config_dict, api_key=API_KEY)
+    _fc2_report = FaultCodeTwoReport(config_dict)#, api_key=API_KEY)
 
     _fc3 = FaultConditionThree(config_dict)
-    _fc3_report = FaultCodeThreeReport(config_dict, api_key=API_KEY)
+    _fc3_report = FaultCodeThreeReport(config_dict)#, api_key=API_KEY)
 
     _fc4 = FaultConditionFour(config_dict)
-    _fc4_report = FaultCodeFourReport(config_dict, API_KEY)
+    _fc4_report = FaultCodeFourReport(config_dict)#, API_KEY)
 
     _fc5 = FaultConditionFive(config_dict)
     _fc5_report = FaultCodeFiveReport(config_dict)
@@ -72,7 +73,8 @@ def apply_faults_and_generate_reports(df, to_do):
     _fc13 = FaultConditionThirteen(config_dict)
     _fc13_report = FaultCodeThirteenReport(config_dict)
 
-    _fc14 = FaultConditionFourteen(config_dict)
+    # todo: this one seems to be missing config_dict params related to coil ent/leav temps
+    # _fc14 = FaultConditionFourteen(config_dict)
 
     # Combine fault conditions and reports into tuples
     faults_and_reports = [
