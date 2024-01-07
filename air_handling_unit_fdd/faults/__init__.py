@@ -153,7 +153,7 @@ class FaultConditionTwo(FaultCondition):
 
         # check analog ouputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col]
-        self.check_analog_pct(columns_to_check)
+        self.check_analog_pct(df, columns_to_check)
 
         # fault condition-specific checks / flags
         df["mat_check"] = df[self.mat_col] + self.mix_degf_err_thres
