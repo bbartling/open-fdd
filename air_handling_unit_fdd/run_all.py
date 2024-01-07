@@ -121,7 +121,13 @@ def apply_faults_and_generate_reports(df, to_do):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=False)
     args = parser.add_argument_group("Options")
-    args.add_argument("-i", "--input", required=True, type=str, help="CSV File Input")
+    args.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        type=str,
+        help="CSV File Input"
+    )
     parser.add_argument(
         "-d",
         "--do",
