@@ -12,7 +12,7 @@
 
 [linkedin](https://www.linkedin.com/in/ben-bartling-510a0961/)
 
-## Licence
+## License
 
 【MIT License】
 

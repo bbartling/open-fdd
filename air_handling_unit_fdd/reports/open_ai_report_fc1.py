@@ -12,24 +12,25 @@ from docx.shared import Pt
 class FaultCodeOneReport:
     """Class provides the definitions for Fault Code 1 Report."""
 
-    def __init__(
-        self,
-        vfd_speed_percent_err_thres: float,
-        vfd_speed_percent_max: float,
-        duct_static_inches_err_thres: float,
-        duct_static_col: str,
-        supply_vfd_speed_col: str,
-        duct_static_setpoint_col: str,
-        api_key: str
-    ):
-        self.vfd_speed_percent_err_thres = vfd_speed_percent_err_thres
-        self.vfd_speed_percent_max = vfd_speed_percent_max
-        self.duct_static_inches_err_thres = duct_static_inches_err_thres
-        self.duct_static_col = duct_static_col
-        self.duct_static_setpoint_col = duct_static_setpoint_col
-        self.fan_vfd_speed_col = supply_vfd_speed_col
-        self.api_key = api_key
-        openai.api_key = self.api_key
+    def __init__(self, dict_, api_key):
+        """Passes dictionary into initialization of class instance, then uses the attributes called out below in
+        attributes_dict to set only the attributes that match from dict_.
+
+        :param dict_: dictionary of all possible class attributes (loaded from config file)
+        """
+        self.vfd_speed_percent_err_thres = float,
+        self.vfd_speed_percent_max = float,
+        self.duct_static_inches_err_thres = float,
+        self.duct_static_col = str,
+        self.supply_vfd_speed_col = str,
+        self.duct_static_setpoint_col = str,
+
+        for attribute in self.__dict__:
+            upper = attribute.upper()
+            value = dict_[upper]
+            self.__setattr__(attribute, value)
+
+        openai.api_key = api_key
         self.max_tokens = 3000
         self.completion_model = 'gpt-3.5-turbo'
 
@@ -112,7 +113,7 @@ class FaultCodeOneReport:
         ax1.legend(loc='best')
         ax1.set_ylabel("Inch WC")
 
-        ax2.plot(df.index, df[self.fan_vfd_speed_col],
+        ax2.plot(df.index, df[self.supply_vfd_speed_col],
                  color="g", label="FAN")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
@@ -145,12 +146,12 @@ class FaultCodeOneReport:
             df[self.duct_static_col].where(df[output_col] == 1).mean(), 2
         )
 
-        motor_on = df[self.fan_vfd_speed_col].gt(.01).astype(int)
+        motor_on = df[self.supply_vfd_speed_col].gt(.01).astype(int)
         hours_motor_runtime = round(
             (delta * motor_on).sum() / pd.Timedelta(hours=1), 2)
 
         # for summary stats on I/O data to make useful
-        df_motor_on_filtered = df[df[self.fan_vfd_speed_col] > 0.1]
+        df_motor_on_filtered = df[df[self.supply_vfd_speed_col] > 0.1]
 
         return (
             total_days,
@@ -248,7 +249,7 @@ class FaultCodeOneReport:
             df_motor_on_filtered
         ) = self.summarize_fault_times(df, output_col=output_col)
 
-        fan_vfd_speed_describe = str(df_motor_on_filtered[self.fan_vfd_speed_col].describe())
+        fan_vfd_speed_describe = str(df_motor_on_filtered[self.supply_vfd_speed_col].describe())
         duct_static_describe = str(df_motor_on_filtered[self.duct_static_col].describe())
         duct_static_setpoint_describe = str(df_motor_on_filtered[self.duct_static_setpoint_col].describe())
 

@@ -19,6 +19,8 @@ class FaultCodeFourReport:
         delta_os_max: float,
         api_key: str,
     ):
+        # ToDo: should this be refactored similarly to other reports? Currently the run_all script seems to call the
+        #  normal FC4report, not the OpenAI one (this one), but it will throw an error of it calls this one.
         self.delta_os_max = delta_os_max
         self.heating_mode_calc_col = "heating_mode"
         self.econ_only_cooling_mode_calc_col = "econ_only_cooling_mode"

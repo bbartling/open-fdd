@@ -5,52 +5,24 @@ import pandas as pd
 from faults import *
 from reports import *
 
-from reports.report_fc1 import FaultCodeOneReport
-from reports.report_fc2 import FaultCodeTwoReport
-from reports.report_fc3 import FaultCodeThreeReport
-from reports.report_fc4 import FaultCodeFourReport
+## Disabling openai for now because I have "exceeded my current quota" and have no billing plan.
+# from reports.open_ai_report_fc1 import FaultCodeOneReport
+# from reports.open_ai_report_fc2 import FaultCodeTwoReport
+# from reports.open_ai_report_fc3 import FaultCodeThreeReport
+# from reports.open_ai_report_fc4 import FaultCodeFourReport
 
 from api_key import API_KEY
 import run_all_config
 
-AHU_NAME = run_all_config.AHU_NAME
-INDEX_COL_NAME = run_all_config.INDEX_COL_NAME
-DUCT_STATIC_COL = run_all_config.DUCT_STATIC_COL
-DUCT_STATIC_SETPOINT_COL = run_all_config.DUCT_STATIC_SETPOINT_COL
-SUPPLY_VFD_SPEED_COL = run_all_config.SUPPLY_VFD_SPEED_COL
-MIX_AIR_TEMP_COL = run_all_config.MIX_AIR_TEMP_COL
-OUTSIDE_AIR_TEMP_COL = run_all_config.OUTSIDE_AIR_TEMP_COL
-SUPPLY_AIR_TEMP_COL = run_all_config.SUPPLY_AIR_TEMP_COL
-RETURN_AIR_TEMP_COL = run_all_config.RETURN_AIR_TEMP_COL
-HEAT_VALVE_COMMAND_COL = run_all_config.HEAT_VALVE_COMMAND_COL
-COOL_VALVE_COMMAND_COL = run_all_config.COOL_VALVE_COMMAND_COL
-OUTSIDE_AIR_DAMPER_COMMAND_COL = run_all_config.OUTSIDE_AIR_DAMPER_COMMAND_COL
-SUPPLY_FAN_AIR_VOLUME_COL = run_all_config.SUPPLY_FAN_AIR_VOLUME_COL
-SUPPLY_AIR_TEMP_SETPOINT_COL = run_all_config.SUPPLY_AIR_TEMP_SETPOINT_COL
-CONSTANT_LEAVE_TEMP_SP = run_all_config.CONSTANT_LEAVE_TEMP_SP
-CONSTANT_LEAVE_TEMP_SP_VAL = run_all_config.CONSTANT_LEAVE_TEMP_SP_VAL
-VFD_SPEED_PERCENT_ERR_THRES = run_all_config.VFD_SPEED_PERCENT_ERR_THRES
-VFD_SPEED_PERCENT_MAX = run_all_config.VFD_SPEED_PERCENT_MAX
-DUCT_STATIC_PRESS_ERR_THRES = run_all_config.DUCT_STATIC_PRESS_ERR_THRES
-OUTSIDE_AIR_TEMP_ERR_THRES = run_all_config.OUTSIDE_AIR_TEMP_ERR_THRES
-MIX_AIR_TEMP_ERR_THRES = run_all_config.MIX_AIR_TEMP_ERR_THRES
-RETURN_AIR_TEMP_ERR_THRES = run_all_config.RETURN_AIR_TEMP_ERR_THRES
-SUPPLY_AIR_TEMP_ERR_THRES = run_all_config.SUPPLY_AIR_TEMP_ERR_THRES
-FAN_DELTA_TEMP_ERR_THRES = run_all_config.FAN_DELTA_TEMP_ERR_THRES
-DELTA_OS_MAX = run_all_config.DELTA_OS_MAX
-AHU_MIN_OA = run_all_config.AHU_MIN_OA
-DELTA_TEMP_MIN = run_all_config.DELTA_TEMP_MIN
-AIRFLOW_ERR_THRES = run_all_config.AIRFLOW_ERR_THRES
-AHU_DESIGN_OA = run_all_config.AHU_DESIGN_OA
-TROUBLESHOOT_MODE = run_all_config.TROUBLESHOOT_MODE
-
+# instead of explicitly naming the above vars, import the config variables from config file as a single dictionary
+config_dict = run_all_config.config_dict
 
 def fault_applier(_fc, df):
     return _fc.apply(df)
 
 def report_maker(report, counter, df):
     print("report maker called", report, counter)
-    report_name = f"{AHU_NAME}_fc{str(counter)}_report"
+    report_name = f"{config_dict['AHU_NAME']}_fc{str(counter)}_report"
     document = report.create_report(report_name, df)
     path = os.path.join(os.path.curdir, "final_report")
     if not os.path.exists(path):
@@ -61,257 +33,48 @@ def report_maker(report, counter, df):
 
 
 def apply_faults_and_generate_reports(df, to_do):
-    _fc1 = FaultConditionOne(
-        VFD_SPEED_PERCENT_ERR_THRES,
-        VFD_SPEED_PERCENT_MAX,
-        DUCT_STATIC_PRESS_ERR_THRES,
-        DUCT_STATIC_COL,
-        SUPPLY_VFD_SPEED_COL,
-        DUCT_STATIC_SETPOINT_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
 
-    _fc1_report = FaultCodeOneReport(
-        VFD_SPEED_PERCENT_ERR_THRES,
-        VFD_SPEED_PERCENT_MAX,
-        DUCT_STATIC_PRESS_ERR_THRES,
-        DUCT_STATIC_COL,
-        SUPPLY_VFD_SPEED_COL,
-        DUCT_STATIC_SETPOINT_COL,
-        API_KEY,
-    )
+    _fc1 = FaultConditionOne(config_dict)
+    _fc1_report = FaultCodeOneReport(config_dict)#, api_key=API_KEY)
 
-    _fc2 = FaultConditionTwo(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc2 = FaultConditionTwo(config_dict)
+    _fc2_report = FaultCodeTwoReport(config_dict)#, api_key=API_KEY)
 
-    _fc2_report = FaultCodeTwoReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        API_KEY,
-    )
+    _fc3 = FaultConditionThree(config_dict)
+    _fc3_report = FaultCodeThreeReport(config_dict)#, api_key=API_KEY)
 
-    _fc3 = FaultConditionThree(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc4 = FaultConditionFour(config_dict)
+    _fc4_report = FaultCodeFourReport(config_dict)#, API_KEY)
 
-    _fc3_report = FaultCodeThreeReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        API_KEY,
-    )
+    _fc5 = FaultConditionFive(config_dict)
+    _fc5_report = FaultCodeFiveReport(config_dict)
 
-    _fc4 = FaultConditionFour(
-        DELTA_OS_MAX,
-        AHU_MIN_OA,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        HEAT_VALVE_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc6 = FaultConditionSix(config_dict)
+    _fc6_report = FaultCodeSixReport(config_dict)
 
-    _fc4_report = FaultCodeFourReport(DELTA_OS_MAX, API_KEY)
+    _fc7 = FaultConditionSeven(config_dict)
+    _fc7_report = FaultCodeSevenReport(config_dict)
 
-    _fc5 = FaultConditionFive(
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        HEAT_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc8 = FaultConditionEight(config_dict)
+    _fc8_report = FaultCodeEightReport(config_dict)
 
-    _fc5_report = FaultCodeFiveReport(
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        HEAT_VALVE_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc9 = FaultConditionNine(config_dict)
+    _fc9_report = FaultCodeNineReport(config_dict)
 
-    _fc6 = FaultConditionSix(
-        AIRFLOW_ERR_THRES,
-        AHU_DESIGN_OA,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        RETURN_AIR_TEMP_ERR_THRES,
-        DELTA_TEMP_MIN,
-        AHU_MIN_OA,
-        SUPPLY_FAN_AIR_VOLUME_COL,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        HEAT_VALVE_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc10 = FaultConditionTen(config_dict)
+    _fc10_report = FaultCodeTenReport(config_dict)
 
-    _fc6_report = FaultCodeSixReport(
-        SUPPLY_FAN_AIR_VOLUME_COL,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        RETURN_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    _fc11 = FaultConditionEleven(config_dict)
+    _fc11_report = FaultCodeElevenReport(config_dict)
 
-    _fc7 = FaultConditionSeven(
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        HEAT_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
+    _fc12 = FaultConditionTwelve(config_dict)
+    _fc12_report = FaultCodeTwelveReport(config_dict)
 
-    _fc7_report = FaultCodeSevenReport(
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        HEAT_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
+    _fc13 = FaultConditionThirteen(config_dict)
+    _fc13_report = FaultCodeThirteenReport(config_dict)
 
-    _fc8 = FaultConditionEight(
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        COOL_VALVE_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc8_report = FaultCodeEightReport(
-        MIX_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
-
-    _fc9 = FaultConditionNine(
-        FAN_DELTA_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc9_report = FaultCodeNineReport(
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        SUPPLY_VFD_SPEED_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-    )
-
-    _fc10 = FaultConditionTen(
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc10_report = FaultCodeTenReport(
-        MIX_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
-
-    _fc11 = FaultConditionEleven(
-        FAN_DELTA_TEMP_ERR_THRES,
-        OUTSIDE_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc11_report = FaultCodeElevenReport(
-        SUPPLY_AIR_TEMP_COL,
-        OUTSIDE_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
-
-    _fc12 = FaultConditionTwelve(
-        FAN_DELTA_TEMP_ERR_THRES,
-        MIX_AIR_TEMP_ERR_THRES,
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_COL,
-        MIX_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc12_report = FaultCodeTwelveReport(
-        SUPPLY_AIR_TEMP_COL,
-        MIX_AIR_TEMP_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
-
-    _fc13 = FaultConditionThirteen(
-        SUPPLY_AIR_TEMP_ERR_THRES,
-        AHU_MIN_OA,
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        troubleshoot=TROUBLESHOOT_MODE,
-    )
-
-    _fc13_report = FaultCodeThirteenReport(
-        SUPPLY_AIR_TEMP_COL,
-        SUPPLY_AIR_TEMP_SETPOINT_COL,
-        COOL_VALVE_COMMAND_COL,
-        OUTSIDE_AIR_DAMPER_COMMAND_COL,
-        SUPPLY_VFD_SPEED_COL,
-    )
+    # todo: this one seems to be missing config_dict params related to coil ent/leav temps
+    # _fc14 = FaultConditionFourteen(config_dict)
 
     # Combine fault conditions and reports into tuples
     faults_and_reports = [
@@ -360,7 +123,13 @@ def apply_faults_and_generate_reports(df, to_do):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=False)
     args = parser.add_argument_group("Options")
-    args.add_argument("-i", "--input", required=True, type=str, help="CSV File Input")
+    args.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        type=str,
+        help="CSV File Input"
+    )
     parser.add_argument(
         "-d",
         "--do",
@@ -371,8 +140,11 @@ if __name__ == "__main__":
         help="Fault(s) to do or run-only",
     )
     args = parser.parse_args()
-
-    df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True)
+    df = pd.read_csv(
+        args.input,
+        index_col=config_dict['INDEX_COL_NAME'],
+        parse_dates=True
+    )
     time_diff = df.index.to_series().diff().iloc[1:]
     max_diff = time_diff.max()
 
@@ -384,8 +156,8 @@ if __name__ == "__main__":
     else:
         df = df.rolling("5T").mean()
 
-    if CONSTANT_LEAVE_TEMP_SP:
-        df[SUPPLY_AIR_TEMP_SETPOINT_COL] = CONSTANT_LEAVE_TEMP_SP_VAL
+    if config_dict['CONSTANT_LEAVE_TEMP_SP']:
+        df[config_dict['SUPPLY_AIR_TEMP_SETPOINT_COL']] = config_dict['CONSTANT_LEAVE_TEMP_SP_VAL']
 
     # Apply fault conditions and generate reports
     apply_faults_and_generate_reports(df, to_do=args.do)
