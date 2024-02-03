@@ -7,7 +7,7 @@
 
 This project is a community-driven initiative, focusing on the development of free and open-source tools. We believe in the power of collaboration and open access to technology, embodying the spirit of open-source philosophy.
 
-> "You can patent fricken physics.."
+> "You can't patent fricken physics..."
 
 This quote captures our ethos. In the world of rapid technological advancement, we stand for open and accessible innovation. We encourage contributions from all who share this vision. Whether it's by contributing code, documentation, ideas, or feedback, your involvement is valued and essential for the growth of this project.
 
