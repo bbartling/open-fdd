@@ -3,20 +3,20 @@
 ## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
 
-* NEW JUNE 2023 - AI powered suggestions based on data analysis, see `air_handling_unit/final_reports` directory for examples! Also paste in your Open AI api key in the `api_key.py` file. Please provide feedback or suggestions as the prompt engineering is a work in progress! See example reports in the directory `air_handling_unit/final_reports` where Chat GPT AI is providing all of the `Suggestions based on data analysis` on the bottom of the report bodys. Using Chat GPT to provide insights isnt a complete finish processed feel free to email or use a git issue to know more. See `air_handling_unit_fdd` sub directory to see more.
+## Contribute
 
-* NEW JULY 2023 - Demand response measurment and verification calculations and reports for electricity power meters. See `demand_response_mv` sub directory to see more. 2 methods are currently used to calculate demand response electricity power reduction are 10 previous weekday averaged of the electrical load profile and 10 closest weekday weather days.
+This project is a community-driven initiative, focusing on the development of free and open-source tools. We believe in the power of collaboration and open access to technology, embodying the spirit of open-source philosophy.
 
+> "You can patent fricken physics.."
 
-## Author
+This quote captures our ethos. In the world of rapid technological advancement, we stand for open and accessible innovation. We encourage contributions from all who share this vision. Whether it's by contributing code, documentation, ideas, or feedback, your involvement is valued and essential for the growth of this project.
 
-[linkedin](https://www.linkedin.com/in/ben-bartling-510a0961/)
 
 ## License
 
 【MIT License】
 
-Copyright 2022 Ben Bartling
+Copyright 2024 Ben Bartling
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

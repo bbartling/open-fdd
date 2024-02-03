@@ -2,8 +2,6 @@
 
 ## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
-Using Chat GPT to provide insights is optional and isnt a completely finish processed feel free to email or use a git issue to know more.
-
 ###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
 ```python
 def apply(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -68,20 +66,5 @@ $ python ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 1 2
 
 ###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system binary commands the fault equation expects an integer of 0 for Off and 1 for On. A column in your CSV file needs to be named `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
-### More to come to incorporate AHU zone level faults, fuel meters, central cooling and heating plants. Please submit a github issue or start a github conservation to request additional features. Pull requests encouraged to promote a community based free open source tool to help promote better buildings, commissioning professionals, HVAC optimization, and building carbon reduction efforts.
 
-## Author
 
-[linkedin](https://www.linkedin.com/in/ben-bartling-510a0961/)
-
-## Licence
-
-【MIT License】
-
-Copyright 2022 Ben Bartling
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
