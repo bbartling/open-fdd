@@ -6,6 +6,9 @@ Windows 10 Python 3.10
 Run like this to exclude fault 6 4 and 9 for example
 $ python3.10 ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 4 6 9
 
+OR another Windows run style:
+$ py -3.10 ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 4 6 9
+
 Linux Python 3.10
 $ python3.10 ./run_all.py -i ./ahu_data/MZVAV-1.csv -e 6
 
