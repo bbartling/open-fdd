@@ -7,7 +7,8 @@ import plotly.graph_objs as go
 import pandas as pd
 import numpy as np
 
-from graphql_schema import execute_query, brick_mappings
+from graphql_schema.graphql_logic import execute_query, brick_mappings
+
 
 app = dash.Dash(__name__)
 
@@ -58,9 +59,9 @@ app.layout = html.Div(
 
 
 @app.callback(
-    Output('motor-run-time-graph', 'figure'),
-    [Input('update-motor-run-time-button', 'n_clicks')],
-    [State('sensor_type', 'value')]
+    Output("motor-run-time-graph", "figure"),
+    [Input("update-motor-run-time-button", "n_clicks")],
+    [State("sensor_type", "value")],
 )
 def update_motor_run_time_graph(n_clicks, sensor_types):
     if n_clicks == 0:
@@ -76,7 +77,9 @@ def update_motor_run_time_graph(n_clicks, sensor_types):
 
         if data and "dailyMotorRunTime" in data:
             df = pd.DataFrame(data["dailyMotorRunTime"])
-            fig = px.line(df, x="day", y="runTimeHours", title="Daily Motor Run Time (Hours)")
+            fig = px.line(
+                df, x="day", y="runTimeHours", title="Daily Motor Run Time (Hours)"
+            )
             return fig
 
     return go.Figure()
@@ -220,15 +223,30 @@ def update_graph(n_clicks, time_resolution, sensor_types, y_axis_choices, fan_st
         if data and query_field in data:
             df = pd.DataFrame(data[query_field])
 
-            # Replace placeholder value with NaN
-            df["average"].replace(-9999.99, np.nan, inplace=True)
+            # Determine the y-axis data and process it based on the time resolution
+            if time_resolution == "R":
+                if 'value' in df.columns:
+                    # Handling Raw data
+                    df["value"].replace(-9999.99, np.nan, inplace=True)
+                    y_data = df["value"]
+                    x_data = df[x_column]
+            else:
+                # Handling Averaged data
+                if 'average' in df.columns:
+                    df["average"].replace(-9999.99, np.nan, inplace=True)
+                    y_data = df["average"]
+                    x_data = df[x_column]
+                else:
+                    raise ValueError(f"'average' column not found in response for {sensor_type}")
 
+            # Define the y-axis side and label based on user's choice
             yaxis = "y2" if y_axis_choice == "right" else "y1"
             axis_label = " (Right)" if y_axis_choice == "right" else " (Left)"
-            y_data = df["value"] if time_resolution == "R" else df["average"]
+
+            # Add trace to the figure
             fig.add_trace(
                 go.Scatter(
-                    x=df[x_column],
+                    x=x_data,
                     y=y_data,
                     mode="lines",
                     connectgaps=False,  # Do not connect the gaps caused by NaN values
@@ -236,6 +254,7 @@ def update_graph(n_clicks, time_resolution, sensor_types, y_axis_choices, fan_st
                     yaxis=yaxis,
                 )
             )
+
         else:
             print(f"No data for {sensor_type}")  # Debug print
 
@@ -250,6 +269,3 @@ def update_graph(n_clicks, time_resolution, sensor_types, y_axis_choices, fan_st
 
     return fig
 
-
-if __name__ == "__main__":
-    app.run_server(debug=True)

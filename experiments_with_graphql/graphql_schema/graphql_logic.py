@@ -7,7 +7,7 @@ from typing import List
 NAN_PLACEHOLDER = -9999.99
 
 # Load the data
-df = pd.read_csv("../ahu_data.csv", parse_dates=["Date"])
+df = pd.read_csv("data/ahu_data.csv", parse_dates=["Date"])
 
 # Define Brick Schema mappings
 brick_mappings = {
@@ -36,30 +36,36 @@ class MonthlyAverage:
     month: str
     average: float
 
+
 @strawberry.type
 class WeeklyAverage:
     week: str
     average: float
+
 
 @strawberry.type
 class DailyAverage:
     day: str
     average: float
 
+
 @strawberry.type
 class HourlyAverage:
     hour: str
     average: float
+
 
 @strawberry.type
 class RawData:
     timestamp: str
     value: float
 
+
 @strawberry.type
 class DailyMotorRunTime:
     day: str
     run_time_hours: float
+
 
 @strawberry.type
 class Query:
@@ -90,14 +96,15 @@ class Query:
             )
             monthly_data["Date"] = monthly_data["Date"].dt.strftime("%Y-%m")
             return [
-                MonthlyAverage(month=row["Date"], 
+                MonthlyAverage(
+                    month=row["Date"],
                     average=(
                         row[column] if not pd.isna(row[column]) else NAN_PLACEHOLDER
                     ),
                 )
                 for index, row in monthly_data.iterrows()
             ]
-            
+
         else:
             return []
 
@@ -125,14 +132,15 @@ class Query:
             )
             weekly_data["Date"] = weekly_data["Date"].dt.strftime("%Y-%m-%d")
             return [
-                WeeklyAverage(week=row["Date"], 
+                WeeklyAverage(
+                    week=row["Date"],
                     average=(
                         row[column] if not pd.isna(row[column]) else NAN_PLACEHOLDER
                     ),
                 )
                 for index, row in weekly_data.iterrows()
             ]
-            
+
         else:
             return []
 
@@ -161,8 +169,8 @@ class Query:
             daily_data["Date"] = daily_data["Date"].dt.strftime("%Y-%m-%d")
             return [
                 DailyAverage(
-                    day=row["Date"], 
-                   average=(
+                    day=row["Date"],
+                    average=(
                         row[column] if not pd.isna(row[column]) else NAN_PLACEHOLDER
                     ),
                 )
@@ -203,44 +211,42 @@ class Query:
                 )
                 for index, row in hourly_data.iterrows()
             ]
-            
+
         else:
             return []
 
     # Raw data retrieval
     @strawberry.field(name="rawData")
     def rawData(self, sensorName: str, fanRunning: bool = False) -> List[RawData]:
-        print("rawData Query fanRunning: ", fanRunning)
         column = get_column_from_brick(sensorName)
         motor_speed_column = get_column_from_brick("Motor_Speed_Sensor")
-
+        
         if column and column in df.columns:
-            # Create a filtered DataFrame based on fanRunning status
-            filtered_df = df[df[motor_speed_column] > 5.0] if fanRunning else df.copy()
+            # Create a DataFrame with all timestamps
+            raw_data = df.set_index("Date").reset_index()
+            raw_data["Date"] = raw_data["Date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-            # Remove rows with NaN values in the specified column
-            # and motor speed column if fanRunning is True
-            filtered_df = filtered_df.dropna(
-                subset=[column] + ([motor_speed_column] if fanRunning else [])
-            )
+            if fanRunning:
+                # Replace values with NAN_PLACEHOLDER where motor speed is not above 5.0
+                raw_data.loc[df[motor_speed_column] <= 5.0, column] = NAN_PLACEHOLDER
 
             return [
                 RawData(
-                    timestamp=row["Date"].strftime("%Y-%m-%d %H:%M:%S"),
-                    value=row[column],
+                    timestamp=row["Date"],
+                    value=row[column] if not pd.isna(row[column]) else NAN_PLACEHOLDER,
                 )
-                for index, row in filtered_df.iterrows()
+                for index, row in raw_data.iterrows()
             ]
         else:
             return []
-        
+
 
     @strawberry.field(name="dailyMotorRunTime")
     def daily_motor_run_time(self, sensorName: str) -> List[DailyMotorRunTime]:
         motor_speed_column = get_column_from_brick("Motor_Speed_Sensor")
 
-        df_copy = df.copy().set_index('Date', inplace=False)
-        
+        df_copy = df.copy().set_index("Date", inplace=False)
+
         if motor_speed_column in df_copy.columns:
             # Determine when the motor is on (speed > 0.1)
             motor_on = df_copy[motor_speed_column] > 0.1
@@ -249,27 +255,30 @@ class Query:
             delta = df_copy.index.to_series().diff().fillna(pd.Timedelta(seconds=0))
 
             # Calculate hours of motor runtime
-            df_copy['running_hours'] = delta.apply(lambda x: x.total_seconds() / 3600) * motor_on
+            df_copy["running_hours"] = (
+                delta.apply(lambda x: x.total_seconds() / 3600) * motor_on
+            )
 
             # Group by day and sum the running hours
-            daily_motor_runtime = df_copy['running_hours'].resample('D').sum()
+            daily_motor_runtime = df_copy["running_hours"].resample("D").sum()
 
             # Reset the index to turn the dates back into a column
             daily_motor_runtime = daily_motor_runtime.reset_index()
 
             # Rename columns for clarity
-            daily_motor_runtime.columns = ['day', 'total_runtime_hours']
+            daily_motor_runtime.columns = ["day", "total_runtime_hours"]
 
             # Convert to list of DailyMotorRunTime
             return [
                 DailyMotorRunTime(
-                    day=row['day'].strftime('%Y-%m-%d'),
-                    run_time_hours=row['total_runtime_hours']
+                    day=row["day"].strftime("%Y-%m-%d"),
+                    run_time_hours=row["total_runtime_hours"],
                 )
                 for index, row in daily_motor_runtime.iterrows()
             ]
         else:
             return []
+
 
 # Create a Strawberry GraphQL schema
 schema = strawberry.Schema(query=Query)
