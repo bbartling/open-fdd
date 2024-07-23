@@ -5,5 +5,3 @@ python-docx
 matplotlib
 argparse
 pytest
-click
-streamlit
