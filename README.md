@@ -1,8 +1,8 @@
 # open-fdd
 
-## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
+This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
-See `README` inside the `air_handling_unit` directory for further instructions.
+* See `README` inside the `air_handling_unit` directory for further instructions.
 
 ## UNDER ACTIVE DEVELOPMENT - 7/23/24
 * Some features may be broken or not work as expected while the project is undergoing a significant makeover to become installable from PyPI. The aim is to streamline the reporting processes and make them much easier to use. We appreciate your patience during this transition.
