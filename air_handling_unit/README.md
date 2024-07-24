@@ -73,21 +73,27 @@ TODO when new PyPI version is ready
 TODO when new PyPI version is ready
 
 ## AHU fault equation descriptions
-* Fault Condition 1: Duct static pressure too low with fan operating near 100% speed
-* Fault Condition 2: Mix temperature too low; should be between outside and return air
-* Fault Condition 3: Mix temperature too high; should be between outside and return air
-* Fault Condition 4: PID hunting; too many operating state changes between AHU modes for heating, economizer, and mechanical cooling
-* Fault Condition 5: Supply air temperature too low should be higher than mix air
-* Fault Condition 6: OA fraction too low or too high, should equal to design % outdoor air requirement
-* Fault Condition 7: Supply air temperature too low in full heating
-* Fault Condition 8: Supply air temperature and mix air temperature should be approx equal in economizer mode
-* Fault Condition 9: Outside air temperature too high in free cooling without additional mechanical cooling in economizer mode
-* Fault Condition 10: Outdoor air temperature and mix air temperature should be approx equal in economizer plus mech cooling mode
-* Fault Condition 11: Outside air temperature too low for 100% outdoor air cooling in economizer cooling mode
-* Fault Condition 12: Supply air temperature too high; should be less than mix air temperature in economizer plus mech cooling mode
-* Fault Condition 13: Supply air temperature too high in full cooling in economizer plus mech cooling mode
-* Fault Condition 14: Temperature drop across inactive cooling coil (requires coil leaving temp sensor)
-* Fault Condition 14: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
+* **Fault Condition 1**: Duct static pressure too low with fan operating near 100% speed
+* **Fault Condition 2**: Mix temperature too low; should be between outside and return air
+* **Fault Condition 3**: Mix temperature too high; should be between outside and return air
+* **Fault Condition 4**: PID hunting; too many operating state changes between AHU modes for heating, economizer, and mechanical cooling
+* **Fault Condition 5**: Supply air temperature too low should be higher than mix air
+* **Fault Condition 6**: OA fraction too low or too high, should equal to design % outdoor air requirement
+* **Fault Condition 7**: Supply air temperature too low in full heating
+* **Fault Condition 8**: Supply air temperature and mix air temperature should be approx equal in economizer mode
+* **Fault Condition 9**: Outside air temperature too high in free cooling without additional mechanical cooling in economizer mode
+* **Fault Condition 10**: Outdoor air temperature and mix air temperature should be approx equal in economizer plus mech cooling mode
+* **Fault Condition 11**: Outside air temperature too low for 100% outdoor air cooling in economizer cooling mode
+* **Fault Condition 12**: Supply air temperature too high; should be less than mix air temperature in economizer plus mech cooling mode
+* **Fault Condition 13**: Supply air temperature too high in full cooling in economizer plus mech cooling mode
+* **Fault Condition 14**: Temperature drop across inactive cooling coil (requires coil leaving temp sensor)
+* **Fault Condition 14**: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
 
-
+## TODO
+Setup repository for general AHU system energy efficiency FDD's.
+* **roque zones**: Find in the VAV system and count of `rogue zones` that could be potentially used in tunning trim and respond (T&R) logic.
+* **Excessive reheat energy fault**: Find in VAV system via VAV box leaving air temperature sensors or reheat valve positions conditions where AHU is cooling and majority of reheat system is in a heating mode.
+* **General AHU Supply Fan Optimization fault**: Find in VAV system via VAV box air damper positions if fan is not adjusting or trimming to meet demand.
+* **General AHU Supply Air Temperature Setpoint fault**: Find in VAV system via optimized AHU discharge air setpoint via VAV box zone air temperature and setpoints (sensible loads) and outside air conditions (latent loads) if applicable in areas where dehumidification is required. 
+* More? Please post a git issue or discussion! 
 
