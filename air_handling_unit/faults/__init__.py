@@ -1,131 +1,13 @@
+
+'''
+
 import operator
 import pandas as pd
 import numpy as np
 import pandas.api.types as pdtypes
 
 
-class HelperUtils:
-    def float_int_check_err(self, col):
-        err_str = " column failed with a check that the data is a float"
-        return str(col) + err_str
-
-    def float_max_check_err(self, col):
-        err_str = (
-            " column failed with a check that the data is a float between 0.0 and 1.0"
-        )
-        return str(col) + err_str
-
-    def isfloat(self, num):
-        try:
-            float(num)
-            return True
-        except:
-            return False
-
-    def isLessThanOnePointOne(self, num):
-        try:
-            if num <= 1.0:
-                return True
-        except:
-            return False
-
-    def convert_to_float(self, df, col):
-        if not pdtypes.is_float_dtype(df[col]):
-            try:
-                df[col] = df[col].astype(float)
-            except ValueError:
-                raise TypeError(self.float_int_check_err(col))
-        return df
-
-
-class FaultCondition:
-    """Parent class for Fault Conditions. Methods are inherited to all children.
-
-    """
-    def set_attributes(self, dict_):
-        """Passes dictionary into initialization of class instance, then uses the attributes called out below in
-        attributes_dict to set only the attributes that match from dict_.
-
-        :param dict_: dictionary of all possible class attributes (loaded from config file)
-        """
-        for attribute in self.__dict__:
-            upper = attribute.upper()
-            value = dict_[upper]
-            self.__setattr__(attribute, value)
-
-    def troubleshoot_cols(self, df):
-        """print troubleshoot columns mapping
-
-        :param df:
-        :return:
-        """
-        print("Troubleshoot mode enabled - not removing helper columns")
-        for col in df.columns:
-            print(
-                "df column: ",
-                col,
-                "- max: ",
-                df[col].max(),
-                "- col type: ",
-                df[col].dtypes,
-            )
-
-    def check_analog_pct(self, df, columns):
-        """check analog outputs [data with units of %] are floats only
-
-        :param columns:
-        :return:
-        """
-        helper = HelperUtils()
-        for col in columns:
-            if not pdtypes.is_float_dtype(df[col]):
-                df = helper.convert_to_float(df, col)
-            if df[col].max() > 1.0:
-                raise TypeError(helper.float_max_check_err(col))
-
-class FaultConditionOne(FaultCondition):
-    """Class provides the definitions for Fault Condition 1."""
-
-    def __init__(self, dict_):
-        """
-
-        :param dict_:
-        """
-        self.vfd_speed_percent_err_thres = float,
-        self.vfd_speed_percent_max = float,
-        self.duct_static_inches_err_thres = float,
-        self.duct_static_col = str,
-        self.supply_vfd_speed_col = str,
-        self.duct_static_setpoint_col = str,
-        self.troubleshoot_mode = bool,  # default should be False
-
-        self.set_attributes(dict_)
-
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot_mode:
-            self.troubleshoot_cols(df)
-
-        # check analog ouputs [data with units of %] are floats only
-        columns_to_check = [self.supply_vfd_speed_col]
-        self.check_analog_pct(df, columns_to_check)
-
-        df["static_check_"] = (
-                df[self.duct_static_col]
-                < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
-        )
-        df["fan_check_"] = (
-                df[self.supply_vfd_speed_col]
-                >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres
-        )
-
-        df["fc1_flag"] = (df["static_check_"] & df["fan_check_"]).astype(int)
-
-        if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
-            del df["static_check_"]
-            del df["fan_check_"]
-
-        return df
+from fault_condition import FaultCondition
 
 
 class FaultConditionTwo(FaultCondition):
@@ -1164,3 +1046,6 @@ class FaultConditionFifteen:
             del df["htg_delta_sqrted"]
 
         return df
+
+        
+'''
