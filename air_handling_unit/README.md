@@ -1,53 +1,78 @@
-# AHU
+# Air Handling Unit
 
-## This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
+This is a Python based FDD tool for running fault equations HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
-###### Under the hood of a `FaultCondition` class a method (Python function inside a class) called `apply` looks like this below as an example shown for the fault condition 1 which returns the boolean flag as a Pandas dataframe column (`fc1_flag`) if the fault condition is present:
+* Under the hood of the `FaultCondition` class, a method called apply (a Python function inside a class) processes the data and returns a boolean flag as a Pandas DataFrame column (fc1_flag) if the fault condition is present. Below is an example of the apply method for Fault Condition 1, which detects a VAV AHU supply fan fault due to low duct static pressure while the fan is operating at near 100% speed.
+
+* As of 7/24/24, a new feature has been added: `rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()`. This feature introduces a rolling sum condition to ensure that a fault is only triggered if 5 consecutive conditions are met in the data. For instance as shown below in the code, if the fan is operating near 100% speed and is not meeting the duct static setpoint, and data is captured every minute, the system requires 5 consecutive faults (or 5 minutes) before officially throwing a fan fault. This helps prevent false positives. The `rolling_window_size` param will be a adjustable value (default of 5) for tuning purposes which can be passed into the fault `FaultCondition` class via the config dictionary. 
+
 ```python
-def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-    df['static_check_'] = (
-        df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
-    df['fan_check_'] = (df[self.supply_vfd_speed_col] >=
-                        self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
+import pandas as pd
+import pandas.api.types as pdtypes
+from air_handling_unit.faults.fault_condition import FaultCondition
 
-    df["fc1_flag"] = (df['static_check_'] & df['fan_check_']).astype(int)
+class FaultConditionOne(FaultCondition):
+    """Class provides the definitions for Fault Condition 1."""
 
-    return df
+    def __init__(self, dict_):
+        """
+        :param dict_:
+        """
+        self.vfd_speed_percent_err_thres = float
+        self.vfd_speed_percent_max = float
+        self.duct_static_inches_err_thres = float
+        self.duct_static_col = str
+        self.supply_vfd_speed_col = str
+        self.duct_static_setpoint_col = str
+        self.troubleshoot_mode = bool  # default should be False
+        self.rolling_window_size = int
+
+        self.set_attributes(dict_)
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self.troubleshoot_mode:
+            self.troubleshoot_cols(df)
+
+        # check analog outputs [data with units of %] are floats only
+        columns_to_check = [self.supply_vfd_speed_col]
+        self.check_analog_pct(df, columns_to_check)
+
+        df['static_check_'] = (
+            df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
+        df['fan_check_'] = (
+            df[self.supply_vfd_speed_col] >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
+
+        # Combined condition check
+        df["combined_check"] = df['static_check_'] & df['fan_check_']
+
+        # Rolling sum to count consecutive trues
+        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        # Set flag to 1 if rolling sum equals the window size
+        df["fc1_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
+
+        if self.troubleshoot_mode:
+            print("Troubleshoot mode enabled - not removing helper columns")
+            del df["static_check_"]
+            del df["fan_check_"]
+            del df["combined_check"]
+
+        return df
 ```
 	
-###### A report is generated using the Python docx library from passing data into the `FaultCodeReport` class will output a Word document to a directory containing the following info, currently tested on a months worth of data.
+
+
+## Example Word Doc Report
+TODO when new PyPI version is ready
 * a description of the fault equation
-* a snip of the fault equation as defined by ASHRAE
 * a plot of the data created with matplotlib with sublots
 * data statistics to show the amount of time that the data contains as well as elapsed in hours and percent of time for when the fault condition is `True` and elapsed time in hours for the fan motor runtime.
 * a histagram representing the hour of the day for when the fault equation is `True`.
 * sensor summary statistics filtered for when the AHU fan is running
 
-### Example Word Doc Report
-![Alt text](/air_handling_unit_fdd/images/fc1_report_screenshot_all.png)
+## Get Setup
+TODO when new PyPI version is ready
 
-### Get Setup
-```bash
-$ git clone https://github.com/bbartling/open-fdd.git
-$ cd open-fdd
-$ pip install -r requirements.txt
-$ cd air_handling_unit_fdd
-```
-
-### Modify with text editor `run_all_config.py`
-* set proper column names in your CSV file 
-* threshold params need to be engineering unit specific for Imperial or SI units, see `params` screenshot in the images directory
-* input arg for CSV file path is `-i`
-* input arg for 'do' is `-d` which represents which fault to 'do'
-* tested on Windows 10 and Ubuntu 20 LTS on Python 3.10
-* output Word Doc reports will be in the final_report directory
-
-```python
-# 'do' fault 1 and 2 for example
-$ python ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 1 2
-```
-
-## Fault equation descriptions
+## AHU fault equation descriptions
 * Fault Condition 1: Duct static pressure too low with fan operating near 100% speed
 * Fault Condition 2: Mix temperature too low; should be between outside and return air
 * Fault Condition 3: Mix temperature too high; should be between outside and return air
@@ -63,8 +88,6 @@ $ python ./run_all.py -i ./ahu_data/MZVAV-1.csv -d 1 2
 * Fault Condition 13: Supply air temperature too high in full cooling in economizer plus mech cooling mode
 * Fault Condition 14: Temperature drop across inactive cooling coil (requires coil leaving temp sensor)
 * Fault Condition 14: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
-
-###### Note - Fault equations expect a float between 0.0 and 1.0 for a control system analog output that is typically expressed in industry HVAC controls as a percentage between 0 and 100% of command. Examples of a analog output could a heating valve, air damper, or fan VFD speed. For sensor input data these can be either float or integer based. Boolean on or off data for control system binary commands the fault equation expects an integer of 0 for Off and 1 for On. A column in your CSV file needs to be named `Date` with a Pandas readable time stamp tested in the format of `12/22/2022  7:40:00 AM`:
 
 
 

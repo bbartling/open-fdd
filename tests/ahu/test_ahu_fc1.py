@@ -10,12 +10,14 @@ $ py -3.12 -m pytest tests/ahu/test_ahu_fc1.py -rP
 Duct static pressure low when fan at full speed
 '''
 
+# Constants
 TEST_VFD_ERR_THRESHOLD = 0.05
 TEST_VFD_SPEED_MAX = 0.7
 TEST_DUCT_STATIC_ERR_THRESHOLD = 0.1
 TEST_DUCT_STATIC_COL = "duct_static"
 TEST_DUCT_STATIC_SETPOINT_COL = "duct_static_setpoint"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
+ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionOne with a dictionary
 fault_condition_params = {
@@ -25,7 +27,8 @@ fault_condition_params = {
     'DUCT_STATIC_COL': TEST_DUCT_STATIC_COL,
     'SUPPLY_VFD_SPEED_COL': TEST_SUPPLY_VFD_SPEED_COL,
     'DUCT_STATIC_SETPOINT_COL': TEST_DUCT_STATIC_SETPOINT_COL,
-    'TROUBLESHOOT_MODE': False  # default value
+    'TROUBLESHOOT_MODE': False,  # default value
+    'ROLLING_WINDOW_SIZE': ROLLING_WINDOW_SIZE  # rolling sum window size
 }
 
 fc1 = FaultConditionOne(fault_condition_params)
