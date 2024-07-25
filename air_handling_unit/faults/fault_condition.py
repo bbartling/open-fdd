@@ -1,4 +1,3 @@
-import pandas as pd
 import pandas.api.types as pdtypes
 from air_handling_unit.faults.helper_utils import HelperUtils
 

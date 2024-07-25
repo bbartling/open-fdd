@@ -1,11 +1,9 @@
 import pandas as pd
-import pandas.api.types as pdtypes
 from air_handling_unit.faults.fault_condition import FaultCondition
 
 class FaultConditionOne(FaultCondition):
     """ Class provides the definitions for Fault Condition 1.
         AHU low duct static pressure fan fault.
-    
     """
 
     def __init__(self, dict_):
