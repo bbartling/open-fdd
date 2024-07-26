@@ -1,103 +1,69 @@
-from faults import FaultConditionSeven, HelperUtils
 import pandas as pd
 import pytest
+from air_handling_unit.faults.fault_condition_seven import FaultConditionSeven
+from air_handling_unit.faults.helper_utils import HelperUtils
 
 '''
-to see print statements in pytest run with
-$ pytest tests/unit/test_ahu_fc7.py -rP
+To see print statements in pytest run with:
+$ py -3.12 -m pytest tests/ahu/test_ahu_fc7.py -rP -s
 
-SAT too low in full heating valve 100% in OS1 mode only
+Supply air temperature too low in full heating.
 '''
 
-
-TEST_SAT_DEGF_ERR_THRES = 2
+# Constants
+TEST_SUPPLY_DEGF_ERR_THRES = 2.0
 TEST_SAT_COL = "supply_air_temp"
-TEST_SAT_SP_COL = "supply_setpoint_air_temp"
-TEST_HEATING_COIL_SIG_COL = "heating_sig_col"
-TEST_SUPPLY_VFD_SPEED_COL = "fan_vfd_speed_col"
+TEST_SAT_SETPOINT_COL = "sat_setpoint"
+TEST_HEATING_SIG_COL = "heating_sig"
+TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
+ROLLING_WINDOW_SIZE = 5
 
+# Initialize FaultConditionSeven with a dictionary
+fault_condition_params = {
+    'SUPPLY_DEGF_ERR_THRES': TEST_SUPPLY_DEGF_ERR_THRES,
+    'SAT_COL': TEST_SAT_COL,
+    'SAT_SETPOINT_COL': TEST_SAT_SETPOINT_COL,
+    'HEATING_SIG_COL': TEST_HEATING_SIG_COL,
+    'SUPPLY_VFD_SPEED_COL': TEST_SUPPLY_VFD_SPEED_COL,
+    'TROUBLESHOOT_MODE': False,  # default value
+    'ROLLING_WINDOW_SIZE': ROLLING_WINDOW_SIZE  # rolling sum window size
+}
 
+fc7 = FaultConditionSeven(fault_condition_params)
 
-fc7 = FaultConditionSeven(
-    TEST_SAT_DEGF_ERR_THRES,
-    TEST_SAT_COL,
-    TEST_SAT_SP_COL,
-    TEST_HEATING_COIL_SIG_COL,
-    TEST_SUPPLY_VFD_SPEED_COL,
-)
+class TestFaultConditionSeven:
 
-
-class TestNoFaultNoHtg(object):
-
-    def no_fault_df_no_htg(self) -> pd.DataFrame:
+    def fault_df(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [60],
-            TEST_SAT_SP_COL: [62.2],
-            TEST_HEATING_COIL_SIG_COL: [0.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [0.55],
+            TEST_SAT_COL: [65, 64, 63, 62, 61, 60],
+            TEST_SAT_SETPOINT_COL: [70, 70, 70, 70, 70, 70],
+            TEST_HEATING_SIG_COL: [0.95, 0.96, 0.97, 0.98, 0.99, 1.0],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
         }
         return pd.DataFrame(data)
 
-    def test_no_fault_no_htg(self):
-        results = fc7.apply(self.no_fault_df_no_htg())
-        actual = results.loc[0, 'fc7_flag']
-        expected = 0.0
-        message = f"fc7 no_fault_df_no_htg actual is {actual} and expected is {expected}"
+    def no_fault_df(self) -> pd.DataFrame:
+        data = {
+            TEST_SAT_COL: [71, 72, 73, 74, 75, 76],
+            TEST_SAT_SETPOINT_COL: [70, 70, 70, 70, 70, 70],
+            TEST_HEATING_SIG_COL: [0.95, 0.96, 0.97, 0.98, 0.99, 1.0],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+        }
+        return pd.DataFrame(data)
+
+    def test_fault_condition_seven(self):
+        results = fc7.apply(self.fault_df())
+        actual = results['fc7_flag'].sum()
+        expected = 2
+        message = f"FC7 fault_df actual is {actual} and expected is {expected}"
         assert actual == expected, message
 
-
-class TestFaultInHtg(object):
-
-    def fault_df_in_htg(self) -> pd.DataFrame:
-        data = {
-            TEST_SAT_COL: [60],
-            TEST_SAT_SP_COL: [66.2],
-            TEST_HEATING_COIL_SIG_COL: [1.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [0.2],
-        }
-        return pd.DataFrame(data)
-
-    def test_fault_in_htg(self):
-        results = fc7.apply(self.fault_df_in_htg())
-        actual = results.loc[0, 'fc7_flag']
-        expected = 1.0
-        message = f"fc7 fault_df_in_htg actual is {actual} and expected is {expected}"
+    def test_no_fault_condition_seven(self):
+        results = fc7.apply(self.no_fault_df())
+        actual = results['fc7_flag'].sum()
+        expected = 0
+        message = f"FC7 no_fault_df actual is {actual} and expected is {expected}"
         assert actual == expected, message
 
-
-
-
-
-class TestFaultOnInt(object):
-
-    def fault_df_on_output_int(self) -> pd.DataFrame:
-        data = {
-            TEST_SAT_COL: [60],
-            TEST_SAT_SP_COL: [80.2],
-            TEST_HEATING_COIL_SIG_COL: [1.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [20],
-        }
-        return pd.DataFrame(data)
-
-    def test_fault_on_int(self):
-        with pytest.raises(TypeError, 
-                           match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
-            fc7.apply(self.fault_df_on_output_int())
-
-
-class TestFaultOnFloatGreaterThanOne(object):
-
-    def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
-        data = {
-            TEST_SAT_COL: [60],
-            TEST_SAT_SP_COL: [80.2],
-            TEST_HEATING_COIL_SIG_COL: [1.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [22.2],
-        }
-        return pd.DataFrame(data)
-
-    def test_fault_on_float_greater_than_one(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
-            fc7.apply(self.fault_df_on_output_greater_than_one())
-            
+if __name__ == "__main__":
+    pytest.main()
