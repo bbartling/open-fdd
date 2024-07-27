@@ -14,7 +14,7 @@ This is a Python based FDD tool for running fault equations inspired by ASHRAE a
 4. Ultimate goal is to be able to make reports like this below with `pip` and `pandas`
 
 
-## Example Python for an AHU fan fault and report
+## Example Python script for an AHU fan fault and report
 ```python
 import pandas as pd
 import os
@@ -96,7 +96,7 @@ report = FaultCodeOneReport(config_dict)
 report.create_report(current_dir, df_faults, report_name="ahu1_fc1.docx")
 ```
 
-## Example Word Doc Reporting
+## Example Word doc report output
 ![Alt text](air_handling_unit/images/ahu1_fc1-1.jpg)
 ![Alt text](/air_handling_unit/images/ahu1_fc1-2.jpg)
 
