@@ -1,116 +1,78 @@
 import pandas as pd
-from open_fdd.air_handling_unit.faults import FaultConditionOne
-from open_fdd.air_handling_unit.reports import FaultCodeOneReport
-from open_fdd.config import default_config
-
-'''
-NOT READY YET BUT ULTIMATE GOAL
-'''
+import os
+from air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from air_handling_unit.reports.report_fc1 import FaultCodeOneReport
 
 # Load your data
-df = pd.read_csv("path_to_your_data.csv")
+ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master.csv"
+df = pd.read_csv(ahu_data)
 
-# Load the configuration
-config = default_config.config_dict
+# Convert the timestamp column to datetime and set it as the index
+df['timestamp'] = pd.to_datetime(df['timestamp'])
+df.set_index('timestamp', inplace=True)
+
+# Print the DataFrame and its columns to verify
+print(df)
+print(df.columns)
+
+# Configuration dictionary
+config_dict = {
+    # used for report name
+    'AHU_NAME': "MZVAV_1",
+
+    # timestamp column name
+    'INDEX_COL_NAME': "timestamp",
+
+    'DUCT_STATIC_COL': "SaStatic",
+    'DUCT_STATIC_SETPOINT_COL': "SaStaticSPt",
+    'SUPPLY_VFD_SPEED_COL': "Sa_FanSpeed",
+    'MAT_COL': "MA_Temp",
+    'OAT_COL': "OaTemp",
+    'SAT_COL': "SaTempSP",
+    'RAT_COL': "RaTemp",
+    'HEATING_SIG_COL': "HW_Valve",  
+    'COOLING_SIG_COL': "CW_Valve",  
+    'ECONOMIZER_SIG_COL': "OA_Damper",
+    'SUPPLY_FAN_AIR_VOLUME_COL': "vav_total_flow",
+
+    'SAT_SETPOINT_COL': "SaTempSPt",
+    'CONSTANT_LEAVE_TEMP_SP': False,
+    'CONSTANT_LEAVE_TEMP_SP_VAL': 55.0,
+
+    'VFD_SPEED_PERCENT_ERR_THRES': 0.05,
+    'VFD_SPEED_PERCENT_MAX': 0.99,
+    'DUCT_STATIC_INCHES_ERR_THRES': 0.1,
+    'OUTDOOR_DEGF_ERR_THRES': 5.0,
+    'MIX_DEGF_ERR_THRES': 2.0,
+    'RETURN_DEGF_ERR_THRES': 2.0,
+    'SUPPLY_DEGF_ERR_THRES': 2.0,
+    'DELTA_T_SUPPLY_FAN': 2.0,
+
+    'DELTA_OS_MAX': 7,
+    'AHU_MIN_OA_DPR': 0.20,
+    'OAT_RAT_DELTA_MIN': 10,
+    'AIRFLOW_ERR_THRES': 0.3,
+    'AHU_MIN_OA_CFM_DESIGN': 2500,
+    'TROUBLESHOOT_MODE': True,
+    'ROLLING_WINDOW_SIZE': 5
+}
+
+# Convert percentage columns to floats between 0 and 1
+percentage_columns = [
+    config_dict['SUPPLY_VFD_SPEED_COL'],
+    config_dict['HEATING_SIG_COL'],
+    config_dict['COOLING_SIG_COL'],
+    config_dict['ECONOMIZER_SIG_COL']
+]
+
+for col in percentage_columns:
+    df[col] = df[col] / 100.0
 
 # Apply fault conditions
-fc1 = FaultConditionOne(config)
+fc1 = FaultConditionOne(config_dict)
 df_faults = fc1.apply(df)
 
 # Generate reports
-report = FaultCodeOneReport(config)
-document = report.create_report("path_to_save_report", df_faults)
-document.save("path_to_save_report/report_fc1.docx")
-
-'''
-import argparse
-import os
-
-import pandas as pd
-
-from faults import FaultConditionOne
-from reports import FaultCodeOneReport
-
-# python 3.10 on Windows 10
-# py .\fc1.py -i ./ahu_data/MZVAV-1.csv -o MZVAV-1_fc1_report
-# py .\fc1.py -i ./ahu_data/MZVAV-2-1.csv -o MZVAV-2-1_fc1_report
-# py .\fc1.py -i ./ahu_data/MZVAV-2-2.csv -o MZVAV-2-2_fc1_report
-
-parser = argparse.ArgumentParser(add_help=False)
-args = parser.add_argument_group("Options")
-
-args.add_argument(
-    "-h", "--help", action="help", help="Show this help message and exit."
-)
-args.add_argument("-i", "--input", required=True, type=str, help="CSV File Input")
-args.add_argument(
-    "-o", "--output", required=True, type=str, help="Word File Output Name"
-)
-"""
-FUTURE 
- * incorporate an arg for SI units 
- * °C on temp sensors
- * piping pressure sensor PSI conversion
- * air flow CFM conversion
- * AHU duct static pressure "WC
-
-args.add_argument('--use-SI-units', default=False, action='store_true')
-args.add_argument('--no-SI-units', dest='use-SI-units', action='store_false')
-"""
-args = parser.parse_args()
-
-# timestamp column name
-INDEX_COL_NAME = "Date"
-
-# G36 params shouldnt need adjusting
-# error threshold parameters
-VFD_SPEED_PERCENT_ERR_THRES = 0.05
-VFD_SPEED_PERCENT_MAX = 0.99
-DUCT_STATIC_INCHES_ERR_THRES = 0.1
-
-
-_fc1 = FaultConditionOne(
-    VFD_SPEED_PERCENT_ERR_THRES,
-    VFD_SPEED_PERCENT_MAX,
-    DUCT_STATIC_INCHES_ERR_THRES,
-    "AHU: Supply Air Duct Static Pressure",
-    "AHU: Supply Air Fan Speed Control Signal",
-    "AHU: Supply Air Duct Static Pressure Set Point",
-)
-
-
-_fc1_report = FaultCodeOneReport(
-    VFD_SPEED_PERCENT_ERR_THRES,
-    VFD_SPEED_PERCENT_MAX,
-    DUCT_STATIC_INCHES_ERR_THRES,
-    "AHU: Supply Air Duct Static Pressure",
-    "AHU: Supply Air Fan Speed Control Signal",
-    "AHU: Supply Air Duct Static Pressure Set Point",
-)
-
-
-df = pd.read_csv(args.input, index_col=INDEX_COL_NAME, parse_dates=True).rolling("5T").mean()
-
-
-start = df.head(1).index.date
-print("Dataset start: ", start)
-
-end = df.tail(1).index.date
-print("Dataset end: ", end)
-
-for col in df.columns:
-    print("df column: ", col, "- max: ", df[col].max(), "- col type: ", df[col].dtypes)
-    
-
-# return a whole new dataframe with fault flag as new col
-df2 = _fc1.apply(df)
-print(df2.head())
-print(df2.describe())
-
-document = _fc1_report.create_report(args.output, df)
-path = os.path.join(os.path.curdir, "final_report")
-if not os.path.exists(path):
-    os.makedirs(path)
-document.save(os.path.join(path, f"{args.output}.docx"))
-
-'''
+current_dir = os.path.dirname(os.path.abspath(__file__))
+report = FaultCodeOneReport(config_dict)
+report.create_report(current_dir, df_faults)
