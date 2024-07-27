@@ -1,6 +1,6 @@
 # open-fdd
 
-This is a Python based FDD tool for running fault equations inspired by ASHRAE Guideline 36 for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
+This is a Python based FDD tool for running fault equations inspired by ASHRAE and NIST for HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
 
 * See `README` inside the `air_handling_unit` directory for further instructions.
 
@@ -13,6 +13,8 @@ This is a Python based FDD tool for running fault equations inspired by ASHRAE G
 3. Publish as a Python library to PyPI
 4. Ultimate goal is to be able to make reports like this below with `pip` and `pandas`
 
+
+## Example Python for an AHU fan fault and report
 ```python
 import pandas as pd
 import os
@@ -94,7 +96,7 @@ report = FaultCodeOneReport(config_dict)
 report.create_report(current_dir, df_faults, report_name="ahu1_fc1.docx")
 ```
 
-## Word Doc Reporting
+## Example Word Doc Reporting
 ![Alt text](air_handling_unit/images/ahu1_fc1-1.jpg)
 ![Alt text](/air_handling_unit/images/ahu1_fc1-2.jpg)
 

@@ -121,7 +121,7 @@ class FaultCodeOneReport(BaseReport):
             paragraph = document.add_paragraph()
             paragraph.style = 'List Bullet'
             paragraph.add_run(
-                f'No faults were found in this given dataset for the equation defined by ASHRAE.')
+                f'No faults were found in this given dataset.')
 
         document.add_heading(
             'Summary Statistics filtered for when the AHU is running', level=1)
