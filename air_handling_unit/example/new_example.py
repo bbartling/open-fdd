@@ -75,4 +75,4 @@ df_faults = fc1.apply(df)
 # Generate reports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 report = FaultCodeOneReport(config_dict)
-report.create_report(current_dir, df_faults)
+report.create_report(current_dir, df_faults, report_name="ahu1_fc1.docx")

@@ -5,6 +5,7 @@ from docx.shared import Inches
 from air_handling_unit.reports.base_report import BaseReport
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 import time
 
 
@@ -42,7 +43,7 @@ class FaultCodeOneReport(BaseReport):
 
         return fig
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc1_flag") -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc1_flag", report_name: str = "report_fc1.docx") -> None:
         document = Document()
         document.add_heading("Fault Condition One Report", 0)
 
@@ -168,9 +169,9 @@ class FaultCodeOneReport(BaseReport):
         else:
             paragraph = document.add_paragraph()
             paragraph.style = "List Bullet"
-            paragraph.add_run("Duct pressure reset strategy has been detected whichis good. Further analysis could be done to verify overall effectiveness with the mechanical system.")
+            paragraph.add_run("Duct pressure reset detected (Good)")
 
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report_fc1.docx")
+        document.save(f"{path}/{report_name}")
