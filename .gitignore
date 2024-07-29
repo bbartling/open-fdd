@@ -7,19 +7,13 @@
 
 # word reports
 *.docx
-/air_handling_unit_fdd/final_report/*
-/air_handling_unit/final_report/*
-/air_handling_unit_fdd/final_report/*.docx
-/air_handling_unit/final_report/*.docx
-
+/air_handling_unit/example/reports
 *.csv
 .vscode/
 
 *.pkl
 /air_handling_unit/ml_experiment/*.pkl
 /air_handling_unit/api_key.py
-
-*api_key.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,8 +1,6 @@
 import pandas.api.types as pdtypes
 from air_handling_unit.faults.helper_utils import HelperUtils
 
-
-
 class FaultCondition:
     """Parent class for Fault Conditions. Methods are inherited to all children."""
 
@@ -46,3 +44,5 @@ class FaultCondition:
                 df = helper.convert_to_float(df, col)
             if df[col].max() > 1.0:
                 raise TypeError(helper.float_max_check_err(col))
+
+

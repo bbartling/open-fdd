@@ -35,3 +35,16 @@ class HelperUtils:
             except ValueError:
                 raise TypeError(self.float_int_check_err(col))
         return df
+    
+
+    def apply_rolling_average_if_needed(self, df, freq="1T", rolling_window="5T"):
+        """Apply rolling average if time difference between consecutive timestamps is not greater than the specified frequency."""
+        time_diff = df.index.to_series().diff().iloc[1:]
+        max_diff = time_diff.max()
+
+        if max_diff > pd.Timedelta(minutes=5):
+            print(f"Warning: Maximum time difference between consecutive timestamps is {max_diff}.")
+            print("SKIPPING 5 MINUTE ROLLING AVERAGE COMPUTATION OF DATA")
+        else:
+            df = df.rolling(rolling_window).mean()
+        return df

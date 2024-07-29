@@ -1,3 +1,4 @@
+# air_handling_unit/reports/base_report.py
 import time
 from io import BytesIO
 
@@ -5,8 +6,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from docx import Document
 from docx.shared import Inches
-
-
 
 class BaseReport:
     def __init__(self, config):
@@ -62,7 +61,7 @@ class BaseReport:
             paragraph.style = "List Bullet"
             paragraph.add_run(f"{key.replace('_', ' ').title()}: {value}")
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str) -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str, report_name: str) -> None:
         document = Document()
         document.add_heading("Fault Condition Report", 0)
 
@@ -86,4 +85,4 @@ class BaseReport:
 
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report.docx")
+        document.save(f"{path}/{report_name}")

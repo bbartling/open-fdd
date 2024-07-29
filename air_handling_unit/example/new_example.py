@@ -1,10 +1,15 @@
 import pandas as pd
 import os
 from air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from air_handling_unit.faults.fault_condition_two import FaultConditionTwo
+from air_handling_unit.faults.fault_condition_three import FaultConditionThree
 from air_handling_unit.reports.report_fc1 import FaultCodeOneReport
+from air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
+from air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
+from air_handling_unit.faults.helper_utils import HelperUtils
 
 # Load your data
-ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master.csv"
+ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master_Mod.csv"
 df = pd.read_csv(ahu_data)
 
 # Convert the timestamp column to datetime and set it as the index
@@ -68,11 +73,50 @@ percentage_columns = [
 for col in percentage_columns:
     df[col] = df[col] / 100.0
 
-# Apply fault conditions
-fc1 = FaultConditionOne(config_dict)
-df_faults = fc1.apply(df)
+# Apply rolling average if needed for high frequency 1-minute or less data set
+helper = HelperUtils()
+df = helper.apply_rolling_average_if_needed(df)
 
-# Generate reports
+# Initialize Fault Condition Classes
+fc1 = FaultConditionOne(config_dict)
+fc2 = FaultConditionTwo(config_dict)
+fc3 = FaultConditionThree(config_dict)
+
+# Apply fault conditions to DataFrame
+df = fc1.apply(df)
+df = fc2.apply(df)
+df = fc3.apply(df)
+
+# Make reports in one month batches
+df['month'] = df.index.to_period('M')
+unique_months = df['month'].unique()
+
+# Generate the report for each month
 current_dir = os.path.dirname(os.path.abspath(__file__))
-report = FaultCodeOneReport(config_dict)
-report.create_report(current_dir, df_faults, report_name="ahu1_fc1.docx")
+
+for month in unique_months:
+    df_month = df[df['month'] == month].copy()
+    
+    # Create directories for each fault type
+    fc1_dir = os.path.join(current_dir, "reports", "fault_code_1", str(month))
+    fc2_dir = os.path.join(current_dir, "reports", "fault_code_2", str(month))
+    fc3_dir = os.path.join(current_dir, "reports", "fault_code_3", str(month))
+    
+    os.makedirs(fc1_dir, exist_ok=True)
+    os.makedirs(fc2_dir, exist_ok=True)
+    os.makedirs(fc3_dir, exist_ok=True)
+    
+    # Generate report for Fault Condition One
+    report_fc1 = FaultCodeOneReport(config_dict)
+    report_name_fc1 = f"ahu1_fc1_{month}.docx"
+    report_fc1.create_report(fc1_dir, df_month, report_name=report_name_fc1)
+    
+    # Generate report for Fault Condition Two
+    report_fc2 = FaultCodeTwoReport(config_dict)
+    report_name_fc2 = f"ahu1_fc2_{month}.docx"
+    report_fc2.create_report(fc2_dir, df_month, report_name=report_name_fc2)
+    
+    # Generate report for Fault Condition Three
+    report_fc3 = FaultCodeThreeReport(config_dict)
+    report_name_fc3 = f"ahu1_fc3_{month}.docx"
+    report_fc3.create_report(fc3_dir, df_month, report_name=report_name_fc3)

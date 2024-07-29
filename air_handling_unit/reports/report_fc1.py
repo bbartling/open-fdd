@@ -85,12 +85,6 @@ class FaultCodeOneReport(BaseReport):
             df[self.duct_static_col].where(df[output_col] == 1).mean(), 2
         )
 
-        paragraph = document.add_paragraph()
-        paragraph.style = "List Bullet"
-        paragraph.add_run(
-            f"Calculated motor runtime in hours based off of VFD signal > zero: {hours_motor_runtime}"
-        )
-
         if int(total_hours) == int(hours_motor_runtime):
             paragraph = document.add_paragraph()
             paragraph.style = "List Bullet"
