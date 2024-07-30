@@ -47,7 +47,7 @@ class FaultCodeThreeReport(BaseReport):
         document.add_heading("Fault Condition Three Report", 0)
 
         p = document.add_paragraph(
-            """Fault condition three of ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition three flags mixing air temperatures that are too high when in comparison to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges. Fault condition three equation as defined by ASHRAE:"""
+            """Fault condition three inspired by ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition three flags mixing air temperatures that are too high when in comparison to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges."""
         )
 
         # Correcting the path to the image

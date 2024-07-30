@@ -141,7 +141,7 @@ for month in unique_months:
     report_fc3.create_report(fc3_dir, df_month, report_name=report_name_fc3)
 ```
 
-## Example Word doc report output
+## Example Monthly Word doc report output for `FaultCodeOneReport`
 ![Alt text](air_handling_unit/images/ahu1_fc1_2024-06_1.jpg)
 ![Alt text](/air_handling_unit/images/ahu1_fc1_2024-06_2.jpg)
 
