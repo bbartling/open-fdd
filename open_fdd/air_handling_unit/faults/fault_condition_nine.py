@@ -1,23 +1,23 @@
 import pandas as pd
 import numpy as np
-from air_handling_unit.faults.fault_condition import FaultCondition
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-class FaultConditionEight(FaultCondition):
-    """ Class provides the definitions for Fault Condition 8.
-        Supply air temperature and mix air temperature should 
-        be approx equal in economizer mode.
+class FaultConditionNine(FaultCondition):
+    """Class provides the definitions for Fault Condition 9.
+    Outside air temperature too high in free cooling without 
+    additional mechanical cooling in economizer mode.
     """
 
     def __init__(self, dict_):
         self.delta_t_supply_fan = float
-        self.mix_degf_err_thres = float
+        self.outdoor_degf_err_thres = float
         self.supply_degf_err_thres = float
         self.ahu_min_oa_dpr = float
-        self.mat_col = str
-        self.sat_col = str
-        self.economizer_sig_col = str
+        self.sat_setpoint_col = str
+        self.oat_col = str
         self.cooling_sig_col = str
+        self.economizer_sig_col = str
         self.troubleshoot_mode = bool  # default should be False
         self.rolling_window_size = int
 
@@ -32,14 +32,17 @@ class FaultConditionEight(FaultCondition):
             self.economizer_sig_col,
             self.cooling_sig_col,
         ]
-
         self.check_analog_pct(df, columns_to_check)
 
-        df["sat_fan_mat"] = abs(df[self.sat_col] - self.delta_t_supply_fan - df[self.mat_col])
-        df["sat_mat_sqrted"] = np.sqrt(self.supply_degf_err_thres ** 2 + self.mix_degf_err_thres ** 2)
+        # Create helper columns
+        df["oat_minus_oaterror"] = df[self.oat_col] - self.outdoor_degf_err_thres
+        df["satsp_delta_saterr"] = (
+            df[self.sat_setpoint_col] - self.delta_t_supply_fan + self.supply_degf_err_thres
+        )
 
         df["combined_check"] = (
-            (df["sat_fan_mat"] > df["sat_mat_sqrted"])
+            (df["oat_minus_oaterror"] > df["satsp_delta_saterr"])
+            # verify AHU is in OS2 only free cooling mode
             & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
             & (df[self.cooling_sig_col] < 0.1)
         )
@@ -47,12 +50,12 @@ class FaultConditionEight(FaultCondition):
         # Rolling sum to count consecutive trues
         rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
         # Set flag to 1 if rolling sum equals the window size
-        df["fc8_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
+        df["fc9_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
-            del df["sat_fan_mat"]
-            del df["sat_mat_sqrted"]
+            del df["oat_minus_oaterror"]
+            del df["satsp_delta_saterr"]
             del df["combined_check"]
 
         return df

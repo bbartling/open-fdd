@@ -1,6 +1,6 @@
 import pandas as pd
-from air_handling_unit.faults.fault_condition import FaultCondition
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 class FaultConditionFour(FaultCondition):
     """Class provides the definitions for Fault Condition 4.

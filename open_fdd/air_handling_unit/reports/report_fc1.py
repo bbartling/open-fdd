@@ -2,11 +2,12 @@ import os
 from io import BytesIO
 from docx import Document
 from docx.shared import Inches
-from air_handling_unit.reports.base_report import BaseReport
+from open_fdd.air_handling_unit.reports.base_report import BaseReport
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import time
+import pkg_resources
 
 
 class FaultCodeOneReport(BaseReport):
@@ -51,8 +52,8 @@ class FaultCodeOneReport(BaseReport):
             """Fault condition one is related to flagging poor performance of a AHU variable supply fan attempting to control to a duct pressure setpoint."""
         )
 
-        # Correcting the path to the image
-        image_path = os.path.join(os.path.dirname(__file__), '..', 'images', 'fc1_definition.png')
+        # Use pkg_resources to find the image path
+        image_path = pkg_resources.resource_filename('open_fdd', 'air_handling_unit/images/fc1_definition.png')
         document.add_picture(image_path, width=Inches(6))
 
         # Add bullet points under the math equation

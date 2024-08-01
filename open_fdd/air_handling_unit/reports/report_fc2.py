@@ -2,13 +2,15 @@ import os
 from io import BytesIO
 from docx import Document
 from docx.shared import Inches
-from air_handling_unit.reports.base_report import BaseReport
+from open_fdd.air_handling_unit.reports.base_report import BaseReport
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import time
+import pkg_resources
 
-class FaultCodeThreeReport(BaseReport):
+
+class FaultCodeTwoReport(BaseReport):
     def __init__(self, config):
         super().__init__(config)
         self.mix_degf_err_thres = config['MIX_DEGF_ERR_THRES']
@@ -21,10 +23,10 @@ class FaultCodeThreeReport(BaseReport):
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
         if output_col is None:
-            output_col = "fc3_flag"
+            output_col = "fc2_flag"
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
-        plt.title('Fault Conditions 3 Plot')
+        plt.title('Fault Conditions 2 Plot')
 
         ax1.plot(df.index, df[self.mat_col], color='r', label="Mix Temp")  # red
         ax1.plot(df.index, df[self.rat_col], color='b', label="Return Temp")  # blue
@@ -42,16 +44,17 @@ class FaultCodeThreeReport(BaseReport):
 
         return fig
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc3_flag", report_name: str = "report_fc3.docx") -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc2_flag", report_name: str = "report_fc2.docx") -> None:
         document = Document()
-        document.add_heading("Fault Condition Three Report", 0)
+        document.add_heading("Fault Condition Two Report", 0)
 
         p = document.add_paragraph(
-            """Fault condition three inspired by ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition three flags mixing air temperatures that are too high when in comparison to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges."""
+            """Fault condition two inspired by ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition 2 flags mixing air temperatures that are too low and fault condition 3 flags mixing temperatures that are too high when in comparison to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges."""
         )
 
-        # Correcting the path to the image
-        image_path = os.path.join(os.path.dirname(__file__), '..', 'images', 'fc3_definition.png')
+
+        # Use pkg_resources to find the image path
+        image_path = pkg_resources.resource_filename('open_fdd', 'air_handling_unit/images/fc2_definition.png')
         document.add_picture(image_path, width=Inches(6))
 
         document.add_heading("Dataset Plot", level=2)
@@ -99,7 +102,7 @@ class FaultCodeThreeReport(BaseReport):
             paragraph = document.add_paragraph()
             paragraph.style = 'List Bullet'
             paragraph.add_run(
-                f'When fault condition 3 is True the average mix air temp is {flag_true_mat}°F, outside air temp is {flag_true_oat}°F, and return air temp is {flag_true_rat}°F. This could possibly help with pin pointing AHU operating conditions for when this fault is True.'
+                f'When fault condition 2 is True the average mix air temp is {flag_true_mat}°F, outside air temp is {flag_true_oat}°F, and return air temp is {flag_true_rat}°F. This could possibly help with pin pointing AHU operating conditions for when this fault is True.'
             )
 
         else:
@@ -135,7 +138,7 @@ class FaultCodeThreeReport(BaseReport):
         percent_true = summary['percent_true']
         if percent_true > 5:
             paragraph.add_run(
-                'The percent True of time in fault condition 3 is high indicating the AHU temperature sensors are out of calibration')
+                'The percent True of time in fault condition 2 is high indicating the AHU temperature temp sensors are out of calibration')
         else:
             paragraph.add_run(
                 'The percent True of time is low indicating the AHU temperature sensors are within calibration')

@@ -1,5 +1,5 @@
 import pandas as pd
-from air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 
 class FaultConditionOne(FaultCondition):
     """ Class provides the definitions for Fault Condition 1.

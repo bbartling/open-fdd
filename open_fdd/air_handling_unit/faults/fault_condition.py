@@ -1,7 +1,10 @@
 import pandas.api.types as pdtypes
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+
+
 
 class FaultCondition:
+    
     """Parent class for Fault Conditions. Methods are inherited to all children."""
 
     def set_attributes(self, dict_):

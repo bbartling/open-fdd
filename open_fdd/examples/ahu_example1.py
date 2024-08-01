@@ -1,12 +1,20 @@
 import pandas as pd
 import os
-from air_handling_unit.faults.fault_condition_one import FaultConditionOne
-from air_handling_unit.faults.fault_condition_two import FaultConditionTwo
-from air_handling_unit.faults.fault_condition_three import FaultConditionThree
-from air_handling_unit.reports.report_fc1 import FaultCodeOneReport
-from air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
-from air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
+from open_fdd.air_handling_unit.faults.fault_condition_three import FaultConditionThree
+from open_fdd.air_handling_unit.reports.report_fc1 import FaultCodeOneReport
+from open_fdd.air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
+from open_fdd.air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+
+
+'''
+local pip install
+
+> pip install .
+'''
+
 
 # Load your data
 ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master_Mod.csv"

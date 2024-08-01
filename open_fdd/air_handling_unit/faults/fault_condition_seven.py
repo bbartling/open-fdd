@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from air_handling_unit.faults.fault_condition import FaultCondition
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 class FaultConditionSeven(FaultCondition):
     """Class provides the definitions for Fault Condition 7.

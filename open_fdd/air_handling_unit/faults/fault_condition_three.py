@@ -1,16 +1,13 @@
 import pandas as pd
 import numpy as np
-from air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 
-class FaultConditionTwo(FaultCondition):
-    """ Class provides the definitions for Fault Condition 2.
-        Mix temperature too low; should be between outside and return air.
+class FaultConditionThree(FaultCondition):
+    """Class provides the definitions for Fault Condition 3.
+        Mix temperature too high; should be between outside and return air.
     """
 
     def __init__(self, dict_):
-        """
-        :param dict_:
-        """
         self.mix_degf_err_thres = float
         self.return_degf_err_thres = float
         self.outdoor_degf_err_thres = float
@@ -32,21 +29,21 @@ class FaultConditionTwo(FaultCondition):
         self.check_analog_pct(df, columns_to_check)
 
         # Fault condition-specific checks / flags
-        df["mat_check"] = df[self.mat_col] + self.mix_degf_err_thres
-        df["temp_min_check"] = np.minimum(
-            df[self.rat_col] - self.return_degf_err_thres,
-            df[self.oat_col] - self.outdoor_degf_err_thres,
+        df["mat_check"] = df[self.mat_col] - self.mix_degf_err_thres
+        df["temp_min_check"] = np.maximum(
+            df[self.rat_col] + self.return_degf_err_thres,
+            df[self.oat_col] + self.outdoor_degf_err_thres,
         )
 
         df["combined_check"] = (
-            (df["mat_check"] < df["temp_min_check"])
+            (df["mat_check"] > df["temp_min_check"])
             & (df[self.supply_vfd_speed_col] > 0.01)
         )
 
         # Rolling sum to count consecutive trues
         rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
         # Set flag to 1 if rolling sum equals the window size
-        df["fc2_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
+        df["fc3_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")

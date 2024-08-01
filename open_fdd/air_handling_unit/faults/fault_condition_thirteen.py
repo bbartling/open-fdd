@@ -1,22 +1,21 @@
 import pandas as pd
 import numpy as np
 import operator
-from air_handling_unit.faults.fault_condition import FaultCondition
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-class FaultConditionTwelve(FaultCondition):
-    """ Class provides the definitions for Fault Condition 12.
-        Supply air temperature too high; should be less than 
-        mix air temperature in economizer plus mech cooling mode.
+
+class FaultConditionThirteen(FaultCondition):
+    """ Class provides the definitions for Fault Condition 13.
+        Supply air temperature too high in full cooling 
+        in economizer plus mech cooling mode
     """
 
     def __init__(self, dict_):
-        self.delta_t_supply_fan = float
-        self.mix_degf_err_thres = float
         self.supply_degf_err_thres = float
         self.ahu_min_oa_dpr = float
         self.sat_col = str
-        self.mat_col = str
+        self.sat_setpoint_col = str
         self.cooling_sig_col = str
         self.economizer_sig_col = str
         self.troubleshoot_mode = bool  # default False
@@ -36,18 +35,16 @@ class FaultConditionTwelve(FaultCondition):
         self.check_analog_pct(df, columns_to_check)
 
         # Create helper columns
-        df["sat_minus_saterr_delta_supply_fan"] = (
-            df[self.sat_col] - self.supply_degf_err_thres - self.delta_t_supply_fan
+        df["sat_greater_than_sp_calc"] = (
+            df[self.sat_col] > df[self.sat_setpoint_col] + self.supply_degf_err_thres
         )
-        df["mat_plus_materr"] = df[self.mat_col] + self.mix_degf_err_thres
 
         df["combined_check"] = operator.or_(
+            ((df["sat_greater_than_sp_calc"]))
             # OS4 AHU state clg @ min OA
-            (df["sat_minus_saterr_delta_supply_fan"] > df["mat_plus_materr"])
-            # verify AHU in OS4 mode
             & (df[self.cooling_sig_col] > 0.01)
             & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
-            (df["sat_minus_saterr_delta_supply_fan"] > df["mat_plus_materr"])
+            ((df["sat_greater_than_sp_calc"]))
             # verify ahu is running in OS 3 clg mode in 100 OA
             & (df[self.cooling_sig_col] > 0.01) & (df[self.economizer_sig_col] > 0.9),
         )
@@ -55,12 +52,11 @@ class FaultConditionTwelve(FaultCondition):
         # Rolling sum to count consecutive trues
         rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
         # Set flag to 1 if rolling sum equals the window size
-        df["fc12_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
+        df["fc13_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
-            del df["sat_minus_saterr_delta_supply_fan"]
-            del df["mat_plus_materr"]
+            del df["sat_greater_than_sp_calc"]
             del df["combined_check"]
 
         return df

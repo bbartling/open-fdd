@@ -1,13 +1,10 @@
 
 '''
-open-fdd/
-├── open_fdd/
+open-fdd/                # Repository root
+├── open_fdd/            # Python package root
 │   ├── __init__.py
 │   ├── air_handling_unit/
 │   │   ├── __init__.py
-│   │   ├── example/
-│   │   │   ├── __init__.py
-│   │   │   ├── new_example.py
 │   │   ├── faults/
 │   │   │   ├── __init__.py
 │   │   │   ├── helper_utils.py
@@ -22,9 +19,9 @@ open-fdd/
 │   │   │   ├── report_fc2.py
 │   │   │   └── ... # other reports
 │   │   └── images/
-│   │   │   ├── fc1_definition.png
-│   │   │   ├── fc2_definition.png
-│   │   │   └── ... # other images
+│   │       ├── fc1_definition.png
+│   │       ├── fc2_definition.png
+│   │       └── ... # other images
 │   ├── utils.py
 ├── tests/
 │   ├── __init__.py
