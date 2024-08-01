@@ -9,7 +9,6 @@ import numpy as np
 import time
 import pkg_resources
 
-
 class FaultCodeOneReport(BaseReport):
     def __init__(self, config):
         super().__init__(config)
@@ -18,7 +17,7 @@ class FaultCodeOneReport(BaseReport):
         self.supply_vfd_speed_col = config['SUPPLY_VFD_SPEED_COL']
         self.duct_static_setpoint_col = config['DUCT_STATIC_SETPOINT_COL']
 
-    def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+    def create_fan_plot(self, df: pd.DataFrame, output_col: str = None) -> BytesIO:
         if output_col is None:
             output_col = "fc1_flag"
 
@@ -29,8 +28,7 @@ class FaultCodeOneReport(BaseReport):
         ax1.legend(loc='best')
         ax1.set_ylabel("Inch WC")
 
-        ax2.plot(df.index, df[self.supply_vfd_speed_col],
-                 color="g", label="FAN")
+        ax2.plot(df.index, df[self.supply_vfd_speed_col], color="g", label="FAN")
         ax2.legend(loc='best')
         ax2.set_ylabel('%')
 
@@ -42,7 +40,12 @@ class FaultCodeOneReport(BaseReport):
         plt.legend()
         plt.tight_layout()
 
-        return fig
+        fan_plot_image = BytesIO()
+        fig.savefig(fan_plot_image, format="png")
+        fan_plot_image.seek(0)
+        plt.close(fig)  # Close the figure
+
+        return fan_plot_image
 
     def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc1_flag", report_name: str = "report_fc1.docx") -> None:
         document = Document()
@@ -71,10 +74,7 @@ class FaultCodeOneReport(BaseReport):
 
         document.add_heading("Dataset Plot", level=2)
 
-        fig = self.create_fan_plot(df, output_col)
-        fan_plot_image = BytesIO()
-        fig.savefig(fan_plot_image, format="png")
-        fan_plot_image.seek(0)
+        fan_plot_image = self.create_fan_plot(df, output_col)
         document.add_picture(fan_plot_image, width=Inches(6))
 
         summary = self.summarize_fault_times(df, output_col)
@@ -100,10 +100,8 @@ class FaultCodeOneReport(BaseReport):
             histogram_plot = self.create_hist_plot(df, output_col=output_col)
             histogram_plot.savefig(histogram_plot_image, format="png")
             histogram_plot_image.seek(0)
-            document.add_picture(
-                histogram_plot_image,
-                width=Inches(6),
-            )
+            document.add_picture(histogram_plot_image, width=Inches(6))
+            plt.close(histogram_plot)  # Close the figure
 
             paragraph = document.add_paragraph()
             paragraph.style = "List Bullet"

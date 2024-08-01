@@ -19,13 +19,14 @@ This is a Python based FDD tool for running fault equations inspired by ASHRAE a
 ```python
 import pandas as pd
 import os
-from air_handling_unit.faults.fault_condition_one import FaultConditionOne
-from air_handling_unit.faults.fault_condition_two import FaultConditionTwo
-from air_handling_unit.faults.fault_condition_three import FaultConditionThree
-from air_handling_unit.reports.report_fc1 import FaultCodeOneReport
-from air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
-from air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
+from open_fdd.air_handling_unit.faults.fault_condition_three import FaultConditionThree
+from open_fdd.air_handling_unit.reports.report_fc1 import FaultCodeOneReport
+from open_fdd.air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
+from open_fdd.air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+
 
 # Load your data
 ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master_Mod.csv"
@@ -67,7 +68,7 @@ config_dict = {
     'VFD_SPEED_PERCENT_MAX': 0.99,
     'DUCT_STATIC_INCHES_ERR_THRES': 0.1,
     'OUTDOOR_DEGF_ERR_THRES': 5.0,
-    'MIX_DEGF_ERR_THRES': 2.0,
+    'MIX_DEGF_ERR_THRES': 5.0,
     'RETURN_DEGF_ERR_THRES': 2.0,
     'SUPPLY_DEGF_ERR_THRES': 2.0,
     'DELTA_T_SUPPLY_FAN': 2.0,

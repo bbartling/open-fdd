@@ -9,7 +9,6 @@ import numpy as np
 import time
 import pkg_resources
 
-
 class FaultCodeTwoReport(BaseReport):
     def __init__(self, config):
         super().__init__(config)
@@ -21,7 +20,7 @@ class FaultCodeTwoReport(BaseReport):
         self.oat_col = config['OAT_COL']
         self.supply_vfd_speed_col = config['SUPPLY_VFD_SPEED_COL']
 
-    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> plt:
+    def create_plot(self, df: pd.DataFrame, output_col: str = None) -> BytesIO:
         if output_col is None:
             output_col = "fc2_flag"
 
@@ -42,7 +41,12 @@ class FaultCodeTwoReport(BaseReport):
         plt.legend()
         plt.tight_layout()
 
-        return fig
+        fan_plot_image = BytesIO()
+        fig.savefig(fan_plot_image, format="png")
+        fan_plot_image.seek(0)
+        plt.close(fig)  # Close the figure
+
+        return fan_plot_image
 
     def create_report(self, path: str, df: pd.DataFrame, output_col: str = "fc2_flag", report_name: str = "report_fc2.docx") -> None:
         document = Document()
@@ -52,17 +56,13 @@ class FaultCodeTwoReport(BaseReport):
             """Fault condition two inspired by ASHRAE Guideline 36 is related to flagging mixing air temperatures of the AHU that are out of acceptable ranges. Fault condition 2 flags mixing air temperatures that are too low and fault condition 3 flags mixing temperatures that are too high when in comparison to return and outside air data. The mixing air temperatures in theory should always be in between the return and outside air temperatures ranges."""
         )
 
-
         # Use pkg_resources to find the image path
         image_path = pkg_resources.resource_filename('open_fdd', 'air_handling_unit/images/fc2_definition.png')
         document.add_picture(image_path, width=Inches(6))
 
         document.add_heading("Dataset Plot", level=2)
 
-        fig = self.create_plot(df, output_col)
-        fan_plot_image = BytesIO()
-        fig.savefig(fan_plot_image, format="png")
-        fan_plot_image.seek(0)
+        fan_plot_image = self.create_plot(df, output_col)
         document.add_picture(fan_plot_image, width=Inches(6))
 
         summary = self.summarize_fault_times(df, output_col)
@@ -94,10 +94,8 @@ class FaultCodeTwoReport(BaseReport):
             histogram_plot = self.create_hist_plot(df, output_col=output_col)
             histogram_plot.savefig(histogram_plot_image, format="png")
             histogram_plot_image.seek(0)
-            document.add_picture(
-                histogram_plot_image,
-                width=Inches(6),
-            )
+            document.add_picture(histogram_plot_image, width=Inches(6))
+            plt.close(histogram_plot)  # Close the figure
 
             paragraph = document.add_paragraph()
             paragraph.style = 'List Bullet'

@@ -10,9 +10,12 @@ from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 
 '''
-local pip install
-
+local pip install example
 > pip install .
+
+When successful setup with pip install . in root dir
+Run code in any directory
+
 '''
 
 
