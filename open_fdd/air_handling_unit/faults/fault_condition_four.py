@@ -76,6 +76,9 @@ class FaultConditionFour(FaultCondition):
                 & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         )
 
+        # Fill non-finite values with zero or drop them
+        df = df.fillna(0)
+
         df = df.astype(int)
         df = df.resample("h").apply(lambda x: (x.eq(1) & x.shift().ne(1)).sum())
 

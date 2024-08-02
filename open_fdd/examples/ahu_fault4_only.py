@@ -1,23 +1,8 @@
 import pandas as pd
 import os
-from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
-from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
-from open_fdd.air_handling_unit.faults.fault_condition_three import FaultConditionThree
-from open_fdd.air_handling_unit.reports.report_fc1 import FaultCodeOneReport
-from open_fdd.air_handling_unit.reports.report_fc2 import FaultCodeTwoReport
-from open_fdd.air_handling_unit.reports.report_fc3 import FaultCodeThreeReport
+from open_fdd.air_handling_unit.faults.fault_condition_four import FaultConditionFour
+from open_fdd.air_handling_unit.reports.report_fc4 import FaultCodeFourReport
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
-
-
-'''
-local pip install example
-> pip install .
-
-When successful setup with pip install . in root dir
-Run code in any directory
-
-'''
-
 
 # Load your data
 ahu_data = r"C:\Users\bbartling\Documents\WPCRC_Master_Mod.csv"
@@ -84,50 +69,44 @@ percentage_columns = [
 for col in percentage_columns:
     df[col] = df[col] / 100.0
 
+# Print out values to verify conversion
+print(df['Sa_FanSpeed'].describe())
+print(df['Sa_FanSpeed'].head(10))
+
+# Check for non-finite values
+if df['Sa_FanSpeed'].isnull().any():
+    print("NaN values found in Sa_FanSpeed")
+if (df['Sa_FanSpeed'] == float('inf')).any():
+    print("Infinity values found in Sa_FanSpeed")
+if (df['Sa_FanSpeed'] == -float('inf')).any():
+    print("-Infinity values found in Sa_FanSpeed")
+
 # Apply rolling average if needed for high frequency 1-minute or less data set
 helper = HelperUtils()
 df = helper.apply_rolling_average_if_needed(df)
 
-# Initialize Fault Condition Classes
-fc1 = FaultConditionOne(config_dict)
-fc2 = FaultConditionTwo(config_dict)
-fc3 = FaultConditionThree(config_dict)
+fc4 = FaultConditionFour(config_dict)
+df_fc4 = fc4.apply(df.copy())
 
-# Apply fault conditions to DataFrame
-df = fc1.apply(df)
-df = fc2.apply(df)
-df = fc3.apply(df)
+df_fc4['fc4_flag'] = df_fc4['fc4_flag']
 
 # Make reports in one month batches
-df['month'] = df.index.to_period('M')
-unique_months = df['month'].unique()
+df_fc4['month'] = df_fc4.index.to_period('M')
+unique_months = df_fc4['month'].unique()
 
 # Generate the report for each month
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
+print("df cols: ",df.columns)
+
 for month in unique_months:
-    df_month = df[df['month'] == month].copy()
-    
-    # Create directories for each fault type
-    fc1_dir = os.path.join(current_dir, "reports", "fault_code_1", str(month))
-    fc2_dir = os.path.join(current_dir, "reports", "fault_code_2", str(month))
-    fc3_dir = os.path.join(current_dir, "reports", "fault_code_3", str(month))
-    
-    os.makedirs(fc1_dir, exist_ok=True)
-    os.makedirs(fc2_dir, exist_ok=True)
-    os.makedirs(fc3_dir, exist_ok=True)
-    
-    # Generate report for Fault Condition One
-    report_fc1 = FaultCodeOneReport(config_dict)
-    report_name_fc1 = f"ahu1_fc1_{month}.docx"
-    report_fc1.create_report(fc1_dir, df_month, report_name=report_name_fc1)
-    
-    # Generate report for Fault Condition Two
-    report_fc2 = FaultCodeTwoReport(config_dict)
-    report_name_fc2 = f"ahu1_fc2_{month}.docx"
-    report_fc2.create_report(fc2_dir, df_month, report_name=report_name_fc2)
-    
-    # Generate report for Fault Condition Three
-    report_fc3 = FaultCodeThreeReport(config_dict)
-    report_name_fc3 = f"ahu1_fc3_{month}.docx"
-    report_fc3.create_report(fc3_dir, df_month, report_name=report_name_fc3)
+    df_month = df_fc4[df_fc4['month'] == month].copy()
+
+    fc4_dir = os.path.join(current_dir, "reports", "fault_code_4", str(month))
+
+    os.makedirs(fc4_dir, exist_ok=True)
+
+    # Generate report for Fault Condition Four
+    report_fc4 = FaultCodeFourReport(config_dict)
+    report_name_fc4 = f"ahu1_fc4_{month}.docx"
+    report_fc4.create_report(fc4_dir, df_month, report_name=report_name_fc4)

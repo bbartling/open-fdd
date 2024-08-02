@@ -1,11 +1,11 @@
 import pandas as pd
 import pytest
-from air_handling_unit.faults.fault_condition_fourteen import FaultConditionFourteen
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition_fourteen import FaultConditionFourteen
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 '''
 To see print statements in pytest run with:
-$ py -3.12 -m pytest tests/ahu/test_ahu_fc14.py -rP -s
+$ py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc14.py -rP -s
 
 Temp drop across inactive clg coil in OS1 & OS2
 '''

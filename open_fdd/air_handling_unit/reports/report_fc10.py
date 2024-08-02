@@ -9,6 +9,8 @@ import numpy as np
 import time
 import pkg_resources
 
+
+
 class FaultCodeTenReport(BaseReport):
     """Class provides the definitions for Fault Code 10 Report."""
 
@@ -105,7 +107,7 @@ class FaultCodeTenReport(BaseReport):
 
         return hist_plot_image
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None) -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None, report_name: str = "report_fc10.docx") -> None:
         if output_col is None:
             output_col = "fc10_flag"
 
@@ -207,4 +209,4 @@ class FaultCodeTenReport(BaseReport):
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report_fc10.docx")
+        document.save(f"{path}/{report_name}")

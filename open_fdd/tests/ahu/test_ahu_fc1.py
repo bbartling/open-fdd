@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
-from air_handling_unit.faults.fault_condition_one import FaultConditionOne
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 '''
 To see print statements in pytest run with:

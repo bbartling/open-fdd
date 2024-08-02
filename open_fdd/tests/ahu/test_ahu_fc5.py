@@ -1,11 +1,11 @@
 import pandas as pd
 import pytest
-from air_handling_unit.faults.fault_condition_five import FaultConditionFive
-from air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition_five import FaultConditionFive
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 '''
 To see print statements in pytest run with:
-$ py -3.12 -m pytest tests/ahu/test_ahu_fc5.py -rP -s
+$ py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc5.py -rP -s
 
 SAT too low; should be higher than MAT in HTG MODE
 '''

@@ -116,7 +116,7 @@ class FaultCodeSixReport(BaseReport):
 
         return hist_plot_image
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None) -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None, report_name: str = "report_fc6.docx") -> None:
         if output_col is None:
             output_col = "fc6_flag"
 
@@ -125,7 +125,7 @@ class FaultCodeSixReport(BaseReport):
         document.add_heading("Fault Condition Six Report", 0)
 
         p = document.add_paragraph(
-            """Fault condition six of ASHRAE Guideline 36 is an attempt at verifying that AHU design minimum outside air is close to the calculated outside air fraction through the outside, mix, and return air temperature sensors. A fault will get flagged in an AHU heating or mechanical cooling mode only if the calculated OA fraction is too low or too high as to compared to percent Min calculation which is the AHU total air flow divided by the design minimum outdoor air expressed as a percent. Fault condition six equation as defined by ASHRAE:"""
+            """Fault condition six of ASHRAE Guideline 36 is an attempt at verifying that AHU design minimum outside air is close to the calculated outside air fraction through the outside, mix, and return air temperature sensors. A fault will get flagged in an AHU heating or mechanical cooling mode only if the calculated OA fraction is too low or too high as compared to percent Min calculation which is the AHU total air flow divided by the design minimum outdoor air expressed as a percent. Fault condition six equation as defined by ASHRAE:"""
         )
 
         image_path = pkg_resources.resource_filename('open_fdd', 'air_handling_unit/images/fc6_definition.png')
@@ -219,14 +219,14 @@ class FaultCodeSixReport(BaseReport):
 
         if percent_true > 5.0:
             paragraph.add_run(
-                'The percent true metric maybe yeilding sensors are out of calibration either on the AHU outside, mix, or return air temperature sensors that handle the OA fraction calculation or the totalized air flow calculation handled by a totalizing all VAV box air flows or AHU AFMS. Air flow and/or AHU temperature sensor may require recalibration.'
+                'The percent true metric maybe yielding sensors are out of calibration either on the AHU outside, mix, or return air temperature sensors that handle the OA fraction calculation or the totalized air flow calculation handled by a totalizing all VAV box air flows or AHU AFMS. Air flow and/or AHU temperature sensor may require recalibration.'
             )
         else:
             paragraph.add_run(
-                'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the sensors are within calibration'
+                'The percent True metric that represents the amount of time for when the fault flag is True is low indicating the sensors are within calibration'
             )
 
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report_fc6.docx")
+        document.save(f"{path}/{report_name}")

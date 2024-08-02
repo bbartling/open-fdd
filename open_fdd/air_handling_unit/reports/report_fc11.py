@@ -105,7 +105,7 @@ class FaultCodeElevenReport(BaseReport):
 
         return hist_plot_image
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None) -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None, report_name: str = "report_fc11.docx") -> None:
         if output_col is None:
             output_col = "fc11_flag"
 
@@ -207,4 +207,4 @@ class FaultCodeElevenReport(BaseReport):
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report_fc11.docx")
+        document.save(f"{path}/{report_name}")

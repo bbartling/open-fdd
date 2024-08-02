@@ -9,6 +9,8 @@ import numpy as np
 import time
 import pkg_resources
 
+
+
 class FaultCodeEightReport(BaseReport):
     """Class provides the definitions for Fault Code 8 Report."""
 
@@ -99,7 +101,7 @@ class FaultCodeEightReport(BaseReport):
 
         return hist_plot_image
 
-    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None) -> None:
+    def create_report(self, path: str, df: pd.DataFrame, output_col: str = None, report_name: str = "report_fc8.docx") -> None:
         if output_col is None:
             output_col = "fc8_flag"
 
@@ -195,10 +197,10 @@ class FaultCodeEightReport(BaseReport):
             )
         else:
             paragraph.add_run(
-                'The percent True metric that represents the amount of time for when the fault flag is True is low inidicating the AHU components are within calibration for this fault equation Ok.'
+                'The percent True metric that represents the amount of time for when the fault flag is True is low indicating the AHU components are within calibration for this fault equation Ok.'
             )
 
         paragraph = document.add_paragraph()
         run = paragraph.add_run(f"Report generated: {time.ctime()}")
         run.style = "Emphasis"
-        document.save(f"{path}/report_fc8.docx")
+        document.save(f"{path}/{report_name}")
