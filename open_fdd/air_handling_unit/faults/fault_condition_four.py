@@ -42,7 +42,7 @@ class FaultConditionFour(FaultCondition):
         for col in columns_to_check:
             self.check_analog_pct(df, [col])
 
-        print("Compiling data in Pandas this one takes a while to run...")
+        print("In FC4 compiling data in Pandas this one takes a while to run...")
 
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
         df["heating_mode"] = (
