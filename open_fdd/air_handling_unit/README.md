@@ -1,16 +1,21 @@
 # Air Handling Unit
 
-See `examples` directory for most current working code bases after running a `pip install .` I run the `examples` anywhere on my local machine.
+## See `examples` directory 
+
+* This will be the most current working code bases after running a `pip install .` I run the `examples` anywhere on my local machine.
 
 * As of 7/24/24, a new feature has been added: `rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()`. This feature introduces a rolling sum condition to ensure that a fault is only triggered if 5 consecutive conditions are met in the data. For instance as shown below in the code, if the fan is operating near 100% speed and is not meeting the duct static setpoint, and data is captured every minute, the system requires 5 consecutive faults (or 5 minutes) before officially throwing a fan fault. This helps prevent false positives. The `rolling_window_size` param will be a adjustable value (default of 5) for tuning purposes which can be passed into the fault `FaultCondition` class via the config dictionary. 
 
+
+## Example of a fault rule running under the hood.
 ```python
 import pandas as pd
-import pandas.api.types as pdtypes
-from air_handling_unit.faults.fault_condition import FaultCondition
+from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 
 class FaultConditionOne(FaultCondition):
-    """Class provides the definitions for Fault Condition 1."""
+    """ Class provides the definitions for Fault Condition 1.
+        AHU low duct static pressure fan fault.
+    """
 
     def __init__(self, dict_):
         """
@@ -58,8 +63,8 @@ class FaultConditionOne(FaultCondition):
 ```
 
 ## Example Word Doc Report
-![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024-06_1.jpg)
-![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024-06_2.jpg)
+![Alt text](open_fdd\air_handling_unit\images\ahu1_fc1_2024-06_1.jpg)
+![Alt text](open_fdd\air_handling_unit\images\ahu1_fc1_2024-06_2.jpg)
 
 ## AHU fault equation descriptions
 * **Fault Condition 1**: Duct static pressure too low with fan operating near 100% speed
