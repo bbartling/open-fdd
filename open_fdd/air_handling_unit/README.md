@@ -111,8 +111,8 @@ class FaultConditionOne(FaultCondition):
 ```
 
 ## Example Word Doc Report
-![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024_06_1.jpg)
-![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024_06_2.jpg)
+![Alt text](open_fdd/air_handling_unit/images/example1.jpg)
+![Alt text](open_fdd/air_handling_unit/images/example2.jpg)
 
 ## AHU fault equation descriptions
 * **Fault Condition 1**: Duct static pressure too low with fan operating near 100% speed
