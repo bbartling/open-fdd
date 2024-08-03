@@ -1,8 +1,6 @@
 # Air Handling Unit
 
-This is a Python based FDD tool for running fault equations HVAC systems across historical datasets with the Pandas computing library. Word documents are generated programmatically with the Python Docx library.
-
-* Under the hood of the `FaultCondition` class, a method called apply (a Python function inside a class) processes the data and returns a boolean flag as a Pandas DataFrame column (fc1_flag) if the fault condition is present. Below is an example of the apply method for Fault Condition 1, which detects a VAV AHU supply fan fault due to low duct static pressure while the fan is operating at near 100% speed.
+See `examples` directory for most current working code bases after running a `pip install .` I run the `examples` anywhere on my local machine.
 
 * As of 7/24/24, a new feature has been added: `rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()`. This feature introduces a rolling sum condition to ensure that a fault is only triggered if 5 consecutive conditions are met in the data. For instance as shown below in the code, if the fan is operating near 100% speed and is not meeting the duct static setpoint, and data is captured every minute, the system requires 5 consecutive faults (or 5 minutes) before officially throwing a fan fault. This helps prevent false positives. The `rolling_window_size` param will be a adjustable value (default of 5) for tuning purposes which can be passed into the fault `FaultCondition` class via the config dictionary. 
 
@@ -58,19 +56,10 @@ class FaultConditionOne(FaultCondition):
 
         return df
 ```
-	
-
 
 ## Example Word Doc Report
-TODO when new PyPI version is ready
-* a description of the fault equation
-* a plot of the data created with matplotlib with sublots
-* data statistics to show the amount of time that the data contains as well as elapsed in hours and percent of time for when the fault condition is `True` and elapsed time in hours for the fan motor runtime.
-* a histagram representing the hour of the day for when the fault equation is `True`.
-* sensor summary statistics filtered for when the AHU fan is running
-
-## Get Setup
-TODO when new PyPI version is ready
+![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024-06_1.jpg)
+![Alt text](open_fdd/air_handling_unit/images/ahu1_fc1_2024-06_2.jpg)
 
 ## AHU fault equation descriptions
 * **Fault Condition 1**: Duct static pressure too low with fan operating near 100% speed
@@ -90,8 +79,10 @@ TODO when new PyPI version is ready
 * **Fault Condition 14**: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
 
 ## TODO
-Setup repository for general AHU system energy efficiency FDD's.
-* **roque zones**: Find in the VAV system and count of `rogue zones` that could be potentially used in tunning trim and respond (T&R) logic.
+* Make chart to represent the operating states (OS) defined by ASHRAE.
+* **Economizer diagnostics report** - Word doc report for percentage of time AHU is in mechanical cooling, economizer cooling, economizer + mechanical cooling, or heating mode.
+
+* **Roque zones**: Find in the VAV system and count of `rogue zones` that could be potentially used in tunning trim and respond (T&R) logic.
 * **Excessive reheat energy fault**: Find in VAV system via VAV box leaving air temperature sensors or reheat valve positions conditions where AHU is cooling and majority of reheat system is in a heating mode.
 * **General AHU Supply Fan Optimization fault**: Find in VAV system via VAV box air damper positions if fan is not adjusting or trimming to meet demand.
 * **General AHU Supply Air Temperature Setpoint fault**: Find in VAV system via optimized AHU discharge air setpoint via VAV box zone air temperature and setpoints (sensible loads) and outside air conditions (latent loads) if applicable in areas where dehumidification is required. 

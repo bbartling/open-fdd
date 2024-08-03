@@ -3,13 +3,6 @@ import pytest
 from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-'''
-To see print statements in pytest run with:
-$ py -3.12 -m pytest tests/ahu/test_ahu_fc1.py -rP
-
-Duct static pressure low when fan at full speed
-'''
-
 # Constants
 TEST_VFD_ERR_THRESHOLD = 0.05
 TEST_VFD_SPEED_MAX = 0.7
@@ -54,18 +47,25 @@ class TestFault:
 
     def fault_df(self) -> pd.DataFrame:
         data = {
-            TEST_DUCT_STATIC_COL: [0.7, 0.7, 0.6, 0.7, 0.65, 0.55],
-            TEST_DUCT_STATIC_SETPOINT_COL: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [0.99, 0.95, 0.96, 0.97, 0.98, 0.98]
+            TEST_DUCT_STATIC_COL: [0.7, 0.7, 0.6, 0.7, 0.65, 0.55, 0.99, 0.99, 0.6, 0.7, 0.65, 0.55, 0.6, 0.7, 0.65, 0.55, 0.6],
+            TEST_DUCT_STATIC_SETPOINT_COL: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.99, 0.95, 0.96, 0.97, 0.98, 0.98, 0.5, 0.55, 0.96, 0.97, 0.98, 0.98, 0.96, 0.97, 0.98, 0.98, 0.96]
         }
         return pd.DataFrame(data)
 
     def test_fault(self):
         results = fc1.apply(self.fault_df())
         actual = results['fc1_flag'].sum()
-        expected = 2
+
+        # accumilated 5 faults need to happen before an "official fault"
+        # in TEST_DUCT_STATIC_COL after the 5 first values there is 3 faults
+        # then artificially adjust fake fan data back to normal and another 5
+        # needs happen per ROLLING_WINDOW_SIZE and then 4 faults after that.
+        # so expected = 3 + 4.
+        expected = 3 + 4 
         message = f"FC1 fault_df actual is {actual} and expected is {expected}"
         assert actual == expected, message
+
 
 class TestFaultOnInt:
 
