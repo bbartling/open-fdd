@@ -79,7 +79,27 @@ config_dict = {
 
 This Python class, `FaultConditionOne`, implements a fault detection algorithm for Air Handling Units (AHU), specifically targeting low duct static pressure fan faults. It utilizes mechanical engineering principles and mathematical calculations to monitor and diagnose faults. The class compares actual duct static pressure (`duct_static_col`) against a setpoint (`duct_static_setpoint_col`) with an error threshold (`duct_static_inches_err_thres`). Simultaneously, it checks if the fan speed (`supply_vfd_speed_col`) exceeds a defined maximum threshold minus an error tolerance (`vfd_speed_percent_max` - `vfd_speed_percent_err_thres`).
 
-![Alt text](open_fdd/air_handling_unit/images/fc1_definition.png)
+```mermaid 
+graph TD
+    title["Fault Equation 1"]
+    caption["Duct static pressure too low with fan at full speed"]
+    equation["DSP < DPSP - eDSP and VFDSPD ≥ 99% - eVFDSPD"]
+
+    legend["Legend:"]
+    DSP["DSP: Duct Static Pressure"]
+    DPSP["DPSP: Duct Static Pressure Setpoint"]
+    VFDSPD["VFDSPD: VFD Speed Reference in Percent"]
+    eVFDSPD["eVFDSPD: VFD Speed Reference Error Threshold"]
+
+    title --> caption
+    caption --> equation
+    equation --> legend
+    legend --> DSP
+    legend --> DPSP
+    legend --> VFDSPD
+    legend --> eVFDSPD
+
+```
 
 These conditions are combined (combined_check) and a rolling window technique is applied to sum consecutive true conditions (rolling_sum). A fault flag (fc1_flag) is set when the sum within the rolling window equals the window size, indicating persistent fault conditions. 
 
