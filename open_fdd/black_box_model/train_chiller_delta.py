@@ -39,10 +39,10 @@ def load_and_prepare_data(filepath):
     df = pd.read_csv(filepath, parse_dates=['timestamp'], index_col='timestamp')
     df = df[(df['CWS_Temp'] != 0) & (df['CWR_Temp'] != 0)]
     df['chiller_delta_temp'] = df['CWR_Temp'] - df['CWS_Temp']
-    # Optionally drop any columns not used
-    # df.drop(columns=['CWR_Temp', 'CWS_Temp'], inplace=True)
-    make_plots(df)
+    make_plots(df)  # Call make_plots before dropping columns
     plot_correlation_matrix(df)
+    df.drop(columns=['CWR_Temp', 'CWS_Temp'], inplace=True)
+    print(df.columns)
     return df.dropna()
 
 def evaluate_lags(df, max_lag):
@@ -50,7 +50,7 @@ def evaluate_lags(df, max_lag):
     best_rmse = np.inf
     best_lag = None
     for lag in range(1, max_lag + 1):
-        temp_df = create_lagged_features(df, lag)  # Lag all columns now
+        temp_df = create_lagged_features(df, lag)
         train_df, test_df = train_test_split(temp_df, test_size=0.2, random_state=42)
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(train_df.drop('chiller_delta_temp', axis=1), train_df['chiller_delta_temp'])
