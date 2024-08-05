@@ -3,6 +3,7 @@ import pandas.api.types as pdtypes
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import operator
+import sys
 
 class FaultConditionSix(FaultCondition):
     """ Class provides the definitions for Fault Condition 6.
@@ -104,6 +105,7 @@ https://gist.github.com/bbartling/e0fb8427b1e0d148a06e3f09121ed5dc#file-fc6-py
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["rat_minus_oat"]
             del df["percent_oa_calc"]
             del df["perc_OAmin"]

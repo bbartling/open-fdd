@@ -1,6 +1,6 @@
 import pandas.api.types as pdtypes
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
-
+import sys
 
 
 class FaultCondition:
@@ -34,6 +34,7 @@ class FaultCondition:
                 "- col type: ",
                 df[col].dtypes,
             )
+            sys.stdout.flush()
 
     def check_analog_pct(self, df, columns):
         """check analog outputs [data with units of %] are floats only

@@ -2,7 +2,7 @@
 Variable volumne air handling unit setup which requires a configuration for the data.
 
 <details>
-  <summary>Tutorial for the `config_dict`</summary>
+  <summary>Tutorial for the config dict</summary>
 
 The `config_dict` is a Python data structure containing variables for tuning faults and names of columns in your data that represent components in the AHU, such as sensors and other I/O that drive the unit. It should be fairly self-explanatory, where the naming convention attempts to follow something related to the `BRICK` schema. Tuning variables for the fault equations, such as anything _DEG_ERR_THRES, can be adjusted when a high number of faults occur for a given fault condition equation. You can review the data in the plots and adjust accordingly, making the mechanical engineer's best determination if further investigation needs to happen with the HVAC system at hand. Please feel free to post a GitHub discussion where high numbers of faults can be very confusing. Other fault tuning parameters that may not be very straightforward are:
 

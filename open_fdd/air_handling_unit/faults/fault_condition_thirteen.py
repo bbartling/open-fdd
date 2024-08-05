@@ -3,7 +3,7 @@ import numpy as np
 import operator
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
-
+import sys
 
 class FaultConditionThirteen(FaultCondition):
     """ Class provides the definitions for Fault Condition 13.
@@ -56,6 +56,7 @@ class FaultConditionThirteen(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["sat_greater_than_sp_calc"]
             del df["combined_check"]
 

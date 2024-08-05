@@ -1,5 +1,6 @@
 import pandas as pd
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
+import sys
 
 class FaultConditionOne(FaultCondition):
     """ Class provides the definitions for Fault Condition 1.
@@ -44,6 +45,7 @@ class FaultConditionOne(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["static_check_"]
             del df["fan_check_"]
             del df["combined_check"]

@@ -1,6 +1,7 @@
 import pandas as pd
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+import sys
 
 class FaultConditionFour(FaultCondition):
     """Class provides the definitions for Fault Condition 4.
@@ -43,6 +44,7 @@ class FaultConditionFour(FaultCondition):
             self.check_analog_pct(df, [col])
 
         print("In FC4 compiling data in Pandas this one takes a while to run...")
+        sys.stdout.flush()
 
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
         df["heating_mode"] = (
@@ -80,7 +82,7 @@ class FaultConditionFour(FaultCondition):
         df = df.fillna(0)
 
         df = df.astype(int)
-        df = df.resample("h").apply(lambda x: (x.eq(1) & x.shift().ne(1)).sum())
+        df = df.resample("60min").apply(lambda x: (x.eq(1) & x.shift().ne(1)).sum())
 
         df["fc4_flag"] = df[df.columns].gt(self.delta_os_max).any(axis=1).astype(int)
         return df

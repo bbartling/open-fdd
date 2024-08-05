@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 '''
 To see print statements in pytest run with:
-$ py -3.12 -m pytest tests/ahu/test_ahu_fc4.py -rP -s
+$ py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc4.py -rP -s
 
 Too much hunting in control system
 OS state changes greater than 7 in an hour

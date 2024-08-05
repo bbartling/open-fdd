@@ -3,6 +3,7 @@ import numpy as np
 import operator
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+import sys
 
 class FaultConditionTwelve(FaultCondition):
     """ Class provides the definitions for Fault Condition 12.
@@ -59,6 +60,7 @@ class FaultConditionTwelve(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["sat_minus_saterr_delta_supply_fan"]
             del df["mat_plus_materr"]
             del df["combined_check"]

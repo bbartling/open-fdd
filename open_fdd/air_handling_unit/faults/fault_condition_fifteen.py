@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+import sys
 
 class FaultConditionFifteen(FaultCondition):
     """ Class provides the definitions for Fault Condition 15.
@@ -74,6 +75,7 @@ class FaultConditionFifteen(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["htg_delta_temp"]
             del df["htg_delta_sqrted"]
             del df["combined_check"]

@@ -3,6 +3,7 @@ import numpy as np
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import operator
+import sys
 
 class FaultConditionFourteen(FaultCondition):
     """ Class provides the definitions for Fault Condition 14.
@@ -68,6 +69,7 @@ class FaultConditionFourteen(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["clg_delta_temp"]
             del df["clg_delta_sqrted"]
             del df["combined_check"]

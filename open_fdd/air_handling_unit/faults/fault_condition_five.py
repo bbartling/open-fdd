@@ -2,6 +2,7 @@ import pandas as pd
 import pandas.api.types as pdtypes
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+import sys
 
 class FaultConditionFive(FaultCondition):
     """ Class provides the definitions for Fault Condition 5.
@@ -56,6 +57,7 @@ class FaultConditionFive(FaultCondition):
 
         if self.troubleshoot_mode:
             print("Troubleshoot mode enabled - not removing helper columns")
+            sys.stdout.flush()
             del df["mat_check"]
             del df["sat_check"]
             del df["combined_check"]
