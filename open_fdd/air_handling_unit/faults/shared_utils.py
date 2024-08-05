@@ -57,12 +57,12 @@ class SharedUtils:
         print(f"Warning: Median time difference between consecutive timestamps is {median_diff}.")
         sys.stdout.flush()
 
-        if median_diff > pd.Timedelta(minutes=5):
+        if median_diff > pd.Timedelta(freq):
             print(f"Warning: Skipping any rolling averaging...")
             sys.stdout.flush()
 
         else:
             df = df.rolling(rolling_window).mean()
-            print(f"Warning: A {rolling_window} rolling average has been applied to the data\.")
+            print(f"Warning: A {rolling_window} rolling average has been applied to the data.")
             sys.stdout.flush()
         return df
