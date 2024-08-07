@@ -15,6 +15,14 @@ data = pd.read_csv(r"C:\Users\bbartling\Documents\WPCRC_Master.csv")
 # Convert timestamp to datetime
 data['timestamp'] = pd.to_datetime(data['timestamp'])
 
+# Calculate the delta temperature for the chiller before dropping the columns
+data['chiller_delta_temp'] = data['CWR_Temp'] - data['CWS_Temp']
+
+# Drop the CWR_Temp and CWS_Temp columns
+data = data.drop(columns=['CWR_Temp', 'CWS_Temp', 'VAV2_6_SpaceTemp', 'VAV2_7_SpaceTemp', 'VAV3_2_SpaceTemp', 'VAV3_5_SpaceTemp'])
+
+
+
 # Select all relevant features for analysis (you can add more features as needed)
 features = data.columns.drop(['timestamp'])
 
@@ -31,18 +39,23 @@ model.fit(data_normalized)
 data['anomaly'] = model.predict(data_normalized)
 data['anomaly'] = data['anomaly'].map({1: 0, -1: 1})  # Convert -1 (outlier) to 1 for easier interpretation
 
-# Calculate the delta temperature for the chiller
-data['chiller_delta_temp'] = data['CWR_Temp'] - data['CWS_Temp']
-
 # Filter data for when the chiller is running (Sa_FanSpeed > 20.0)
-running_data = data[data['Sa_FanSpeed'] > 20.0]
+#running_data = data[data['Sa_FanSpeed'] > 20.0]
+
+running_data = data
 
 # Separate data by anomaly status
 anomaly_data = running_data[running_data['anomaly'] == 1]
 normal_data = running_data[running_data['anomaly'] == 0]
 
 # Columns to analyze
-columns_to_analyze = ['CurrentKW', 'CoolValve', 'DischargeTemp', 'VAV2_6_SpaceTemp', 'RaHumidity', 'RA_Temp']
+columns_to_analyze = ['CurrentKW', 'CoolValve', 'Ma_Temp', 'HW_Valve', 'MaDampers', 'OaTemp', 'SaStatic', 'Sa_FanSpeed', 'DischargeTemp', 'SpaceTemp', 'RaHumidity', 'RA_Temp']
+
+# Grouped columns for subplots
+group1 = ['CurrentKW']
+group2 = ['HW_Valve', 'MaDampers', 'CoolValve', 'Sa_FanSpeed']
+group3 = ['DischargeTemp', 'SpaceTemp', 'RaHumidity', 'RA_Temp', 'Ma_Temp', 'OaTemp']
+group4 = ['SaStatic']
 
 # Calculate statistics for anomaly data
 anomaly_stats = anomaly_data[columns_to_analyze].describe().T
@@ -78,7 +91,7 @@ plt.savefig('anomaly_vs_normal_boxplots.png')
 # Plotting chiller_delta_temp over time with anomalies
 fig, ax = plt.subplots(figsize=(12, 6))
 ax.plot(data['timestamp'], data['chiller_delta_temp'], label='Chiller Delta Temp')
-ax.plot(anomaly_data['timestamp'], anomaly_data['chiller_delta_temp'], 'ro', markersize=5, label='Anomaly')
+ax.plot(anomaly_data['timestamp'], anomaly_data['chiller_delta_temp'], 'ro', markersize=5)
 ax.set_title('Chiller Delta Temperature (CWR_Temp - CWS_Temp) Over Time')
 ax.set_xlabel('Time')
 ax.set_ylabel('Chiller Delta Temperature')
@@ -101,22 +114,69 @@ for anomaly_date in anomaly_dates:
     
     combined_data = data[(data['timestamp'].dt.date >= day_before.date()) & (data['timestamp'].dt.date <= day_after.date())]
     
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, axes = plt.subplots(5, 1, figsize=(12, 24))
     
-    for column in columns_to_analyze:
-        ax.plot(combined_data['timestamp'], combined_data[column], label=f'{column}')
+    # Plot group1
+    for column in group1:
+        axes[0].plot(combined_data['timestamp'], combined_data[column], label=f'{column}')
+        # Highlight anomaly points
+        anomaly_points = combined_data[combined_data['anomaly'] == 1]
+        if not anomaly_points.empty:
+            axes[0].plot(anomaly_points['timestamp'], anomaly_points[column], 'ro', markersize=5)
+    axes[0].set_title(f'Building Power Metrics Around Anomaly Date {anomaly_date}')
+    axes[0].set_ylabel('Value')
+    axes[0].legend(loc='upper right')
+    axes[0].xaxis.set_major_locator(mdates.HourLocator(interval=4))
+    axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+    axes[0].tick_params(labelbottom=False)  # Hide x-axis labels for the subplot
 
-    # Highlight anomaly points
-    anomaly_points = combined_data[combined_data['anomaly'] == 1]
+    # Plot group2
+    for column in group2:
+        axes[1].plot(combined_data['timestamp'], combined_data[column], label=f'{column}')
+        if not anomaly_points.empty:
+            axes[1].plot(anomaly_points['timestamp'], anomaly_points[column], 'ro', markersize=5)
+    axes[1].set_title(f'AHU Output Metrics Around Anomaly Date {anomaly_date}')
+    axes[1].set_ylabel('Value')
+    axes[1].legend(loc='upper right')
+    axes[1].xaxis.set_major_locator(mdates.HourLocator(interval=4))
+    axes[1].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+    axes[1].tick_params(labelbottom=False)
+
+    # Plot group3
+    for column in group3:
+        axes[2].plot(combined_data['timestamp'], combined_data[column], label=f'{column}')
+        if not anomaly_points.empty:
+            axes[2].plot(anomaly_points['timestamp'], anomaly_points[column], 'ro', markersize=5)
+    axes[2].set_title(f'AHU Temp Sensor Metrics Around Anomaly Date {anomaly_date}')
+    axes[2].set_ylabel('Value')
+    axes[2].legend(loc='upper right')
+    axes[2].xaxis.set_major_locator(mdates.HourLocator(interval=4))
+    axes[2].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+    axes[2].tick_params(labelbottom=False)
+
+    # Plot group4
+    for column in group4:
+        axes[3].plot(combined_data['timestamp'], combined_data[column], label=f'{column}')
+        if not anomaly_points.empty:
+            axes[3].plot(anomaly_points['timestamp'], anomaly_points[column], 'ro', markersize=5)
+    axes[3].set_title(f'AHU Duct Static Pressure Around Anomaly Date {anomaly_date}')
+    axes[3].set_ylabel('Value')
+    axes[3].legend(loc='upper right')
+    axes[3].xaxis.set_major_locator(mdates.HourLocator(interval=4))
+    axes[3].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+    axes[3].tick_params(labelbottom=False)
+
+    # Plot chiller delta temp
+    axes[4].plot(combined_data['timestamp'], combined_data['chiller_delta_temp'], label='Chiller Delta Temp')
     if not anomaly_points.empty:
-        ax.plot(anomaly_points['timestamp'], anomaly_points[column], 'ro', markersize=5, label='Anomaly')
+        axes[4].plot(anomaly_points['timestamp'], anomaly_points['chiller_delta_temp'], 'ro', markersize=5)
+    axes[4].set_title(f'Chiller Delta Temp Around Anomaly Date {anomaly_date}')
+    axes[4].set_xlabel('Time')
+    axes[4].set_ylabel('°F')
+    axes[4].legend(loc='best')
+    axes[4].xaxis.set_major_locator(mdates.HourLocator(interval=4))
+    axes[4].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
 
-    ax.set_title(f'Metrics Around Anomaly Date {anomaly_date}')
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Value')
-    ax.legend(loc='upper right')
-    ax.xaxis.set_major_locator(mdates.HourLocator(interval=4))  # Set interval of ticks
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))  # Format datetime
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f'all_metrics_around_anomaly_{anomaly_date}.png'))
