@@ -57,33 +57,33 @@ class HelperUtils:
         fc6 = FaultConditionSix(config_dict) if config_dict["SUPPLY_FAN_AIR_VOLUME_COL"] is not None else None
 
         # Function to apply a fault condition and collect its results
-        def apply_fault_condition(fc, df, fault_flag_col):
+        def apply_fault_condition(fc, df, fault_flag_col, description="None"):
             df_result = fc.apply(df)
             fault_sum = df_result[fault_flag_col].sum()
             print(f"{fc.__class__.__name__} done")
-            print(f"Fault description here")
+            print(f"{description}")
             print("fault sum:", fault_sum)
             print("=" * 50)
             sys.stdout.flush()
             return df_result, fault_sum
 
         # Apply each fault condition and store the results
-        df_fc1, fc1_faults = apply_fault_condition(fc1, df, "fc1_flag")
-        df_fc2, fc2_faults = apply_fault_condition(fc2, df, "fc2_flag")
-        df_fc3, fc3_faults = apply_fault_condition(fc3, df, "fc3_flag")
-        df_fc4, fc4_faults = apply_fault_condition(fc4, df, "fc4_flag")
-        df_fc5, fc5_faults = apply_fault_condition(fc5, df, "fc5_flag")
+        df_fc1, fc1_faults = apply_fault_condition(fc1, df, "fc1_flag", "Duct static pressure too low with fan operating near 100 speed")
+        df_fc2, fc2_faults = apply_fault_condition(fc2, df, "fc2_flag", "Mix temperature too low; should be between outside and return air")
+        df_fc3, fc3_faults = apply_fault_condition(fc3, df, "fc3_flag", "Mix temperature too high; should be between outside and return air")
+        df_fc4, fc4_faults = apply_fault_condition(fc4, df, "fc4_flag", "PID hunting; too many operating state changes between AHU modes for heating, economizer, and mechanical cooling")
+        df_fc5, fc5_faults = apply_fault_condition(fc5, df, "fc5_flag", "Supply air temperature too low should be higher than mix air")
         
         if fc6 is not None:
-            df_fc6, fc6_faults = apply_fault_condition(fc6, df, "fc6_flag")
+            df_fc6, fc6_faults = apply_fault_condition(fc6, df, "fc6_flag", "OA fraction too low or too high, should equal to design % outdoor air requirement")
             fault_counts["fc6_fault_sum"] = fc6_faults
 
-        df_fc7, fc7_faults = apply_fault_condition(fc7, df, "fc7_flag")
-        df_fc8, fc8_faults = apply_fault_condition(fc8, df, "fc8_flag")
-        df_fc9, fc9_faults = apply_fault_condition(fc9, df, "fc9_flag")
-        df_fc10, fc10_faults = apply_fault_condition(fc10, df, "fc10_flag")
-        df_fc11, fc11_faults = apply_fault_condition(fc11, df, "fc11_flag")
-        df_fc12, fc12_faults = apply_fault_condition(fc12, df, "fc12_flag")
+        df_fc7, fc7_faults = apply_fault_condition(fc7, df, "fc7_flag", "Supply air temperature too low in full heating")
+        df_fc8, fc8_faults = apply_fault_condition(fc8, df, "fc8_flag", "Supply air temperature and mix air temperature should be approx equal in economizer mode")
+        df_fc9, fc9_faults = apply_fault_condition(fc9, df, "fc9_flag", "Outside air temperature too high in free cooling without additional mechanical cooling in economizer mode")
+        df_fc10, fc10_faults = apply_fault_condition(fc10, df, "fc10_flag", "Outdoor air temperature and mix air temperature should be approx equal in economizer plus mech cooling mode")
+        df_fc11, fc11_faults = apply_fault_condition(fc11, df, "fc11_flag", "Outside air temperature too low for 100 outdoor air cooling in economizer cooling mode")
+        df_fc12, fc12_faults = apply_fault_condition(fc12, df, "fc12_flag", "Supply air temperature too high; should be less than mix air temperature in economizer plus mech cooling mode")
 
         # Store fault counts
         fault_counts["fc1_fault_sum"] = fc1_faults
