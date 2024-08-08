@@ -22,7 +22,8 @@ open-fdd/                # Repository root
 │   │       ├── fc1_definition.png
 │   │       ├── fc2_definition.png
 │   │       └── ... # other images
-│   ├── utils.py
+│   ├── black_box/
+│   │   └── ... # subject to change being experimental
 ├── tests/
 │   ├── __init__.py
 │   ├── air_handling_unit/

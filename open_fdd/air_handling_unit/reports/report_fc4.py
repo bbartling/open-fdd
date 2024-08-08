@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import time
 import pkg_resources
+import sys
 
 class FaultCodeFourReport(BaseReport):
     """Class provides the definitions for Fault Code 4 Report.
@@ -28,6 +29,7 @@ class FaultCodeFourReport(BaseReport):
         
         # Debug: print DataFrame columns to ensure they exist
         print("DataFrame columns:", df.columns)
+        sys.stdout.flush()
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(25, 8))
         plt.title('Fault Conditions 4 Plots')
@@ -55,7 +57,7 @@ class FaultCodeFourReport(BaseReport):
 
         return plot_image
 
-    def summarize_fault_times(self, df: pd.DataFrame, output_col: str = None) -> str:
+    def summarize_fault_times(self, df: pd.DataFrame, output_col: str = None) -> tuple:
         if output_col is None:
             output_col = "fc4_flag"
 
@@ -75,17 +77,17 @@ class FaultCodeFourReport(BaseReport):
 
         # Econ mode runtime stats
         delta_econ = df[self.econ_only_cooling_mode_calc_col].index.to_series().diff()
-        total_hours_econ = (delta_econ * df[self.econ_only_cooling_mode_calc_col]).sum() / pd.Timedelta(hours=1)
+        total_hours_econ = (delta_econ * df[self.econ_only_cooling_mode_calc_col]).sum() / pd.Timedelta(hours(1))
         percent_econ = round(df[self.econ_only_cooling_mode_calc_col].mean() * 100, 2)
 
         # Econ plus mech cooling mode runtime stats
         delta_econ_clg = df[self.econ_plus_mech_cooling_mode_calc_col].index.to_series().diff()
-        total_hours_econ_clg = (delta_econ_clg * df[self.econ_plus_mech_cooling_mode_calc_col]).sum() / pd.Timedelta(hours=1)
+        total_hours_econ_clg = (delta_econ_clg * df[self.econ_plus_mech_cooling_mode_calc_col]).sum() / pd.Timedelta(hours(1))
         percent_econ_clg = round(df[self.econ_plus_mech_cooling_mode_calc_col].mean() * 100, 2)
 
         # Mech clg mode runtime stats
         delta_clg = df[self.mech_cooling_only_mode_calc_col].index.to_series().diff()
-        total_hours_clg = (delta_clg * df[self.mech_cooling_only_mode_calc_col]).sum() / pd.Timedelta(hours=1)
+        total_hours_clg = (delta_clg * df[self.mech_cooling_only_mode_calc_col]).sum() / pd.Timedelta(hours(1))
         percent_clg = round(df[self.mech_cooling_only_mode_calc_col].mean() * 100, 2)
 
         return (
@@ -130,6 +132,7 @@ class FaultCodeFourReport(BaseReport):
             output_col = "fc4_flag"
 
         print(f"Starting {path} docx report!")
+        sys.stdout.flush()
         document = Document()
         document.add_heading("Fault Condition Four Report", 0)
 
@@ -197,6 +200,7 @@ class FaultCodeFourReport(BaseReport):
             )
         else:
             print("NO FAULTS FOUND - For report skipping time-of-day Histogram plot")
+            sys.stdout.flush()
             paragraph = document.add_paragraph()
             paragraph.style = 'List Bullet'
             paragraph.add_run(
@@ -221,3 +225,53 @@ class FaultCodeFourReport(BaseReport):
         run.style = "Emphasis"
         document.save(f"{path}/{report_name}")
 
+    def print_summary_statistics(self, df: pd.DataFrame, output_col: str = None):
+        (
+            total_days_all_data,
+            total_hours_all_data,
+            hours_fc4_mode,
+            percent_true_fc4,
+            percent_false_fc4,
+            percent_clg,
+            percent_econ_clg,
+            percent_econ,
+            percent_heating,
+            total_hours_heating,
+            total_hours_econ,
+            total_hours_econ_clg,
+            total_hours_clg
+        ) = self.summarize_fault_times(df, output_col=output_col)
+
+        summary_labels = [
+            "Total time in days calculated in dataset",
+            "Total time in hours calculated in dataset",
+            "Total time in hours for when fault flag is True",
+            "Percent of time in the dataset when the fault flag is True",
+            "Percent of time in the dataset when the fault flag is False",
+            "Total percent time while AHU is in a mechanical cooling mode",
+            "Total percent time while AHU is in an economizing plus mechanical cooling mode",
+            "Total percent time while AHU is in an economizing mode",
+            "Total percent time while AHU is in a heating mode",
+            "Total time in hours while AHU is in a heating mode",
+            "Total time in hours while AHU is in an economizing mode",
+            "Total time in hours while AHU is in an economizing plus mechanical cooling mode",
+            "Total time in hours while AHU is in a mechanical cooling mode"
+        ]
+
+        for label, stat in zip(summary_labels, [
+            total_days_all_data,
+            total_hours_all_data,
+            hours_fc4_mode,
+            percent_true_fc4,
+            percent_false_fc4,
+            percent_clg,
+            percent_econ_clg,
+            percent_econ,
+            percent_heating,
+            total_hours_heating,
+            total_hours_econ,
+            total_hours_econ_clg,
+            total_hours_clg
+        ]):
+            print(f"{label}: {stat}")
+            sys.stdout.flush()

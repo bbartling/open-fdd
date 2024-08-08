@@ -22,7 +22,6 @@ data['chiller_delta_temp'] = data['CWR_Temp'] - data['CWS_Temp']
 data = data.drop(columns=['CWR_Temp', 'CWS_Temp', 'VAV2_6_SpaceTemp', 'VAV2_7_SpaceTemp', 'VAV3_2_SpaceTemp', 'VAV3_5_SpaceTemp'])
 
 
-
 # Select all relevant features for analysis (you can add more features as needed)
 features = data.columns.drop(['timestamp'])
 

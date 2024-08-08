@@ -38,8 +38,6 @@ class FaultConditionFour(FaultCondition):
             self.supply_vfd_speed_col,
         ]
 
-        helper = HelperUtils()
-
         for col in columns_to_check:
             self.check_analog_pct(df, [col])
 
