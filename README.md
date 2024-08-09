@@ -2,7 +2,7 @@
 
 ![Alt text](open_fdd/air_handling_unit/images/plot_for_repo.png)
 
-This is a Python based FDD tool for running fault equations inspired by ASHRAE and NIST for HVAC systems across historical datasets with the Pandas computing library. Word document reports are generated programmatically with the Python Docx library.
+This is a Python-based Fault Detection and Diagnostics (FDD) tool for running fault equations inspired by ASHRAE and NIST standards for HVAC systems across historical datasets using the Pandas computing library. The tool evaluates various fault conditions and outputs fault flags as boolean columns within typical Pandas DataFrames. These fault flags indicate the presence (True) or absence (False) of specific issues identified by the fault equations. This approach integrates seamlessly into standard data science and computer science workflows, allowing for efficient analysis, visualization, and further processing of fault conditions within familiar data structures like DataFrames.
 
 
 ## Getting Setup
