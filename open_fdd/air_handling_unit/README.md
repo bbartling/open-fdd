@@ -158,7 +158,7 @@ class FaultConditionOne(FaultCondition):
 * **Fault Condition 12**: Supply air temperature too high; should be less than mix air temperature in economizer plus mech cooling mode
 * **Fault Condition 13**: Supply air temperature too high in full cooling in economizer plus mech cooling mode
 * **Fault Condition 14**: Temperature drop across inactive cooling coil (requires coil leaving temp sensor)
-* **Fault Condition 14**: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
+* **Fault Condition 15**: Temperature rise across inactive heating coil (requires coil leaving temp sensor)
 
 ## TODO
 * Make chart to represent the operating states (OS) defined by ASHRAE.

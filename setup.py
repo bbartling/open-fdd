@@ -17,10 +17,6 @@ setup(
     install_requires=[
         "pandas",
         "matplotlib",
-        "python-docx",
-        "docutils",
-        "docxcompose",
-        "argparse",
         "pytest",
     ],
     classifiers=[
