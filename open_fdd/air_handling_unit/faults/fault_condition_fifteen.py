@@ -41,7 +41,7 @@ class FaultConditionFifteen(FaultCondition):
 
         # Create helper columns
         df["htg_delta_temp"] = (
-            df[self.htg_coil_enter_temp_col] - df[self.htg_coil_leave_temp_col]
+            df[self.htg_coil_leave_temp_col] - df[self.htg_coil_enter_temp_col] 
         )
 
         df["htg_delta_sqrted"] = (

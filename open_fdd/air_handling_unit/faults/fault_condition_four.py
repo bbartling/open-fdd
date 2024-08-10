@@ -41,7 +41,13 @@ class FaultConditionFour(FaultCondition):
         for col in columns_to_check:
             self.check_analog_pct(df, [col])
 
-        print("The program is in FC4 and resampling the data to compute AHU OS state changes per hour takes a while to run...")
+        print("=" * 50)
+        print("Warning: The program is in FC4 and resampling the data")
+        print("to compute AHU OS state changes per hour")
+        print("to flag any hunting issue")
+        print("and this usually takes a while to run...")
+        print("=" * 50)
+
         sys.stdout.flush()
 
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating

@@ -5,9 +5,9 @@ from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 '''
 To see print statements in pytest run with:
-$ py -3.12 -m pytest tests/ahu/test_ahu_fc15.py -rP -s
+$ py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc15.py -rP -s 
 
-Temp drop across inactive htg coil in OS2, OS3, & OS4
+Temp rise across inactive htg coil in OS2, OS3, & OS4
 '''
 
 # Constants
@@ -67,8 +67,8 @@ class TestFaultConditionFifteen:
 
     def fault_df_in_econ(self) -> pd.DataFrame:
         data = {
-            TEST_HTG_COIL_ENTER_TEMP_COL: [140, 140, 140, 140, 140, 140],
-            TEST_HTG_COIL_LEAVE_TEMP_COL: [136.5, 136.5, 136.5, 136.5, 136.5, 136.5],
+            TEST_HTG_COIL_ENTER_TEMP_COL: [136.5, 136.5, 136.5, 136.5, 136.5, 136.5],
+            TEST_HTG_COIL_LEAVE_TEMP_COL: [140, 140, 140, 140, 140, 140],
             TEST_HTG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_CLG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_MIX_AIR_DAMPER_COL: [0.55, 0.55, 0.55, 0.55, 0.55, 0.55],
@@ -78,8 +78,8 @@ class TestFaultConditionFifteen:
 
     def fault_df_in_os3(self) -> pd.DataFrame:
         data = {
-            TEST_HTG_COIL_ENTER_TEMP_COL: [140, 140, 140, 140, 140, 140],
-            TEST_HTG_COIL_LEAVE_TEMP_COL: [136.5, 136.5, 136.5, 136.5, 136.5, 136.5],
+            TEST_HTG_COIL_ENTER_TEMP_COL: [136.5, 136.5, 136.5, 136.5, 136.5, 136.5],
+            TEST_HTG_COIL_LEAVE_TEMP_COL: [140, 140, 140, 140, 140, 140],
             TEST_HTG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_CLG_COIL_CMD_COL: [0.55, 0.55, 0.55, 0.55, 0.55, 0.55],
             TEST_MIX_AIR_DAMPER_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
@@ -119,8 +119,8 @@ class TestFaultOnInt:
 
     def fault_df_on_output_int(self) -> pd.DataFrame:
         data = {
-            TEST_HTG_COIL_ENTER_TEMP_COL: [55, 55, 55, 55, 55, 55],
-            TEST_HTG_COIL_LEAVE_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_ENTER_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_LEAVE_TEMP_COL: [55, 55, 55, 55, 55, 55],
             TEST_HTG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_CLG_COIL_CMD_COL: [0.55, 0.55, 0.55, 0.55, 0.55, 0.55],
             TEST_MIX_AIR_DAMPER_COL: [55, 55, 55, 55, 55, 55],  # Incorrect type
@@ -137,8 +137,8 @@ class TestFaultOnFloatGreaterThanOne:
 
     def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
         data = {
-            TEST_HTG_COIL_ENTER_TEMP_COL: [55, 55, 55, 55, 55, 55],
-            TEST_HTG_COIL_LEAVE_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_ENTER_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_LEAVE_TEMP_COL: [55, 55, 55, 55, 55, 55],
             TEST_HTG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_CLG_COIL_CMD_COL: [0.55, 0.55, 0.55, 0.55, 0.55, 0.55],
             TEST_MIX_AIR_DAMPER_COL: [1.1, 1.2, 1.1, 1.3, 1.1, 1.2],  # Values > 1.0
@@ -155,8 +155,8 @@ class TestFaultOnMixedTypes:
 
     def fault_df_on_mixed_types(self) -> pd.DataFrame:
         data = {
-            TEST_HTG_COIL_ENTER_TEMP_COL: [55, 55, 55, 55, 55, 55],
-            TEST_HTG_COIL_LEAVE_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_ENTER_TEMP_COL: [50.5, 50.5, 50.5, 50.5, 50.5, 50.5],
+            TEST_HTG_COIL_LEAVE_TEMP_COL: [55, 55, 55, 55, 55, 55],
             TEST_HTG_COIL_CMD_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_CLG_COIL_CMD_COL: [0.55, 0.55, 0.55, 0.55, 0.55, 0.55],
             TEST_MIX_AIR_DAMPER_COL: [1.1, 0.55, 1.2, 1.3, 0.55, 1.1],  # Mixed types

@@ -12,6 +12,7 @@ open-fdd/                # Repository root
 │   │   │   ├── fault_condition_one.py
 │   │   │   ├── fault_condition_two.py
 │   │   │   └── ... # other fault conditions
+│   │   ├── examples/
 │   │   ├── reports/
 │   │   │   ├── __init__.py
 │   │   │   ├── base_report.py

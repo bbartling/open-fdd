@@ -23,7 +23,7 @@ I am on Windows, using a version of Python 3.12, and run this project on SharePo
 py -m pip install .
 ```
 
-See `README` inside the `air_handling_unit` directory for further instructions. Coming soon more faults and reports for `vav_system` and `central_plants` and examples getting data from SQL databases.
+See the examples directory for Jupyter notebook tutorials as well as the `README` inside the `air_handling_unit` directory for parameter definitions. Coming soon more faults and reports for `vav_system` and `central_plants` and examples getting data from SQL databases.
 
 ## Contribute
 This project is a community-driven initiative, focusing on the development of free and open-source tools. I believe that Fault Detection and Diagnostics (FDD) should be free and accessible to anyone who wants to try it out, embodying the spirit of open-source philosophy. Additionally, this project aims to serve as an educational resource, empowering individuals to learn about and implement FDD in their own systems. As someone wisely said, `"Knowledge should be shared, not hoarded,"` and this project strives to put that wisdom into practice.
