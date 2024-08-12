@@ -29,8 +29,8 @@ jobs:
 
     - name: Run Black
       run: |
-        black --check open_fdd/ tests/  # Check code formatting
+        black --check open_fdd/
 
     - name: Run tests
       run: |
-        pytest tests/  # Run your test suite
+        pytest open_fdd/tests/
