@@ -38,3 +38,22 @@ open-fdd/                # Repository root
 └── requirements.txt
 
 '''
+
+"""
+# test_formatting.py
+
+import subprocess
+import sys
+
+def test_black_formatting():
+    # Run the Black formatter check
+    result = subprocess.run(
+        [sys.executable, "-m", "black", "--check", "."],
+        capture_output=True,
+        text=True
+    )
+    
+    # Assert that the command was successful
+    assert result.returncode == 0, f"Black formatting issues found:\n{result.stdout}\n{result.stderr}"
+
+"""
