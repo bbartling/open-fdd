@@ -1,7 +1,7 @@
 # open-fdd
 
+![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
-![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 
 
