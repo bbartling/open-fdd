@@ -28,6 +28,7 @@ These are some basic project goals to make this into an interactive FDD applicat
  - [x] finish `air_handling_unit` faults and reports based on ASHRAE and NIST
  - [x] publish to PyPI as Python library
  - [ ] make a few IPython notebook tutorials AHU FDD examples
+ - [ ] make a guide for fault `parameters` like error thresholds, etc.
  - [ ] make `central_plant` faults, IPython reports, and examples
  - [ ] make `energy_efficiency` faults, IPython reports, and examples
  - [ ] make `metering`, faults, IPython reports, and examples
