@@ -4,10 +4,11 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionEight(FaultCondition):
-    """ Class provides the definitions for Fault Condition 8.
-        Supply air temperature and mix air temperature should 
-        be approx equal in economizer mode.
+    """Class provides the definitions for Fault Condition 8.
+    Supply air temperature and mix air temperature should
+    be approx equal in economizer mode.
     """
 
     def __init__(self, dict_):
@@ -36,8 +37,12 @@ class FaultConditionEight(FaultCondition):
 
         self.check_analog_pct(df, columns_to_check)
 
-        df["sat_fan_mat"] = abs(df[self.sat_col] - self.delta_t_supply_fan - df[self.mat_col])
-        df["sat_mat_sqrted"] = np.sqrt(self.supply_degf_err_thres ** 2 + self.mix_degf_err_thres ** 2)
+        df["sat_fan_mat"] = abs(
+            df[self.sat_col] - self.delta_t_supply_fan - df[self.mat_col]
+        )
+        df["sat_mat_sqrted"] = np.sqrt(
+            self.supply_degf_err_thres**2 + self.mix_degf_err_thres**2
+        )
 
         df["combined_check"] = (
             (df["sat_fan_mat"] > df["sat_mat_sqrted"])
@@ -46,7 +51,9 @@ class FaultConditionEight(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc8_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

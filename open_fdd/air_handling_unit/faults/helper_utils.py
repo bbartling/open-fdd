@@ -2,6 +2,7 @@ import sys
 from open_fdd.air_handling_unit.faults.shared_utils import SharedUtils
 import pandas as pd
 
+
 class HelperUtils:
     def float_int_check_err(self, col):
         return SharedUtils.float_int_check_err(col)
@@ -23,21 +24,51 @@ class HelperUtils:
 
     def process_all_faults(self, df, config_dict):
         # Import fault conditions
-        from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
-        from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
-        from open_fdd.air_handling_unit.faults.fault_condition_three import FaultConditionThree
-        from open_fdd.air_handling_unit.faults.fault_condition_four import FaultConditionFour
-        from open_fdd.air_handling_unit.faults.fault_condition_five import FaultConditionFive
-        from open_fdd.air_handling_unit.faults.fault_condition_six import FaultConditionSix
-        from open_fdd.air_handling_unit.faults.fault_condition_seven import FaultConditionSeven
-        from open_fdd.air_handling_unit.faults.fault_condition_eight import FaultConditionEight
-        from open_fdd.air_handling_unit.faults.fault_condition_nine import FaultConditionNine
-        from open_fdd.air_handling_unit.faults.fault_condition_ten import FaultConditionTen
-        from open_fdd.air_handling_unit.faults.fault_condition_eleven import FaultConditionEleven
-        from open_fdd.air_handling_unit.faults.fault_condition_twelve import FaultConditionTwelve
-        from open_fdd.air_handling_unit.faults.fault_condition_thirteen import FaultConditionThirteen
-        from open_fdd.air_handling_unit.faults.fault_condition_fourteen import FaultConditionFourteen
-        from open_fdd.air_handling_unit.faults.fault_condition_fifteen import FaultConditionFifteen
+        from open_fdd.air_handling_unit.faults.fault_condition_one import (
+            FaultConditionOne,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_two import (
+            FaultConditionTwo,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_three import (
+            FaultConditionThree,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_four import (
+            FaultConditionFour,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_five import (
+            FaultConditionFive,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_six import (
+            FaultConditionSix,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_seven import (
+            FaultConditionSeven,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_eight import (
+            FaultConditionEight,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_nine import (
+            FaultConditionNine,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_ten import (
+            FaultConditionTen,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_eleven import (
+            FaultConditionEleven,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_twelve import (
+            FaultConditionTwelve,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_thirteen import (
+            FaultConditionThirteen,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_fourteen import (
+            FaultConditionFourteen,
+        )
+        from open_fdd.air_handling_unit.faults.fault_condition_fifteen import (
+            FaultConditionFifteen,
+        )
 
         fault_counts = {}
 
@@ -65,12 +96,18 @@ class HelperUtils:
 
         # Optionally initialize Fault Condition Fourteen
         fc14 = None
-        if config_dict.get("COOLING_SIG_COL") is not None and config_dict.get("CLG_COIL_LEAVE_TEMP_COL") is not None:
+        if (
+            config_dict.get("COOLING_SIG_COL") is not None
+            and config_dict.get("CLG_COIL_LEAVE_TEMP_COL") is not None
+        ):
             fc14 = FaultConditionFourteen(config_dict)
 
         # Optionally initialize Fault Condition Fifteen
         fc15 = None
-        if config_dict.get("HTG_COIL_ENTER_TEMP_COL") is not None and config_dict.get("HTG_COIL_LEAVE_TEMP_COL") is not None:
+        if (
+            config_dict.get("HTG_COIL_ENTER_TEMP_COL") is not None
+            and config_dict.get("HTG_COIL_LEAVE_TEMP_COL") is not None
+        ):
             fc15 = FaultConditionFifteen(config_dict)
 
         # Apply fault conditions and calculate fault counts

@@ -3,12 +3,12 @@ import pytest
 from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-'''
+"""
 To see print statements in pytest run with:
 $ py -3.12 -m pytest tests/ahu/test_ahu_fc2.py -rP -s
 
 Mix air temp lower than out temp
-'''
+"""
 
 TEST_OUTDOOR_DEGF_ERR_THRES = 5.0
 TEST_MIX_DEGF_ERR_THRES = 2.0
@@ -21,18 +21,19 @@ TEST_ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionTwo with a dictionary
 fault_condition_params = {
-    'MIX_DEGF_ERR_THRES': TEST_MIX_DEGF_ERR_THRES,
-    'RETURN_DEGF_ERR_THRES': TEST_RETURN_DEGF_ERR_THRES,
-    'OUTDOOR_DEGF_ERR_THRES': TEST_OUTDOOR_DEGF_ERR_THRES,
-    'MAT_COL': TEST_MIX_TEMP_COL,
-    'RAT_COL': TEST_RETURN_TEMP_COL,
-    'OAT_COL': TEST_OUT_TEMP_COL,
-    'SUPPLY_VFD_SPEED_COL': TEST_SUPPLY_VFD_SPEED_COL,
-    'TROUBLESHOOT_MODE': False,  # default value
-    'ROLLING_WINDOW_SIZE': TEST_ROLLING_WINDOW_SIZE
+    "MIX_DEGF_ERR_THRES": TEST_MIX_DEGF_ERR_THRES,
+    "RETURN_DEGF_ERR_THRES": TEST_RETURN_DEGF_ERR_THRES,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OUTDOOR_DEGF_ERR_THRES,
+    "MAT_COL": TEST_MIX_TEMP_COL,
+    "RAT_COL": TEST_RETURN_TEMP_COL,
+    "OAT_COL": TEST_OUT_TEMP_COL,
+    "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
+    "TROUBLESHOOT_MODE": False,  # default value
+    "ROLLING_WINDOW_SIZE": TEST_ROLLING_WINDOW_SIZE,
 }
 
 fc2 = FaultConditionTwo(fault_condition_params)
+
 
 class TestNoFault(object):
 
@@ -47,7 +48,7 @@ class TestNoFault(object):
 
     def test_no_fault(self):
         results = fc2.apply(self.no_fault_df())
-        actual = results['fc2_flag'].sum()
+        actual = results["fc2_flag"].sum()
         expected = 0
         message = f"fc2 no_fault_df actual is {actual} and expected is {expected}"
         print(message)
@@ -67,7 +68,7 @@ class TestFault(object):
 
     def test_fault(self):
         results = fc2.apply(self.fault_df())
-        actual = results['fc2_flag'].sum()
+        actual = results["fc2_flag"].sum()
         expected = 2
         message = f"fc2 fault_df actual is {actual} and expected is {expected}"
         print(message)
@@ -86,8 +87,10 @@ class TestFaultOnInt(object):
         return pd.DataFrame(data)
 
     def test_fault_on_int(self):
-        with pytest.raises(TypeError, 
-                           match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
             fc2.apply(self.fault_df_on_output_int())
 
 
@@ -103,8 +106,10 @@ class TestFaultOnFloatGreaterThanOne(object):
         return pd.DataFrame(data)
 
     def test_fault_on_float_greater_than_one(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
             fc2.apply(self.fault_df_on_output_greater_than_one())
 
 
@@ -120,6 +125,8 @@ class TestFaultOnMixedTypes(object):
         return pd.DataFrame(data)
 
     def test_fault_on_mixed_types(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
             fc2.apply(self.fault_df_on_mixed_types())

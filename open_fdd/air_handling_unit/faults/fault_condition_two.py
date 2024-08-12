@@ -3,9 +3,10 @@ import numpy as np
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 import sys
 
+
 class FaultConditionTwo(FaultCondition):
-    """ Class provides the definitions for Fault Condition 2.
-        Mix temperature too low; should be between outside and return air.
+    """Class provides the definitions for Fault Condition 2.
+    Mix temperature too low; should be between outside and return air.
     """
 
     def __init__(self, dict_):
@@ -39,13 +40,14 @@ class FaultConditionTwo(FaultCondition):
             df[self.oat_col] - self.outdoor_degf_err_thres,
         )
 
-        df["combined_check"] = (
-            (df["mat_check"] < df["temp_min_check"])
-            & (df[self.supply_vfd_speed_col] > 0.01)
+        df["combined_check"] = (df["mat_check"] < df["temp_min_check"]) & (
+            df[self.supply_vfd_speed_col] > 0.01
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc2_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

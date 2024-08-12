@@ -3,15 +3,16 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionFour(FaultCondition):
     """Class provides the definitions for Fault Condition 4.
 
-        This fault flags excessive operating states on the AHU
-        if its hunting between heating, econ, econ+mech, and
-        a mech clg modes. The code counts how many operating 
-        changes in an hour and will throw a fault if there is 
-        excessive OS changes to flag control sys hunting.
-        
+    This fault flags excessive operating states on the AHU
+    if its hunting between heating, econ, econ+mech, and
+    a mech clg modes. The code counts how many operating
+    changes in an hour and will throw a fault if there is
+    excessive OS changes to flag control sys hunting.
+
     """
 
     def __init__(self, dict_):
@@ -52,34 +53,34 @@ class FaultConditionFour(FaultCondition):
 
         # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
         df["heating_mode"] = (
-                (df[self.heating_sig_col] > 0)
-                & (df[self.cooling_sig_col] == 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
+            (df[self.heating_sig_col] > 0)
+            & (df[self.cooling_sig_col] == 0)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         )
 
         # AHU econ only mode based on OA damper modulating and clg htg = zero
         df["econ_only_cooling_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] == 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
+            (df[self.heating_sig_col] == 0)
+            & (df[self.cooling_sig_col] == 0)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
         )
 
         # AHU econ+mech clg mode based on OA damper modulating for cooling and clg pid/vlv modulating
         df["econ_plus_mech_cooling_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] > 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
+            (df[self.heating_sig_col] == 0)
+            & (df[self.cooling_sig_col] > 0)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
         )
 
         # AHU mech mode based on OA damper @ min OA and clg pid/vlv modulating
         df["mech_cooling_only_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] > 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
+            (df[self.heating_sig_col] == 0)
+            & (df[self.cooling_sig_col] > 0)
+            & (df[self.supply_vfd_speed_col] > 0)
+            & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
         )
 
         # Fill non-finite values with zero or drop them

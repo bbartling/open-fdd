@@ -2,9 +2,10 @@ import pandas as pd
 from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 import sys
 
+
 class FaultConditionOne(FaultCondition):
-    """ Class provides the definitions for Fault Condition 1.
-        AHU low duct static pressure fan fault.
+    """Class provides the definitions for Fault Condition 1.
+    AHU low duct static pressure fan fault.
     """
 
     def __init__(self, dict_):
@@ -30,16 +31,22 @@ class FaultConditionOne(FaultCondition):
         columns_to_check = [self.supply_vfd_speed_col]
         self.check_analog_pct(df, columns_to_check)
 
-        df['static_check_'] = (
-            df[self.duct_static_col] < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres)
-        df['fan_check_'] = (
-            df[self.supply_vfd_speed_col] >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres)
+        df["static_check_"] = (
+            df[self.duct_static_col]
+            < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
+        )
+        df["fan_check_"] = (
+            df[self.supply_vfd_speed_col]
+            >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres
+        )
 
         # Combined condition check
-        df["combined_check"] = df['static_check_'] & df['fan_check_']
+        df["combined_check"] = df["static_check_"] & df["fan_check_"]
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc1_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
 

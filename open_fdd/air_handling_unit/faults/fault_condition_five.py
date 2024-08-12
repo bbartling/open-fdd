@@ -4,11 +4,12 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionFive(FaultCondition):
-    """ Class provides the definitions for Fault Condition 5.
-        SAT too low; should be higher than MAT in HTG MODE
-        --Broken heating valve or other mechanical issue
-        related to heat valve not working as designed
+    """Class provides the definitions for Fault Condition 5.
+    SAT too low; should be higher than MAT in HTG MODE
+    --Broken heating valve or other mechanical issue
+    related to heat valve not working as designed
     """
 
     def __init__(self, dict_):
@@ -30,7 +31,7 @@ class FaultConditionFive(FaultCondition):
         if self.troubleshoot_mode:
             self.troubleshoot_cols(df)
 
-        # check analog outputs [data with units of %] are floats only            
+        # check analog outputs [data with units of %] are floats only
         columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
 
         for col in columns_to_check:
@@ -38,20 +39,22 @@ class FaultConditionFive(FaultCondition):
 
         df["sat_check"] = df[self.sat_col] + self.supply_degf_err_thres
         df["mat_check"] = (
-                df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
+            df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
         )
 
         df["combined_check"] = (
-                (df["sat_check"] <= df["mat_check"])
-                # this is to make fault only active in OS1 for htg mode only
-                # and fan is running. Some control programming may use htg
-                # vlv when AHU is off to prevent low limit freeze alarms
-                & (df[self.heating_sig_col] > 0.01)
-                & (df[self.supply_vfd_speed_col] > 0.01)
+            (df["sat_check"] <= df["mat_check"])
+            # this is to make fault only active in OS1 for htg mode only
+            # and fan is running. Some control programming may use htg
+            # vlv when AHU is off to prevent low limit freeze alarms
+            & (df[self.heating_sig_col] > 0.01)
+            & (df[self.supply_vfd_speed_col] > 0.01)
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc5_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
 

@@ -4,7 +4,6 @@ import sys
 
 
 class FaultCondition:
-    
     """Parent class for Fault Conditions. Methods are inherited to all children."""
 
     def set_attributes(self, dict_):
@@ -48,5 +47,3 @@ class FaultCondition:
                 df = helper.convert_to_float(df, col)
             if df[col].max() > 1.0:
                 raise TypeError(helper.float_max_check_err(col))
-
-

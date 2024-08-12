@@ -5,10 +5,11 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionThirteen(FaultCondition):
-    """ Class provides the definitions for Fault Condition 13.
-        Supply air temperature too high in full cooling 
-        in economizer plus mech cooling mode
+    """Class provides the definitions for Fault Condition 13.
+    Supply air temperature too high in full cooling
+    in economizer plus mech cooling mode
     """
 
     def __init__(self, dict_):
@@ -50,7 +51,9 @@ class FaultConditionThirteen(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc13_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

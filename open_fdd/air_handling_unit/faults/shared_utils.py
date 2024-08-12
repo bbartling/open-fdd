@@ -2,6 +2,7 @@ import pandas as pd
 import pandas.api.types as pdtypes
 import sys
 
+
 class SharedUtils:
     @staticmethod
     def float_int_check_err(col):
@@ -42,19 +43,23 @@ class SharedUtils:
 
     @staticmethod
     def apply_rolling_average_if_needed(df, freq="1min", rolling_window="5min"):
-        """ Apply rolling average if time difference between consecutive 
-            timestamps is not greater than the specified frequency.
+        """Apply rolling average if time difference between consecutive
+        timestamps is not greater than the specified frequency.
         """
 
-        print("Warning: If data has a one minute or less sampling frequency a rolling average will be automatically applied")
+        print(
+            "Warning: If data has a one minute or less sampling frequency a rolling average will be automatically applied"
+        )
         sys.stdout.flush()
 
         time_diff = df.index.to_series().diff().iloc[1:]
-        
+
         # Calculate median time difference to avoid being affected by outliers
         median_diff = time_diff.median()
 
-        print(f"Warning: Median time difference between consecutive timestamps is {median_diff}.")
+        print(
+            f"Warning: Median time difference between consecutive timestamps is {median_diff}."
+        )
         sys.stdout.flush()
 
         if median_diff > pd.Timedelta(freq):
@@ -63,6 +68,8 @@ class SharedUtils:
 
         else:
             df = df.rolling(rolling_window).mean()
-            print(f"Warning: A {rolling_window} rolling average has been applied to the data.")
+            print(
+                f"Warning: A {rolling_window} rolling average has been applied to the data."
+            )
             sys.stdout.flush()
         return df

@@ -1,5 +1,4 @@
-
-'''
+"""
 open-fdd/                # Repository root
 ├── open_fdd/            # Python package root
 │   ├── __init__.py
@@ -7,7 +6,7 @@ open-fdd/                # Repository root
 │   │   ├── __init__.py
 │   │   ├── faults/
 │   │   │   ├── __init__.py
-│   │   │   ├── helper_utils.py
+│   │   │   ├── helper_utils.pya
 │   │   │   ├── fault_condition.py
 │   │   │   ├── fault_condition_one.py
 │   │   │   ├── fault_condition_two.py
@@ -36,24 +35,5 @@ open-fdd/                # Repository root
 ├── README.md
 ├── LICENSE
 └── requirements.txt
-
-'''
-
-"""
-# test_formatting.py
-
-import subprocess
-import sys
-
-def test_black_formatting():
-    # Run the Black formatter check
-    result = subprocess.run(
-        [sys.executable, "-m", "black", "--check", "."],
-        capture_output=True,
-        text=True
-    )
-    
-    # Assert that the command was successful
-    assert result.returncode == 0, f"Black formatting issues found:\n{result.stdout}\n{result.stderr}"
 
 """

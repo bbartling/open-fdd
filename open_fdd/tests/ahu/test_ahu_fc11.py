@@ -1,14 +1,16 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults.fault_condition_eleven import FaultConditionEleven
+from open_fdd.air_handling_unit.faults.fault_condition_eleven import (
+    FaultConditionEleven,
+)
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-'''
+"""
 To see print statements in pytest run with:
 $ py -3.12 -m pytest tests/ahu/test_ahu_fc11.py -rP -s
 
 OAT Temp too low for 100% cooling in OS3
-'''
+"""
 
 # Constants
 TEST_DELTA_SUPPLY_FAN = 2.0
@@ -22,18 +24,19 @@ ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionEleven with a dictionary
 fault_condition_params = {
-    'DELTA_T_SUPPLY_FAN': TEST_DELTA_SUPPLY_FAN,
-    'OUTDOOR_DEGF_ERR_THRES': TEST_OAT_DEGF_ERR_THRES,
-    'SUPPLY_DEGF_ERR_THRES': TEST_SUPPLY_DEGF_ERR_THRES,
-    'SAT_SETPOINT_COL': TEST_SAT_SP_COL,
-    'OAT_COL': TEST_OAT_COL,
-    'COOLING_SIG_COL': TEST_COOLING_COIL_SIG_COL,
-    'ECONOMIZER_SIG_COL': TEST_MIX_AIR_DAMPER_COL,
-    'TROUBLESHOOT_MODE': False,
-    'ROLLING_WINDOW_SIZE': ROLLING_WINDOW_SIZE
+    "DELTA_T_SUPPLY_FAN": TEST_DELTA_SUPPLY_FAN,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OAT_DEGF_ERR_THRES,
+    "SUPPLY_DEGF_ERR_THRES": TEST_SUPPLY_DEGF_ERR_THRES,
+    "SAT_SETPOINT_COL": TEST_SAT_SP_COL,
+    "OAT_COL": TEST_OAT_COL,
+    "COOLING_SIG_COL": TEST_COOLING_COIL_SIG_COL,
+    "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
+    "TROUBLESHOOT_MODE": False,
+    "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,
 }
 
 fc11 = FaultConditionEleven(fault_condition_params)
+
 
 class TestFaultConditionEleven:
 
@@ -57,17 +60,20 @@ class TestFaultConditionEleven:
 
     def test_no_fault_no_econ(self):
         results = fc11.apply(self.no_fault_df_no_econ())
-        actual = results['fc11_flag'].sum()
+        actual = results["fc11_flag"].sum()
         expected = 0
-        message = f"FC11 no_fault_df_no_econ actual is {actual} and expected is {expected}"
+        message = (
+            f"FC11 no_fault_df_no_econ actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
 
     def test_fault_in_econ(self):
         results = fc11.apply(self.fault_df_in_econ())
-        actual = results['fc11_flag'].sum()
+        actual = results["fc11_flag"].sum()
         expected = 2
         message = f"FC11 fault_df_in_econ actual is {actual} and expected is {expected}"
         assert actual == expected, message
+
 
 class TestFaultOnInt:
 
@@ -81,9 +87,12 @@ class TestFaultOnInt:
         return pd.DataFrame(data)
 
     def test_fault_on_int(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_int_check_err(TEST_COOLING_COIL_SIG_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_int_check_err(TEST_COOLING_COIL_SIG_COL),
+        ):
             fc11.apply(self.fault_df_on_output_int())
+
 
 class TestFaultOnFloatGreaterThanOne:
 
@@ -97,9 +106,12 @@ class TestFaultOnFloatGreaterThanOne:
         return pd.DataFrame(data)
 
     def test_fault_on_float_greater_than_one(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_COOLING_COIL_SIG_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_COOLING_COIL_SIG_COL),
+        ):
             fc11.apply(self.fault_df_on_output_greater_than_one())
+
 
 class TestFaultOnMixedTypes:
 
@@ -113,9 +125,12 @@ class TestFaultOnMixedTypes:
         return pd.DataFrame(data)
 
     def test_fault_on_mixed_types(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_COOLING_COIL_SIG_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_COOLING_COIL_SIG_COL),
+        ):
             fc11.apply(self.fault_df_on_mixed_types())
+
 
 if __name__ == "__main__":
     pytest.main()

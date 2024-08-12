@@ -4,12 +4,13 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
-class FaultConditionEleven(FaultCondition):
-    """ Class provides the definitions for Fault Condition 11.
-        Outside air temperature too low for 100% outdoor 
-        air cooling in economizer cooling mode.
 
-        Economizer performance fault
+class FaultConditionEleven(FaultCondition):
+    """Class provides the definitions for Fault Condition 11.
+    Outside air temperature too low for 100% outdoor
+    air cooling in economizer cooling mode.
+
+    Economizer performance fault
     """
 
     def __init__(self, dict_):
@@ -38,7 +39,9 @@ class FaultConditionEleven(FaultCondition):
 
         df["oat_plus_oaterror"] = df[self.oat_col] + self.outdoor_degf_err_thres
         df["satsp_delta_saterr"] = (
-            df[self.sat_setpoint_col] - self.delta_t_supply_fan - self.supply_degf_err_thres
+            df[self.sat_setpoint_col]
+            - self.delta_t_supply_fan
+            - self.supply_degf_err_thres
         )
 
         df["combined_check"] = (
@@ -49,7 +52,9 @@ class FaultConditionEleven(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc11_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

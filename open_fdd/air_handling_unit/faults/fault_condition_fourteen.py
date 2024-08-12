@@ -5,11 +5,12 @@ from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import operator
 import sys
 
+
 class FaultConditionFourteen(FaultCondition):
-    """ Class provides the definitions for Fault Condition 14.
-        Temperature drop across inactive cooling coil.
-        Requires coil leaving temp sensor.
-        """
+    """Class provides the definitions for Fault Condition 14.
+    Temperature drop across inactive cooling coil.
+    Requires coil leaving temp sensor.
+    """
 
     def __init__(self, dict_):
         self.delta_t_supply_fan = float
@@ -47,7 +48,7 @@ class FaultConditionFourteen(FaultCondition):
 
         df["clg_delta_sqrted"] = (
             np.sqrt(
-                self.coil_temp_enter_err_thres ** 2 + self.coil_temp_leav_err_thres ** 2
+                self.coil_temp_enter_err_thres**2 + self.coil_temp_leav_err_thres**2
             )
             + self.delta_t_supply_fan
         )
@@ -63,7 +64,9 @@ class FaultConditionFourteen(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc14_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

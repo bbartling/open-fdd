@@ -1,14 +1,16 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults.fault_condition_thirteen import FaultConditionThirteen
+from open_fdd.air_handling_unit.faults.fault_condition_thirteen import (
+    FaultConditionThirteen,
+)
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-'''
+"""
 To see print statements in pytest run with:
 $ py -3.12 -m pytest tests/ahu/test_ahu_fc13.py -rP -s
 
 SAT too high in full cooling. OS3 & OS4
-'''
+"""
 
 # Constants
 TEST_SUPPLY_DEGF_ERR_THRES = 2.0
@@ -21,17 +23,18 @@ ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionThirteen with a dictionary
 fault_condition_params = {
-    'SUPPLY_DEGF_ERR_THRES': TEST_SUPPLY_DEGF_ERR_THRES,
-    'AHU_MIN_OA_DPR': TEST_AHU_MIN_OA_DPR,
-    'SAT_COL': TEST_SAT_COL,
-    'SAT_SETPOINT_COL': TEST_SAT_SP_COL,
-    'COOLING_SIG_COL': TEST_COOLING_COIL_SIG_COL,
-    'ECONOMIZER_SIG_COL': TEST_MIX_AIR_DAMPER_COL,
-    'TROUBLESHOOT_MODE': False,
-    'ROLLING_WINDOW_SIZE': ROLLING_WINDOW_SIZE
+    "SUPPLY_DEGF_ERR_THRES": TEST_SUPPLY_DEGF_ERR_THRES,
+    "AHU_MIN_OA_DPR": TEST_AHU_MIN_OA_DPR,
+    "SAT_COL": TEST_SAT_COL,
+    "SAT_SETPOINT_COL": TEST_SAT_SP_COL,
+    "COOLING_SIG_COL": TEST_COOLING_COIL_SIG_COL,
+    "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
+    "TROUBLESHOOT_MODE": False,
+    "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,
 }
 
 fc13 = FaultConditionThirteen(fault_condition_params)
+
 
 class TestFaultConditionThirteen:
 
@@ -40,7 +43,14 @@ class TestFaultConditionThirteen:
             TEST_SAT_COL: [55, 55, 55, 55, 55, 55],
             TEST_SAT_SP_COL: [56, 56, 56, 56, 56, 56],
             TEST_COOLING_COIL_SIG_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            TEST_MIX_AIR_DAMPER_COL: [TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR],
+            TEST_MIX_AIR_DAMPER_COL: [
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+            ],
         }
         return pd.DataFrame(data)
 
@@ -58,30 +68,42 @@ class TestFaultConditionThirteen:
             TEST_SAT_COL: [66, 66, 66, 66, 66, 66],
             TEST_SAT_SP_COL: [56, 56, 56, 56, 56, 56],
             TEST_COOLING_COIL_SIG_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
-            TEST_MIX_AIR_DAMPER_COL: [TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR, TEST_AHU_MIN_OA_DPR],
+            TEST_MIX_AIR_DAMPER_COL: [
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+                TEST_AHU_MIN_OA_DPR,
+            ],
         }
         return pd.DataFrame(data)
 
     def test_no_fault_no_econ(self):
         results = fc13.apply(self.no_fault_df_no_econ())
-        actual = results['fc13_flag'].sum()
+        actual = results["fc13_flag"].sum()
         expected = 0
-        message = f"FC13 no_fault_df_no_econ actual is {actual} and expected is {expected}"
+        message = (
+            f"FC13 no_fault_df_no_econ actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
 
     def test_fault_in_econ_plus_mech(self):
         results = fc13.apply(self.fault_df_in_econ_plus_mech())
-        actual = results['fc13_flag'].sum()
+        actual = results["fc13_flag"].sum()
         expected = 2
         message = f"FC13 fault_df_in_econ actual is {actual} and expected is {expected}"
         assert actual == expected, message
 
     def test_fault_in_mech_clg(self):
         results = fc13.apply(self.fault_df_in_mech_clg())
-        actual = results['fc13_flag'].sum()
+        actual = results["fc13_flag"].sum()
         expected = 2
-        message = f"FC13 fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        message = (
+            f"FC13 fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
+
 
 class TestFaultOnInt:
 
@@ -95,9 +117,11 @@ class TestFaultOnInt:
         return pd.DataFrame(data)
 
     def test_fault_on_int(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_int_check_err(TEST_MIX_AIR_DAMPER_COL)):
+        with pytest.raises(
+            TypeError, match=HelperUtils().float_int_check_err(TEST_MIX_AIR_DAMPER_COL)
+        ):
             fc13.apply(self.fault_df_on_output_int())
+
 
 class TestFaultOnFloatGreaterThanOne:
 
@@ -111,9 +135,11 @@ class TestFaultOnFloatGreaterThanOne:
         return pd.DataFrame(data)
 
     def test_fault_on_float_greater_than_one(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_MIX_AIR_DAMPER_COL)):
+        with pytest.raises(
+            TypeError, match=HelperUtils().float_max_check_err(TEST_MIX_AIR_DAMPER_COL)
+        ):
             fc13.apply(self.fault_df_on_output_greater_than_one())
+
 
 class TestFaultOnMixedTypes:
 
@@ -127,9 +153,11 @@ class TestFaultOnMixedTypes:
         return pd.DataFrame(data)
 
     def test_fault_on_mixed_types(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_MIX_AIR_DAMPER_COL)):
+        with pytest.raises(
+            TypeError, match=HelperUtils().float_max_check_err(TEST_MIX_AIR_DAMPER_COL)
+        ):
             fc13.apply(self.fault_df_on_mixed_types())
+
 
 if __name__ == "__main__":
     pytest.main()

@@ -3,12 +3,12 @@ import pytest
 from open_fdd.air_handling_unit.faults.fault_condition_six import FaultConditionSix
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
-'''
+"""
 To see print statements in pytest run with:
 $ py -3.12 -m pytest tests/ahu/test_ahu_fc6.py -rP -s
 
 OA FRACTION TOO LOW OR TOO HIGH; SHOULD BE EQUAL TO %OAmin
-'''
+"""
 
 # Constants
 TEST_AIRFLOW_ERR_THRES = 0.3
@@ -29,25 +29,26 @@ ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionSix with a dictionary
 fault_condition_params = {
-    'AIRFLOW_ERR_THRES': TEST_AIRFLOW_ERR_THRES,
-    'AHU_MIN_OA_CFM_DESIGN': TEST_AHU_MIN_CFM_DESIGN,
-    'OUTDOOR_DEGF_ERR_THRES': TEST_OAT_DEGF_ERR_THRES,
-    'RETURN_DEGF_ERR_THRES': TEST_RAT_DEGF_ERR_THRES,
-    'OAT_RAT_DELTA_MIN': TEST_DELTA_TEMP_MIN,
-    'AHU_MIN_OA_DPR': TEST_AHU_MIN_OA_DPR,
-    'SUPPLY_FAN_AIR_VOLUME_COL': TEST_VAV_TOTAL_AIR_FLOW_COL,
-    'MAT_COL': TEST_MIX_TEMP_COL,
-    'OAT_COL': TEST_OUT_TEMP_COL,
-    'RAT_COL': TEST_RETURN_TEMP_COL,
-    'SUPPLY_VFD_SPEED_COL': TEST_SUPPLY_VFD_SPEED_COL,
-    'ECONOMIZER_SIG_COL': TEST_MIX_AIR_DAMPER_COL,
-    'HEATING_SIG_COL': TEST_HEATING_COIL_SIG_COL,
-    'COOLING_SIG_COL': TEST_COOLING_COIL_SIG_COL,
-    'TROUBLESHOOT_MODE': False,  # default value
-    'ROLLING_WINDOW_SIZE': ROLLING_WINDOW_SIZE  # rolling sum window size
+    "AIRFLOW_ERR_THRES": TEST_AIRFLOW_ERR_THRES,
+    "AHU_MIN_OA_CFM_DESIGN": TEST_AHU_MIN_CFM_DESIGN,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OAT_DEGF_ERR_THRES,
+    "RETURN_DEGF_ERR_THRES": TEST_RAT_DEGF_ERR_THRES,
+    "OAT_RAT_DELTA_MIN": TEST_DELTA_TEMP_MIN,
+    "AHU_MIN_OA_DPR": TEST_AHU_MIN_OA_DPR,
+    "SUPPLY_FAN_AIR_VOLUME_COL": TEST_VAV_TOTAL_AIR_FLOW_COL,
+    "MAT_COL": TEST_MIX_TEMP_COL,
+    "OAT_COL": TEST_OUT_TEMP_COL,
+    "RAT_COL": TEST_RETURN_TEMP_COL,
+    "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
+    "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
+    "HEATING_SIG_COL": TEST_HEATING_COIL_SIG_COL,
+    "COOLING_SIG_COL": TEST_COOLING_COIL_SIG_COL,
+    "TROUBLESHOOT_MODE": False,  # default value
+    "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,  # rolling sum window size
 }
 
 fc6 = FaultConditionSix(fault_condition_params)
+
 
 class TestNoFaultNoHtg(object):
 
@@ -66,10 +67,13 @@ class TestNoFaultNoHtg(object):
 
     def test_no_fault_no_htg(self):
         results = fc6.apply(self.no_fault_df_no_htg())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 0
-        message = f"FC6 no_fault_df_no_htg actual is {actual} and expected is {expected}"
+        message = (
+            f"FC6 no_fault_df_no_htg actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
+
 
 class TestFaultInHtg(object):
 
@@ -88,10 +92,11 @@ class TestFaultInHtg(object):
 
     def test_fault_in_htg(self):
         results = fc6.apply(self.fault_df_in_htg())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 2
         message = f"FC6 fault_df_in_htg actual is {actual} and expected is {expected}"
         assert actual == expected, message
+
 
 class TestNoFaultInEconMode(object):
 
@@ -110,10 +115,13 @@ class TestNoFaultInEconMode(object):
 
     def test_no_fault_in_econ_mode(self):
         results = fc6.apply(self.no_fault_df_in_econ())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 0
-        message = f"FC6 no_fault_df_in_econ actual is {actual} and expected is {expected}"
+        message = (
+            f"FC6 no_fault_df_in_econ actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
+
 
 class TestNoFaultInEconPlusMechClg(object):
 
@@ -132,10 +140,11 @@ class TestNoFaultInEconPlusMechClg(object):
 
     def test_no_fault_in_econ_plus_mech_mode(self):
         results = fc6.apply(self.no_fault_df_in_econ_plus_mech())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 0
         message = f"FC6 no_fault_df_in_econ_plus_mech actual is {actual} and expected is {expected}"
         assert actual == expected, message
+
 
 class TestFaultInMechClg(object):
 
@@ -154,10 +163,13 @@ class TestFaultInMechClg(object):
 
     def test_fault_in_mech_mode(self):
         results = fc6.apply(self.fault_df_in_mech_clg())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 2
-        message = f"FC6 fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        message = (
+            f"FC6 fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
+
 
 class TestNoFaultInMechClg(object):
 
@@ -176,10 +188,13 @@ class TestNoFaultInMechClg(object):
 
     def test_no_fault_in_mech_mode(self):
         results = fc6.apply(self.no_fault_df_in_mech_clg())
-        actual = results['fc6_flag'].sum()
+        actual = results["fc6_flag"].sum()
         expected = 0
-        message = f"FC6 no_fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        message = (
+            f"FC6 no_fault_df_in_mech_clg actual is {actual} and expected is {expected}"
+        )
         assert actual == expected, message
+
 
 class TestFaultOnInt(object):
 
@@ -197,9 +212,12 @@ class TestFaultOnInt(object):
         return pd.DataFrame(data)
 
     def test_fault_on_int(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
             fc6.apply(self.fault_df_on_output_int())
+
 
 class TestFaultOnFloatGreaterThanOne(object):
 
@@ -217,9 +235,12 @@ class TestFaultOnFloatGreaterThanOne(object):
         return pd.DataFrame(data)
 
     def test_fault_on_float_greater_than_one(self):
-        with pytest.raises(TypeError,
-                           match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL)):
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
             fc6.apply(self.fault_df_on_output_greater_than_one())
+
 
 if __name__ == "__main__":
     pytest.main()

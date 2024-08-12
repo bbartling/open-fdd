@@ -4,10 +4,11 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionTen(FaultCondition):
-    """ Class provides the definitions for Fault Condition 10.
-        Outdoor air temperature and mix air temperature should 
-        be approx equal in economizer plus mech cooling mode.
+    """Class provides the definitions for Fault Condition 10.
+    Outdoor air temperature and mix air temperature should
+    be approx equal in economizer plus mech cooling mode.
     """
 
     def __init__(self, dict_):
@@ -35,7 +36,7 @@ class FaultConditionTen(FaultCondition):
 
         df["abs_mat_minus_oat"] = abs(df[self.mat_col] - df[self.oat_col])
         df["mat_oat_sqrted"] = np.sqrt(
-            self.mix_degf_err_thres ** 2 + self.outdoor_degf_err_thres ** 2
+            self.mix_degf_err_thres**2 + self.outdoor_degf_err_thres**2
         )
 
         df["combined_check"] = (
@@ -46,7 +47,9 @@ class FaultConditionTen(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc10_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 

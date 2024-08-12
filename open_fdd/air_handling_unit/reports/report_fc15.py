@@ -7,31 +7,31 @@ class FaultCodeFifteenReport:
     """Class provides the definitions for Fault Condition 15 Report."""
 
     def __init__(self, config):
-        self.sat_col = config['SAT_COL']
-        self.hlt_col = config['HLT_COL']
-        self.heating_sig_col = config['HEATING_SIG_COL']
-        self.supply_vfd_speed_col = config['SUPPLY_VFD_SPEED_COL']
+        self.sat_col = config["SAT_COL"]
+        self.hlt_col = config["HLT_COL"]
+        self.heating_sig_col = config["HEATING_SIG_COL"]
+        self.supply_vfd_speed_col = config["SUPPLY_VFD_SPEED_COL"]
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None):
         if output_col is None:
             output_col = "fc15_flag"
 
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(25, 8))
-        fig.suptitle('Fault Conditions 15 Plot')
+        fig.suptitle("Fault Conditions 15 Plot")
 
         ax1.plot(df.index, df[self.sat_col], label="SAT")
         ax1.plot(df.index, df[self.hlt_col], label="HLT")
-        ax1.legend(loc='best')
-        ax1.set_ylabel('AHU Temps °F')
+        ax1.legend(loc="best")
+        ax1.set_ylabel("AHU Temps °F")
 
         ax2.plot(df.index, df[self.heating_sig_col], label="AHU Heat Vlv", color="r")
-        ax2.legend(loc='best')
-        ax2.set_ylabel('%')
+        ax2.legend(loc="best")
+        ax2.set_ylabel("%")
 
         ax3.plot(df.index, df[output_col], label="Fault", color="k")
-        ax3.set_xlabel('Date')
-        ax3.set_ylabel('Fault Flags')
-        ax3.legend(loc='best')
+        ax3.set_xlabel("Date")
+        ax3.set_ylabel("Fault Flags")
+        ax3.legend(loc="best")
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
@@ -43,14 +43,24 @@ class FaultCodeFifteenReport:
 
         delta = df.index.to_series().diff()
         summary = {
-            'total_days': round(delta.sum() / pd.Timedelta(days=1), 2),
-            'total_hours': round(delta.sum() / pd.Timedelta(hours=1)),
-            'hours_fc15_mode': round((delta * df[output_col]).sum() / pd.Timedelta(hours=1)),
-            'percent_true': round(df[output_col].mean() * 100, 2),
-            'percent_false': round((100 - round(df[output_col].mean() * 100, 2)), 2),
-            'flag_true_hlt': round(df[self.hlt_col].where(df[output_col] == 1).mean(), 2),
-            'flag_true_sat': round(df[self.sat_col].where(df[output_col] == 1).mean(), 2),
-            'hours_motor_runtime': round((delta * df[self.supply_vfd_speed_col].gt(.01).astype(int)).sum() / pd.Timedelta(hours=1), 2)
+            "total_days": round(delta.sum() / pd.Timedelta(days=1), 2),
+            "total_hours": round(delta.sum() / pd.Timedelta(hours=1)),
+            "hours_fc15_mode": round(
+                (delta * df[output_col]).sum() / pd.Timedelta(hours=1)
+            ),
+            "percent_true": round(df[output_col].mean() * 100, 2),
+            "percent_false": round((100 - round(df[output_col].mean() * 100, 2)), 2),
+            "flag_true_hlt": round(
+                df[self.hlt_col].where(df[output_col] == 1).mean(), 2
+            ),
+            "flag_true_sat": round(
+                df[self.sat_col].where(df[output_col] == 1).mean(), 2
+            ),
+            "hours_motor_runtime": round(
+                (delta * df[self.supply_vfd_speed_col].gt(0.01).astype(int)).sum()
+                / pd.Timedelta(hours=1),
+                2,
+            ),
         }
 
         return summary
@@ -69,15 +79,19 @@ class FaultCodeFifteenReport:
         plt.show()
         plt.close()
 
-    def display_report_in_ipython(self, df: pd.DataFrame, output_col: str = "fc15_flag"):
-        print("Fault Condition 15: Temperature rise across inactive heating coil (requires coil leaving temp sensor)")
+    def display_report_in_ipython(
+        self, df: pd.DataFrame, output_col: str = "fc15_flag"
+    ):
+        print(
+            "Fault Condition 15: Temperature rise across inactive heating coil (requires coil leaving temp sensor)"
+        )
 
         self.create_plot(df, output_col)
 
         summary = self.summarize_fault_times(df, output_col)
 
         for key, value in summary.items():
-            formatted_key = key.replace('_', ' ')
+            formatted_key = key.replace("_", " ")
             print(f"{formatted_key}: {value}")
             sys.stdout.flush()
 
@@ -96,13 +110,13 @@ class FaultCodeFifteenReport:
 
             sys.stdout.flush()
 
-            if summary['percent_true'] > 5.0:
+            if summary["percent_true"] > 5.0:
                 print(
-                    'The percent True metric that represents the amount of time for when the fault flag is True is high, indicating potential leakage in the heating coil. Verify temperature sensor calibration and investigate possible mechanical issues.'
+                    "The percent True metric that represents the amount of time for when the fault flag is True is high, indicating potential leakage in the heating coil. Verify temperature sensor calibration and investigate possible mechanical issues."
                 )
             else:
                 print(
-                    'The percent True metric that represents the amount of time for when the fault flag is True is low, indicating the heating coil is likely functioning correctly.'
+                    "The percent True metric that represents the amount of time for when the fault flag is True is low, indicating the heating coil is likely functioning correctly."
                 )
 
         else:

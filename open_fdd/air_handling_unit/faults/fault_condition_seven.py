@@ -4,6 +4,7 @@ from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+
 class FaultConditionSeven(FaultCondition):
     """Class provides the definitions for Fault Condition 7.
     Very similar to FC 13 but uses heating valve.
@@ -39,7 +40,9 @@ class FaultConditionSeven(FaultCondition):
         )
 
         # Rolling sum to count consecutive trues
-        rolling_sum = df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        rolling_sum = (
+            df["combined_check"].rolling(window=self.rolling_window_size).sum()
+        )
         # Set flag to 1 if rolling sum equals the window size
         df["fc7_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
 
