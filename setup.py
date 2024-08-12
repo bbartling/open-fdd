@@ -1,14 +1,12 @@
 from setuptools import setup, find_packages
 
-
 def read_long_description(file_path):
     with open(file_path, encoding="utf-8") as f:
         return f.read()
 
-
 setup(
     name="open_fdd",
-    version="0.1.0",
+    version="0.1.1",
     author="Ben Bartling",
     author_email="ben.bartling@gmail.com",
     description="A package for fault detection and diagnosis in HVAC systems",

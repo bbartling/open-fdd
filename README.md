@@ -5,7 +5,8 @@
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 
 
-![Alt text](open_fdd/air_handling_unit/images/plot_for_repo.png)
+![Alt text](https://raw.githubusercontent.com/bbartling/open-fdd/master/open_fdd/air_handling_unit/images/plot_for_repo.png)
+
 
 This is a Python-based Fault Detection and Diagnostics (FDD) tool for running fault equations inspired by ASHRAE and NIST standards for HVAC systems across historical datasets using the Pandas computing library. The tool evaluates various fault conditions and outputs fault flags as boolean columns within typical Pandas DataFrames. These fault flags indicate the presence (True) or absence (False) of specific issues identified by the fault equations. This approach integrates seamlessly into standard data science and computer science workflows, allowing for efficient analysis, visualization, and further processing of fault conditions within familiar data structures like DataFrames.
 
@@ -13,19 +14,10 @@ This is a Python-based Fault Detection and Diagnostics (FDD) tool for running fa
 ## Getting Setup
 * Some features may be broken or not work as expected while the project is undergoing a significant makeover to become installable from PyPI. The aim is to streamline the reporting processes and make them much easier to use. I appreciate your patience during this transition.
 
-```bash
-git clone https://github.com/bbartling/open-fdd
-cd open-fdd
-```
-For now until this project is on PyPI as a Python library install `open-fdd` as a local python library.
+This project is on PyPI now so get setup with this command using the Python package manager called pip.
 
 ```bash
-pip install .
-```
-I am on Windows, using a version of Python 3.12, and run this project on SharePoint drives to make reports. Future examples could be Linux OS on a cloud machine for a more AFDD approach but in Windows OS world.
-
-```bash
-py -m pip install .
+pip install open-fdd
 ```
 
 See the examples directory for Jupyter notebook tutorials as well as the `README` inside the `air_handling_unit` directory for parameter definitions. Coming soon more faults and reports for `vav_system` and `central_plants` and examples getting data from SQL databases.
