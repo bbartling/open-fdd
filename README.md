@@ -3,6 +3,7 @@
 ![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
+![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 
 
 ![Alt text](https://raw.githubusercontent.com/bbartling/open-fdd/master/open_fdd/air_handling_unit/images/plot_for_repo.png)
@@ -20,7 +21,18 @@ This project is on PyPI now so get setup with this command using the Python pack
 pip install open-fdd
 ```
 
-See the examples directory for Jupyter notebook tutorials as well as the `README` inside the `air_handling_unit` directory for parameter definitions. Coming soon more faults and reports for `vav_system` and `central_plants` and examples getting data from SQL databases.
+See the `examples` directory for Jupyter notebook tutorials.
+
+## Project goals
+These are some basic project goals to make this into an interactive FDD application.
+ - [x] finish `air_handling_unit` faults and reports based on ASHRAE and NIST
+ - [x] publish to PyPI as Python library
+ - [ ] make a few IPython notebook tutorials AHU FDD examples
+ - [ ] make `central_plant` faults, IPython reports, and examples
+ - [ ] make `energy_efficiency` faults, IPython reports, and examples
+ - [ ] make `metering`, faults, IPython reports, and examples
+ - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana
+ - [ ] other?
 
 ## Contribute
 This project is a community-driven initiative, focusing on the development of free and open-source tools. I believe that Fault Detection and Diagnostics (FDD) should be free and accessible to anyone who wants to try it out, embodying the spirit of open-source philosophy. Additionally, this project aims to serve as an educational resource, empowering individuals to learn about and implement FDD in their own systems. As someone wisely said, `"Knowledge should be shared, not hoarded,"` and this project strives to put that wisdom into practice.
