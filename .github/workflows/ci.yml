@@ -8,21 +8,18 @@ on:
     branches:
       - master
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # Update to v4
+      uses: actions/checkout@v4  # Using the latest version of the checkout action
 
     - name: Set up Python
-      uses: actions/setup-python@v4  # Update to v4
+      uses: actions/setup-python@v4  # Using the latest version of the setup-python action
       with:
-        python-version: '3.12'
+        python-version: '3.12'  # Specify the Python version you are using
 
     - name: Install dependencies
       run: |
@@ -32,8 +29,8 @@ jobs:
 
     - name: Run Black
       run: |
-        black --check open_fdd/ tests/
+        black --check open_fdd/ tests/  # Check code formatting
 
     - name: Run tests
       run: |
-        pytest tests/
+        pytest tests/  # Run your test suite
