@@ -27,12 +27,12 @@ See the `examples` directory for Jupyter notebook tutorials.
 These are some basic project goals to make this into an interactive FDD application.
  - [x] finish `air_handling_unit` faults and reports based on ASHRAE and NIST
  - [x] publish to PyPI as Python library
- - [ ] make a few IPython notebook tutorials AHU FDD examples
+ - [ ] make a few IPython notebook tutorials AHU FDD examples with `BRICK` meta data integration.
  - [ ] make a guide for fault `parameters` like error thresholds, etc.
- - [ ] make `central_plant` faults, IPython reports, and examples
- - [ ] make `energy_efficiency` faults, IPython reports, and examples
- - [ ] make `metering`, faults, IPython reports, and examples
- - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana
+ - [ ] make `central_plant` faults, IPython reports, and examples.
+ - [ ] make `energy_efficiency` faults, IPython reports, and examples to `optimize` in reducing energy consumption.
+ - [ ] make `metering`, faults, IPython reports, and examples to possibly model utility metering data.
+ - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana.
  - [ ] other?
 
 ## Contribute
