@@ -4,11 +4,12 @@ import sys
 
 
 class FaultCodeOneReport:
-    def __init__(self, config):
-        self.vfd_speed_percent_err_thres = config["VFD_SPEED_PERCENT_ERR_THRES"]
-        self.duct_static_col = config["DUCT_STATIC_COL"]
-        self.supply_vfd_speed_col = config["SUPPLY_VFD_SPEED_COL"]
-        self.duct_static_setpoint_col = config["DUCT_STATIC_SETPOINT_COL"]
+    def __init__(self, fault_condition):
+        # We now expect the FaultConditionOne object instead of a config dictionary
+        self.duct_static_col = fault_condition.duct_static_col
+        self.supply_vfd_speed_col = fault_condition.supply_vfd_speed_col
+        self.duct_static_setpoint_col = fault_condition.duct_static_setpoint_col
+        self.vfd_speed_percent_err_thres = fault_condition.vfd_speed_percent_err_thres
 
     def create_plot(self, df: pd.DataFrame, output_col: str = None):
         if output_col is None:

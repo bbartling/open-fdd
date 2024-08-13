@@ -2,38 +2,59 @@ import pandas as pd
 import pytest
 from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from rdflib import Graph, Namespace, URIRef, Literal
+from rdflib import RDF
 
-# Constants
-TEST_VFD_ERR_THRESHOLD = 0.05
-TEST_VFD_SPEED_MAX = 0.7
-TEST_DUCT_STATIC_ERR_THRESHOLD = 0.1
-TEST_DUCT_STATIC_COL = "duct_static"
-TEST_DUCT_STATIC_SETPOINT_COL = "duct_static_setpoint"
-TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
-ROLLING_WINDOW_SIZE = 5
 
-# Initialize FaultConditionOne with a dictionary
-fault_condition_params = {
-    "VFD_SPEED_PERCENT_ERR_THRES": TEST_VFD_ERR_THRESHOLD,
-    "VFD_SPEED_PERCENT_MAX": TEST_VFD_SPEED_MAX,
-    "DUCT_STATIC_INCHES_ERR_THRES": TEST_DUCT_STATIC_ERR_THRESHOLD,
-    "DUCT_STATIC_COL": TEST_DUCT_STATIC_COL,
-    "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
-    "DUCT_STATIC_SETPOINT_COL": TEST_DUCT_STATIC_SETPOINT_COL,
-    "TROUBLESHOOT_MODE": False,  # default value
-    "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,  # rolling sum window size
+# Initialize the Brick graph and model
+BRICK = Namespace("https://brickschema.org/schema/1.1/Brick#")
+BRICKFRAME = Namespace("https://brickschema.org/schema/1.1/BrickFrame#")
+brick_graph = Graph()
+
+brick_graph.bind("brick", BRICK)
+brick_graph.bind("brickframe", BRICKFRAME)
+
+# Create the Air Handling Unit (AHU) and related sensors in the Brick model
+ahu = URIRef("http://example.com/building/AHU1")
+duct_static_sensor = URIRef(
+    "http://example.com/building/Supply_Air_Static_Pressure_Sensor"
+)
+vfd_speed_sensor = URIRef("http://example.com/building/Supply_Fan_VFD_Speed_Sensor")
+static_pressure_setpoint = URIRef(
+    "http://example.com/building/Static_Pressure_Setpoint"
+)
+
+brick_graph.add((ahu, RDF.type, BRICK.Air_Handler_Unit))
+brick_graph.add((duct_static_sensor, RDF.type, BRICK.Supply_Air_Static_Pressure_Sensor))
+brick_graph.add((vfd_speed_sensor, RDF.type, BRICK.Supply_Fan_VFD_Speed_Sensor))
+brick_graph.add((static_pressure_setpoint, RDF.type, BRICK.Static_Pressure_Setpoint))
+brick_graph.add((ahu, BRICKFRAME.hasPoint, duct_static_sensor))
+brick_graph.add((ahu, BRICKFRAME.hasPoint, vfd_speed_sensor))
+brick_graph.add((ahu, BRICKFRAME.hasPoint, static_pressure_setpoint))
+
+# Mapping from URIs to DataFrame column names
+column_mapping = {
+    str(duct_static_sensor): "duct_static",
+    str(vfd_speed_sensor): "supply_vfd_speed",
+    str(static_pressure_setpoint): "duct_static_setpoint",
 }
 
-fc1 = FaultConditionOne(fault_condition_params)
+# Initialize FaultConditionOne with Brick model and column mapping
+fc1 = FaultConditionOne(
+    brick_graph,
+    column_mapping=column_mapping,
+    troubleshoot_mode=False,
+    rolling_window_size=5,
+)
 
 
 class TestNoFault:
 
     def no_fault_df(self) -> pd.DataFrame:
         data = {
-            TEST_DUCT_STATIC_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
-            TEST_DUCT_STATIC_SETPOINT_COL: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-            TEST_SUPPLY_VFD_SPEED_COL: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
+            "duct_static": [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
+            "duct_static_setpoint": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            "supply_vfd_speed": [0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
         }
         return pd.DataFrame(data)
 
@@ -49,7 +70,7 @@ class TestFault:
 
     def fault_df(self) -> pd.DataFrame:
         data = {
-            TEST_DUCT_STATIC_COL: [
+            "duct_static": [
                 0.7,
                 0.7,
                 0.6,
@@ -68,7 +89,7 @@ class TestFault:
                 0.55,
                 0.6,
             ],
-            TEST_DUCT_STATIC_SETPOINT_COL: [
+            "duct_static_setpoint": [
                 1.0,
                 1.0,
                 1.0,
@@ -87,7 +108,7 @@ class TestFault:
                 1.0,
                 1.0,
             ],
-            TEST_SUPPLY_VFD_SPEED_COL: [
+            "supply_vfd_speed": [
                 0.99,
                 0.95,
                 0.96,
@@ -113,11 +134,6 @@ class TestFault:
         results = fc1.apply(self.fault_df())
         actual = results["fc1_flag"].sum()
 
-        # accumilated 5 faults need to happen before an "official fault"
-        # in TEST_DUCT_STATIC_COL after the 5 first values there is 3 faults
-        # then artificially adjust fake fan data back to normal and another 5
-        # needs happen per ROLLING_WINDOW_SIZE and then 4 faults after that.
-        # so expected = 3 + 4.
         expected = 3 + 4
         message = f"FC1 fault_df actual is {actual} and expected is {expected}"
         assert actual == expected, message
@@ -127,16 +143,16 @@ class TestFaultOnInt:
 
     def fault_df_on_output_int(self) -> pd.DataFrame:
         data = {
-            TEST_DUCT_STATIC_COL: [0.8] * 6,
-            TEST_DUCT_STATIC_SETPOINT_COL: [1.0] * 6,
-            TEST_SUPPLY_VFD_SPEED_COL: [99] * 6,
+            "duct_static": [0.8] * 6,
+            "duct_static_setpoint": [1.0] * 6,
+            "supply_vfd_speed": [99] * 6,
         }
         return pd.DataFrame(data)
 
     def test_fault_on_int(self):
         with pytest.raises(
             TypeError,
-            match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+            match=HelperUtils().float_int_check_err("supply_vfd_speed"),
         ):
             fc1.apply(self.fault_df_on_output_int())
 
@@ -145,15 +161,15 @@ class TestFaultOnFloatGreaterThanOne:
 
     def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
         data = {
-            TEST_DUCT_STATIC_COL: [0.8] * 6,
-            TEST_DUCT_STATIC_SETPOINT_COL: [1.0] * 6,
-            TEST_SUPPLY_VFD_SPEED_COL: [99.0] * 6,
+            "duct_static": [0.8] * 6,
+            "duct_static_setpoint": [1.0] * 6,
+            "supply_vfd_speed": [99.0] * 6,
         }
         return pd.DataFrame(data)
 
     def test_fault_on_float_greater_than_one(self):
         with pytest.raises(
             TypeError,
-            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+            match=HelperUtils().float_max_check_err("supply_vfd_speed"),
         ):
             fc1.apply(self.fault_df_on_output_greater_than_one())

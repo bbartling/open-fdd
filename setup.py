@@ -1,8 +1,10 @@
 from setuptools import setup, find_packages
 
+
 def read_long_description(file_path):
     with open(file_path, encoding="utf-8") as f:
         return f.read()
+
 
 setup(
     name="open_fdd",
