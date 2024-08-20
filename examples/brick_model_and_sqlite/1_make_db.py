@@ -48,23 +48,30 @@ VALUES
 )
 
 # Step 4: Load the CSV data
-csv_file = r"C:\Users\bbartling\Documents\WPCRC_Master.csv"
+csv_file = r"C:\Users\bbartling\Documents\WPCRC_July.csv"
 df = pd.read_csv(csv_file)
 print("df.columns", df.columns)
+
+# Ensure that the 'timestamp' column is properly parsed as a datetime object
+if "timestamp" in df.columns:
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+else:
+    raise ValueError("The CSV file does not contain a 'timestamp' column.")
 
 print("Starting step 5")
 
 # Step 5: Insert CSV data into the TimeseriesData table
 for column in df.columns:
-    for index, row in df.iterrows():
-        cursor.execute(
-            """
-        INSERT INTO TimeseriesData (sensor_name, timestamp, value)
-        VALUES (?, ?, ?)
-        """,
-            (column, index, row[column]),
-        )
-    print(f"Doing {column} in step 5")
+    if column != "timestamp":  # Skip the timestamp column itself
+        for index, row in df.iterrows():
+            cursor.execute(
+                """
+            INSERT INTO TimeseriesData (sensor_name, timestamp, value)
+            VALUES (?, ?, ?)
+            """,
+                (column, row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"), row[column]),
+            )
+        print(f"Doing {column} in step 5")
 
 conn.commit()
 
@@ -72,15 +79,16 @@ print("Starting step 6")
 
 # Step 6: Insert timeseries references based on sensor names
 for column in df.columns:
-    cursor.execute(
-        """
-    INSERT INTO TimeseriesReference (timeseries_id, stored_at)
-    VALUES (?, ?)
-    """,
-        (column, "SQLite Timeseries Storage"),
-    )
+    if column != "timestamp":  # Skip the timestamp column itself
+        cursor.execute(
+            """
+        INSERT INTO TimeseriesReference (timeseries_id, stored_at)
+        VALUES (?, ?)
+        """,
+            (column, "SQLite Timeseries Storage"),
+        )
 
-    print(f"Doing {column} in step 6")
+        print(f"Doing {column} in step 6")
 
 conn.commit()
 

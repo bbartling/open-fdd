@@ -1,0 +1,355 @@
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix ns1: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ref: <https://brickschema.org/schema/Reference#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ns1:CWR_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CWR_Temp .
+
+ns1:CWS_Freeze_SPt a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CWS_Freeze_SPt .
+
+ns1:CWS_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CWS_Temp .
+
+ns1:CW_Valve a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CW_Valve .
+
+ns1:CoolValve a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CoolValve .
+
+ns1:CurrentKW a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CurrentKW .
+
+ns1:CurrentKWHrs a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_CurrentKWHrs .
+
+ns1:DischargeTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_DischargeTemp .
+
+ns1:EaDamper a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_EaDamper .
+
+ns1:EffSetpoint a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_EffSetpoint .
+
+ns1:Eff_DaSP a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Eff_DaSP .
+
+ns1:Eff_DaSPt a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Eff_DaSPt .
+
+ns1:HWR_value a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_HWR_value .
+
+ns1:HWS_value a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_HWS_value .
+
+ns1:HW_Valve a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_HW_Valve .
+
+ns1:Heat_Calls a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Heat_Calls .
+
+ns1:MA_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_MA_Temp .
+
+ns1:MaDampers a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_MaDampers .
+
+ns1:MaLowSPt a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_MaLowSPt .
+
+ns1:Ma_Dampers a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Ma_Dampers .
+
+ns1:Ma_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Ma_Temp .
+
+ns1:OA_Damper a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_OA_Damper .
+
+ns1:OaTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_OaTemp .
+
+ns1:OaTemp_Enable a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_OaTemp_Enable .
+
+ns1:Oa_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Oa_Temp .
+
+ns1:RA_CO2 a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_RA_CO2 .
+
+ns1:RA_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_RA_Temp .
+
+ns1:RaCO2 a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_RaCO2 .
+
+ns1:RaHumidity a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_RaHumidity .
+
+ns1:RaTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_RaTemp .
+
+ns1:Ra_FanSpeed a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Ra_FanSpeed .
+
+ns1:Ra_Temp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_Ra_Temp .
+
+ns1:SaStatic a brick:Supply_Air_Static_Pressure_Sensor ;
+    brick:hasUnit unit:Inch_Water_Column ;
+    ref:hasExternalReference ns1:timeseries_SaStatic .
+
+ns1:SaStaticSPt a brick:Supply_Air_Static_Pressure_Setpoint ;
+    brick:hasUnit unit:Inch_Water_Column ;
+    ref:hasExternalReference ns1:timeseries_SaStaticSPt .
+
+ns1:SaStatic_SPt a brick:Supply_Air_Static_Pressure_Sensor ;
+    brick:hasUnit unit:Inch_Water_Column ;
+    ref:hasExternalReference ns1:timeseries_SaStatic_SPt .
+
+ns1:SaTempSP a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_SaTempSP .
+
+ns1:SaTempSPt a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_SaTempSPt .
+
+ns1:Sa_FanSpeed a brick:Supply_Fan_VFD_Speed_Sensor ;
+    brick:hasUnit unit:Percent ;
+    ref:hasExternalReference ns1:timeseries_Sa_FanSpeed .
+
+ns1:SpaceTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_SpaceTemp .
+
+ns1:VAV2_6_SpaceTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_VAV2_6_SpaceTemp .
+
+ns1:VAV2_7_SpaceTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_VAV2_7_SpaceTemp .
+
+ns1:VAV3_2_SpaceTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_VAV3_2_SpaceTemp .
+
+ns1:VAV3_5_SpaceTemp a brick:Temperature_Sensor ;
+    brick:hasUnit unit:DEG_F ;
+    ref:hasExternalReference ns1:timeseries_VAV3_5_SpaceTemp .
+
+ns1:timeseries_CWR_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CWR_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CWS_Freeze_SPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CWS_Freeze_SPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CWS_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CWS_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CW_Valve a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CW_Valve"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CoolValve a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CoolValve"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CurrentKW a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CurrentKW"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_CurrentKWHrs a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "CurrentKWHrs"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_DischargeTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "DischargeTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_EaDamper a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "EaDamper"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_EffSetpoint a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "EffSetpoint"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Eff_DaSP a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Eff_DaSP"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Eff_DaSPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Eff_DaSPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_HWR_value a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "HWR_value"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_HWS_value a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "HWS_value"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_HW_Valve a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "HW_Valve"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Heat_Calls a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Heat_Calls"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_MA_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "MA_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_MaDampers a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "MaDampers"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_MaLowSPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "MaLowSPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Ma_Dampers a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Ma_Dampers"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Ma_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Ma_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_OA_Damper a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "OA_Damper"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_OaTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "OaTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_OaTemp_Enable a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "OaTemp_Enable"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Oa_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Oa_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_RA_CO2 a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "RA_CO2"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_RA_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "RA_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_RaCO2 a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "RaCO2"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_RaHumidity a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "RaHumidity"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_RaTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "RaTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Ra_FanSpeed a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Ra_FanSpeed"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Ra_Temp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Ra_Temp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SaStatic a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SaStatic"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SaStaticSPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SaStaticSPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SaStatic_SPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SaStatic_SPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SaTempSP a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SaTempSP"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SaTempSPt a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SaTempSPt"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_Sa_FanSpeed a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "Sa_FanSpeed"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_SpaceTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "SpaceTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_VAV2_6_SpaceTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "VAV2_6_SpaceTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_VAV2_7_SpaceTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "VAV2_7_SpaceTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_VAV3_2_SpaceTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "VAV3_2_SpaceTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:timeseries_VAV3_5_SpaceTemp a ref:TimeseriesReference ;
+    ref:hasTimeseriesId "VAV3_5_SpaceTemp"^^xsd:string ;
+    ref:storedAt ns1:database .
+
+ns1:database a ref:Database ;
+    rdfs:label "SQLite Timeseries Storage"^^xsd:string ;
+    ns1:connstring "sqlite:///brick_timeseries.db"^^xsd:string .
+

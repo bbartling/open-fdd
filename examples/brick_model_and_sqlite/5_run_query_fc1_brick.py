@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 from rdflib import Graph, Namespace
-
+import time
 from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
 
 PERCENTAGE_COLS_TO_CONVERT = [
@@ -112,25 +112,45 @@ def run_fault_one(config_dict, df):
     return df
 
 
-def update_fault_flags_in_db(df, conn):
+def update_fault_flags_in_db(df, conn, batch_size=1000):
     cursor = conn.cursor()
 
-    update_data = [
-        (int(row["fc1_flag"]), index, "Supply_Fan_VFD_Speed_Sensor")
-        for index, row in df.iterrows()
-    ]
+    update_data = [(int(row["fc1_flag"]), index) for index, row in df.iterrows()]
 
-    cursor.executemany(
-        """
-    UPDATE TimeseriesData
-    SET fc1_flag = ?
-    WHERE timestamp = ? AND sensor_name = ?
-    """,
-        update_data,
+    start_time = time.time()
+    print("Starting batch update...")
+
+    for i in range(0, len(update_data), batch_size):
+        print(f"Doing batch {i}")
+        batch = update_data[i : i + batch_size]
+        cursor.executemany(
+            """
+            UPDATE TimeseriesData
+            SET fc1_flag = ?
+            WHERE timestamp = ?
+            """,
+            batch,
+        )
+        conn.commit()
+
+        # Calculate and print the elapsed time and records updated
+        elapsed_time = time.time() - start_time
+        minutes, seconds = divmod(elapsed_time, 60)
+        print(
+            f"Batch {i//batch_size + 1} completed: {len(batch)} records updated in {int(minutes)} minutes and {int(seconds)} seconds"
+        )
+
+    print("Batch update completed.")
+
+    # Calculate and print total records updated per minute
+    total_records = len(update_data)
+    total_time = time.time() - start_time
+    records_per_minute = total_records / (total_time / 60)
+    print(f"Total records updated: {total_records}")
+    print(
+        f"Total time taken: {int(total_time // 60)} minutes and {int(total_time % 60)} seconds"
     )
-
-    conn.commit()
-    print("Database updated with fault flags.")
+    print(f"Records per minute: {records_per_minute:.2f}")
 
 
 def main():
@@ -152,6 +172,7 @@ def main():
 
     # Step 6: Combine the retrieved dataframes
     df_combined = combine_dataframes(dfs)
+
     print(df_combined.columns)
 
     if df_combined is not None:

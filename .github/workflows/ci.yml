@@ -14,12 +14,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # Using the latest version of the checkout action
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4  # Using the latest version of the setup-python action
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.12'  # Specify the Python version you are using
+        python-version: '3.12.3'
 
     - name: Install dependencies
       run: |

@@ -13,15 +13,13 @@ This is a Python-based Fault Detection and Diagnostics (FDD) tool for running fa
 
 
 ## Getting Setup
-* Some features may be broken or not work as expected while the project is undergoing a significant makeover to become installable from PyPI. The aim is to streamline the reporting processes and make them much easier to use. I appreciate your patience during this transition.
-
-This project is on PyPI now so get setup with this command using the Python package manager called pip.
+This project is now available on PyPI, making it easy to set up with the Python package manager, pip. You can install the package using the following command:
 
 ```bash
 pip install open-fdd
 ```
 
-See the `examples` directory for Jupyter notebook tutorials.
+For running Jupyter notebooks, I recommend using Visual Studio Code with the Jupyter notebook extension installed, which offers a seamless experience directly within the editor. Be sure to explore the `examples` directory for Jupyter notebook tutorials. If you have your own FDD experiences to share, feel free to contribute by creating a notebook (`.ipynb`). You’re welcome to reach out to me directly, and I can push your example to GitHub on your behalf, which might be a simpler process than submitting a pull request (PR), especially if you're just sharing an example rather than developing `open-fdd`.
 
 ## Project goals
 These are some basic project goals to make this into an interactive FDD application.
@@ -35,7 +33,26 @@ These are some basic project goals to make this into an interactive FDD applicat
  - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana.
  - [ ] other?
 
+Certainly! Here's a revised version of your contribution guidelines:
+
 ## Contribute
+
+If you have suggestions for improving developer best practices or solutions, please feel free to reach out to me directly using my contact information or Git issue/discussion. I primarily work on Windows with multiple versions of Python installed, with Python 3.12.x as my default version. You can download the latest version of Python here:
+* https://www.python.org/downloads/
+
+1. **Adding New Faults and Reports:**  
+   Developers will need to `> py -3.12 -m pip install black pytest`. When adding new faults and reports, I usually run `> py -3.12 -m pip install .` in the cloned project directory. I continuously uninstall with `> py -3.12 -m pip uninstall open-fdd` and reinstall locally until I'm satisfied with the changes.
+
+2. **Testing Fault Logic:**  
+   All fault logic is rigorously tested using `pytest`. You can run the tests with `> py -m pytest`.
+
+3. **Formatting with Black:**  
+   To ensure code consistency, I use Black for formatting. Run `> py -m black .` to format the code and check it with `> py -m black --check .`
+
+4. **Pushing to GitHub:**  
+   After making changes, and the steps above are successful push them to GitHub in a pull request. The GitHub Actions workflow will automatically run `pytest` and `black` to ensure the build is successful.
+
+
 This project is a community-driven initiative, focusing on the development of free and open-source tools. I believe that Fault Detection and Diagnostics (FDD) should be free and accessible to anyone who wants to try it out, embodying the spirit of open-source philosophy. Additionally, this project aims to serve as an educational resource, empowering individuals to learn about and implement FDD in their own systems. As someone wisely said, `"Knowledge should be shared, not hoarded,"` and this project strives to put that wisdom into practice.
 
 Got any ideas or questions? Submit a Git issue or start a Discussion...

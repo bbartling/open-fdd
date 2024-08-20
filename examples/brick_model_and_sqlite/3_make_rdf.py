@@ -42,13 +42,12 @@ for timeseries_id, stored_at in timeseries_refs:
     sensor_uri = URIRef(f"http://example.org/{timeseries_id.replace(' ', '_')}")
 
     # Adjust sensor type and unit based on sensor name
-    if "SaTempSP" in timeseries_id or "SaStatic" in timeseries_id:
-        if "SPt" in timeseries_id or "SPt" in timeseries_id:  # Adjust setpoint type
-            g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Setpoint))
-            g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
-        else:
-            g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Sensor))
-            g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
+    if "SaStaticSPt" in timeseries_id:
+        g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Setpoint))
+        g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
+    elif "SaStatic" in timeseries_id:
+        g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Sensor))
+        g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
     elif "Sa_FanSpeed" in timeseries_id:
         g.add((sensor_uri, RDF.type, brick.Supply_Fan_VFD_Speed_Sensor))
         g.add((sensor_uri, brick.hasUnit, unit.Percent))
@@ -58,7 +57,6 @@ for timeseries_id, stored_at in timeseries_refs:
         g.add(
             (sensor_uri, brick.hasUnit, unit.DEG_F)
         )  # Assuming degrees Fahrenheit, adjust if needed
-
     timeseries_ref_uri = URIRef(
         f"http://example.org/timeseries_{timeseries_id.replace(' ', '_')}"
     )
