@@ -82,7 +82,9 @@ class FaultCodeSevenReport:
         plt.close()
 
     def display_report_in_ipython(self, df: pd.DataFrame, output_col: str = "fc7_flag"):
-        print("Fault Condition 7: Supply air temperature too low in full heating mode")
+        print(
+            "Fault Condition 7: Supply air temperature too low its not making supply air temperature setpoint in full heating mode"
+        )
 
         self.create_plot(df, output_col)
 
