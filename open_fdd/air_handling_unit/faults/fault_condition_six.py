@@ -1,33 +1,29 @@
 import pandas as pd
-import pandas.api.types as pdtypes
-from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
-from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import operator
+from open_fdd.air_handling_unit.faults.fault_condition import (
+    FaultCondition,
+    MissingColumnError,
+)
 import sys
 
 
 class FaultConditionSix(FaultCondition):
     """Class provides the definitions for Fault Condition 6.
 
-            This fault related to knowing the design air flow for
-            ventilation AHU_MIN_CFM_DESIGN which comes from the
-            design mech engineered records where then the fault
-            tries to calculate that based on totalized measured
-            AHU air flow and outside air fraction calc from
-            AHU temp sensors. The fault could flag issues where
-            flow stations are either not in calibration, temp
-            sensors used in the OA frac calc, or possibly the AHU
-            not bringing in design air flow when not operating in
-            economizer free cooling modes. Troubleshoot by TAB tech
-            verifying flow sensor and temp sensor precisions from
-            3rd party sensing tools.
-
-            this fault is confusing if you want to play around
-            in py code sandbox try this:
-    https://gist.github.com/bbartling/e0fb8427b1e0d148a06e3f09121ed5dc#file-fc6-py
+    This fault related to knowing the design air flow for
+    ventilation AHU_MIN_CFM_DESIGN which comes from the
+    design mech engineered records where then the fault
+    tries to calculate that based on totalized measured
+    AHU air flow and outside air fraction calc from
+    AHU temp sensors. The fault could flag issues where
+    flow stations are either not in calibration, temp
+    sensors used in the OA frac calc, or possibly the AHU
+    not bringing in design air flow when not operating in
+    economizer free cooling modes.
     """
 
     def __init__(self, dict_):
+        super().__init__()
         self.airflow_err_thres = float
         self.ahu_min_oa_cfm_design = float
         self.outdoor_degf_err_thres = float
@@ -47,74 +43,102 @@ class FaultConditionSix(FaultCondition):
 
         self.set_attributes(dict_)
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot_mode:
-            self.troubleshoot_cols(df)
-
-        # check analog outputs [data with units of %] are floats only
-        columns_to_check = [
+        # Set required columns specific to this fault condition
+        self.required_columns = [
+            self.supply_fan_air_volume_col,
+            self.mat_col,
+            self.oat_col,
+            self.rat_col,
             self.supply_vfd_speed_col,
             self.economizer_sig_col,
             self.heating_sig_col,
             self.cooling_sig_col,
         ]
 
-        for col in columns_to_check:
-            self.check_analog_pct(df, [col])
+    def get_required_columns(self) -> str:
+        """Returns a string representation of the required columns."""
+        return f"Required columns for FaultConditionSix: {', '.join(self.required_columns)}"
 
-        # create helper columns
-        df["rat_minus_oat"] = abs(df[self.rat_col] - df[self.oat_col])
-        df["percent_oa_calc"] = (df[self.mat_col] - df[self.rat_col]) / (
-            df[self.oat_col] - df[self.rat_col]
-        )
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            # Ensure all required columns are present
+            self.check_required_columns(df)
 
-        # weed out any negative values
-        df["percent_oa_calc"] = df["percent_oa_calc"].apply(lambda x: x if x > 0 else 0)
+            if self.troubleshoot_mode:
+                self.troubleshoot_cols(df)
 
-        df["perc_OAmin"] = (
-            self.ahu_min_oa_cfm_design / df[self.supply_fan_air_volume_col]
-        )
+            # Check analog outputs [data with units of %] are floats only
+            columns_to_check = [
+                self.supply_vfd_speed_col,
+                self.economizer_sig_col,
+                self.heating_sig_col,
+                self.cooling_sig_col,
+            ]
 
-        df["percent_oa_calc_minus_perc_OAmin"] = abs(
-            df["percent_oa_calc"] - df["perc_OAmin"]
-        )
+            for col in columns_to_check:
+                self.check_analog_pct(df, [col])
 
-        df["combined_check"] = operator.or_(
-            # OS 1 htg mode
-            (
-                (df["rat_minus_oat"] >= self.oat_rat_delta_min)
-                & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
+            # Create helper columns
+            df["rat_minus_oat"] = abs(df[self.rat_col] - df[self.oat_col])
+            df["percent_oa_calc"] = (df[self.mat_col] - df[self.rat_col]) / (
+                df[self.oat_col] - df[self.rat_col]
             )
-            # verify ahu is running in OS 1 htg mode in min OA
-            & (
-                (df[self.heating_sig_col] > 0.0) & (df[self.supply_vfd_speed_col] > 0.0)
-            ),  # OR
-            # OS 4 mech clg mode
-            (
-                (df["rat_minus_oat"] >= self.oat_rat_delta_min)
-                & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
+
+            # Weed out any negative values
+            df["percent_oa_calc"] = df["percent_oa_calc"].apply(
+                lambda x: x if x > 0 else 0
             )
-            # verify ahu is running in OS 4 clg mode in min OA
-            & (df[self.heating_sig_col] == 0.0)
-            & (df[self.cooling_sig_col] > 0.0)
-            & (df[self.supply_vfd_speed_col] > 0.0)
-            & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),
-        )
 
-        # Rolling sum to count consecutive trues
-        rolling_sum = (
-            df["combined_check"].rolling(window=self.rolling_window_size).sum()
-        )
-        # Set flag to 1 if rolling sum equals the window size
-        df["fc6_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
+            df["perc_OAmin"] = (
+                self.ahu_min_oa_cfm_design / df[self.supply_fan_air_volume_col]
+            )
 
-        if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
+            df["percent_oa_calc_minus_perc_OAmin"] = abs(
+                df["percent_oa_calc"] - df["perc_OAmin"]
+            )
+
+            df["combined_check"] = operator.or_(
+                # OS 1 htg mode
+                (
+                    (df["rat_minus_oat"] >= self.oat_rat_delta_min)
+                    & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
+                )
+                # Verify AHU is running in OS 1 htg mode in min OA
+                & (
+                    (df[self.heating_sig_col] > 0.0)
+                    & (df[self.supply_vfd_speed_col] > 0.0)
+                ),  # OR
+                # OS 4 mech clg mode
+                (
+                    (df["rat_minus_oat"] >= self.oat_rat_delta_min)
+                    & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
+                )
+                # Verify AHU is running in OS 4 clg mode in min OA
+                & (df[self.heating_sig_col] == 0.0)
+                & (df[self.cooling_sig_col] > 0.0)
+                & (df[self.supply_vfd_speed_col] > 0.0)
+                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),
+            )
+
+            # Rolling sum to count consecutive trues
+            rolling_sum = (
+                df["combined_check"].rolling(window=self.rolling_window_size).sum()
+            )
+            # Set flag to 1 if rolling sum equals the window size
+            df["fc6_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
+
+            if self.troubleshoot_mode:
+                print("Troubleshoot mode enabled - not removing helper columns")
+                sys.stdout.flush()
+                del df["rat_minus_oat"]
+                del df["percent_oa_calc"]
+                del df["perc_OAmin"]
+                del df["percent_oa_calc_minus_perc_OAmin"]
+                del df["combined_check"]
+
+            return df
+
+        except MissingColumnError as e:
+            print(f"Error: {e.message}")
             sys.stdout.flush()
-            del df["rat_minus_oat"]
-            del df["percent_oa_calc"]
-            del df["perc_OAmin"]
-            del df["percent_oa_calc_minus_perc_OAmin"]
-            del df["combined_check"]
-
-        return df
+            raise e  # Re-raise the exception so it can be caught by pytest

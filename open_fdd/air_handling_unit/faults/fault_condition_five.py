@@ -1,7 +1,9 @@
 import pandas as pd
 import pandas.api.types as pdtypes
-from open_fdd.air_handling_unit.faults.fault_condition import FaultCondition
-from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import (
+    FaultCondition,
+    MissingColumnError,
+)
 import sys
 
 
@@ -13,6 +15,7 @@ class FaultConditionFive(FaultCondition):
     """
 
     def __init__(self, dict_):
+        super().__init__()
         self.mix_degf_err_thres = float
         self.supply_degf_err_thres = float
         self.delta_t_supply_fan = float
@@ -25,44 +28,60 @@ class FaultConditionFive(FaultCondition):
 
         self.set_attributes(dict_)
 
-    # fault only active if fan is running and htg vlv is modulating
-    # OS 1 is heating mode only fault
+        # Set required columns specific to this fault condition
+        self.required_columns = [
+            self.mat_col,
+            self.sat_col,
+            self.heating_sig_col,
+            self.supply_vfd_speed_col,
+        ]
+
+    def get_required_columns(self) -> str:
+        """Returns a string representation of the required columns."""
+        return f"Required columns for FaultConditionFive: {', '.join(self.required_columns)}"
+
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        if self.troubleshoot_mode:
-            self.troubleshoot_cols(df)
+        try:
+            # Ensure all required columns are present
+            self.check_required_columns(df)
 
-        # check analog outputs [data with units of %] are floats only
-        columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
+            if self.troubleshoot_mode:
+                self.troubleshoot_cols(df)
 
-        for col in columns_to_check:
-            self.check_analog_pct(df, [col])
+            # Check analog outputs [data with units of %] are floats only
+            columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
 
-        df["sat_check"] = df[self.sat_col] + self.supply_degf_err_thres
-        df["mat_check"] = (
-            df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
-        )
+            for col in columns_to_check:
+                self.check_analog_pct(df, [col])
 
-        df["combined_check"] = (
-            (df["sat_check"] <= df["mat_check"])
-            # this is to make fault only active in OS1 for htg mode only
-            # and fan is running. Some control programming may use htg
-            # vlv when AHU is off to prevent low limit freeze alarms
-            & (df[self.heating_sig_col] > 0.01)
-            & (df[self.supply_vfd_speed_col] > 0.01)
-        )
+            df["sat_check"] = df[self.sat_col] + self.supply_degf_err_thres
+            df["mat_check"] = (
+                df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
+            )
 
-        # Rolling sum to count consecutive trues
-        rolling_sum = (
-            df["combined_check"].rolling(window=self.rolling_window_size).sum()
-        )
-        # Set flag to 1 if rolling sum equals the window size
-        df["fc5_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
+            df["combined_check"] = (
+                (df["sat_check"] <= df["mat_check"])
+                & (df[self.heating_sig_col] > 0.01)
+                & (df[self.supply_vfd_speed_col] > 0.01)
+            )
 
-        if self.troubleshoot_mode:
-            print("Troubleshoot mode enabled - not removing helper columns")
+            # Rolling sum to count consecutive trues
+            rolling_sum = (
+                df["combined_check"].rolling(window=self.rolling_window_size).sum()
+            )
+            # Set flag to 1 if rolling sum equals the window size
+            df["fc5_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
+
+            if self.troubleshoot_mode:
+                print("Troubleshoot mode enabled - not removing helper columns")
+                sys.stdout.flush()
+                del df["mat_check"]
+                del df["sat_check"]
+                del df["combined_check"]
+
+            return df
+
+        except MissingColumnError as e:
+            print(f"Error: {e.message}")
             sys.stdout.flush()
-            del df["mat_check"]
-            del df["sat_check"]
-            del df["combined_check"]
-
-        return df
+            raise e  # Re-raise the exception so it can be caught by pytest

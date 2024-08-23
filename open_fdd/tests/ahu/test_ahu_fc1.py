@@ -2,6 +2,8 @@ import pandas as pd
 import pytest
 from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
+
 
 # Constants
 TEST_VFD_ERR_THRESHOLD = 0.05
@@ -25,6 +27,21 @@ fault_condition_params = {
 }
 
 fc1 = FaultConditionOne(fault_condition_params)
+
+
+class TestMissingColumn:
+
+    def missing_col_df(self) -> pd.DataFrame:
+        data = {
+            TEST_DUCT_STATIC_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
+            # Missing TEST_SUPPLY_VFD_SPEED_COL
+            TEST_DUCT_STATIC_SETPOINT_COL: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        }
+        return pd.DataFrame(data)
+
+    def test_missing_column(self):
+        with pytest.raises(MissingColumnError):
+            fc1.apply(self.missing_col_df())
 
 
 class TestNoFault:
