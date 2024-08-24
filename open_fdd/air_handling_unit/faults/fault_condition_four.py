@@ -10,7 +10,7 @@ class FaultConditionFour(FaultCondition):
     """Class provides the definitions for Fault Condition 4.
 
     This fault flags excessive operating states on the AHU
-    if its hunting between heating, econ, econ+mech, and
+    if it's hunting between heating, econ, econ+mech, and
     a mech clg modes. The code counts how many operating
     changes in an hour and will throw a fault if there is
     excessive OS changes to flag control sys hunting.
@@ -28,13 +28,17 @@ class FaultConditionFour(FaultCondition):
 
         self.set_attributes(dict_)
 
-        # Set required columns specific to this fault condition
+        # Set required columns, making heating and cooling optional
         self.required_columns = [
             self.economizer_sig_col,
-            self.heating_sig_col,
-            self.cooling_sig_col,
             self.supply_vfd_speed_col,
         ]
+
+        # If heating or cooling columns are provided, add them to the required columns
+        if self.heating_sig_col:
+            self.required_columns.append(self.heating_sig_col)
+        if self.cooling_sig_col:
+            self.required_columns.append(self.cooling_sig_col)
 
     def get_required_columns(self) -> str:
         """Returns a string representation of the required columns."""
@@ -44,6 +48,12 @@ class FaultConditionFour(FaultCondition):
         try:
             # Ensure all required columns are present
             self.check_required_columns(df)
+
+            # If the optional columns are not present, create them with all values set to 0.0
+            if self.heating_sig_col not in df.columns:
+                df[self.heating_sig_col] = 0.0
+            if self.cooling_sig_col not in df.columns:
+                df[self.cooling_sig_col] = 0.0
 
             if self.troubleshoot_mode:
                 self.troubleshoot_cols(df)
@@ -96,6 +106,14 @@ class FaultConditionFour(FaultCondition):
             df["mech_cooling_only_mode"] = (
                 (df[self.heating_sig_col] == 0)
                 & (df[self.cooling_sig_col] > 0)
+                & (df[self.supply_vfd_speed_col] > 0)
+                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
+            )
+
+            # AHU minimum OA mode without heating or cooling (ventilation mode)
+            df["min_oa_mode_only"] = (
+                (df[self.heating_sig_col] == 0)
+                & (df[self.cooling_sig_col] == 0)
                 & (df[self.supply_vfd_speed_col] > 0)
                 & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
             )

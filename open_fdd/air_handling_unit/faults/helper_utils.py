@@ -97,10 +97,10 @@ class HelperUtils:
         if self.validate_config(
             ["DUCT_STATIC_COL", "DUCT_STATIC_SETPOINT_COL", "SUPPLY_VFD_SPEED_COL"]
         ):
-            print("fc1 Go!")
+            print("Info: Running fc1")
             fc1 = FaultConditionOne(config_dict)
         else:
-            print("Skipping fc1...")
+            print("Info: Skipping fc1")
 
         sys.stdout.flush()
 
@@ -108,10 +108,10 @@ class HelperUtils:
         if self.validate_config(
             ["SUPPLY_VFD_SPEED_COL", "MAT_COL", "OAT_COL", "SAT_COL", "RAT_COL"]
         ):
-            print("fc2 Go!")
+            print("Info: Running fc2 Go!")
             fc2 = FaultConditionTwo(config_dict)
         else:
-            print("Skipping fc2...")
+            print("Info: Skipping fc2")
 
         sys.stdout.flush()
 
@@ -119,10 +119,10 @@ class HelperUtils:
         if self.validate_config(
             ["SUPPLY_VFD_SPEED_COL", "MAT_COL", "OAT_COL", "SAT_COL", "RAT_COL"]
         ):
-            print("fc3 Go!")
+            print("Info: Running fc3 Go!")
             fc3 = FaultConditionThree(config_dict)
         else:
-            print("Skipping fc3...")
+            print("Info: Skipping fc3")
 
         sys.stdout.flush()
 
@@ -135,10 +135,10 @@ class HelperUtils:
                 "ECONOMIZER_SIG_COL",
             ]
         ):
-            print("fc4 Go!")
+            print("Info: Running fc4 Go!")
             fc4 = FaultConditionFour(config_dict)
         else:
-            print("Skipping fc4...")
+            print("Info: Skipping fc4")
 
         sys.stdout.flush()
 
@@ -146,10 +146,10 @@ class HelperUtils:
         if self.validate_config(
             ["SUPPLY_VFD_SPEED_COL", "HEATING_SIG_COL", "SAT_COL", "MAT_COL"]
         ):
-            print("fc5 Go!")
+            print("Info: Running fc5 Go!")
             fc5 = FaultConditionFive(config_dict)
         else:
-            print("Skipping fc5...")
+            print("Info: Skipping fc5")
 
         sys.stdout.flush()
 
@@ -163,10 +163,10 @@ class HelperUtils:
                 "SUPPLY_FAN_AIR_VOLUME_COL",
             ]
         ):
-            print("fc6 Go!")
+            print("Info: Running fc6 Go!")
             fc6 = FaultConditionSix(config_dict)
         else:
-            print("Skipping fc6...")
+            print("Info: Skipping fc6")
 
         sys.stdout.flush()
 
@@ -174,10 +174,10 @@ class HelperUtils:
         if self.validate_config(
             ["SUPPLY_VFD_SPEED_COL", "SAT_COL", "SAT_SETPOINT_COL", "HEATING_SIG_COL"]
         ):
-            print("fc7 Go!")
+            print("Info: Running fc7 Go!")
             fc7 = FaultConditionSeven(config_dict)
         else:
-            print("Skipping fc7...")
+            print("Info: Skipping fc7")
 
         sys.stdout.flush()
 
@@ -191,10 +191,10 @@ class HelperUtils:
                 "SAT_COL",
             ]
         ):
-            print("fc8 Go!")
+            print("Info: Running fc8 Go!")
             fc8 = FaultConditionEight(config_dict)
         else:
-            print("Skipping fc8...")
+            print("Info: Skipping fc8")
 
         sys.stdout.flush()
 
@@ -209,10 +209,10 @@ class HelperUtils:
                 "ECONOMIZER_SIG_COL",
             ]
         ):
-            print("fc9 Go!")
+            print("Info: Running fc9 Go!")
             fc9 = FaultConditionNine(config_dict)
         else:
-            print("Skipping fc9...")
+            print("Info: Skipping fc9")
 
         sys.stdout.flush()
 
@@ -226,10 +226,10 @@ class HelperUtils:
                 "ECONOMIZER_SIG_COL",
             ]
         ):
-            print("fc10 Go!")
+            print("Info: Running fc10 Go!")
             fc10 = FaultConditionTen(config_dict)
         else:
-            print("Skipping fc10...")
+            print("Info: Skipping fc10")
 
         sys.stdout.flush()
 
@@ -243,10 +243,10 @@ class HelperUtils:
                 "SAT_SETPOINT_COL",
             ]
         ):
-            print("fc11 Go!")
+            print("Info: Running fc11 Go!")
             fc11 = FaultConditionEleven(config_dict)
         else:
-            print("Skipping fc11...")
+            print("Info: Skipping fc11")
 
         sys.stdout.flush()
 
@@ -260,10 +260,10 @@ class HelperUtils:
                 "MAT_COL",
             ]
         ):
-            print("fc12 Go!")
+            print("Info: Running fc12 Go!")
             fc12 = FaultConditionTwelve(config_dict)
         else:
-            print("Skipping fc12...")
+            print("Info: Skipping fc12")
 
         sys.stdout.flush()
 
@@ -277,10 +277,10 @@ class HelperUtils:
                 "SAT_COL",
             ]
         ):
-            print("fc13 Go!")
+            print("Info: Running fc13 Go!")
             fc13 = FaultConditionThirteen(config_dict)
         else:
-            print("Skipping fc13...")
+            print("Info: Skipping fc13")
 
         sys.stdout.flush()
 
@@ -289,10 +289,10 @@ class HelperUtils:
             config_dict.get("COOLING_SIG_COL") is not None
             and config_dict.get("CLG_COIL_LEAVE_TEMP_COL") is not None
         ):
-            print("fc14 Go!")
+            print("Info: Running fc14 Go!")
             fc14 = FaultConditionFourteen(config_dict)
         else:
-            print("Skipping fc14...")
+            print("Info: Skipping fc14")
 
         sys.stdout.flush()
 
@@ -301,10 +301,10 @@ class HelperUtils:
             config_dict.get("HTG_COIL_ENTER_TEMP_COL") is not None
             and config_dict.get("HTG_COIL_LEAVE_TEMP_COL") is not None
         ):
-            print("fc15 Go!")
+            print("Info: Running fc15 Go!")
             fc15 = FaultConditionFifteen(config_dict)
         else:
-            print("Skipping fc15...")
+            print("Info: Skipping fc15")
 
         sys.stdout.flush()
 
