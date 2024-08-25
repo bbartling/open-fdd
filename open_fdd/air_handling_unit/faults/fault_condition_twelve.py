@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import operator
 from open_fdd.air_handling_unit.faults.fault_condition import (
     FaultCondition,
@@ -26,6 +27,20 @@ class FaultConditionTwelve(FaultCondition):
         self.troubleshoot_mode = bool  # default False
         self.rolling_window_size = int
 
+        self.equation_string = (
+            "fc12_flag = 1 if SAT >= MAT + εMAT in "
+            "economizer + mech cooling mode for N consecutive values else 0 \n"
+        )
+        self.description_string = (
+            "Fault Condition 12: Supply air temperature too high; should be less than "
+            "mixed air temperature in economizer plus mechanical cooling mode \n"
+        )
+        self.required_column_description = (
+            "Required inputs are the supply air temperature, mixed air temperature, "
+            "cooling signal, and economizer signal \n"
+        )
+        self.error_string = f"One or more required columns are missing or None \n"
+
         self.set_attributes(dict_)
 
         # Set required columns specific to this fault condition
@@ -36,9 +51,31 @@ class FaultConditionTwelve(FaultCondition):
             self.economizer_sig_col,
         ]
 
+        # Check if any of the required columns are None
+        if any(col is None for col in self.required_columns):
+            raise MissingColumnError(
+                f"{self.error_string}"
+                f"{self.equation_string}"
+                f"{self.description_string}"
+                f"{self.required_column_description}"
+                f"{self.required_columns}"
+            )
+
+        # Ensure all required columns are strings
+        self.required_columns = [str(col) for col in self.required_columns]
+
+        self.mapped_columns = (
+            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
+        )
+
     def get_required_columns(self) -> str:
         """Returns a string representation of the required columns."""
-        return f"Required columns for FaultConditionTwelve: {', '.join(self.required_columns)}"
+        return (
+            f"{self.equation_string}"
+            f"{self.description_string}"
+            f"{self.required_column_description}"
+            f"{self.mapped_columns}"
+        )
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
@@ -68,7 +105,7 @@ class FaultConditionTwelve(FaultCondition):
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
                 (df["sat_minus_saterr_delta_supply_fan"] > df["mat_plus_materr"])
-                # verify ahu is running in OS 3 clg mode in 100 OA
+                # verify AHU is running in OS 3 clg mode in 100 OA
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9),
             )
@@ -92,4 +129,4 @@ class FaultConditionTwelve(FaultCondition):
         except MissingColumnError as e:
             print(f"Error: {e.message}")
             sys.stdout.flush()
-            raise e  # Re-raise the exception so it can be caught by pytest
+            raise e

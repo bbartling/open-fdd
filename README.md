@@ -31,9 +31,8 @@ These are some basic project goals to make this into an interactive FDD applicat
  - [ ] make `energy_efficiency` faults, IPython reports, and examples to `optimize` in reducing energy consumption.
  - [ ] make `metering`, faults, IPython reports, and examples to possibly model utility metering data.
  - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana.
- - [ ] other?
+ - [ ] other? Certainly! As ChatGPT would eagerly say!
 
-Certainly! Here's a revised version of your contribution guidelines:
 
 ## Contribute
 

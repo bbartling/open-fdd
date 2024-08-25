@@ -24,6 +24,20 @@ class FaultConditionTen(FaultCondition):
         self.troubleshoot_mode = bool  # default False,
         self.rolling_window_size = int
 
+        self.equation_string = (
+            "fc10_flag = 1 if |OAT - MAT| > √(εOAT² + εMAT²) in "
+            "economizer + mech cooling mode for N consecutive values else 0 \n"
+        )
+        self.description_string = (
+            "Fault Condition 10: Outdoor air temperature and mixed air temperature "
+            "should be approximately equal in economizer plus mechanical cooling mode \n"
+        )
+        self.required_column_description = (
+            "Required inputs are the outside air temperature, mixed air temperature, "
+            "cooling signal, and economizer signal \n"
+        )
+        self.error_string = f"One or more required columns are missing or None \n"
+
         self.set_attributes(dict_)
 
         # Set required columns specific to this fault condition
@@ -34,9 +48,31 @@ class FaultConditionTen(FaultCondition):
             self.economizer_sig_col,
         ]
 
+        # Check if any of the required columns are None
+        if any(col is None for col in self.required_columns):
+            raise MissingColumnError(
+                f"{self.error_string}"
+                f"{self.equation_string}"
+                f"{self.description_string}"
+                f"{self.required_column_description}"
+                f"{self.required_columns}"
+            )
+
+        # Ensure all required columns are strings
+        self.required_columns = [str(col) for col in self.required_columns]
+
+        self.mapped_columns = (
+            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
+        )
+
     def get_required_columns(self) -> str:
         """Returns a string representation of the required columns."""
-        return f"Required columns for FaultConditionTen: {', '.join(self.required_columns)}"
+        return (
+            f"{self.equation_string}"
+            f"{self.description_string}"
+            f"{self.required_column_description}"
+            f"{self.mapped_columns}"
+        )
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
@@ -60,7 +96,7 @@ class FaultConditionTen(FaultCondition):
 
             df["combined_check"] = (
                 (df["abs_mat_minus_oat"] > df["mat_oat_sqrted"])
-                # verify ahu is running in OS 3 clg mode in min OA
+                # verify AHU is running in OS 3 clg mode in min OA
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9)
             )
@@ -84,4 +120,4 @@ class FaultConditionTen(FaultCondition):
         except MissingColumnError as e:
             print(f"Error: {e.message}")
             sys.stdout.flush()
-            raise e  # Re-raise the exception so it can be caught by pytest
+            raise e

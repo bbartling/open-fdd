@@ -28,6 +28,20 @@ class FaultConditionFifteen(FaultCondition):
         self.troubleshoot_mode = bool  # default to False
         self.rolling_window_size = int
 
+        self.equation_string = (
+            "fc15_flag = 1 if ΔT_coil >= √(εcoil_enter² + εcoil_leave²) + ΔT_fan "
+            "in inactive heating coil mode for N consecutive values else 0 \n"
+        )
+        self.description_string = (
+            "Fault Condition 15: Temperature rise across inactive heating coil "
+            "detected, requiring coil leaving temperature sensor \n"
+        )
+        self.required_column_description = (
+            "Required inputs are the heating coil entering temperature, heating coil leaving temperature, "
+            "cooling signal, heating signal, economizer signal, and supply fan VFD speed \n"
+        )
+        self.error_string = f"One or more required columns are missing or None \n"
+
         self.set_attributes(dict_)
 
         # Set required columns specific to this fault condition
@@ -40,9 +54,31 @@ class FaultConditionFifteen(FaultCondition):
             self.supply_vfd_speed_col,
         ]
 
+        # Check if any of the required columns are None
+        if any(col is None for col in self.required_columns):
+            raise MissingColumnError(
+                f"{self.error_string}"
+                f"{self.equation_string}"
+                f"{self.description_string}"
+                f"{self.required_column_description}"
+                f"{self.required_columns}"
+            )
+
+        # Ensure all required columns are strings
+        self.required_columns = [str(col) for col in self.required_columns]
+
+        self.mapped_columns = (
+            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
+        )
+
     def get_required_columns(self) -> str:
         """Returns a string representation of the required columns."""
-        return f"Required columns for FaultConditionFifteen: {', '.join(self.required_columns)}"
+        return (
+            f"{self.equation_string}"
+            f"{self.description_string}"
+            f"{self.required_column_description}"
+            f"{self.mapped_columns}"
+        )
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
@@ -113,4 +149,4 @@ class FaultConditionFifteen(FaultCondition):
         except MissingColumnError as e:
             print(f"Error: {e.message}")
             sys.stdout.flush()
-            raise e  # Re-raise the exception so it can be caught by pytest
+            raise e
