@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults.fault_condition_one import FaultConditionOne
+from open_fdd.air_handling_unit.faults import FaultConditionOne
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
 

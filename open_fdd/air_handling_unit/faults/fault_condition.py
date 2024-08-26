@@ -3,9 +3,19 @@ import pandas.api.types as pdtypes
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 import sys
 
+"""see __init__.py for fault classes"""
+
 
 class MissingColumnError(Exception):
     """Custom exception raised when a required column is missing or None."""
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+
+class InvalidParameterError(Exception):
+    """Custom exception raised when a parameter is not valid (e.g., not a float)."""
 
     def __init__(self, message):
         self.message = message
@@ -36,11 +46,7 @@ class FaultCondition:
             raise MissingColumnError(f"Missing required columns: {missing_columns}")
 
     def troubleshoot_cols(self, df):
-        """print troubleshoot columns mapping
-
-        :param df:
-        :return:
-        """
+        """Print troubleshoot columns mapping."""
         print("Troubleshoot mode enabled - not removing helper columns")
         for col in df.columns:
             print(
@@ -54,11 +60,7 @@ class FaultCondition:
             sys.stdout.flush()
 
     def check_analog_pct(self, df, columns):
-        """check analog outputs [data with units of %] are floats only
-
-        :param columns:
-        :return:
-        """
+        """Check analog outputs [data with units of %] are floats only."""
         helper = HelperUtils()
         for col in columns:
             if not pdtypes.is_float_dtype(df[col]):

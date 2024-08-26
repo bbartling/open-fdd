@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults.fault_condition_two import FaultConditionTwo
+from open_fdd.air_handling_unit.faults import FaultConditionTwo
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 """

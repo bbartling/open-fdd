@@ -41,49 +41,21 @@ class HelperUtils:
         # Set the config dictionary
         self.set_config_dict(config_dict)
 
-        from open_fdd.air_handling_unit.faults.fault_condition_one import (
+        from open_fdd.air_handling_unit.faults import (
             FaultConditionOne,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_two import (
             FaultConditionTwo,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_three import (
             FaultConditionThree,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_four import (
             FaultConditionFour,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_five import (
             FaultConditionFive,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_six import (
             FaultConditionSix,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_seven import (
             FaultConditionSeven,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_eight import (
             FaultConditionEight,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_nine import (
             FaultConditionNine,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_ten import (
             FaultConditionTen,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_eleven import (
             FaultConditionEleven,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_twelve import (
             FaultConditionTwelve,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_thirteen import (
             FaultConditionThirteen,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_fourteen import (
             FaultConditionFourteen,
-        )
-        from open_fdd.air_handling_unit.faults.fault_condition_fifteen import (
             FaultConditionFifteen,
         )
 

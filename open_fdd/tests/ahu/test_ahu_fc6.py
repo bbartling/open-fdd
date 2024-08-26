@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults.fault_condition_six import FaultConditionSix
+from open_fdd.air_handling_unit.faults import FaultConditionSix
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 """
@@ -12,7 +12,7 @@ OA FRACTION TOO LOW OR TOO HIGH; SHOULD BE EQUAL TO %OAmin
 
 # Constants
 TEST_AIRFLOW_ERR_THRES = 0.3
-TEST_AHU_MIN_CFM_DESIGN = 3000
+TEST_AHU_MIN_CFM_DESIGN = 3000.0
 TEST_OAT_DEGF_ERR_THRES = 5.0
 TEST_RAT_DEGF_ERR_THRES = 2.0
 TEST_DELTA_TEMP_MIN = 10.0

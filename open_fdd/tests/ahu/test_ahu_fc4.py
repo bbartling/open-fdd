@@ -1,128 +1,200 @@
 import pandas as pd
-from open_fdd.air_handling_unit.faults.fault_condition import (
-    FaultCondition,
-    MissingColumnError,
-)
-import sys
+import pytest
+from open_fdd.air_handling_unit.faults import FaultConditionFour
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from datetime import datetime, timezone
+
+"""
+To see print statements in pytest run with:
+$ py -3.12 -m pytest tests/ahu/test_ahu_fc4.py -rP -s
+
+Too much hunting in control system
+OS state changes greater than 7 in an hour
+"""
+
+# Constants
+DELTA_OS_MAX = 7
+AHU_MIN_OA = 0.20
+TEST_MIX_AIR_DAMPER_COL = "economizer_sig_col"
+TEST_HEATING_COIL_SIG_COL = "heating_sig_col"
+TEST_COOLING_COIL_SIG_COL = "cooling_sig_col"
+TEST_SUPPLY_VFD_SPEED_COL = "fan_vfd_speed_col"
+TEST_DATASET_ROWS = 60
+
+# Initialize FaultConditionFour with a dictionary
+fault_condition_params = {
+    "DELTA_OS_MAX": DELTA_OS_MAX,
+    "AHU_MIN_OA_DPR": AHU_MIN_OA,
+    "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
+    "HEATING_SIG_COL": TEST_HEATING_COIL_SIG_COL,
+    "COOLING_SIG_COL": TEST_COOLING_COIL_SIG_COL,
+    "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
+    "TROUBLESHOOT_MODE": False,  # default value
+}
+
+fc4 = FaultConditionFour(fault_condition_params)
 
 
-class FaultConditionFour(FaultCondition):
-    """Class provides the definitions for Fault Condition 4.
+def generate_timestamp() -> pd.Series:
+    df = pd.DataFrame()
+    date_range = pd.period_range(
+        # make a time stamp starting at top of
+        # the hour with one min intervals
+        start=datetime(2022, 6, 6, 14, 30, 0, 0, tzinfo=timezone.utc),
+        periods=TEST_DATASET_ROWS,
+        freq="min",
+    )
+    df["Date"] = [x.to_timestamp() for x in date_range]
+    return df["Date"]
 
-    This fault flags excessive operating states on the AHU
-    if it's hunting between heating, econ, econ+mech, and
-    a mech clg modes. The code counts how many operating
-    changes in an hour and will throw a fault if there is
-    excessive OS changes to flag control sys hunting.
-    """
 
-    def __init__(self, dict_):
-        super().__init__()
-        self.delta_os_max = float
-        self.ahu_min_oa_dpr = float
-        self.economizer_sig_col = str
-        self.heating_sig_col = str
-        self.cooling_sig_col = str
-        self.supply_vfd_speed_col = str
-        self.troubleshoot_mode = bool  # default to False
+def econ_plus_mech_clg_row() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: 0.6,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 0.8,
+    }
+    return data
 
-        self.set_attributes(dict_)
 
-        # Set required columns, making heating and cooling optional
-        self.required_columns = [
-            self.economizer_sig_col,
-            self.supply_vfd_speed_col,
-        ]
+def mech_clg_row() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: 0.0,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 0.8,
+    }
+    return data
 
-        # If heating or cooling columns are provided, add them to the required columns
-        if self.heating_sig_col:
-            self.required_columns.append(self.heating_sig_col)
-        if self.cooling_sig_col:
-            self.required_columns.append(self.cooling_sig_col)
 
-    def get_required_columns(self) -> str:
-        """Returns a string representation of the required columns."""
-        return f"Required columns for FaultConditionFour: {', '.join(self.required_columns)}"
+def econ_plus_mech_clg_row_int() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: 0.6,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 88,
+    }
+    return data
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            # Ensure all required columns are present
-            self.check_required_columns(df)
 
-            # If the optional columns are not present, create them with all values set to 0.0
-            if self.heating_sig_col not in df.columns:
-                df[self.heating_sig_col] = 0.0
-            if self.cooling_sig_col not in df.columns:
-                df[self.cooling_sig_col] = 0.0
+def econ_plus_mech_clg_row_float_greater_than_one() -> dict:
+    data = {
+        TEST_MIX_AIR_DAMPER_COL: 0.6,
+        TEST_HEATING_COIL_SIG_COL: 0.0,
+        TEST_COOLING_COIL_SIG_COL: 0.6,
+        TEST_SUPPLY_VFD_SPEED_COL: 88.8,
+    }
+    return data
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
 
-            # Check analog outputs [data with units of %] are floats only
-            columns_to_check = [
-                self.economizer_sig_col,
-                self.heating_sig_col,
-                self.cooling_sig_col,
-                self.supply_vfd_speed_col,
-            ]
+class TestFault(object):
 
-            for col in columns_to_check:
-                self.check_analog_pct(df, [col])
+    def fault_df(self) -> pd.DataFrame:
+        data = []
+        counter = 0
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0 and counter < 11:
+                data.append(econ_plus_mech_clg_row())
+                counter += 1  # only simulate 10 OS changes
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
 
-            print("=" * 50)
-            print("Warning: The program is in FC4 and resampling the data")
-            print("to compute AHU OS state changes per hour")
-            print("to flag any hunting issue")
-            print("and this usually takes a while to run...")
-            print("=" * 50)
+    def test_fault(self):
+        fault_df = self.fault_df().set_index(generate_timestamp())
+        results = fc4.apply(fault_df)
+        actual = results["fc4_flag"].sum()
+        expected = 1
+        message = f"FC4 fault_df actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
-            sys.stdout.flush()
 
-            # AHU htg only mode based on OA damper @ min oa and only htg pid/vlv modulating
-            df["heating_mode"] = (
-                (df[self.heating_sig_col] > 0)
-                & (df[self.cooling_sig_col] == 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
-            )
+class TestNoFault(object):
 
-            # AHU econ only mode based on OA damper modulating and clg htg = zero
-            df["econ_only_cooling_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] == 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
-            )
+    def no_fault_df(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            data.append(mech_clg_row())
+        return pd.DataFrame(data)
 
-            # AHU econ+mech clg mode based on OA damper modulating for cooling and clg pid/vlv modulating
-            df["econ_plus_mech_cooling_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] > 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
-            )
+    def test_no_fault(self):
+        no_fault_df = self.no_fault_df().set_index(generate_timestamp())
+        results = fc4.apply(no_fault_df)
+        actual = results["fc4_flag"].sum()
+        expected = 0
+        message = f"FC4 no_fault_df actual is {actual} and expected is {expected}"
+        assert actual == expected, message
 
-            # AHU mech mode based on OA damper @ min OA and clg pid/vlv modulating
-            df["mech_cooling_only_mode"] = (
-                (df[self.heating_sig_col] == 0)
-                & (df[self.cooling_sig_col] > 0)
-                & (df[self.supply_vfd_speed_col] > 0)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
-            )
 
-            # Fill non-finite values with zero or drop them
-            df = df.fillna(0)
+class TestFaultOnInt(object):
 
-            df = df.astype(int)
-            df = df.resample("60min").apply(lambda x: (x.eq(1) & x.shift().ne(1)).sum())
+    def fault_df_on_output_int(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0:
+                data.append(econ_plus_mech_clg_row_int())
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
 
-            df["fc4_flag"] = (
-                df[df.columns].gt(self.delta_os_max).any(axis=1).astype(int)
-            )
+    def test_fault_on_int(self):
+        fault_df_on_output_int = self.fault_df_on_output_int().set_index(
+            generate_timestamp()
+        )
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_int_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
+            fc4.apply(fault_df_on_output_int)
 
-            return df
 
-        except MissingColumnError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e  # Re-raise the exception so it can be caught by pytest
+class TestFaultOnFloatGreaterThanOne(object):
+
+    def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0:
+                data.append(econ_plus_mech_clg_row_float_greater_than_one())
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
+
+    def test_fault_on_float_greater_than_one(self):
+        fault_df_on_output_greater_than_one = (
+            self.fault_df_on_output_greater_than_one().set_index(generate_timestamp())
+        )
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
+            fc4.apply(fault_df_on_output_greater_than_one)
+
+
+class TestFaultOnMixedTypes(object):
+
+    def fault_df_on_mixed_types(self) -> pd.DataFrame:
+        data = []
+        for i in range(TEST_DATASET_ROWS):
+            if i % 2 == 0:
+                data.append(
+                    {
+                        TEST_MIX_AIR_DAMPER_COL: 0.6,
+                        TEST_HEATING_COIL_SIG_COL: 0.0,
+                        TEST_COOLING_COIL_SIG_COL: 0.6,
+                        TEST_SUPPLY_VFD_SPEED_COL: 1.1,
+                    }
+                )
+            else:
+                data.append(mech_clg_row())
+        return pd.DataFrame(data)
+
+    def test_fault_on_mixed_types(self):
+        fault_df_on_mixed_types = self.fault_df_on_mixed_types().set_index(
+            generate_timestamp()
+        )
+        with pytest.raises(
+            TypeError,
+            match=HelperUtils().float_max_check_err(TEST_SUPPLY_VFD_SPEED_COL),
+        ):
+            fc4.apply(fault_df_on_mixed_types)
