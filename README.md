@@ -22,20 +22,28 @@ pip install open-fdd
 For running Jupyter notebooks, I recommend using Visual Studio Code with the Jupyter notebook extension installed, which offers a seamless experience directly within the editor. Be sure to explore the `examples` directory for Jupyter notebook tutorials. If you have your own FDD experiences to share, feel free to contribute by creating a notebook (`.ipynb`). You’re welcome to reach out to me directly, and I can push your example to GitHub on your behalf, which might be a simpler process than submitting a pull request (PR), especially if you're just sharing an example rather than developing `open-fdd`.
 
 ## Project goals
-These are some basic project goals to make this into an interactive FDD application.
- - [x] finish `air_handling_unit` faults and reports based on ASHRAE and NIST
- - [x] publish to PyPI as Python library
- - [ ] make a few IPython notebook tutorials AHU FDD examples with `BRICK` meta data integration.
- - [ ] make a guide for fault `parameters` like error thresholds, etc.
- - [ ] make `central_plant` faults, IPython reports, and examples.
- - [ ] make `energy_efficiency` faults, IPython reports, and examples to `optimize` in reducing energy consumption.
- - [ ] make `metering`, faults, IPython reports, and examples to possibly model utility metering data.
- - [ ] create SQL example to read data from time series db and write back to SQL to then read faults in Grafana.
- - [ ] other? Certainly! As ChatGPT would eagerly say!
+The following are key objectives to enhance this project into a fully interactive Fault Detection and Diagnostics (FDD) application.
+
+### Completed
+ - [x] Develop and finalize `air_handling_unit` fault conditions and reports, aligning with ASHRAE and NIST standards.
+ - [x] Publish the project as a Python library on PyPI.
+
+### In Progress
+ - [ ] Create IPython notebook tutorials showcasing AHU FDD examples, incorporating BRICK metadata integration.
+ - [ ] Develop a comprehensive guide on a github.io website (or other?) for defining fault parameters, including error thresholds and other critical settings.
+
+### Upcoming
+ - [ ] Extend the project to include `central_plant` fault conditions, IPython reports, and example applications.
+ - [ ] Design `energy_efficiency` fault detection modules, including IPython reports and examples focused on optimizing energy consumption.
+ - [ ] Develop `metering` fault conditions, along with IPython reports and examples, potentially modeling utility metering data.
+ - [ ] Implement SQL integration examples for reading data from a time series database, writing back to SQL, and visualizing faults in Grafana.
+
+### Future Considerations
+ Explore additional features and enhancements as the project evolves.
+ - [ ] Explore additional features and enhancements as the project evolves.
 
 
 ## Contribute
-
 If you have suggestions for improving developer best practices or solutions, please feel free to reach out to me directly using my contact information or Git issue/discussion. I primarily work on Windows with multiple versions of Python installed, with Python 3.12.x as my default version. You can download the latest version of Python here:
 * https://www.python.org/downloads/
 
