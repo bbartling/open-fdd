@@ -30,10 +30,10 @@ The following are key objectives to enhance this project into a fully interactiv
 
 ### In Progress
  - [ ] Create IPython notebook tutorials showcasing AHU FDD examples, incorporating BRICK metadata integration.
- - [ ] Develop a comprehensive guide on a github.io website (or other?) for defining fault parameters, including error thresholds and other critical settings.
+ - [ ] Extend the project to include `central_plant` fault conditions, IPython reports, and example applications for boiler and chiller systems.
+
 
 ### Upcoming
- - [ ] Extend the project to include `central_plant` fault conditions, IPython reports, and example applications.
  - [ ] Design `energy_efficiency` fault detection modules, including IPython reports and examples focused on optimizing energy consumption.
  - [ ] Develop `metering` fault conditions, along with IPython reports and examples, potentially modeling utility metering data.
  - [ ] Implement SQL integration examples for reading data from a time series database, writing back to SQL, and visualizing faults in Grafana.
@@ -41,6 +41,7 @@ The following are key objectives to enhance this project into a fully interactiv
 ### Future Considerations
  Explore additional features and enhancements as the project evolves.
  - [ ] Explore additional features and enhancements as the project evolves.
+ - [ ] Develop a comprehensive guide on a github.io website (or other?) for defining fault parameters, including error thresholds and other critical settings.
 
 
 ## Contribute
