@@ -13,8 +13,7 @@ CREATE TABLE IF NOT EXISTS TimeseriesData (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sensor_name TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    value REAL NOT NULL,
-    fc1_flag INTEGER DEFAULT 0  -- Add this line to store fault condition 1 flags
+    value REAL NOT NULL
 )
 """
 )
@@ -65,6 +64,9 @@ pattern = (
 )
 df.columns = df.columns.str.replace(pattern, "", regex=True)
 
+# Trim any leading or trailing spaces from the column names
+df.columns = df.columns.str.strip()
+
 # Print columns after modification to verify changes
 print("Modified df.columns", df.columns)
 
@@ -80,14 +82,14 @@ for column in df.columns:
                 VALUES (?, ?, ?)
                 """,
                     (
-                        column,
+                        column.strip(),  # Trim the sensor_name
                         row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                         row[column],
                     ),
                 )
                 if index < 5:  # Print the first 5 rows only
                     print(
-                        f"Inserted sensor name {column} with value {row[column]} at {row['timestamp']}"
+                        f"Inserted sensor name {column.strip()} with value {row[column]} at {row['timestamp']}"
                     )
             print(f"Processed {column} in step 5")
         else:
@@ -107,9 +109,9 @@ for column in df.columns:
             INSERT INTO TimeseriesReference (timeseries_id, stored_at)
             VALUES (?, ?)
             """,
-                (column, "SQLite Timeseries Storage"),
+                (column.strip(), "SQLite Timeseries Storage"),
             )
-            print(f"Inserted reference for {column} in step 6")
+            print(f"Inserted reference for {column.strip()} in step 6")
         else:
             pass
 

@@ -42,7 +42,7 @@ unique_sensors = set()  # To track and avoid redundancy
 ahu_uris = {}  # To track and associate sensors with AHUs
 
 # List of specific identifiers related to AHU points
-ahu_related_identifiers = ["SaStaticSPt", "SaStatic", "SaFanSpeedAO"]
+ahu_related_identifiers = ["StaticSPt", "SaStatic", "SaFanSpeedAO"]
 
 for timeseries_id, stored_at in timeseries_refs:
     timeseries_id = timeseries_id.strip()  # Remove any leading/trailing spaces
@@ -65,15 +65,12 @@ for timeseries_id, stored_at in timeseries_refs:
         if "StaticSPt" in timeseries_id:
             g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Setpoint))
             g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
-            print("StaticSPt added: ", sensor_uri)
         elif "SaStatic" in timeseries_id:
             g.add((sensor_uri, RDF.type, brick.Supply_Air_Static_Pressure_Sensor))
             g.add((sensor_uri, brick.hasUnit, unit.Inch_Water_Column))
-            print("SaStatic added: ", sensor_uri)
         elif "SaFanSpeedAO" in timeseries_id:
             g.add((sensor_uri, RDF.type, brick.Supply_Fan_VFD_Speed_Sensor))
             g.add((sensor_uri, brick.hasUnit, unit.Percent))
-            print("SaFanSpeedAO added: ", sensor_uri)
 
         # Associate the sensor with the AHU
         g.add((ahu_uris[ahu_name], brick.hasPoint, sensor_uri))
