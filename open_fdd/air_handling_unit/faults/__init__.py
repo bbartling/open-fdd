@@ -12,6 +12,8 @@ import sys
 class FaultConditionOne(FaultCondition):
     """Class provides the definitions for Fault Condition 1.
     AHU low duct static pressure fan fault.
+
+    py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc1.py -rP -s
     """
 
     def __init__(self, dict_):
@@ -101,33 +103,24 @@ class FaultConditionOne(FaultCondition):
             columns_to_check = [self.supply_vfd_speed_col]
             self.check_analog_pct(df, columns_to_check)
 
-            df["static_check_"] = (
+            # Perform checks
+            static_check = (
                 df[self.duct_static_col]
                 < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
             )
-            df["fan_check_"] = (
+            fan_check = (
                 df[self.supply_vfd_speed_col]
                 >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres
             )
 
             # Combined condition check
-            df["combined_check"] = df["static_check_"] & df["fan_check_"]
+            combined_check = static_check & fan_check
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc1_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["static_check_", "fan_check_", "combined_check"], inplace=True
-            )
 
             return df
 
@@ -232,32 +225,22 @@ class FaultConditionTwo(FaultCondition):
             columns_to_check = [self.supply_vfd_speed_col]
             self.check_analog_pct(df, columns_to_check)
 
-            # Fault condition-specific checks / flags
-            df["mat_check"] = df[self.mat_col] + self.mix_degf_err_thres
-            df["temp_min_check"] = np.minimum(
+            # Perform checks
+            mat_check = df[self.mat_col] + self.mix_degf_err_thres
+            temp_min_check = np.minimum(
                 df[self.rat_col] - self.return_degf_err_thres,
                 df[self.oat_col] - self.outdoor_degf_err_thres,
             )
 
-            df["combined_check"] = (df["mat_check"] < df["temp_min_check"]) & (
+            combined_check = (mat_check < temp_min_check) & (
                 df[self.supply_vfd_speed_col] > 0.01
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc2_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["mat_check", "temp_min_check", "combined_check"], inplace=True
-            )
 
             return df
 
@@ -362,32 +345,22 @@ class FaultConditionThree(FaultCondition):
             columns_to_check = [self.supply_vfd_speed_col]
             self.check_analog_pct(df, columns_to_check)
 
-            # Fault condition-specific checks / flags
-            df["mat_check"] = df[self.mat_col] - self.mix_degf_err_thres
-            df["temp_max_check"] = np.maximum(
+            # Perform checks
+            mat_check = df[self.mat_col] - self.mix_degf_err_thres
+            temp_max_check = np.maximum(
                 df[self.rat_col] + self.return_degf_err_thres,
                 df[self.oat_col] + self.outdoor_degf_err_thres,
             )
 
-            df["combined_check"] = (df["mat_check"] > df["temp_max_check"]) & (
+            combined_check = (mat_check > temp_max_check) & (
                 df[self.supply_vfd_speed_col] > 0.01
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc3_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["mat_check", "temp_max_check", "combined_check"], inplace=True
-            )
 
             return df
 
@@ -675,39 +648,27 @@ class FaultConditionFive(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
+            self.check_analog_pct(df, columns_to_check)
 
-            for col in columns_to_check:
-                self.check_analog_pct(df, [col])
-
-            df["sat_check"] = df[self.sat_col] + self.supply_degf_err_thres
-            df["mat_check"] = (
+            # Perform checks
+            sat_check = df[self.sat_col] + self.supply_degf_err_thres
+            mat_check = (
                 df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
             )
 
-            df["combined_check"] = (
-                (df["sat_check"] <= df["mat_check"])
+            combined_check = (
+                (sat_check <= mat_check)
                 & (df[self.heating_sig_col] > 0.01)
                 & (df[self.supply_vfd_speed_col] > 0.01)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc5_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(columns=["mat_check", "sat_check", "combined_check"], inplace=True)
 
             return df
 
@@ -839,9 +800,6 @@ class FaultConditionSix(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.supply_vfd_speed_col,
@@ -849,74 +807,43 @@ class FaultConditionSix(FaultCondition):
                 self.heating_sig_col,
                 self.cooling_sig_col,
             ]
+            self.check_analog_pct(df, columns_to_check)
 
-            for col in columns_to_check:
-                self.check_analog_pct(df, [col])
-
-            # Create helper columns
-            df["rat_minus_oat"] = abs(df[self.rat_col] - df[self.oat_col])
-            df["percent_oa_calc"] = (df[self.mat_col] - df[self.rat_col]) / (
+            # Calculate intermediate values
+            rat_minus_oat = abs(df[self.rat_col] - df[self.oat_col])
+            percent_oa_calc = (df[self.mat_col] - df[self.rat_col]) / (
                 df[self.oat_col] - df[self.rat_col]
             )
-
-            # Weed out any negative values
-            df["percent_oa_calc"] = df["percent_oa_calc"].apply(
+            percent_oa_calc = percent_oa_calc.apply(
                 lambda x: x if x > 0 else 0
+            )  # Weed out any negative values
+            perc_OAmin = self.ahu_min_oa_cfm_design / df[self.supply_fan_air_volume_col]
+            percent_oa_calc_minus_perc_OAmin = abs(percent_oa_calc - perc_OAmin)
+
+            # Combined checks for OS 1 and OS 4 modes
+            os1_htg_mode_check = (
+                (rat_minus_oat >= self.oat_rat_delta_min)
+                & (percent_oa_calc_minus_perc_OAmin > self.airflow_err_thres)
+                & (df[self.heating_sig_col] > 0.0)
+                & (df[self.supply_vfd_speed_col] > 0.0)
             )
 
-            df["perc_OAmin"] = (
-                self.ahu_min_oa_cfm_design / df[self.supply_fan_air_volume_col]
-            )
-
-            df["percent_oa_calc_minus_perc_OAmin"] = abs(
-                df["percent_oa_calc"] - df["perc_OAmin"]
-            )
-
-            df["combined_check"] = operator.or_(
-                # OS 1 htg mode
-                (
-                    (df["rat_minus_oat"] >= self.oat_rat_delta_min)
-                    & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
-                )
-                # Verify AHU is running in OS 1 htg mode in min OA
-                & (
-                    (df[self.heating_sig_col] > 0.0)
-                    & (df[self.supply_vfd_speed_col] > 0.0)
-                ),  # OR
-                # OS 4 mech clg mode
-                (
-                    (df["rat_minus_oat"] >= self.oat_rat_delta_min)
-                    & (df["percent_oa_calc_minus_perc_OAmin"] > self.airflow_err_thres)
-                )
-                # Verify AHU is running in OS 4 clg mode in min OA
+            os4_clg_mode_check = (
+                (rat_minus_oat >= self.oat_rat_delta_min)
+                & (percent_oa_calc_minus_perc_OAmin > self.airflow_err_thres)
                 & (df[self.heating_sig_col] == 0.0)
                 & (df[self.cooling_sig_col] > 0.0)
                 & (df[self.supply_vfd_speed_col] > 0.0)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),
+                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr)
             )
+
+            combined_check = os1_htg_mode_check | os4_clg_mode_check
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc6_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=[
-                    "rat_minus_oat",
-                    "percent_oa_calc",
-                    "perc_OAmin",
-                    "percent_oa_calc_minus_perc_OAmin",
-                    "combined_check",
-                ],
-                inplace=True,
-            )
 
             return df
 
@@ -1013,35 +940,24 @@ class FaultConditionSeven(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
             self.check_analog_pct(df, columns_to_check)
 
-            # Fault condition-specific checks / flags
-            df["sat_check"] = df[self.sat_setpoint_col] - self.supply_degf_err_thres
+            # Perform checks
+            sat_check = df[self.sat_setpoint_col] - self.supply_degf_err_thres
 
-            df["combined_check"] = (
-                (df[self.sat_col] < df["sat_check"])
+            combined_check = (
+                (df[self.sat_col] < sat_check)
                 & (df[self.heating_sig_col] > 0.9)
                 & (df[self.supply_vfd_speed_col] > 0)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc7_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(columns=["sat_check", "combined_check"], inplace=True)
 
             return df
 
@@ -1147,9 +1063,6 @@ class FaultConditionEight(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1157,35 +1070,25 @@ class FaultConditionEight(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            df["sat_fan_mat"] = abs(
+            # Perform checks
+            sat_fan_mat = abs(
                 df[self.sat_col] - self.delta_t_supply_fan - df[self.mat_col]
             )
-            df["sat_mat_sqrted"] = np.sqrt(
+            sat_mat_sqrted = np.sqrt(
                 self.supply_degf_err_thres**2 + self.mix_degf_err_thres**2
             )
 
-            df["combined_check"] = (
-                (df["sat_fan_mat"] > df["sat_mat_sqrted"])
+            combined_check = (
+                (sat_fan_mat > sat_mat_sqrted)
                 & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
                 & (df[self.cooling_sig_col] < 0.1)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc8_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["sat_fan_mat", "sat_mat_sqrted", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
@@ -1291,9 +1194,6 @@ class FaultConditionNine(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1301,37 +1201,26 @@ class FaultConditionNine(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            # Create helper columns
-            df["oat_minus_oaterror"] = df[self.oat_col] - self.outdoor_degf_err_thres
-            df["satsp_delta_saterr"] = (
+            # Perform calculations
+            oat_minus_oaterror = df[self.oat_col] - self.outdoor_degf_err_thres
+            satsp_delta_saterr = (
                 df[self.sat_setpoint_col]
                 - self.delta_t_supply_fan
                 + self.supply_degf_err_thres
             )
 
-            df["combined_check"] = (
-                (df["oat_minus_oaterror"] > df["satsp_delta_saterr"])
+            combined_check = (
+                (oat_minus_oaterror > satsp_delta_saterr)
                 # verify AHU is in OS2 only free cooling mode
                 & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
                 & (df[self.cooling_sig_col] < 0.1)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc9_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["oat_minus_oaterror", "satsp_delta_saterr", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
@@ -1433,9 +1322,6 @@ class FaultConditionTen(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1443,34 +1329,24 @@ class FaultConditionTen(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            df["abs_mat_minus_oat"] = abs(df[self.mat_col] - df[self.oat_col])
-            df["mat_oat_sqrted"] = np.sqrt(
+            # Perform calculations
+            abs_mat_minus_oat = abs(df[self.mat_col] - df[self.oat_col])
+            mat_oat_sqrted = np.sqrt(
                 self.mix_degf_err_thres**2 + self.outdoor_degf_err_thres**2
             )
 
-            df["combined_check"] = (
-                (df["abs_mat_minus_oat"] > df["mat_oat_sqrted"])
-                # verify AHU is running in OS 3 clg mode in min OA
+            combined_check = (
+                (abs_mat_minus_oat > mat_oat_sqrted)
+                # Verify AHU is running in OS 3 cooling mode with minimum OA
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc10_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["abs_mat_minus_oat", "mat_oat_sqrted", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
@@ -1575,9 +1451,6 @@ class FaultConditionEleven(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1585,36 +1458,26 @@ class FaultConditionEleven(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            df["oat_plus_oaterror"] = df[self.oat_col] + self.outdoor_degf_err_thres
-            df["satsp_delta_saterr"] = (
+            # Perform calculations without creating DataFrame columns
+            oat_plus_oaterror = df[self.oat_col] + self.outdoor_degf_err_thres
+            satsp_delta_saterr = (
                 df[self.sat_setpoint_col]
                 - self.delta_t_supply_fan
                 - self.supply_degf_err_thres
             )
 
-            df["combined_check"] = (
-                (df["oat_plus_oaterror"] < df["satsp_delta_saterr"])
-                # verify ahu is running in OS 3 clg mode in 100 OA
+            combined_check = (
+                (oat_plus_oaterror < satsp_delta_saterr)
+                # Verify AHU is running in OS 3 cooling mode with 100% OA
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9)
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc11_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["oat_plus_oaterror", "satsp_delta_saterr", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
@@ -1720,9 +1583,6 @@ class FaultConditionTwelve(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1730,44 +1590,31 @@ class FaultConditionTwelve(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            # Create helper columns
-            df["sat_minus_saterr_delta_supply_fan"] = (
+            # Perform calculations without creating DataFrame columns
+            sat_minus_saterr_delta_supply_fan = (
                 df[self.sat_col] - self.supply_degf_err_thres - self.delta_t_supply_fan
             )
-            df["mat_plus_materr"] = df[self.mat_col] + self.mix_degf_err_thres
+            mat_plus_materr = df[self.mat_col] + self.mix_degf_err_thres
 
-            df["combined_check"] = operator.or_(
-                # OS4 AHU state clg @ min OA
-                (df["sat_minus_saterr_delta_supply_fan"] > df["mat_plus_materr"])
-                # verify AHU in OS4 mode
+            # Combined check without adding to DataFrame columns
+            combined_check = operator.or_(
+                # OS4 AHU state cooling @ min OA
+                (sat_minus_saterr_delta_supply_fan > mat_plus_materr)
+                # Verify AHU in OS4 mode
                 & (df[self.cooling_sig_col] > 0.01)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
-                (df["sat_minus_saterr_delta_supply_fan"] > df["mat_plus_materr"])
-                # verify AHU is running in OS 3 clg mode in 100 OA
+                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),
+                # OR
+                (sat_minus_saterr_delta_supply_fan > mat_plus_materr)
+                # Verify AHU is running in OS3 cooling mode in 100% OA
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9),
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc12_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=[
-                    "sat_minus_saterr_delta_supply_fan",
-                    "mat_plus_materr",
-                    "combined_check",
-                ],
-                inplace=True,
-            )
 
             return df
 
@@ -1869,9 +1716,6 @@ class FaultConditionThirteen(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -1879,39 +1723,29 @@ class FaultConditionThirteen(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            # Create helper columns
-            df["sat_greater_than_sp_calc"] = (
+            # Perform calculation without creating DataFrame columns
+            sat_greater_than_sp_calc = (
                 df[self.sat_col]
                 > df[self.sat_setpoint_col] + self.supply_degf_err_thres
             )
 
-            df["combined_check"] = operator.or_(
-                ((df["sat_greater_than_sp_calc"]))
-                # OS4 AHU state clg @ min OA
+            # Combined check without adding to DataFrame columns
+            combined_check = operator.or_(
+                # OS4 AHU state cooling @ min OA
+                (sat_greater_than_sp_calc)
                 & (df[self.cooling_sig_col] > 0.01)
-                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),  # OR
-                ((df["sat_greater_than_sp_calc"]))
-                # verify ahu is running in OS 3 clg mode in 100 OA
+                & (df[self.economizer_sig_col] == self.ahu_min_oa_dpr),
+                # OR verify AHU is running in OS 3 cooling mode in 100% OA
+                (sat_greater_than_sp_calc)
                 & (df[self.cooling_sig_col] > 0.01)
                 & (df[self.economizer_sig_col] > 0.9),
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc13_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["sat_greater_than_sp_calc", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
@@ -2020,9 +1854,6 @@ class FaultConditionFourteen(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
                 self.economizer_sig_col,
@@ -2032,45 +1863,32 @@ class FaultConditionFourteen(FaultCondition):
             ]
             self.check_analog_pct(df, columns_to_check)
 
-            # Create helper columns
-            df["clg_delta_temp"] = (
+            # Calculate necessary checks
+            clg_delta_temp = (
                 df[self.clg_coil_enter_temp_col] - df[self.clg_coil_leave_temp_col]
             )
-
-            df["clg_delta_sqrted"] = (
+            clg_delta_sqrted = (
                 np.sqrt(
                     self.coil_temp_enter_err_thres**2 + self.coil_temp_leav_err_thres**2
                 )
                 + self.delta_t_supply_fan
             )
 
-            df["combined_check"] = operator.or_(
-                (df["clg_delta_temp"] >= df["clg_delta_sqrted"])
-                # verify AHU is in OS2 only free cooling mode
+            # Perform combined checks without adding intermediate columns to DataFrame
+            combined_check = operator.or_(
+                (clg_delta_temp >= clg_delta_sqrted)
                 & (df[self.economizer_sig_col] > self.ahu_min_oa_dpr)
                 & (df[self.cooling_sig_col] < 0.1),  # OR
-                (df["clg_delta_temp"] >= df["clg_delta_sqrted"])
-                # verify AHU is running in OS 1 at near full heat
+                (clg_delta_temp >= clg_delta_sqrted)
                 & (df[self.heating_sig_col] > 0.0)
                 & (df[self.supply_vfd_speed_col] > 0.0),
             )
 
             # Rolling sum to count consecutive trues
-            rolling_sum = (
-                df["combined_check"].rolling(window=self.rolling_window_size).sum()
-            )
+            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
+
             # Set flag to 1 if rolling sum equals the window size
             df["fc14_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            if self.troubleshoot_mode:
-                print("Troubleshoot mode enabled - not removing helper columns")
-                sys.stdout.flush()
-
-            # Optionally remove temporary columns
-            df.drop(
-                columns=["clg_delta_temp", "clg_delta_sqrted", "combined_check"],
-                inplace=True,
-            )
 
             return df
 
