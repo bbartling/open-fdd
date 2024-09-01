@@ -2251,3 +2251,176 @@ class FaultConditionFifteen(FaultCondition):
             print(f"Error: {e.message}")
             sys.stdout.flush()
             raise e
+
+
+class FaultConditionSixteen(FaultCondition):
+    """Class provides the definitions for Fault Condition 16.
+    ERV Ineffective Process based on outdoor air temperature ranges.
+    """
+
+    def __init__(self, dict_):
+        super().__init__()
+
+        # Threshold parameters for efficiency ranges based on heating and cooling
+        self.erv_efficiency_min_heating = dict_.get("ERV_EFFICIENCY_MIN_HEATING", 0.7)
+        self.erv_efficiency_max_heating = dict_.get("ERV_EFFICIENCY_MAX_HEATING", 0.8)
+        self.erv_efficiency_min_cooling = dict_.get("ERV_EFFICIENCY_MIN_COOLING", 0.5)
+        self.erv_efficiency_max_cooling = dict_.get("ERV_EFFICIENCY_MAX_COOLING", 0.6)
+
+        self.oat_low_threshold = dict_.get("OAT_LOW_THRES", 32.0)
+        self.oat_high_threshold = dict_.get("OAT_HIGH_THRES", 80.0)
+
+        # Validate that threshold parameters are floats and within 0.0 and 1.0 for efficiency values
+        for param, value in [
+            ("erv_efficiency_min_heating", self.erv_efficiency_min_heating),
+            ("erv_efficiency_max_heating", self.erv_efficiency_max_heating),
+            ("erv_efficiency_min_cooling", self.erv_efficiency_min_cooling),
+            ("erv_efficiency_max_cooling", self.erv_efficiency_max_cooling),
+            ("oat_low_threshold", self.oat_low_threshold),
+            ("oat_high_threshold", self.oat_high_threshold),
+        ]:
+            if not isinstance(value, float):
+                raise InvalidParameterError(
+                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
+                )
+            if "erv_efficiency" in param and not (0.0 <= value <= 1.0):
+                raise InvalidParameterError(
+                    f"The parameter '{param}' should be a float between 0.0 and 1.0 to represent a percentage, but got {value}."
+                )
+
+        # Other attributes
+        self.erv_oat_enter_col = dict_.get("ERV_OAT_ENTER_COL", "erv_oat_enter")
+        self.erv_oat_leaving_col = dict_.get("ERV_OAT_LEAVING_COL", "erv_oat_leaving")
+        self.erv_eat_enter_col = dict_.get("ERV_EAT_ENTER_COL", "erv_eat_enter")
+        self.erv_eat_leaving_col = dict_.get("ERV_EAT_LEAVING_COL", "erv_eat_leaving")
+        self.supply_vfd_speed_col = dict_.get(
+            "SUPPLY_VFD_SPEED_COL", "supply_vfd_speed"
+        )
+        self.rolling_window_size = dict_.get("ROLLING_WINDOW_SIZE", 1)
+        self.troubleshoot_mode = dict_.get("TROUBLESHOOT_MODE", False)
+
+        self.equation_string = (
+            "fc16_flag = 1 if temperature deltas and expected efficiency is ineffective "
+            "for N consecutive values else 0 \n"
+        )
+        self.description_string = (
+            "Fault Condition 16: ERV is an ineffective heat transfer fault. "
+            "This fault occurs when the ERV's efficiency "
+            "is outside the acceptable range based on the delta temperature across the "
+            "ERV outside air enter temperature and ERV outside air leaving temperature, "
+            "indicating poor heat transfer. "
+            "It considers both heating and cooling conditions where each have acceptable "
+            "ranges in percentage for expected heat transfer efficiency. The percentage needs "
+            "to be a float between 0.0 and 1.0."
+        )
+        self.required_column_description = (
+            "Required inputs are the ERV outside air entering temperature, ERV outside air leaving temperature, "
+            "ERV exhaust entering temperature, ERV exhaust leaving temperature, "
+            "and AHU supply fan VFD speed."
+        )
+        self.error_string = "One or more required columns are missing or None."
+
+        self.set_attributes(dict_)
+
+        # Set required columns specific to this fault condition
+        self.required_columns = [
+            self.erv_oat_enter_col,
+            self.erv_oat_leaving_col,
+            self.erv_eat_enter_col,
+            self.erv_eat_leaving_col,
+            self.supply_vfd_speed_col,
+        ]
+
+        # Check if any of the required columns are None
+        if any(col is None for col in self.required_columns):
+            raise MissingColumnError(
+                f"{self.error_string}\n"
+                f"{self.equation_string}\n"
+                f"{self.description_string}\n"
+                f"{self.required_column_description}\n"
+                f"Missing columns: {self.required_columns}"
+            )
+
+        # Ensure all required columns are strings
+        self.required_columns = [str(col) for col in self.required_columns]
+
+        self.mapped_columns = (
+            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
+        )
+
+    def get_required_columns(self) -> str:
+        """Returns a string representation of the required columns."""
+        return (
+            f"{self.equation_string}"
+            f"{self.description_string}\n"
+            f"{self.required_column_description}\n"
+            f"{self.mapped_columns}"
+        )
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            # Calculate ERV efficiency
+            df["erv_efficiency_oa"] = (
+                df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
+            ) / (df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col])
+
+            # Fan must be on for a fault to be considered
+            fan_on = df[self.supply_vfd_speed_col] > 0.1
+
+            # Combined heating and cooling checks
+            cold_outside = df[self.erv_oat_enter_col] <= self.oat_low_threshold
+            hot_outside = df[self.erv_oat_enter_col] >= self.oat_high_threshold
+
+            heating_fault = (
+                (
+                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_heating)
+                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_heating)
+                )
+                & cold_outside
+                & fan_on
+            )
+
+            cooling_fault = (
+                (
+                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_cooling)
+                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_cooling)
+                )
+                & hot_outside
+                & fan_on
+            )
+
+            df["combined_checks"] = heating_fault | cooling_fault
+
+            # Apply rolling sum
+            df["fc16_flag"] = (
+                df["combined_checks"]
+                .rolling(window=self.rolling_window_size)
+                .sum()
+                .ge(self.rolling_window_size)
+                .astype(int)
+            )
+
+            if self.troubleshoot_mode:
+                print("Troubleshoot mode enabled - not removing helper columns")
+                sys.stdout.flush()
+
+            # Drop helper cols if not in troubleshoot mode
+            if not self.troubleshoot_mode:
+                df.drop(
+                    columns=[
+                        "combined_checks",
+                        "erv_efficiency_oa",
+                    ],
+                    inplace=True,
+                )
+
+            return df
+
+        except MissingColumnError as e:
+            print(f"Error: {e.message}")
+            sys.stdout.flush()
+            raise e
+        except InvalidParameterError as e:
+            print(f"Error: {e.message}")
+            sys.stdout.flush()
+            raise e

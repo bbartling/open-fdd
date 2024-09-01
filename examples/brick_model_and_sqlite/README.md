@@ -1,5 +1,7 @@
 # BRICK and SQL Experiment
 
+* **NOTE** - This process is a bit experimental and a learning experience for me on the database side.
+
 This project demonstrates how to loop over a BRICK model and apply fault detection to datasets purely based on the BRICK model that has time series references. By leveraging the BRICK schema and time series data, the project allows efficient querying and fault detection across multiple Air Handling Units (AHUs).
 
 ## Project Overview
@@ -27,6 +29,7 @@ pip install rdflib sqlite3 open-fdd
 * It sets up the necessary tables and populates them with the sensor data.
 
 ### 2. run `2_make_rdf.py`
+* **NOTES** - the script is hard coded to look for the `sensor_names` for the AHU points. Some research needs to be done to learn how to build an rdf BRICK model properly.
 * This script builds the BRICK RDF turtle file, specifically modeling the AHUs with their respective sensors.
 * The RDF file is created based on the sensor data, with time series references included.
 
