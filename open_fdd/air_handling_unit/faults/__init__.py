@@ -2072,7 +2072,6 @@ class FaultConditionFifteen(FaultCondition):
             raise e
 
 
-
 class FaultConditionSixteen(FaultCondition):
     """Class provides the definitions for Fault Condition 16.
     ERV Ineffective Process based on outdoor air temperature ranges.
@@ -2181,10 +2180,10 @@ class FaultConditionSixteen(FaultCondition):
         # Calculate the temperature differences
         delta_temp_oa = df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
         delta_temp_ea = df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col]
-        
+
         # Use the absolute value to handle both heating and cooling applications
         df["erv_efficiency_oa"] = np.abs(delta_temp_oa) / np.abs(delta_temp_ea)
-        
+
         return df
 
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:

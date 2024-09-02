@@ -919,7 +919,7 @@ class FaultCodeSixteenReport(BaseFaultReport):
         print("summary statistics ")
         print(df["erv_efficiency_oa"].describe())
         print("=" * 50)
-        
+
         sys.stdout.flush()
 
         # Create the plot with four subplots
@@ -934,16 +934,19 @@ class FaultCodeSixteenReport(BaseFaultReport):
 
         # Plot ERV Exhaust Air Side Temps
         ax2.plot(df.index, df[self.erv_eat_enter_col], label="Enter", color="red")
-        ax2.plot(df.index, df[self.erv_eat_leaving_col], label="Leaving", color="purple")
+        ax2.plot(
+            df.index, df[self.erv_eat_leaving_col], label="Leaving", color="purple"
+        )
         ax2.legend(loc="best")
         ax2.set_ylabel("ERV Exhaust Air Side Temps °F")
 
-
         # Plot ERV Efficiency
-        ax3.plot(df.index, df["erv_efficiency_oa"], label="ERV Efficiency OA", color="b")
+        ax3.plot(
+            df.index, df["erv_efficiency_oa"], label="ERV Efficiency OA", color="b"
+        )
         ax3.legend(loc="best")
         ax3.set_ylabel("ERV Efficiency OA")
-        
+
         # Plot Fault Flags
         ax4.plot(df.index, df[self.fault_col], label="Fault", color="k")
         ax4.set_xlabel("Date")
@@ -970,14 +973,12 @@ class FaultCodeSixteenReport(BaseFaultReport):
             "flag_true_erv_oat_leave_temp": round(
                 df[self.erv_oat_leaving_col].where(df[self.fault_col] == 1).mean(), 2
             ),
-
             "flag_true_erv_eat_enter_temp": round(
                 df[self.erv_eat_enter_col].where(df[self.fault_col] == 1).mean(), 2
             ),
             "flag_true_erv_eat_leave_temp": round(
                 df[self.erv_eat_leaving_col].where(df[self.fault_col] == 1).mean(), 2
             ),
-
             "hours_motor_runtime": round(
                 (delta * df[self.supply_vfd_speed_col].gt(0.01).astype(int)).sum()
                 / pd.Timedelta(hours=1),
