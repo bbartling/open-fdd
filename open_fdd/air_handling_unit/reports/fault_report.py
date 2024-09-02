@@ -35,6 +35,7 @@ class BaseFaultReport:
             sys.stdout.flush()
 
         if df[self.fault_col].max() != 0:
+            self.create_plot(df)
             self.create_hist_plot(df)
         else:
             print("NO FAULTS FOUND - Skipping time-of-day Histogram plot")

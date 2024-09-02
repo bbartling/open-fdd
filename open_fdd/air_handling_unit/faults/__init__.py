@@ -814,9 +814,10 @@ class FaultConditionSix(FaultCondition):
             percent_oa_calc = (df[self.mat_col] - df[self.rat_col]) / (
                 df[self.oat_col] - df[self.rat_col]
             )
-            percent_oa_calc = percent_oa_calc.apply(
-                lambda x: x if x > 0 else 0
-            )  # Weed out any negative values
+
+            # Replace negative values in percent_oa_calc with zero using vectorized operation
+            percent_oa_calc = percent_oa_calc.clip(lower=0)
+
             perc_OAmin = self.ahu_min_oa_cfm_design / df[self.supply_fan_air_volume_col]
             percent_oa_calc_minus_perc_OAmin = abs(percent_oa_calc - perc_OAmin)
 
@@ -2071,6 +2072,7 @@ class FaultConditionFifteen(FaultCondition):
             raise e
 
 
+
 class FaultConditionSixteen(FaultCondition):
     """Class provides the definitions for Fault Condition 16.
     ERV Ineffective Process based on outdoor air temperature ranges.
@@ -2175,12 +2177,20 @@ class FaultConditionSixteen(FaultCondition):
             f"{self.mapped_columns}"
         )
 
+    def calculate_erv_efficiency(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Calculate the temperature differences
+        delta_temp_oa = df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
+        delta_temp_ea = df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col]
+        
+        # Use the absolute value to handle both heating and cooling applications
+        df["erv_efficiency_oa"] = np.abs(delta_temp_oa) / np.abs(delta_temp_ea)
+        
+        return df
+
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
             # Calculate ERV efficiency
-            df["erv_efficiency_oa"] = (
-                df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
-            ) / (df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col])
+            df = self.calculate_erv_efficiency(df)
 
             # Fan must be on for a fault to be considered
             fan_on = df[self.supply_vfd_speed_col] > 0.1

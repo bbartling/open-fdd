@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 from open_fdd.air_handling_unit.reports.fault_report import BaseFaultReport
+from open_fdd.air_handling_unit.faults import FaultConditionSixteen
 import pandas as pd
+import numpy as np
+import sys
 
 
 class FaultCodeOneReport(BaseFaultReport):
@@ -885,6 +888,96 @@ class FaultCodeFifteenReport(BaseFaultReport):
             "flag_true_sat": round(
                 df[self.sat_col].where(df[self.fault_col] == 1).mean(), 2
             ),
+            "hours_motor_runtime": round(
+                (delta * df[self.supply_vfd_speed_col].gt(0.01).astype(int)).sum()
+                / pd.Timedelta(hours=1),
+                2,
+            ),
+        }
+        return summary
+
+
+class FaultCodeSixteenReport(BaseFaultReport):
+    def __init__(self, config):
+        super().__init__(config, "fc16_flag")
+
+        self.supply_vfd_speed_col = config["SUPPLY_VFD_SPEED_COL"]
+        self.erv_oat_enter_col = config["ERV_OAT_ENTER_COL"]
+        self.erv_oat_leaving_col = config["ERV_OAT_LEAVING_COL"]
+        self.erv_eat_enter_col = config["ERV_EAT_ENTER_COL"]
+        self.erv_eat_leaving_col = config["ERV_EAT_LEAVING_COL"]
+
+        # Instantiate FaultConditionSixteen to access its methods
+        self.fc16 = FaultConditionSixteen(config)
+
+    def create_plot(self, df: pd.DataFrame):
+        # Calculate the efficiency before plotting using FaultConditionSixteen method
+        df = self.fc16.calculate_erv_efficiency(df)
+
+        print("=" * 50)
+        print("Info: ERV calculated efficiency ")
+        print("summary statistics ")
+        print(df["erv_efficiency_oa"].describe())
+        print("=" * 50)
+        
+        sys.stdout.flush()
+
+        # Create the plot with four subplots
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(25, 10))
+        fig.suptitle("Fault Conditions 16 Plot")
+
+        # Plot ERV Outdoor Air Side Temps
+        ax1.plot(df.index, df[self.erv_oat_enter_col], label="Enter", color="blue")
+        ax1.plot(df.index, df[self.erv_oat_leaving_col], label="Leaving", color="green")
+        ax1.legend(loc="best")
+        ax1.set_ylabel("ERV Outdoor Air Side Temps °F")
+
+        # Plot ERV Exhaust Air Side Temps
+        ax2.plot(df.index, df[self.erv_eat_enter_col], label="Enter", color="red")
+        ax2.plot(df.index, df[self.erv_eat_leaving_col], label="Leaving", color="purple")
+        ax2.legend(loc="best")
+        ax2.set_ylabel("ERV Exhaust Air Side Temps °F")
+
+
+        # Plot ERV Efficiency
+        ax3.plot(df.index, df["erv_efficiency_oa"], label="ERV Efficiency OA", color="b")
+        ax3.legend(loc="best")
+        ax3.set_ylabel("ERV Efficiency OA")
+        
+        # Plot Fault Flags
+        ax4.plot(df.index, df[self.fault_col], label="Fault", color="k")
+        ax4.set_xlabel("Date")
+        ax4.set_ylabel("Fault Flags")
+        ax4.legend(loc="best")
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+        plt.close()
+
+    def summarize_fault_times(self, df: pd.DataFrame) -> dict:
+        delta = df.index.to_series().diff()
+        summary = {
+            "total_days": round(delta.sum() / pd.Timedelta(days=1), 2),
+            "total_hours": round(delta.sum() / pd.Timedelta(hours=1)),
+            "hours_fc16_mode": round(
+                (delta * df[self.fault_col]).sum() / pd.Timedelta(hours=1)
+            ),
+            "percent_true": round(df[self.fault_col].mean() * 100, 2),
+            "percent_false": round((100 - df[self.fault_col].mean() * 100), 2),
+            "flag_true_erv_oat_enter_temp": round(
+                df[self.erv_oat_enter_col].where(df[self.fault_col] == 1).mean(), 2
+            ),
+            "flag_true_erv_oat_leave_temp": round(
+                df[self.erv_oat_leaving_col].where(df[self.fault_col] == 1).mean(), 2
+            ),
+
+            "flag_true_erv_eat_enter_temp": round(
+                df[self.erv_eat_enter_col].where(df[self.fault_col] == 1).mean(), 2
+            ),
+            "flag_true_erv_eat_leave_temp": round(
+                df[self.erv_eat_leaving_col].where(df[self.fault_col] == 1).mean(), 2
+            ),
+
             "hours_motor_runtime": round(
                 (delta * df[self.supply_vfd_speed_col].gt(0.01).astype(int)).sum()
                 / pd.Timedelta(hours=1),
