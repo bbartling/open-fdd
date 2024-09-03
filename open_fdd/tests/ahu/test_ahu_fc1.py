@@ -12,6 +12,7 @@ TEST_DUCT_STATIC_ERR_THRESHOLD = 0.1
 TEST_DUCT_STATIC_COL = "duct_static"
 TEST_DUCT_STATIC_SETPOINT_COL = "duct_static_setpoint"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
+
 ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionOne with a dictionary

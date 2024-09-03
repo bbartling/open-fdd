@@ -13,7 +13,6 @@ $ py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc16.py -rP -s
 ERV effectiveness should be within specified thresholds based on OAT.
 """
 
-
 # Constants
 TEST_ERV_EFFICIENCY_MIN_HEATING = 0.65
 TEST_ERV_EFFICIENCY_MAX_HEATING = 0.8
@@ -21,7 +20,7 @@ TEST_ERV_EFFICIENCY_MIN_COOLING = 0.45
 TEST_ERV_EFFICIENCY_MAX_COOLING = 0.6
 TEST_OAT_LOW_THRESHOLD = 32.0
 TEST_OAT_HIGH_THRESHOLD = 80.0
-TEST_ERV_DEGF_ERR_THRES = 2.0
+TEST_OAT_RAT_DELTA_THRES = 15.0
 TEST_ERV_OAT_ENTER_COL = "erv_oat_enter"
 TEST_ERV_OAT_LEAVING_COL = "erv_oat_leaving"
 TEST_ERV_EAT_ENTER_COL = "erv_eat_enter"
@@ -37,7 +36,7 @@ fault_condition_params = {
     "ERV_EFFICIENCY_MAX_COOLING": TEST_ERV_EFFICIENCY_MAX_COOLING,
     "OAT_LOW_THRESHOLD": TEST_OAT_LOW_THRESHOLD,
     "OAT_HIGH_THRESHOLD": TEST_OAT_HIGH_THRESHOLD,
-    "ERV_DEGF_ERR_THRES": TEST_ERV_DEGF_ERR_THRES,
+    "OAT_RAT_DELTA_MIN": TEST_OAT_RAT_DELTA_THRES,
     "ERV_OAT_ENTER_COL": TEST_ERV_OAT_ENTER_COL,
     "ERV_OAT_LEAVING_COL": TEST_ERV_OAT_LEAVING_COL,
     "ERV_EAT_ENTER_COL": TEST_ERV_EAT_ENTER_COL,
@@ -107,6 +106,24 @@ class TestFaultConditionSixteen:
         )
         assert actual == expected, message
 
+    def test_fault_with_insufficient_oat_rat_delta(self):
+        """Test that no fault is raised when the OAT-RAT delta is below the minimum threshold."""
+        data = {
+            TEST_ERV_OAT_ENTER_COL: [10, 10, 10, 10, 10, 10],
+            TEST_ERV_OAT_LEAVING_COL: [20.0, 20.5, 20.8, 20.6, 20.2, 20.4],
+            TEST_ERV_EAT_ENTER_COL: [24, 24, 24, 24, 24, 24],  # Low delta with OAT
+            TEST_ERV_EAT_LEAVING_COL: [22, 22.5, 22.2, 22.4, 22.1, 22.3],
+            TEST_SUPPLY_VFD_SPEED_COL: [0.5, 0.6, 0.5, 0.7, 0.5, 0.6],
+        }
+        df = pd.DataFrame(data)
+        results = fc16.apply(df)
+        actual = results["fc16_flag"].sum()
+        expected = 0  # No fault should be triggered due to insufficient delta
+        message = (
+            f"FC16 fault_with_insufficient_oat_rat_delta actual is {actual} and expected is {expected}"
+        )
+        assert actual == expected, message
+
 
 class TestFaultOnInvalidParams:
 
@@ -121,7 +138,7 @@ class TestFaultOnInvalidParams:
                     "ERV_EFFICIENCY_MAX_COOLING": 0.6,
                     "OAT_LOW_THRESHOLD": 32.0,
                     "OAT_HIGH_THRESHOLD": 80.0,
-                    "ERV_DEGF_ERR_THRES": 2.0,
+                    "OAT_RAT_DELTA_MIN": TEST_OAT_RAT_DELTA_THRES,
                     "ERV_OAT_ENTER_COL": TEST_ERV_OAT_ENTER_COL,
                     "ERV_OAT_LEAVING_COL": TEST_ERV_OAT_LEAVING_COL,
                     "ERV_EAT_ENTER_COL": TEST_ERV_EAT_ENTER_COL,
@@ -142,7 +159,7 @@ class TestFaultOnInvalidParams:
                     "ERV_EFFICIENCY_MAX_COOLING": 0.6,
                     "OAT_LOW_THRESHOLD": 32.0,
                     "OAT_HIGH_THRESHOLD": 80.0,
-                    "ERV_DEGF_ERR_THRES": 2.0,
+                    "OAT_RAT_DELTA_MIN": TEST_OAT_RAT_DELTA_THRES,
                     "ERV_OAT_ENTER_COL": TEST_ERV_OAT_ENTER_COL,
                     "ERV_OAT_LEAVING_COL": TEST_ERV_OAT_LEAVING_COL,
                     "ERV_EAT_ENTER_COL": TEST_ERV_EAT_ENTER_COL,
@@ -166,7 +183,7 @@ class TestFaultOnMissingColumns:
                     "ERV_EFFICIENCY_MAX_COOLING": 0.6,
                     "OAT_LOW_THRESHOLD": 32.0,
                     "OAT_HIGH_THRESHOLD": 80.0,
-                    "ERV_DEGF_ERR_THRES": 2.0,
+                    "OAT_RAT_DELTA_MIN": TEST_OAT_RAT_DELTA_THRES,
                     "ERV_OAT_ENTER_COL": TEST_ERV_OAT_ENTER_COL,
                     "ERV_OAT_LEAVING_COL": None,  # Missing column
                     "ERV_EAT_ENTER_COL": TEST_ERV_EAT_ENTER_COL,

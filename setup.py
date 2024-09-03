@@ -8,7 +8,7 @@ def read_long_description(file_path):
 
 setup(
     name="open_fdd",
-    version="0.1.5",
+    version="0.1.6",
     author="Ben Bartling",
     author_email="ben.bartling@gmail.com",
     description="A package for fault detection and diagnosis in HVAC systems",

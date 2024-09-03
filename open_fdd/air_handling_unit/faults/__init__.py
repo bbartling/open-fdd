@@ -5,6 +5,7 @@ from open_fdd.air_handling_unit.faults.fault_condition import (
     MissingColumnError,
     InvalidParameterError,
 )
+from open_fdd.air_handling_unit.faults.helper_utils import SharedUtils
 import operator
 import sys
 
@@ -799,6 +800,13 @@ class FaultConditionSix(FaultCondition):
         try:
             # Ensure all required columns are present
             self.check_required_columns(df)
+
+            # Check for zeros in the columns that could lead to division by zero errors
+            cols_to_check = [self.rat_col, self.oat_col, self.supply_fan_air_volume_col]
+            if df[cols_to_check].eq(0).any().any():
+                print(f"Warning: Zero values found in columns: {cols_to_check}")
+                print("This may cause division by zero errors.")
+                sys.stdout.flush()
 
             # Check analog outputs [data with units of %] are floats only
             columns_to_check = [
@@ -2088,6 +2096,7 @@ class FaultConditionSixteen(FaultCondition):
 
         self.oat_low_threshold = dict_.get("OAT_LOW_THRES", 32.0)
         self.oat_high_threshold = dict_.get("OAT_HIGH_THRES", 80.0)
+        self.oat_rat_delta_min = dict_.get("OAT_RAT_DELTA_MIN", None)
 
         # Validate that threshold parameters are floats and within 0.0 and 1.0 for efficiency values
         for param, value in [
@@ -2097,6 +2106,7 @@ class FaultConditionSixteen(FaultCondition):
             ("erv_efficiency_max_cooling", self.erv_efficiency_max_cooling),
             ("oat_low_threshold", self.oat_low_threshold),
             ("oat_high_threshold", self.oat_high_threshold),
+            ("oat_rat_delta_min", self.oat_rat_delta_min)
         ]:
             if not isinstance(value, float):
                 raise InvalidParameterError(
@@ -2177,6 +2187,15 @@ class FaultConditionSixteen(FaultCondition):
         )
 
     def calculate_erv_efficiency(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df = SharedUtils.clean_nan_values(df)
+
+        cols_to_check = [self.erv_eat_enter_col, self.erv_oat_enter_col]
+        if df[cols_to_check].eq(0).any().any():
+            print(f"Warning: Zero values found in columns: {cols_to_check}")
+            print(f"This may cause division by zero errors.")
+            sys.stdout.flush()
+        
         # Calculate the temperature differences
         delta_temp_oa = df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
         delta_temp_ea = df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col]
@@ -2194,31 +2213,33 @@ class FaultConditionSixteen(FaultCondition):
             # Fan must be on for a fault to be considered
             fan_on = df[self.supply_vfd_speed_col] > 0.1
 
-            # Combined heating and cooling checks
+            # Determine if the conditions are for heating or cooling based on OAT
             cold_outside = df[self.erv_oat_enter_col] <= self.oat_low_threshold
             hot_outside = df[self.erv_oat_enter_col] >= self.oat_high_threshold
 
+            # Calculate the temperature difference between the exhaust air entering and outside air entering
+            rat_minus_oat = abs(df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col])
+            good_delta_check = rat_minus_oat >= self.oat_rat_delta_min
+
+            # Initialize the fault condition to False (no fault)
+            df["fc16_flag"] = 0
+
+            # Apply heating fault logic
             heating_fault = (
-                (
-                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_heating)
-                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_heating)
-                )
-                & cold_outside
-                & fan_on
-            )
+                (df["erv_efficiency_oa"] < self.erv_efficiency_min_heating) |
+                (df["erv_efficiency_oa"] > self.erv_efficiency_max_heating)
+            ) & cold_outside & good_delta_check & fan_on
 
+            # Apply cooling fault logic
             cooling_fault = (
-                (
-                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_cooling)
-                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_cooling)
-                )
-                & hot_outside
-                & fan_on
-            )
+                (df["erv_efficiency_oa"] < self.erv_efficiency_min_cooling) |
+                (df["erv_efficiency_oa"] > self.erv_efficiency_max_cooling)
+            ) & hot_outside & good_delta_check & fan_on
 
+            # Combine the faults
             df["combined_checks"] = heating_fault | cooling_fault
 
-            # Apply rolling sum
+            # Apply rolling sum to combined checks to account for rolling window
             df["fc16_flag"] = (
                 df["combined_checks"]
                 .rolling(window=self.rolling_window_size)

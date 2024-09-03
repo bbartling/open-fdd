@@ -897,6 +897,7 @@ class FaultCodeFifteenReport(BaseFaultReport):
         return summary
 
 
+
 class FaultCodeSixteenReport(BaseFaultReport):
     def __init__(self, config):
         super().__init__(config, "fc16_flag")
@@ -914,16 +915,8 @@ class FaultCodeSixteenReport(BaseFaultReport):
         # Calculate the efficiency before plotting using FaultConditionSixteen method
         df = self.fc16.calculate_erv_efficiency(df)
 
-        print("=" * 50)
-        print("Info: ERV calculated efficiency ")
-        print("summary statistics ")
-        print(df["erv_efficiency_oa"].describe())
-        print("=" * 50)
-
-        sys.stdout.flush()
-
-        # Create the plot with four subplots
-        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(25, 10))
+        # Create the plot with five subplots
+        fig, (ax1, ax2, ax3, ax4, ax5) = plt.subplots(5, 1, figsize=(25, 14))
         fig.suptitle("Fault Conditions 16 Plot")
 
         # Plot ERV Outdoor Air Side Temps
@@ -952,6 +945,27 @@ class FaultCodeSixteenReport(BaseFaultReport):
         ax4.set_xlabel("Date")
         ax4.set_ylabel("Fault Flags")
         ax4.legend(loc="best")
+
+        # New Plot: Compare Distribution of OAT (Overall vs Fault True)
+        fault_true_df = df[df[self.fault_col] == 1]
+        data_to_plot = [
+            df[self.erv_oat_enter_col].dropna(),  # Overall OAT
+            fault_true_df[self.erv_oat_enter_col].dropna(),  # OAT when Fault is True
+        ]
+        ax5.boxplot(
+            data_to_plot,
+            vert=False,
+            patch_artist=True,
+            labels=["Overall OAT", "OAT when Fault 16 is True"],
+            boxprops=dict(facecolor="lightblue"),
+            medianprops=dict(color="red"),
+            showmeans=True,
+            meanline=True,
+            meanprops=dict(color="green"),
+        )
+        ax5.set_xlabel("Outside Air Temperature (°F)")
+        ax5.set_title("Comparison of OAT Distribution")
+        ax5.grid(True)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()

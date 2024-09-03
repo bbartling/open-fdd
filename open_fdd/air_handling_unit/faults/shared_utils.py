@@ -48,8 +48,10 @@ class SharedUtils:
         """
 
         print(
-            "Warning: If data has a one minute or less sampling frequency a rolling average will be automatically applied"
+            "Warning: If data has a one minute or less sampling \n"
+            "frequency a rolling average will be automatically applied"
         )
+
         sys.stdout.flush()
 
         time_diff = df.index.to_series().diff().iloc[1:]
@@ -73,3 +75,17 @@ class SharedUtils:
             )
             sys.stdout.flush()
         return df
+
+    @staticmethod
+    def clean_nan_values(df: pd.DataFrame) -> pd.DataFrame:
+        for col in df.columns:
+            if df[col].isnull().any():
+                print(f"NaN values found in column: {col}")
+
+                # Remove rows with any NaN values, then forward and backfill
+                df = df.dropna().ffill().bfill()
+                print("DataFrame has been cleaned for NaNs")
+                print("and has also been forward and backfilled.")
+                sys.stdout.flush()
+        return df
+

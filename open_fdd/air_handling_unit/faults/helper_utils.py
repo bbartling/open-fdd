@@ -11,6 +11,9 @@ class HelperUtils:
     def set_config_dict(self, config_dict):
         self.config_dict = config_dict
 
+    def clean_nan_values(self, df):
+        return SharedUtils.clean_nan_values(df)
+
     def float_int_check_err(self, col):
         return SharedUtils.float_int_check_err(col)
 
