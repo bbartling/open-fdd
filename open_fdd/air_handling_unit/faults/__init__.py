@@ -2106,7 +2106,7 @@ class FaultConditionSixteen(FaultCondition):
             ("erv_efficiency_max_cooling", self.erv_efficiency_max_cooling),
             ("oat_low_threshold", self.oat_low_threshold),
             ("oat_high_threshold", self.oat_high_threshold),
-            ("oat_rat_delta_min", self.oat_rat_delta_min)
+            ("oat_rat_delta_min", self.oat_rat_delta_min),
         ]:
             if not isinstance(value, float):
                 raise InvalidParameterError(
@@ -2195,7 +2195,7 @@ class FaultConditionSixteen(FaultCondition):
             print(f"Warning: Zero values found in columns: {cols_to_check}")
             print(f"This may cause division by zero errors.")
             sys.stdout.flush()
-        
+
         # Calculate the temperature differences
         delta_temp_oa = df[self.erv_oat_leaving_col] - df[self.erv_oat_enter_col]
         delta_temp_ea = df[self.erv_eat_enter_col] - df[self.erv_oat_enter_col]
@@ -2226,15 +2226,25 @@ class FaultConditionSixteen(FaultCondition):
 
             # Apply heating fault logic
             heating_fault = (
-                (df["erv_efficiency_oa"] < self.erv_efficiency_min_heating) |
-                (df["erv_efficiency_oa"] > self.erv_efficiency_max_heating)
-            ) & cold_outside & good_delta_check & fan_on
+                (
+                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_heating)
+                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_heating)
+                )
+                & cold_outside
+                & good_delta_check
+                & fan_on
+            )
 
             # Apply cooling fault logic
             cooling_fault = (
-                (df["erv_efficiency_oa"] < self.erv_efficiency_min_cooling) |
-                (df["erv_efficiency_oa"] > self.erv_efficiency_max_cooling)
-            ) & hot_outside & good_delta_check & fan_on
+                (
+                    (df["erv_efficiency_oa"] < self.erv_efficiency_min_cooling)
+                    | (df["erv_efficiency_oa"] > self.erv_efficiency_max_cooling)
+                )
+                & hot_outside
+                & good_delta_check
+                & fan_on
+            )
 
             # Combine the faults
             df["combined_checks"] = heating_fault | cooling_fault

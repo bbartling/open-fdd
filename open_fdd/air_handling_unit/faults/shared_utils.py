@@ -88,4 +88,3 @@ class SharedUtils:
                 print("and has also been forward and backfilled.")
                 sys.stdout.flush()
         return df
-

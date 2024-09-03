@@ -119,9 +119,7 @@ class TestFaultConditionSixteen:
         results = fc16.apply(df)
         actual = results["fc16_flag"].sum()
         expected = 0  # No fault should be triggered due to insufficient delta
-        message = (
-            f"FC16 fault_with_insufficient_oat_rat_delta actual is {actual} and expected is {expected}"
-        )
+        message = f"FC16 fault_with_insufficient_oat_rat_delta actual is {actual} and expected is {expected}"
         assert actual == expected, message
 
 
