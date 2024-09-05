@@ -137,25 +137,29 @@ class FaultConditionOne(FaultCondition):
             raise e
 
 
-'''
 class FaultConditionTwo(FaultCondition):
-    """Class provides the definitions for Fault Condition 2.
-    Mix temperature too low; should be between outside and return air.
+    """
+    Class provides the definitions for Fault Condition 2.
+    Primary chilled water flow is too high with the chilled water pump running at high speed.
+
+    py -3.12 -m pytest open_fdd/tests/chiller/test_chiller_fc2.py -rP -s
     """
 
     def __init__(self, dict_):
         super().__init__()
 
         # Threshold parameters
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
+        self.flow_error_threshold = dict_.get("FLOW_ERROR_THRESHOLD", None)
+        self.pump_speed_percent_max = dict_.get("PUMP_SPEED_PERCENT_MAX", None)
+        self.pump_speed_percent_err_thres = dict_.get(
+            "PUMP_SPEED_PERCENT_ERR_THRES", None
+        )
 
         # Validate that threshold parameters are floats
         for param, value in [
-            ("mix_degf_err_thres", self.mix_degf_err_thres),
-            ("return_degf_err_thres", self.return_degf_err_thres),
-            ("outdoor_degf_err_thres", self.outdoor_degf_err_thres),
+            ("flow_error_threshold", self.flow_error_threshold),
+            ("pump_speed_percent_max", self.pump_speed_percent_max),
+            ("pump_speed_percent_err_thres", self.pump_speed_percent_err_thres),
         ]:
             if not isinstance(value, float):
                 raise InvalidParameterError(
@@ -163,32 +167,26 @@ class FaultConditionTwo(FaultCondition):
                 )
 
         # Other attributes
-        self.mat_col = dict_.get("MAT_COL", None)
-        self.rat_col = dict_.get("RAT_COL", None)
-        self.oat_col = dict_.get("OAT_COL", None)
-        self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
-        self.troubleshoot_mode = dict_.get("TROUBLESHOOT_MODE", False)
+        self.flow_col = dict_.get("FLOW_COL", None)
+        self.pump_speed_col = dict_.get("PUMP_SPEED_COL", None)
         self.rolling_window_size = dict_.get("ROLLING_WINDOW_SIZE", None)
 
         self.equation_string = (
-            "fc2_flag = 1 if (MAT + εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) "
+            "fc2_flag = 1 if (FLOW > εFM) and (PUMPSPD >= PUMPSPD_max - εPUMPSPD) "
             "for N consecutive values else 0 \n"
         )
-        self.description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
+        self.description_string = "Fault Condition 2: Primary chilled water flow is too high with the pump running at high speed \n"
         self.required_column_description = (
-            "Required inputs are the mix air temperature, return air temperature, outside air temperature, "
-            "and supply fan VFD speed \n"
+            "Required inputs are the flow meter readings and pump VFD speed \n"
         )
-        self.error_string = "One or more required columns are missing or None \n"
+        self.error_string = f"One or more required columns are missing or None \n"
 
         self.set_attributes(dict_)
 
         # Set required columns specific to this fault condition
         self.required_columns = [
-            self.mat_col,
-            self.rat_col,
-            self.oat_col,
-            self.supply_vfd_speed_col,
+            self.flow_col,
+            self.pump_speed_col,
         ]
 
         # Check if any of the required columns are None
@@ -209,7 +207,7 @@ class FaultConditionTwo(FaultCondition):
         )
 
     def get_required_columns(self) -> str:
-        """Returns a string representation of the required columns."""
+        """Called from IPython to print out."""
         return (
             f"{self.equation_string}"
             f"{self.description_string}"
@@ -222,29 +220,21 @@ class FaultConditionTwo(FaultCondition):
             # Ensure all required columns are present
             self.check_required_columns(df)
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
-            # Check analog outputs [data with units of %] are floats only
-            columns_to_check = [self.supply_vfd_speed_col]
-            self.check_analog_pct(df, columns_to_check)
-
             # Perform checks
-            mat_check = df[self.mat_col] + self.mix_degf_err_thres
-            temp_min_check = np.minimum(
-                df[self.rat_col] - self.return_degf_err_thres,
-                df[self.oat_col] - self.outdoor_degf_err_thres,
+            flow_check = df[self.flow_col] < self.flow_error_threshold
+            pump_check = (
+                df[self.pump_speed_col]
+                >= self.pump_speed_percent_max - self.pump_speed_percent_err_thres
             )
 
-            combined_check = (mat_check < temp_min_check) & (
-                df[self.supply_vfd_speed_col] > 0.01
-            )
+            # Combined condition check
+            combined_check = flow_check & pump_check
 
             # Rolling sum to count consecutive trues
             rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
 
             # Set flag to 1 if rolling sum equals the window size
-            df["fc2_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
+            df["fc2_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
 
             return df
 
@@ -257,6 +247,8 @@ class FaultConditionTwo(FaultCondition):
             sys.stdout.flush()
             raise e
 
+
+'''
 
 class FaultConditionThree(FaultCondition):
     """Class provides the definitions for Fault Condition 3.
