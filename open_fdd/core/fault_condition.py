@@ -24,7 +24,9 @@ class FaultCondition:
 
     def check_required_columns(self, df: pd.DataFrame):
         """Check if all required columns are present in the DataFrame."""
-        missing_columns = [col for col in self.required_columns if col not in df.columns]
+        missing_columns = [
+            col for col in self.required_columns if col not in df.columns
+        ]
         if missing_columns:
             raise MissingColumnError(
                 f"Missing columns in DataFrame: {', '.join(missing_columns)}"
@@ -43,4 +45,4 @@ class FaultCondition:
         print("\nTroubleshooting columns:")
         for col in self.required_columns:
             print(f"{col}: {df[col].dtype}")
-        print() 
+        print()

@@ -77,7 +77,7 @@ class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
         self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
         self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
         self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-        
+
         # Set required columns
         self.required_columns = [
             self.mat_col,
@@ -85,7 +85,7 @@ class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
             self.oat_col,
             self.supply_vfd_speed_col,
         ]
-        
+
         # Set documentation strings
         self.equation_string = "fc2_flag = 1 if (MAT - εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
         self.description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
@@ -96,15 +96,17 @@ class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         self._apply_common_checks(df)
         self._apply_analog_checks(df, [self.supply_vfd_speed_col])
-        
+
         # Specific checks
         mat_check = df[self.mat_col] - self.mix_degf_err_thres
         temp_min_check = np.minimum(
             df[self.rat_col] - self.return_degf_err_thres,
             df[self.oat_col] - self.outdoor_degf_err_thres,
         )
-        combined_check = (mat_check < temp_min_check) & (df[self.supply_vfd_speed_col] > 0.01)
-        
+        combined_check = (mat_check < temp_min_check) & (
+            df[self.supply_vfd_speed_col] > 0.01
+        )
+
         self._set_fault_flag(df, combined_check, "fc2_flag")
         return df
 
@@ -123,7 +125,7 @@ class FaultConditionThree(BaseFaultCondition, FaultConditionMixin):
         self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
         self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
         self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-        
+
         # Set required columns
         self.required_columns = [
             self.mat_col,
@@ -131,7 +133,7 @@ class FaultConditionThree(BaseFaultCondition, FaultConditionMixin):
             self.oat_col,
             self.supply_vfd_speed_col,
         ]
-        
+
         # Set documentation strings
         self.equation_string = "fc3_flag = 1 if (MAT - εMAT > max(RAT + εRAT, OAT + εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
         self.description_string = "Fault Condition 3: Mix temperature too high; should be between outside and return air \n"
@@ -142,15 +144,17 @@ class FaultConditionThree(BaseFaultCondition, FaultConditionMixin):
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         self._apply_common_checks(df)
         self._apply_analog_checks(df, [self.supply_vfd_speed_col])
-        
+
         # Specific checks
         mat_check = df[self.mat_col] - self.mix_degf_err_thres
         temp_max_check = np.maximum(
             df[self.rat_col] + self.return_degf_err_thres,
             df[self.oat_col] + self.outdoor_degf_err_thres,
         )
-        combined_check = (mat_check > temp_max_check) & (df[self.supply_vfd_speed_col] > 0.01)
-        
+        combined_check = (mat_check > temp_max_check) & (
+            df[self.supply_vfd_speed_col] > 0.01
+        )
+
         self._set_fault_flag(df, combined_check, "fc3_flag")
         return df
 
@@ -307,9 +311,7 @@ class FaultConditionFive(BaseFaultCondition, FaultConditionMixin):
 
         # Perform checks
         sat_check = df[self.sat_col] + self.supply_degf_err_thres
-        mat_check = (
-            df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
-        )
+        mat_check = df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
 
         combined_check = (
             (sat_check <= mat_check)

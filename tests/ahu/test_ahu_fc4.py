@@ -15,7 +15,7 @@ def test_fc4_initialization():
         "HEATING_SIG_COL": "heating_sig",
         "COOLING_SIG_COL": "cooling_sig",
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 60
+        "ROLLING_WINDOW_SIZE": 60,
     }
     fault = FaultConditionFour(config)
     assert fault.delta_os_max == 5
@@ -32,7 +32,7 @@ def test_fc4_invalid_delta_os_max():
         "DELTA_OS_MAX": "5",  # Should be int, not str
         "AHU_MIN_OA_DPR": 0.2,
         "ECONOMIZER_SIG_COL": "economizer_sig",
-        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed"
+        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
     }
     with pytest.raises(InvalidParameterError):
         FaultConditionFour(config)
@@ -44,7 +44,7 @@ def test_fc4_invalid_ahu_min_oa_dpr():
         "DELTA_OS_MAX": 5,
         "AHU_MIN_OA_DPR": "0.2",  # Should be float, not str
         "ECONOMIZER_SIG_COL": "economizer_sig",
-        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed"
+        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
     }
     with pytest.raises(InvalidParameterError):
         FaultConditionFour(config)
@@ -56,7 +56,7 @@ def test_fc4_missing_required_columns():
         "DELTA_OS_MAX": 5,
         "AHU_MIN_OA_DPR": 0.2,
         "ECONOMIZER_SIG_COL": None,  # Missing required column
-        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed"
+        "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
     }
     with pytest.raises(MissingColumnError):
         FaultConditionFour(config)
@@ -81,7 +81,7 @@ def test_fc4_apply():
         "HEATING_SIG_COL": "heating_sig",
         "COOLING_SIG_COL": "cooling_sig",
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 60
+        "ROLLING_WINDOW_SIZE": 60,
     }
     fault = FaultConditionFour(config)
 
@@ -90,4 +90,4 @@ def test_fc4_apply():
 
     # Check that fc4_flag column exists and contains only 0s and 1s
     assert "fc4_flag" in result.columns
-    assert result["fc4_flag"].isin([0, 1]).all() 
+    assert result["fc4_flag"].isin([0, 1]).all()

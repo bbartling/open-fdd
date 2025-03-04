@@ -16,14 +16,14 @@ def test_fc5_initialization():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "DELTA_T_SUPPLY_FAN": 1.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionFive(config)
-    
+
     # Check base attributes
     assert fault.troubleshoot_mode is False
     assert fault.rolling_window_size == 5
-    
+
     # Check specific attributes
     assert fault.mat_col == "mat"
     assert fault.sat_col == "sat"
@@ -43,7 +43,7 @@ def test_fc5_missing_required_columns():
         "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
         "MIX_DEGF_ERR_THRES": 0.5,
         "SUPPLY_DEGF_ERR_THRES": 0.5,
-        "DELTA_T_SUPPLY_FAN": 1.0
+        "DELTA_T_SUPPLY_FAN": 1.0,
     }
     with pytest.raises(MissingColumnError):
         FaultConditionFive(config)
@@ -58,7 +58,7 @@ def test_fc5_invalid_threshold():
         "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
         "MIX_DEGF_ERR_THRES": "invalid",  # Should be float
         "SUPPLY_DEGF_ERR_THRES": 0.5,
-        "DELTA_T_SUPPLY_FAN": 1.0
+        "DELTA_T_SUPPLY_FAN": 1.0,
     }
     with pytest.raises(InvalidParameterError):
         FaultConditionFive(config)
@@ -84,7 +84,7 @@ def test_fc5_apply():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "DELTA_T_SUPPLY_FAN": 1.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionFive(config)
 
@@ -101,10 +101,54 @@ def test_fc5_apply_with_fault():
     # Create sample data with conditions that should trigger a fault
     dates = pd.date_range(start="2024-01-01", periods=10, freq="1min")
     df = pd.DataFrame(index=dates)
-    df["mat"] = [25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0]  # High mix temp
-    df["sat"] = [24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0]  # Low supply temp
-    df["heating_sig"] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  # Full heating
-    df["supply_vfd_speed"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]  # Fan running
+    df["mat"] = [
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+    ]  # High mix temp
+    df["sat"] = [
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+        24.0,
+    ]  # Low supply temp
+    df["heating_sig"] = [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ]  # Full heating
+    df["supply_vfd_speed"] = [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+    ]  # Fan running
 
     # Initialize fault condition
     config = {
@@ -116,7 +160,7 @@ def test_fc5_apply_with_fault():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "DELTA_T_SUPPLY_FAN": 1.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionFive(config)
 
@@ -124,4 +168,4 @@ def test_fc5_apply_with_fault():
     result = fault.apply(df)
 
     # Check that fault is detected (fc5_flag should be 1)
-    assert result["fc5_flag"].sum() > 0  # At least one fault should be detected 
+    assert result["fc5_flag"].sum() > 0  # At least one fault should be detected

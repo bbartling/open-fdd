@@ -17,14 +17,14 @@ def test_fc8_initialization():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "AHU_MIN_OA_DPR": 0.2,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionEight(config)
-    
+
     # Check base attributes
     assert fault.troubleshoot_mode is False
     assert fault.rolling_window_size == 5
-    
+
     # Check specific attributes
     assert fault.mat_col == "mat"
     assert fault.sat_col == "sat"
@@ -46,7 +46,7 @@ def test_fc8_missing_required_columns():
         "DELTA_T_SUPPLY_FAN": 0.5,
         "MIX_DEGF_ERR_THRES": 0.5,
         "SUPPLY_DEGF_ERR_THRES": 0.5,
-        "AHU_MIN_OA_DPR": 0.2
+        "AHU_MIN_OA_DPR": 0.2,
     }
     with pytest.raises(MissingColumnError):
         FaultConditionEight(config)
@@ -62,7 +62,7 @@ def test_fc8_invalid_threshold():
         "DELTA_T_SUPPLY_FAN": "invalid",  # Should be float
         "MIX_DEGF_ERR_THRES": 0.5,
         "SUPPLY_DEGF_ERR_THRES": 0.5,
-        "AHU_MIN_OA_DPR": 0.2
+        "AHU_MIN_OA_DPR": 0.2,
     }
     with pytest.raises(InvalidParameterError):
         FaultConditionEight(config)
@@ -89,7 +89,7 @@ def test_fc8_apply():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "AHU_MIN_OA_DPR": 0.2,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionEight(config)
 
@@ -106,9 +106,42 @@ def test_fc8_apply_with_fault():
     # Create sample data with conditions that should trigger a fault
     dates = pd.date_range(start="2024-01-01", periods=10, freq="1min")
     df = pd.DataFrame(index=dates)
-    df["mat"] = [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]  # Low mix temp
-    df["sat"] = [30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0]  # High supply temp
-    df["economizer_sig"] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  # Full economizer
+    df["mat"] = [
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+    ]  # Low mix temp
+    df["sat"] = [
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+        30.0,
+    ]  # High supply temp
+    df["economizer_sig"] = [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ]  # Full economizer
     df["cooling_sig"] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # No cooling
 
     # Initialize fault condition
@@ -122,7 +155,7 @@ def test_fc8_apply_with_fault():
         "SUPPLY_DEGF_ERR_THRES": 0.5,
         "AHU_MIN_OA_DPR": 0.2,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionEight(config)
 
@@ -130,4 +163,4 @@ def test_fc8_apply_with_fault():
     result = fault.apply(df)
 
     # Check that fault is detected (fc8_flag should be 1)
-    assert result["fc8_flag"].sum() > 0  # At least one fault should be detected 
+    assert result["fc8_flag"].sum() > 0  # At least one fault should be detected

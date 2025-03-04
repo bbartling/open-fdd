@@ -16,14 +16,14 @@ def test_fc2_initialization():
         "OUTDOOR_DEGF_ERR_THRES": 0.5,
         "RETURN_DEGF_ERR_THRES": 0.5,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionTwo(config)
-    
+
     # Check base attributes
     assert fault.troubleshoot_mode is False
     assert fault.rolling_window_size == 5
-    
+
     # Check specific attributes
     assert fault.mat_col == "mat"
     assert fault.rat_col == "rat"
@@ -43,7 +43,7 @@ def test_fc2_missing_required_columns():
         "SUPPLY_VFD_SPEED_COL": "supply_vfd_speed",
         "MIX_DEGF_ERR_THRES": 0.5,
         "OUTDOOR_DEGF_ERR_THRES": 0.5,
-        "RETURN_DEGF_ERR_THRES": 0.5
+        "RETURN_DEGF_ERR_THRES": 0.5,
     }
     with pytest.raises(MissingColumnError):
         FaultConditionTwo(config)
@@ -69,7 +69,7 @@ def test_fc2_apply():
         "OUTDOOR_DEGF_ERR_THRES": 0.5,
         "RETURN_DEGF_ERR_THRES": 0.5,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionTwo(config)
 
@@ -86,10 +86,54 @@ def test_fc2_apply_with_fault():
     # Create sample data with conditions that should trigger a fault
     dates = pd.date_range(start="2024-01-01", periods=10, freq="1min")
     df = pd.DataFrame(index=dates)
-    df["mat"] = [15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0, 15.0]  # Low mix temp
-    df["rat"] = [25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0]  # High return temp
-    df["oat"] = [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]  # Moderate outside temp
-    df["supply_vfd_speed"] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]  # Fan running
+    df["mat"] = [
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+        15.0,
+    ]  # Low mix temp
+    df["rat"] = [
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+        25.0,
+    ]  # High return temp
+    df["oat"] = [
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+        20.0,
+    ]  # Moderate outside temp
+    df["supply_vfd_speed"] = [
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+    ]  # Fan running
 
     # Initialize fault condition
     config = {
@@ -101,7 +145,7 @@ def test_fc2_apply_with_fault():
         "OUTDOOR_DEGF_ERR_THRES": 0.5,
         "RETURN_DEGF_ERR_THRES": 0.5,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionTwo(config)
 
@@ -109,4 +153,4 @@ def test_fc2_apply_with_fault():
     result = fault.apply(df)
 
     # Check that fault is detected (fc2_flag should be 1)
-    assert result["fc2_flag"].sum() > 0  # At least one fault should be detected 
+    assert result["fc2_flag"].sum() > 0  # At least one fault should be detected

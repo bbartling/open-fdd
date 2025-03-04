@@ -15,14 +15,14 @@ def test_fc1_initialization():
         "VFD_SPEED_PERCENT_MAX": 100.0,
         "VFD_SPEED_PERCENT_ERR_THRES": 5.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionOne(config)
-    
+
     # Check base attributes
     assert fault.troubleshoot_mode is False
     assert fault.rolling_window_size == 5
-    
+
     # Check specific attributes
     assert fault.duct_static_col == "duct_static"
     assert fault.supply_vfd_speed_col == "supply_vfd_speed"
@@ -40,7 +40,7 @@ def test_fc1_missing_required_columns():
         "DUCT_STATIC_SETPOINT_COL": "duct_static_setpoint",
         "DUCT_STATIC_INCHES_ERR_THRES": 0.5,
         "VFD_SPEED_PERCENT_MAX": 100.0,
-        "VFD_SPEED_PERCENT_ERR_THRES": 5.0
+        "VFD_SPEED_PERCENT_ERR_THRES": 5.0,
     }
     with pytest.raises(MissingColumnError):
         FaultConditionOne(config)
@@ -52,7 +52,18 @@ def test_fc1_apply():
     dates = pd.date_range(start="2024-01-01", periods=10, freq="1min")
     df = pd.DataFrame(index=dates)
     df["duct_static"] = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9]
-    df["supply_vfd_speed"] = [95.0, 96.0, 97.0, 98.0, 99.0, 100.0, 100.0, 100.0, 100.0, 100.0]
+    df["supply_vfd_speed"] = [
+        95.0,
+        96.0,
+        97.0,
+        98.0,
+        99.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+    ]
     df["duct_static_setpoint"] = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
 
     # Initialize fault condition
@@ -64,7 +75,7 @@ def test_fc1_apply():
         "VFD_SPEED_PERCENT_MAX": 100.0,
         "VFD_SPEED_PERCENT_ERR_THRES": 5.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionOne(config)
 
@@ -81,9 +92,42 @@ def test_fc1_apply_with_fault():
     # Create sample data with conditions that should trigger a fault
     dates = pd.date_range(start="2024-01-01", periods=10, freq="1min")
     df = pd.DataFrame(index=dates)
-    df["duct_static"] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  # Low static pressure
-    df["supply_vfd_speed"] = [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0]  # Full speed
-    df["duct_static_setpoint"] = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]  # High setpoint
+    df["duct_static"] = [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ]  # Low static pressure
+    df["supply_vfd_speed"] = [
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+    ]  # Full speed
+    df["duct_static_setpoint"] = [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+    ]  # High setpoint
 
     # Initialize fault condition
     config = {
@@ -94,7 +138,7 @@ def test_fc1_apply_with_fault():
         "VFD_SPEED_PERCENT_MAX": 100.0,
         "VFD_SPEED_PERCENT_ERR_THRES": 5.0,
         "TROUBLESHOOT_MODE": False,
-        "ROLLING_WINDOW_SIZE": 5
+        "ROLLING_WINDOW_SIZE": 5,
     }
     fault = FaultConditionOne(config)
 
@@ -102,4 +146,4 @@ def test_fc1_apply_with_fault():
     result = fault.apply(df)
 
     # Check that fault is detected (fc1_flag should be 1)
-    assert result["fc1_flag"].sum() > 0  # At least one fault should be detected 
+    assert result["fc1_flag"].sum() > 0  # At least one fault should be detected
