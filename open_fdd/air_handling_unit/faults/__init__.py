@@ -1,378 +1,157 @@
 import pandas as pd
 import numpy as np
-from open_fdd.air_handling_unit.faults.fault_condition import (
-    FaultCondition,
-    MissingColumnError,
-    InvalidParameterError,
-)
+from open_fdd.core.base_fault import BaseFaultCondition
+from open_fdd.core.mixins import FaultConditionMixin
 from open_fdd.air_handling_unit.faults.helper_utils import SharedUtils
 import operator
 import sys
 
 
-class FaultConditionOne(FaultCondition):
+class FaultConditionOne(BaseFaultCondition, FaultConditionMixin):
     """Class provides the definitions for Fault Condition 1.
     AHU low duct static pressure fan fault.
 
     py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc1.py -rP -s
     """
 
-    def __init__(self, dict_):
-        super().__init__()
-
-        # Threshold parameters
-        self.vfd_speed_percent_err_thres = dict_.get(
-            "VFD_SPEED_PERCENT_ERR_THRES", None
-        )
-        self.vfd_speed_percent_max = dict_.get("VFD_SPEED_PERCENT_MAX", None)
-        self.duct_static_inches_err_thres = dict_.get(
-            "DUCT_STATIC_INCHES_ERR_THRES", None
-        )
-
-        # Validate that threshold parameters are floats
-        for param, value in [
-            ("vfd_speed_percent_err_thres", self.vfd_speed_percent_err_thres),
-            ("vfd_speed_percent_max", self.vfd_speed_percent_max),
-            ("duct_static_inches_err_thres", self.duct_static_inches_err_thres),
-        ]:
-            if not isinstance(value, float):
-                raise InvalidParameterError(
-                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
-                )
-
-        # Other attributes
+    def _init_specific_attributes(self, dict_):
+        # Initialize specific attributes
         self.duct_static_col = dict_.get("DUCT_STATIC_COL", None)
         self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
         self.duct_static_setpoint_col = dict_.get("DUCT_STATIC_SETPOINT_COL", None)
-        self.troubleshoot_mode = dict_.get("TROUBLESHOOT_MODE", False)
-        self.rolling_window_size = dict_.get("ROLLING_WINDOW_SIZE", None)
-
-        self.equation_string = (
-            "fc1_flag = 1 if (DSP < DPSP - εDSP) and (VFDSPD >= VFDSPD_max - εVFDSPD) "
-            "for N consecutive values else 0 \n"
+        self.duct_static_inches_err_thres = dict_.get(
+            "DUCT_STATIC_INCHES_ERR_THRES", None
         )
-        self.description_string = (
-            "Fault Condition 1: Duct static too low at fan at full speed \n"
+        self.vfd_speed_percent_max = dict_.get("VFD_SPEED_PERCENT_MAX", None)
+        self.vfd_speed_percent_err_thres = dict_.get(
+            "VFD_SPEED_PERCENT_ERR_THRES", None
         )
-        self.required_column_description = "Required inputs are the duct static pressure, setpoint, and supply fan VFD speed \n"
-        self.error_string = f"One or more required columns are missing or None \n"
 
-        self.set_attributes(dict_)
-
-        # Set required columns specific to this fault condition
+        # Set required columns
         self.required_columns = [
             self.duct_static_col,
             self.supply_vfd_speed_col,
             self.duct_static_setpoint_col,
         ]
 
-        # Check if any of the required columns are None
-        if any(col is None for col in self.required_columns):
-            raise MissingColumnError(
-                f"{self.error_string}"
-                f"{self.equation_string}"
-                f"{self.description_string}"
-                f"{self.required_column_description}"
-                f"{self.required_columns}"
-            )
-
-        # Ensure all required columns are strings
-        self.required_columns = [str(col) for col in self.required_columns]
-
-        self.mapped_columns = (
-            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
+        # Set documentation strings
+        self.equation_string = "fc1_flag = 1 if (DP < DPSP - εDP) and (VFDSPD >= VFDSPD_max - εVFDSPD) for N consecutive values else 0 \n"
+        self.description_string = (
+            "Fault Condition 1: Duct static too low at fan at full speed \n"
         )
+        self.required_column_description = "Required inputs are the duct static pressure, setpoint, and supply fan VFD speed \n"
+        self.error_string = "One or more required columns are missing or None \n"
 
-    def get_required_columns(self) -> str:
-        """Called from IPython to print out."""
-        return (
-            f"{self.equation_string}"
-            f"{self.description_string}"
-            f"{self.required_column_description}"
-            f"{self.mapped_columns}"
-        )
-
+    @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            # Ensure all required columns are present
-            self.check_required_columns(df)
+        self._apply_common_checks(df)
+        self._apply_analog_checks(df, [self.supply_vfd_speed_col])
 
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
+        # Specific checks
+        static_check = (
+            df[self.duct_static_col]
+            < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
+        )
+        fan_check = (
+            df[self.supply_vfd_speed_col]
+            >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres
+        )
+        combined_check = static_check & fan_check
 
-            # Check analog outputs [data with units of %] are floats only
-            columns_to_check = [self.supply_vfd_speed_col]
-            self.check_analog_pct(df, columns_to_check)
-
-            # Perform checks
-            static_check = (
-                df[self.duct_static_col]
-                < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
-            )
-            fan_check = (
-                df[self.supply_vfd_speed_col]
-                >= self.vfd_speed_percent_max - self.vfd_speed_percent_err_thres
-            )
-
-            # Combined condition check
-            combined_check = static_check & fan_check
-
-            # Rolling sum to count consecutive trues
-            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
-
-            # Set flag to 1 if rolling sum equals the window size
-            df["fc1_flag"] = (rolling_sum == self.rolling_window_size).astype(int)
-
-            return df
-
-        except MissingColumnError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
-        except InvalidParameterError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
+        self._set_fault_flag(df, combined_check, "fc1_flag")
+        return df
 
 
-class FaultConditionTwo(FaultCondition):
+class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
     """Class provides the definitions for Fault Condition 2.
     Mix temperature too low; should be between outside and return air.
     """
 
-    def __init__(self, dict_):
-        super().__init__()
-
-        # Threshold parameters
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
-
-        # Validate that threshold parameters are floats
-        for param, value in [
-            ("mix_degf_err_thres", self.mix_degf_err_thres),
-            ("return_degf_err_thres", self.return_degf_err_thres),
-            ("outdoor_degf_err_thres", self.outdoor_degf_err_thres),
-        ]:
-            if not isinstance(value, float):
-                raise InvalidParameterError(
-                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
-                )
-
-        # Other attributes
+    def _init_specific_attributes(self, dict_):
+        # Initialize specific attributes
         self.mat_col = dict_.get("MAT_COL", None)
         self.rat_col = dict_.get("RAT_COL", None)
         self.oat_col = dict_.get("OAT_COL", None)
         self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
-        self.troubleshoot_mode = dict_.get("TROUBLESHOOT_MODE", False)
-        self.rolling_window_size = dict_.get("ROLLING_WINDOW_SIZE", None)
-
-        self.equation_string = (
-            "fc2_flag = 1 if (MAT + εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) "
-            "for N consecutive values else 0 \n"
-        )
-        self.description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
-        self.required_column_description = (
-            "Required inputs are the mix air temperature, return air temperature, outside air temperature, "
-            "and supply fan VFD speed \n"
-        )
-        self.error_string = "One or more required columns are missing or None \n"
-
-        self.set_attributes(dict_)
-
-        # Set required columns specific to this fault condition
+        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
+        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
+        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
+        
+        # Set required columns
         self.required_columns = [
             self.mat_col,
             self.rat_col,
             self.oat_col,
             self.supply_vfd_speed_col,
         ]
+        
+        # Set documentation strings
+        self.equation_string = "fc2_flag = 1 if (MAT - εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
+        self.description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
+        self.required_column_description = "Required inputs are the mixed air temperature, return air temperature, outside air temperature, and supply fan VFD speed \n"
+        self.error_string = "One or more required columns are missing or None \n"
 
-        # Check if any of the required columns are None
-        if any(col is None for col in self.required_columns):
-            raise MissingColumnError(
-                f"{self.error_string}"
-                f"{self.equation_string}"
-                f"{self.description_string}"
-                f"{self.required_column_description}"
-                f"{self.required_columns}"
-            )
-
-        # Ensure all required columns are strings
-        self.required_columns = [str(col) for col in self.required_columns]
-
-        self.mapped_columns = (
-            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
-        )
-
-    def get_required_columns(self) -> str:
-        """Returns a string representation of the required columns."""
-        return (
-            f"{self.equation_string}"
-            f"{self.description_string}"
-            f"{self.required_column_description}"
-            f"{self.mapped_columns}"
-        )
-
+    @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            # Ensure all required columns are present
-            self.check_required_columns(df)
-
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
-            # Check analog outputs [data with units of %] are floats only
-            columns_to_check = [self.supply_vfd_speed_col]
-            self.check_analog_pct(df, columns_to_check)
-
-            # Perform checks
-            mat_check = df[self.mat_col] + self.mix_degf_err_thres
-            temp_min_check = np.minimum(
-                df[self.rat_col] - self.return_degf_err_thres,
-                df[self.oat_col] - self.outdoor_degf_err_thres,
-            )
-
-            combined_check = (mat_check < temp_min_check) & (
-                df[self.supply_vfd_speed_col] > 0.01
-            )
-
-            # Rolling sum to count consecutive trues
-            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
-
-            # Set flag to 1 if rolling sum equals the window size
-            df["fc2_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            return df
-
-        except MissingColumnError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
-        except InvalidParameterError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
+        self._apply_common_checks(df)
+        self._apply_analog_checks(df, [self.supply_vfd_speed_col])
+        
+        # Specific checks
+        mat_check = df[self.mat_col] - self.mix_degf_err_thres
+        temp_min_check = np.minimum(
+            df[self.rat_col] - self.return_degf_err_thres,
+            df[self.oat_col] - self.outdoor_degf_err_thres,
+        )
+        combined_check = (mat_check < temp_min_check) & (df[self.supply_vfd_speed_col] > 0.01)
+        
+        self._set_fault_flag(df, combined_check, "fc2_flag")
+        return df
 
 
-class FaultConditionThree(FaultCondition):
+class FaultConditionThree(BaseFaultCondition, FaultConditionMixin):
     """Class provides the definitions for Fault Condition 3.
     Mix temperature too high; should be between outside and return air.
     """
 
-    def __init__(self, dict_):
-        super().__init__()
-
-        # Threshold parameters
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
-
-        # Validate that threshold parameters are floats
-        for param, value in [
-            ("mix_degf_err_thres", self.mix_degf_err_thres),
-            ("return_degf_err_thres", self.return_degf_err_thres),
-            ("outdoor_degf_err_thres", self.outdoor_degf_err_thres),
-        ]:
-            if not isinstance(value, float):
-                raise InvalidParameterError(
-                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
-                )
-
-        # Other attributes
+    def _init_specific_attributes(self, dict_):
+        # Initialize specific attributes
         self.mat_col = dict_.get("MAT_COL", None)
         self.rat_col = dict_.get("RAT_COL", None)
         self.oat_col = dict_.get("OAT_COL", None)
         self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
-        self.troubleshoot_mode = dict_.get("TROUBLESHOOT_MODE", False)
-        self.rolling_window_size = dict_.get("ROLLING_WINDOW_SIZE", None)
-
-        self.equation_string = (
-            "fc3_flag = 1 if (MAT - εMAT > max(RAT + εRAT, OAT + εOAT)) and (VFDSPD > 0) "
-            "for N consecutive values else 0 \n"
-        )
-        self.description_string = "Fault Condition 3: Mix temperature too high; should be between outside and return air \n"
-        self.required_column_description = (
-            "Required inputs are the mix air temperature, return air temperature, outside air temperature, "
-            "and supply fan VFD speed \n"
-        )
-        self.error_string = "One or more required columns are missing or None \n"
-
-        self.set_attributes(dict_)
-
-        # Set required columns specific to this fault condition
+        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
+        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
+        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
+        
+        # Set required columns
         self.required_columns = [
             self.mat_col,
             self.rat_col,
             self.oat_col,
             self.supply_vfd_speed_col,
         ]
+        
+        # Set documentation strings
+        self.equation_string = "fc3_flag = 1 if (MAT - εMAT > max(RAT + εRAT, OAT + εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
+        self.description_string = "Fault Condition 3: Mix temperature too high; should be between outside and return air \n"
+        self.required_column_description = "Required inputs are the mixed air temperature, return air temperature, outside air temperature, and supply fan VFD speed \n"
+        self.error_string = "One or more required columns are missing or None \n"
 
-        # Check if any of the required columns are None
-        if any(col is None for col in self.required_columns):
-            raise MissingColumnError(
-                f"{self.error_string}"
-                f"{self.equation_string}"
-                f"{self.description_string}"
-                f"{self.required_column_description}"
-                f"{self.required_columns}"
-            )
-
-        # Ensure all required columns are strings
-        self.required_columns = [str(col) for col in self.required_columns]
-
-        self.mapped_columns = (
-            f"Your config dictionary is mapped as: {', '.join(self.required_columns)}"
-        )
-
-    def get_required_columns(self) -> str:
-        """Returns a string representation of the required columns."""
-        return (
-            f"{self.equation_string}"
-            f"{self.description_string}"
-            f"{self.required_column_description}"
-            f"{self.mapped_columns}"
-        )
-
+    @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        try:
-            # Ensure all required columns are present
-            self.check_required_columns(df)
-
-            if self.troubleshoot_mode:
-                self.troubleshoot_cols(df)
-
-            # Check analog outputs [data with units of %] are floats only
-            columns_to_check = [self.supply_vfd_speed_col]
-            self.check_analog_pct(df, columns_to_check)
-
-            # Perform checks
-            mat_check = df[self.mat_col] - self.mix_degf_err_thres
-            temp_max_check = np.maximum(
-                df[self.rat_col] + self.return_degf_err_thres,
-                df[self.oat_col] + self.outdoor_degf_err_thres,
-            )
-
-            combined_check = (mat_check > temp_max_check) & (
-                df[self.supply_vfd_speed_col] > 0.01
-            )
-
-            # Rolling sum to count consecutive trues
-            rolling_sum = combined_check.rolling(window=self.rolling_window_size).sum()
-
-            # Set flag to 1 if rolling sum equals the window size
-            df["fc3_flag"] = (rolling_sum >= self.rolling_window_size).astype(int)
-
-            return df
-
-        except MissingColumnError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
-        except InvalidParameterError as e:
-            print(f"Error: {e.message}")
-            sys.stdout.flush()
-            raise e
+        self._apply_common_checks(df)
+        self._apply_analog_checks(df, [self.supply_vfd_speed_col])
+        
+        # Specific checks
+        mat_check = df[self.mat_col] - self.mix_degf_err_thres
+        temp_max_check = np.maximum(
+            df[self.rat_col] + self.return_degf_err_thres,
+            df[self.oat_col] + self.outdoor_degf_err_thres,
+        )
+        combined_check = (mat_check > temp_max_check) & (df[self.supply_vfd_speed_col] > 0.01)
+        
+        self._set_fault_flag(df, combined_check, "fc3_flag")
+        return df
 
 
 class FaultConditionFour(FaultCondition):
