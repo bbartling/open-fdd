@@ -3,6 +3,7 @@ import pytest
 from open_fdd.air_handling_unit.faults import (
     FaultConditionTwelve,
 )
+from open_fdd.core.exceptions import MissingColumnError
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 """
@@ -16,9 +17,11 @@ SAT too high should be less than MAT. OS3 & OS4
 TEST_DELTA_SUPPLY_FAN = 2.0
 TEST_MIX_DEGF_ERR_THRES = 2.0
 TEST_SUPPLY_DEGF_ERR_THRES = 2.0
+TEST_OUTDOOR_DEGF_ERR_THRES = 5.0
 TEST_AHU_MIN_OA_DPR = 0.2
 TEST_SAT_COL = "supply_air_temp"
 TEST_MAT_COL = "mix_air_temp"
+TEST_OAT_COL = "out_air_temp"
 TEST_COOLING_COIL_SIG_COL = "cooling_sig_col"
 TEST_MIX_AIR_DAMPER_COL = "economizer_sig_col"
 ROLLING_WINDOW_SIZE = 5
@@ -28,9 +31,11 @@ fault_condition_params = {
     "DELTA_T_SUPPLY_FAN": TEST_DELTA_SUPPLY_FAN,
     "MIX_DEGF_ERR_THRES": TEST_MIX_DEGF_ERR_THRES,
     "SUPPLY_DEGF_ERR_THRES": TEST_SUPPLY_DEGF_ERR_THRES,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OUTDOOR_DEGF_ERR_THRES,
     "AHU_MIN_OA_DPR": TEST_AHU_MIN_OA_DPR,
     "SAT_COL": TEST_SAT_COL,
     "MAT_COL": TEST_MAT_COL,
+    "OAT_COL": TEST_OAT_COL,
     "COOLING_SIG_COL": TEST_COOLING_COIL_SIG_COL,
     "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
     "TROUBLESHOOT_MODE": False,
@@ -44,8 +49,9 @@ class TestFaultConditionTwelve:
 
     def no_fault_df_no_econ(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [55, 55, 55, 55, 55, 55],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
+            TEST_SAT_COL: [55.0, 55.0, 55.0, 55.0, 55.0, 55.0],
+            TEST_MAT_COL: [56.0, 56.0, 56.0, 56.0, 56.0, 56.0],
+            TEST_OAT_COL: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
             TEST_COOLING_COIL_SIG_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_MIX_AIR_DAMPER_COL: [
                 TEST_AHU_MIN_OA_DPR,
@@ -60,8 +66,9 @@ class TestFaultConditionTwelve:
 
     def fault_df_in_econ_plus_mech(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [66, 66, 66, 66, 66, 66],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
+            TEST_SAT_COL: [66.0, 66.0, 66.0, 66.0, 66.0, 66.0],
+            TEST_MAT_COL: [56.0, 56.0, 56.0, 56.0, 56.0, 56.0],
+            TEST_OAT_COL: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
             TEST_COOLING_COIL_SIG_COL: [0.50, 0.50, 0.50, 0.50, 0.50, 0.50],
             TEST_MIX_AIR_DAMPER_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
         }
@@ -69,9 +76,38 @@ class TestFaultConditionTwelve:
 
     def fault_df_in_mech_clg(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [66, 66, 66, 66, 66, 66],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
-            TEST_COOLING_COIL_SIG_COL: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99],
+            TEST_SAT_COL: [
+                66.0,
+                66.0,
+                66.0,
+                66.0,
+                66.0,
+                66.0,
+            ],  # SAT much higher than MAT
+            TEST_MAT_COL: [
+                52.0,
+                52.0,
+                52.0,
+                52.0,
+                52.0,
+                52.0,
+            ],  # Lower MAT to make fault more apparent
+            TEST_OAT_COL: [
+                75.0,
+                75.0,
+                75.0,
+                75.0,
+                75.0,
+                75.0,
+            ],  # Hot outside conditions
+            TEST_COOLING_COIL_SIG_COL: [
+                0.99,
+                0.99,
+                0.99,
+                0.99,
+                0.99,
+                0.99,
+            ],  # Full mechanical cooling
             TEST_MIX_AIR_DAMPER_COL: [
                 TEST_AHU_MIN_OA_DPR,
                 TEST_AHU_MIN_OA_DPR,
@@ -79,7 +115,7 @@ class TestFaultConditionTwelve:
                 TEST_AHU_MIN_OA_DPR,
                 TEST_AHU_MIN_OA_DPR,
                 TEST_AHU_MIN_OA_DPR,
-            ],
+            ],  # Minimum OA position
         }
         return pd.DataFrame(data)
 
@@ -113,10 +149,11 @@ class TestFaultOnInt:
 
     def fault_df_on_output_int(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [55, 55, 55, 55, 55, 55],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
+            TEST_SAT_COL: [55.0, 55.0, 55.0, 55.0, 55.0, 55.0],
+            TEST_MAT_COL: [56.0, 56.0, 56.0, 56.0, 56.0, 56.0],
+            TEST_OAT_COL: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
             TEST_COOLING_COIL_SIG_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            TEST_MIX_AIR_DAMPER_COL: [11, 11, 11, 11, 11, 11],  # Incorrect type
+            TEST_MIX_AIR_DAMPER_COL: [1, 1, 1, 1, 1, 1],  # Incorrect type
         }
         return pd.DataFrame(data)
 
@@ -131,8 +168,9 @@ class TestFaultOnFloatGreaterThanOne:
 
     def fault_df_on_output_greater_than_one(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [55, 55, 55, 55, 55, 55],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
+            TEST_SAT_COL: [55.0, 55.0, 55.0, 55.0, 55.0, 55.0],
+            TEST_MAT_COL: [56.0, 56.0, 56.0, 56.0, 56.0, 56.0],
+            TEST_OAT_COL: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
             TEST_COOLING_COIL_SIG_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_MIX_AIR_DAMPER_COL: [1.1, 1.2, 1.1, 1.3, 1.1, 1.2],  # Values > 1.0
         }
@@ -149,8 +187,9 @@ class TestFaultOnMixedTypes:
 
     def fault_df_on_mixed_types(self) -> pd.DataFrame:
         data = {
-            TEST_SAT_COL: [55, 55, 55, 55, 55, 55],
-            TEST_MAT_COL: [56, 56, 56, 56, 56, 56],
+            TEST_SAT_COL: [55.0, 55.0, 55.0, 55.0, 55.0, 55.0],
+            TEST_MAT_COL: [56.0, 56.0, 56.0, 56.0, 56.0, 56.0],
+            TEST_OAT_COL: [50.0, 50.0, 50.0, 50.0, 50.0, 50.0],
             TEST_COOLING_COIL_SIG_COL: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             TEST_MIX_AIR_DAMPER_COL: [1.1, 0.55, 1.2, 1.3, 0.55, 1.1],  # Mixed types
         }

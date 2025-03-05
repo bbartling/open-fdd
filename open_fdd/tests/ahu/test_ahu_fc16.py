@@ -1,10 +1,8 @@
 import pandas as pd
 import pytest
 from open_fdd.air_handling_unit.faults import FaultConditionSixteen
-from open_fdd.air_handling_unit.faults.fault_condition import (
-    InvalidParameterError,
-    MissingColumnError,
-)
+from open_fdd.core.exceptions import MissingColumnError, InvalidParameterError
+from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 """
 To see print statements in pytest run with:
@@ -21,11 +19,16 @@ TEST_ERV_EFFICIENCY_MAX_COOLING = 0.6
 TEST_OAT_LOW_THRESHOLD = 32.0
 TEST_OAT_HIGH_THRESHOLD = 80.0
 TEST_OAT_RAT_DELTA_THRES = 15.0
+TEST_MIX_DEGF_ERR_THRES = 2.0
+TEST_OUTDOOR_DEGF_ERR_THRES = 5.0
 TEST_ERV_OAT_ENTER_COL = "erv_oat_enter"
 TEST_ERV_OAT_LEAVING_COL = "erv_oat_leaving"
 TEST_ERV_EAT_ENTER_COL = "erv_eat_enter"
 TEST_ERV_EAT_LEAVING_COL = "erv_eat_leaving"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
+TEST_OAT_COL = "out_air_temp"
+TEST_MAT_COL = "mix_air_temp"
+TEST_ECONOMIZER_SIG_COL = "economizer_sig_col"
 ROLLING_WINDOW_SIZE = 1
 
 # Initialize FaultConditionSixteen with a dictionary
@@ -37,11 +40,16 @@ fault_condition_params = {
     "OAT_LOW_THRESHOLD": TEST_OAT_LOW_THRESHOLD,
     "OAT_HIGH_THRESHOLD": TEST_OAT_HIGH_THRESHOLD,
     "OAT_RAT_DELTA_MIN": TEST_OAT_RAT_DELTA_THRES,
+    "MIX_DEGF_ERR_THRES": TEST_MIX_DEGF_ERR_THRES,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OUTDOOR_DEGF_ERR_THRES,
     "ERV_OAT_ENTER_COL": TEST_ERV_OAT_ENTER_COL,
     "ERV_OAT_LEAVING_COL": TEST_ERV_OAT_LEAVING_COL,
     "ERV_EAT_ENTER_COL": TEST_ERV_EAT_ENTER_COL,
     "ERV_EAT_LEAVING_COL": TEST_ERV_EAT_LEAVING_COL,
     "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
+    "OAT_COL": TEST_OAT_COL,
+    "MAT_COL": TEST_MAT_COL,
+    "ECONOMIZER_SIG_COL": TEST_ECONOMIZER_SIG_COL,
     "TROUBLESHOOT_MODE": False,
     "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,
 }
