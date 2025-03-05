@@ -3,6 +3,7 @@ import pytest
 from open_fdd.air_handling_unit.faults import (
     FaultConditionFourteen,
 )
+from open_fdd.core.exceptions import MissingColumnError
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 
 """
@@ -16,6 +17,8 @@ Temp drop across inactive clg coil in OS1 & OS2
 TEST_DELTA_SUPPLY_FAN = 2.0
 TEST_COIL_TEMP_ENTER_ERR_THRES = 1.0
 TEST_COIL_TEMP_LEAVE_ERR_THRES = 1.0
+TEST_MIX_DEGF_ERR_THRES = 2.0
+TEST_OUTDOOR_DEGF_ERR_THRES = 5.0
 TEST_AHU_MIN_OA_DPR = 0.2
 TEST_CLG_COIL_ENTER_TEMP_COL = "clg_enter_air_temp"
 TEST_CLG_COIL_LEAVE_TEMP_COL = "clg_leave_air_temp"
@@ -23,6 +26,8 @@ TEST_CLG_COIL_CMD_COL = "cooling_sig_col"
 TEST_HTG_COIL_CMD_COL = "heating_sig_col"
 TEST_MIX_AIR_DAMPER_COL = "economizer_sig_col"
 TEST_SUPPLY_VFD_SPEED_COL = "supply_vfd_speed"
+TEST_OAT_COL = "out_air_temp"
+TEST_MAT_COL = "mix_air_temp"
 ROLLING_WINDOW_SIZE = 5
 
 # Initialize FaultConditionFourteen with a dictionary
@@ -30,6 +35,8 @@ fault_condition_params = {
     "DELTA_T_SUPPLY_FAN": TEST_DELTA_SUPPLY_FAN,
     "COIL_TEMP_ENTER_ERR_THRES": TEST_COIL_TEMP_ENTER_ERR_THRES,
     "COIL_TEMP_LEAV_ERR_THRES": TEST_COIL_TEMP_LEAVE_ERR_THRES,
+    "MIX_DEGF_ERR_THRES": TEST_MIX_DEGF_ERR_THRES,
+    "OUTDOOR_DEGF_ERR_THRES": TEST_OUTDOOR_DEGF_ERR_THRES,
     "AHU_MIN_OA_DPR": TEST_AHU_MIN_OA_DPR,
     "CLG_COIL_ENTER_TEMP_COL": TEST_CLG_COIL_ENTER_TEMP_COL,
     "CLG_COIL_LEAVE_TEMP_COL": TEST_CLG_COIL_LEAVE_TEMP_COL,
@@ -37,6 +44,8 @@ fault_condition_params = {
     "HEATING_SIG_COL": TEST_HTG_COIL_CMD_COL,
     "ECONOMIZER_SIG_COL": TEST_MIX_AIR_DAMPER_COL,
     "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
+    "OAT_COL": TEST_OAT_COL,
+    "MAT_COL": TEST_MAT_COL,
     "TROUBLESHOOT_MODE": False,
     "ROLLING_WINDOW_SIZE": ROLLING_WINDOW_SIZE,
 }
