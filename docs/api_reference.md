@@ -5,6 +5,8 @@
 #### `class open_fdd.air_handling_unit.fault_condition.FaultCondition`
 **Base class for fault detection conditions**.
 
+* TODO is a make a complete API reference...!
+
 ```python
 class FaultCondition:
     def __init__(self, df: pd.DataFrame):

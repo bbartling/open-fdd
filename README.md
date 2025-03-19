@@ -8,12 +8,18 @@
 ![Fault Detection Visualization](https://raw.githubusercontent.com/bbartling/open-fdd/master/open_fdd/air_handling_unit/images/plot_for_repo.png)
 
 ## 🔥 What is open-fdd?
-`open-fdd` is an **open-source Fault Detection and Diagnostics (FDD) tool** designed for analysts and engineers using local toolsets like Jupyter notebooks. It is not necessarily an IoT tool for an MSI (Master Systems Integrator), though it could be adapted for that purpose. Instead, it is tailored for individual engineers analyzing HVAC system data with CSV files. While it could potentially be integrated with a database, doing so may require additional effort. It leverages **ASHRAE** and **NIST**-inspired fault equations. Built on Python and **Pandas**, this library enables efficient detection of operational issues in HVAC systems with:
+**open-fdd** is an **open-source Fault Detection and Diagnostics (FDD) tool** designed for analysts and engineers using local toolsets like Jupyter notebooks. It is not necessarily an IoT tool for **Grafana**, which an MSI (Master Systems Integrator) might use, though it could be adapted for that purpose. Instead, it is tailored for **individual engineers analyzing historical HVAC system data** using the **Pandas computing library**. While it could potentially be integrated with a database, doing so may require additional effort. It leverages **ASHRAE** and **NIST**-inspired fault equations. Built on Python and **Pandas**, this library enables efficient detection of operational issues in HVAC systems with:
+
+This version improves clarity and flow while keeping it professional and readable. 🚀 Let me know if you want any more refinements!
 
 ✅ **Pre-built fault equations** for detecting HVAC anomalies
 ✅ **Seamless Pandas integration** for time-series analysis
 ✅ **Extensible architecture** for custom fault conditions
 ✅ **Open-source & community-driven** development
+
+
+📖 **See Online Documentation:**  
+[📚 Open-FDD Docs](https://bbartling.github.io/open-fdd/)
 
 ---
 
