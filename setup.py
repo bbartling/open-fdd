@@ -14,7 +14,7 @@ setup(
     description="A package for fault detection and diagnosis in HVAC systems",
     long_description=read_long_description("README.md"),
     long_description_content_type="text/markdown",
-    url="https://github.com/bbartling/open-fdd",
+    url="https://bbartling.github.io/open-fdd/",
     packages=find_packages(include=["open_fdd", "open_fdd.*"]),
     install_requires=[
         "pandas",
