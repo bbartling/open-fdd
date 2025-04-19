@@ -1,6 +1,5 @@
 import pytest
 import pandas as pd
-import numpy as np
 from open_fdd.air_handling_unit.faults import FaultConditionNine
 from open_fdd.core.exceptions import MissingColumnError, InvalidParameterError
 

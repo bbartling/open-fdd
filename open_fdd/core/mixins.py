@@ -1,13 +1,7 @@
 from functools import wraps
 import sys
-from open_fdd.core.exceptions import MissingColumnError as CoreMissingColumnError
-from open_fdd.core.exceptions import InvalidParameterError as CoreInvalidParameterError
-from open_fdd.air_handling_unit.faults.fault_condition import (
-    MissingColumnError as FaultMissingColumnError,
-)
-from open_fdd.air_handling_unit.faults.fault_condition import (
-    InvalidParameterError as FaultInvalidParameterError,
-)
+from open_fdd.core.exceptions import MissingColumnError
+from open_fdd.core.exceptions import InvalidParameterError
 
 
 class FaultConditionMixin:
@@ -22,19 +16,19 @@ class FaultConditionMixin:
             try:
                 return func(*args, **kwargs)
             except (
-                CoreMissingColumnError,
-                CoreInvalidParameterError,
-                FaultMissingColumnError,
-                FaultInvalidParameterError,
+                MissingColumnError,
+                InvalidParameterError,
+                MissingColumnError,
+                InvalidParameterError,
             ) as e:
                 print(f"Error: {e.message}")
                 sys.stdout.flush()
                 # Raise a new instance of the appropriate exception type
                 # This allows pytest.raises to catch it
-                if isinstance(e, CoreMissingColumnError):
-                    raise FaultMissingColumnError(e.message)
-                elif isinstance(e, CoreInvalidParameterError):
-                    raise FaultInvalidParameterError(e.message)
+                if isinstance(e, MissingColumnError):
+                    raise MissingColumnError(e.message)
+                elif isinstance(e, InvalidParameterError):
+                    raise InvalidParameterError(e.message)
                 else:
                     raise e
 

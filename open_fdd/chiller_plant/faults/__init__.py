@@ -5,7 +5,15 @@ from open_fdd.air_handling_unit.faults.fault_condition import (
     MissingColumnError,
     InvalidParameterError,
 )
-from open_fdd.air_handling_unit.faults.helper_utils import SharedUtils
+from open_fdd.core.utils import (
+    clean_nan_values,
+    float_int_check_err,
+    float_max_check_err,
+    is_float,
+    not_greater_than_one,
+    convert_to_float,
+    apply_rolling_average_if_needed,
+)
 import operator
 import sys
 
@@ -2183,7 +2191,7 @@ class FaultConditionSixteen(FaultCondition):
 
     def calculate_erv_efficiency(self, df: pd.DataFrame) -> pd.DataFrame:
 
-        df = SharedUtils.clean_nan_values(df)
+        df = clean_nan_values(df)
 
         cols_to_check = [self.erv_eat_enter_col, self.erv_oat_enter_col]
         if df[cols_to_check].eq(0).any().any():
