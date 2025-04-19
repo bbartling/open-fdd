@@ -93,10 +93,6 @@ class FaultConditionEight(BaseFaultCondition, FaultConditionMixin):
     )
     error_string = "One or more required columns are missing or None \n"
 
-    def _init_specific_attributes(self, dict_):
-        # Use the BaseFaultCondition's _init_specific_attributes method
-        super()._init_specific_attributes(dict_)
-
     @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply the fault condition to the DataFrame."""

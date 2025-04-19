@@ -1,8 +1,8 @@
 import pandas as pd
-from open_fdd.core.base_fault import BaseFaultCondition
-from open_fdd.core.mixins import FaultConditionMixin
 
+from open_fdd.core.base_fault import BaseFaultCondition
 from open_fdd.core.components import FaultInputColumn, InstanceAttribute
+from open_fdd.core.mixins import FaultConditionMixin
 
 INPUT_COLS = [
     FaultInputColumn(
