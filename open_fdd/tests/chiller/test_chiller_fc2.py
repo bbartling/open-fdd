@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
+from open_fdd.core.exceptions import MissingColumnError
 from open_fdd.chiller_plant.faults import FaultConditionTwo
 
 # Constants for test cases
