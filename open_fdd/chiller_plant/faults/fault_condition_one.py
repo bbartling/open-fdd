@@ -101,8 +101,7 @@ class FaultConditionOne(BaseFaultCondition, FaultConditionMixin):
             < df[diff_pressure_setpoint_col] - diff_pressure_psi_err_thres
         )
         pump_check = (
-            df[pump_speed_col]
-            >= pump_speed_percent_max - pump_speed_percent_err_thres
+            df[pump_speed_col] >= pump_speed_percent_max - pump_speed_percent_err_thres
         )
 
         # Combined condition check

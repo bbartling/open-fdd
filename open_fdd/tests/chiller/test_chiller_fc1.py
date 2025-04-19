@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
 
-from open_fdd.core.exceptions import MissingColumnError
 from open_fdd.chiller_plant.faults import FaultConditionOne
+from open_fdd.core.exceptions import MissingColumnError
 
 # Constants for test cases
 TEST_PUMP_ERR_THRESHOLD = 0.05

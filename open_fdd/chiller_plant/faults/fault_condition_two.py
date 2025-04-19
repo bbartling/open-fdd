@@ -88,8 +88,7 @@ class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
         # Perform checks
         flow_check = df[flow_col] < flow_error_threshold
         pump_check = (
-            df[pump_speed_col]
-            >= pump_speed_percent_max - pump_speed_percent_err_thres
+            df[pump_speed_col] >= pump_speed_percent_max - pump_speed_percent_err_thres
         )
 
         # Combined condition check
