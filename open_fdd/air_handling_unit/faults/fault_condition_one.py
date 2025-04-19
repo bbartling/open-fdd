@@ -38,6 +38,7 @@ FAULT_PARAMS = [
         description="Duct static pressure error threshold",
         unit="inches of water",
         type=float,
+        range=(0.0, 1.0),
     ),
     InstanceAttribute(
         name="vfd_speed_percent_max",
@@ -45,6 +46,7 @@ FAULT_PARAMS = [
         description="Maximum VFD speed percentage",
         unit="%",
         type=float,
+        range=(0.0, 100.0),
     ),
     InstanceAttribute(
         name="vfd_speed_percent_err_thres",
@@ -52,6 +54,7 @@ FAULT_PARAMS = [
         description="VFD speed error threshold",
         unit="%",
         type=float,
+        range=(0.0, 100.0),
     ),
 ]
 
@@ -62,49 +65,48 @@ class FaultConditionOne(BaseFaultCondition, FaultConditionMixin):
 
     py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc1.py -rP -s
     """
+
     input_columns = INPUT_COLS
     fault_params = FAULT_PARAMS
     equation_string = "fc1_flag = 1 if (DP < DPSP - εDP) and (VFDSPD >= VFDSPD_max - εVFDSPD) for N consecutive values else 0 \n"
     description_string = (
-         "Fault Condition 1: Duct static too low at fan at full speed \n"
+        "Fault Condition 1: Duct static too low at fan at full speed \n"
     )
-    
+
     error_string = "One or more required columns are missing or None \n"
-
-    def _init_specific_attributes(self, dict_):
-        # Initialize specific attributes
-        self.required_columns = []
-        required_column_map = {
-            col.name: col for col in self.input_columns if col.required
-        }
-        for col in self.input_columns:
-            setattr(self, col.name, dict_.get(col.constant_form, None))
-            if col.required:
-                self.required_columns.append(dict_.get(col.constant_form))
-
-        for param in self.fault_params:
-            setattr(self, param.name, dict_.get(param.constant_form, None))
-        self.required_column_description = f"Required inputs are: {',\n'.join([f'{val.constant_form}: {val.description}' for val in required_column_map.values()])}\n"
 
     @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         self._apply_common_checks(df)
-        self._apply_analog_checks(df, [self.supply_vfd_speed_col])
+
+        # Get column values using accessor methods
+        supply_vfd_speed_col = self.get_input_column("supply_vfd_speed_col")
+        duct_static_col = self.get_input_column("duct_static_col")
+        duct_static_setpoint_col = self.get_input_column("duct_static_setpoint_col")
+
+        # Get parameter values using accessor methods
+        vfd_speed_percent_max = self.get_param("vfd_speed_percent_max")
+        vfd_speed_percent_err_thres = self.get_param("vfd_speed_percent_err_thres")
+        duct_static_inches_err_thres = self.get_param("duct_static_inches_err_thres")
+
+        self._apply_analog_checks(
+            df, [supply_vfd_speed_col], check_greater_than_one=True
+        )
 
         # Convert VFD speed from percentage to fraction if needed
-        if (df[self.supply_vfd_speed_col] > 1.0).any():
-            df[self.supply_vfd_speed_col] = df[self.supply_vfd_speed_col] / 100.0
+        if (df[supply_vfd_speed_col] > 1.0).any():
+            df[supply_vfd_speed_col] = df[supply_vfd_speed_col] / 100.0
 
         # Convert thresholds from percentage to fraction
-        vfd_speed_max = self.vfd_speed_percent_max / 100.0
-        vfd_speed_err_thres = self.vfd_speed_percent_err_thres / 100.0
+        vfd_speed_max = vfd_speed_percent_max / 100.0
+        vfd_speed_err_thres = vfd_speed_percent_err_thres / 100.0
 
         # Specific checks
         static_check = (
-            df[self.duct_static_col]
-            < df[self.duct_static_setpoint_col] - self.duct_static_inches_err_thres
+            df[duct_static_col]
+            < df[duct_static_setpoint_col] - duct_static_inches_err_thres
         )
-        fan_check = df[self.supply_vfd_speed_col] >= vfd_speed_max - vfd_speed_err_thres
+        fan_check = df[supply_vfd_speed_col] >= vfd_speed_max - vfd_speed_err_thres
         combined_check = static_check & fan_check
 
         self._set_fault_flag(df, combined_check, "fc1_flag")

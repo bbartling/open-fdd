@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionNine
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
 

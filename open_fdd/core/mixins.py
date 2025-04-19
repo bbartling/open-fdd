@@ -1,7 +1,7 @@
-from functools import wraps
 import sys
-from open_fdd.core.exceptions import MissingColumnError
-from open_fdd.core.exceptions import InvalidParameterError
+from functools import wraps
+
+from open_fdd.core.exceptions import InvalidParameterError, MissingColumnError
 
 
 class FaultConditionMixin:

@@ -1,21 +1,23 @@
-import pandas as pd
+import operator
+import sys
+
 import numpy as np
+import pandas as pd
+
 from open_fdd.air_handling_unit.faults.fault_condition import (
     FaultCondition,
-    MissingColumnError,
     InvalidParameterError,
+    MissingColumnError,
 )
 from open_fdd.core.utils import (
+    apply_rolling_average_if_needed,
     clean_nan_values,
+    convert_to_float,
     float_int_check_err,
     float_max_check_err,
     is_float,
     not_greater_than_one,
-    convert_to_float,
-    apply_rolling_average_if_needed,
 )
-import operator
-import sys
 
 
 class FaultConditionOne(FaultCondition):

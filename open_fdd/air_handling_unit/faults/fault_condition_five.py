@@ -1,61 +1,93 @@
 import pandas as pd
-import numpy as np
+
 from open_fdd.core.base_fault import BaseFaultCondition
-from open_fdd.core.mixins import FaultConditionMixin
+from open_fdd.core.components import FaultInputColumn, InstanceAttribute
 from open_fdd.core.exceptions import InvalidParameterError
+from open_fdd.core.mixins import FaultConditionMixin
+
+INPUT_COLS = [
+    FaultInputColumn(
+        name="mat_col",
+        constant_form="MAT_COL",
+        description="Mixed air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="sat_col",
+        constant_form="SAT_COL",
+        description="Supply air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="heating_sig_col",
+        constant_form="HEATING_SIG_COL",
+        description="Heating signal",
+        unit="%",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="supply_vfd_speed_col",
+        constant_form="SUPPLY_VFD_SPEED_COL",
+        description="Supply fan VFD speed",
+        unit="%",
+        required=True,
+        type=float,
+    ),
+]
+
+FAULT_PARAMS = [
+    InstanceAttribute(
+        name="mix_degf_err_thres",
+        constant_form="MIX_DEGF_ERR_THRES",
+        description="Mixed air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+    InstanceAttribute(
+        name="supply_degf_err_thres",
+        constant_form="SUPPLY_DEGF_ERR_THRES",
+        description="Supply air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+    InstanceAttribute(
+        name="delta_t_supply_fan",
+        constant_form="DELTA_T_SUPPLY_FAN",
+        description="Temperature rise across supply fan",
+        unit="°F",
+        type=float,
+        range=(0.0, 5.0),
+    ),
+]
+
 
 class FaultConditionFive(BaseFaultCondition, FaultConditionMixin):
     """Class provides the definitions for Fault Condition 5.
     SAT too low; should be higher than MAT in HTG MODE
     --Broken heating valve or other mechanical issue
     related to heat valve not working as designed
+
+    py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc5.py -rP -s
     """
 
-    def _init_specific_attributes(self, dict_):
-        # Threshold parameters
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-        self.supply_degf_err_thres = dict_.get("SUPPLY_DEGF_ERR_THRES", None)
-        self.delta_t_supply_fan = dict_.get("DELTA_T_SUPPLY_FAN", None)
-
-        # Validate that threshold parameters are floats
-        for param, value in [
-            ("mix_degf_err_thres", self.mix_degf_err_thres),
-            ("supply_degf_err_thres", self.supply_degf_err_thres),
-            ("delta_t_supply_fan", self.delta_t_supply_fan),
-        ]:
-            if not isinstance(value, float):
-                raise InvalidParameterError(
-                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
-                )
-
-        # Other attributes
-        self.mat_col = dict_.get("MAT_COL", None)
-        self.sat_col = dict_.get("SAT_COL", None)
-        self.heating_sig_col = dict_.get("HEATING_SIG_COL", None)
-        self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
-
-        # Set documentation strings
-        self.equation_string = (
-            "fc5_flag = 1 if (SAT + εSAT <= MAT - εMAT + ΔT_supply_fan) and "
-            "(heating signal > 0) and (VFDSPD > 0) for N consecutive values else 0 \n"
-        )
-        self.description_string = (
-            "Fault Condition 5: SAT too low; should be higher than MAT in HTG MODE, "
-            "potential broken heating valve or mechanical issue \n"
-        )
-        self.required_column_description = (
-            "Required inputs are the mixed air temperature, supply air temperature, "
-            "heating signal, and supply fan VFD speed \n"
-        )
-        self.error_string = "One or more required columns are missing or None \n"
-
-        # Set required columns specific to this fault condition
-        self.required_columns = [
-            self.mat_col,
-            self.sat_col,
-            self.heating_sig_col,
-            self.supply_vfd_speed_col,
-        ]
+    input_columns = INPUT_COLS
+    fault_params = FAULT_PARAMS
+    equation_string = (
+        "fc5_flag = 1 if (SAT + εSAT <= MAT - εMAT + ΔT_supply_fan) and "
+        "(heating signal > 0) and (VFDSPD > 0) for N consecutive values else 0 \n"
+    )
+    description_string = (
+        "Fault Condition 5: SAT too low; should be higher than MAT in HTG MODE, "
+        "potential broken heating valve or mechanical issue \n"
+    )
+    error_string = "One or more required columns are missing or None \n"
 
     @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -63,18 +95,29 @@ class FaultConditionFive(BaseFaultCondition, FaultConditionMixin):
         # Apply common checks
         self._apply_common_checks(df)
 
+        # Get column values using accessor methods
+        supply_vfd_speed_col = self.get_input_column("supply_vfd_speed_col")
+        heating_sig_col = self.get_input_column("heating_sig_col")
+        sat_col = self.get_input_column("sat_col")
+        mat_col = self.get_input_column("mat_col")
+
+        # Get parameter values using accessor methods
+        supply_degf_err_thres = self.get_param("supply_degf_err_thres")
+        mix_degf_err_thres = self.get_param("mix_degf_err_thres")
+        delta_t_supply_fan = self.get_param("delta_t_supply_fan")
+
         # Check analog outputs [data with units of %] are floats only
-        columns_to_check = [self.supply_vfd_speed_col, self.heating_sig_col]
-        self._apply_analog_checks(df, columns_to_check)
+        columns_to_check = [supply_vfd_speed_col, heating_sig_col]
+        self._apply_analog_checks(df, columns_to_check, check_greater_than_one=True)
 
         # Perform checks
-        sat_check = df[self.sat_col] + self.supply_degf_err_thres
-        mat_check = df[self.mat_col] - self.mix_degf_err_thres + self.delta_t_supply_fan
+        sat_check = df[sat_col] + supply_degf_err_thres
+        mat_check = df[mat_col] - mix_degf_err_thres + delta_t_supply_fan
 
         combined_check = (
             (sat_check <= mat_check)
-            & (df[self.heating_sig_col] > 0.01)
-            & (df[self.supply_vfd_speed_col] > 0.01)
+            & (df[heating_sig_col] > 0.01)
+            & (df[supply_vfd_speed_col] > 0.01)
         )
 
         # Set fault flag

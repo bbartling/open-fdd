@@ -1,6 +1,5 @@
 import streamlit as st
 
-
 # On windows 10 python 3.10.6
 # py -3.10 -m streamlit run .\latex_generator.py
 

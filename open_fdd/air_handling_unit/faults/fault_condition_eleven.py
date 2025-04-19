@@ -1,12 +1,56 @@
-
-import sys
-
 import numpy as np
 import pandas as pd
 
 from open_fdd.core.base_fault import BaseFaultCondition
+from open_fdd.core.components import FaultInputColumn, InstanceAttribute
 from open_fdd.core.exceptions import InvalidParameterError
 from open_fdd.core.mixins import FaultConditionMixin
+
+INPUT_COLS = [
+    FaultInputColumn(
+        name="oat_col",
+        constant_form="OAT_COL",
+        description="Outside air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="mat_col",
+        constant_form="MAT_COL",
+        description="Mixed air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="economizer_sig_col",
+        constant_form="ECONOMIZER_SIG_COL",
+        description="Economizer signal",
+        unit="%",
+        required=True,
+        type=float,
+    ),
+]
+
+FAULT_PARAMS = [
+    InstanceAttribute(
+        name="outdoor_degf_err_thres",
+        constant_form="OUTDOOR_DEGF_ERR_THRES",
+        description="Outdoor air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+    InstanceAttribute(
+        name="mix_degf_err_thres",
+        constant_form="MIX_DEGF_ERR_THRES",
+        description="Mixed air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+]
 
 
 class FaultConditionEleven(BaseFaultCondition, FaultConditionMixin):
@@ -17,47 +61,17 @@ class FaultConditionEleven(BaseFaultCondition, FaultConditionMixin):
     py -3.12 -m pytest open_fdd/tests/ahu/test_ahu_fc11.py -rP -s
     """
 
-    def _init_specific_attributes(self, dict_):
-        # Threshold parameters
-        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-
-        # Validate that threshold parameters are floats
-        for param, value in [
-            ("outdoor_degf_err_thres", self.outdoor_degf_err_thres),
-            ("mix_degf_err_thres", self.mix_degf_err_thres),
-        ]:
-            if not isinstance(value, float):
-                raise InvalidParameterError(
-                    f"The parameter '{param}' should be a float, but got {type(value).__name__}."
-                )
-
-        # Other attributes
-        self.oat_col = dict_.get("OAT_COL", None)
-        self.mat_col = dict_.get("MAT_COL", None)
-        self.economizer_sig_col = dict_.get("ECONOMIZER_SIG_COL", None)
-
-        # Set documentation strings
-        self.equation_string = (
-            "fc11_flag = 1 if |OAT - MAT| > √(εOAT² + εMAT²) in "
-            "economizer mode for N consecutive values else 0 \n"
-        )
-        self.description_string = (
-            "Fault Condition 11: Outdoor air temperature and mixed air temperature "
-            "should be approximately equal in economizer mode \n"
-        )
-        self.required_column_description = (
-            "Required inputs are the outside air temperature, mixed air temperature, "
-            "and economizer signal \n"
-        )
-        self.error_string = "One or more required columns are missing or None \n"
-
-        # Set required columns specific to this fault condition
-        self.required_columns = [
-            self.oat_col,
-            self.mat_col,
-            self.economizer_sig_col,
-        ]
+    input_columns = INPUT_COLS
+    fault_params = FAULT_PARAMS
+    equation_string = (
+        "fc11_flag = 1 if |OAT - MAT| > √(εOAT² + εMAT²) in "
+        "economizer mode for N consecutive values else 0 \n"
+    )
+    description_string = (
+        "Fault Condition 11: Outdoor air temperature and mixed air temperature "
+        "should be approximately equal in economizer mode \n"
+    )
+    error_string = "One or more required columns are missing or None \n"
 
     @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -65,20 +79,27 @@ class FaultConditionEleven(BaseFaultCondition, FaultConditionMixin):
         # Apply common checks
         self._apply_common_checks(df)
 
+        # Get column values using accessor methods
+        mat_col = self.get_input_column("mat_col")
+        oat_col = self.get_input_column("oat_col")
+        economizer_sig_col = self.get_input_column("economizer_sig_col")
+
+        # Get parameter values using accessor methods
+        mix_degf_err_thres = self.get_param("mix_degf_err_thres")
+        outdoor_degf_err_thres = self.get_param("outdoor_degf_err_thres")
+
         # Check analog outputs [data with units of %] are floats only
-        columns_to_check = [self.economizer_sig_col]
-        self._apply_analog_checks(df, columns_to_check)
+        columns_to_check = [economizer_sig_col]
+        self._apply_analog_checks(df, columns_to_check, check_greater_than_one=True)
 
         # Perform calculations
-        abs_mat_minus_oat = abs(df[self.mat_col] - df[self.oat_col])
-        mat_oat_sqrted = np.sqrt(
-            self.mix_degf_err_thres**2 + self.outdoor_degf_err_thres**2
-        )
+        abs_mat_minus_oat = abs(df[mat_col] - df[oat_col])
+        mat_oat_sqrted = np.sqrt(mix_degf_err_thres**2 + outdoor_degf_err_thres**2)
 
         combined_check = (
             (abs_mat_minus_oat > mat_oat_sqrted)
             # Verify AHU is running in economizer mode
-            & (df[self.economizer_sig_col] > 0.9)
+            & (df[economizer_sig_col] > 0.9)
         )
 
         # Set fault flag

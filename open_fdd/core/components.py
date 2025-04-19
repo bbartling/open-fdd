@@ -1,8 +1,9 @@
-from typing import Any, Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any, Optional, Tuple, Union
+
 
 @dataclass
-class InstanceAttribute():
+class InstanceAttribute:
     """
     A class to represent an instance attribute.
 
@@ -20,9 +21,11 @@ class InstanceAttribute():
     type: type
     value: Any = None
     required: bool = False
+    range: Optional[Tuple[Union[int, float], Union[int, float]]] = None
+
 
 @dataclass
-class FaultInputColumn():
+class FaultInputColumn:
     """
     A class to represent a fault input column.
 

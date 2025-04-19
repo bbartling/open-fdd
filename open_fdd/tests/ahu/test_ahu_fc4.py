@@ -1,8 +1,10 @@
+from datetime import datetime, timezone
+
 import pandas as pd
 import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionFour
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
-from datetime import datetime, timezone
 
 """
 To see print statements in pytest run with:

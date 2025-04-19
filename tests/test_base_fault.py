@@ -1,5 +1,6 @@
-import pytest
 import pandas as pd
+import pytest
+
 from open_fdd.core.base_fault import BaseFaultCondition
 from open_fdd.core.exceptions import MissingColumnError
 

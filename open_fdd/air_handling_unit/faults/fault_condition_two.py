@@ -1,50 +1,111 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from open_fdd.core.base_fault import BaseFaultCondition
+from open_fdd.core.components import FaultInputColumn, InstanceAttribute
 from open_fdd.core.mixins import FaultConditionMixin
+
+INPUT_COLS = [
+    FaultInputColumn(
+        name="mat_col",
+        constant_form="MAT_COL",
+        description="Mixed air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="rat_col",
+        constant_form="RAT_COL",
+        description="Return air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="oat_col",
+        constant_form="OAT_COL",
+        description="Outside air temperature",
+        unit="°F",
+        required=True,
+        type=float,
+    ),
+    FaultInputColumn(
+        name="supply_vfd_speed_col",
+        constant_form="SUPPLY_VFD_SPEED_COL",
+        description="Supply fan VFD speed",
+        unit="%",
+        required=True,
+        type=float,
+    ),
+]
+
+FAULT_PARAMS = [
+    InstanceAttribute(
+        name="mix_degf_err_thres",
+        constant_form="MIX_DEGF_ERR_THRES",
+        description="Mixed air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+    InstanceAttribute(
+        name="outdoor_degf_err_thres",
+        constant_form="OUTDOOR_DEGF_ERR_THRES",
+        description="Outdoor air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+    InstanceAttribute(
+        name="return_degf_err_thres",
+        constant_form="RETURN_DEGF_ERR_THRES",
+        description="Return air temperature error threshold",
+        unit="°F",
+        type=float,
+        range=(0.0, 10.0),
+    ),
+]
+
 
 class FaultConditionTwo(BaseFaultCondition, FaultConditionMixin):
     """Class provides the definitions for Fault Condition 2.
     Mix temperature too low; should be between outside and return air.
     """
 
-    def _init_specific_attributes(self, dict_):
-        # Initialize specific attributes
-        self.mat_col = dict_.get("MAT_COL", None)
-        self.rat_col = dict_.get("RAT_COL", None)
-        self.oat_col = dict_.get("OAT_COL", None)
-        self.supply_vfd_speed_col = dict_.get("SUPPLY_VFD_SPEED_COL", None)
-        self.mix_degf_err_thres = dict_.get("MIX_DEGF_ERR_THRES", None)
-        self.outdoor_degf_err_thres = dict_.get("OUTDOOR_DEGF_ERR_THRES", None)
-        self.return_degf_err_thres = dict_.get("RETURN_DEGF_ERR_THRES", None)
-
-        # Set required columns
-        self.required_columns = [
-            self.mat_col,
-            self.rat_col,
-            self.oat_col,
-            self.supply_vfd_speed_col,
-        ]
-
-        # Set documentation strings
-        self.equation_string = "fc2_flag = 1 if (MAT - εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
-        self.description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
-        self.required_column_description = "Required inputs are the mixed air temperature, return air temperature, outside air temperature, and supply fan VFD speed \n"
-        self.error_string = "One or more required columns are missing or None \n"
+    input_columns = INPUT_COLS
+    fault_params = FAULT_PARAMS
+    equation_string = "fc2_flag = 1 if (MAT - εMAT < min(RAT - εRAT, OAT - εOAT)) and (VFDSPD > 0) for N consecutive values else 0 \n"
+    description_string = "Fault Condition 2: Mix temperature too low; should be between outside and return air \n"
+    error_string = "One or more required columns are missing or None \n"
 
     @FaultConditionMixin._handle_errors
     def apply(self, df: pd.DataFrame) -> pd.DataFrame:
         self._apply_common_checks(df)
-        self._apply_analog_checks(df, [self.supply_vfd_speed_col])
+
+        # Get column values using accessor methods
+        supply_vfd_speed_col = self.get_input_column("supply_vfd_speed_col")
+        mat_col = self.get_input_column("mat_col")
+        rat_col = self.get_input_column("rat_col")
+        oat_col = self.get_input_column("oat_col")
+
+        # Get parameter values using accessor methods
+        mix_degf_err_thres = self.get_param("mix_degf_err_thres")
+        return_degf_err_thres = self.get_param("return_degf_err_thres")
+        outdoor_degf_err_thres = self.get_param("outdoor_degf_err_thres")
+
+        self._apply_analog_checks(
+            df, [supply_vfd_speed_col], check_greater_than_one=True
+        )
 
         # Specific checks
-        mat_check = df[self.mat_col] - self.mix_degf_err_thres
+        mat_check = df[mat_col] - mix_degf_err_thres
         temp_min_check = np.minimum(
-            df[self.rat_col] - self.return_degf_err_thres,
-            df[self.oat_col] - self.outdoor_degf_err_thres,
+            df[rat_col] - return_degf_err_thres,
+            df[oat_col] - outdoor_degf_err_thres,
         )
         combined_check = (mat_check < temp_min_check) & (
-            df[self.supply_vfd_speed_col] > 0.01
+            df[supply_vfd_speed_col] > 0.01
         )
 
         self._set_fault_flag(df, combined_check, "fc2_flag")

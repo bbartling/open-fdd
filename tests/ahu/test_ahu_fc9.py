@@ -1,7 +1,8 @@
-import pytest
 import pandas as pd
+import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionNine
-from open_fdd.core.exceptions import MissingColumnError, InvalidParameterError
+from open_fdd.core.exceptions import InvalidParameterError, MissingColumnError
 
 
 def test_fc9_initialization():

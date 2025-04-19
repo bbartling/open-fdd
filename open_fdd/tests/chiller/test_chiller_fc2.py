@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
-from open_fdd.chiller_plant.faults import FaultConditionTwo
-from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
 
+from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
+from open_fdd.chiller_plant.faults import FaultConditionTwo
 
 # Constants for test cases
 TEST_FLOW_ERR_THRESHOLD = 10.0  # Error threshold for flow in GPM

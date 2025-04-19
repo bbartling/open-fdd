@@ -1,6 +1,7 @@
+import sys
+
 import pandas as pd
 import pandas.api.types as pdtypes
-import sys
 
 
 def float_int_check_err(col):

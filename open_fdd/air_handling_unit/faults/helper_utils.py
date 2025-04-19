@@ -1,14 +1,16 @@
 import sys
+
+import pandas as pd
+
 from open_fdd.core.utils import (
+    apply_rolling_average_if_needed,
     clean_nan_values,
+    convert_to_float,
     float_int_check_err,
     float_max_check_err,
     is_float,
     not_greater_than_one,
-    convert_to_float,
-    apply_rolling_average_if_needed,
 )
-import pandas as pd
 
 
 class HelperUtils:
@@ -53,21 +55,21 @@ class HelperUtils:
         self.set_config_dict(config_dict)
 
         from open_fdd.air_handling_unit.faults import (
-            FaultConditionOne,
-            FaultConditionTwo,
-            FaultConditionThree,
-            FaultConditionFour,
-            FaultConditionFive,
-            FaultConditionSix,
-            FaultConditionSeven,
             FaultConditionEight,
-            FaultConditionNine,
-            FaultConditionTen,
             FaultConditionEleven,
-            FaultConditionTwelve,
-            FaultConditionThirteen,
-            FaultConditionFourteen,
             FaultConditionFifteen,
+            FaultConditionFive,
+            FaultConditionFour,
+            FaultConditionFourteen,
+            FaultConditionNine,
+            FaultConditionOne,
+            FaultConditionSeven,
+            FaultConditionSix,
+            FaultConditionTen,
+            FaultConditionThirteen,
+            FaultConditionThree,
+            FaultConditionTwelve,
+            FaultConditionTwo,
         )
 
         fault_counts = {}

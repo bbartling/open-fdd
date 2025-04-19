@@ -1,10 +1,9 @@
 import pandas as pd
 import pytest
-from open_fdd.air_handling_unit.faults import (
-    FaultConditionFifteen,
-)
-from open_fdd.core.exceptions import MissingColumnError
+
+from open_fdd.air_handling_unit.faults import FaultConditionFifteen
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.core.exceptions import MissingColumnError
 
 """
 To see print statements in pytest run with:

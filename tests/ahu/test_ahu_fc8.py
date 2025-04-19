@@ -1,8 +1,9 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionEight
-from open_fdd.core.exceptions import MissingColumnError, InvalidParameterError
+from open_fdd.core.exceptions import InvalidParameterError, MissingColumnError
 
 
 def test_fc8_initialization():
