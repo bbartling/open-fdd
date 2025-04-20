@@ -1,6 +1,16 @@
 import sys
-from open_fdd.air_handling_unit.faults.shared_utils import SharedUtils
+
 import pandas as pd
+
+from open_fdd.core.utils import (
+    apply_rolling_average_if_needed,
+    clean_nan_values,
+    convert_to_float,
+    float_int_check_err,
+    float_max_check_err,
+    is_float,
+    not_greater_than_one,
+)
 
 
 class HelperUtils:
@@ -12,25 +22,25 @@ class HelperUtils:
         self.config_dict = config_dict
 
     def clean_nan_values(self, df):
-        return SharedUtils.clean_nan_values(df)
+        return clean_nan_values(df)
 
     def float_int_check_err(self, col):
-        return SharedUtils.float_int_check_err(col)
+        return float_int_check_err(col)
 
     def float_max_check_err(self, col):
-        return SharedUtils.float_max_check_err(col)
+        return float_max_check_err(col)
 
     def isfloat(self, num):
-        return SharedUtils.isfloat(num)
+        return is_float(num)
 
     def isLessThanOnePointOne(self, num):
-        return SharedUtils.isLessThanOnePointOne(num)
+        return not_greater_than_one(num)
 
     def convert_to_float(self, df, col):
-        return SharedUtils.convert_to_float(df, col)
+        return convert_to_float(df, col)
 
     def apply_rolling_average_if_needed(self, df, freq="1min", rolling_window="5min"):
-        return SharedUtils.apply_rolling_average_if_needed(df, freq, rolling_window)
+        return apply_rolling_average_if_needed(df, freq, rolling_window)
 
     def validate_config(self, required_columns):
         """
@@ -45,21 +55,21 @@ class HelperUtils:
         self.set_config_dict(config_dict)
 
         from open_fdd.air_handling_unit.faults import (
-            FaultConditionOne,
-            FaultConditionTwo,
-            FaultConditionThree,
-            FaultConditionFour,
-            FaultConditionFive,
-            FaultConditionSix,
-            FaultConditionSeven,
             FaultConditionEight,
-            FaultConditionNine,
-            FaultConditionTen,
             FaultConditionEleven,
-            FaultConditionTwelve,
-            FaultConditionThirteen,
-            FaultConditionFourteen,
             FaultConditionFifteen,
+            FaultConditionFive,
+            FaultConditionFour,
+            FaultConditionFourteen,
+            FaultConditionNine,
+            FaultConditionOne,
+            FaultConditionSeven,
+            FaultConditionSix,
+            FaultConditionTen,
+            FaultConditionThirteen,
+            FaultConditionThree,
+            FaultConditionTwelve,
+            FaultConditionTwo,
         )
 
         fault_counts = {}

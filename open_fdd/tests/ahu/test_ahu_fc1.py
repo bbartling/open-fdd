@@ -1,9 +1,9 @@
 import pandas as pd
 import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionOne
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
-from open_fdd.air_handling_unit.faults.fault_condition import MissingColumnError
-
+from open_fdd.core.exceptions import MissingColumnError
 
 # Constants
 TEST_VFD_ERR_THRESHOLD = 0.05

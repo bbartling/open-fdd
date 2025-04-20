@@ -1,8 +1,9 @@
 import pandas as pd
 import pytest
+
 from open_fdd.air_handling_unit.faults import FaultConditionSixteen
-from open_fdd.core.exceptions import MissingColumnError, InvalidParameterError
 from open_fdd.air_handling_unit.faults.helper_utils import HelperUtils
+from open_fdd.core.exceptions import InvalidParameterError, MissingColumnError
 
 """
 To see print statements in pytest run with:
@@ -152,7 +153,7 @@ class TestFaultOnInvalidParams:
                     "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
                 }
             )
-        assert "should be a float" in str(excinfo.value)
+        assert "should be of type float" in str(excinfo.value)
 
     def test_invalid_efficiency_value(self):
         """Test that InvalidParameterError is raised if efficiency values are out of 0.0 - 1.0 range."""
@@ -173,7 +174,7 @@ class TestFaultOnInvalidParams:
                     "SUPPLY_VFD_SPEED_COL": TEST_SUPPLY_VFD_SPEED_COL,
                 }
             )
-        assert "should be a float between 0.0 and 1.0" in str(excinfo.value)
+        assert "should be between 0.0 and 1.0" in str(excinfo.value)
 
 
 class TestFaultOnMissingColumns:

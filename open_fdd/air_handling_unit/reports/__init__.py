@@ -1,9 +1,11 @@
-import matplotlib.pyplot as plt
-from open_fdd.air_handling_unit.reports.fault_report import BaseFaultReport
-from open_fdd.air_handling_unit.faults import FaultConditionSixteen
-import pandas as pd
-import numpy as np
 import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from open_fdd.air_handling_unit.faults import FaultConditionSixteen
+from open_fdd.air_handling_unit.reports.fault_report import BaseFaultReport
 
 
 class FaultCodeOneReport(BaseFaultReport):
