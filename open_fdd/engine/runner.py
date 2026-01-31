@@ -27,9 +27,7 @@ def load_rule(path: Union[str, Path]) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def _resolve_bounds(
-    bounds: Any, units: str = "imperial"
-) -> Optional[List[float]]:
+def _resolve_bounds(bounds: Any, units: str = "imperial") -> Optional[List[float]]:
     """Resolve bounds: [low, high] or {imperial: [...], metric: [...]}."""
     if bounds is None:
         return None
@@ -119,7 +117,9 @@ class RuleRunner:
             except (KeyError, NameError) as e:
                 if skip_missing:
                     continue
-                raise RuntimeError(f"Rule '{rule.get('name', '?')}' failed (missing column?): {e}") from e
+                raise RuntimeError(
+                    f"Rule '{rule.get('name', '?')}' failed (missing column?): {e}"
+                ) from e
             except Exception as e:
                 raise RuntimeError(f"Rule '{rule.get('name', '?')}' failed: {e}") from e
 

@@ -58,9 +58,7 @@ def summarize_fault(
         fault_mask = df[flag_col] == 1
         for label, col in sensor_cols.items():
             if col in df.columns:
-                summary[f"flag_true_{label}"] = round(
-                    df.loc[fault_mask, col].mean(), 2
-                )
+                summary[f"flag_true_{label}"] = round(df.loc[fault_mask, col].mean(), 2)
 
     return summary
 
@@ -89,9 +87,7 @@ def summarize_all_faults(
     results = {}
     for fc in flag_cols:
         sensors = sensor_map.get(fc)
-        results[fc] = summarize_fault(
-            df, fc, sensor_cols=sensors, motor_col=motor_col
-        )
+        results[fc] = summarize_fault(df, fc, sensor_cols=sensors, motor_col=motor_col)
     return results
 
 

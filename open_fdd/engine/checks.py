@@ -117,6 +117,7 @@ def check_oa_fraction(
     AHU FC6: OA fraction calc error or AHU not maintaining design airflow.
     Fault when |OA_frac_calc - OA_min| > threshold in non-economizer modes.
     """
+
     def _get(name: str) -> pd.Series:
         col = col_map.get(name)
         return df[col] if col and col in df.columns else pd.Series(0.0, index=df.index)
@@ -148,7 +149,9 @@ def check_oa_fraction(
     denom = oat - rat
     percent_oa_calc = np.where(denom != 0, (mat - rat) / denom, 0)
     percent_oa_calc = np.clip(percent_oa_calc, 0, None)
-    perc_OAmin = np.where(supply_fan_air_volume > 0, ahu_min_oa_cfm_design / supply_fan_air_volume, 0)
+    perc_OAmin = np.where(
+        supply_fan_air_volume > 0, ahu_min_oa_cfm_design / supply_fan_air_volume, 0
+    )
     percent_oa_calc_minus_perc_OAmin = np.abs(percent_oa_calc - perc_OAmin)
 
     os1 = (
@@ -176,6 +179,7 @@ def check_erv_efficiency(
     """
     AHU FC16: ERV effectiveness outside expected range.
     """
+
     def _get(name: str) -> pd.Series:
         col = col_map.get(name)
         return df[col] if col and col in df.columns else pd.Series(0.0, index=df.index)
@@ -194,7 +198,9 @@ def check_erv_efficiency(
 
     oat_rat_delta = (erv_oat_enter - erv_eat_enter).abs()
     denom = erv_eat_enter - erv_oat_enter
-    erv_effectiveness = np.where(denom != 0, (erv_oat_leaving - erv_oat_enter) / denom, 0)
+    erv_effectiveness = np.where(
+        denom != 0, (erv_oat_leaving - erv_oat_enter) / denom, 0
+    )
 
     heating_mode = erv_oat_enter < oat_low
     cooling_mode = erv_oat_enter > oat_high
@@ -204,5 +210,7 @@ def check_erv_efficiency(
     low_clg = cooling_mode & (erv_effectiveness < erv_eff_min_clg)
     high_clg = cooling_mode & (erv_effectiveness > erv_eff_max_clg)
 
-    fault = (oat_rat_delta >= oat_rat_delta_min) & (low_htg | high_htg | low_clg | high_clg)
+    fault = (oat_rat_delta >= oat_rat_delta_min) & (
+        low_htg | high_htg | low_clg | high_clg
+    )
     return pd.Series(fault, index=df.index)

@@ -9,14 +9,16 @@ from open_fdd.engine import RuleRunner
 @pytest.fixture
 def sample_df():
     """Sample AHU-style DataFrame."""
-    return pd.DataFrame({
-        "timestamp": pd.date_range(start="2023-01-01", periods=20, freq="15min"),
-        "duct_static": [0.4, 0.35, 0.3, 0.25, 0.2] * 4,
-        "duct_static_setpoint": [0.5] * 20,
-        "supply_vfd_speed": [0.95, 0.96, 0.97, 0.98, 0.99] * 4,
-        "sat": [54, 55, 56, 57, 58] * 4,
-        "rat": [70] * 20,
-    })
+    return pd.DataFrame(
+        {
+            "timestamp": pd.date_range(start="2023-01-01", periods=20, freq="15min"),
+            "duct_static": [0.4, 0.35, 0.3, 0.25, 0.2] * 4,
+            "duct_static_setpoint": [0.5] * 20,
+            "supply_vfd_speed": [0.95, 0.96, 0.97, 0.98, 0.99] * 4,
+            "sat": [54, 55, 56, 57, 58] * 4,
+            "rat": [70] * 20,
+        }
+    )
 
 
 @pytest.fixture
@@ -80,9 +82,11 @@ def test_runner_bounds_out_of_range(sample_df):
 
 def test_runner_flatline_rule():
     """RuleRunner evaluates flatline rules."""
-    df = pd.DataFrame({
-        "sat": [50.0] * 20,  # completely flat
-    })
+    df = pd.DataFrame(
+        {
+            "sat": [50.0] * 20,  # completely flat
+        }
+    )
     rule = {
         "name": "flatline",
         "type": "flatline",
@@ -99,6 +103,7 @@ def test_runner_flatline_rule():
 def test_runner_from_dir(sample_df):
     """RuleRunner loads rules from directory."""
     from pathlib import Path
+
     rules_dir = Path(__file__).resolve().parent.parent.parent / "rules"
     if rules_dir.is_dir():
         runner = RuleRunner(rules_path=rules_dir)
@@ -108,12 +113,14 @@ def test_runner_from_dir(sample_df):
 
 def test_runner_fc3_expression():
     """FC3 mix temp too high - fault when MAT > max(RAT, OAT)."""
-    df = pd.DataFrame({
-        "mat": [80.0, 81.0, 79.0],
-        "rat": [70.0, 70.5, 71.0],
-        "oat": [50.0, 51.0, 52.0],
-        "supply_vfd_speed": [0.9, 0.9, 0.9],
-    })
+    df = pd.DataFrame(
+        {
+            "mat": [80.0, 81.0, 79.0],
+            "rat": [70.0, 70.5, 71.0],
+            "oat": [50.0, 51.0, 52.0],
+            "supply_vfd_speed": [0.9, 0.9, 0.9],
+        }
+    )
     rule = {
         "name": "mix_temp_too_high",
         "type": "expression",
@@ -124,7 +131,11 @@ def test_runner_fc3_expression():
             "oat": {"column": "oat"},
             "supply_vfd_speed": {"column": "supply_vfd_speed"},
         },
-        "params": {"mix_err_thres": 2.0, "return_err_thres": 2.0, "outdoor_err_thres": 5.0},
+        "params": {
+            "mix_err_thres": 2.0,
+            "return_err_thres": 2.0,
+            "outdoor_err_thres": 5.0,
+        },
         "expression": "(mat - mix_err_thres > np.maximum(rat + return_err_thres, oat + outdoor_err_thres)) & (supply_vfd_speed > 0.01)",
     }
     runner = RuleRunner(rules=[rule])
@@ -136,9 +147,11 @@ def test_runner_fc3_expression():
 
 def test_runner_bounds_metric_units():
     """Bounds rule uses metric bounds when params={"units": "metric"}."""
-    df = pd.DataFrame({
-        "sat": [5, 70],   # 5 degC in range [4,66], 70 degC out of range
-    })
+    df = pd.DataFrame(
+        {
+            "sat": [5, 70],  # 5 degC in range [4,66], 70 degC out of range
+        }
+    )
     rule = {
         "name": "bounds",
         "type": "bounds",
@@ -164,9 +177,23 @@ def test_runner_fc4_hunting():
     data = []
     for i in range(60):
         if i % 2 == 0:
-            data.append({"economizer_sig": 0.6, "heating_sig": 0.0, "cooling_sig": 0.6, "supply_vfd_speed": 0.8})
+            data.append(
+                {
+                    "economizer_sig": 0.6,
+                    "heating_sig": 0.0,
+                    "cooling_sig": 0.6,
+                    "supply_vfd_speed": 0.8,
+                }
+            )
         else:
-            data.append({"economizer_sig": 0.0, "heating_sig": 0.0, "cooling_sig": 0.6, "supply_vfd_speed": 0.8})
+            data.append(
+                {
+                    "economizer_sig": 0.0,
+                    "heating_sig": 0.0,
+                    "cooling_sig": 0.6,
+                    "supply_vfd_speed": 0.8,
+                }
+            )
     df = pd.DataFrame(data)
     rule = {
         "name": "excessive_state_changes",
