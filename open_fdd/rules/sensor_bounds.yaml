@@ -1,0 +1,64 @@
+# Sensor bounds check — SkySpark/Axon-style
+# Fault if value is outside valid range for sensor type
+# Pass params={"units": "metric"} to run() for metric bounds
+name: bad_sensor_check
+description: Returns fault if sensor is out of range (inspired by SkySpark badSensorCheck)
+type: bounds
+flag: bad_sensor_flag
+
+params:
+  units: imperial   # override at runtime: params={"units": "metric"}
+
+inputs:
+  supply_air_temp:
+    column: sat
+    bounds:
+      imperial: [40, 150]    # degF
+      metric: [4, 66]        # degC
+  zone_temp:
+    column: zt
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  return_air_temp:
+    column: rat
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  mixed_air_temp:
+    column: mat
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  outdoor_air_temp:
+    column: oat
+    bounds:
+      imperial: [-40, 120]
+      metric: [-40, 49]
+  relative_humidity:
+    column: rh
+    bounds: [0, 100]   # same for both
+  chilled_water_temp:
+    column: chwt
+    bounds:
+      imperial: [35, 100]    # degF
+      metric: [2, 38]        # degC
+  hot_water_temp:
+    column: hwt
+    bounds:
+      imperial: [50, 212]
+      metric: [10, 100]
+  condenser_water_temp:
+    column: cwt
+    bounds:
+      imperial: [50, 110]
+      metric: [10, 43]
+  co2_ppm:
+    column: co2
+    bounds: [400, 2000]   # same for both
+  # Air pressure (inH2O vs Pa) — use column that matches your data
+  air_pressure_inh2o:
+    column: ap
+    bounds:
+      imperial: [-5, 10]    # inH2O
+      metric: [-1244, 2488] # Pa

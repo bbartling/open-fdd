@@ -1,0 +1,24 @@
+# AHU Fault Condition 12 — SAT too high in OS3/OS4 cooling modes
+name: sat_too_high_cooling_modes
+description: SAT too high; should be less than MAT in econ+mech or mech-only cooling
+type: expression
+flag: fc12_flag
+
+inputs:
+  sat:
+    column: sat
+  mat:
+    column: mat
+  cooling_sig:
+    column: cooling_sig
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  delta_t_supply_fan: 0.5
+  mix_err_thres: 1.0
+  supply_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  (sat > mat + np.sqrt(supply_err_thres**2 + mix_err_thres**2) + delta_t_supply_fan) & (((economizer_sig > 0.9) & (cooling_sig > 0)) | ((economizer_sig <= ahu_min_oa_dpr) & (cooling_sig > 0.9)))

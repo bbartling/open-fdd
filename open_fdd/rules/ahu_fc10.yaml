@@ -1,0 +1,22 @@
+# AHU Fault Condition 10 — OAT and MAT should be approx equal in econ+mech cooling
+name: oat_mat_mismatch_econ_mech
+description: OAT and MAT should be approx equal in economizer + mechanical cooling mode
+type: expression
+flag: fc10_flag
+
+inputs:
+  oat:
+    column: oat
+  mat:
+    column: mat
+  cooling_sig:
+    column: cooling_sig
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  outdoor_err_thres: 1.0
+  mix_err_thres: 1.0
+
+expression: |
+  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (cooling_sig > 0.01) & (economizer_sig > 0.9)

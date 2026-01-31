@@ -1,7 +1,1 @@
-from open_fdd.chiller_plant.faults.fault_condition_one import FaultConditionOne
-from open_fdd.chiller_plant.faults.fault_condition_two import FaultConditionTwo
-
-__all__ = [
-    "FaultConditionOne",
-    "FaultConditionTwo",
-]
+"""Chiller plant fault rules — now config-driven via open_fdd/rules/chiller_*.yaml."""

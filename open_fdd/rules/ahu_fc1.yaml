@@ -1,0 +1,22 @@
+# AHU Fault Condition 1 — Low duct static at max fan speed
+# ASHRAE/NIST style: duct static too low while fan at full speed
+name: low_duct_static_at_max_fan
+description: Duct static pressure too low with supply fan at max speed
+type: expression
+flag: fc1_flag
+
+inputs:
+  duct_static:
+    column: duct_static
+  duct_static_setpoint:
+    column: duct_static_setpoint
+  supply_vfd_speed:
+    column: supply_vfd_speed
+
+params:
+  static_err_thres: 0.1      # inches H2O
+  vfd_max: 0.95              # 95% max
+  vfd_err_thres: 0.05
+
+expression: |
+  (duct_static < duct_static_setpoint - static_err_thres) & (supply_vfd_speed >= vfd_max - vfd_err_thres)

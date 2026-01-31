@@ -1,0 +1,24 @@
+# AHU Fault Condition 5 — SAT too low in heating mode
+# SAT should be higher than MAT when heating; broken heating valve
+name: sat_too_low_heating_mode
+description: SAT too low; should be higher than MAT in heating mode (broken heating valve)
+type: expression
+flag: fc5_flag
+
+inputs:
+  mat:
+    column: mat
+  sat:
+    column: sat
+  heating_sig:
+    column: heating_sig
+  supply_vfd_speed:
+    column: supply_vfd_speed
+
+params:
+  mix_err_thres: 1.0
+  supply_err_thres: 1.0
+  delta_t_supply_fan: 0.5
+
+expression: |
+  (sat + supply_err_thres <= mat - mix_err_thres + delta_t_supply_fan) & (heating_sig > 0.01) & (supply_vfd_speed > 0.01)

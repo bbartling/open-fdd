@@ -1,0 +1,25 @@
+# AHU Fault Condition 14 — Temp drop across inactive cooling coil
+name: cooling_coil_drop_when_inactive
+description: Temperature drop across inactive cooling coil in heating/economizer modes
+type: expression
+flag: fc14_flag
+
+inputs:
+  clg_coil_enter:
+    column: clg_coil_enter_temp
+  clg_coil_leave:
+    column: clg_coil_leave_temp
+  heating_sig:
+    column: heating_sig
+  cooling_sig:
+    column: cooling_sig
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  coil_enter_err_thres: 1.0
+  coil_leave_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  ((clg_coil_enter - clg_coil_leave) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((heating_sig > 0) & (cooling_sig == 0) & (economizer_sig <= ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)))

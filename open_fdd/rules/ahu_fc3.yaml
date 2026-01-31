@@ -1,0 +1,24 @@
+# AHU Fault Condition 3 — Mix temp too high
+# MAT should be between OAT and RAT; fault if MAT > max(OAT, RAT)
+name: mix_temp_too_high
+description: Mix temperature too high; should be between outside and return air
+type: expression
+flag: fc3_flag
+
+inputs:
+  mat:
+    column: mat
+  rat:
+    column: rat
+  oat:
+    column: oat
+  supply_vfd_speed:
+    column: supply_vfd_speed
+
+params:
+  mix_err_thres: 1.0
+  return_err_thres: 1.0
+  outdoor_err_thres: 1.0
+
+expression: |
+  (mat - mix_err_thres > np.maximum(rat + return_err_thres, oat + outdoor_err_thres)) & (supply_vfd_speed > 0.01)

@@ -1,0 +1,20 @@
+# AHU Fault Condition 11 — OAT and MAT should be approx equal in economizer mode
+name: oat_mat_mismatch_economizer
+description: OAT and MAT should be approx equal in economizer mode
+type: expression
+flag: fc11_flag
+
+inputs:
+  oat:
+    column: oat
+  mat:
+    column: mat
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  outdoor_err_thres: 1.0
+  mix_err_thres: 1.0
+
+expression: |
+  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (economizer_sig > 0.9)

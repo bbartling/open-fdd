@@ -1,0 +1,16 @@
+# Flatline detection — sensor stuck at constant value
+# SkySpark-style: hisRollup(spread, timeSensitivity) < tolerance
+name: sensor_flatline
+description: Fault if sensor value does not change over window (stuck sensor)
+type: flatline
+flag: flatline_flag
+
+inputs:
+  supply_air_temp:
+    column: sat
+  zone_temp:
+    column: zt
+
+params:
+  tolerance: 0.000001
+  window: 12   # number of samples (e.g. 12 x 15min = 3hr)

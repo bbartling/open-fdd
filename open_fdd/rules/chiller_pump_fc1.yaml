@@ -1,0 +1,21 @@
+# Chiller plant — Pump FC1: Differential pressure too low at max pump speed
+name: pump_diff_pressure_low
+description: Variable pump does not meet differential pressure setpoint at full speed
+type: expression
+flag: fc_pump_flag
+
+inputs:
+  diff_pressure:
+    column: diff_pressure
+  diff_pressure_setpoint:
+    column: diff_pressure_setpoint
+  pump_speed:
+    column: pump_speed
+
+params:
+  diff_pressure_err_thres: 2.0
+  pump_speed_max: 0.95
+  pump_speed_err_thres: 0.05
+
+expression: |
+  (diff_pressure < diff_pressure_setpoint - diff_pressure_err_thres) & (pump_speed >= pump_speed_max - pump_speed_err_thres)
