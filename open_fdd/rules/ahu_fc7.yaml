@@ -1,0 +1,22 @@
+# AHU Fault Condition 7 — SAT too low in full heating
+# Supply air temp too low when heating valve fully open
+name: sat_too_low_full_heating
+description: Supply air temperature too low in full heating mode with heating valve fully open
+type: expression
+flag: fc7_flag
+
+inputs:
+  sat:
+    column: sat
+  sat_setpoint:
+    column: sat_setpoint
+  heating_sig:
+    column: heating_sig
+  supply_vfd_speed:
+    column: supply_vfd_speed
+
+params:
+  supply_err_thres: 1.0
+
+expression: |
+  (sat < sat_setpoint - supply_err_thres) & (heating_sig > 0.9) & (supply_vfd_speed > 0)

@@ -1,0 +1,22 @@
+# AHU Fault Condition 16 — ERV effectiveness outside expected range
+name: erv_effectiveness_fault
+description: ERV effectiveness outside expected range based on OAT
+type: erv_efficiency
+flag: fc16_flag
+
+inputs:
+  erv_oat_enter:
+    column: erv_oat_enter
+  erv_oat_leaving:
+    column: erv_oat_leaving
+  erv_eat_enter:
+    column: erv_eat_enter
+
+params:
+  erv_efficiency_min_heating: 0.5
+  erv_efficiency_max_heating: 0.9
+  erv_efficiency_min_cooling: 0.5
+  erv_efficiency_max_cooling: 0.9
+  oat_low_threshold: 55.0
+  oat_high_threshold: 65.0
+  oat_rat_delta_min: 5.0

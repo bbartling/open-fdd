@@ -1,0 +1,26 @@
+# AHU Fault Condition 15 — Temp rise across inactive heating coil
+name: heating_coil_rise_when_inactive
+description: Temperature rise across inactive heating coil in econ/mech cooling modes
+type: expression
+flag: fc15_flag
+
+inputs:
+  htg_coil_enter:
+    column: htg_coil_enter_temp
+  htg_coil_leave:
+    column: htg_coil_leave_temp
+  heating_sig:
+    column: heating_sig
+  cooling_sig:
+    column: cooling_sig
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  coil_enter_err_thres: 1.0
+  coil_leave_err_thres: 1.0
+  delta_t_supply_fan: 0.5
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  ((htg_coil_leave - htg_coil_enter) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig > 0.9)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig <= ahu_min_oa_dpr)))

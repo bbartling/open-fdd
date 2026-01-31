@@ -3,108 +3,146 @@
 ![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
-![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 
-![Fault Detection Visualization](https://raw.githubusercontent.com/bbartling/open-fdd/master/open_fdd/air_handling_unit/images/plot_for_repo.png)
+**open-fdd** is a **config-driven Fault Detection and Diagnostics (FDD)** library for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and SkySpark/Axon-style logic.
 
-## 🔥 What is open-fdd?
-**open-fdd** is an **open-source Fault Detection and Diagnostics (FDD) tool** designed for analysts and engineers using local toolsets like Jupyter notebooks. It is not necessarily an IoT tool for **Grafana**, which an MSI (Master Systems Integrator) might use, though it could be adapted for that purpose. Instead, it is tailored for **individual engineers analyzing historical HVAC system data** using the **Pandas computing library**. While it could potentially be integrated with a database, doing so may require additional effort. It leverages **ASHRAE** and **NIST**-inspired fault equations. Built on Python and **Pandas**, this library enables efficient detection of operational issues in HVAC systems with:
+## Features
 
-This version improves clarity and flow while keeping it professional and readable. 🚀 Let me know if you want any more refinements!
+- **Config-driven rules** — YAML-based fault definitions (bounds, flatline, expression, hunting, OA fraction, ERV)
+- **Pandas-native** — Works directly with DataFrames
+- **AHU rules** — FC1–FC16 (duct static, mix temp, PID hunting, economizer, coils, ERV)
+- **Chiller plant** — Pump differential pressure, CHW flow
+- **Sensor checks** — Bounds (imperial/metric) and flatline detection
+- **Fault analytics** — Duration, motor runtime, sensor stats when faulted
 
-✅ **Pre-built fault equations** for detecting HVAC anomalies
-✅ **Seamless Pandas integration** for time-series analysis
-✅ **Extensible architecture** for custom fault conditions
-✅ **Open-source & community-driven** development
+## Installation
 
-
-📖 **See Online Documentation:**  
-[📚 Open-FDD Docs](https://bbartling.github.io/open-fdd/)
-
----
-
-## 🚀 Getting Started
-### Installation
-Install `open-fdd` from PyPI with:
 ```bash
 pip install open-fdd
 ```
 
-### Quick Example
-```python
-import pandas as pd
-from open_fdd.air_handling_unit.fault_condition_one import FaultConditionOne
+Or from source:
 
-# Sample data
-data = {
-    "timestamp": pd.date_range(start="2023-01-01", periods=10, freq="15T"),
-    "supply_air_temp": [54, 55, 56, 57, 58, 59, 60, 61, 62, 63],
-    "return_air_temp": [70, 70, 70, 70, 70, 70, 70, 70, 70, 70],
-}
-df = pd.DataFrame(data)
-
-# Run fault detection
-fault_checker = FaultConditionOne(df)
-df_faults = fault_checker.process()
-print(df_faults)
-```
-
----
-
-## 📌 Project Goals
-`open-fdd` aims to provide a full-featured **Fault Detection & Diagnostics (FDD) platform** with:
-
-### ✅ Completed Features
-- [x] Air handling unit (AHU) fault conditions & reports (aligned with ASHRAE/NIST)
-- [x] PyPI distribution for easy installation
-
-### 🔄 In Progress
-- [ ] Jupyter notebook tutorials showcasing AHU FDD examples + BRICK metadata integration
-- [ ] Expansion to **central plant** fault conditions (chillers, boilers, pumps)
-- [ ] Jupyter notebook tutorials showcasing AHU FDD examples + BRICK metadata integration
-
-### ⏳ Upcoming
-- [ ] **Energy Efficiency** fault detection & reporting
-- [ ] **Metering** fault analytics & data modeling
-- [ ] **SQL Integration** for storing results & visualizing in Grafana
-- [ ] Dedicated documentation site (`github.io` or ReadTheDocs)
-
----
-
-## 🤝 How to Contribute
-We welcome contributions from the community! To get started:
-
-1. **Clone the repository:**
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-```
-2. **Install dependencies:**
-```bash
-py -3.12 -m pip install -r requirements.txt
-```
-3. **Run tests:**
-```bash
-py -3.12 -m pytest
-```
-4. **Format with Black:**
-```bash
-py -3.12 -m black .
-```
-5. **Submit a Pull Request (PR)**
-
----
-
-## 📜 License
-`open-fdd` is released under the **MIT License**, ensuring it remains free and accessible for all.
-
+pip install -e ".[dev]"
 ```
 
-【MIT License】
+## Quick Start
 
-Copyright 2025 Ben Bartling
+```python
+import pandas as pd
+from open_fdd import RuleRunner
+from open_fdd.air_handling_unit.reports import summarize_fault, print_summary
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+# Sample AHU data
+df = pd.DataFrame({
+    "timestamp": pd.date_range(start="2023-01-01", periods=100, freq="15min"),
+    "duct_static": [0.4] * 50 + [0.2] * 50,
+    "duct_static_setpoint": [0.5] * 100,
+    "supply_vfd_speed": [0.95] * 100,
+    "mat": [60] * 100,
+    "rat": [72] * 100,
+    "oat": [50] * 100,
+})
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+# Run rules
+runner = RuleRunner("open_fdd/rules")
+df_result = runner.run(df, rolling_window=3)
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# Analytics
+summary = summarize_fault(df_result, "fc1_flag", motor_col="supply_vfd_speed")
+print_summary(summary, "FC1 Low Duct Static")
+```
+
+## Rule Types
+
+| Type | Description |
+|------|-------------|
+| `bounds` | Value outside [low, high]; supports `units: metric` |
+| `flatline` | Sensor stuck (rolling spread < tolerance) |
+| `expression` | Pandas/numpy expression |
+| `hunting` | Excessive AHU state changes (PID hunting) |
+| `oa_fraction` | OA fraction / design airflow error |
+| `erv_efficiency` | ERV effectiveness out of range |
+
+## Rule Structure
+
+```yaml
+name: my_rule
+type: expression
+flag: my_flag
+
+inputs:
+  col_a:
+    column: actual_df_column_name
+  col_b:
+    column: other_column
+
+params:
+  thres: 0.1
+
+expression: |
+  (col_a < col_b - thres) & (col_a > 0)
+```
+
+## Creating custom rules
+
+You can define your own rules in YAML. The `expression` type is the most flexible — use any pandas/numpy expression against your columns:
+
+```yaml
+name: my_custom_rule
+type: expression
+flag: my_fault_flag
+
+inputs:
+  temp_a:
+    column: sensor_1   # maps to your DataFrame column
+  temp_b:
+    column: sensor_2
+
+params:
+  threshold: 5.0
+
+expression: |
+  (temp_a - temp_b) > threshold
+```
+
+Put your rules in a directory and load them:
+
+```python
+runner = RuleRunner("path/to/your/rules")
+df_result = runner.run(df)
+```
+
+Or pass rule dicts directly: `RuleRunner(rules=[{...}])`. Use `skip_missing_columns=True` when your DataFrame doesn't have all columns for every rule.
+
+## Metric Units
+
+For sensor bounds, pass `params={"units": "metric"}`:
+
+```python
+runner.run(df, params={"units": "metric"})
+```
+
+## Project Layout
+
+```
+open_fdd/
+├── engine/          # RuleRunner, checks
+├── rules/           # YAML rule configs (AHU, chiller, sensor)
+├── air_handling_unit/
+│   └── reports/     # Fault analytics (summarize_fault, etc.)
+└── tests/
+```
+
+## Contributing
+
+1. Clone and install: `pip install -e ".[dev]"`
+2. Run tests: `pytest open_fdd/tests/`
+3. Format: `black open_fdd/`
+4. Submit a PR
+
+## License
+
+MIT — see [LICENSE](LICENSE).

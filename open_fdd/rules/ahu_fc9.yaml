@@ -1,0 +1,24 @@
+# AHU Fault Condition 9 — OAT too high in free cooling mode
+name: oat_too_high_free_cooling
+description: Outside air temp too high in free cooling without mechanical cooling
+type: expression
+flag: fc9_flag
+
+inputs:
+  oat:
+    column: oat
+  sat_setpoint:
+    column: sat_setpoint
+  economizer_sig:
+    column: economizer_sig
+  cooling_sig:
+    column: cooling_sig
+
+params:
+  outdoor_err_thres: 1.0
+  delta_t_supply_fan: 0.5
+  supply_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  (oat - outdoor_err_thres > sat_setpoint - delta_t_supply_fan + supply_err_thres) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)

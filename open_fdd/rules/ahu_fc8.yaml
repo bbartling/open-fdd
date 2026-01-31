@@ -1,0 +1,24 @@
+# AHU Fault Condition 8 — SAT and MAT should be approx equal in economizer mode
+name: sat_mat_mismatch_economizer
+description: Supply air and mixed air temp should be approx equal in economizer mode
+type: expression
+flag: fc8_flag
+
+inputs:
+  mat:
+    column: mat
+  sat:
+    column: sat
+  economizer_sig:
+    column: economizer_sig
+  cooling_sig:
+    column: cooling_sig
+
+params:
+  delta_t_supply_fan: 0.5
+  mix_err_thres: 1.0
+  supply_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  (np.abs(sat - delta_t_supply_fan - mat) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)

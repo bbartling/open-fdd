@@ -1,0 +1,19 @@
+# Chiller plant — Flow FC2: Primary CHW flow too high at high pump speed
+name: chw_flow_high_at_max_pump
+description: Primary chilled water flow too high with pump at high speed
+type: expression
+flag: fc_chiller_flow_flag
+
+inputs:
+  flow:
+    column: flow
+  pump_speed:
+    column: pump_speed
+
+params:
+  flow_error_threshold: 1000.0
+  pump_speed_max: 0.95
+  pump_speed_err_thres: 0.05
+
+expression: |
+  (flow > flow_error_threshold) & (pump_speed >= pump_speed_max - pump_speed_err_thres)

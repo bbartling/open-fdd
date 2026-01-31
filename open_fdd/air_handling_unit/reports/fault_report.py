@@ -1,43 +1,103 @@
-import sys
+"""
+Fault analytics and reporting for config-driven FDD.
 
-import matplotlib.pyplot as plt
-import numpy as np
+Provides fault duration, motor runtime, and sensor stats when faults occur.
+"""
+
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 
-class BaseFaultReport:
-    def __init__(self, config, fault_col):
-        self.config = config
-        self.fault_col = fault_col
+def summarize_fault(
+    df: pd.DataFrame,
+    flag_col: str,
+    timestamp_col: Optional[str] = None,
+    sensor_cols: Optional[Dict[str, str]] = None,
+    motor_col: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Compute fault analytics for a single fault flag.
 
-    def create_plot(self, df: pd.DataFrame):
-        raise NotImplementedError
+    Args:
+        df: DataFrame with datetime index or timestamp_col.
+        flag_col: Name of fault flag column (0/1).
+        timestamp_col: If df has no datetime index, column with timestamps.
+        sensor_cols: Optional {label: column_name} for flag_true_* stats.
+        motor_col: Optional column for hours_motor_runtime (e.g. supply_vfd_speed).
 
-    def summarize_fault_times(self, df: pd.DataFrame) -> dict:
-        raise NotImplementedError
+    Returns:
+        Dict with total_days, total_hours, hours_fault_mode, percent_true/false,
+        hours_motor_runtime (if motor_col), and flag_true_* for each sensor_col.
+    """
+    if timestamp_col and timestamp_col in df.columns:
+        df = df.set_index(timestamp_col) if timestamp_col != df.index.name else df
+    if not isinstance(df.index, pd.DatetimeIndex):
+        return {"error": "DataFrame must have DatetimeIndex"}
 
-    def create_hist_plot(self, df: pd.DataFrame):
-        df[f"hour_of_the_day_{self.fault_col}"] = df.index.hour.where(
-            df[self.fault_col] == 1
+    delta = df.index.to_series().diff()
+    total_td = delta.sum()
+
+    summary = {
+        "total_days": round(total_td / pd.Timedelta(days=1), 2),
+        "total_hours": round(total_td / pd.Timedelta(hours=1)),
+        f"hours_{flag_col.replace('_flag','')}_mode": round(
+            (delta * df[flag_col]).sum() / pd.Timedelta(hours=1)
+        ),
+        "percent_true": round(df[flag_col].mean() * 100, 2),
+        "percent_false": round((100 - df[flag_col].mean() * 100), 2),
+    }
+
+    if motor_col and motor_col in df.columns:
+        motor_on = df[motor_col].gt(0.01).astype(int)
+        summary["hours_motor_runtime"] = round(
+            (delta * motor_on).sum() / pd.Timedelta(hours=1), 2
         )
-        fig, ax = plt.subplots(tight_layout=True, figsize=(25, 8))
-        ax.hist(df[f"hour_of_the_day_{self.fault_col}"].dropna())
-        ax.set_xlabel("Hour of the Day")
-        ax.set_ylabel("Frequency")
-        ax.set_title(f"Hour-Of-Day When Fault Flag {self.fault_col} is TRUE")
-        plt.show()
-        plt.close()
 
-    def display_report_in_ipython(self, df: pd.DataFrame):
-        summary = self.summarize_fault_times(df)
-        for key, value in summary.items():
-            formatted_key = key.replace("_", " ")
-            print(f"{formatted_key}: {value}")
-            sys.stdout.flush()
+    if sensor_cols:
+        fault_mask = df[flag_col] == 1
+        for label, col in sensor_cols.items():
+            if col in df.columns:
+                summary[f"flag_true_{label}"] = round(
+                    df.loc[fault_mask, col].mean(), 2
+                )
 
-        if df[self.fault_col].max() != 0:
-            self.create_plot(df)
-            self.create_hist_plot(df)
-        else:
-            print("NO FAULTS FOUND - Skipping time-of-day Histogram plot")
-            sys.stdout.flush()
+    return summary
+
+
+def summarize_all_faults(
+    df: pd.DataFrame,
+    flag_cols: Optional[List[str]] = None,
+    motor_col: str = "supply_vfd_speed",
+    sensor_map: Optional[Dict[str, Dict[str, str]]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Compute analytics for all fault flag columns.
+
+    Args:
+        df: DataFrame with fault flags.
+        flag_cols: List of flag column names. Default: all columns ending in _flag.
+        motor_col: Column for motor runtime.
+        sensor_map: Optional {flag_col: {label: col}} for flag_true_* per fault.
+
+    Returns:
+        Dict[flag_col, summary_dict]
+    """
+    if flag_cols is None:
+        flag_cols = [c for c in df.columns if c.endswith("_flag") and c in df.columns]
+    sensor_map = sensor_map or {}
+    results = {}
+    for fc in flag_cols:
+        sensors = sensor_map.get(fc)
+        results[fc] = summarize_fault(
+            df, fc, sensor_cols=sensors, motor_col=motor_col
+        )
+    return results
+
+
+def print_summary(summary: Dict[str, Any], title: Optional[str] = None) -> None:
+    """Print summary dict in readable format."""
+    if title:
+        print(f"\n--- {title} ---")
+    for k, v in summary.items():
+        print(f"  {k.replace('_', ' ')}: {v}")

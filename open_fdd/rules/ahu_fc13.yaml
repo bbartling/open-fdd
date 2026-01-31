@@ -1,0 +1,22 @@
+# AHU Fault Condition 13 — SAT too high in full cooling mode
+name: sat_too_high_full_cooling
+description: SAT too high vs setpoint in OS3/OS4 full cooling mode
+type: expression
+flag: fc13_flag
+
+inputs:
+  sat:
+    column: sat
+  sat_setpoint:
+    column: sat_setpoint
+  cooling_sig:
+    column: cooling_sig
+  economizer_sig:
+    column: economizer_sig
+
+params:
+  supply_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  (sat > sat_setpoint + supply_err_thres) & (((economizer_sig > 0.9) & (cooling_sig > 0.9)) | ((economizer_sig <= ahu_min_oa_dpr) & (cooling_sig > 0.9)))
