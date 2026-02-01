@@ -2,3 +2,4 @@ include README.md
 include LICENSE
 include pyproject.toml
 recursive-include open_fdd *.yaml
+recursive-include open_fdd *.yaml
