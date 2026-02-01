@@ -4,7 +4,8 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 
-![snip](https://raw.githubusercontent.com/bbartling/open-fdd/config-driven-v2/snip.png)
+![snip](https://raw.githubusercontent.com/bbartling/open-fdd/config-driven-v2/image.png)
+
 
 
 **open-fdd** is a **config-driven Fault Detection and Diagnostics (FDD)** library for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and SkySpark/Axon-style logic.
@@ -38,16 +39,24 @@ import pandas as pd
 from open_fdd import RuleRunner
 from open_fdd.air_handling_unit.reports import summarize_fault, print_summary
 
-# Sample AHU data
+# Sample AHU data set in Pandas computing library format
 df = pd.DataFrame({
-    "timestamp": pd.date_range(start="2023-01-01", periods=100, freq="15min"),
-    "duct_static": [0.4] * 50 + [0.2] * 50,
-    "duct_static_setpoint": [0.5] * 100,
-    "supply_vfd_speed": [0.95] * 100,
-    "mat": [60] * 100,
-    "rat": [72] * 100,
-    "oat": [50] * 100,
+    "timestamp": [
+        "2023-01-01 00:00", "2023-01-01 00:15", "2023-01-01 00:30",
+        "2023-01-01 00:45", "2023-01-01 01:00", "2023-01-01 01:15",
+        "2023-01-01 01:30", "2023-01-01 01:45", "2023-01-01 02:00",
+        "2023-01-01 02:15"
+    ],
+
+    "duct_static": [0.4, 0.4, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2, 0.2, 0.2],
+    "duct_static_setpoint": [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    "supply_vfd_speed": [0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95, 0.95],
+    "mat": [60, 60, 60, 60, 60, 60, 60, 60, 60, 60],
+    "rat": [72, 72, 72, 72, 72, 72, 72, 72, 72, 72],
+    "oat": [50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
 })
+
+
 
 # Run rules
 runner = RuleRunner("open_fdd/rules")
