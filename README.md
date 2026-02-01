@@ -4,8 +4,7 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 
-![snip](https://raw.githubusercontent.com/bbartling/open-fdd/config-driven-v2/image.png)
-
+![snip](https://raw.githubusercontent.com/bbartling/open-fdd/config-driven-v2/snip.png)
 
 
 **open-fdd** is a **config-driven Fault Detection and Diagnostics (FDD)** library for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and SkySpark/Axon-style logic.
