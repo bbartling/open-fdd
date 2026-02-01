@@ -18,7 +18,7 @@
 - **Sensor checks** — Bounds (imperial/metric) and flatline detection
 - **Fault analytics** — Duration, motor runtime, sensor stats when faulted
 
-## Installation
+## Installation 
 
 ```bash
 pip install open-fdd
@@ -54,8 +54,6 @@ df = pd.DataFrame({
     "rat": [72, 72, 72, 72, 72, 72, 72, 72, 72, 72],
     "oat": [50, 50, 50, 50, 50, 50, 50, 50, 50, 50],
 })
-
-
 
 # Run rules
 runner = RuleRunner("open_fdd/rules")
