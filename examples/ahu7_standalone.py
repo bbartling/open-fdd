@@ -3,6 +3,7 @@
 Uses the packaged examples/ahu7_sample.csv (500 rows, ~80KB). For full dataset,
 download ahu7_data.csv and place next to this script.
 """
+
 import pandas as pd
 from pathlib import Path
 
@@ -30,13 +31,13 @@ df = df.rename(columns=rename)
 rules_dir = Path(open_fdd.__file__).parent / "rules"
 runner = RuleRunner(rules_path=rules_dir)
 runner._rules = [
-    r for r in runner._rules
-    if r.get("name") in ("bad_sensor_check", "sensor_flatline")
+    r for r in runner._rules if r.get("name") in ("bad_sensor_check", "sensor_flatline")
 ]
 
 # Imperial (AHU7 data is °F)
 result = runner.run(
-    df, timestamp_col="timestamp",
+    df,
+    timestamp_col="timestamp",
     params={"units": "imperial"},
     skip_missing_columns=True,
 )
