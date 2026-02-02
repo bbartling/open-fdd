@@ -1,0 +1,15 @@
+# Weather: Gust less than wind (sensor inconsistency)
+# Fault when gust_mph < wind_mph — physically implausible
+name: weather_gust_lt_wind
+description: Wind gust reported lower than sustained wind (sensor error)
+type: expression
+flag: fault_gust_lt_wind
+
+inputs:
+  gust_mph:
+    column: gust_mph
+  wind_mph:
+    column: wind_mph
+
+expression: |
+  gust_mph.notna() & wind_mph.notna() & (gust_mph < wind_mph)

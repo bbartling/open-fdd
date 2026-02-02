@@ -1,0 +1,16 @@
+# Weather: Temperature spike between consecutive readings
+# Fault when |temp_f diff| > temp_spike_f_per_hour (unrealistic change per sample)
+name: weather_temp_spike
+description: Unrealistic temperature change between consecutive readings
+type: expression
+flag: fault_temp_spike
+
+inputs:
+  temp_f:
+    column: temp_f
+
+params:
+  temp_spike_f_per_hour: 15.0
+
+expression: |
+  temp_f.diff().abs() > temp_spike_f_per_hour

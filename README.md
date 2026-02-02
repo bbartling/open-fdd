@@ -7,6 +7,10 @@
 ![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 
 
+> open fdd is under construction at the moment stay tuned!
+
+Please see [Pypi](https://pypi.org/project/open-fdd/) for the legacy open-fdd until the version 2 is ready.
+
 
 **open-fdd** is a **config-driven Fault Detection and Diagnostics (FDD)** library for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and SkySpark/Axon-style logic.
 
@@ -65,18 +69,30 @@ summary = summarize_fault(df_result, "fc1_flag", motor_col="supply_vfd_speed")
 print_summary(summary, "FC1 Low Duct Static")
 ```
 
+## AHU7 sensor checks (standalone)
+
+Run bounds + flatline on the packaged sample without open-fdd-core:
+
+```bash
+python examples/ahu7_standalone.py
+```
+
+Uses `examples/ahu7_sample.csv` (500 rows). For full dataset, place `ahu7_data.csv` in `examples/`. See [docs/examples.md](docs/examples.md). Imperial units (°F); pass `params={"units": "metric"}` only if your data is already in °C.
+
 ## Rule Types
 
 | Type | Description |
 |------|-------------|
-| `bounds` | Value outside [low, high]; supports `units: metric` |
-| `flatline` | Sensor stuck (rolling spread < tolerance) |
+| `bounds` | Value outside [low, high]; supports `units: metric`. See `open_fdd/rules/sensor_bounds.yaml` |
+| `flatline` | Sensor stuck (rolling spread < tolerance over window). See `open_fdd/rules/sensor_flatline.yaml` |
 | `expression` | Pandas/numpy expression |
 | `hunting` | Excessive AHU state changes (PID hunting) |
 | `oa_fraction` | OA fraction / design airflow error |
 | `erv_efficiency` | ERV effectiveness out of range |
 
 ## Rule Structure
+
+**Expression** (flexible; any pandas/numpy expression):
 
 ```yaml
 name: my_rule
@@ -95,6 +111,12 @@ params:
 expression: |
   (col_a < col_b - thres) & (col_a > 0)
 ```
+
+**Bounds** (bad data): `inputs.*.bounds` = `[low, high]` or `{imperial: [...], metric: [...]}`.
+
+**Flatline** (stuck sensor): `inputs.*.column` + `params.tolerance` and `params.window`.
+
+Full YAML for both: [docs/examples.md](docs/examples.md)
 
 ## Creating custom rules
 

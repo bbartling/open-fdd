@@ -1,0 +1,17 @@
+# Weather: Relative humidity outside valid range
+# Fault when rh_pct < rh_min or rh_pct > rh_max (params from config)
+name: weather_rh_out_of_range
+description: Relative humidity outside valid range (sensor error or bad data)
+type: expression
+flag: fault_rh_out_of_range
+
+inputs:
+  rh_pct:
+    column: rh_pct
+
+params:
+  rh_min: 0.0
+  rh_max: 100.0
+
+expression: |
+  (rh_pct < rh_min) | (rh_pct > rh_max)
