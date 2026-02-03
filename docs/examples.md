@@ -138,6 +138,4 @@ print("flatline_flag:", result["flatline_flag"].sum())
 
 ---
 
-## With open-fdd-core
 
-For TimescaleDB, Brick TTL, and web API: use [open-fdd-core](https://github.com/bbartling/open-fdd-core). Ingest CSV → run faults via `POST /faults/run` or the Python API. Rules resolve from the Brick model (`fdd_input`); no column mapping needed at runtime.

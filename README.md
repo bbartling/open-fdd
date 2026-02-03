@@ -9,7 +9,7 @@
 
 > open fdd is under construction at the moment stay tuned!
 
-Please see [Pypi](https://pypi.org/project/open-fdd/) for the legacy open-fdd until the version 2 is ready.
+Please see [Pypi](https://pypi.org/project/open-fdd/) for the legacy open-fdd until the version 2 is ready. Also coming the future will be [open-fdd-core](https://github.com/bbartling/open-fdd-core) for a full blown framework to boostrap TimescaleDB, Brick TTL, and web API to ingest CSV → run faults via `POST /faults/run` or the Python API. Rules resolve from the Brick model (`fdd_input`); no column mapping needed at runtime.
 
 
 **open-fdd** is a **config-driven Fault Detection and Diagnostics (FDD)** library for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and SkySpark/Axon-style logic.
