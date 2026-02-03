@@ -17,19 +17,12 @@ nav_order: 1
 - **Fault analytics** — Duration, motor runtime, sensor stats
 - **BRICK model driven** — Optional: resolve rule inputs from Brick TTL
 
-## Quick run
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-pip install -e ".[dev]"
-python examples/ahu7_standalone.py
-```
 
 ## Docs
 
-1. **[Getting Started](getting_started.md)** — Easiest example, all code inline
-2. **[Data Model & Brick](data_model.md)** — TTL from BAS screenshot + CSV, brick_resolver, external refs
-3. **[Fault Reports](fault_report.md)** — `summarize_fault`, motor runtime, analytics
-4. **[Configuration](configuration.md)** — Rule types, YAML structure
-5. **[Examples](examples.md)** — Sensor checks, BRICK-driven, minimal
-6. **[API Reference](api_reference.md)** — RuleRunner, reports
+1. **[Getting Started](getting_started.md)** — AHU7 tutorial: run the script, then Brick data model
+2. **[Configuration](configuration.md)** — Rule types, YAML structure
+3. **[API Reference](api_reference.md)** — RuleRunner, reports, brick_resolver
+4. **[Examples](examples.md)** — API examples: minimal, manual map, Brick map, analytics
+5. **[Data Model & Brick](data_model.md)** — TTL, brick_resolver, external refs
+6. **[Fault Reports](fault_report.md)** — `summarize_fault`, motor runtime

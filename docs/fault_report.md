@@ -1,6 +1,6 @@
 ---
 title: Fault Reports
-nav_order: 4
+nav_order: 7
 ---
 
 # Fault Reports

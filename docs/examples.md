@@ -1,9 +1,11 @@
 ---
 title: Examples
-nav_order: 6
+nav_order: 5
 ---
 
 # Examples
+
+Code snippets using the [API Reference](api_reference.md). Copy and adapt.
 
 ## 1. Minimal (in-memory)
 
