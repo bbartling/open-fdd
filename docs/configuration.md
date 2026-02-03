@@ -103,3 +103,5 @@ inputs:
 
 - **`brick`** — Brick class name (documentation).
 - **`equipment_type`** — Equipment types this rule applies to (for future Brick-based filtering).
+
+**Next:** [API Reference](api_reference.md)

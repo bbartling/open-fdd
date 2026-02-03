@@ -146,3 +146,5 @@ You can use either:
 | **Brick** | BAS/BMS with a Brick TTL: `column_map = resolve_from_ttl("model.ttl")` |
 
 `RuleRunner.run(column_map=...)` accepts any `{rule_input: df_column}` dict.
+
+**Next:** [Fault Reports](fault_report.md)

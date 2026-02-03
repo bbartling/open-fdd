@@ -86,3 +86,5 @@ python examples/ahu7_standalone.py
 With `open-fdd[brick]`, the script loads `examples/ahu7_brick_model.ttl` and uses `brick_resolver.resolve_from_ttl()` to build `column_map` from `ofdd:mapsToRuleInput` + `rdfs:label`. No manual mapping.
 
 See **[Data Model & Brick](data_model.md)** for the full picture.
+
+**Next:** [Configuration](configuration.md)

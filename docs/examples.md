@@ -131,3 +131,5 @@ print_summary(summary, "FC1 Low Duct Static")
 ## Units
 
 For sensor bounds, pass `params={"units": "metric"}` for °C. Your DataFrame must already be in that unit — no auto-conversion.
+
+**Next:** [Data Model & Brick](data_model.md)

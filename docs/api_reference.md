@@ -92,3 +92,5 @@ column_map = resolve_from_ttl("examples/ahu7_brick_model.ttl")
 ```
 
 Requires `pip install open-fdd[brick]`.
+
+**Next:** [Examples](examples.md)
