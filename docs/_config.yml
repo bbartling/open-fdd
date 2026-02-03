@@ -1,3 +1,10 @@
-title: "Open-FDD Documentation"
+title: "open-fdd"
+description: "Config-driven FDD for HVAC — YAML rules, pandas, Brick"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
+
+aux_links:
+  "GitHub": "https://github.com/bbartling/open-fdd"
+  "PyPI": "https://pypi.org/project/open-fdd/"
+
+footer_content: "MIT License"

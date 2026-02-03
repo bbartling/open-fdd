@@ -1,15 +1,20 @@
 # AHU Fault Condition 16 — ERV effectiveness outside expected range
+# AHU with Energy Recovery Ventilator only
 name: erv_effectiveness_fault
 description: ERV effectiveness outside expected range based on OAT
 type: erv_efficiency
 flag: fc16_flag
+equipment_type: [AHU_ERV]
 
 inputs:
   erv_oat_enter:
+    brick: Outside_Air_Temperature_Sensor
     column: erv_oat_enter
   erv_oat_leaving:
+    brick: Discharge_Air_Temperature_Sensor
     column: erv_oat_leaving
   erv_eat_enter:
+    brick: Return_Air_Temperature_Sensor
     column: erv_eat_enter
 
 params:

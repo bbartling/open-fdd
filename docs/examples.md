@@ -1,71 +1,32 @@
+---
+title: Examples
+nav_order: 6
+---
+
 # Examples
 
-**open-fdd** runs standalone — no open-fdd-core needed. You only need pandas and a DataFrame. Use open-fdd-core when you want TimescaleDB, Brick TTL, and a web API.
+## 1. Minimal (in-memory)
 
-**Try it:** The repo includes `examples/ahu7_sample.csv` (500 rows, ~80KB) and `examples/ahu7_standalone.py`:
-```bash
-cd open-fdd
-python examples/ahu7_standalone.py
-```
-For the full dataset (~10k rows), place `ahu7_data.csv` in `examples/` — the script uses it if present.
+```python
+import pandas as pd
+from open_fdd import RuleRunner
 
----
+df = pd.DataFrame({
+    "timestamp": pd.date_range("2024-01-01", periods=100, freq="15min"),
+    "sat": [55.0] * 100,
+    "mat": [60.0] * 100,
+    "oat": [45.0] * 100,
+    "rat": [70.0] * 100,
+})
 
-## Rule definitions: bad data (bounds) and flatline
+runner = RuleRunner("open_fdd/rules")
+result = runner.run(df, timestamp_col="timestamp", skip_missing_columns=True)
 
-Rules live in `open_fdd/rules/` as YAML. Here’s how the sensor checks are defined:
-
-### Bad data (bounds) — `sensor_bounds.yaml`
-
-Faults when a value is outside the configured range (e.g. bad sensor or bad data):
-
-```yaml
-name: bad_sensor_check
-type: bounds
-flag: bad_sensor_flag
-
-params:
-  units: imperial   # override at runtime: params={"units": "metric"}
-
-inputs:
-  supply_air_temp:
-    column: sat
-    bounds:
-      imperial: [40, 150]    # degF
-      metric: [4, 66]        # degC
-  return_air_temp:
-    column: rat
-    bounds:
-      imperial: [40, 100]
-      metric: [4, 38]
-  # ... mat, oat, rh, etc.
+print("bad_sensor_flag:", result["bad_sensor_flag"].sum())
+print("flatline_flag:", result["flatline_flag"].sum())
 ```
 
-### Flatline — `sensor_flatline.yaml`
-
-Faults when a sensor value barely changes over a rolling window (stuck sensor):
-
-```yaml
-name: sensor_flatline
-type: flatline
-flag: flatline_flag
-
-inputs:
-  supply_air_temp:
-    column: sat
-  zone_temp:
-    column: zt
-
-params:
-  tolerance: 0.000001   # rolling spread must exceed this
-  window: 12            # number of samples (e.g. 12 x 15min = 3hr)
-```
-
----
-
-## Sensor checks on AHU7 data (bounds + flatline)
-
-Bounds (imperial) and flatline detection. Uses `examples/ahu7_sample.csv` or `ahu7_data.csv`:
+## 2. AHU7 CSV with manual column mapping
 
 ```python
 import pandas as pd
@@ -74,14 +35,10 @@ from pathlib import Path
 import open_fdd
 from open_fdd import RuleRunner
 
-# Load AHU7 CSV (ahu7_data.csv or ahu7_sample.csv in examples/)
-csv_path = Path(__file__).parent / "ahu7_data.csv"
-if not csv_path.exists():
-    csv_path = Path(__file__).parent / "ahu7_sample.csv"
+csv_path = Path("examples/ahu7_sample.csv")
 df = pd.read_csv(csv_path)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-# Map AHU7 column names to rule input names
 rename = {
     "SAT (°F)": "sat",
     "MAT (°F)": "mat",
@@ -90,52 +47,85 @@ rename = {
 }
 df = df.rename(columns=rename)
 
-# Rules directory (from installed package)
 rules_dir = Path(open_fdd.__file__).parent / "rules"
 runner = RuleRunner(rules_path=rules_dir)
-
-# Run only sensor rules (bounds + flatline)
 runner._rules = [
     r for r in runner._rules
     if r.get("name") in ("bad_sensor_check", "sensor_flatline")
 ]
 
-# Imperial (AHU7 data is °F): SAT 40–150 °F, MAT/RAT/OAT 40–100 °F, etc.
 result = runner.run(
     df, timestamp_col="timestamp",
     params={"units": "imperial"},
     skip_missing_columns=True,
 )
-print("Bounds (imperial):", result["bad_sensor_flag"].sum(), "faults")
-print("Flatline:", result["flatline_flag"].sum(), "faults")
+print("Bounds:", result["bad_sensor_flag"].sum())
+print("Flatline:", result["flatline_flag"].sum())
 ```
 
-**How to change units:** Pass `params={"units": "metric"}` for °C bounds. Your DataFrame values must already be in that unit (no auto-conversion). AHU7 data is °F — use `params={"units": "imperial"}` (or omit; imperial is default). To switch to metric, convert your temps to °C first, then pass `params={"units": "metric"}`.
+## 3. AHU7 with BRICK-driven column mapping
 
----
+```python
+import pandas as pd
+from pathlib import Path
+import sys
 
-## Minimal standalone (no CSV, in-memory)
+import open_fdd
+from open_fdd import RuleRunner
+
+script_dir = Path(__file__).parent
+ttl_path = script_dir / "ahu7_brick_model.ttl"
+csv_path = script_dir / "ahu7_sample.csv"
+
+df = pd.read_csv(csv_path)
+df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+sys.path.insert(0, str(script_dir))
+from brick_resolver import resolve_from_ttl
+
+column_map = resolve_from_ttl(ttl_path)
+
+rules_dir = Path(open_fdd.__file__).parent / "rules"
+runner = RuleRunner(rules_path=rules_dir)
+runner._rules = [
+    r for r in runner._rules
+    if r.get("name") in ("bad_sensor_check", "sensor_flatline")
+]
+
+result = runner.run(
+    df,
+    timestamp_col="timestamp",
+    params={"units": "imperial"},
+    skip_missing_columns=True,
+    column_map=column_map,
+)
+print("Bounds:", result["bad_sensor_flag"].sum())
+print("Flatline:", result["flatline_flag"].sum())
+```
+
+## 4. With fault analytics
 
 ```python
 import pandas as pd
 from open_fdd import RuleRunner
+from open_fdd.reports import summarize_fault, print_summary
 
 df = pd.DataFrame({
-    "timestamp": pd.date_range("2024-01-01", periods=100, freq="15min"),
-    "sat": [55.0] * 100,      # flatline
-    "mat": [60.0] * 100,
-    "oat": [45.0] * 100,
-    "rat": [70.0] * 100,
+    "timestamp": pd.date_range("2023-01-01", periods=20, freq="15min"),
+    "duct_static": [0.4, 0.35, 0.3, 0.25, 0.2] * 4,
+    "duct_static_setpoint": [0.5] * 20,
+    "supply_vfd_speed": [0.95, 0.96, 0.97, 0.98, 0.99] * 4,
+    "mat": [60] * 20,
+    "rat": [72] * 20,
 })
 
-runner = RuleRunner("open_fdd/rules")  # or Path(open_fdd.__file__).parent / "rules"
-result = runner.run(df, timestamp_col="timestamp", skip_missing_columns=True)
+runner = RuleRunner("open_fdd/rules")
+df_result = runner.run(df, rolling_window=3)
 
-# Sensor checks
-print("bad_sensor_flag:", result["bad_sensor_flag"].sum())
-print("flatline_flag:", result["flatline_flag"].sum())
+summary = summarize_fault(df_result, "fc1_flag", motor_col="supply_vfd_speed")
+print_summary(summary, "FC1 Low Duct Static")
 ```
 
----
+## Units
 
-
+For sensor bounds, pass `params={"units": "metric"}` for °C. Your DataFrame must already be in that unit — no auto-conversion.

@@ -3,15 +3,20 @@ name: oat_mat_mismatch_econ_mech
 description: OAT and MAT should be approx equal in economizer + mechanical cooling mode
 type: expression
 flag: fc10_flag
+equipment_type: [AHU, VAV_AHU]
 
 inputs:
   oat:
+    brick: Outside_Air_Temperature_Sensor
     column: oat
   mat:
+    brick: Mixed_Air_Temperature_Sensor
     column: mat
   cooling_sig:
+    brick: Valve_Command
     column: cooling_sig
   economizer_sig:
+    brick: Damper_Position_Command
     column: economizer_sig
 
 params:

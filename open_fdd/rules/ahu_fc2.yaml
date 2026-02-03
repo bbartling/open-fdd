@@ -4,15 +4,20 @@ name: mix_temp_too_low
 description: Mix temperature too low; should be between outside and return air
 type: expression
 flag: fc2_flag
+equipment_type: [AHU, VAV_AHU]
 
 inputs:
   mat:
+    brick: Mixed_Air_Temperature_Sensor
     column: mat
   rat:
+    brick: Return_Air_Temperature_Sensor
     column: rat
   oat:
+    brick: Outside_Air_Temperature_Sensor
     column: oat
   supply_vfd_speed:
+    brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
 params:

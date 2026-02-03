@@ -171,6 +171,25 @@ def test_runner_bounds_metric_units():
     assert result["bounds_flag"].iloc[1] == 1
 
 
+def test_runner_column_map_override(sample_df):
+    """column_map overrides rule inputs (e.g. from Brick resolution)."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {"sat": {"column": "wrong_col"}},
+    }
+    runner = RuleRunner(rules=[rule])
+    # Override: rule says "wrong_col" but column_map says use "sat"
+    result = runner.run(
+        sample_df,
+        column_map={"sat": "sat"},
+    )
+    assert "bounds_flag" in result.columns
+    # sat 54-58 in [40,60] -> no fault
+    assert result["bounds_flag"].sum() == 0
+
+
 def test_runner_fc4_hunting():
     """FC4 PID hunting - fault when excessive state changes in window."""
     # Alternate between two modes to create many state changes

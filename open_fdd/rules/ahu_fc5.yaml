@@ -4,15 +4,20 @@ name: sat_too_low_heating_mode
 description: SAT too low; should be higher than MAT in heating mode (broken heating valve)
 type: expression
 flag: fc5_flag
+equipment_type: [AHU, VAV_AHU]
 
 inputs:
   mat:
+    brick: Mixed_Air_Temperature_Sensor
     column: mat
   sat:
+    brick: Supply_Air_Temperature_Sensor
     column: sat
   heating_sig:
+    brick: Valve_Command
     column: heating_sig
   supply_vfd_speed:
+    brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
 params:

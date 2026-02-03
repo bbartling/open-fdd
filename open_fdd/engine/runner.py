@@ -85,6 +85,7 @@ class RuleRunner:
         rolling_window: Optional[int] = None,
         params: Optional[Dict[str, Any]] = None,
         skip_missing_columns: bool = False,
+        column_map: Optional[Dict[str, str]] = None,
     ) -> pd.DataFrame:
         """
         Run all rules against the DataFrame.
@@ -95,6 +96,7 @@ class RuleRunner:
             rolling_window: Consecutive samples required to flag fault (None = any).
             params: Override params merged into each rule (e.g. units="metric" for bounds).
             skip_missing_columns: If True, skip rules with missing columns instead of raising.
+            column_map: Optional {rule_input: df_column} from Brick/SPARQL. Overrides rule inputs.
 
         Returns:
             DataFrame with original columns plus fault flag columns (e.g. rule_name_flag).
@@ -104,11 +106,14 @@ class RuleRunner:
             timestamp_col = "timestamp"
         run_params = params or {}
         skip_missing = skip_missing_columns
+        global_col_map = column_map or {}
 
         for rule in self._rules:
             flag_name = rule.get("flag", f"{rule.get('name', 'rule')}_flag")
             try:
-                mask = self._evaluate_rule(rule, result, timestamp_col, run_params)
+                mask = self._evaluate_rule(
+                    rule, result, timestamp_col, run_params, global_col_map
+                )
                 if rolling_window and rolling_window > 1:
                     rolling_sum = mask.astype(int).rolling(window=rolling_window).sum()
                     result[flag_name] = (rolling_sum >= rolling_window).astype(int)
@@ -131,16 +136,20 @@ class RuleRunner:
         df: pd.DataFrame,
         timestamp_col: Optional[str],
         run_params: Optional[Dict[str, Any]] = None,
+        column_map: Optional[Dict[str, str]] = None,
     ) -> pd.Series:
         """Evaluate a single rule and return boolean fault mask."""
         rule_type = rule.get("type", "expression")
         inputs = rule.get("inputs", {})
         params = {**(rule.get("params") or {}), **(run_params or {})}
+        global_col_map = column_map or {}
 
-        # Resolve column mappings: inputs can be {col: "df_column_name"} or {col: {column: "x"}}
+        # Resolve column mappings: Brick/column_map overrides, else rule inputs
         col_map = {}
         for key, val in inputs.items():
-            if isinstance(val, str):
+            if key in global_col_map:
+                col_map[key] = global_col_map[key]
+            elif isinstance(val, str):
                 col_map[key] = val
             elif isinstance(val, dict) and "column" in val:
                 col_map[key] = val["column"]

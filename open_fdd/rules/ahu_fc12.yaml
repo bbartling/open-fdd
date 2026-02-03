@@ -3,15 +3,20 @@ name: sat_too_high_cooling_modes
 description: SAT too high; should be less than MAT in econ+mech or mech-only cooling
 type: expression
 flag: fc12_flag
+equipment_type: [AHU, VAV_AHU]
 
 inputs:
   sat:
+    brick: Supply_Air_Temperature_Sensor
     column: sat
   mat:
+    brick: Mixed_Air_Temperature_Sensor
     column: mat
   cooling_sig:
+    brick: Valve_Command
     column: cooling_sig
   economizer_sig:
+    brick: Damper_Position_Command
     column: economizer_sig
 
 params:

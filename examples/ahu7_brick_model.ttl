@@ -1,0 +1,77 @@
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix ref: <https://brickschema.org/schema/ref#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix unit: <http://brickschema.org/schema/Brick/units#> .
+@prefix : <http://openfdd.local/ahu7#> .
+
+# Williams Peak School District - Elementary School - AHU 7 (RTU7)
+# BRICK model for VAV AHU — maps BMS points to open-fdd rule inputs
+
+:site_1 a brick:Site ;
+    rdfs:label "Elementary School" .
+
+:ahu_7 a brick:Air_Handling_Unit ;
+    rdfs:label "AHU 7" ;
+    brick:isPartOf :site_1 .
+
+# Temperature sensors
+:oat_sensor a brick:Outside_Air_Temperature_Sensor ;
+    rdfs:label "OAT (°F)" ;
+    brick:hasUnit unit:DEG_F ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "oat" .
+
+:rat_sensor a brick:Return_Air_Temperature_Sensor ;
+    rdfs:label "RAT (°F)" ;
+    brick:hasUnit unit:DEG_F ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "rat" .
+
+:mat_sensor a brick:Mixed_Air_Temperature_Sensor ;
+    rdfs:label "MAT (°F)" ;
+    brick:hasUnit unit:DEG_F ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "mat" .
+
+:sat_sensor a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SAT (°F)" ;
+    brick:hasUnit unit:DEG_F ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "sat" .
+
+# Setpoints
+:sat_setpoint a brick:Supply_Air_Temperature_Setpoint ;
+    rdfs:label "Eff SAT Sp (°F)" ;
+    brick:hasUnit unit:DEG_F ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "sat_setpoint" .
+
+# Commands / control signals
+:oa_damper_cmd a brick:Damper_Position_Command ;
+    rdfs:label "OA Damper Cmd (%)" ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "economizer_sig" .
+
+:clg_valve_cmd a brick:Valve_Command ;
+    rdfs:label "Clg Vlv Cmd (%)" ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "cooling_sig" .
+
+:prht_valve_cmd a brick:Valve_Command ;
+    rdfs:label "Prht Vlv Cmd (%)" ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "heating_sig" .
+
+:sf_spd_cmd a brick:Supply_Fan_Speed_Command ;
+    rdfs:label "SF Spd Cmd (%)" ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "supply_vfd_speed" .
+
+# Static pressure
+:sa_static_press a brick:Supply_Air_Static_Pressure_Sensor ;
+    rdfs:label "SA Static Press (inH₂O)" ;
+    brick:hasUnit unit:INWG ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "duct_static" .

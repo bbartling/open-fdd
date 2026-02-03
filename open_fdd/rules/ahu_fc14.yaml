@@ -1,19 +1,26 @@
 # AHU Fault Condition 14 — Temp drop across inactive cooling coil
+# Requires cooling coil entering/leaving temp sensors (not all AHUs have these)
 name: cooling_coil_drop_when_inactive
 description: Temperature drop across inactive cooling coil in heating/economizer modes
 type: expression
 flag: fc14_flag
+equipment_type: [AHU, VAV_AHU]  # requires Cooling_Coil_Entering/Leaving_Air_Temperature_Sensor
 
 inputs:
   clg_coil_enter:
+    brick: Cooling_Coil_Entering_Air_Temperature_Sensor
     column: clg_coil_enter_temp
   clg_coil_leave:
+    brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
     column: clg_coil_leave_temp
   heating_sig:
+    brick: Valve_Command
     column: heating_sig
   cooling_sig:
+    brick: Valve_Command
     column: cooling_sig
   economizer_sig:
+    brick: Damper_Position_Command
     column: economizer_sig
 
 params:

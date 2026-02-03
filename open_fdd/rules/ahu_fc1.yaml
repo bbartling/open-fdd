@@ -1,16 +1,21 @@
 # AHU Fault Condition 1 — Low duct static at max fan speed
-# ASHRAE/NIST style: duct static too low while fan at full speed
+# VAV only (constant volume has no duct static pressure control)
+# BRICK: duct_static->Supply_Air_Static_Pressure_Sensor, supply_vfd_speed->Supply_Fan_Speed_Command
 name: low_duct_static_at_max_fan
 description: Duct static pressure too low with supply fan at max speed
 type: expression
 flag: fc1_flag
+equipment_type: [VAV_AHU]
 
 inputs:
   duct_static:
+    brick: Supply_Air_Static_Pressure_Sensor
     column: duct_static
   duct_static_setpoint:
+    brick: Supply_Air_Static_Pressure_Setpoint
     column: duct_static_setpoint
   supply_vfd_speed:
+    brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
 params:

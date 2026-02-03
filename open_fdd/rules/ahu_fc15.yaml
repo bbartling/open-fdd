@@ -1,19 +1,26 @@
 # AHU Fault Condition 15 — Temp rise across inactive heating coil
+# Requires heating coil entering/leaving temp sensors (not all AHUs have these)
 name: heating_coil_rise_when_inactive
 description: Temperature rise across inactive heating coil in econ/mech cooling modes
 type: expression
 flag: fc15_flag
+equipment_type: [AHU, VAV_AHU]  # requires Heating_Coil_Entering/Leaving_Air_Temperature_Sensor
 
 inputs:
   htg_coil_enter:
+    brick: Heating_Coil_Entering_Air_Temperature_Sensor
     column: htg_coil_enter_temp
   htg_coil_leave:
+    brick: Heating_Coil_Leaving_Air_Temperature_Sensor
     column: htg_coil_leave_temp
   heating_sig:
+    brick: Valve_Command
     column: heating_sig
   cooling_sig:
+    brick: Valve_Command
     column: cooling_sig
   economizer_sig:
+    brick: Damper_Position_Command
     column: economizer_sig
 
 params:

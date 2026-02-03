@@ -23,22 +23,27 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "brick"]
 
 dependencies = [
-    "pandas>=1.5.0",
-    "pyyaml>=6.0",
+    "pandas",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
-    "black>=23.0",
+    "pytest",
+    "black",
 ]
 viz = [
-    "matplotlib>=3.5",
+    "matplotlib",
+]
+brick = [
+    "rdflib",
 ]
 
 [project.urls]
