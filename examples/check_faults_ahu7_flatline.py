@@ -4,12 +4,14 @@ from pathlib import Path
 import pandas as pd
 
 from open_fdd import RuleRunner
+from open_fdd.engine import load_rule
 from open_fdd.reports import (
     analyze_flatline_episodes,
-    flatline_period,
     flatline_period_range,
+    print_column_mapping,
     print_flatline_episodes,
     print_summary,
+    sensor_cols_from_column_map,
     summarize_fault,
     time_range,
 )
@@ -31,8 +33,7 @@ column_map = {
 df = pd.read_csv(csv_path)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-runner = RuleRunner(rules_path=rules_dir)
-runner._rules = [r for r in runner._rules if r.get("name") == "sensor_flatline"]
+runner = RuleRunner(rules=[load_rule(rules_dir / "sensor_flatline.yaml")])
 
 result = runner.run(
     df,
@@ -42,18 +43,16 @@ result = runner.run(
     column_map=column_map,
 )
 
-# sensor_cols for episode analysis: all sensors (exclude Supply_Fan_Speed_Command)
-sensor_cols = {k: v for k, v in column_map.items() if "Sensor" in k}
+sensor_cols = sensor_cols_from_column_map(column_map)
 
 flatline_count = int(result["flatline_flag"].sum())
 
 print("Flatline check only")
-safe_map = {k: v.encode("ascii", "replace").decode() for k, v in column_map.items()}
-print("Column mapping:", safe_map)
+print_column_mapping("Column mapping", column_map)
 print()
 print("Results")
 print("  Flatline (stuck sensor):", flatline_count, "rows flagged")
-print("    Time frame (data flat):", flatline_period(result))
+print("    Time frame:", time_range(result, "flatline_flag"))
 print()
 
 # Per-episode: which BRICK sensor(s) were flat

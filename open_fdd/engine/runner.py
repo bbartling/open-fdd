@@ -38,6 +38,23 @@ def _resolve_bounds(bounds: Any, units: str = "imperial") -> Optional[List[float
     return None
 
 
+def bounds_map_from_rule(rule: Dict[str, Any], units: str = "imperial") -> Dict[str, tuple]:
+    """
+    Extract {brick_name: (low, high)} from a bounds-type rule.
+    Use for episode analysis so bounds stay in sync with the YAML.
+    """
+    out = {}
+    for key, inp in rule.get("inputs", {}).items():
+        if isinstance(inp, str):
+            continue
+        brick = inp.get("brick", key)
+        raw = inp.get("bounds", rule.get("bounds"))
+        resolved = _resolve_bounds(raw, units)
+        if resolved and len(resolved) == 2:
+            out[brick] = (float(resolved[0]), float(resolved[1]))
+    return out
+
+
 def load_rules_from_dir(path: Union[str, Path]) -> List[Dict[str, Any]]:
     """Load all .yaml rule configs from a directory."""
     rules_dir = Path(path)

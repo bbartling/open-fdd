@@ -1,6 +1,6 @@
 ---
 title: API Reference
-nav_order: 4
+nav_order: 5
 ---
 
 # API Reference
@@ -94,4 +94,5 @@ column_map = resolve_from_ttl("examples/brick_model.ttl")
 
 Requires `pip install open-fdd[brick]`.
 
-**Next:** [Examples](examples.md)
+**Next:** [Data Model](data_model.md)
+

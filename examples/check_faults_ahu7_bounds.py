@@ -4,7 +4,16 @@ from pathlib import Path
 import pandas as pd
 
 from open_fdd import RuleRunner
-from open_fdd.reports import print_summary, summarize_fault, time_range
+from open_fdd.engine import bounds_map_from_rule, load_rule
+from open_fdd.reports import (
+    analyze_bounds_episodes,
+    print_bounds_episodes,
+    print_column_mapping,
+    print_summary,
+    sensor_cols_from_column_map,
+    summarize_fault,
+    time_range,
+)
 
 script_dir = Path(__file__).parent
 csv_path = script_dir / "data_ahu7.csv"
@@ -20,11 +29,14 @@ column_map = {
     "Supply_Fan_Speed_Command": "SF Spd Cmd (%)",
 }
 
+# Bounds from YAML (single source of truth)
+bounds_rule = load_rule(rules_dir / "sensor_bounds.yaml")
+bounds_map = bounds_map_from_rule(bounds_rule, units="imperial")
+
 df = pd.read_csv(csv_path)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
-runner = RuleRunner(rules_path=rules_dir)
-runner._rules = [r for r in runner._rules if r.get("name") == "bad_sensor_check"]
+runner = RuleRunner(rules=[load_rule(rules_dir / "sensor_bounds.yaml")])
 
 result = runner.run(
     df,
@@ -34,18 +46,28 @@ result = runner.run(
     column_map=column_map,
 )
 
-# sensor_cols for reports: all sensors (exclude Supply_Fan_Speed_Command)
-sensor_cols = {k: v for k, v in column_map.items() if "Sensor" in k}
+sensor_cols = sensor_cols_from_column_map(column_map)
 
 bounds_count = int(result["bad_sensor_flag"].sum())
 
 print("Bounds check only")
-safe_map = {k: v.encode("ascii", "replace").decode() for k, v in column_map.items()}
-print("Column mapping:", safe_map)
+print_column_mapping("Column mapping", column_map)
 print()
 print("Results")
 print("  Bounds (out-of-range):", bounds_count, "rows flagged")
 print("    Time frame:", time_range(result, "bad_sensor_flag"))
+print()
+
+# Per-episode: which BRICK sensor(s) were out of bounds
+episodes = analyze_bounds_episodes(
+    result,
+    flag_col="bad_sensor_flag",
+    timestamp_col="timestamp",
+    sensor_cols=sensor_cols,
+    bounds_map=bounds_map,
+)
+print_bounds_episodes(episodes)
+
 print()
 print("Analytics")
 print_summary(

@@ -1,5 +1,7 @@
 # Sensor bounds — fault if value outside valid range
 # Inputs use BRICK class names
+# Imperial: °F for temp, inH2O for pressure. Metric: °C for temp, Pa for pressure.
+# Conversion: 1 inH2O ≈ 249 Pa
 name: bad_sensor_check
 type: bounds
 flag: bad_sensor_flag
@@ -12,29 +14,29 @@ inputs:
     brick: Supply_Air_Temperature_Sensor
     column: Supply_Air_Temperature_Sensor
     bounds:
-      imperial: [40, 150]
-      metric: [4, 66]
+      imperial: [50, 90]    # °F
+      metric: [10, 32]     # °C
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: Mixed_Air_Temperature_Sensor
     bounds:
-      imperial: [40, 100]
-      metric: [4, 38]
+      imperial: [50, 100]   # °F
+      metric: [10, 38]     # °C
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: Return_Air_Temperature_Sensor
     bounds:
-      imperial: [40, 100]
-      metric: [4, 38]
+      imperial: [60, 100]  # °F
+      metric: [16, 38]     # °C
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: Outside_Air_Temperature_Sensor
     bounds:
-      imperial: [-40, 120]
-      metric: [-40, 49]
+      imperial: [-40, 120] # °F
+      metric: [-40, 49]    # °C
   Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
     column: Supply_Air_Static_Pressure_Sensor
     bounds:
-      imperial: [-5, 10]   # inH2O
-      metric: [-1244, 2488]  # Pa
+      imperial: [-0.5, 2.5]   # inH2O
+      metric: [-125, 623]    # Pa (1 inH2O ≈ 249 Pa)

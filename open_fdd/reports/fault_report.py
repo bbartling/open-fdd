@@ -9,6 +9,25 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 
+def sensor_cols_from_column_map(column_map: Dict[str, str]) -> Dict[str, str]:
+    """
+    Return sensor entries from column_map (excludes motor/command columns).
+    Use for summarize_fault and analyze_*_episodes.
+    """
+    return {k: v for k, v in column_map.items() if "Sensor" in k}
+
+
+def print_column_mapping(label: str, mapping: Dict[str, str]) -> None:
+    """
+    Print column mapping. Falls back to ASCII-safe on Windows (cp1252) if Unicode fails.
+    """
+    try:
+        print(f"{label}: {mapping}")
+    except UnicodeEncodeError:
+        safe = {k: v.encode("ascii", "replace").decode() for k, v in mapping.items()}
+        print(f"{label}: {safe}")
+
+
 def time_range(
     df: pd.DataFrame,
     flag_col: str,
@@ -327,3 +346,129 @@ def _print_episode(idx: int, ep: Dict[str, Any]) -> None:
         print("    All sensors flat: Yes (device offline)")
     elif ep["single_sensor_flat"] and sensors:
         print(f"    Single sensor flat: {sensors[0]} (controller not writing)")
+
+
+def analyze_bounds_episodes(
+    df: pd.DataFrame,
+    flag_col: str = "bad_sensor_flag",
+    timestamp_col: str = "timestamp",
+    sensor_cols: Optional[Dict[str, str]] = None,
+    bounds_map: Optional[Dict[str, tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Find bounds-violation episodes and which BRICK sensor(s) were out of range in each.
+
+    For each contiguous run of flag=1:
+    - Which sensors had any value outside [low, high] in that episode
+    - all_sensors_oob: True if every sensor was out of bounds
+    - single_sensor_oob: True if exactly one sensor was out of bounds
+
+    Args:
+        df: DataFrame with flag and sensor columns.
+        flag_col: Bounds flag column name.
+        timestamp_col: Timestamp column.
+        sensor_cols: {BRICK_class: csv_column} e.g. {"Supply_Air_Temperature_Sensor": "SAT (°F)"}
+        bounds_map: {BRICK_class: (low, high)} for each sensor. Must match units in data.
+
+    Returns:
+        List of episode dicts with start_ts, end_ts, sensors_oob (BRICK names),
+        all_sensors_oob, single_sensor_oob.
+    """
+    sensor_cols = sensor_cols or {}
+    bounds_map = bounds_map or {}
+    faulted = df[df[flag_col] == 1]
+    if faulted.empty:
+        return []
+
+    # Find contiguous episodes (runs of flag=1)
+    flag = df[flag_col].astype(int)
+    starts = (flag.diff() == 1) & (flag == 1)
+    ends = (flag == 1) & (flag.shift(-1).fillna(0) == 0)
+    start_idxs = df.index[starts].tolist()
+    end_idxs = df.index[ends].tolist()
+    if flag.iloc[0] == 1:
+        start_idxs.insert(0, df.index[0])
+    if flag.iloc[-1] == 1:
+        end_idxs.append(df.index[-1])
+    if len(start_idxs) != len(end_idxs):
+        start_idxs = [faulted.index.min()]
+        end_idxs = [faulted.index.max()]
+
+    episodes = []
+    for start_idx, end_idx in zip(start_idxs, end_idxs):
+        ep_df = df.loc[start_idx:end_idx]
+        start_ts = ep_df[timestamp_col].min()
+        end_ts = ep_df[timestamp_col].max()
+        sensors_oob: List[str] = []
+        sensor_means: Dict[str, float] = {}
+        for brick_name, col in sensor_cols.items():
+            if col not in ep_df.columns:
+                continue
+            b = bounds_map.get(brick_name)
+            if not b or len(b) != 2:
+                continue
+            low, high = float(b[0]), float(b[1])
+            s = ep_df[col].dropna()
+            if s.empty:
+                continue
+            if (s < low).any() or (s > high).any():
+                sensors_oob.append(brick_name)
+                sensor_means[brick_name] = round(float(s.mean()), 2)
+        num_with_bounds = sum(1 for k in sensor_cols if bounds_map.get(k) and len(bounds_map.get(k)) == 2)
+        all_oob = num_with_bounds > 0 and len(sensors_oob) == num_with_bounds
+        single_oob = len(sensors_oob) == 1
+        episodes.append({
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "sensors_flat": sensors_oob,  # reuse key for print compatibility
+            "all_sensors_flat": all_oob,
+            "single_sensor_flat": single_oob,
+            "rows": len(ep_df),
+            "sensor_means": sensor_means,
+        })
+    return episodes
+
+
+def print_bounds_episodes(
+    episodes: List[Dict[str, Any]],
+    title: str = "Bounds episodes",
+    max_show: Optional[int] = 10,
+) -> None:
+    """
+    Print bounds episode analysis in BRICK format.
+
+    Shows which sensor(s) were out of bounds per episode. If max_show is set,
+    shows first and last N episodes.
+    """
+    print(f"\n--- {title} ---")
+    if not episodes:
+        print("  No bounds episodes.")
+        return
+    n = len(episodes)
+    if max_show and n > max_show * 2:
+        first = episodes[:max_show]
+        last = episodes[-max_show:]
+        print(f"  ({n} episodes total, showing first {max_show} and last {max_show})")
+        for i, ep in enumerate(first, 1):
+            _print_bounds_episode(i, ep)
+        print(f"\n  ... ({n - max_show * 2} episodes omitted) ...")
+        for i, ep in enumerate(last, n - max_show + 1):
+            _print_bounds_episode(i, ep)
+    else:
+        for i, ep in enumerate(episodes, 1):
+            _print_bounds_episode(i, ep)
+
+
+def _print_bounds_episode(idx: int, ep: Dict[str, Any]) -> None:
+    """Print a single bounds episode in BRICK format."""
+    print(f"\n  Episode {idx}: {ep['start_ts']} to {ep['end_ts']} ({ep['rows']} rows)")
+    sensors = ep["sensors_flat"]
+    print(f"    BRICK sensors out of bounds: {', '.join(sensors) or '(none)'}")
+    means = ep.get("sensor_means", {})
+    if means:
+        avg_str = ", ".join(f"{k}: {v}" for k, v in means.items())
+        print(f"    Avg readings: {avg_str}")
+    if ep["all_sensors_flat"]:
+        print("    All sensors OOB: Yes")
+    elif ep["single_sensor_flat"] and sensors:
+        print(f"    Single sensor OOB: {sensors[0]}")

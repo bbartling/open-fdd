@@ -25,4 +25,4 @@ nav_order: 1
 3. **[API Reference](api_reference.md)** — RuleRunner, reports, brick_resolver
 4. **[Examples](examples.md)** — API examples: minimal, manual map, Brick map, analytics
 5. **[Data Model & Brick](data_model.md)** — TTL, brick_resolver, external refs
-6. **[Fault Reports](fault_report.md)** — `summarize_fault`, motor runtime
+

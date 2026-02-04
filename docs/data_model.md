@@ -147,4 +147,4 @@ You can use either:
 
 `RuleRunner.run(column_map=...)` accepts any `{rule_input: df_column}` dict.
 
-**Next:** [Fault Reports](fault_report.md)
+
