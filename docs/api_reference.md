@@ -35,7 +35,7 @@ result = runner.run(
 | `rolling_window` | `int` | Consecutive samples to flag fault (None = any) |
 | `params` | `dict` | Override rule params (e.g. `{"units": "metric"}`) |
 | `skip_missing_columns` | `bool` | Skip rules with missing columns |
-| `column_map` | `dict` | `{rule_input: df_column}` from Brick or manual |
+| `column_map` | `dict` | `{BRICK_class: df_column}` or `{rule_input: df_column}`. Runner resolves via BRICK first when rule has `brick` tag. |
 
 **Returns:** DataFrame with original columns plus fault flag columns.
 
@@ -82,13 +82,14 @@ print_summary(summary, title="FC1 Low Duct Static")
 
 ---
 
-## brick_resolver (examples)
+## brick_resolver
 
 ```python
-from brick_resolver import resolve_from_ttl
+from open_fdd import resolve_from_ttl
 
-column_map = resolve_from_ttl("examples/ahu7_brick_model.ttl")
-# {"oat": "OAT (°F)", "sat": "SAT (°F)", ...}
+column_map = resolve_from_ttl("examples/brick_model.ttl")
+# Keys: BRICK class names (Supply_Air_Temperature_Sensor, etc.) and rule_input for backward compat
+# {"Supply_Air_Temperature_Sensor": "SAT (°F)", "sat": "SAT (°F)", ...}
 ```
 
 Requires `pip install open-fdd[brick]`.

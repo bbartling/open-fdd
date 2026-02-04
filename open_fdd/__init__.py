@@ -9,6 +9,6 @@ Example:
     df_result = runner.run(df)
 """
 
-from open_fdd.engine import RuleRunner
+from open_fdd.engine import RuleRunner, resolve_from_ttl
 
-__all__ = ["RuleRunner"]
+__all__ = ["RuleRunner", "resolve_from_ttl"]

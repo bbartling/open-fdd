@@ -7,7 +7,12 @@
 
 ![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 
-**Config-driven FDD** for HVAC — YAML rules, pandas DataFrames, optional Brick model. [📖 Docs](https://bbartling.github.io/open-fdd/)
+**Config-driven FDD** for HVAC — YAML rules, pandas DataFrames, optional Brick model. 
+
+Pandas is an excellent choice for high-performance, tabular-style computing, especially for rule- or expression-based fault detection equations, and it has become a standard tool across modern data science, machine learning, and AI workflows. **Pandas** is an open-source Python library that provides fast, spreadsheet-like data tables called DataFrames, making it easy to clean, analyze, and compute with time-series and tabular data using simple, Excel-style operations at much larger scales; it was created in 2008 by Wes McKinney while working in finance to handle large time-series datasets more efficiently and later became a core project in the scientific Python ecosystem under the NumFOCUS foundation.
+
+
+[📖 Docs](https://bbartling.github.io/open-fdd/)
 
 > open fdd is under construction with daily updates please stay tuned for a new version 2.0!
 
@@ -86,11 +91,19 @@ pytest open_fdd/tests/
 
 ## BRICK model driven
 
-Resolve rule inputs from a Brick TTL via `ofdd:mapsToRuleInput`:
+Column mapping uses BRICK class names. Resolve from a Brick TTL:
 
 ```bash
 pip install open-fdd[brick]
-python examples/ahu7_standalone.py
+python examples/check_faults_ahu7.py
+```
+
+```python
+from open_fdd import RuleRunner, resolve_from_ttl
+
+column_map = resolve_from_ttl("path/to/brick_model.ttl")  # BRICK class -> CSV column
+runner = RuleRunner("open_fdd/rules")
+result = runner.run(df, column_map=column_map)
 ```
 
 ## Contributing

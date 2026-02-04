@@ -1,0 +1,40 @@
+# Sensor bounds — fault if value outside valid range
+# Inputs use BRICK class names
+name: bad_sensor_check
+type: bounds
+flag: bad_sensor_flag
+
+params:
+  units: imperial
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: Supply_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 150]
+      metric: [4, 66]
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    column: Mixed_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    column: Return_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: Outside_Air_Temperature_Sensor
+    bounds:
+      imperial: [-40, 120]
+      metric: [-40, 49]
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+    column: Supply_Air_Static_Pressure_Sensor
+    bounds:
+      imperial: [-5, 10]   # inH2O
+      metric: [-1244, 2488]  # Pa

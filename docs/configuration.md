@@ -40,6 +40,8 @@ expression: |
 
 ## Bounds rule (bad data)
 
+Inputs use BRICK class names; `column_map` keys match:
+
 ```yaml
 name: bad_sensor_check
 type: bounds
@@ -49,13 +51,15 @@ params:
   units: imperial
 
 inputs:
-  supply_air_temp:
-    column: sat
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: Supply_Air_Temperature_Sensor
     bounds:
       imperial: [40, 150]
       metric: [4, 66]
-  return_air_temp:
-    column: rat
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    column: Return_Air_Temperature_Sensor
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
@@ -69,10 +73,12 @@ type: flatline
 flag: flatline_flag
 
 inputs:
-  supply_air_temp:
-    column: sat
-  zone_temp:
-    column: zt
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: Supply_Air_Temperature_Sensor
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: Outside_Air_Temperature_Sensor
 
 params:
   tolerance: 0.000001
@@ -101,7 +107,7 @@ inputs:
     column: economizer_sig
 ```
 
-- **`brick`** — Brick class name (documentation).
+- **`brick`** — Brick class name. Used for column resolution: `column_map` can be keyed by Brick class (e.g. `Supply_Air_Temperature_Sensor`), and the runner resolves columns via BRICK first.
 - **`equipment_type`** — Equipment types this rule applies to (for future Brick-based filtering).
 
 **Next:** [API Reference](api_reference.md)

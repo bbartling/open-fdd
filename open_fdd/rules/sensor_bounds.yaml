@@ -1,6 +1,7 @@
 # Sensor bounds check — SkySpark/Axon-style
 # Fault if value is outside valid range for sensor type
 # Pass params={"units": "metric"} to run() for metric bounds
+# BRICK: column_map keys can be Brick class names (Supply_Air_Temperature_Sensor) or rule names (sat)
 name: bad_sensor_check
 description: Returns fault if sensor is out of range (inspired by SkySpark badSensorCheck)
 type: bounds
@@ -11,26 +12,31 @@ params:
 
 inputs:
   supply_air_temp:
+    brick: Supply_Air_Temperature_Sensor
     column: sat
     bounds:
       imperial: [40, 150]    # degF
       metric: [4, 66]        # degC
   zone_temp:
+    brick: Zone_Temperature_Sensor
     column: zt
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   return_air_temp:
+    brick: Return_Air_Temperature_Sensor
     column: rat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   mixed_air_temp:
+    brick: Mixed_Air_Temperature_Sensor
     column: mat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   outdoor_air_temp:
+    brick: Outside_Air_Temperature_Sensor
     column: oat
     bounds:
       imperial: [-40, 120]

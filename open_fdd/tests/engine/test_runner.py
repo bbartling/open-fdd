@@ -180,13 +180,37 @@ def test_runner_column_map_override(sample_df):
         "inputs": {"sat": {"column": "wrong_col"}},
     }
     runner = RuleRunner(rules=[rule])
-    # Override: rule says "wrong_col" but column_map says use "sat"
+    # Override: rule says "wrong_col" but column_map says use "sat" (keyed by rule input)
     result = runner.run(
         sample_df,
         column_map={"sat": "sat"},
     )
     assert "bounds_flag" in result.columns
     # sat 54-58 in [40,60] -> no fault
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_column_map_brick_class(sample_df):
+    """column_map keyed by BRICK class resolves correctly."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "column": "sat",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    # BRICK class key -> df column
+    result = runner.run(
+        sample_df,
+        column_map={"Supply_Air_Temperature_Sensor": "sat"},
+    )
+    assert "bounds_flag" in result.columns
     assert result["bounds_flag"].sum() == 0
 
 

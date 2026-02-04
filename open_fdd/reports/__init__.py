@@ -6,9 +6,23 @@ motor runtime, and sensor stats when faults occur.
 """
 
 from open_fdd.reports.fault_report import (
-    summarize_fault,
-    summarize_all_faults,
+    analyze_flatline_episodes,
+    flatline_period,
+    flatline_period_range,
+    print_flatline_episodes,
     print_summary,
+    summarize_all_faults,
+    summarize_fault,
+    time_range,
 )
 
-__all__ = ["summarize_fault", "summarize_all_faults", "print_summary"]
+__all__ = [
+    "analyze_flatline_episodes",
+    "flatline_period",
+    "flatline_period_range",
+    "print_flatline_episodes",
+    "print_summary",
+    "summarize_all_faults",
+    "summarize_fault",
+    "time_range",
+]

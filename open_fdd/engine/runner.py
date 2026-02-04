@@ -144,17 +144,36 @@ class RuleRunner:
         params = {**(rule.get("params") or {}), **(run_params or {})}
         global_col_map = column_map or {}
 
-        # Resolve column mappings: Brick/column_map overrides, else rule inputs
+        # Resolve column mappings: BRICK class first, then rule input name
+        # column_map keys can be Brick class (Supply_Air_Temperature_Sensor),
+        # BrickClass|rule_input for disambiguation, or rule input (sat)
         col_map = {}
         for key, val in inputs.items():
-            if key in global_col_map:
-                col_map[key] = global_col_map[key]
-            elif isinstance(val, str):
-                col_map[key] = val
-            elif isinstance(val, dict) and "column" in val:
-                col_map[key] = val["column"]
+            if isinstance(val, str):
+                col = val
+                brick_class = None
             else:
-                col_map[key] = val.get("column", key)
+                inp = val if isinstance(val, dict) else {}
+                col = inp.get("column", key)
+                brick_class = inp.get("brick")
+            # Lookup order: Brick class, BrickClass|column (disambiguation), column, key, literal
+            resolved = col
+            if global_col_map:
+                if brick_class:
+                    resolved = (
+                        global_col_map.get(brick_class)
+                        or global_col_map.get(f"{brick_class}|{col}")
+                        or global_col_map.get(col)
+                        or global_col_map.get(key)
+                        or col
+                    )
+                else:
+                    resolved = (
+                        global_col_map.get(col)
+                        or global_col_map.get(key)
+                        or col
+                    )
+            col_map[key] = resolved
 
         if rule_type == "bounds":
             return self._run_bounds(rule, df, col_map, params)

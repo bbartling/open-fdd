@@ -1,0 +1,24 @@
+# Flatline — fault if sensor stuck at constant value
+# Inputs use BRICK class names
+name: sensor_flatline
+type: flatline
+flag: flatline_flag
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: Supply_Air_Temperature_Sensor
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    column: Mixed_Air_Temperature_Sensor
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    column: Return_Air_Temperature_Sensor
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: Outside_Air_Temperature_Sensor
+
+
+params:
+  tolerance: 0.000001
+  window: 12
