@@ -47,21 +47,12 @@ The data set has been artififially modified for flat lined values on all rows in
 2025-01-01 02:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,65.06600189208984,45.50650024414063,62.3120002746582,61.64599990844727,,,,,,,,
 2025-01-01 02:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,64.68800354003906,45.11940002441406,61.80799865722656,61.555999755859375,,,,,,,,
 2025-01-01 02:30:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,64.50800323486328,44.67440032958984,61.46599960327149,61.46599960327149,,,,,,,,
-2025-01-01 02:45:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,64.22000122070312,44.51440048217773,61.93399810791016,61.30400085449219,,,,,,,,
-2025-01-01 03:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 03:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 03:45:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 04:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 04:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 04:30:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 04:45:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 05:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 05:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 05:30:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
+
+...
+
 2025-01-01 05:45:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
 2025-01-01 06:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
 2025-01-01 06:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
-2025-01-01 06:26:00,,,,,,,,,,,,,,,,,1.0,,,
 ```
 
 There are also real instances in the dataset where the BAS supervisory controller fails to update the outside air networked temperature value on the AHU7 controller. The fault rule detects these conditions and reports them as `episodes`, representing the number of separate times the sensor stops updating.
@@ -78,7 +69,7 @@ python check_faults_ahu7_flatline.py
 ## What the script does
 
 
-What it does: It finds each contiguous flatline episode in the data, checks which BRICK sensors were flat (spread &lt; tolerance) in that episode, and returns a list of episode dicts with start/end times, which sensors were flat, and flags for “all sensors flat” (device offline) vs “single sensor flat” (controller not writing).
+What it does: It finds each contiguous flatline episode in the data, checks which BRICK sensors were flat lined in that episode, and returns a list of episode dicts with start/end times, which sensors were flat, and flags for “all sensors flat” (device offline) vs “single sensor flat” (controller not updating).
 
 
 ```python
@@ -177,89 +168,61 @@ Column mapping: {'Supply_Air_Temperature_Sensor': 'SAT (°F)', 'Mixed_Air_Temper
 
 Results
   Flatline (stuck sensor): 3926 rows flagged
-    Time frame (data flat): 2025-01-01 03:00:00 to 2025-02-28 06:15:00
-
-First 3 flagged rows (SAT, MAT, OAT, RAT):
-  2025-01-01 06:00:00: SAT=60.80 MAT=75.76 OAT=44.99 RAT=61.14
-  2025-01-01 06:15:00: SAT=60.80 MAT=75.76 OAT=44.99 RAT=61.14
-  2025-01-05 04:45:00: SAT=66.33 MAT=93.45 OAT=21.00 RAT=56.57
-Last 3 flagged rows:
-  2025-02-28 05:45:00: SAT=76.89 MAT=57.92 OAT=70.00 RAT=69.08
-  2025-02-28 06:00:00: SAT=88.02 MAT=58.95 OAT=70.00 RAT=69.42
-  2025-02-28 06:15:00: SAT=97.25 MAT=60.24 OAT=70.00 RAT=69.75
-
-Analytics
-
---- Flatline fault ---
-  total days: 105.39
-  total hours: 2529
-  hours flatline mode: 992
-  percent true: 38.44
-  percent false: 61.56
-  percent hours true: 39.22
-  hours motor runtime: 860.3
-  flag true Supply Air Temperature Sensor: 93.74
-  flag true Mixed Air Temperature Sensor: 60.39
-  flag true Outside Air Temperature Sensor: 69.78
-  flag true Return Air Temperature Sensor: 71.13
-  fault period start: 2025-01-01 03:00:00
-  fault period end: 2025-02-28 06:15:00
-  fault period days: 58.14
-  fault period hours: 1395
-  fault period rows: 5636
-  fault period rows flagged: 3926
-  fault period percent true: 69.66
-PS C:\Users\ben\Documents\open-fdd\examples> python .\check_faults_ahu7_flatline.py
-Flatline check only
-Column mapping: {'Supply_Air_Temperature_Sensor': 'SAT (°F)', 'Mixed_Air_Temperature_Sensor': 'MAT (°F)', 'Outside_Air_Temperature_Sensor': 'OAT (°F)', 'Return_Air_Temperature_Sensor': 'RAT (°F)', 'Supply_Fan_Speed_Command': 'SF Spd Cmd (%)'}
-
-Results
-  Flatline (stuck sensor): 3926 rows flagged
-    Time frame (data flat): 2025-01-01 03:00:00 to 2025-02-28 06:15:00
+    Time frame: 2025-01-01 06:00:00 to 2025-02-28 06:15:00
 
 
 --- Flatline episodes ---
   (76 episodes total, showing first 10 and last 10)
 
   Episode 1: 2025-01-01 06:00:00 to 2025-01-01 06:15:00 (2 rows)
-    BRICK sensors flat: Supply_Air_Temperature_Sensor, Mixed_Air_Temperature_Sensor, Outside_Air_Temperature_Sensor, Return_Air_Temperature_Sensor
+    BRICK sensors flat: Supply_Air_Temperature_Sensor, Mixed_Air_Temperature_Sensor, Outside_Air_Temperature_Sensor, Return_Air_Temperature_Sensor        
+    Last 3 values: Supply_Air_Temperature_Sensor: [60.8, 60.8], Mixed_Air_Temperature_Sensor: [75.76, 75.76], Outside_Air_Temperature_Sensor: [44.99, 44.99], Return_Air_Temperature_Sensor: [61.14, 61.14]
     All sensors flat: Yes (device offline)
 
   Episode 2: 2025-01-05 04:45:00 to 2025-01-05 08:45:00 (17 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [21.0, 21.0, 21.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 3: 2025-01-09 10:30:00 to 2025-01-09 18:00:00 (29 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 4: 2025-01-09 21:00:00 to 2025-01-10 06:15:00 (38 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 5: 2025-01-10 09:30:00 to 2025-01-10 18:00:00 (35 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 6: 2025-01-10 21:00:00 to 2025-01-13 05:15:00 (225 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 7: 2025-01-13 08:15:00 to 2025-01-13 18:00:00 (40 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 8: 2025-01-13 21:00:00 to 2025-01-14 06:15:00 (38 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 9: 2025-01-14 09:15:00 to 2025-01-14 18:00:00 (36 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 10: 2025-01-14 21:00:00 to 2025-01-15 06:15:00 (38 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   ... (56 episodes omitted) ...
 
@@ -268,39 +231,48 @@ Results
 
   Episode 68: 2025-02-22 00:00:00 to 2025-02-24 05:15:00 (212 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 69: 2025-02-24 08:15:00 to 2025-02-24 18:00:00 (40 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 70: 2025-02-24 21:00:00 to 2025-02-25 06:15:00 (37 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 71: 2025-02-25 09:15:00 to 2025-02-25 16:00:00 (26 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 72: 2025-02-25 21:00:00 to 2025-02-26 06:15:00 (37 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 73: 2025-02-26 09:15:00 to 2025-02-26 18:00:00 (34 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 74: 2025-02-26 21:00:00 to 2025-02-27 06:15:00 (38 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 75: 2025-02-27 09:15:00 to 2025-02-27 18:00:00 (36 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
   Episode 76: 2025-02-27 21:00:00 to 2025-02-28 06:15:00 (38 rows)
     BRICK sensors flat: Outside_Air_Temperature_Sensor
-    Single sensor flat: Outside_Air_Temperature_Sensor (controller not writing)
+    Last 3 values: Outside_Air_Temperature_Sensor: [70.0, 70.0, 70.0]
+    Single sensor flat: Outside_Air_Temperature_Sensor (controller not updating)
 
 Analytics
 

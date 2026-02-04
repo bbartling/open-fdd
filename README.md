@@ -17,33 +17,51 @@ Pandas is an excellent choice for high-performance, tabular-style computing, esp
 
 ## Quick Start
 
+Map BRICK class names to your DataFrame columns, then run rules:
+
 ```python
 import pandas as pd
+from pathlib import Path
 from open_fdd import RuleRunner
+from open_fdd.engine import load_rule
 from open_fdd.reports import summarize_fault, print_summary
 
 df = pd.DataFrame({
     "timestamp": [
-        "2023-01-01 00:00", "2023-01-01 00:15", "2023-01-01 00:30", "2023-01-01 00:45"
+        "2023-01-01 00:00", "2023-01-01 00:15", "2023-01-01 00:30", "2023-01-01 00:45",
     ],
-
-    "duct_static": [0.4, 0.4, 0.2, 0.2, 0.2],
-    "duct_static_setpoint": [0.5, 0.5, 0.5, 0.5, 0.5],
-    "supply_vfd_speed": [0.95, 0.95, 0.95, 0.95, 0.95],
-    "mat": [60.3, 60.2, 60.3, 60.3, 60.4],
-    "rat": [72.0, 72.1, 72.0, 72.0, 72.1],
-    "oat": [53.3, 53.3, 53.3, 53.4, 53.4],
+    "duct_static": [0.4, 0.4, 0.2, 0.2],
+    "duct_static_setpoint": [0.5, 0.5, 0.5, 0.5],
+    "supply_vfd_speed": [0.95, 0.95, 0.95, 0.95],
 })
 
-runner = RuleRunner("open_fdd/rules")
-df_result = runner.run(df, rolling_window=3)  # fault only if true for 3+ consecutive samples
-summary = summarize_fault(df_result, "fc1_flag", motor_col="supply_vfd_speed")
+# BRICK class -> your DataFrame column
+column_map = {
+    "Supply_Air_Static_Pressure_Sensor": "duct_static",
+    "Supply_Air_Static_Pressure_Setpoint": "duct_static_setpoint",
+    "Supply_Fan_Speed_Command": "supply_vfd_speed",
+}
+
+rules_dir = Path("open_fdd/rules")
+runner = RuleRunner(rules=[load_rule(rules_dir / "ahu_fc1.yaml")])
+result = runner.run(
+    df,
+    timestamp_col="timestamp",
+    column_map=column_map,
+    rolling_window=3,  # fault only if true for 3+ consecutive samples
+)
+summary = summarize_fault(
+    result,
+    "fc1_flag",
+    timestamp_col="timestamp",
+    motor_col=column_map["Supply_Fan_Speed_Command"],
+)
 print_summary(summary, "FC1 Low Duct Static")
 ```
 
 ## Rule expression example (FC9)
 
-Rules are YAML with `inputs`, `params`, and an `expression`. BRICK metadata links rule inputs to Brick classes:
+Rules use BRICK class names in `inputs`; `column_map` maps them to your DataFrame:
 
 ```yaml
 name: oat_too_high_free_cooling
@@ -67,11 +85,15 @@ inputs:
 
 params:
   outdoor_err_thres: 1.0
+  delta_t_supply_fan: 0.5
+  supply_err_thres: 1.0
   ahu_min_oa_dpr: 0.1
 
 expression: |
   (oat - outdoor_err_thres > sat_setpoint - delta_t_supply_fan + supply_err_thres) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)
 ```
+
+With Brick TTL, use `resolve_from_ttl("model.ttl")` instead of a manual `column_map`.
 
 ## Getting Started
 

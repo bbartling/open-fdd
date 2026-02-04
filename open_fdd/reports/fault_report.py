@@ -247,7 +247,7 @@ def analyze_flatline_episodes(
     For each contiguous run of flatline_flag=1:
     - Which sensors had spread (max-min) < tolerance over the episode
     - all_sensors_flat: True if every sensor was flat (device offline)
-    - single_sensor_flat: True if exactly one sensor was flat (e.g. controller not writing)
+    - single_sensor_flat: True if exactly one sensor was flat (e.g. controller not updating)
 
     Args:
         df: DataFrame with flatline_flag and sensor columns.
@@ -298,6 +298,12 @@ def analyze_flatline_episodes(
                 sensors_flat.append(brick_name)
         all_flat = num_evaluated > 0 and len(sensors_flat) == num_evaluated
         single_flat = len(sensors_flat) == 1
+        sensor_last_values: Dict[str, List[float]] = {}
+        for brick_name in sensors_flat:
+            col = sensor_cols.get(brick_name)
+            if col and col in ep_df.columns:
+                vals = ep_df[col].dropna().tail(3).tolist()
+                sensor_last_values[brick_name] = [round(float(v), 2) for v in vals]
         episodes.append(
             {
                 "start_ts": start_ts,
@@ -306,6 +312,7 @@ def analyze_flatline_episodes(
                 "all_sensors_flat": all_flat,
                 "single_sensor_flat": single_flat,
                 "rows": len(ep_df),
+                "sensor_last_values": sensor_last_values,
             }
         )
     return episodes
@@ -346,10 +353,14 @@ def _print_episode(idx: int, ep: Dict[str, Any]) -> None:
     print(f"\n  Episode {idx}: {ep['start_ts']} to {ep['end_ts']} ({ep['rows']} rows)")
     sensors = ep["sensors_flat"]
     print(f"    BRICK sensors flat: {', '.join(sensors) or '(none)'}")
+    last_vals = ep.get("sensor_last_values", {})
+    if last_vals:
+        parts = [f"{k}: [{', '.join(map(str, v))}]" for k, v in last_vals.items()]
+        print(f"    Last 3 values: {', '.join(parts)}")
     if ep["all_sensors_flat"]:
         print("    All sensors flat: Yes (device offline)")
     elif ep["single_sensor_flat"] and sensors:
-        print(f"    Single sensor flat: {sensors[0]} (controller not writing)")
+        print(f"    Single sensor flat: {sensors[0]} (controller not updating)")
 
 
 def analyze_bounds_episodes(
