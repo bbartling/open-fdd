@@ -20,9 +20,10 @@ nav_order: 1
 
 ## Docs
 
-1. **[Getting Started](getting_started.md)** — AHU7 tutorial: run the script, then Brick data model
-2. **[Configuration](configuration.md)** — Rule types, YAML structure
-3. **[API Reference](api_reference.md)** — RuleRunner, reports, brick_resolver
-4. **[Examples](examples.md)** — API examples: minimal, manual map, Brick map, analytics
-5. **[Data Model & Brick](data_model.md)** — TTL, brick_resolver, external refs
+1. **[Getting Started](getting_started.md)** — Install, run AHU7 scripts
+2. **[Flat Line Sensor Tutorial](flat_line_sensor_tuntorial.md)** — Stuck sensor detection
+3. **[Sensor Bounds Tutorial](bounds_sensor_tuntorial.md)** — Out-of-range sensor values
+4. **[Configuration](configuration.md)** — Rule types, YAML structure
+5. **[API Reference](api_reference.md)** — RuleRunner, reports, brick_resolver
+6. **[Data Model & Brick](data_model.md)** — TTL, brick_resolver, external refs
 

@@ -1,6 +1,6 @@
 ---
 title: Data Model & Brick
-nav_order: 6
+nav_order: 7
 ---
 
 # Data Model & Brick
@@ -147,4 +147,6 @@ You can use either:
 
 `RuleRunner.run(column_map=...)` accepts any `{rule_input: df_column}` dict.
 
+---
 
+**Next:** [Home](index.md)

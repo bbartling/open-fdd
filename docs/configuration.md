@@ -1,6 +1,6 @@
 ---
 title: Configuration
-nav_order: 4
+nav_order: 5
 ---
 
 # Configuration
@@ -109,5 +109,7 @@ inputs:
 
 - **`brick`** — Brick class name. Used for column resolution: `column_map` can be keyed by Brick class (e.g. `Supply_Air_Temperature_Sensor`), and the runner resolves columns via BRICK first.
 - **`equipment_type`** — Equipment types this rule applies to (for future Brick-based filtering).
+
+---
 
 **Next:** [API Reference](api_reference.md)

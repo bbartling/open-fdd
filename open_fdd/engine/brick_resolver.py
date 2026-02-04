@@ -1,0 +1,81 @@
+"""
+Resolve open-fdd rule inputs from a Brick TTL model.
+
+Returns column_map keyed by BRICK class names (e.g. Supply_Air_Temperature_Sensor)
+for use with RuleRunner.run(column_map=...). When a Brick class appears multiple
+times (e.g. two Valve_Command), uses composite key BrickClass|rule_input.
+
+Requires: pip install open-fdd[brick]  # or pip install rdflib
+"""
+
+from pathlib import Path
+from typing import Dict, Union
+
+BRICK = "https://brickschema.org/schema/Brick#"
+OFDD = "http://openfdd.local/ontology#"
+RDFS = "http://www.w3.org/2000/01/rdf-schema#"
+
+
+def resolve_from_ttl(ttl_path: Union[str, Path]) -> Dict[str, str]:
+    """
+    Load Brick TTL and return column_map keyed by BRICK class names.
+
+    Keys are Brick class names (e.g. Supply_Air_Temperature_Sensor). When the
+    same Brick class appears multiple times (e.g. two Valve_Command), uses
+    BrickClass|rule_input for disambiguation.
+
+    Also includes rule_input -> label for backward compatibility.
+
+    Returns:
+        Dict mapping Brick class names (and rule_input) to DataFrame column names
+        (rdfs:label from the Brick model).
+    """
+    try:
+        from rdflib import Graph
+    except ImportError:
+        raise ImportError(
+            "rdflib required for Brick resolution. Run: pip install open-fdd[brick]"
+        ) from None
+
+    g = Graph()
+    g.parse(ttl_path, format="turtle")
+    mapping: Dict[str, str] = {}
+
+    # SPARQL: find points with ofdd:mapsToRuleInput (BMS points mapped to rule inputs)
+    q = """
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX ofdd: <http://openfdd.local/ontology#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?brick_class ?rule_input ?label WHERE {
+        ?point ofdd:mapsToRuleInput ?rule_input .
+        ?point a ?brick_type .
+        FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+        BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
+        ?point rdfs:label ?label .
+    }
+    """
+    rows = list(g.query(q))
+
+    # Count Brick classes to detect duplicates
+    brick_counts: Dict[str, int] = {}
+    for row in rows:
+        bc = str(row.brick_class)
+        brick_counts[bc] = brick_counts.get(bc, 0) + 1
+
+    for row in rows:
+        brick_class = str(row.brick_class)
+        rule_input = str(row.rule_input).strip('"') if row.rule_input else None
+        label = str(row.label).strip('"')
+
+        # Primary: BRICK class key
+        if brick_counts[brick_class] > 1 and rule_input:
+            key = f"{brick_class}|{rule_input}"
+        else:
+            key = brick_class
+        mapping[key] = label
+
+        # Backward compat: rule_input -> label
+        if rule_input:
+            mapping[rule_input] = label
+
+    return mapping

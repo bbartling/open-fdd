@@ -49,7 +49,6 @@ This image shows an example of an Air Handling Unit (AHU):
 
 To run the example, navigate to the root directory of the `open-fdd` repository, create and activate a virtual environment, and then execute the script.
 
-
 ---
 
 **Next:** [Flat Line Sensor Tutorial](flat_line_sensor_tuntorial.md)
