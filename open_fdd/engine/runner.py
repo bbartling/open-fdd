@@ -38,7 +38,9 @@ def _resolve_bounds(bounds: Any, units: str = "imperial") -> Optional[List[float
     return None
 
 
-def bounds_map_from_rule(rule: Dict[str, Any], units: str = "imperial") -> Dict[str, tuple]:
+def bounds_map_from_rule(
+    rule: Dict[str, Any], units: str = "imperial"
+) -> Dict[str, tuple]:
     """
     Extract {brick_name: (low, high)} from a bounds-type rule.
     Use for episode analysis so bounds stay in sync with the YAML.
@@ -185,11 +187,7 @@ class RuleRunner:
                         or col
                     )
                 else:
-                    resolved = (
-                        global_col_map.get(col)
-                        or global_col_map.get(key)
-                        or col
-                    )
+                    resolved = global_col_map.get(col) or global_col_map.get(key) or col
             col_map[key] = resolved
 
         if rule_type == "bounds":

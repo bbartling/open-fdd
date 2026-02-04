@@ -150,7 +150,9 @@ def summarize_fault(
         f"hours_{flag_col.replace('_flag','')}_mode": round(hours_fault),
         "percent_true": round(df[flag_col].mean() * 100, 2),
         "percent_false": round((100 - df[flag_col].mean() * 100), 2),
-        "percent_hours_true": round(100 * hours_fault / total_hours, 2) if total_hours > 0 else 0,
+        "percent_hours_true": (
+            round(100 * hours_fault / total_hours, 2) if total_hours > 0 else 0
+        ),
     }
 
     if motor_col and motor_col in df.columns:
@@ -296,14 +298,16 @@ def analyze_flatline_episodes(
                 sensors_flat.append(brick_name)
         all_flat = num_evaluated > 0 and len(sensors_flat) == num_evaluated
         single_flat = len(sensors_flat) == 1
-        episodes.append({
-            "start_ts": start_ts,
-            "end_ts": end_ts,
-            "sensors_flat": sensors_flat,
-            "all_sensors_flat": all_flat,
-            "single_sensor_flat": single_flat,
-            "rows": len(ep_df),
-        })
+        episodes.append(
+            {
+                "start_ts": start_ts,
+                "end_ts": end_ts,
+                "sensors_flat": sensors_flat,
+                "all_sensors_flat": all_flat,
+                "single_sensor_flat": single_flat,
+                "rows": len(ep_df),
+            }
+        )
     return episodes
 
 
@@ -414,18 +418,22 @@ def analyze_bounds_episodes(
             if (s < low).any() or (s > high).any():
                 sensors_oob.append(brick_name)
                 sensor_means[brick_name] = round(float(s.mean()), 2)
-        num_with_bounds = sum(1 for k in sensor_cols if bounds_map.get(k) and len(bounds_map.get(k)) == 2)
+        num_with_bounds = sum(
+            1 for k in sensor_cols if bounds_map.get(k) and len(bounds_map.get(k)) == 2
+        )
         all_oob = num_with_bounds > 0 and len(sensors_oob) == num_with_bounds
         single_oob = len(sensors_oob) == 1
-        episodes.append({
-            "start_ts": start_ts,
-            "end_ts": end_ts,
-            "sensors_flat": sensors_oob,  # reuse key for print compatibility
-            "all_sensors_flat": all_oob,
-            "single_sensor_flat": single_oob,
-            "rows": len(ep_df),
-            "sensor_means": sensor_means,
-        })
+        episodes.append(
+            {
+                "start_ts": start_ts,
+                "end_ts": end_ts,
+                "sensors_flat": sensors_oob,  # reuse key for print compatibility
+                "all_sensors_flat": all_oob,
+                "single_sensor_flat": single_oob,
+                "rows": len(ep_df),
+                "sensor_means": sensor_means,
+            }
+        )
     return episodes
 
 
