@@ -20,10 +20,10 @@ nav_order: 1
 
 ## Docs
 
-1. **[Getting Started](getting_started.md)** — Install, run AHU7 scripts
-2. **[Flat Line Sensor Tutorial](flat_line_sensor_tuntorial.md)** — Stuck sensor detection
-3. **[Sensor Bounds Tutorial](bounds_sensor_tuntorial.md)** — Out-of-range sensor values
-4. **[Configuration](configuration.md)** — Rule types, YAML structure
-5. **[API Reference](api_reference.md)** — RuleRunner, reports, brick_resolver
-6. **[Data Model & Brick](data_model.md)** — TTL, brick_resolver, external refs
+1. **[Getting Started]({{ "getting_started" | relative_url }})** — Install, run AHU7 scripts
+2. **[Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})** — Stuck sensor detection
+3. **[Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})** — Out-of-range sensor values
+4. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
+5. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
+6. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, external refs
 

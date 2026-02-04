@@ -328,4 +328,4 @@ Analytics
 
 ---
 
-**Next:** [Sensor Bounds Check Tutorial](bounds_sensor_tuntorial.md)
+**Next:** [Sensor Bounds Check Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})

@@ -96,5 +96,5 @@ Requires `pip install open-fdd[brick]`.
 
 ---
 
-**Next:** [Data Model & Brick](data_model.md)
+**Next:** [Data Model & Brick]({{ "data_model" | relative_url }})
 

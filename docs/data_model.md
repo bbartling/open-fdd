@@ -149,4 +149,4 @@ You can use either:
 
 ---
 
-**Next:** [Home](index.md)
+**Next:** [Home]({{ "" | relative_url }})

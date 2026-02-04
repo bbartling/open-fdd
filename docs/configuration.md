@@ -112,4 +112,4 @@ inputs:
 
 ---
 
-**Next:** [API Reference](api_reference.md)
+**Next:** [API Reference]({{ "api_reference" | relative_url }})

@@ -3,9 +3,6 @@ title: Getting Started
 nav_order: 2
 ---
 
-Here’s a clean, polished Markdown version you can drop straight into your **open-fdd** docs. I kept it simple, professional, and beginner-friendly for HVAC engineers.
-
----
 
 # Getting Started — AHU7 Tutorial
 
@@ -51,4 +48,4 @@ To run the example, navigate to the root directory of the `open-fdd` repository,
 
 ---
 
-**Next:** [Flat Line Sensor Tutorial](flat_line_sensor_tuntorial.md)
+**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})

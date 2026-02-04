@@ -302,4 +302,4 @@ Analytics
 
 ---
 
-**Next:** [Configuration](configuration.md)
+**Next:** [Configuration]({{ "configuration" | relative_url }})

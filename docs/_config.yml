@@ -1,5 +1,6 @@
 title: "open-fdd"
 description: "Config-driven FDD for HVAC — YAML rules, pandas, Brick"
+baseurl: "/open-fdd"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
 
