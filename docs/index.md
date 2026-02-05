@@ -25,7 +25,7 @@ A **rules engine** is software that runs automated checks on your data — when 
 6. **[Hunting Rule]({{ "hunting_rule" | relative_url }})** — Excessive AHU state changes (built-in)
 7. **[OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }})** — OA fraction calc error (built-in)
 8. **[ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }})** — ERV effectiveness (built-in, custom)
-9. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather); will be greatly expanded in future releases
+9. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather) — *TODO: will be greatly expanded in future releases*
 10. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
 11. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
 12. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, external refs — *TODO: not finished*

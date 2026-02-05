@@ -302,4 +302,4 @@ Analytics
 
 ---
 
-**Next:** [Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})
+**Next:** [Bounds Rule]({{ "bounds_rule" | relative_url }})
