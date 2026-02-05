@@ -7,7 +7,7 @@ nav_order: 5
 
 All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
 
-**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency`
+**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks.
 
 **About `np` in expressions:** When you see `np` in a rule (e.g. `np.maximum`, `np.abs`, `np.sqrt`), it refers to **NumPy** — the Python computing library which Pandas uses under the hood for high-performance numerical math. open-fdd injects `np` into expression evaluation automatically, so you can use NumPy functions directly in your fault logic.
 
@@ -121,9 +121,9 @@ params:
 
 ---
 
-## AHU fault conditions for air handling units defined by ASHRAE Guideline 36
+## AHU fault conditions for air handling units (ASHRAE Guideline 36, Fault Rules One–Fifteen)
 
-These fault rules are defined by ASHRAE Guideline 36. open-fdd was originally based on G36 and has been expanded with BRICK terminology.
+Fault Rules One through Fifteen are defined by ASHRAE Guideline 36. open-fdd was originally based on G36 and has been expanded with BRICK terminology.
 
 ### Fault Rule One — low_duct_static_at_max_fan (expression)
 
@@ -641,9 +641,9 @@ expression: |
   ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))
 ```
 
-### Fault Rule Sixteen — erv_effectiveness_fault (erv_efficiency)
+### Fault Rule Sixteen — erv_effectiveness_fault (erv_efficiency) — *custom, not ASHRAE G36*
 
-ERV effectiveness outside expected range. AHU with ERV only.
+ERV effectiveness outside expected range. AHU with ERV only. This rule was created for open-fdd and is not part of ASHRAE Guideline 36.
 
 ```yaml
 name: erv_effectiveness_fault

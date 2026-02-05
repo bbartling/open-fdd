@@ -50,6 +50,8 @@ On the next page, we will run a fault rule against a CSV dataset pulled from the
 
 Follow along in the tutorial to get familiar with the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples). See the examples README for how to obtain the practice dataset.
 
+**Rule types vs expressions:** All rule types produce boolean (true/false) fault flags. Only the `expression` type lets you write custom logic; the others (`bounds`, `flatline`, `hunting`, `oa_fraction`, `erv_efficiency`) use built-in checks in the engine. The flatline and bounds tutorials use those built-in types.
+
 ---
 
 **Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})
