@@ -9,6 +9,41 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 
 **Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency`
 
+**About `np` in expressions:** When you see `np` in a rule (e.g. `np.maximum`, `np.abs`, `np.sqrt`), it refers to **NumPy** — the Python computing library which Pandas uses under the hood for high-performance numerical math. open-fdd injects `np` into expression evaluation automatically, so you can use NumPy functions directly in your fault logic.
+
+---
+
+## How to define your own expressions
+
+Expressions are boolean (true/false) statements — when they evaluate to **True**, a fault is flagged. Here's a quick guide:
+
+1. **Choose your inputs** — Each input maps a BRICK class (or rule name) to a DataFrame column. Use `brick:` for Brick model resolution and `column:` for the raw column name.
+
+2. **Define params** — Thresholds and constants go in `params`. Reference them by name in the expression (e.g. `static_err_thres`, `vfd_max`).
+
+3. **Write the expression** — Use input names and param names as variables. The expression must evaluate to a boolean Series (True = fault). Use `&` for AND, `|` for OR, `~` for NOT. Use `np` for NumPy functions (`np.maximum`, `np.abs`, `np.sqrt`, etc.).
+
+4. **Example** — A simple "sensor above threshold" rule:
+
+```yaml
+name: my_custom_rule
+type: expression
+flag: my_fault_flag
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: sat
+
+params:
+  max_temp: 90.0
+
+expression: |
+  Supply_Air_Temperature_Sensor > max_temp
+```
+
+5. **Save and run** — Save as `.yaml` in your rules folder and run with `RuleRunner(rules_path="my_rules").run(df)`.
+
 ---
 
 ## Sensor checks (bounds & flatline)
@@ -86,11 +121,11 @@ params:
 
 ---
 
-## AHU fault conditions (FC1–FC16)
+## AHU fault conditions for air handling units defined by ASHRAE Guideline 36
 
 These fault rules are defined by ASHRAE Guideline 36. open-fdd was originally based on G36 and has been expanded with BRICK terminology.
 
-### FC1 — low_duct_static_at_max_fan (expression)
+### Fault Rule One — low_duct_static_at_max_fan (expression)
 
 Duct static pressure too low with supply fan at max speed. VAV only.
 
@@ -121,7 +156,7 @@ expression: |
   (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - static_err_thres) & (Supply_Fan_Speed_Command >= vfd_max - vfd_err_thres)
 ```
 
-### FC2 — mix_temp_too_low (expression)
+### Fault Rule Two — mix_temp_too_low (expression)
 
 Mix temperature too low; should be between outside and return air.
 
@@ -155,7 +190,7 @@ expression: |
   (Mixed_Air_Temperature_Sensor - mix_err_thres < np.minimum(Return_Air_Temperature_Sensor - return_err_thres, Outside_Air_Temperature_Sensor - outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### FC3 — mix_temp_too_high (expression)
+### Fault Rule Three — mix_temp_too_high (expression)
 
 Mix temperature too high; should be between outside and return air.
 
@@ -189,7 +224,7 @@ expression: |
   (Mixed_Air_Temperature_Sensor - mix_err_thres > np.maximum(Return_Air_Temperature_Sensor + return_err_thres, Outside_Air_Temperature_Sensor + outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### FC4 — excessive_ahu_state_changes (hunting)
+### Fault Rule Four — excessive_ahu_state_changes (hunting)
 
 Excessive AHU operating state changes (PID hunting).
 
@@ -220,7 +255,7 @@ params:
   window: 60
 ```
 
-### FC5 — sat_too_low_heating_mode (expression)
+### Fault Rule Five — sat_too_low_heating_mode (expression)
 
 SAT too low in heating mode (broken heating valve).
 
@@ -254,7 +289,7 @@ expression: |
   (Supply_Air_Temperature_Sensor + supply_err_thres <= Mixed_Air_Temperature_Sensor - mix_err_thres + delta_t_supply_fan) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### FC6 — oa_fraction_airflow_error (oa_fraction)
+### Fault Rule Six — oa_fraction_airflow_error (oa_fraction)
 
 OA fraction calc error or AHU not maintaining design airflow.
 
@@ -298,7 +333,7 @@ params:
   ahu_min_oa_dpr: 0.1
 ```
 
-### FC7 — sat_too_low_full_heating (expression)
+### Fault Rule Seven — sat_too_low_full_heating (expression)
 
 Supply air temp too low when heating valve fully open.
 
@@ -330,7 +365,7 @@ expression: |
   (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - supply_err_thres) & (Valve_Command > 0.9) & (Supply_Fan_Speed_Command > 0)
 ```
 
-### FC8 — sat_mat_mismatch_economizer (expression)
+### Fault Rule Eight — sat_mat_mismatch_economizer (expression)
 
 SAT and MAT should be approx equal in economizer mode.
 
@@ -365,7 +400,7 @@ expression: |
   (np.abs(Supply_Air_Temperature_Sensor - delta_t_supply_fan - Mixed_Air_Temperature_Sensor) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
 ```
 
-### FC9 — oat_too_high_free_cooling (expression)
+### Fault Rule Nine — oat_too_high_free_cooling (expression)
 
 OAT too high in free cooling without mechanical cooling.
 
@@ -400,7 +435,7 @@ expression: |
   (Outside_Air_Temperature_Sensor - outdoor_err_thres > Supply_Air_Temperature_Setpoint - delta_t_supply_fan + supply_err_thres) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
 ```
 
-### FC10 — oat_mat_mismatch_econ_mech (expression)
+### Fault Rule Ten — oat_mat_mismatch_econ_mech (expression)
 
 OAT and MAT approx equal in economizer + mechanical cooling mode.
 
@@ -433,7 +468,7 @@ expression: |
   (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)
 ```
 
-### FC11 — oat_mat_mismatch_economizer (expression)
+### Fault Rule Eleven — oat_mat_mismatch_economizer (expression)
 
 OAT and MAT approx equal in economizer mode.
 
@@ -463,7 +498,7 @@ expression: |
   (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Damper_Position_Command > 0.9)
 ```
 
-### FC12 — sat_too_high_cooling_modes (expression)
+### Fault Rule Twelve — sat_too_high_cooling_modes (expression)
 
 SAT too high in econ+mech or mech-only cooling.
 
@@ -498,7 +533,7 @@ expression: |
   (Supply_Air_Temperature_Sensor > Mixed_Air_Temperature_Sensor + np.sqrt(supply_err_thres**2 + mix_err_thres**2) + delta_t_supply_fan) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
 ```
 
-### FC13 — sat_too_high_full_cooling (expression)
+### Fault Rule Thirteen — sat_too_high_full_cooling (expression)
 
 SAT too high vs setpoint in full cooling mode.
 
@@ -531,7 +566,7 @@ expression: |
   (Supply_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint + supply_err_thres) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0.9)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
 ```
 
-### FC14 — cooling_coil_drop_when_inactive (expression)
+### Fault Rule Fourteen — cooling_coil_drop_when_inactive (expression)
 
 Temperature drop across inactive cooling coil. Requires coil entering/leaving sensors.
 
@@ -568,7 +603,7 @@ expression: |
   ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)))
 ```
 
-### FC15 — heating_coil_rise_when_inactive (expression)
+### Fault Rule Fifteen — heating_coil_rise_when_inactive (expression)
 
 Temperature rise across inactive heating coil. Requires coil entering/leaving sensors.
 
@@ -606,7 +641,7 @@ expression: |
   ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))
 ```
 
-### FC16 — erv_effectiveness_fault (erv_efficiency)
+### Fault Rule Sixteen — erv_effectiveness_fault (erv_efficiency)
 
 ERV effectiveness outside expected range. AHU with ERV only.
 
@@ -787,6 +822,8 @@ inputs:
 expression: |
   Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)
 ```
+
+
 
 ---
 
