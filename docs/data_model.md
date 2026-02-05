@@ -1,6 +1,6 @@
 ---
 title: Data Model & Brick
-nav_order: 8
+nav_order: 13
 ---
 
 # Data Model & Brick

@@ -1,13 +1,13 @@
 ---
 title: Expression Rule Cookbook
-nav_order: 5
+nav_order: 10
 ---
 
 # Expression Rule Cookbook
 
 All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
 
-**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks.
+**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks. See [Bounds]({{ "bounds_rule" | relative_url }}), [Flatline]({{ "flatline_rule" | relative_url }}), [Hunting]({{ "hunting_rule" | relative_url }}), [OA Fraction]({{ "oa_fraction_rule" | relative_url }}), [ERV Efficiency]({{ "erv_efficiency_rule" | relative_url }}) for those rule types.
 
 **About `np` in expressions:** When you see `np` in a rule (e.g. `np.maximum`, `np.abs`, `np.sqrt`), it refers to **NumPy** — the Python computing library which Pandas uses under the hood for high-performance numerical math. open-fdd injects `np` into expression evaluation automatically, so you can use NumPy functions directly in your fault logic.
 
@@ -150,36 +150,7 @@ expression: |
   (Mixed_Air_Temperature_Sensor - mix_err_thres > np.maximum(Return_Air_Temperature_Sensor + return_err_thres, Outside_Air_Temperature_Sensor + outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### Fault Rule Four — excessive_ahu_state_changes (hunting)
-
-Excessive AHU operating state changes (PID hunting).
-
-```yaml
-name: excessive_ahu_state_changes
-description: Excessive AHU operating state changes detected (hunting behavior)
-type: hunting
-flag: fc4_flag
-equipment_type: [AHU, VAV_AHU]
-
-inputs:
-  economizer_sig:
-    brick: Damper_Position_Command
-    column: economizer_sig
-  supply_vfd_speed:
-    brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
-  heating_sig:
-    brick: Valve_Command
-    column: heating_sig
-  cooling_sig:
-    brick: Valve_Command
-    column: cooling_sig
-
-params:
-  delta_os_max: 10
-  ahu_min_oa_dpr: 0.1
-  window: 60
-```
+*Fault Rule Four (hunting) — see [Hunting Rule]({{ "hunting_rule" | relative_url }}).*
 
 ### Fault Rule Five — sat_too_low_heating_mode (expression)
 
@@ -215,49 +186,7 @@ expression: |
   (Supply_Air_Temperature_Sensor + supply_err_thres <= Mixed_Air_Temperature_Sensor - mix_err_thres + delta_t_supply_fan) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### Fault Rule Six — oa_fraction_airflow_error (oa_fraction)
-
-OA fraction calc error or AHU not maintaining design airflow.
-
-```yaml
-name: oa_fraction_airflow_error
-description: OA fraction calc error or AHU not maintaining design airflow in non-economizer modes
-type: oa_fraction
-flag: fc6_flag
-equipment_type: [AHU, VAV_AHU]
-
-inputs:
-  supply_fan_air_volume:
-    brick: Supply_Fan_Air_Flow_Sensor
-    column: supply_fan_air_volume
-  mat:
-    brick: Mixed_Air_Temperature_Sensor
-    column: mat
-  oat:
-    brick: Outside_Air_Temperature_Sensor
-    column: oat
-  rat:
-    brick: Return_Air_Temperature_Sensor
-    column: rat
-  supply_vfd_speed:
-    brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
-  economizer_sig:
-    brick: Damper_Position_Command
-    column: economizer_sig
-  heating_sig:
-    brick: Valve_Command
-    column: heating_sig
-  cooling_sig:
-    brick: Valve_Command
-    column: cooling_sig
-
-params:
-  airflow_err_thres: 0.1
-  ahu_min_oa_cfm_design: 1000.0
-  oat_rat_delta_min: 5.0
-  ahu_min_oa_dpr: 0.1
-```
+*Fault Rule Six (oa_fraction) — see [OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }}).*
 
 ### Fault Rule Seven — sat_too_low_full_heating (expression)
 
@@ -567,37 +496,7 @@ expression: |
   ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))
 ```
 
-### Fault Rule Sixteen — erv_effectiveness_fault (erv_efficiency) — *custom, not ASHRAE G36*
-
-ERV effectiveness outside expected range. AHU with ERV only. This rule was created for open-fdd and is not part of ASHRAE Guideline 36.
-
-```yaml
-name: erv_effectiveness_fault
-description: ERV effectiveness outside expected range based on OAT
-type: erv_efficiency
-flag: fc16_flag
-equipment_type: [AHU_ERV]
-
-inputs:
-  erv_oat_enter:
-    brick: Outside_Air_Temperature_Sensor
-    column: erv_oat_enter
-  erv_oat_leaving:
-    brick: Discharge_Air_Temperature_Sensor
-    column: erv_oat_leaving
-  erv_eat_enter:
-    brick: Return_Air_Temperature_Sensor
-    column: erv_eat_enter
-
-params:
-  erv_efficiency_min_heating: 0.5
-  erv_efficiency_max_heating: 0.9
-  erv_efficiency_min_cooling: 0.5
-  erv_efficiency_max_cooling: 0.9
-  oat_low_threshold: 55.0
-  oat_high_threshold: 65.0
-  oat_rat_delta_min: 5.0
-```
+*Fault Rule Sixteen (erv_efficiency, custom) — see [ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }}).*
 
 ---
 
@@ -662,25 +561,7 @@ expression: |
 
 ## Weather station
 
-### weather_temp_stuck (flatline)
-
-Temperature sensor stuck at near-constant value.
-
-```yaml
-name: weather_temp_stuck
-description: Temperature sensor stuck at near-constant value
-type: flatline
-flag: fault_temp_stuck
-
-inputs:
-  Outside_Air_Temperature_Sensor:
-    brick: Outside_Air_Temperature_Sensor
-    column: temp_f
-
-params:
-  tolerance: 0.2
-  window: 6
-```
+*weather_temp_stuck (flatline) — see [Flatline Rule]({{ "flatline_rule" | relative_url }}).*
 
 ### weather_temp_spike (expression)
 
