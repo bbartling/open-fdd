@@ -7,16 +7,16 @@ flag: fc5_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  heating_sig:
+  Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -26,4 +26,4 @@ params:
   delta_t_supply_fan: 0.5
 
 expression: |
-  (sat + supply_err_thres <= mat - mix_err_thres + delta_t_supply_fan) & (heating_sig > 0.01) & (supply_vfd_speed > 0.01)
+  (Supply_Air_Temperature_Sensor + supply_err_thres <= Mixed_Air_Temperature_Sensor - mix_err_thres + delta_t_supply_fan) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)

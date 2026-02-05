@@ -6,7 +6,8 @@ type: flatline
 flag: fault_temp_stuck
 
 inputs:
-  temp_f:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
     column: temp_f
 
 params:

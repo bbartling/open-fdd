@@ -7,16 +7,16 @@ flag: fc7_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  heating_sig:
+  Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -24,4 +24,4 @@ params:
   supply_err_thres: 1.0
 
 expression: |
-  (sat < sat_setpoint - supply_err_thres) & (heating_sig > 0.9) & (supply_vfd_speed > 0)
+  (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - supply_err_thres) & (Valve_Command > 0.9) & (Supply_Fan_Speed_Command > 0)

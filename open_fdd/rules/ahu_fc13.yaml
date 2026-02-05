@@ -6,16 +6,16 @@ flag: fc13_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -24,4 +24,4 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (sat > sat_setpoint + supply_err_thres) & (((economizer_sig > 0.9) & (cooling_sig > 0.9)) | ((economizer_sig <= ahu_min_oa_dpr) & (cooling_sig > 0.9)))
+  (Supply_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint + supply_err_thres) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0.9)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))

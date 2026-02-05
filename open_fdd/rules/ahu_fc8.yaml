@@ -6,16 +6,16 @@ flag: fc8_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
 
@@ -26,4 +26,4 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (np.abs(sat - delta_t_supply_fan - mat) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)
+  (np.abs(Supply_Air_Temperature_Sensor - delta_t_supply_fan - Mixed_Air_Temperature_Sensor) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)

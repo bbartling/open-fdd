@@ -29,31 +29,32 @@ params:
   units: imperial
 
 inputs:
-  supply_air_temp:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
     bounds:
       imperial: [40, 150]
       metric: [4, 66]
-  return_air_temp:
+  Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: rat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
-  mixed_air_temp:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
-  outdoor_air_temp:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
     bounds:
       imperial: [-40, 120]
       metric: [-40, 49]
-  air_pressure_inh2o:
+  Discharge_Air_Static_Pressure_Sensor:
+    brick: Discharge_Air_Static_Pressure_Sensor
     column: ap
     bounds:
       imperial: [-5, 10]
@@ -71,10 +72,10 @@ type: flatline
 flag: flatline_flag
 
 inputs:
-  supply_air_temp:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  zone_temp:
+  Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
     column: zt
 
@@ -86,6 +87,8 @@ params:
 ---
 
 ## AHU fault conditions (FC1–FC16)
+
+These fault rules are defined by ASHRAE Guideline 36. open-fdd was originally based on G36 and has been expanded with BRICK terminology.
 
 ### FC1 — low_duct_static_at_max_fan (expression)
 
@@ -99,13 +102,13 @@ flag: fc1_flag
 equipment_type: [VAV_AHU]
 
 inputs:
-  duct_static:
+  Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
     column: duct_static
-  duct_static_setpoint:
+  Supply_Air_Static_Pressure_Setpoint:
     brick: Supply_Air_Static_Pressure_Setpoint
     column: duct_static_setpoint
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -115,7 +118,7 @@ params:
   vfd_err_thres: 0.05
 
 expression: |
-  (duct_static < duct_static_setpoint - static_err_thres) & (supply_vfd_speed >= vfd_max - vfd_err_thres)
+  (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - static_err_thres) & (Supply_Fan_Speed_Command >= vfd_max - vfd_err_thres)
 ```
 
 ### FC2 — mix_temp_too_low (expression)
@@ -130,16 +133,16 @@ flag: fc2_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  rat:
+  Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: rat
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -149,7 +152,7 @@ params:
   outdoor_err_thres: 1.0
 
 expression: |
-  (mat - mix_err_thres < np.minimum(rat - return_err_thres, oat - outdoor_err_thres)) & (supply_vfd_speed > 0.01)
+  (Mixed_Air_Temperature_Sensor - mix_err_thres < np.minimum(Return_Air_Temperature_Sensor - return_err_thres, Outside_Air_Temperature_Sensor - outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
 ### FC3 — mix_temp_too_high (expression)
@@ -164,16 +167,16 @@ flag: fc3_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  rat:
+  Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: rat
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -183,7 +186,7 @@ params:
   outdoor_err_thres: 1.0
 
 expression: |
-  (mat - mix_err_thres > np.maximum(rat + return_err_thres, oat + outdoor_err_thres)) & (supply_vfd_speed > 0.01)
+  (Mixed_Air_Temperature_Sensor - mix_err_thres > np.maximum(Return_Air_Temperature_Sensor + return_err_thres, Outside_Air_Temperature_Sensor + outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
 ### FC4 — excessive_ahu_state_changes (hunting)
@@ -229,16 +232,16 @@ flag: fc5_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  heating_sig:
+  Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -248,7 +251,7 @@ params:
   delta_t_supply_fan: 0.5
 
 expression: |
-  (sat + supply_err_thres <= mat - mix_err_thres + delta_t_supply_fan) & (heating_sig > 0.01) & (supply_vfd_speed > 0.01)
+  (Supply_Air_Temperature_Sensor + supply_err_thres <= Mixed_Air_Temperature_Sensor - mix_err_thres + delta_t_supply_fan) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
 ### FC6 — oa_fraction_airflow_error (oa_fraction)
@@ -307,16 +310,16 @@ flag: fc7_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  heating_sig:
+  Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -324,7 +327,7 @@ params:
   supply_err_thres: 1.0
 
 expression: |
-  (sat < sat_setpoint - supply_err_thres) & (heating_sig > 0.9) & (supply_vfd_speed > 0)
+  (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - supply_err_thres) & (Valve_Command > 0.9) & (Supply_Fan_Speed_Command > 0)
 ```
 
 ### FC8 — sat_mat_mismatch_economizer (expression)
@@ -339,16 +342,16 @@ flag: fc8_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
 
@@ -359,7 +362,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (np.abs(sat - delta_t_supply_fan - mat) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)
+  (np.abs(Supply_Air_Temperature_Sensor - delta_t_supply_fan - Mixed_Air_Temperature_Sensor) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
 ```
 
 ### FC9 — oat_too_high_free_cooling (expression)
@@ -374,16 +377,16 @@ flag: fc9_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
 
@@ -394,7 +397,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (oat - outdoor_err_thres > sat_setpoint - delta_t_supply_fan + supply_err_thres) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)
+  (Outside_Air_Temperature_Sensor - outdoor_err_thres > Supply_Air_Temperature_Setpoint - delta_t_supply_fan + supply_err_thres) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
 ```
 
 ### FC10 — oat_mat_mismatch_econ_mech (expression)
@@ -409,16 +412,16 @@ flag: fc10_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -427,7 +430,7 @@ params:
   mix_err_thres: 1.0
 
 expression: |
-  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (cooling_sig > 0.01) & (economizer_sig > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)
 ```
 
 ### FC11 — oat_mat_mismatch_economizer (expression)
@@ -442,13 +445,13 @@ flag: fc11_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -457,7 +460,7 @@ params:
   mix_err_thres: 1.0
 
 expression: |
-  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (economizer_sig > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Damper_Position_Command > 0.9)
 ```
 
 ### FC12 — sat_too_high_cooling_modes (expression)
@@ -472,16 +475,16 @@ flag: fc12_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -492,7 +495,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (sat > mat + np.sqrt(supply_err_thres**2 + mix_err_thres**2) + delta_t_supply_fan) & (((economizer_sig > 0.9) & (cooling_sig > 0)) | ((economizer_sig <= ahu_min_oa_dpr) & (cooling_sig > 0.9)))
+  (Supply_Air_Temperature_Sensor > Mixed_Air_Temperature_Sensor + np.sqrt(supply_err_thres**2 + mix_err_thres**2) + delta_t_supply_fan) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
 ```
 
 ### FC13 — sat_too_high_full_cooling (expression)
@@ -507,16 +510,16 @@ flag: fc13_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  sat:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -525,7 +528,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (sat > sat_setpoint + supply_err_thres) & (((economizer_sig > 0.9) & (cooling_sig > 0.9)) | ((economizer_sig <= ahu_min_oa_dpr) & (cooling_sig > 0.9)))
+  (Supply_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint + supply_err_thres) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0.9)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
 ```
 
 ### FC14 — cooling_coil_drop_when_inactive (expression)
@@ -540,19 +543,19 @@ flag: fc14_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  clg_coil_enter:
+  Cooling_Coil_Entering_Air_Temperature_Sensor:
     brick: Cooling_Coil_Entering_Air_Temperature_Sensor
     column: clg_coil_enter_temp
-  clg_coil_leave:
+  Cooling_Coil_Leaving_Air_Temperature_Sensor:
     brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
     column: clg_coil_leave_temp
-  heating_sig:
+  Heating_Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  cooling_sig:
+  Cooling_Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -562,7 +565,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  ((clg_coil_enter - clg_coil_leave) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((heating_sig > 0) & (cooling_sig == 0) & (economizer_sig <= ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)))
+  ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)))
 ```
 
 ### FC15 — heating_coil_rise_when_inactive (expression)
@@ -577,19 +580,19 @@ flag: fc15_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  htg_coil_enter:
+  Heating_Coil_Entering_Air_Temperature_Sensor:
     brick: Heating_Coil_Entering_Air_Temperature_Sensor
     column: htg_coil_enter_temp
-  htg_coil_leave:
+  Heating_Coil_Leaving_Air_Temperature_Sensor:
     brick: Heating_Coil_Leaving_Air_Temperature_Sensor
     column: htg_coil_leave_temp
-  heating_sig:
+  Heating_Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  cooling_sig:
+  Cooling_Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -600,7 +603,7 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  ((htg_coil_leave - htg_coil_enter) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig > 0.9)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig <= ahu_min_oa_dpr)))
+  ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))
 ```
 
 ### FC16 — erv_effectiveness_fault (erv_efficiency)
@@ -650,11 +653,14 @@ type: expression
 flag: fc_pump_flag
 
 inputs:
-  diff_pressure:
+  Differential_Pressure_Sensor:
+    brick: Differential_Pressure_Sensor
     column: diff_pressure
-  diff_pressure_setpoint:
+  Differential_Pressure_Setpoint:
+    brick: Differential_Pressure_Setpoint
     column: diff_pressure_setpoint
-  pump_speed:
+  Pump_Speed_Command:
+    brick: Pump_Speed_Command
     column: pump_speed
 
 params:
@@ -663,7 +669,7 @@ params:
   pump_speed_err_thres: 0.05
 
 expression: |
-  (diff_pressure < diff_pressure_setpoint - diff_pressure_err_thres) & (pump_speed >= pump_speed_max - pump_speed_err_thres)
+  (Differential_Pressure_Sensor < Differential_Pressure_Setpoint - diff_pressure_err_thres) & (Pump_Speed_Command >= pump_speed_max - pump_speed_err_thres)
 ```
 
 ### chw_flow_high_at_max_pump (expression)
@@ -706,7 +712,8 @@ type: flatline
 flag: fault_temp_stuck
 
 inputs:
-  temp_f:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
     column: temp_f
 
 params:
@@ -725,14 +732,15 @@ type: expression
 flag: fault_temp_spike
 
 inputs:
-  temp_f:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
     column: temp_f
 
 params:
   temp_spike_f_per_hour: 15.0
 
 expression: |
-  temp_f.diff().abs() > temp_spike_f_per_hour
+  Outside_Air_Temperature_Sensor.diff().abs() > temp_spike_f_per_hour
 ```
 
 ### weather_rh_out_of_range (expression)
@@ -746,7 +754,8 @@ type: expression
 flag: fault_rh_out_of_range
 
 inputs:
-  rh_pct:
+  Humidity_Sensor:
+    brick: Humidity_Sensor
     column: rh_pct
 
 params:
@@ -754,7 +763,7 @@ params:
   rh_max: 100.0
 
 expression: |
-  (rh_pct < rh_min) | (rh_pct > rh_max)
+  (Humidity_Sensor < rh_min) | (Humidity_Sensor > rh_max)
 ```
 
 ### weather_gust_lt_wind (expression)
@@ -768,13 +777,15 @@ type: expression
 flag: fault_gust_lt_wind
 
 inputs:
-  gust_mph:
+  Wind_Gust_Speed_Sensor:
+    brick: Wind_Gust_Speed_Sensor
     column: gust_mph
-  wind_mph:
+  Wind_Speed_Sensor:
+    brick: Wind_Speed_Sensor
     column: wind_mph
 
 expression: |
-  gust_mph.notna() & wind_mph.notna() & (gust_mph < wind_mph)
+  Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)
 ```
 
 ---

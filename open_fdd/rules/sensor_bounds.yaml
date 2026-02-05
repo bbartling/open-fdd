@@ -1,7 +1,7 @@
 # Sensor bounds check — SkySpark/Axon-style
 # Fault if value is outside valid range for sensor type
 # Pass params={"units": "metric"} to run() for metric bounds
-# BRICK: column_map keys can be Brick class names (Supply_Air_Temperature_Sensor) or rule names (sat)
+# BRICK: column_map keys use Brick class names for Brick model resolution
 name: bad_sensor_check
 description: Returns fault if sensor is out of range (inspired by SkySpark badSensorCheck)
 type: bounds
@@ -11,59 +11,65 @@ params:
   units: imperial   # override at runtime: params={"units": "metric"}
 
 inputs:
-  supply_air_temp:
+  Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
     bounds:
       imperial: [40, 150]    # degF
       metric: [4, 66]        # degC
-  zone_temp:
+  Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
     column: zt
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
-  return_air_temp:
+  Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: rat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
-  mixed_air_temp:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
-  outdoor_air_temp:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
     bounds:
       imperial: [-40, 120]
       metric: [-40, 49]
-  relative_humidity:
+  Humidity_Sensor:
+    brick: Humidity_Sensor
     column: rh
     bounds: [0, 100]   # same for both
-  chilled_water_temp:
+  Chilled_Water_Supply_Temperature_Sensor:
+    brick: Chilled_Water_Supply_Temperature_Sensor
     column: chwt
     bounds:
       imperial: [35, 100]    # degF
       metric: [2, 38]        # degC
-  hot_water_temp:
+  Hot_Water_Supply_Temperature_Sensor:
+    brick: Hot_Water_Supply_Temperature_Sensor
     column: hwt
     bounds:
       imperial: [50, 212]
       metric: [10, 100]
-  condenser_water_temp:
+  Condenser_Water_Temperature_Sensor:
+    brick: Condenser_Water_Temperature_Sensor
     column: cwt
     bounds:
       imperial: [50, 110]
       metric: [10, 43]
-  co2_ppm:
+  CO2_Sensor:
+    brick: CO2_Sensor
     column: co2
     bounds: [400, 2000]   # same for both
   # Air pressure (inH2O vs Pa) — use column that matches your data
-  air_pressure_inh2o:
+  Discharge_Air_Static_Pressure_Sensor:
+    brick: Discharge_Air_Static_Pressure_Sensor
     column: ap
     bounds:
       imperial: [-5, 10]    # inH2O

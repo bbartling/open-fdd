@@ -1,6 +1,5 @@
 # AHU Fault Condition 9 — OAT too high in free cooling mode
-# BRICK: oat->Outside_Air_Temperature_Sensor, sat_setpoint->Supply_Air_Temperature_Setpoint,
-#        economizer_sig->Damper_Position_Command (OA), cooling_sig->Valve_Command (Clg)
+# BRICK: Outside_Air_Temperature_Sensor, Supply_Air_Temperature_Setpoint, Damper_Position_Command, Valve_Command
 name: oat_too_high_free_cooling
 description: Outside air temp too high in free cooling without mechanical cooling
 type: expression
@@ -8,16 +7,16 @@ flag: fc9_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
 
@@ -28,4 +27,4 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  (oat - outdoor_err_thres > sat_setpoint - delta_t_supply_fan + supply_err_thres) & (economizer_sig > ahu_min_oa_dpr) & (cooling_sig < 0.1)
+  (Outside_Air_Temperature_Sensor - outdoor_err_thres > Supply_Air_Temperature_Setpoint - delta_t_supply_fan + supply_err_thres) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)

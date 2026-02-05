@@ -1,6 +1,6 @@
 # AHU Fault Condition 1 — Low duct static at max fan speed
 # VAV only (constant volume has no duct static pressure control)
-# BRICK: duct_static->Supply_Air_Static_Pressure_Sensor, supply_vfd_speed->Supply_Fan_Speed_Command
+# BRICK: Supply_Air_Static_Pressure_Sensor, Supply_Air_Static_Pressure_Setpoint, Supply_Fan_Speed_Command
 name: low_duct_static_at_max_fan
 description: Duct static pressure too low with supply fan at max speed
 type: expression
@@ -8,13 +8,13 @@ flag: fc1_flag
 equipment_type: [VAV_AHU]
 
 inputs:
-  duct_static:
+  Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
     column: duct_static
-  duct_static_setpoint:
+  Supply_Air_Static_Pressure_Setpoint:
     brick: Supply_Air_Static_Pressure_Setpoint
     column: duct_static_setpoint
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -24,4 +24,4 @@ params:
   vfd_err_thres: 0.05
 
 expression: |
-  (duct_static < duct_static_setpoint - static_err_thres) & (supply_vfd_speed >= vfd_max - vfd_err_thres)
+  (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - static_err_thres) & (Supply_Fan_Speed_Command >= vfd_max - vfd_err_thres)

@@ -9,11 +9,10 @@
 
 **Config-driven FDD** for HVAC — YAML fault rules, pandas DataFrames, and optional Brick model–driven column mapping.
 
-[pandas](https://github.com/pandas-dev/pandas) is an excellent choice for high-performance, tabular computing and rule-based fault detection. If you know Python and love pandas, you'll feel right at home — especially if you're a visual or spatial thinker (or both) who likes to see data in tables and trace logic through expressions. pandas provides fast, spreadsheet-like DataFrames for cleaning, wrangling, analyzing, and computing on time-series data using simple, Excel-style operations at scale; it was created in 2008 by Wes McKinney while working in finance to handle large time-series datasets more efficiently and later became a core project in the scientific Python ecosystem under the NumFOCUS foundation.
+Pandas is an excellent choice for high-performance, tabular computing and rule-based fault detection. If you know Python and love pandas, you'll feel right at home — especially if you're a visual or spatial thinker (or both) who likes to see data in tables and trace logic through expressions. pandas provides fast, spreadsheet-like DataFrames for cleaning, wrangling, analyzing, and computing on time-series data using simple, Excel-style operations at scale; it was created in 2008 by Wes McKinney while working in finance to handle large time-series datasets more efficiently and later became a core project in the scientific Python ecosystem under the NumFOCUS foundation.
 
-**Dependencies:** [pandas](https://github.com/pandas-dev/pandas) · [PyYAML](https://github.com/yaml/pyyaml) · optional: [matplotlib](https://github.com/matplotlib/matplotlib) (viz), [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL)
 
-> open-fdd is under construction with daily updates. Stay tuned for version 2.0!
+> open-fdd is under construction with daily updates. Stay tuned for version 2.0! Be sure to check out the new online docs!
 
 
 ## Quick Start
@@ -112,6 +111,11 @@ With Brick TTL, use `resolve_from_ttl("model.ttl")` instead of a manual `column_
 Please see the online docs for setup and running HVAC fault checks with pandas.
 
 [📖 Docs](https://bbartling.github.io/open-fdd/)
+
+
+## Dependencies
+
+[pandas](https://github.com/pandas-dev/pandas) · [PyYAML](https://github.com/yaml/pyyaml) · optional: [matplotlib](https://github.com/matplotlib/matplotlib) (viz), [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL)
 
 
 ## Contributing

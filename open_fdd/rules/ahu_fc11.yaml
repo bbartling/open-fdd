@@ -6,13 +6,13 @@ flag: fc11_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -21,4 +21,4 @@ params:
   mix_err_thres: 1.0
 
 expression: |
-  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (economizer_sig > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Damper_Position_Command > 0.9)

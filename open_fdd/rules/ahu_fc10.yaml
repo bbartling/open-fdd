@@ -6,16 +6,16 @@ flag: fc10_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  cooling_sig:
+  Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -24,4 +24,4 @@ params:
   mix_err_thres: 1.0
 
 expression: |
-  (np.abs(mat - oat) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (cooling_sig > 0.01) & (economizer_sig > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)

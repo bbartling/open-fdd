@@ -6,7 +6,8 @@ type: expression
 flag: fault_rh_out_of_range
 
 inputs:
-  rh_pct:
+  Humidity_Sensor:
+    brick: Humidity_Sensor
     column: rh_pct
 
 params:
@@ -14,4 +15,4 @@ params:
   rh_max: 100.0
 
 expression: |
-  (rh_pct < rh_min) | (rh_pct > rh_max)
+  (Humidity_Sensor < rh_min) | (Humidity_Sensor > rh_max)

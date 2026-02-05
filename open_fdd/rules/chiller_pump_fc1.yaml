@@ -5,11 +5,14 @@ type: expression
 flag: fc_pump_flag
 
 inputs:
-  diff_pressure:
+  Differential_Pressure_Sensor:
+    brick: Differential_Pressure_Sensor
     column: diff_pressure
-  diff_pressure_setpoint:
+  Differential_Pressure_Setpoint:
+    brick: Differential_Pressure_Setpoint
     column: diff_pressure_setpoint
-  pump_speed:
+  Pump_Speed_Command:
+    brick: Pump_Speed_Command
     column: pump_speed
 
 params:
@@ -18,4 +21,4 @@ params:
   pump_speed_err_thres: 0.05
 
 expression: |
-  (diff_pressure < diff_pressure_setpoint - diff_pressure_err_thres) & (pump_speed >= pump_speed_max - pump_speed_err_thres)
+  (Differential_Pressure_Sensor < Differential_Pressure_Setpoint - diff_pressure_err_thres) & (Pump_Speed_Command >= pump_speed_max - pump_speed_err_thres)

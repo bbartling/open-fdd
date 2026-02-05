@@ -7,19 +7,19 @@ flag: fc14_flag
 equipment_type: [AHU, VAV_AHU]  # requires Cooling_Coil_Entering/Leaving_Air_Temperature_Sensor
 
 inputs:
-  clg_coil_enter:
+  Cooling_Coil_Entering_Air_Temperature_Sensor:
     brick: Cooling_Coil_Entering_Air_Temperature_Sensor
     column: clg_coil_enter_temp
-  clg_coil_leave:
+  Cooling_Coil_Leaving_Air_Temperature_Sensor:
     brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
     column: clg_coil_leave_temp
-  heating_sig:
+  Heating_Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  cooling_sig:
+  Cooling_Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -29,4 +29,4 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  ((clg_coil_enter - clg_coil_leave) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((heating_sig > 0) & (cooling_sig == 0) & (economizer_sig <= ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)))
+  ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)))

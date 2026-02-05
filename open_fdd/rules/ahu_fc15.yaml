@@ -7,19 +7,19 @@ flag: fc15_flag
 equipment_type: [AHU, VAV_AHU]  # requires Heating_Coil_Entering/Leaving_Air_Temperature_Sensor
 
 inputs:
-  htg_coil_enter:
+  Heating_Coil_Entering_Air_Temperature_Sensor:
     brick: Heating_Coil_Entering_Air_Temperature_Sensor
     column: htg_coil_enter_temp
-  htg_coil_leave:
+  Heating_Coil_Leaving_Air_Temperature_Sensor:
     brick: Heating_Coil_Leaving_Air_Temperature_Sensor
     column: htg_coil_leave_temp
-  heating_sig:
+  Heating_Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  cooling_sig:
+  Cooling_Valve_Command:
     brick: Valve_Command
     column: cooling_sig
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 
@@ -30,4 +30,4 @@ params:
   ahu_min_oa_dpr: 0.1
 
 expression: |
-  ((htg_coil_leave - htg_coil_enter) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((heating_sig == 0) & (cooling_sig == 0) & (economizer_sig > ahu_min_oa_dpr)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig > 0.9)) | ((heating_sig == 0) & (cooling_sig > 0) & (economizer_sig <= ahu_min_oa_dpr)))
+  ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))

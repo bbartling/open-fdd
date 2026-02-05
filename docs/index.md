@@ -14,7 +14,7 @@ nav_order: 1
 - **Sensor checks** — Bad data (bounds) and flatline detection
 - **Fault analytics** — Duration, motor runtime, sensor stats
 - **BRICK model driven** — Optional: resolve rule inputs from Brick TTL
-- **Fault Rule Cookbook** — All rules in one place
+- **Fault Rule Cookbook** — Fault rule recipes available online; pick and choose what you need and copy locally into your project
 
 ## Docs
 

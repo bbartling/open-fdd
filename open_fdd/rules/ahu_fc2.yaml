@@ -7,16 +7,16 @@ flag: fc2_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  mat:
+  Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
     column: mat
-  rat:
+  Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: rat
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
 
@@ -26,4 +26,4 @@ params:
   outdoor_err_thres: 1.0
 
 expression: |
-  (mat - mix_err_thres < np.minimum(rat - return_err_thres, oat - outdoor_err_thres)) & (supply_vfd_speed > 0.01)
+  (Mixed_Air_Temperature_Sensor - mix_err_thres < np.minimum(Return_Air_Temperature_Sensor - return_err_thres, Outside_Air_Temperature_Sensor - outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
