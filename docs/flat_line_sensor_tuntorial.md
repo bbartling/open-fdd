@@ -39,7 +39,7 @@ params:
 
 > For this tutorial the supply air static pressure is excluded from flatline as it is legitimately flat when the fan is off but included in the next tutorial for a sensor bounds check.
 
-The tutorial uses `data_ahu7.csv` (~10k rows). Place it in the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples) (see the README there for how to obtain it). The scripts load rules from `my_rules/` — your rules folder for your deployment. `check_faults_ahu7_flatline.py` and `check_faults_ahu7_bounds.py` run flatline and bounds checks on this data. Try it yourself.
+The tutorial uses `data_ahu7.csv` (~10k rows). Place it in the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples) (see the README there for how to obtain it). The scripts load rules from `my_rules/` — your rules folder. Create a `my_rules` folder on your desktop (or anywhere) and run the tutorial from there; it doesn't need to be inside the repo. `check_faults_ahu7_flatline.py` and `check_faults_ahu7_bounds.py` run flatline and bounds checks on this data. Try it yourself.
 
 The data set has been artificially modified for flat lined values on all rows in a 3 hour time frame which could mimic a BAS/BMS device being offline.
 

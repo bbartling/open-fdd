@@ -44,7 +44,11 @@ The [examples directory](https://github.com/bbartling/open-fdd/tree/master/examp
 This image shows an example of a Variable Air Volume Air Handling Unit (VAV AHU) which depicts the `ahu7` data we will be using in the tutorials:
 ![AHU in the GitHub Pages](https://raw.githubusercontent.com/bbartling/open-fdd/master/examples/rtu7_snip.png)
 
-On the next page, we will run a fault rule against a CSV dataset pulled from the AHU7 BAS. You will navigate to the root directory of the `open-fdd` repository, create and activate a virtual environment, and then execute the script. Follow along in the tutorial to get familiar with the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples). See the examples README for how to obtain the practice dataset.
+On the next page, we will run a fault rule against a CSV dataset pulled from the AHU7 BAS.
+
+**Running the tutorial on your end:** You don't need to run from inside the repo. Clone the repo only to install from source (`pip install -e ".[dev]"`). Then create a folder on your desktop (e.g. `my_rules`) with your rules and data, and run the tutorial scripts from there. Future versions will be on PyPI — `pip install open-fdd` — so you won't need to clone at all.
+
+Follow along in the tutorial to get familiar with the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples). See the examples README for how to obtain the practice dataset.
 
 ---
 

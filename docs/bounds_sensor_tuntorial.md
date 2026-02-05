@@ -57,7 +57,7 @@ inputs:
 
 ```
 
-Run it:
+Run it. Rules load from `my_rules/` — create that folder on your desktop and run from there if you prefer; it doesn't need to be inside the repo.
 
 ```bash
 cd examples
