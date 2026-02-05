@@ -4,7 +4,7 @@ nav_order: 3
 ---
 
 
-Every fault rule in **open-fdd** is now configuration-driven in Version 2. When the Python code below runs, it reads settings from a YAML file that defines which sensors to evaluate and what parameters to use. For each sensor, the algorithm checks whether the reading changes within a specified tolerance over a rolling 12-sample window and flags rows where the difference between the maximum and minimum values is less than the tolerance.
+Every fault rule in **open-fdd** is now configuration-driven in Version 2 in the form of a YAML file as shown below. When the Python code below runs, it reads settings from a YAML file that defines which sensors to evaluate and what parameters to use. For each sensor, the algorithm checks whether the reading changes within a specified tolerance over a rolling 12-sample window and flags rows where the difference between the maximum and minimum values is less than the tolerance.
 
 The masks from each sensor are then combined using the `|=` operator, so a row is flagged if any sensor appears flat. Finally, the combined mask is written to the result DataFrame as a new column called `flatline_flag`.
 
@@ -37,11 +37,11 @@ params:
 ```
 
 
-(Supply Air Static Pressure is excluded from flatline—it is legitimately flat when the fan is off but included in the next tutorial for a sensor bounds check.)
+> For this tutorial the supply air static pressure is excluded from flatline as it is legitimately flat when the fan is off but included in the next tutorial for a sensor bounds check.
 
-The `examples/data_ahu7.csv` file (~10k rows) is included in the repository. The `check_faults_ahu7_flatline.py` script runs bounds and flatline checks on this data and prints the fault counts. Try it yourself.
+The tutorial uses `data_ahu7.csv` (~10k rows). Place it in the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples) (see the README there for how to obtain it). The scripts load rules from `my_rules/` — your rules folder for your deployment. `check_faults_ahu7_flatline.py` and `check_faults_ahu7_bounds.py` run flatline and bounds checks on this data. Try it yourself.
 
-The data set has been artififially modified for flat lined values on all rows in a 3 hour time frame which could mimic a BAS/BMS device being offline.
+The data set has been artificially modified for flat lined values on all rows in a 3 hour time frame which could mimic a BAS/BMS device being offline.
 
 ```csv
 2025-01-01 02:00:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,65.06600189208984,45.50650024414063,62.3120002746582,61.64599990844727,,,,,,,,
@@ -55,7 +55,9 @@ The data set has been artififially modified for flat lined values on all rows in
 2025-01-01 06:15:00,0.0,0.0,100.0,0.0,0.0,0.0,0.0268750004470348,70.0,75.75800323486328,44.99039840698242,61.141998291015625,60.79999923706055,,,,,,,,
 ```
 
-There are also real instances in the dataset where the BAS supervisory controller fails to update the outside air networked temperature value on the AHU7 controller. The fault rule detects these conditions and reports them as `episodes`, representing the number of separate times the sensor stops updating.
+## Episodes
+
+There are also real instances in the dataset where the BAS supervisory controller fails to update the networked outside-air temperature value on the AHU7 controller. The fault rule detects these conditions and reports them as `episodes` — each episode represents a separate period when the sensor stops updating.
 
 
 When you run the script.
@@ -68,8 +70,7 @@ python check_faults_ahu7_flatline.py
 
 ## What the script does
 
-
-What it does: It finds each contiguous flatline episode in the data, checks which BRICK sensors were flat lined in that episode, and returns a list of episode dicts with start/end times, which sensors were flat, and flags for “all sensors flat” (device offline) vs “single sensor flat” (controller not updating).
+**What it does:** It finds each contiguous flatline episode in the data, checks which BRICK sensors were flat lined in that episode, and returns a list of episode dicts with start/end times, which sensors were flat, and flags for “all sensors flat” (device offline) vs “single sensor flat” (controller not updating).
 
 
 ```python
@@ -94,7 +95,7 @@ from open_fdd.reports import (
 
 script_dir = Path(__file__).parent
 csv_path = script_dir / "data_ahu7.csv"
-rules_dir = script_dir / "rules"
+rules_dir = script_dir / "my_rules"
 
 # BRICK class -> CSV column (flatline check: temp sensors only)
 # Supply_Air_Static_Pressure_Sensor excluded - legitimately flat when fan off

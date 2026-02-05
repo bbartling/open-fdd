@@ -11,19 +11,18 @@ nav_order: 1
 
 - **YAML rules** — Bounds, flatline, expression, hunting, OA fraction, ERV
 - **Pandas-native** — Works directly with DataFrames
-- **AHU rules** — FC1–FC16 (duct static, mix temp, PID hunting, economizer, coils)
-- **Chiller plant** — Pump differential pressure, CHW flow
 - **Sensor checks** — Bad data (bounds) and flatline detection
 - **Fault analytics** — Duration, motor runtime, sensor stats
 - **BRICK model driven** — Optional: resolve rule inputs from Brick TTL
-
+- **Fault Rule Cookbook** — All rules in one place
 
 ## Docs
 
 1. **[Getting Started]({{ "getting_started" | relative_url }})** — Install, run AHU7 scripts
 2. **[Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})** — Stuck sensor detection
 3. **[Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})** — Out-of-range sensor values
-4. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
-5. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
-6. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, external refs
+4. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — All rules (AHU, chiller, weather)
+5. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
+6. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
+7. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, external refs
 

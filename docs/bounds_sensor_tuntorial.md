@@ -4,7 +4,7 @@ nav_order: 4
 ---
 
 
-The bounds script checks whether sensor values fall outside valid ranges (e.g. temperature too high or too low). Like the flatline check, it runs in **episodic fashion**—finding each contiguous run of flagged rows and reporting which BRICK sensor(s) were out of bounds in that episode. OOB means Out Of Bounds. In this context, an OOB sensor is one whose readings fall outside the allowed range (e.g. temperature or pressure outside the configured bounds).
+The bounds script checks whether sensor values fall outside valid ranges (e.g. temperature too high or too low). Like the flatline check, it runs in **episodic fashion**—finding each contiguous run of flagged rows and reporting which BRICK sensor(s) were out of bounds in that episode. OOB means "out of bounds." In this context, an OOB sensor is one whose readings fall outside the allowed range (e.g. temperature or pressure outside the configured bounds).
 
 ### Metric conversion
 
@@ -66,7 +66,7 @@ python check_faults_ahu7_bounds.py
 
 ## What the script does
 
-What it does: RuleRunner loads sensor_bounds.yaml and parses it into a rule dict with type bounds, inputs with bounds.imperial or bounds.metric, and params.units. For each input, the runner uses column_map to map BRICK class to DataFrame column (e.g. Supply_Air_Temperature_Sensor to SAT (°F)). It calls check_bounds(df[col], low, high) using the bounds for the active unit system. A row is flagged if any sensor value is outside [low, high]. The masks from each sensor are combined with |=, so a row is flagged if any sensor is out of bounds. The combined mask is stored as bad_sensor_flag on the result DataFrame. analyze_bounds_episodes finds each contiguous run of bad_sensor_flag=1 and determines which BRICK sensor(s) had values outside bounds in that episode. print_bounds_episodes formats and prints them (first and last N when there are many), including average readings per OOB sensor.
+**What it does:** RuleRunner loads sensor_bounds.yaml and parses it into a rule dict with type bounds, inputs with bounds.imperial or bounds.metric, and params.units. For each input, the runner uses column_map to map BRICK class to DataFrame column (e.g. Supply_Air_Temperature_Sensor to SAT (°F)). It calls check_bounds(df[col], low, high) using the bounds for the active unit system. A row is flagged if any sensor value is outside [low, high]. The masks from each sensor are combined with |=, so a row is flagged if any sensor is out of bounds. The combined mask is stored as bad_sensor_flag on the result DataFrame. analyze_bounds_episodes finds each contiguous run of bad_sensor_flag=1 and determines which BRICK sensor(s) had values outside bounds in that episode. print_bounds_episodes formats and prints them (first and last N when there are many), including average readings per OOB sensor.
 
 ### Bounds script code
 
@@ -91,7 +91,7 @@ from open_fdd.reports import (
 
 script_dir = Path(__file__).parent
 csv_path = script_dir / "data_ahu7.csv"
-rules_dir = script_dir / "rules"
+rules_dir = script_dir / "my_rules"
 
 # BRICK class -> CSV column (bounds check: temp + static pressure sensors)
 column_map = {
@@ -103,7 +103,7 @@ column_map = {
     "Supply_Fan_Speed_Command": "SF Spd Cmd (%)",
 }
 
-# Bounds from YAML (single source of truth)
+# Bounds from my_rules (your rules for your deployment)
 bounds_rule = load_rule(rules_dir / "sensor_bounds.yaml")
 bounds_map = bounds_map_from_rule(bounds_rule, units="imperial")
 
@@ -302,4 +302,4 @@ Analytics
 
 ---
 
-**Next:** [Configuration]({{ "configuration" | relative_url }})
+**Next:** [Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})

@@ -39,12 +39,12 @@ pip install -e ".[dev]"
 
 Continue to the **Bounds** and **Flatline** tutorials to run your first AHU fault checks on real data.
 
-The `open-fdd` repository includes an [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples) with various scripts. This tutorial covers two: `check_faults_ahu7_flatline.py` (stuck sensors) and `check_faults_ahu7_bounds.py` (out-of-range values). We start with the flatline script.
+The [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples) contains the tutorial scripts. Download `data_ahu7.csv` and place it in `examples/` before running (see the examples README for the download link). This tutorial covers two: `check_faults_ahu7_flatline.py` (stuck sensors) and `check_faults_ahu7_bounds.py` (out-of-range values). We start with the flatline script.
 
-This image shows an example of an Air Handling Unit (AHU):
+This image shows an example of a Variable Air Volume Air Handling Unit (VAV AHU) which depicts the `ahu7` data we will be using in the tutorials:
 ![AHU in the GitHub Pages](https://raw.githubusercontent.com/bbartling/open-fdd/master/examples/rtu7_snip.png)
 
-To run the example, navigate to the root directory of the `open-fdd` repository, create and activate a virtual environment, and then execute the script.
+On the next page, we will run a fault rule against a CSV dataset pulled from the AHU7 BAS. You will navigate to the root directory of the `open-fdd` repository, create and activate a virtual environment, and then execute the script. Follow along in the tutorial to get familiar with the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples). See the examples README for how to obtain the practice dataset.
 
 ---
 

@@ -1,5 +1,5 @@
 # Flatline — fault if sensor stuck at constant value
-# Inputs use BRICK class names
+# Your rules for your deployment. Add or remove sensors for your BAS.
 name: sensor_flatline
 type: flatline
 flag: flatline_flag
@@ -17,7 +17,6 @@ inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: Outside_Air_Temperature_Sensor
-
 
 params:
   tolerance: 0.000001

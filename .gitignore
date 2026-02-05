@@ -9,6 +9,7 @@
 *.docx
 /reports
 *.csv
+!examples/*.csv
 .vscode/
 
 *.pkl

@@ -1,5 +1,5 @@
 # Sensor bounds — fault if value outside valid range
-# Inputs use BRICK class names
+# Your rules for your deployment. Customize inputs and bounds for your BAS.
 # Imperial: °F for temp, inH2O for pressure. Metric: °C for temp, Pa for pressure.
 # Conversion: 1 inH2O ≈ 249 Pa
 name: bad_sensor_check

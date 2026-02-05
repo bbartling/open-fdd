@@ -18,7 +18,7 @@ from open_fdd.reports import (
 
 script_dir = Path(__file__).parent
 csv_path = script_dir / "data_ahu7.csv"
-rules_dir = script_dir / "rules"
+rules_dir = script_dir / "my_rules"
 
 # BRICK class -> CSV column (flatline check: temp sensors only)
 # Supply_Air_Static_Pressure_Sensor excluded - legitimately flat when fan off
