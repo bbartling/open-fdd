@@ -15,13 +15,13 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 
 ## How to define your own expressions
 
-Expressions are boolean (true/false) statements — when they evaluate to **True**, a fault is flagged. Here's a quick guide:
+Expressions are boolean (true/false) statements — when they evaluate to **True**, a fault is flagged. open-fdd evaluates expressions with **pandas** and **NumPy** under the hood: input names become pandas Series, and `np` gives you NumPy functions for vectorized math. Here's a quick guide — AI can definitely help with this, and pandas and NumPy are popular open-source libraries in the modern data science world:
 
-1. **Choose your inputs** — Each input maps a BRICK class (or rule name) to a DataFrame column. Use `brick:` for Brick model resolution and `column:` for the raw column name.
+1. **Choose your inputs** — Each input maps a BRICK class (or rule name) to a DataFrame column. Use `brick:` for Brick model resolution and `column:` for the raw column name. Input names become **pandas Series** in the expression (one value per row).
 
 2. **Define params** — Thresholds and constants go in `params`. Reference them by name in the expression (e.g. `static_err_thres`, `vfd_max`).
 
-3. **Write the expression** — Use input names and param names as variables. The expression must evaluate to a boolean Series (True = fault). Use `&` for AND, `|` for OR, `~` for NOT. Use `np` for NumPy functions (`np.maximum`, `np.abs`, `np.sqrt`, etc.).
+3. **Write the expression** — Use input names and param names as variables. The expression must evaluate to a **boolean Series** (True = fault). Use `&` for AND, `|` for OR, `~` for NOT. Use `np` for NumPy functions (`np.maximum`, `np.abs`, `np.sqrt`, etc.) — they work on Series and are vectorized (no Python loops). Comparisons and logical ops produce boolean Series. You can also use pandas Series methods like `.diff()`, `.rolling()`, `.notna()` on your inputs.
 
 4. **Example** — A simple "sensor above threshold" rule:
 
