@@ -92,10 +92,10 @@ def check_hunting(
             return s
         return pd.Series(0.0, index=df.index)
 
-    economizer_sig = _get_series("economizer_sig")
-    supply_vfd_speed = _get_series("supply_vfd_speed")
-    heating_sig = _get_series("heating_sig")
-    cooling_sig = _get_series("cooling_sig")
+    economizer_sig = _get_series("Damper_Position_Command")
+    supply_vfd_speed = _get_series("Supply_Fan_Speed_Command")
+    heating_sig = _get_series("Heating_Valve_Command")
+    cooling_sig = _get_series("Cooling_Valve_Command")
 
     os_change = (
         (economizer_sig > 0).astype(int)
@@ -127,14 +127,14 @@ def check_oa_fraction(
     oat_rat_delta_min = params.get("oat_rat_delta_min", 5.0)
     ahu_min_oa_dpr = params.get("ahu_min_oa_dpr", 0.1)
 
-    rat = _get("rat")
-    oat = _get("oat")
-    mat = _get("mat")
-    supply_fan_air_volume = _get("supply_fan_air_volume")
-    supply_vfd_speed = _get("supply_vfd_speed")
-    economizer_sig = _get("economizer_sig")
-    heating_sig = _get("heating_sig")
-    cooling_sig = _get("cooling_sig")
+    rat = _get("Return_Air_Temperature_Sensor")
+    oat = _get("Outside_Air_Temperature_Sensor")
+    mat = _get("Mixed_Air_Temperature_Sensor")
+    supply_fan_air_volume = _get("Supply_Fan_Air_Flow_Sensor")
+    supply_vfd_speed = _get("Supply_Fan_Speed_Command")
+    economizer_sig = _get("Damper_Position_Command")
+    heating_sig = _get("Heating_Valve_Command")
+    cooling_sig = _get("Cooling_Valve_Command")
 
     if (supply_vfd_speed > 1.0).any():
         supply_vfd_speed = supply_vfd_speed / 100.0
@@ -184,9 +184,9 @@ def check_erv_efficiency(
         col = col_map.get(name)
         return df[col] if col and col in df.columns else pd.Series(0.0, index=df.index)
 
-    erv_oat_enter = _get("erv_oat_enter")
-    erv_oat_leaving = _get("erv_oat_leaving")
-    erv_eat_enter = _get("erv_eat_enter")
+    erv_oat_enter = _get("ERV_Outside_Air_Temperature_Sensor")
+    erv_oat_leaving = _get("ERV_Discharge_Air_Temperature_Sensor")
+    erv_eat_enter = _get("ERV_Return_Air_Temperature_Sensor")
 
     erv_eff_min_htg = params.get("erv_efficiency_min_heating", 0.5)
     erv_eff_max_htg = params.get("erv_efficiency_max_heating", 0.9)

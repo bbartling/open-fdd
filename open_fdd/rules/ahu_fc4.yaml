@@ -7,16 +7,16 @@ flag: fc4_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
-  supply_vfd_speed:
+  Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
     column: supply_vfd_speed
-  heating_sig:
+  Heating_Valve_Command:
     brick: Valve_Command
     column: heating_sig
-  cooling_sig:
+  Cooling_Valve_Command:
     brick: Valve_Command
     column: cooling_sig
 

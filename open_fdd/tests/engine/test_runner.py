@@ -243,10 +243,10 @@ def test_runner_fc4_hunting():
         "type": "hunting",
         "flag": "fc4_flag",
         "inputs": {
-            "economizer_sig": {"column": "economizer_sig"},
-            "supply_vfd_speed": {"column": "supply_vfd_speed"},
-            "heating_sig": {"column": "heating_sig"},
-            "cooling_sig": {"column": "cooling_sig"},
+            "Damper_Position_Command": {"column": "economizer_sig"},
+            "Supply_Fan_Speed_Command": {"column": "supply_vfd_speed"},
+            "Heating_Valve_Command": {"column": "heating_sig"},
+            "Cooling_Valve_Command": {"column": "cooling_sig"},
         },
         "params": {"delta_os_max": 7, "ahu_min_oa_dpr": 0.2, "window": 60},
     }

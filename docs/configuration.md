@@ -96,13 +96,13 @@ flag: fc9_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
-  oat:
+  Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: oat
-  sat_setpoint:
+  Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
     column: sat_setpoint
-  economizer_sig:
+  Damper_Position_Command:
     brick: Damper_Position_Command
     column: economizer_sig
 ```

@@ -543,9 +543,11 @@ type: expression
 flag: fc_chiller_flow_flag
 
 inputs:
-  flow:
+  Water_Flow_Sensor:
+    brick: Water_Flow_Sensor
     column: flow
-  pump_speed:
+  Pump_Speed_Command:
+    brick: Pump_Speed_Command
     column: pump_speed
 
 params:
@@ -554,7 +556,7 @@ params:
   pump_speed_err_thres: 0.05
 
 expression: |
-  (flow > flow_error_threshold) & (pump_speed >= pump_speed_max - pump_speed_err_thres)
+  (Water_Flow_Sensor > flow_error_threshold) & (Pump_Speed_Command >= pump_speed_max - pump_speed_err_thres)
 ```
 
 ---

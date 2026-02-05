@@ -27,13 +27,13 @@ flag: fc16_flag
 equipment_type: [AHU_ERV]
 
 inputs:
-  erv_oat_enter:
+  ERV_Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
     column: erv_oat_enter
-  erv_oat_leaving:
+  ERV_Discharge_Air_Temperature_Sensor:
     brick: Discharge_Air_Temperature_Sensor
     column: erv_oat_leaving
-  erv_eat_enter:
+  ERV_Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
     column: erv_eat_enter
 
