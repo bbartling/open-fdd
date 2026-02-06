@@ -1,6 +1,6 @@
 ---
 title: API Reference
-nav_order: 12
+nav_order: 14
 ---
 
 # API Reference
@@ -85,16 +85,36 @@ print_summary(summary, title="FC1 Low Duct Static")
 ## brick_resolver
 
 ```python
-from open_fdd import resolve_from_ttl
+from open_fdd.engine.brick_resolver import resolve_from_ttl, get_equipment_types_from_ttl
 
 column_map = resolve_from_ttl("examples/brick_model.ttl")
-# Keys: BRICK class names (Supply_Air_Temperature_Sensor, etc.) and rule_input for backward compat
-# {"Supply_Air_Temperature_Sensor": "SAT (°F)", "sat": "SAT (°F)", ...}
+# Keys: BRICK class names (Supply_Air_Temperature_Sensor, etc.), BrickClass|rule_input for disambiguation, rule_input for backward compat
+# {"Supply_Air_Temperature_Sensor": "SAT (°F)", "Valve_Command|heating_sig": "Prht Vlv Cmd (%)", "oat": "OAT (°F)", ...}
+
+equipment_types = get_equipment_types_from_ttl("examples/brick_model.ttl")
+# ["VAV_AHU"] — used to filter rules by equipment_type
 ```
 
 Requires `pip install open-fdd[brick]`.
 
 ---
 
-**Next:** [Data Model & Brick]({{ "data_model" | relative_url }})
+## Example scripts (Brick workflow)
+
+| Script | Description |
+|--------|-------------|
+| `examples/validate_data_model.py` | SPARQL prereq, column map, rules vs model check. Run before faults. |
+| `examples/run_all_rules_brick.py` | Load TTL, filter rules by equipment_type, run on CSV. |
+| `examples/test_sparql.py` | Raw SPARQL test against Brick TTL. |
+| `examples/brick_fault_viz/run_and_viz_faults.ipynb` | Run faults + zoom in on random fault events (Jupyter). |
+
+```bash
+python examples/validate_data_model.py
+python examples/run_all_rules_brick.py --validate-first
+jupyter notebook examples/brick_fault_viz/run_and_viz_faults.ipynb
+```
+
+---
+
+**Next:** [Home]({{ "" | relative_url }})
 

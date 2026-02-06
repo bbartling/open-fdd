@@ -632,4 +632,4 @@ expression: |
 
 ---
 
-**Next:** [Configuration]({{ "configuration" | relative_url }})
+**Next:** [Data Model & Brick]({{ "data_model" | relative_url }}) — Brick TTL, validate, run

@@ -1,6 +1,6 @@
 ---
 title: Configuration
-nav_order: 11
+nav_order: 13
 ---
 
 # Configuration
@@ -107,9 +107,9 @@ inputs:
     column: economizer_sig
 ```
 
-- **`brick`** — Brick class name. Used for column resolution: `column_map` can be keyed by Brick class (e.g. `Supply_Air_Temperature_Sensor`), and the runner resolves columns via BRICK first.
-- **`equipment_type`** — Equipment types this rule applies to (for future Brick-based filtering).
+- **`brick`** — Brick class name. Used for column resolution: `column_map` can be keyed by Brick class (e.g. `Supply_Air_Temperature_Sensor`), and the runner resolves columns via BRICK first. When the same Brick class appears multiple times (e.g. two `Valve_Command`), use `BrickClass|rule_input` in the column map.
+- **`equipment_type`** — Equipment types this rule applies to. When using `run_all_rules_brick.py` with a Brick TTL, only rules whose `equipment_type` matches the model's `ofdd:equipmentType` are run. See [Data Model & Brick]({{ "data_model" | relative_url }}).
 
 ---
 
-**Next:** [API Reference]({{ "api_reference" | relative_url }})
+**Next:** [API Reference]({{ "api_reference" | relative_url }}) — RuleRunner, brick_resolver, example scripts

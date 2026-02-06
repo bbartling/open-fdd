@@ -1,6 +1,6 @@
 ---
 title: Data Model & Brick
-nav_order: 13
+nav_order: 11
 ---
 
 # Data Model & Brick
@@ -12,17 +12,35 @@ open-fdd can run **BRICK model driven**: rule inputs are resolved from a Brick T
 Before running fault equations, you **validate** the data model and YAML rules. Only then do you run faults.
 
 ```
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
-│ brick_model.ttl │────▶│ validate_data_model.py│────▶│ run_all_rules_brick  │
-│ my_rules/*.yaml │     │ (SPARQL + mapping)   │     │ (run applicable     │
-│ data_ahu7.csv  │     └──────────────────────┘     │  rules on CSV)       │
-└─────────────────┘              │                   └─────────────────────┘
-                                 │
-                                 ▼
-                    VALIDATION PASSED?
-                    - SPARQL works
-                    - All rule inputs mapped
-                    - equipment_type matches
+┌───────────────────────┐
+│ Inputs                │
+│ • brick_model.ttl     │
+│ • my_rules/*.yaml     │
+│ • data_ahu7.csv       │
+└───────────┬───────────┘
+            │
+            ▼
+┌──────────────────────────────┐
+│ validate_data_model.py       │
+│ • SPARQL queries             │
+│ • Point resolution           │
+│ • Rule input mapping checks  │
+└───────────┬──────────────────┘
+            │
+            ▼
+     Validation Passed?
+     • SPARQL executes successfully
+     • All rule inputs resolved
+     • equipment_type matches rules
+            │
+            ▼
+┌──────────────────────────────┐
+│ run_all_rules_brick.py       │
+│ • Execute applicable faults  │
+│ • Process CSV time-series    │
+│ • Generate fault flags       │
+└──────────────────────────────┘
+
 ```
 
 ### 1. SPARQL prereq (validate first)
@@ -236,4 +254,4 @@ open-fdd-core uses this when ingesting CSV: it creates points in the DB, then ge
 
 ---
 
-**Next:** [Home]({{ "" | relative_url }})
+**Next:** [Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }}) — zoom in on fault events, IPython notebook

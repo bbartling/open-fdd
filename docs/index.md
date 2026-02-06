@@ -29,8 +29,9 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 6. **[Hunting Rule]({{ "hunting_rule" | relative_url }})** — Excessive AHU state changes (built-in)
 7. **[OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }})** — OA fraction calc error (built-in)
 8. **[ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }})** — ERV effectiveness (built-in, custom)
-9. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather) — *TODO: will be greatly expanded in future releases*
-10. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
-11. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
-12. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, external refs — *TODO: not finished*
+9. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather)
+10. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, validate, run
+11. **[Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }})** — Zoom in on fault events, IPython notebook, next: false positives
+12. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
+13. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver, Brick workflow
 
