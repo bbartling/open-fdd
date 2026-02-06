@@ -22,7 +22,6 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          # Prefer a stable version for tooling compatibility
           python-version: "3.12"
           cache: "pip"
 
@@ -31,10 +30,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Check formatting (Black)
-        run: |
-          black --check open_fdd/
+      - name: Format with Black
+        run: black .
 
       - name: Run tests
-        run: |
-          pytest open_fdd/tests/
+        run: pytest open_fdd/tests/

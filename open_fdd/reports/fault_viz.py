@@ -12,6 +12,7 @@ import pandas as pd
 # Optional seaborn for nicer default styling
 try:
     import seaborn as sns
+
     sns.set_theme(style="whitegrid", palette="muted")
 except ImportError:
     pass
@@ -19,9 +20,15 @@ except ImportError:
 
 # Default signal columns when rule has none (common AHU sensors)
 DEFAULT_SIGNAL_COLS = [
-    "SAT (°F)", "MAT (°F)", "OAT (°F)", "RAT (°F)",
-    "SA Static Press (inH₂O)", "SF Spd Cmd (%)", "OA Damper Cmd (%)",
-    "Clg Vlv Cmd (%)", "Prht Vlv Cmd (%)",
+    "SAT (°F)",
+    "MAT (°F)",
+    "OAT (°F)",
+    "RAT (°F)",
+    "SA Static Press (inH₂O)",
+    "SF Spd Cmd (%)",
+    "OA Damper Cmd (%)",
+    "Clg Vlv Cmd (%)",
+    "Prht Vlv Cmd (%)",
 ]
 
 
@@ -42,7 +49,9 @@ def get_fault_events(df: pd.DataFrame, flag_col: str) -> List[Tuple[int, int, st
     return events
 
 
-def all_fault_events(df: pd.DataFrame, flag_cols: List[str]) -> List[Tuple[int, int, str]]:
+def all_fault_events(
+    df: pd.DataFrame, flag_cols: List[str]
+) -> List[Tuple[int, int, str]]:
     """Collect events from all flag columns, sorted by start time."""
     events = []
     for col in flag_cols:
@@ -188,7 +197,9 @@ def zoom_on_event(
     fault_hi = min(len(window) - 1, end_iloc - lo)
     if fault_lo <= fault_hi:
         for ax in axes[:-1]:
-            ax.axvspan(ts.iloc[fault_lo], ts.iloc[fault_hi], alpha=0.15, color="#e94f37")
+            ax.axvspan(
+                ts.iloc[fault_lo], ts.iloc[fault_hi], alpha=0.15, color="#e94f37"
+            )
 
     t0, t1 = ts.iloc[0], ts.iloc[-1]
     t0_str = t0.strftime("%Y-%m-%d %H:%M") if hasattr(t0, "strftime") else str(t0)
@@ -264,7 +275,9 @@ def run_fault_analytics(
     from open_fdd.reports import flatline_period_range, summarize_fault
 
     sensor_map = build_sensor_map_for_summarize(rules, result, column_map)
-    result_idx = result.set_index("timestamp") if "timestamp" in result.columns else result
+    result_idx = (
+        result.set_index("timestamp") if "timestamp" in result.columns else result
+    )
     motor_col = "SF Spd Cmd (%)" if "SF Spd Cmd (%)" in result.columns else None
 
     summaries = {}
@@ -352,8 +365,12 @@ def plot_flag_true_bars(
             ax.set_title(fc, fontsize=10)
         else:
             ax.text(
-                0.5, 0.5, "No sensor stats",
-                ha="center", va="center", transform=ax.transAxes
+                0.5,
+                0.5,
+                "No sensor stats",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
             )
             ax.set_title(fc, fontsize=10)
     for j in range(idx + 1, len(axes)):

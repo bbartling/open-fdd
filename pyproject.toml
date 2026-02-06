@@ -37,7 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "black",
+    "black==26.1.0",
     "pre-commit",
 ]
 viz = [
