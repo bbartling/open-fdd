@@ -5,10 +5,6 @@ nav_order: 10
 
 # Expression Rule Cookbook
 
-All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
-
-**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks. See [Bounds]({{ "bounds_rule" | relative_url }}), [Flatline]({{ "flatline_rule" | relative_url }}), [Hunting]({{ "hunting_rule" | relative_url }}), [OA Fraction]({{ "oa_fraction_rule" | relative_url }}), [ERV Efficiency]({{ "erv_efficiency_rule" | relative_url }}) for those rule types.
-
 **About `np` in expressions:** When you see `np` in a rule (e.g. `np.maximum`, `np.abs`, `np.sqrt`), it refers to **NumPy** — the Python computing library which Pandas uses under the hood for high-performance numerical math. open-fdd injects `np` into expression evaluation automatically, so you can use NumPy functions directly in your fault logic.
 
 ---

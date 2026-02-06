@@ -9,7 +9,7 @@ nav_order: 7
 
 ## What the rules engine does
 
-The **hunting** rule flags *excessive operating state changes* — when the AHU cycles too rapidly between heating, economizer, and mechanical cooling modes. This is often caused by PID tuning issues (hunting). The engine builds an operating-state vector from economizer damper, supply fan VFD, heating valve, and cooling valve. It counts how many state changes occur in a rolling `window`. When the sum exceeds `delta_os_max`, a fault is flagged. ASHRAE Guideline 36 Fault Rule Four.
+The **hunting** rule flags which is defined by ASHRAE Guideline 36 Fault Rule Four is *excessive operating state changes* — when the AHU cycles too rapidly between heating, economizer, and mechanical cooling modes. This is often caused by PID tuning issues (hunting). The engine builds an operating-state vector from economizer damper, supply fan VFD, heating valve, and cooling valve. It counts how many state changes occur in a rolling `window`. When the sum exceeds `delta_os_max`, a fault is flagged.
 
 ---
 

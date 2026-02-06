@@ -10,6 +10,7 @@
 /reports
 *.csv
 !examples/*.csv
+examples/run_all_rules_output.csv
 .vscode/
 
 *.pkl

@@ -15,6 +15,10 @@ A **rules engine** is software that runs automated checks on your data — when 
 
 **Smart buildings & IoT:** Coupled with modern smart-building IoT data modeling efforts (e.g., BRICK), this could be a powerful solution. Pandas is used widely across many domains and scales to massive datasets — it just needs to be tailored to smart-building fault detection and diagnostics. The FDD industry is notoriously proprietary and expensive. A free, open-source option that executes FDD effectively has been missing, but it can be.
 
+All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
+
+**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks. See [Bounds]({{ "bounds_rule" | relative_url }}), [Flatline]({{ "flatline_rule" | relative_url }}), [Hunting]({{ "hunting_rule" | relative_url }}), [OA Fraction]({{ "oa_fraction_rule" | relative_url }}), [ERV Efficiency]({{ "erv_efficiency_rule" | relative_url }}) for those rule types.
+
 ## Docs
 
 1. **[Getting Started]({{ "getting_started" | relative_url }})** — Install, run AHU7 scripts

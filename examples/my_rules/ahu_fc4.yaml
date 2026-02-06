@@ -1,0 +1,26 @@
+# AHU Fault Condition 4 — PID hunting / excessive state changes
+# Fault when too many operating mode changes in a window (heating, econ, mech clg, etc.)
+name: excessive_ahu_state_changes
+description: Excessive AHU operating state changes detected (hunting behavior)
+type: hunting
+flag: fc4_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+    column: economizer_sig
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+    column: supply_vfd_speed
+  Heating_Valve_Command:
+    brick: Valve_Command
+    column: heating_sig
+  Cooling_Valve_Command:
+    brick: Valve_Command
+    column: cooling_sig
+
+params:
+  delta_os_max: 10       # max allowable state changes in window
+  ahu_min_oa_dpr: 0.1    # min OA damper position (fraction)
+  window: 60             # samples (e.g. 60 x 1min = 1hr)

@@ -79,3 +79,31 @@ def resolve_from_ttl(ttl_path: Union[str, Path]) -> Dict[str, str]:
             mapping[rule_input] = label
 
     return mapping
+
+
+def get_equipment_types_from_ttl(ttl_path: Union[str, Path]) -> list:
+    """
+    Load Brick TTL and return list of equipment types (e.g. ["VAV_AHU", "AHU"]).
+    Used to filter which rules apply to the equipment in the data model.
+    """
+    try:
+        from rdflib import Graph
+    except ImportError:
+        raise ImportError(
+            "rdflib required for Brick resolution. Run: pip install open-fdd[brick]"
+        ) from None
+
+    g = Graph()
+    g.parse(ttl_path, format="turtle")
+    types = []
+    q = """
+    PREFIX ofdd: <http://openfdd.local/ontology#>
+    SELECT DISTINCT ?equipmentType WHERE {
+        ?equipment ofdd:equipmentType ?equipmentType .
+    }
+    """
+    for row in g.query(q):
+        t = str(row.equipmentType).strip('"')
+        if t and t not in types:
+            types.append(t)
+    return types

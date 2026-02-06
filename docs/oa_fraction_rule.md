@@ -9,7 +9,7 @@ nav_order: 8
 
 ## What the rules engine does
 
-The **oa_fraction** rule flags when the *calculated outdoor air (OA) fraction* deviates too much from the *minimum design OA fraction* in non-economizer modes. The engine computes OA fraction from MAT, RAT, and OAT using the standard enthalpy/temperature-based formula. It compares that to the design minimum (based on `ahu_min_oa_cfm_design` and supply airflow). When `|OA_frac_calc - OA_min| > airflow_err_thres` and the AHU is in heating (OS1) or mechanical-only cooling (OS4), a fault is flagged. Catches OA fraction calculation errors or AHU not maintaining design airflow. ASHRAE Guideline 36 Fault Rule Six.
+The **oa_fraction** rule which is defined by ASHRAE Guideline 36 Fault Rule Six flags when the *calculated outdoor air (OA) fraction* deviates too much from the *minimum design OA fraction* in non-economizer modes. The engine computes OA fraction from MAT, RAT, and OAT using the standard enthalpy/temperature-based formula. It compares that to the design minimum (based on `ahu_min_oa_cfm_design` and supply airflow). When `|OA_frac_calc - OA_min| > airflow_err_thres` and the AHU is in heating (OS1) or mechanical-only cooling (OS4), a fault is flagged. Catches OA fraction calculation errors or AHU not maintaining design airflow.
 
 ---
 

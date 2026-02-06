@@ -14,7 +14,8 @@
 
 :ahu_7 a brick:Air_Handling_Unit ;
     rdfs:label "AHU 7" ;
-    brick:isPartOf :site_1 .
+    brick:isPartOf :site_1 ;
+    ofdd:equipmentType "VAV_AHU" .
 
 # Temperature sensors
 :oat_sensor a brick:Outside_Air_Temperature_Sensor ;
@@ -75,3 +76,9 @@
     brick:hasUnit unit:INWG ;
     brick:isPointOf :ahu_7 ;
     ofdd:mapsToRuleInput "duct_static" .
+
+:sa_static_sp a brick:Supply_Air_Static_Pressure_Setpoint ;
+    rdfs:label "SA Static Press Sp (inH₂O)" ;
+    brick:hasUnit unit:INWG ;
+    brick:isPointOf :ahu_7 ;
+    ofdd:mapsToRuleInput "duct_static_setpoint" .
