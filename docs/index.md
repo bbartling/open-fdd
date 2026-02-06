@@ -22,16 +22,17 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 ## Docs
 
 1. **[Getting Started]({{ "getting_started" | relative_url }})** — Install, run AHU7 scripts
-2. **[Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})** — Stuck sensor detection
-3. **[Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})** — Out-of-range sensor values
-4. **[Bounds Rule]({{ "bounds_rule" | relative_url }})** — Sensor out-of-range (built-in)
-5. **[Flatline Rule]({{ "flatline_rule" | relative_url }})** — Stuck sensor detection (built-in)
-6. **[Hunting Rule]({{ "hunting_rule" | relative_url }})** — Excessive AHU state changes (built-in)
-7. **[OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }})** — OA fraction calc error (built-in)
-8. **[ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }})** — ERV effectiveness (built-in, custom)
-9. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather)
-10. **[Data Model & Brick]({{ "data_model" | relative_url }})** — TTL, brick_resolver, validate, run
-11. **[Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }})** — Zoom in on fault events, IPython notebook, next: false positives
-12. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
-13. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver, Brick workflow
+2. **[Bounds Rule]({{ "bounds_rule" | relative_url }})** — Sensor out-of-range (built-in)
+3. **[Flatline Rule]({{ "flatline_rule" | relative_url }})** — Stuck sensor detection (built-in)
+4. **[Hunting Rule]({{ "hunting_rule" | relative_url }})** — Excessive AHU state changes (built-in)
+5. **[OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }})** — OA fraction calc error (built-in)
+6. **[ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }})** — ERV effectiveness (built-in, custom)
+7. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather)
+8. **[Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})** — Stuck sensor detection
+9. **[Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})** — Out-of-range sensor values
+10. **[SPARQL & Validate Prereq]({{ "sparql_validate_prereq" | relative_url }})** — Test SPARQL, validate model before faults
+11. **[Data Model & Brick]({{ "data_model" | relative_url }})** — Run faults, Brick TTL, column map
+12. **[Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }})** — Zoom in on fault events, IPython notebook
+13. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
+14. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver, Brick workflow
 

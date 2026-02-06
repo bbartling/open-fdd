@@ -1,6 +1,6 @@
 ---
 title: OA Fraction Rule
-nav_order: 8
+nav_order: 6
 ---
 
 # OA Fraction Rule

@@ -1,10 +1,10 @@
 ---
 title: Flat Line Sensor Tutorial
-nav_order: 3
+nav_order: 9
 ---
 
 
-Every fault rule in **open-fdd** is now configuration-driven in Version 2 in the form of a YAML file as shown below. When the Python code below runs, it reads settings from a YAML file that defines which sensors to evaluate and what parameters to use. For each sensor, the algorithm checks whether the reading changes within a specified tolerance over a rolling 12-sample window and flags rows where the difference between the maximum and minimum values is less than the tolerance.
+For each sensor, the algorithm checks whether the reading changes within a specified tolerance over a rolling 12-sample window and flags rows where the difference between the maximum and minimum values is less than the tolerance.
 
 The masks from each sensor are then combined using the `|=` operator, so a row is flagged if any sensor appears flat. Finally, the combined mask is written to the result DataFrame as a new column called `flatline_flag`.
 
@@ -301,4 +301,4 @@ Analytics
 
 ---
 
-**Next:** [Sensor Bounds Check Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})
+**Next:** [Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})

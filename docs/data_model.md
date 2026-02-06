@@ -1,73 +1,15 @@
 ---
 title: Data Model & Brick
-nav_order: 11
+nav_order: 12
 ---
 
 # Data Model & Brick
 
 open-fdd can run **BRICK model driven**: rule inputs are resolved from a Brick TTL instead of hardcoded column names. The Brick model maps BMS points to open-fdd rule inputs via `ofdd:mapsToRuleInput`, `rdfs:label`, and optionally `ofdd:equipmentType` for equipment-specific rule filtering.
 
-## Workflow overview
+**Prerequisite:** Complete [SPARQL & Validate Prereq]({{ "sparql_validate_prereq" | relative_url }}) — test SPARQL and run validation before running faults.
 
-Before running fault equations, you **validate** the data model and YAML rules. Only then do you run faults.
-
-```
-┌───────────────────────┐
-│ Inputs                │
-│ • brick_model.ttl     │
-│ • my_rules/*.yaml     │
-│ • data_ahu7.csv       │
-└───────────┬───────────┘
-            │
-            ▼
-┌──────────────────────────────┐
-│ validate_data_model.py       │
-│ • SPARQL queries             │
-│ • Point resolution           │
-│ • Rule input mapping checks  │
-└───────────┬──────────────────┘
-            │
-            ▼
-     Validation Passed?
-     • SPARQL executes successfully
-     • All rule inputs resolved
-     • equipment_type matches rules
-            │
-            ▼
-┌──────────────────────────────┐
-│ run_all_rules_brick.py       │
-│ • Execute applicable faults  │
-│ • Process CSV time-series    │
-│ • Generate fault flags       │
-└──────────────────────────────┘
-
-```
-
-### 1. SPARQL prereq (validate first)
-
-The validator runs a raw SPARQL query against the Brick TTL to ensure:
-
-- The TTL parses correctly
-- Points have `ofdd:mapsToRuleInput` and `rdfs:label`
-- The Brick model structure is valid
-
-If SPARQL fails, fault detection will not work. Fix the Brick model before proceeding.
-
-### 2. Validate data model and rules
-
-```bash
-python examples/validate_data_model.py
-# or with custom paths:
-python examples/validate_data_model.py --ttl brick_model.ttl --rules my_rules
-```
-
-This checks:
-
-1. **SPARQL test** — Query runs and returns rows
-2. **Brick model** — Column map and equipment types extracted
-3. **Rules vs model** — Every rule input required by applicable rules has a mapping
-
-### 3. Run all applicable rules
+## Run all applicable rules
 
 ```bash
 python examples/run_all_rules_brick.py
@@ -76,18 +18,37 @@ python examples/run_all_rules_brick.py --ttl brick_model.ttl --rules my_rules --
 python examples/run_all_rules_brick.py --validate-first   # run validation before faults
 ```
 
-The runner:
+The runner loads the Brick TTL, resolves the column map, filters rules by equipment type, and runs `RuleRunner`. Use `--validate-first` to run validation before faults.
 
-1. Loads Brick TTL and resolves `column_map` (Brick class → CSV column)
-2. Loads equipment types from Brick (e.g. `VAV_AHU`)
-3. Loads all rules from `my_rules`
-4. **Filters rules by equipment_type** — only runs rules whose `equipment_type` matches the Brick model
-5. Adds synthetic columns for missing data (e.g. duct static setpoint if not in CSV)
-6. Runs `RuleRunner` with `column_map`
-
+**Example output:**
 
 ```bash
-> python examples/run_all_rules_brick.py --ttl brick_model.ttl --rules my_rules --csv data_ahu7.csv
+> python examples/run_all_rules_brick.py --validate-first 
+=== Brick Data Model Validation ===
+
+TTL: C:\Users\ben\Documents\open-fdd\examples\brick_model.ttl
+Rules: C:\Users\ben\Documents\open-fdd\examples\my_rules
+
+Validates: Can open-fdd run your rules against your CSV using this Brick model?
+
+1. SPARQL test (prereq)
+   Checks: TTL parses; points have ofdd:mapsToRuleInput + rdfs:label (Brick->CSV mapping)
+   OK
+
+2. Brick model (column map, equipment types)
+   Checks: Resolved Brick class -> CSV column; equipment_type for rule filtering
+   Column map: 22 mappings (Brick class -> CSV column)
+   Equipment types: ['VAV_AHU']
+
+3. Rules vs model
+   Checks: Each rule input (brick class) has a mapping; 6 rules loaded
+   All applicable rule inputs mapped
+
+4. Brick schema (SHACL) - skipped (pip install brickschema to validate ontology)
+
+=== VALIDATION PASSED ===
+
+Data model and rules are ready. Run: python run_all_rules_brick.py
 Loading Brick model...
   Column map: 22 mappings
   Equipment types: ['VAV_AHU']
@@ -102,6 +63,8 @@ Ran 6 rules. Flag columns: ['fc1_flag', 'fc2_flag', 'fc3_flag', 'fc4_flag', 'bad
   fc4_flag: 717 fault samples
   bad_sensor_flag: 3146 fault samples
   flatline_flag: 3926 fault samples
+
+Output saved to C:\Users\ben\Documents\open-fdd\examples\run_all_rules_output.csv
 
 ```
 
@@ -188,36 +151,6 @@ The Brick model declares equipment types on equipment entities:
 | `oat` | `"OAT (°F)"` | Backward compat: rule_input → label |
 
 `RuleRunner` uses this to resolve rule inputs: for each input with `brick: Valve_Command` and `column: heating_sig`, it looks up `Valve_Command|heating_sig` in the column map.
-
----
-
-## Testing a raw SPARQL file
-
-You can test SPARQL against the Brick model before running faults. Example:
-
-```python
-from rdflib import Graph
-
-g = Graph()
-g.parse("examples/brick_model.ttl", format="turtle")
-
-q = """
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-PREFIX ofdd: <http://openfdd.local/ontology#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?point ?brick_class ?label ?rule_input WHERE {
-    ?point ofdd:mapsToRuleInput ?rule_input .
-    ?point a ?brick_type .
-    FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
-    BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
-    ?point rdfs:label ?label .
-}
-"""
-for row in g.query(q):
-    print(row)
-```
-
-Save as `examples/test_sparql.py` and run. If this works, the Brick model is valid for open-fdd.
 
 ---
 

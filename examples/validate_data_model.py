@@ -148,9 +148,11 @@ def main() -> int:
     print("=== Brick Data Model Validation ===\n")
     print(f"TTL: {ttl_path}")
     print(f"Rules: {rules_dir}\n")
+    print("Validates: Can open-fdd run your rules against your CSV using this Brick model?\n")
 
     # 1. SPARQL prereq
-    print("1. SPARQL test (prereq)...")
+    print("1. SPARQL test (prereq)")
+    print("   Checks: TTL parses; points have ofdd:mapsToRuleInput + rdfs:label (Brick->CSV mapping)")
     sparql_errors = run_sparql_test(ttl_path)
     if sparql_errors:
         for e in sparql_errors:
@@ -159,28 +161,47 @@ def main() -> int:
         print("   OK\n")
 
     # 2. Brick model
-    print("2. Brick model (column map, equipment types)...")
+    print("2. Brick model (column map, equipment types)")
+    print("   Checks: Resolved Brick class -> CSV column; equipment_type for rule filtering")
     column_map, equipment_types, model_errors = validate_brick_model(ttl_path)
     if model_errors:
         for e in model_errors:
             print(f"   ERROR: {e}")
     else:
-        print(f"   Column map: {len(column_map)} mappings")
+        print(f"   Column map: {len(column_map)} mappings (Brick class -> CSV column)")
         print(f"   Equipment types: {equipment_types or ['(none)']}\n")
 
     # 3. Rules vs model
     if not rules_dir.is_dir():
-        print(f"3. Rules dir not found: {rules_dir}")
+        print(f"3. Rules vs model — dir not found: {rules_dir}")
         return 1
 
     rules = _load_rules(rules_dir)
-    print(f"3. Rules vs model ({len(rules)} rules)...")
+    print("3. Rules vs model")
+    print(f"   Checks: Each rule input (brick class) has a mapping; {len(rules)} rules loaded")
     rule_errors = validate_rules_against_model(rules, column_map, equipment_types)
     if rule_errors:
         for e in rule_errors:
             print(f"   ERROR: {e}")
     else:
         print("   All applicable rule inputs mapped\n")
+
+    # 4. Optional: Brick schema validation (SHACL) — warning only, does not fail validation
+    try:
+        from brickschema import Graph as BrickGraph
+        print("4. Brick schema (SHACL) — optional")
+        print("   Checks: TTL conforms to Brick ontology (classes, relationships); SHACL shapes")
+        g = BrickGraph(load_brick=True)
+        g.load_file(str(ttl_path))
+        valid, _, report = g.validate()
+        if not valid:
+            print("   WARN: Brick schema violations (open-fdd may still run):")
+            for line in str(report).splitlines()[:8]:
+                print(f"      {line}")
+        else:
+            print("   OK\n")
+    except ImportError:
+        print("4. Brick schema (SHACL) - skipped (pip install brickschema to validate ontology)\n")
 
     all_errors = sparql_errors + model_errors + rule_errors
     if all_errors:

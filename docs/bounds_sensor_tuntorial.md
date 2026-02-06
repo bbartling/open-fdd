@@ -1,6 +1,6 @@
 ---
 title: Sensor Bounds Tutorial
-nav_order: 4
+nav_order: 10
 ---
 
 
@@ -302,4 +302,4 @@ Analytics
 
 ---
 
-**Next:** [Bounds Rule]({{ "bounds_rule" | relative_url }})
+**Next:** [SPARQL & Validate Prereq]({{ "sparql_validate_prereq" | relative_url }}) — test SPARQL, validate model before running faults

@@ -1,6 +1,6 @@
 ---
 title: ERV Efficiency Rule
-nav_order: 9
+nav_order: 7
 ---
 
 # ERV Efficiency Rule

@@ -1,6 +1,6 @@
 ---
 title: API Reference
-nav_order: 14
+nav_order: 15
 ---
 
 # API Reference
@@ -109,7 +109,8 @@ Requires `pip install open-fdd[brick]`.
 | `examples/brick_fault_viz/run_and_viz_faults.ipynb` | Run faults + zoom in on random fault events (Jupyter). |
 
 ```bash
-python examples/validate_data_model.py
+python examples/test_sparql.py --ttl brick_model.ttl   # Prereq: test SPARQL
+python examples/validate_data_model.py                 # Validate before faults
 python examples/run_all_rules_brick.py --validate-first
 jupyter notebook examples/brick_fault_viz/run_and_viz_faults.ipynb
 ```

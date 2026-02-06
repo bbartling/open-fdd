@@ -1,6 +1,6 @@
 ---
 title: Expression Rule Cookbook
-nav_order: 10
+nav_order: 8
 ---
 
 # Expression Rule Cookbook
@@ -632,4 +632,4 @@ expression: |
 
 ---
 
-**Next:** [Data Model & Brick]({{ "data_model" | relative_url }}) — Brick TTL, validate, run
+**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})

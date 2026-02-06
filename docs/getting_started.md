@@ -35,6 +35,17 @@ Install **open-fdd** from source.
 pip install -e ".[dev]"
 ```
 
+- **`-e`** — Editable install: links to your source so code changes take effect immediately (no reinstall).
+- **`.[dev]`** — Install from current dir (`.`) with the `dev` extras: pytest, black, pre-commit.
+
+**Not included:** `.[dev]` does not install Brick (rdflib) or notebook support. For the Brick workflow and fault viz notebook, add:
+
+```bash
+pip install -e ".[dev,brick]"      # Brick TTL, validate, run_all_rules_brick
+pip install -e ".[dev,brick,viz]"  # + matplotlib for fault viz notebook
+pip install ipykernel               # For .ipynb in VS Code (lightweight)
+```
+
 ## 2. Next Step Run the AHU7 scripts
 
 Continue to the **Bounds** and **Flatline** tutorials to run your first AHU fault checks on real data.
@@ -54,4 +65,4 @@ Follow along in the tutorial to get familiar with the [examples directory](https
 
 ---
 
-**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})
+**Next:** [Bounds Rule]({{ "bounds_rule" | relative_url }})
