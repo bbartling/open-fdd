@@ -1,6 +1,6 @@
 ---
 title: Fault Visualization & Zooming
-nav_order: 12
+nav_order: 13
 ---
 
 # Fault Visualization & Zooming
@@ -15,21 +15,15 @@ Fault flags are boolean time series. A contiguous run of `True` is a **fault eve
 2. **Zoom in** — plot the time window around each event with the relevant signals
 3. **Inspect** — look at SAT, MAT, OAT, damper, valves, duct static, etc. during the fault window
 
-## Install Jupyter / IPython
+## Install notebook support (lightweight)
 
-To run the notebook, install Jupyter (includes IPython):
-
-```bash
-pip install jupyter
-# or with open-fdd extras:
-pip install "open-fdd[dev]"
-```
-
-Then launch Jupyter:
+To run the `.ipynb` notebook in VS Code, install **ipykernel** (lightweight; no full Jupyter stack):
 
 ```bash
-jupyter notebook
+pip install ipykernel
 ```
+
+Then open the notebook in VS Code and run cells directly. If you prefer the browser, use `pip install jupyter` instead.
 
 ---
 
@@ -85,7 +79,8 @@ n_sample = 3
 sampled = rng.choice(events, size=min(n_sample, len(events)), replace=False)
 
 for event in sampled:
-    zoom_on_event(result, event, pad=48, signal_cols=plot_cols)
+    zoom_on_event(result, event, pad=48, rule_to_sensors=rule_to_sensors,
+                  rule_by_flag=rule_by_flag, column_map=column_map)
     plt.show()
 ```
 
