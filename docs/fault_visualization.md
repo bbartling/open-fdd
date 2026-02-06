@@ -86,7 +86,7 @@ for event in sampled:
 
 `pad=48` means 48 samples before and after the event center (e.g. 48 × 15 min ≈ 12 hours each side for 15‑min data).
 
-## Next: False positives
+## Next: False positives & AI-assisted workflows
 
 Many fault flags are **false positives** — the rule fired but the condition was acceptable:
 
@@ -95,15 +95,10 @@ Many fault flags are **false positives** — the rule fired but the condition wa
 - **Sensor noise** — brief spikes or dropouts
 - **Edge cases** — rule logic doesn’t account for a valid operating mode
 
-The next tutorial will cover:
-
-- Filtering by occupancy / schedule
-- Rolling-window confirmation (require N consecutive samples)
-- Manual review workflows
-- Tuning thresholds to reduce false positives
+**See:** [AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }}) for agentic workflows, false positive tuning, and root cause analysis.
 
 ---
 
 **See also:** [Data Model & Brick]({{ "data_model" | relative_url }}) — validate and run the Brick workflow before visualizing.
 
-**Next:** [Configuration]({{ "configuration" | relative_url }}) — rule types, YAML structure
+**Next:** [AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }}) · [Configuration]({{ "configuration" | relative_url }})
