@@ -8,6 +8,7 @@ Usage:
     python examples/test_sparql.py
     python examples/test_sparql.py --ttl brick_model.ttl
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,7 +52,9 @@ def main() -> int:
     """
     rows = list(g.query(q))
     if not rows:
-        print("No rows returned. Check Brick TTL structure (ofdd:mapsToRuleInput, rdfs:label).")
+        print(
+            "No rows returned. Check Brick TTL structure (ofdd:mapsToRuleInput, rdfs:label)."
+        )
         return 1
 
     def _safe(s: str) -> str:

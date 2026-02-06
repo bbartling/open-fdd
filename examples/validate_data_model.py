@@ -10,6 +10,7 @@ Usage:
     python validate_data_model.py
     python validate_data_model.py --ttl brick_model.ttl --rules my_rules
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +26,7 @@ if str(_script_dir) not in sys.path:
 def _load_rules(rules_dir: Path) -> list[dict]:
     """Load all YAML rules from directory."""
     import yaml
+
     rules = []
     for f in sorted(rules_dir.glob("*.yaml")):
         with open(f, encoding="utf-8") as fp:
@@ -49,7 +51,10 @@ def validate_brick_model(ttl_path: Path) -> tuple[dict[str, str], list[str], lis
     """
     Validate Brick TTL and return (column_map, equipment_types, errors).
     """
-    from open_fdd.engine.brick_resolver import resolve_from_ttl, get_equipment_types_from_ttl
+    from open_fdd.engine.brick_resolver import (
+        resolve_from_ttl,
+        get_equipment_types_from_ttl,
+    )
 
     errors = []
     column_map = {}
@@ -67,7 +72,9 @@ def validate_brick_model(ttl_path: Path) -> tuple[dict[str, str], list[str], lis
         return column_map, equipment_types, errors
 
     if not column_map:
-        errors.append("Brick TTL produced empty column map (no points with ofdd:mapsToRuleInput)")
+        errors.append(
+            "Brick TTL produced empty column map (no points with ofdd:mapsToRuleInput)"
+        )
 
     return column_map, equipment_types, errors
 
@@ -114,6 +121,7 @@ def run_sparql_test(ttl_path: Path) -> list[str]:
     errors = []
     try:
         from rdflib import Graph
+
         g = Graph()
         g.parse(ttl_path, format="turtle")
         q = """
@@ -130,14 +138,18 @@ def run_sparql_test(ttl_path: Path) -> list[str]:
         """
         rows = list(g.query(q))
         if not rows:
-            errors.append("SPARQL test query returned no rows (check Brick TTL structure)")
+            errors.append(
+                "SPARQL test query returned no rows (check Brick TTL structure)"
+            )
     except Exception as e:
         errors.append(f"SPARQL test failed: {e}")
     return errors
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate Brick data model and YAML rules")
+    parser = argparse.ArgumentParser(
+        description="Validate Brick data model and YAML rules"
+    )
     parser.add_argument("--ttl", default="brick_model.ttl", help="Path to Brick TTL")
     parser.add_argument("--rules", default="my_rules", help="Path to rules directory")
     args = parser.parse_args()
@@ -148,11 +160,15 @@ def main() -> int:
     print("=== Brick Data Model Validation ===\n")
     print(f"TTL: {ttl_path}")
     print(f"Rules: {rules_dir}\n")
-    print("Validates: Can open-fdd run your rules against your CSV using this Brick model?\n")
+    print(
+        "Validates: Can open-fdd run your rules against your CSV using this Brick model?\n"
+    )
 
     # 1. SPARQL prereq
     print("1. SPARQL test (prereq)")
-    print("   Checks: TTL parses; points have ofdd:mapsToRuleInput + rdfs:label (Brick->CSV mapping)")
+    print(
+        "   Checks: TTL parses; points have ofdd:mapsToRuleInput + rdfs:label (Brick->CSV mapping)"
+    )
     sparql_errors = run_sparql_test(ttl_path)
     if sparql_errors:
         for e in sparql_errors:
@@ -162,7 +178,9 @@ def main() -> int:
 
     # 2. Brick model
     print("2. Brick model (column map, equipment types)")
-    print("   Checks: Resolved Brick class -> CSV column; equipment_type for rule filtering")
+    print(
+        "   Checks: Resolved Brick class -> CSV column; equipment_type for rule filtering"
+    )
     column_map, equipment_types, model_errors = validate_brick_model(ttl_path)
     if model_errors:
         for e in model_errors:
@@ -178,7 +196,9 @@ def main() -> int:
 
     rules = _load_rules(rules_dir)
     print("3. Rules vs model")
-    print(f"   Checks: Each rule input (brick class) has a mapping; {len(rules)} rules loaded")
+    print(
+        f"   Checks: Each rule input (brick class) has a mapping; {len(rules)} rules loaded"
+    )
     rule_errors = validate_rules_against_model(rules, column_map, equipment_types)
     if rule_errors:
         for e in rule_errors:
@@ -189,8 +209,11 @@ def main() -> int:
     # 4. Optional: Brick schema validation (SHACL) — warning only, does not fail validation
     try:
         from brickschema import Graph as BrickGraph
+
         print("4. Brick schema (SHACL) — optional")
-        print("   Checks: TTL conforms to Brick ontology (classes, relationships); SHACL shapes")
+        print(
+            "   Checks: TTL conforms to Brick ontology (classes, relationships); SHACL shapes"
+        )
         g = BrickGraph(load_brick=True)
         g.load_file(str(ttl_path))
         valid, _, report = g.validate()
@@ -201,7 +224,9 @@ def main() -> int:
         else:
             print("   OK\n")
     except ImportError:
-        print("4. Brick schema (SHACL) - skipped (pip install brickschema to validate ontology)\n")
+        print(
+            "4. Brick schema (SHACL) - skipped (pip install brickschema to validate ontology)\n"
+        )
 
     all_errors = sparql_errors + model_errors + rule_errors
     if all_errors:

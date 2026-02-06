@@ -15,6 +15,7 @@ Usage:
     python run_all_rules_brick.py
     python run_all_rules_brick.py --ttl brick_model.ttl --rules my_rules --csv data_ahu7.csv
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,11 +29,16 @@ _script_dir = Path(__file__).resolve().parent
 if str(_script_dir) not in sys.path:
     sys.path.insert(0, str(_script_dir))
 
-from open_fdd.engine.brick_resolver import resolve_from_ttl, get_equipment_types_from_ttl
+from open_fdd.engine.brick_resolver import (
+    resolve_from_ttl,
+    get_equipment_types_from_ttl,
+)
 from open_fdd.engine.runner import RuleRunner, load_rules_from_dir
 
 
-def _filter_rules_by_equipment(rules: list[dict], equipment_types: list[str]) -> list[dict]:
+def _filter_rules_by_equipment(
+    rules: list[dict], equipment_types: list[str]
+) -> list[dict]:
     """Keep rules that apply: no equipment_type, or equipment_type intersects model."""
     if not equipment_types:
         return rules  # No equipment filter in model, run all
@@ -46,7 +52,9 @@ def _filter_rules_by_equipment(rules: list[dict], equipment_types: list[str]) ->
     return out
 
 
-def _add_synthetic_columns(df: pd.DataFrame, column_map: dict[str, str]) -> pd.DataFrame:
+def _add_synthetic_columns(
+    df: pd.DataFrame, column_map: dict[str, str]
+) -> pd.DataFrame:
     """
     Add synthetic columns for Brick-mapped columns that are missing from CSV.
     E.g. duct static setpoint often not in BMS export — use constant for demo.
@@ -65,7 +73,9 @@ def main() -> int:
     parser.add_argument("--ttl", default="brick_model.ttl", help="Path to Brick TTL")
     parser.add_argument("--rules", default="my_rules", help="Path to rules directory")
     parser.add_argument("--csv", default="data_ahu7.csv", help="Path to CSV data")
-    parser.add_argument("--validate-first", action="store_true", help="Run validate_data_model.py first")
+    parser.add_argument(
+        "--validate-first", action="store_true", help="Run validate_data_model.py first"
+    )
     args = parser.parse_args()
 
     ttl_path = _script_dir / args.ttl
@@ -74,8 +84,16 @@ def main() -> int:
 
     if args.validate_first:
         import subprocess
+
         r = subprocess.run(
-            [sys.executable, str(_script_dir / "validate_data_model.py"), "--ttl", args.ttl, "--rules", args.rules],
+            [
+                sys.executable,
+                str(_script_dir / "validate_data_model.py"),
+                "--ttl",
+                args.ttl,
+                "--rules",
+                args.rules,
+            ],
             cwd=str(_script_dir),
         )
         if r.returncode != 0:
