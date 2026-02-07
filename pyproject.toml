@@ -46,6 +46,9 @@ viz = [
 brick = [
     "rdflib",
 ]
+docx = [
+    "python-docx",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"

@@ -95,7 +95,7 @@ Many fault flags are **false positives** — the rule fired but the condition wa
 - **Sensor noise** — brief spikes or dropouts
 - **Edge cases** — rule logic doesn’t account for a valid operating mode
 
-**See:** [AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }}) for agentic workflows, false positive tuning, and root cause analysis.
+**See:** [AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }}) — Coming soon in Open FDD AI.
 
 ---
 

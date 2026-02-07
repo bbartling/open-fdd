@@ -137,11 +137,15 @@ def zoom_on_event(
     rule_by_flag: Optional[Dict[str, Dict]] = None,
     column_map: Optional[Dict[str, str]] = None,
     fallback_cols: Optional[List[str]] = None,
+    save_path: Optional[str] = None,
 ):
     """
     Plot fault-specific signals around an event. pad = samples before/after.
 
     Uses ffill/bfill so lines are continuous (no gaps from NaNs).
+
+    Args:
+        save_path: If provided, save figure to this path (e.g. for docx embedding).
     """
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
@@ -206,6 +210,8 @@ def zoom_on_event(
     t1_str = t1.strftime("%Y-%m-%d %H:%M") if hasattr(t1, "strftime") else str(t1)
     fig.suptitle(f"{flag_name}: {t0_str} to {t1_str}", fontsize=11)
     plt.tight_layout()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return fig
 
 

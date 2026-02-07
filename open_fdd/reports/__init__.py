@@ -30,6 +30,16 @@ from open_fdd.reports.fault_viz import (
     zoom_on_event,
 )
 
+try:
+    from open_fdd.reports.docx_generator import (
+        build_report,
+        events_from_dataframe,
+        events_to_summary_table,
+    )
+    _docx_available = True
+except ImportError:
+    _docx_available = False
+
 __all__ = [
     "all_fault_events",
     "analyze_bounds_episodes",
@@ -52,3 +62,6 @@ __all__ = [
     "time_range",
     "zoom_on_event",
 ]
+
+if _docx_available:
+    __all__ += ["build_report", "events_from_dataframe", "events_to_summary_table"]
