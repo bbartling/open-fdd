@@ -38,4 +38,7 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 15. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
 16. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
 17. **[AI Agents Guide]({{ "ai_agents" | relative_url }})** — Structured context for AI agents and automation, Brick workflow
+18. **[Knowledge Map]({{ "knowledge-map" | relative_url }})** — Where to find rules, Brick, config, API
+19. **[DataFrame Contract]({{ "dataframe-contract" | relative_url }})** — Input/output requirements for DataFrames
+20. **[Config Schema]({{ "config_schema" | relative_url }})** — Rule YAML schema, equipment types
 

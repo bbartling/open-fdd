@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bbartling/open-fdd/docs/config_schema.json",
+  "title": "open-fdd Rule Config",
+  "description": "Schema for open-fdd YAML rule configs. Not enforced at runtime.",
+  "type": "object",
+  "required": ["name", "type", "flag", "inputs"],
+  "properties": {
+    "name": { "type": "string", "description": "Rule identifier" },
+    "type": {
+      "type": "string",
+      "enum": ["expression", "bounds", "flatline", "hunting", "oa_fraction", "erv_efficiency"],
+      "description": "Rule type"
+    },
+    "flag": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+      "description": "Output column name (e.g. rule_a_flag)"
+    },
+    "description": { "type": "string" },
+    "equipment_type": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Filter: AHU, VAV_AHU, VAV, AHU_ERV"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "column": { "type": "string" },
+          "brick": { "type": "string" },
+          "bounds": {
+            "oneOf": [
+              { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+              {
+                "type": "object",
+                "properties": {
+                  "imperial": { "type": "array", "items": { "type": "number" } },
+                  "metric": { "type": "array", "items": { "type": "number" } }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "params": { "type": "object" },
+    "expression": { "type": "string", "description": "For type: expression" }
+  }
+}

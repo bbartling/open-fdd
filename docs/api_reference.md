@@ -128,5 +128,5 @@ jupyter notebook examples/brick_fault_viz/run_and_viz_faults.ipynb
 
 ---
 
-**Next:** [Home]({{ "" | relative_url }})
+**See also:** [Public API]({{ "api/public" | relative_url }}) (detailed reference) · [Home]({{ "" | relative_url }})
 
