@@ -41,14 +41,16 @@ def main():
         f.write("parent: API Reference\n")
         f.write("---\n\n")
         f.write("# Generated API\n\n")
-        f.write("*Auto-generated from docstrings. Run `python scripts/generate_api_docs.py` to refresh.*\n\n")
+        f.write(
+            "*Auto-generated from docstrings. Run `python scripts/generate_api_docs.py` to refresh.*\n\n"
+        )
 
         for mod_name in ["open_fdd", "open_fdd.engine", "open_fdd.reports"]:
             f.write(f"## {mod_name}\n\n")
             f.write("```\n")
             text = pydoc.plain(pydoc.render_doc(mod_name, renderer=pydoc.plaintext))
             # Limit length, avoid huge output
-            f.write(text[: 8000] if len(text) > 8000 else text)
+            f.write(text[:8000] if len(text) > 8000 else text)
             f.write("\n```\n\n")
 
     print(f"Wrote {out_path}")
