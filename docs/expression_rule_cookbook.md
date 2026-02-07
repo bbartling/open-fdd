@@ -9,9 +9,15 @@ A reference for building fault detection rules in open-fdd. Rules use **YAML** w
 
 ---
 
+## BRICK naming convention
+
+All rule inputs in this cookbook use **BRICK class names** as input keys (e.g. `Supply_Air_Temperature_Sensor`, `Mixed_Air_Temperature_Sensor`). The `column` field is the fallback DataFrame column when no `column_map` is provided. When using a Brick TTL, `column_map` keys are BRICK class names; the runner resolves each input via the model. For multiple instances of the same Brick class (e.g. heating vs cooling valve), use semantic input names (`Heating_Valve_Command`, `Cooling_Valve_Command`) with `brick: Valve_Command` and disambiguate in `column_map` with `Valve_Command|heating_sig`.
+
+---
+
 ## How to define expressions
 
-1. **Inputs** — Map BRICK classes or column names to DataFrame columns. Each input becomes a pandas Series in the expression.
+1. **Inputs** — Map BRICK classes or column names to DataFrame columns. Each input key becomes the variable name in the expression. Use BRICK class names as keys for Brick model compatibility.
 2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
 3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
 
@@ -38,17 +44,17 @@ expression: |
 
 ## AHU rules (reference-style)
 
-The following rules follow common industry practice for air-handling fault detection. Thresholds and logic are tunable; adjust params for your site.
+The following rules follow common industry practice for air-handling fault detection. Rules A through M are adapted from ASHRAE Guideline 36 (GL36) AFDD guidance. Thresholds and logic are tunable; adjust params for your site.
 
 ### Rule A — Duct static below setpoint at full fan speed
 
-Static pressure under setpoint while supply fan runs near maximum. May indicate duct leakage, undersized fan, or terminal damper issues.
+Static pressure under setpoint while supply fan runs near maximum. May indicate duct leakage, undersized fan, or terminal damper issues. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: duct_static_low_at_full_speed
-description: Static pressure below setpoint when fan at full speed
+description: Static pressure below setpoint when fan at full speed (GL36-inspired)
 type: expression
-flag: fc1_flag
+flag: rule_a_flag
 equipment_type: [VAV_AHU]
 
 inputs:
@@ -73,13 +79,13 @@ expression: |
 
 ### Rule B — Blended air temp below expected band
 
-Blended air temp should lie between outdoor and return. If below both (minus tolerance), suspect sensor or mixing fault.
+Blended air temp should lie between outdoor and return. If below both (minus tolerance), suspect sensor or mixing fault. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: blend_temp_below_band
-description: Blended air temp below expected range (OAT/RAT)
+description: Blended air temp below expected range (OAT/RAT) (GL36-inspired)
 type: expression
-flag: fc2_flag
+flag: rule_b_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -107,13 +113,13 @@ expression: |
 
 ### Rule C — Blended air temp above expected band
 
-Blended air temp above the higher of OAT and RAT (plus tolerance) indicates mixing or sensor fault.
+Blended air temp above the higher of OAT and RAT (plus tolerance) indicates mixing or sensor fault. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: blend_temp_above_band
-description: Blended air temp above expected range (OAT/RAT)
+description: Blended air temp above expected range (OAT/RAT) (GL36-inspired)
 type: expression
-flag: fc3_flag
+flag: rule_c_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -139,17 +145,17 @@ expression: |
   (Mixed_Air_Temperature_Sensor - blend_tol > np.maximum(Return_Air_Temperature_Sensor + rat_tol, Outside_Air_Temperature_Sensor + oat_tol)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-*Fault Rule Four (hunting) — see [Hunting Rule]({{ "hunting_rule" | relative_url }}).*
+*Hunting/oscillation — see [Hunting Rule]({{ "hunting_rule" | relative_url }}).*
 
 ### Rule D — Discharge air cold when heating commanded
 
-Discharge air temp below blended air when heating valve is open. Indicates heating coil or valve failure.
+Discharge air temp below blended air when heating valve is open. Indicates heating coil or valve failure. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: discharge_cold_when_heating
-description: Discharge air below blended air when heating active
+description: Discharge air below blended air when heating active (GL36-inspired)
 type: expression
-flag: fc5_flag
+flag: rule_d_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -175,17 +181,17 @@ expression: |
   (Supply_Air_Temperature_Sensor + sat_tol <= Mixed_Air_Temperature_Sensor - blend_tol + fan_delta_t) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-*Fault Rule Six (oa_fraction) — see [OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }}).*
+*OA fraction — see [OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }}).*
 
-### FC7 — SAT too low with full heating
+### Rule E — SAT too low with full heating
 
-Heating valve fully open but SAT remains below setpoint. Indicates undersized coil or valve failure.
+Heating valve fully open but SAT remains below setpoint. Indicates undersized coil or valve failure. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: sat_too_low_full_heating
-description: SAT below setpoint with heating valve fully open — GL36-inspired
+description: SAT below setpoint with heating valve fully open (GL36-inspired)
 type: expression
-flag: fc7_flag
+flag: rule_e_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -209,15 +215,15 @@ expression: |
   (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - supply_err_thres) & (Valve_Command > 0.9) & (Supply_Fan_Speed_Command > 0)
 ```
 
-### FC8 — SAT/MAT mismatch in economizer mode
+### Rule F — SAT/MAT mismatch in economizer mode
 
-In economizer mode (min mechanical cooling), SAT should approximate MAT. Large deviation suggests coil bypass or sensor error.
+In economizer mode (min mechanical cooling), SAT should approximate MAT. Large deviation suggests coil bypass or sensor error. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: discharge_blend_mismatch_econ
-description: Discharge and blended air diverge in economizer mode
+description: Discharge and blended air diverge in economizer mode (GL36-inspired)
 type: expression
-flag: fc8_flag
+flag: rule_f_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -246,13 +252,13 @@ expression: |
 
 ### Rule G — Ambient too warm for free cooling
 
-Outside air temperature exceeds SAT setpoint while economizer is active and mechanical cooling is off. Economizer should not be providing “free” cooling under these conditions.
+Outside air temperature exceeds SAT setpoint while economizer is active and mechanical cooling is off. Economizer should not be providing “free” cooling under these conditions. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: ambient_warm_free_cool
-description: Outdoor air above setpoint in free cooling mode
+description: Outdoor air above setpoint in free cooling mode (GL36-inspired)
 type: expression
-flag: fc9_flag
+flag: rule_g_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -281,13 +287,13 @@ expression: |
 
 ### Rule H — Ambient vs blended mismatch (econ + mech cooling)
 
-When both economizer and mechanical cooling are active, MAT should approach OAT. Large deviation suggests inadequate mixing or damper fault.
+When both economizer and mechanical cooling are active, MAT should approach OAT. Large deviation suggests inadequate mixing or damper fault. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: ambient_blend_mismatch_econ_mech
-description: Outdoor and blended air diverge in econ+mech cooling
+description: Outdoor and blended air diverge in econ+mech cooling (GL36-inspired)
 type: expression
-flag: fc10_flag
+flag: rule_h_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -314,13 +320,13 @@ expression: |
 
 ### Rule I — Ambient vs blended mismatch (econ-only)
 
-In economizer-only mode, MAT should match OAT. Deviation indicates damper or mixing fault.
+In economizer-only mode, MAT should match OAT. Deviation indicates damper or mixing fault. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: ambient_blend_mismatch_econ
-description: Outdoor and blended air diverge in economizer-only mode
+description: Outdoor and blended air diverge in economizer-only mode (GL36-inspired)
 type: expression
-flag: fc11_flag
+flag: rule_i_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -344,13 +350,13 @@ expression: |
 
 ### Rule J — Discharge above blended in cooling
 
-SAT exceeds MAT when cooling (econ+mech or mech-only) is active. Indicates underperforming cooling coil or valve.
+SAT exceeds MAT when cooling (econ+mech or mech-only) is active. Indicates underperforming cooling coil or valve. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: discharge_above_blend_cooling
-description: Discharge air above blended air in cooling modes
+description: Discharge air above blended air in cooling modes (GL36-inspired)
 type: expression
-flag: fc12_flag
+flag: rule_j_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -379,13 +385,13 @@ expression: |
 
 ### Rule K — Discharge above setpoint in full cooling
 
-SAT above setpoint with cooling at full capacity. Suggests undersized coil or plant limits.
+SAT above setpoint with cooling at full capacity. Suggests undersized coil or plant limits. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: discharge_above_sp_full_cool
-description: Discharge air above setpoint in full cooling mode
+description: Discharge air above setpoint in full cooling mode (GL36-inspired)
 type: expression
-flag: fc13_flag
+flag: rule_k_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -412,13 +418,13 @@ expression: |
 
 ### Rule L — Cooling coil delta-T when inactive
 
-Temperature drop across cooling coil when it should be off. Indicates leaking CHW valve or coil bypass.
+Temperature drop across cooling coil when it should be off. Indicates leaking CHW valve or coil bypass. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: clg_coil_drop_when_off
-description: Temperature drop across cooling coil when it should be off
+description: Temperature drop across cooling coil when it should be off (GL36-inspired)
 type: expression
-flag: fc14_flag
+flag: rule_l_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -449,13 +455,13 @@ expression: |
 
 ### Rule M — Heating coil delta-T when inactive
 
-Temperature rise across heating coil when it should be off. Indicates leaking HW valve.
+Temperature rise across heating coil when it should be off. Indicates leaking HW valve. *Adapted from GL36 AFDD guidance.*
 
 ```yaml
 name: htg_coil_rise_when_off
-description: Temperature rise across heating coil when it should be off
+description: Temperature rise across heating coil when it should be off (GL36-inspired)
 type: expression
-flag: fc15_flag
+flag: rule_m_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
@@ -487,6 +493,7 @@ expression: |
 
 *Heat exchanger effectiveness — see [ERV/Heat Exchanger Rule]({{ "erv_efficiency_rule" | relative_url }}).*
 
+
 ---
 
 ## Central plant
@@ -499,7 +506,7 @@ Variable-speed pump cannot meet differential pressure setpoint at full speed. In
 name: dp_below_sp_pump_max
 description: Differential pressure below setpoint with pump at full speed
 type: expression
-flag: fc_pump_flag
+flag: dp_pump_flag
 
 inputs:
   Differential_Pressure_Sensor:
@@ -529,7 +536,7 @@ Flow unusually high with pump at high speed. Suggests short circuit or flow mete
 name: flow_high_pump_max
 description: Water flow unusually high with pump at full speed
 type: expression
-flag: fc_chiller_flow_flag
+flag: flow_high_flag
 
 inputs:
   Water_Flow_Sensor:

@@ -177,7 +177,7 @@ def check_erv_efficiency(
     params: Dict[str, Any],
 ) -> pd.Series:
     """
-    AHU FC16: ERV effectiveness outside expected range.
+    AHU heat exchanger: ERV effectiveness outside expected range.
     """
 
     def _get(name: str) -> pd.Series:

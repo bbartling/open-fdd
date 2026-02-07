@@ -1,8 +1,8 @@
-# AHU Fault Condition 13 — SAT too high in full cooling mode
+# Rule K — Discharge above setpoint in full cooling (GL36-inspired)
 name: sat_too_high_full_cooling
 description: SAT too high vs setpoint in OS3/OS4 full cooling mode
 type: expression
-flag: fc13_flag
+flag: rule_k_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

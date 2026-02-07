@@ -1,8 +1,8 @@
-# Chiller plant — Pump FC1: Differential pressure too low at max pump speed
+# Chiller plant — Differential pressure below setpoint at max pump speed
 name: pump_diff_pressure_low
 description: Variable pump does not meet differential pressure setpoint at full speed
 type: expression
-flag: fc_pump_flag
+flag: dp_pump_flag
 
 inputs:
   Differential_Pressure_Sensor:

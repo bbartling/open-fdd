@@ -1,8 +1,8 @@
-# AHU Fault Condition 6 — OA fraction calc error or design airflow not maintained
+# OA fraction — Calc error or design airflow not maintained (GL36-inspired)
 name: oa_fraction_airflow_error
 description: OA fraction calc error or AHU not maintaining design airflow in non-economizer modes
 type: oa_fraction
-flag: fc6_flag
+flag: oa_frac_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

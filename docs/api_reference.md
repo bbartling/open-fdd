@@ -5,6 +5,16 @@ nav_order: 15
 
 # API Reference
 
+## Rule loading
+
+```python
+from open_fdd.engine import load_rule
+
+rule = load_rule("open_fdd/rules/ahu_rule_a.yaml")  # Returns dict (parsed YAML)
+```
+
+---
+
 ## RuleRunner
 
 ```python
@@ -12,7 +22,7 @@ from open_fdd import RuleRunner
 
 runner = RuleRunner(rules_path="open_fdd/rules")
 # or
-runner = RuleRunner(rules=[{...}, {...}])
+runner = RuleRunner(rules=[load_rule("ahu_rule_a.yaml"), {...}])
 ```
 
 ### run
@@ -35,7 +45,7 @@ result = runner.run(
 | `rolling_window` | `int` | Consecutive samples to flag fault (None = any) |
 | `params` | `dict` | Override rule params (e.g. `{"units": "metric"}`) |
 | `skip_missing_columns` | `bool` | Skip rules with missing columns |
-| `column_map` | `dict` | `{BRICK_class: df_column}` or `{rule_input: df_column}`. Runner resolves via BRICK first when rule has `brick` tag. |
+| `column_map` | `dict` | `{BRICK_class: df_column}` or `{rule_input: df_column}`. When rule inputs use BRICK class names as keys, `column_map` keys match those. For disambiguation (e.g. two `Valve_Command`), use `Valve_Command|heating_sig`. Runner resolves via BRICK first when rule has `brick` tag. |
 
 **Returns:** DataFrame with original columns plus fault flag columns.
 
@@ -52,7 +62,7 @@ from open_fdd.reports import summarize_fault, summarize_all_faults, print_summar
 ```python
 summary = summarize_fault(
     df,
-    flag_col="fc1_flag",
+    flag_col="rule_a_flag",
     timestamp_col="timestamp",
     sensor_cols={"label": "column_name"},
     motor_col="supply_vfd_speed",
@@ -77,7 +87,7 @@ results = summarize_all_faults(
 ### print_summary
 
 ```python
-print_summary(summary, title="FC1 Low Duct Static")
+print_summary(summary, title="Rule A (duct static)")
 ```
 
 ---
@@ -88,8 +98,9 @@ print_summary(summary, title="FC1 Low Duct Static")
 from open_fdd.engine.brick_resolver import resolve_from_ttl, get_equipment_types_from_ttl
 
 column_map = resolve_from_ttl("examples/brick_model.ttl")
-# Keys: BRICK class names (Supply_Air_Temperature_Sensor, etc.), BrickClass|rule_input for disambiguation, rule_input for backward compat
-# {"Supply_Air_Temperature_Sensor": "SAT (°F)", "Valve_Command|heating_sig": "Prht Vlv Cmd (%)", "oat": "OAT (°F)", ...}
+# Keys: BRICK class names (Supply_Air_Temperature_Sensor, etc.)
+# For duplicate Brick classes: BrickClass|rule_input (e.g. Valve_Command|heating_sig)
+# Example: {"Supply_Air_Temperature_Sensor": "SAT (°F)", "Valve_Command|heating_sig": "Prht Vlv Cmd (%)", ...}
 
 equipment_types = get_equipment_types_from_ttl("examples/brick_model.ttl")
 # ["VAV_AHU"] — used to filter rules by equipment_type

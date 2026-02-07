@@ -3,124 +3,87 @@ title: Machine Learning for FDD — Ideas & Roadmap
 nav_order: 20
 ---
 
-# Machine Learning for FDD: Ideas & Roadmap
 
-This document outlines possible machine learning (ML) enhancements for open-fdd. These are **ideas only** — not yet implemented. The goal is to complement rule-based FDD with data-driven methods.
+# Machine Learning for FDD (Ideas)
 
----
+These are **future enhancements** for open-fdd to complement rule-based fault detection with data-driven methods.
 
-## Why ML alongside rules?
+**Rules** remain the foundation because they are physics-based, interpretable, and easy to validate.
+**Machine learning** can add value by learning normal behavior, detecting unknown faults, and reducing false positives.
 
-- **Rules** — Interpretable, based on physics and heuristics. Good for known fault types.
-- **ML** — Can learn patterns from data, handle novel faults, and reduce false positives by learning "normal" vs "fault" from historical runs.
+Potential additions include:
 
-Hybrid approaches (rules + ML) are common in building FDD research.
+* Anomaly detection on telemetry
+* Anomaly detection on rule outputs (fault patterns)
+* Clustering to group similar fault events
+* Simple regression/classification for performance modeling
 
----
+The goal is a **hybrid approach**: rules for known problems, ML to surface unusual or emerging issues — keeping results transparent and engineer-friendly.
 
-## Idea 1: Anomaly detection on rule outputs
 
-**Concept:** Run rule-based FDD, then use an anomaly detector on the resulting flag patterns (e.g. event counts, durations, co-occurrence) to flag *unusual* rule behavior.
+## Physics Based ML Regression models
 
-**Example:**  
-- Rules produce `fc1_flag`, `fc2_flag`, etc. per timestamp.  
-- Aggregate to hourly/daily counts per flag.  
-- Train Isolation Forest or One-Class SVM on "normal" periods.  
-- Flag when the pattern deviates.
+**Concept:** Train a regression model to predict supply fan motor speed from zone-level and AHU-level inputs. If the model is well-calibrated, predicted vs actual fan speed within tolerance indicates normal operation; deviation beyond tolerance flags a potential fault. Results can be compared with open-fdd rule-based faults.
 
-**Use case:** Detect novel fault combinations or rule interactions that no single rule catches.
+**Example — VAV AHU with zone data:**
 
----
+| Input (features) | Target |
+|------------------|--------|
+| `Damper_Position_Command` (VAV 1..N; use `column_map` keys like `Damper_Position_Command` + zone id) | `Supply_Fan_Speed_Command` |
+| `Zone_Air_Temperature_Sensor`, `Zone_Temperature_Setpoint` | |
+| `Supply_Air_Temperature_Sensor`, `Supply_Air_Temperature_Setpoint` | |
+| `Supply_Air_Static_Pressure_Sensor`, `Supply_Air_Static_Pressure_Setpoint` | |
+| `Outside_Air_Temperature_Sensor`, `Mixed_Air_Temperature_Sensor`, `Return_Air_Temperature_Sensor` | |
+| `Valve_Command` (heating, cooling — disambiguate via `Valve_Command` + rule_input in `column_map`) | |
 
-## Idea 2: Learned threshold tuning
+**Workflow:**
 
-**Concept:** Rules use thresholds (e.g. `static_err_thres`, `mix_err_thres`). ML can learn site-specific thresholds from labeled or semi-labeled data.
+1. **Data:** Time-series DataFrame with AHU + zone columns (e.g. from Brick model + CSV). Align to common timestamps.
+2. **Train:** Fit a model (e.g. Gradient Boosting, Random Forest, or simple neural net) on "normal" periods — exclude known fault intervals if labeled.
+3. **Predict:** Generate `fan_speed_pred` for each timestamp.
+4. **Fault flag:** `ml_fan_speed_fault = |Supply_Fan_Speed_Command - fan_speed_pred| > tolerance`
+5. **Compare:** Join `ml_fan_speed_fault` with open-fdd rule flags (`rule_a_flag`, `rule_b_flag`, etc.). Correlate ML faults with rule faults; ML may catch deviations rules miss (e.g. subtle efficiency drift), while rules catch known conditions (e.g. duct static low at full speed).
 
-**Example:**  
-- Collect (timestamp, sensor values, expert label: fault/not fault).  
-- Use grid search or Bayesian optimization to find thresholds that maximize F1 or minimize false positives.  
-- Update rule params per site.
+**Pseudocode with open-fdd:**
 
-**Use case:** Reduce false positives when generic thresholds don't fit a particular building.
+```python
+import pandas as pd
+from sklearn.ensemble import GradientBoostingRegressor
+from open_fdd import RuleRunner
 
----
+# 1. Load data (AHU + zone columns)
+df = pd.read_csv("vav_ahu_zone_data.csv", parse_dates=["timestamp"])
 
-## Idea 3: Sequence models for fault prediction
+# 2. Run rule-based FDD
+runner = RuleRunner(rules_path="open_fdd/rules")
+result = runner.run(df, column_map=column_map)
+# result has rule_a_flag, rule_b_flag, ...
 
-**Concept:** Use LSTM or Transformer on time-series to predict the *next* fault or to classify sequences as "leading to fault" vs "normal."
+# 3. Train ML model (features = BRICK classes; column_map resolves to df columns)
+# Use column_map keys: Damper_Position_Command|zone1, Zone_Air_Temperature_Sensor, etc.
+feature_cols = ["Damper_Position_Command|zone1", "Damper_Position_Command|zone2", ...,
+                "Supply_Air_Temperature_Sensor", "Supply_Air_Temperature_Setpoint",
+                "Supply_Air_Static_Pressure_Sensor", "Outside_Air_Temperature_Sensor",
+                "Mixed_Air_Temperature_Sensor", "Return_Air_Temperature_Sensor",
+                "Valve_Command|heating_sig", "Valve_Command|cooling_sig"]
+X = df[[column_map[c] for c in feature_cols if c in column_map]]
+y = df[column_map["Supply_Fan_Speed_Command"]]
+model = GradientBoostingRegressor().fit(X, y)
 
-**Example:**  
-- Input: Rolling window of SAT, MAT, OAT, valve positions, etc.  
-- Output: probability of fault in next N steps, or fault type.  
-- Train on historical FDD results (rule flags as labels).
+# 4. Predict and flag
+result["fan_speed_pred"] = model.predict(X)
+tolerance = 0.05  # 5% deviation
+result["ml_fan_speed_fault"] = (result[column_map["Supply_Fan_Speed_Command"]] - result["fan_speed_pred"]).abs() > tolerance
 
-**Use case:** Early warning before a fault fully manifests.
-
----
-
-## Idea 4: Transfer learning from simulation
-
-**Concept:** Train ML models in simulation (e.g. EnergyPlus, Modelica) where faults are injected, then fine-tune on real building data.
-
-**Example:**  
-- Generate synthetic fault scenarios in simulation.  
-- Train a classifier or autoencoder.  
-- Fine-tune on small amounts of real data.
-
-**Use case:** Mitigate lack of labeled fault data in real buildings.
-
----
-
-## Idea 5: Clustering for fault grouping
-
-**Concept:** Cluster fault events by sensor patterns (e.g. k-means, DBSCAN). Similar clusters may share root cause.
-
-**Example:**  
-- Extract features from each fault event (mean sensor values, duration, co-occurring flags).  
-- Cluster.  
-- Label clusters via domain expert or majority rule.
-
-**Use case:** Discover fault subtypes and prioritize investigation.
-
----
-
-## Idea 6: Autoencoder for reconstruction error
-
-**Concept:** Train autoencoder on "normal" data. High reconstruction error indicates anomaly (potential fault).
-
-**Example:**  
-- Input: Vector of sensor values per timestep.  
-- Train on fault-free periods (or low-fault periods).  
-- Flag when reconstruction error exceeds threshold.
-
-**Use case:** Detect faults without explicit rule definitions.
-
----
-
-## Implementation sketch (optional)
-
-If pursuing ML integration, a possible structure:
-
-```
-open_fdd/
-  ml/
-    __init__.py
-    anomaly.py      # Isolation Forest, One-Class SVM
-    threshold_tune.py  # Bayesian / grid search for params
-    sequence.py     # LSTM / simple RNN for sequence classification
-    clustering.py   # Cluster fault events
+# 5. Compare ML vs rule faults
+# e.g. result[["rule_a_flag", "rule_b_flag", "ml_fan_speed_fault"]].corr()
+# or: during ml_fan_speed_fault, what % also have rule_a_flag?
 ```
 
-Dependencies would be optional (e.g. `scikit-learn`, `torch` or `tensorflow` in extras).
+**Use case:** Detect fan/system anomalies that rules may not explicitly cover (e.g. control drift, partial damper failures, unexpected interaction between zones). Good model fit implies the system behaves as expected; poor fit suggests something changed.
 
 ---
 
-## References & further reading
 
-- ASHRAE Guideline 36, RP-1312
-- Research on hybrid rule+ML FDD for HVAC
-- Time-series anomaly detection surveys
-
----
 
 **Status:** Ideas only. No ML code in open-fdd core yet. Contributions welcome.

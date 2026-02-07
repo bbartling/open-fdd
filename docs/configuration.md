@@ -20,23 +20,29 @@ Rules are YAML files. Each rule has `name`, `type`, `flag`, `inputs`, and option
 
 ## Expression rule
 
+Use **BRICK class names** as input keys for Brick model compatibility. The input key is the variable name in the expression:
+
 ```yaml
 name: my_rule
 type: expression
 flag: my_flag
 
 inputs:
-  col_a:
-    column: actual_df_column_name
-  col_b:
-    column: other_column
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: sat
+  Supply_Air_Temperature_Setpoint:
+    brick: Supply_Air_Temperature_Setpoint
+    column: sat_setpoint
 
 params:
-  thres: 0.1
+  err_thres: 1.0
 
 expression: |
-  (col_a < col_b - thres) & (col_a > 0)
+  (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - err_thres) & (Supply_Air_Temperature_Sensor > 0)
 ```
+
+When using a Brick TTL, `column_map` keys are BRICK class names; the runner resolves columns from the model.
 
 ## Bounds rule (bad data)
 
@@ -92,7 +98,7 @@ Rules can include `brick` and `equipment_type` for documentation and future filt
 ```yaml
 name: oat_too_high_free_cooling
 type: expression
-flag: fc9_flag
+flag: rule_g_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

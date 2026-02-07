@@ -1,8 +1,8 @@
-# AHU Fault Condition 11 — OAT and MAT should be approx equal in economizer mode
+# Rule I — Ambient vs blended mismatch (econ-only) (GL36-inspired)
 name: oat_mat_mismatch_economizer
 description: OAT and MAT should be approx equal in economizer mode
 type: expression
-flag: fc11_flag
+flag: rule_i_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

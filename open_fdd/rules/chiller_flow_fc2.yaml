@@ -1,8 +1,8 @@
-# Chiller plant — Flow FC2: Primary CHW flow too high at high pump speed
+# Chiller plant — Flow unusually high at max pump speed
 name: chw_flow_high_at_max_pump
 description: Primary chilled water flow too high with pump at high speed
 type: expression
-flag: fc_chiller_flow_flag
+flag: flow_high_flag
 
 inputs:
   Water_Flow_Sensor:

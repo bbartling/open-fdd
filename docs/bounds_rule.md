@@ -9,7 +9,7 @@ nav_order: 3
 
 ## What the rules engine does
 
-The **bounds** rule flags sensor values that fall *outside* a valid range. For each input, you define `[low, high]` bounds (optionally different for imperial vs metric). The engine evaluates `(value < low) | (value > high)` — when **True**, a fault is flagged. This catches bad data, sensor drift, or physically impossible readings (e.g., SAT at 200°F when the coil can't produce that). Inspired by SkySpark/Axon-style `badSensorCheck`.
+The **bounds** rule flags sensor values that fall *outside* a valid range. For each input, you define `[low, high]` bounds (optionally different for imperial vs metric). The engine evaluates `(value < low) | (value > high)` — when **True**, a fault is flagged. This catches bad data, sensor drift, or physically impossible readings (e.g., SAT at 200°F when the coil can't produce that). Common sensor validation pattern.
 
 Use `params={"units": "metric"}` at runtime to switch to metric bounds when your data is in °C, Pa, etc.
 
@@ -21,7 +21,7 @@ Sensor out of range. Pass `params={"units": "metric"}` for metric bounds.
 
 ```yaml
 name: bad_sensor_check
-description: Returns fault if sensor is out of range (inspired by SkySpark badSensorCheck)
+description: Returns fault if sensor is out of range
 type: bounds
 flag: bad_sensor_flag
 

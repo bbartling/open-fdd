@@ -1,9 +1,9 @@
-# AHU Fault Condition 14 — Temp drop across inactive cooling coil
+# Rule L — Cooling coil delta-T when inactive (GL36-inspired)
 # Requires cooling coil entering/leaving temp sensors (not all AHUs have these)
 name: cooling_coil_drop_when_inactive
 description: Temperature drop across inactive cooling coil in heating/economizer modes
 type: expression
-flag: fc14_flag
+flag: rule_l_flag
 equipment_type: [AHU, VAV_AHU]  # requires Cooling_Coil_Entering/Leaving_Air_Temperature_Sensor
 
 inputs:

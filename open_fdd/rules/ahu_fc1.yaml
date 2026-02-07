@@ -1,10 +1,10 @@
-# AHU Fault Condition 1 — Low duct static at max fan speed
+# Rule A — Duct static below setpoint at full fan speed (GL36-inspired)
 # VAV only (constant volume has no duct static pressure control)
 # BRICK: Supply_Air_Static_Pressure_Sensor, Supply_Air_Static_Pressure_Setpoint, Supply_Fan_Speed_Command
 name: low_duct_static_at_max_fan
 description: Duct static pressure too low with supply fan at max speed
 type: expression
-flag: fc1_flag
+flag: rule_a_flag
 equipment_type: [VAV_AHU]
 
 inputs:

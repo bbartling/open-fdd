@@ -1,9 +1,8 @@
-# Sensor bounds check — SkySpark/Axon-style
-# Fault if value is outside valid range for sensor type
+# Sensor bounds check — fault if value outside valid range for sensor type
 # Pass params={"units": "metric"} to run() for metric bounds
 # BRICK: column_map keys use Brick class names for Brick model resolution
 name: bad_sensor_check
-description: Returns fault if sensor is out of range (inspired by SkySpark badSensorCheck)
+description: Returns fault if sensor is out of range
 type: bounds
 flag: bad_sensor_flag
 

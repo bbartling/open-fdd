@@ -9,7 +9,7 @@ nav_order: 4
 
 ## What the rules engine does
 
-The **flatline** rule flags sensors that are *stuck* — the value does not change (or changes very little) over a rolling window. The engine computes the rolling spread (max − min) over `window` samples. When the spread is below `tolerance`, a fault is flagged. This catches dead sensors, frozen readings, or communication dropouts. Inspired by SkySpark-style `hisRollup(spread, timeSensitivity) < tolerance`.
+The **flatline** rule flags sensors that are *stuck* — the value does not change (or changes very little) over a rolling window. The engine computes the rolling spread (max − min) over `window` samples. When the spread is below `tolerance`, a fault is flagged. This catches dead sensors, frozen readings, or communication dropouts. Uses rolling spread (max − min) over a window.
 
 ---
 

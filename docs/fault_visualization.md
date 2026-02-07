@@ -5,7 +5,7 @@ nav_order: 13
 
 # Fault Visualization & Zooming
 
-After running Brick-driven fault detection, you get fault flags (e.g. `fc1_flag`, `fc2_flag`, …). The next step is **zooming in on fault events** to inspect what the signals looked like when the rule fired. This sets up the follow-on tutorial: **working with false positives**.
+After running Brick-driven fault detection, you get fault flags (e.g. `rule_a_flag`, `rule_b_flag`, …). The next step is **zooming in on fault events** to inspect what the signals looked like when the rule fired. This sets up the follow-on tutorial: **working with false positives**.
 
 ## Why zoom?
 
@@ -45,7 +45,7 @@ jupyter notebook examples/brick_fault_viz/run_and_viz_faults.ipynb
 
 Run all cells. You’ll see:
 
-- Fault sample counts per flag (fc1, fc2, fc3, fc4, bad_sensor, flatline)
+- Fault sample counts per flag (rule_a, rule_b, rule_c, hunting, bad_sensor, flatline)
 - Total fault events (contiguous regions)
 - **Random zoom plots** — 3 randomly chosen events with signals and fault region shaded
 

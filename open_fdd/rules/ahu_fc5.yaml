@@ -1,9 +1,9 @@
-# AHU Fault Condition 5 — SAT too low in heating mode
+# Rule D — Discharge air cold when heating commanded (GL36-inspired)
 # SAT should be higher than MAT when heating; broken heating valve
 name: sat_too_low_heating_mode
 description: SAT too low; should be higher than MAT in heating mode (broken heating valve)
 type: expression
-flag: fc5_flag
+flag: rule_d_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

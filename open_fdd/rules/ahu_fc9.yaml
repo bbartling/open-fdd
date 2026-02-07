@@ -1,9 +1,9 @@
-# AHU Fault Condition 9 — OAT too high in free cooling mode
+# Rule G — Ambient too warm for free cooling (GL36-inspired)
 # BRICK: Outside_Air_Temperature_Sensor, Supply_Air_Temperature_Setpoint, Damper_Position_Command, Valve_Command
 name: oat_too_high_free_cooling
 description: Outside air temp too high in free cooling without mechanical cooling
 type: expression
-flag: fc9_flag
+flag: rule_g_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

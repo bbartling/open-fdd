@@ -1,9 +1,9 @@
-# AHU Fault Condition 7 — SAT too low in full heating
+# Rule E — SAT too low with full heating (GL36-inspired)
 # Supply air temp too low when heating valve fully open
 name: sat_too_low_full_heating
 description: Supply air temperature too low in full heating mode with heating valve fully open
 type: expression
-flag: fc7_flag
+flag: rule_e_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

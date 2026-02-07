@@ -44,7 +44,7 @@ column_map = {
 }
 
 rules_dir = Path("open_fdd/rules")
-runner = RuleRunner(rules=[load_rule(rules_dir / "ahu_fc1.yaml")])
+runner = RuleRunner(rules=[load_rule(rules_dir / "ahu_rule_a.yaml")])
 result = runner.run(
     df,
     timestamp_col="timestamp",
@@ -53,21 +53,21 @@ result = runner.run(
 )
 summary = summarize_fault(
     result,
-    "fc1_flag",
+    "rule_a_flag",
     timestamp_col="timestamp",
     motor_col=column_map["Supply_Fan_Speed_Command"],
 )
-print_summary(summary, "FC1 Low Duct Static")
+print_summary(summary, "Rule A (duct static)")
 ```
 
-## Rule expression example (FC9)
+## Rule expression example (Rule G)
 
 Rules use BRICK class names in `inputs`; `column_map` maps them to your raw BAS columns:
 
 ```yaml
 name: oat_too_high_free_cooling
 type: expression
-flag: fc9_flag
+flag: rule_g_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

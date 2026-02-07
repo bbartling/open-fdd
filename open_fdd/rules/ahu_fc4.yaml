@@ -1,9 +1,9 @@
-# AHU Fault Condition 4 — PID hunting / excessive state changes
+# Hunting — Excessive operating state changes (GL36-inspired)
 # Fault when too many operating mode changes in a window (heating, econ, mech clg, etc.)
 name: excessive_ahu_state_changes
 description: Excessive AHU operating state changes detected (hunting behavior)
 type: hunting
-flag: fc4_flag
+flag: hunting_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

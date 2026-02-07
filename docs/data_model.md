@@ -56,11 +56,11 @@ Loading rules...
   Loaded 6 rules, 6 apply to this equipment
 Loading CSV...
 
-Ran 6 rules. Flag columns: ['fc1_flag', 'fc2_flag', 'fc3_flag', 'fc4_flag', 'bad_sensor_flag', 'flatline_flag']
-  fc1_flag: 409 fault samples
-  fc2_flag: 1826 fault samples
-  fc3_flag: 31 fault samples
-  fc4_flag: 717 fault samples
+Ran 6 rules. Flag columns: ['rule_a_flag', 'rule_b_flag', 'rule_c_flag', 'hunting_flag', 'bad_sensor_flag', 'flatline_flag']
+  rule_a_flag: 409 fault samples
+  rule_b_flag: 1826 fault samples
+  rule_c_flag: 31 fault samples
+  hunting_flag: 717 fault samples
   bad_sensor_flag: 3146 fault samples
   flatline_flag: 3926 fault samples
 
@@ -120,7 +120,7 @@ So the TTL is the **semantic bridge** between that BAS/BMS schema and open-fddâ€
 YAML rules can declare `equipment_type`:
 
 ```yaml
-# ahu_fc1.yaml
+# ahu_rule_a.yaml (or duct static rule)
 equipment_type: [VAV_AHU]
 ```
 

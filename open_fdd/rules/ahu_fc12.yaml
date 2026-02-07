@@ -1,8 +1,8 @@
-# AHU Fault Condition 12 — SAT too high in OS3/OS4 cooling modes
+# Rule J — Discharge above blended in cooling (GL36-inspired)
 name: sat_too_high_cooling_modes
 description: SAT too high; should be less than MAT in econ+mech or mech-only cooling
 type: expression
-flag: fc12_flag
+flag: rule_j_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

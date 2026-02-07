@@ -23,7 +23,7 @@ ERV effectiveness outside expected range based on OAT.
 name: erv_effectiveness_fault
 description: ERV effectiveness outside expected range based on OAT
 type: erv_efficiency
-flag: fc16_flag
+flag: heat_exch_eff_flag
 equipment_type: [AHU_ERV]
 
 inputs:

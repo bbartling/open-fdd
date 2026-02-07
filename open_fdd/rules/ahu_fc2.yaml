@@ -1,9 +1,9 @@
-# AHU Fault Condition 2 — Mix temp too low
+# Rule B — Blended air temp below expected band (GL36-inspired)
 # MAT should be between OAT and RAT; fault if MAT < min(OAT, RAT)
 name: mix_temp_too_low
 description: Mix temperature too low; should be between outside and return air
 type: expression
-flag: fc2_flag
+flag: rule_b_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

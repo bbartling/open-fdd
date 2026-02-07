@@ -23,11 +23,11 @@ def sample_df():
 
 @pytest.fixture
 def fc1_rule():
-    """AHU FC1 rule config."""
+    """AHU Rule A (duct static) config."""
     return {
         "name": "low_duct_static_at_max_fan",
         "type": "expression",
-        "flag": "fc1_flag",
+        "flag": "rule_a_flag",
         "inputs": {
             "duct_static": {"column": "duct_static"},
             "duct_static_setpoint": {"column": "duct_static_setpoint"},
@@ -46,9 +46,9 @@ def test_runner_expression_rule(sample_df, fc1_rule):
     """RuleRunner evaluates expression rules correctly."""
     runner = RuleRunner(rules=[fc1_rule])
     result = runner.run(sample_df)
-    assert "fc1_flag" in result.columns
+    assert "rule_a_flag" in result.columns
     # duct_static 0.2 < 0.5-0.1=0.4, vfd 0.99 >= 0.95-0.05=0.9 -> fault
-    assert result["fc1_flag"].sum() > 0
+    assert result["rule_a_flag"].sum() > 0
 
 
 def test_runner_bounds_rule(sample_df):
@@ -124,7 +124,7 @@ def test_runner_fc3_expression():
     rule = {
         "name": "mix_temp_too_high",
         "type": "expression",
-        "flag": "fc3_flag",
+        "flag": "rule_c_flag",
         "inputs": {
             "mat": {"column": "mat"},
             "rat": {"column": "rat"},
@@ -140,9 +140,9 @@ def test_runner_fc3_expression():
     }
     runner = RuleRunner(rules=[rule])
     result = runner.run(df)
-    assert "fc3_flag" in result.columns
+    assert "rule_c_flag" in result.columns
     # MAT 80 > max(72, 55)=72, 81 > max(72.5, 56)=72.5, 79 > max(73, 57)=73 -> fault
-    assert result["fc3_flag"].sum() >= 2
+    assert result["rule_c_flag"].sum() >= 2
 
 
 def test_runner_bounds_metric_units():
@@ -215,7 +215,7 @@ def test_runner_column_map_brick_class(sample_df):
 
 
 def test_runner_fc4_hunting():
-    """FC4 PID hunting - fault when excessive state changes in window."""
+    """Hunting rule - fault when excessive state changes in window."""
     # Alternate between two modes to create many state changes
     data = []
     for i in range(60):
@@ -241,7 +241,7 @@ def test_runner_fc4_hunting():
     rule = {
         "name": "excessive_state_changes",
         "type": "hunting",
-        "flag": "fc4_flag",
+        "flag": "hunting_flag",
         "inputs": {
             "Damper_Position_Command": {"column": "economizer_sig"},
             "Supply_Fan_Speed_Command": {"column": "supply_vfd_speed"},
@@ -252,5 +252,5 @@ def test_runner_fc4_hunting():
     }
     runner = RuleRunner(rules=[rule])
     result = runner.run(df)
-    assert "fc4_flag" in result.columns
-    assert result["fc4_flag"].sum() >= 1
+    assert "hunting_flag" in result.columns
+    assert result["hunting_flag"].sum() >= 1

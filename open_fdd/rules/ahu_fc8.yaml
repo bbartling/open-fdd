@@ -1,8 +1,8 @@
-# AHU Fault Condition 8 — SAT and MAT should be approx equal in economizer mode
+# Rule F — SAT/MAT mismatch in economizer mode (GL36-inspired)
 name: sat_mat_mismatch_economizer
 description: Supply air and mixed air temp should be approx equal in economizer mode
 type: expression
-flag: fc8_flag
+flag: rule_f_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

@@ -17,7 +17,7 @@ Rules with `equipment_type: [VAV_AHU]` (or `[AHU, VAV_AHU]`) only run when the B
 |------|------|----------------|
 | sensor_bounds.yaml | bounds | (all) |
 | sensor_flatline.yaml | flatline | (all) |
-| ahu_fc1.yaml | expression | VAV_AHU |
+| ahu_rule_a.yaml | expression | VAV_AHU |
 | ahu_fc2.yaml | expression | AHU, VAV_AHU |
 | ahu_fc3.yaml | expression | AHU, VAV_AHU |
 | ahu_fc4.yaml | hunting | AHU, VAV_AHU |

@@ -1,8 +1,8 @@
-# AHU Fault Condition 10 — OAT and MAT should be approx equal in econ+mech cooling
+# Rule H — Ambient vs blended mismatch (econ+mech) (GL36-inspired)
 name: oat_mat_mismatch_econ_mech
 description: OAT and MAT should be approx equal in economizer + mechanical cooling mode
 type: expression
-flag: fc10_flag
+flag: rule_h_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:

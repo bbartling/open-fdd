@@ -1,9 +1,9 @@
-# AHU Fault Condition 3 — Mix temp too high
+# Rule C — Blended air temp above expected band (GL36-inspired)
 # MAT should be between OAT and RAT; fault if MAT > max(OAT, RAT)
 name: mix_temp_too_high
 description: Mix temperature too high; should be between outside and return air
 type: expression
-flag: fc3_flag
+flag: rule_c_flag
 equipment_type: [AHU, VAV_AHU]
 
 inputs:
