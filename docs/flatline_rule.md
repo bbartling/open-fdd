@@ -60,4 +60,48 @@ params:
 
 ---
 
+## RH flatline
+
+Relative humidity sensor stuck at constant value.
+
+```yaml
+name: rh_flatline
+description: Humidity sensor stuck (minimal variation over window)
+type: flatline
+flag: rh_flatline_flag
+
+inputs:
+  Humidity_Sensor:
+    brick: Humidity_Sensor
+    column: rh_pct
+
+params:
+  tolerance: 0.15
+  window: 12
+```
+
+---
+
+## CO2 flatline
+
+CO2 sensor stuck; common when sensor is offline or malfunctioning.
+
+```yaml
+name: co2_flatline
+description: CO2 sensor stuck at constant value
+type: flatline
+flag: co2_flatline_flag
+
+inputs:
+  CO2_Sensor:
+    brick: CO2_Sensor
+    column: co2_ppm
+
+params:
+  tolerance: 1.0
+  window: 12
+```
+
+---
+
 **Next:** [Hunting Rule]({{ "hunting_rule" | relative_url }})

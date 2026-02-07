@@ -1,9 +1,9 @@
 ---
-title: ERV Efficiency Rule
+title: Heat Exchanger Effectiveness Rule
 nav_order: 7
 ---
 
-# ERV Efficiency Rule
+# Heat Exchanger Effectiveness Rule (ERV)
 
 **Type:** `erv_efficiency` — Built-in check; no custom expression.
 
@@ -11,7 +11,7 @@ nav_order: 7
 
 ## What the rules engine does
 
-The **erv_efficiency** rule flags when *Energy Recovery Ventilator (ERV) effectiveness* falls outside the expected range. The engine computes effectiveness from OAT entering, OAT leaving the ERV, and return air temp. In heating mode (OAT < oat_low_threshold), effectiveness should be between `erv_efficiency_min_heating` and `erv_efficiency_max_heating`. In cooling mode (OAT > oat_high_threshold), it should be between the cooling min/max. When effectiveness is too low or too high (or OAT–RAT delta is too small to trust the calc), a fault is flagged. AHU with ERV only.
+The **erv_efficiency** rule flags when *heat exchanger effectiveness* falls outside the expected range. The engine computes effectiveness from entering and leaving temperatures and the opposing stream temperature. For an ERV (air-to-air): effectiveness = (T_cold_out - T_cold_in) / (T_hot_in - T_cold_in). This same effectiveness formula applies to any counterflow heat exchanger — ERVs, runaround coils, plate heat exchangers, etc. When the cold stream is heated by the hot stream, effectiveness should lie within a band (e.g. 0.5–0.9). Too low indicates fouling, bypass, or airflow issues; too high can indicate sensor error. The open-fdd implementation is wired for ERV (OAT entering/leaving, RAT). Same logic extends to other HX types with appropriate column mapping. AHU with ERV only in current config.
 
 ---
 

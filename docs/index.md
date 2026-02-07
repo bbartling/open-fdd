@@ -33,7 +33,8 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 10. **[SPARQL & Validate Prereq]({{ "sparql_validate_prereq" | relative_url }})** — Test SPARQL, validate model before faults
 11. **[Data Model & Brick]({{ "data_model" | relative_url }})** — Run faults, Brick TTL, column map
 12. **[Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }})** — Zoom in on fault events, IPython notebook
-13. **[AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }})** — Agentic workflows, false positive tuning, root cause analysis
-14. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
-15. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver, Brick workflow
+13. **[AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }})** — Coming soon (Open FDD AI)
+14. **[ML for FDD Ideas]({{ "ml_fdd_ideas" | relative_url }})** — Machine learning ideas, anomaly detection, threshold tuning
+15. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
+16. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver, Brick workflow
 

@@ -5,26 +5,22 @@ nav_order: 8
 
 # Expression Rule Cookbook
 
-**About `np` in expressions:** When you see `np` in a rule (e.g. `np.maximum`, `np.abs`, `np.sqrt`), it refers to **NumPy** — the Python computing library which Pandas uses under the hood for high-performance numerical math. open-fdd injects `np` into expression evaluation automatically, so you can use NumPy functions directly in your fault logic.
+A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math.
 
 ---
 
-## How to define your own expressions
+## How to define expressions
 
-Expressions are boolean (true/false) statements — when they evaluate to **True**, a fault is flagged. open-fdd evaluates expressions with **pandas** and **NumPy** under the hood: input names become pandas Series, and `np` gives you NumPy functions for vectorized math. Here's a quick guide — AI can definitely help with this, and pandas and NumPy are popular open-source libraries in the modern data science world:
+1. **Inputs** — Map BRICK classes or column names to DataFrame columns. Each input becomes a pandas Series in the expression.
+2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
+3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
 
-1. **Choose your inputs** — Each input maps a BRICK class (or rule name) to a DataFrame column. Use `brick:` for Brick model resolution and `column:` for the raw column name. Input names become **pandas Series** in the expression (one value per row).
-
-2. **Define params** — Thresholds and constants go in `params`. Reference them by name in the expression (e.g. `static_err_thres`, `vfd_max`).
-
-3. **Write the expression** — Use input names and param names as variables. The expression must evaluate to a **boolean Series** (True = fault). Use `&` for AND, `|` for OR, `~` for NOT. Use `np` for NumPy functions (`np.maximum`, `np.abs`, `np.sqrt`, etc.) — they work on Series and are vectorized (no Python loops). Comparisons and logical ops produce boolean Series. You can also use pandas Series methods like `.diff()`, `.rolling()`, `.notna()` on your inputs.
-
-4. **Example** — A simple "sensor above threshold" rule:
+**Minimal example:**
 
 ```yaml
-name: my_custom_rule
+name: high_temp_check
 type: expression
-flag: my_fault_flag
+flag: high_temp_flag
 
 inputs:
   Supply_Air_Temperature_Sensor:
@@ -38,22 +34,19 @@ expression: |
   Supply_Air_Temperature_Sensor > max_temp
 ```
 
-5. **Save and run** — Save as `.yaml` in your rules folder and run with `RuleRunner(rules_path="my_rules").run(df)`.
-
-
 ---
 
-## AHU fault conditions for air handling units (ASHRAE Guideline 36, Fault Rules One–Fifteen)
+## AHU rules (reference-style)
 
-Fault Rules One through Fifteen are defined by ASHRAE Guideline 36. open-fdd was originally based on G36 and has been expanded with BRICK terminology.
+The following rules follow common industry practice for air-handling fault detection. Thresholds and logic are tunable; adjust params for your site.
 
-### Fault Rule One — low_duct_static_at_max_fan (expression)
+### Rule A — Duct static below setpoint at full fan speed
 
-Duct static pressure too low with supply fan at max speed. VAV only.
+Static pressure under setpoint while supply fan runs near maximum. May indicate duct leakage, undersized fan, or terminal damper issues.
 
 ```yaml
-name: low_duct_static_at_max_fan
-description: Duct static pressure too low with supply fan at max speed
+name: duct_static_low_at_full_speed
+description: Static pressure below setpoint when fan at full speed
 type: expression
 flag: fc1_flag
 equipment_type: [VAV_AHU]
@@ -70,21 +63,21 @@ inputs:
     column: supply_vfd_speed
 
 params:
-  static_err_thres: 0.1
-  vfd_max: 0.95
-  vfd_err_thres: 0.05
+  sp_margin: 0.12
+  drv_hi_frac: 0.93
+  drv_near_hi: 0.06
 
 expression: |
-  (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - static_err_thres) & (Supply_Fan_Speed_Command >= vfd_max - vfd_err_thres)
+  (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - sp_margin) & (Supply_Fan_Speed_Command >= drv_hi_frac - drv_near_hi)
 ```
 
-### Fault Rule Two — mix_temp_too_low (expression)
+### Rule B — Blended air temp below expected band
 
-Mix temperature too low; should be between outside and return air.
+Blended air temp should lie between outdoor and return. If below both (minus tolerance), suspect sensor or mixing fault.
 
 ```yaml
-name: mix_temp_too_low
-description: Mix temperature too low; should be between outside and return air
+name: blend_temp_below_band
+description: Blended air temp below expected range (OAT/RAT)
 type: expression
 flag: fc2_flag
 equipment_type: [AHU, VAV_AHU]
@@ -104,21 +97,21 @@ inputs:
     column: supply_vfd_speed
 
 params:
-  mix_err_thres: 1.0
-  return_err_thres: 1.0
-  outdoor_err_thres: 1.0
+  blend_tol: 1.15
+  rat_tol: 1.15
+  oat_tol: 1.15
 
 expression: |
-  (Mixed_Air_Temperature_Sensor - mix_err_thres < np.minimum(Return_Air_Temperature_Sensor - return_err_thres, Outside_Air_Temperature_Sensor - outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
+  (Mixed_Air_Temperature_Sensor - blend_tol < np.minimum(Return_Air_Temperature_Sensor - rat_tol, Outside_Air_Temperature_Sensor - oat_tol)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-### Fault Rule Three — mix_temp_too_high (expression)
+### Rule C — Blended air temp above expected band
 
-Mix temperature too high; should be between outside and return air.
+Blended air temp above the higher of OAT and RAT (plus tolerance) indicates mixing or sensor fault.
 
 ```yaml
-name: mix_temp_too_high
-description: Mix temperature too high; should be between outside and return air
+name: blend_temp_above_band
+description: Blended air temp above expected range (OAT/RAT)
 type: expression
 flag: fc3_flag
 equipment_type: [AHU, VAV_AHU]
@@ -138,23 +131,23 @@ inputs:
     column: supply_vfd_speed
 
 params:
-  mix_err_thres: 1.0
-  return_err_thres: 1.0
-  outdoor_err_thres: 1.0
+  blend_tol: 1.15
+  rat_tol: 1.15
+  oat_tol: 1.15
 
 expression: |
-  (Mixed_Air_Temperature_Sensor - mix_err_thres > np.maximum(Return_Air_Temperature_Sensor + return_err_thres, Outside_Air_Temperature_Sensor + outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)
+  (Mixed_Air_Temperature_Sensor - blend_tol > np.maximum(Return_Air_Temperature_Sensor + rat_tol, Outside_Air_Temperature_Sensor + oat_tol)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
 *Fault Rule Four (hunting) — see [Hunting Rule]({{ "hunting_rule" | relative_url }}).*
 
-### Fault Rule Five — sat_too_low_heating_mode (expression)
+### Rule D — Discharge air cold when heating commanded
 
-SAT too low in heating mode (broken heating valve).
+Discharge air temp below blended air when heating valve is open. Indicates heating coil or valve failure.
 
 ```yaml
-name: sat_too_low_heating_mode
-description: SAT too low; should be higher than MAT in heating mode (broken heating valve)
+name: discharge_cold_when_heating
+description: Discharge air below blended air when heating active
 type: expression
 flag: fc5_flag
 equipment_type: [AHU, VAV_AHU]
@@ -174,23 +167,23 @@ inputs:
     column: supply_vfd_speed
 
 params:
-  mix_err_thres: 1.0
-  supply_err_thres: 1.0
-  delta_t_supply_fan: 0.5
+  blend_tol: 1.15
+  sat_tol: 1.15
+  fan_delta_t: 0.55
 
 expression: |
-  (Supply_Air_Temperature_Sensor + supply_err_thres <= Mixed_Air_Temperature_Sensor - mix_err_thres + delta_t_supply_fan) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
+  (Supply_Air_Temperature_Sensor + sat_tol <= Mixed_Air_Temperature_Sensor - blend_tol + fan_delta_t) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
 *Fault Rule Six (oa_fraction) — see [OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }}).*
 
-### Fault Rule Seven — sat_too_low_full_heating (expression)
+### FC7 — SAT too low with full heating
 
-Supply air temp too low when heating valve fully open.
+Heating valve fully open but SAT remains below setpoint. Indicates undersized coil or valve failure.
 
 ```yaml
 name: sat_too_low_full_heating
-description: Supply air temperature too low in full heating mode with heating valve fully open
+description: SAT below setpoint with heating valve fully open — GL36-inspired
 type: expression
 flag: fc7_flag
 equipment_type: [AHU, VAV_AHU]
@@ -216,13 +209,13 @@ expression: |
   (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - supply_err_thres) & (Valve_Command > 0.9) & (Supply_Fan_Speed_Command > 0)
 ```
 
-### Fault Rule Eight — sat_mat_mismatch_economizer (expression)
+### FC8 — SAT/MAT mismatch in economizer mode
 
-SAT and MAT should be approx equal in economizer mode.
+In economizer mode (min mechanical cooling), SAT should approximate MAT. Large deviation suggests coil bypass or sensor error.
 
 ```yaml
-name: sat_mat_mismatch_economizer
-description: Supply air and mixed air temp should be approx equal in economizer mode
+name: discharge_blend_mismatch_econ
+description: Discharge and blended air diverge in economizer mode
 type: expression
 flag: fc8_flag
 equipment_type: [AHU, VAV_AHU]
@@ -242,22 +235,22 @@ inputs:
     column: cooling_sig
 
 params:
-  delta_t_supply_fan: 0.5
-  mix_err_thres: 1.0
-  supply_err_thres: 1.0
-  ahu_min_oa_dpr: 0.1
+  fan_delta_t: 0.55
+  blend_tol: 1.15
+  sat_tol: 1.15
+  econ_min_open: 0.12
 
 expression: |
-  (np.abs(Supply_Air_Temperature_Sensor - delta_t_supply_fan - Mixed_Air_Temperature_Sensor) > np.sqrt(supply_err_thres**2 + mix_err_thres**2)) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
+  (np.abs(Supply_Air_Temperature_Sensor - fan_delta_t - Mixed_Air_Temperature_Sensor) > np.sqrt(sat_tol**2 + blend_tol**2)) & (Damper_Position_Command > econ_min_open) & (Valve_Command < 0.1)
 ```
 
-### Fault Rule Nine — oat_too_high_free_cooling (expression)
+### Rule G — Ambient too warm for free cooling
 
-OAT too high in free cooling without mechanical cooling.
+Outside air temperature exceeds SAT setpoint while economizer is active and mechanical cooling is off. Economizer should not be providing “free” cooling under these conditions.
 
 ```yaml
-name: oat_too_high_free_cooling
-description: Outside air temp too high in free cooling without mechanical cooling
+name: ambient_warm_free_cool
+description: Outdoor air above setpoint in free cooling mode
 type: expression
 flag: fc9_flag
 equipment_type: [AHU, VAV_AHU]
@@ -277,22 +270,22 @@ inputs:
     column: cooling_sig
 
 params:
-  outdoor_err_thres: 1.0
-  delta_t_supply_fan: 0.5
-  supply_err_thres: 1.0
-  ahu_min_oa_dpr: 0.1
+  oat_tol: 1.15
+  fan_delta_t: 0.55
+  sat_tol: 1.15
+  econ_min_open: 0.12
 
 expression: |
-  (Outside_Air_Temperature_Sensor - outdoor_err_thres > Supply_Air_Temperature_Setpoint - delta_t_supply_fan + supply_err_thres) & (Damper_Position_Command > ahu_min_oa_dpr) & (Valve_Command < 0.1)
+  (Outside_Air_Temperature_Sensor - oat_tol > Supply_Air_Temperature_Setpoint - fan_delta_t + sat_tol) & (Damper_Position_Command > econ_min_open) & (Valve_Command < 0.1)
 ```
 
-### Fault Rule Ten — oat_mat_mismatch_econ_mech (expression)
+### Rule H — Ambient vs blended mismatch (econ + mech cooling)
 
-OAT and MAT approx equal in economizer + mechanical cooling mode.
+When both economizer and mechanical cooling are active, MAT should approach OAT. Large deviation suggests inadequate mixing or damper fault.
 
 ```yaml
-name: oat_mat_mismatch_econ_mech
-description: OAT and MAT should be approx equal in economizer + mechanical cooling mode
+name: ambient_blend_mismatch_econ_mech
+description: Outdoor and blended air diverge in econ+mech cooling
 type: expression
 flag: fc10_flag
 equipment_type: [AHU, VAV_AHU]
@@ -312,20 +305,20 @@ inputs:
     column: economizer_sig
 
 params:
-  outdoor_err_thres: 1.0
-  mix_err_thres: 1.0
+  oat_tol: 1.15
+  blend_tol: 1.15
 
 expression: |
-  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(blend_tol**2 + oat_tol**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)
 ```
 
-### Fault Rule Eleven — oat_mat_mismatch_economizer (expression)
+### Rule I — Ambient vs blended mismatch (econ-only)
 
-OAT and MAT approx equal in economizer mode.
+In economizer-only mode, MAT should match OAT. Deviation indicates damper or mixing fault.
 
 ```yaml
-name: oat_mat_mismatch_economizer
-description: OAT and MAT should be approx equal in economizer mode
+name: ambient_blend_mismatch_econ
+description: Outdoor and blended air diverge in economizer-only mode
 type: expression
 flag: fc11_flag
 equipment_type: [AHU, VAV_AHU]
@@ -342,20 +335,20 @@ inputs:
     column: economizer_sig
 
 params:
-  outdoor_err_thres: 1.0
-  mix_err_thres: 1.0
+  oat_tol: 1.15
+  blend_tol: 1.15
 
 expression: |
-  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Damper_Position_Command > 0.9)
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(blend_tol**2 + oat_tol**2)) & (Damper_Position_Command > 0.9)
 ```
 
-### Fault Rule Twelve — sat_too_high_cooling_modes (expression)
+### Rule J — Discharge above blended in cooling
 
-SAT too high in econ+mech or mech-only cooling.
+SAT exceeds MAT when cooling (econ+mech or mech-only) is active. Indicates underperforming cooling coil or valve.
 
 ```yaml
-name: sat_too_high_cooling_modes
-description: SAT too high; should be less than MAT in econ+mech or mech-only cooling
+name: discharge_above_blend_cooling
+description: Discharge air above blended air in cooling modes
 type: expression
 flag: fc12_flag
 equipment_type: [AHU, VAV_AHU]
@@ -375,22 +368,22 @@ inputs:
     column: economizer_sig
 
 params:
-  delta_t_supply_fan: 0.5
-  mix_err_thres: 1.0
-  supply_err_thres: 1.0
-  ahu_min_oa_dpr: 0.1
+  fan_delta_t: 0.55
+  blend_tol: 1.15
+  sat_tol: 1.15
+  econ_min_open: 0.12
 
 expression: |
-  (Supply_Air_Temperature_Sensor > Mixed_Air_Temperature_Sensor + np.sqrt(supply_err_thres**2 + mix_err_thres**2) + delta_t_supply_fan) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
+  (Supply_Air_Temperature_Sensor > Mixed_Air_Temperature_Sensor + np.sqrt(sat_tol**2 + blend_tol**2) + fan_delta_t) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0)) | ((Damper_Position_Command <= econ_min_open) & (Valve_Command > 0.9)))
 ```
 
-### Fault Rule Thirteen — sat_too_high_full_cooling (expression)
+### Rule K — Discharge above setpoint in full cooling
 
-SAT too high vs setpoint in full cooling mode.
+SAT above setpoint with cooling at full capacity. Suggests undersized coil or plant limits.
 
 ```yaml
-name: sat_too_high_full_cooling
-description: SAT too high vs setpoint in OS3/OS4 full cooling mode
+name: discharge_above_sp_full_cool
+description: Discharge air above setpoint in full cooling mode
 type: expression
 flag: fc13_flag
 equipment_type: [AHU, VAV_AHU]
@@ -410,20 +403,20 @@ inputs:
     column: economizer_sig
 
 params:
-  supply_err_thres: 1.0
-  ahu_min_oa_dpr: 0.1
+  sat_tol: 1.15
+  econ_min_open: 0.12
 
 expression: |
-  (Supply_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint + supply_err_thres) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0.9)) | ((Damper_Position_Command <= ahu_min_oa_dpr) & (Valve_Command > 0.9)))
+  (Supply_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint + sat_tol) & (((Damper_Position_Command > 0.9) & (Valve_Command > 0.9)) | ((Damper_Position_Command <= econ_min_open) & (Valve_Command > 0.9)))
 ```
 
-### Fault Rule Fourteen — cooling_coil_drop_when_inactive (expression)
+### Rule L — Cooling coil delta-T when inactive
 
-Temperature drop across inactive cooling coil. Requires coil entering/leaving sensors.
+Temperature drop across cooling coil when it should be off. Indicates leaking CHW valve or coil bypass.
 
 ```yaml
-name: cooling_coil_drop_when_inactive
-description: Temperature drop across inactive cooling coil in heating/economizer modes
+name: clg_coil_drop_when_off
+description: Temperature drop across cooling coil when it should be off
 type: expression
 flag: fc14_flag
 equipment_type: [AHU, VAV_AHU]
@@ -446,21 +439,21 @@ inputs:
     column: economizer_sig
 
 params:
-  coil_enter_err_thres: 1.0
-  coil_leave_err_thres: 1.0
-  ahu_min_oa_dpr: 0.1
+  enter_tol: 1.15
+  leave_tol: 1.15
+  econ_min_open: 0.12
 
 expression: |
-  ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)))
+  ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(enter_tol**2 + leave_tol**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= econ_min_open)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > econ_min_open)))
 ```
 
-### Fault Rule Fifteen — heating_coil_rise_when_inactive (expression)
+### Rule M — Heating coil delta-T when inactive
 
-Temperature rise across inactive heating coil. Requires coil entering/leaving sensors.
+Temperature rise across heating coil when it should be off. Indicates leaking HW valve.
 
 ```yaml
-name: heating_coil_rise_when_inactive
-description: Temperature rise across inactive heating coil in econ/mech cooling modes
+name: htg_coil_rise_when_off
+description: Temperature rise across heating coil when it should be off
 type: expression
 flag: fc15_flag
 equipment_type: [AHU, VAV_AHU]
@@ -483,28 +476,28 @@ inputs:
     column: economizer_sig
 
 params:
-  coil_enter_err_thres: 1.0
-  coil_leave_err_thres: 1.0
-  delta_t_supply_fan: 0.5
-  ahu_min_oa_dpr: 0.1
+  enter_tol: 1.15
+  leave_tol: 1.15
+  fan_delta_t: 0.55
+  econ_min_open: 0.12
 
 expression: |
-  ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2) + delta_t_supply_fan) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= ahu_min_oa_dpr)))
+  ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(enter_tol**2 + leave_tol**2) + fan_delta_t) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > econ_min_open)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= econ_min_open)))
 ```
 
-*Fault Rule Sixteen (erv_efficiency, custom) — see [ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }}).*
+*Heat exchanger effectiveness — see [ERV/Heat Exchanger Rule]({{ "erv_efficiency_rule" | relative_url }}).*
 
 ---
 
-## Chiller plant
+## Central plant
 
-### pump_diff_pressure_low (expression)
+### Differential pressure at max pump speed
 
-Variable pump does not meet differential pressure setpoint at full speed.
+Variable-speed pump cannot meet differential pressure setpoint at full speed. Indicates piping issues, undersized pump, or blocked strainers.
 
 ```yaml
-name: pump_diff_pressure_low
-description: Variable pump does not meet differential pressure setpoint at full speed
+name: dp_below_sp_pump_max
+description: Differential pressure below setpoint with pump at full speed
 type: expression
 flag: fc_pump_flag
 
@@ -520,21 +513,21 @@ inputs:
     column: pump_speed
 
 params:
-  diff_pressure_err_thres: 2.0
-  pump_speed_max: 0.95
-  pump_speed_err_thres: 0.05
+  dp_margin: 2.2
+  pmp_hi_frac: 0.93
+  pmp_near_hi: 0.06
 
 expression: |
-  (Differential_Pressure_Sensor < Differential_Pressure_Setpoint - diff_pressure_err_thres) & (Pump_Speed_Command >= pump_speed_max - pump_speed_err_thres)
+  (Differential_Pressure_Sensor < Differential_Pressure_Setpoint - dp_margin) & (Pump_Speed_Command >= pmp_hi_frac - pmp_near_hi)
 ```
 
-### chw_flow_high_at_max_pump (expression)
+### Plant flow high at max pump
 
-Primary chilled water flow too high with pump at high speed.
+Flow unusually high with pump at high speed. Suggests short circuit or flow meter error.
 
 ```yaml
-name: chw_flow_high_at_max_pump
-description: Primary chilled water flow too high with pump at high speed
+name: flow_high_pump_max
+description: Water flow unusually high with pump at full speed
 type: expression
 flag: fc_chiller_flow_flag
 
@@ -547,13 +540,260 @@ inputs:
     column: pump_speed
 
 params:
-  flow_error_threshold: 1000.0
-  pump_speed_max: 0.95
-  pump_speed_err_thres: 0.05
+  flow_hi_limit: 1100.0
+  pmp_hi_frac: 0.93
+  pmp_near_hi: 0.06
 
 expression: |
-  (Water_Flow_Sensor > flow_error_threshold) & (Pump_Speed_Command >= pump_speed_max - pump_speed_err_thres)
+  (Water_Flow_Sensor > flow_hi_limit) & (Pump_Speed_Command >= pmp_hi_frac - pmp_near_hi)
 ```
+
+### Plant supply temp outside deadband
+
+CHW supply temperature outside deadband while pump runs. Requires coil entering/leaving or plant supply temp sensors.
+
+```yaml
+name: plant_supply_temp_deadband
+description: Supply water temp outside deadband during pump operation
+type: expression
+flag: chw_temp_fault
+
+inputs:
+  Chilled_Water_Supply_Temperature_Sensor:
+    brick: Chilled_Water_Supply_Temperature_Sensor
+    column: chw_supply_temp
+  Chilled_Water_Supply_Temperature_Setpoint:
+    brick: Chilled_Water_Supply_Temperature_Setpoint
+    column: chw_supply_sp
+  Pump_Speed_Command:
+    brick: Pump_Speed_Command
+    column: pump_speed
+
+params:
+  sp_band: 2.2
+
+expression: |
+  (Pump_Speed_Command > 0.01) & ((Chilled_Water_Supply_Temperature_Sensor < Chilled_Water_Supply_Temperature_Setpoint - sp_band) | (Chilled_Water_Supply_Temperature_Sensor > Chilled_Water_Supply_Temperature_Setpoint + sp_band))
+```
+
+### Chiller runtime over daily limit
+
+Chiller running beyond a daily threshold (e.g. 23 hours). Often indicates over-cooling or schedules that bypass lockout. Use a rolling window sized for your data interval (e.g. 5‑min data → 276 samples ≈ 23 h).
+
+```yaml
+name: chiller_excessive_runtime
+description: Chiller runtime exceeds daily threshold (rolling window)
+type: expression
+flag: chiller_runtime_fault
+
+inputs:
+  Chiller_Status:
+    brick: Chiller_Status
+    column: chiller_run
+
+params:
+  # For 5-min data: 23 hours ≈ 276 samples; max_runtime = count of "on" samples in window
+  rolling_samples: 276
+  max_runtime_samples: 264
+
+expression: |
+  Chiller_Status.rolling(window=rolling_samples).sum() > max_runtime_samples
+```
+
+*Note: Adjust `rolling_samples` and `max_runtime_samples` for your data interval. For 5‑min data, 264 samples ≈ 22 hours.*
+
+---
+
+## VAV zones
+
+### Excessive heating during warm weather
+
+Reheat valve open when outdoor air is warm. Suggests over-cooling or setpoint issues.
+
+```yaml
+name: zone_reheat_warm_ambient
+description: Heating valve open when OAT is high
+type: expression
+flag: excessive_heating_flag
+equipment_type: [VAV]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: oat
+  Reheat_Valve_Command:
+    brick: Valve_Command
+    column: reheat_sig
+
+params:
+  t_amb_cutoff: 78.0
+  reheat_open_min: 0.52
+
+expression: |
+  (Outside_Air_Temperature_Sensor > t_amb_cutoff) & (Reheat_Valve_Command > reheat_open_min)
+```
+
+### Damper or valve at full open
+
+Damper or reheat valve consistently at full open. Indicates override, undersized equipment, or control fault.
+
+```yaml
+name: zone_damper_valve_full_open
+description: Damper or valve at full open for extended period
+type: expression
+flag: damper_100_flag
+equipment_type: [VAV]
+
+inputs:
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+    column: damper_pos
+
+params:
+  full_open_pct: 97.5
+  roll_samples: 105
+
+expression: |
+  (Damper_Position_Command > full_open_pct) & (Damper_Position_Command.rolling(roll_samples).min() > full_open_pct)
+```
+
+### Zone and IAQ bounds
+
+For CO2 and zone temperature out-of-range checks, use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) — `co2_bounds` and `zone_temp_bounds` examples.
+
+---
+
+## Opportunistic rules (economizer & ventilation)
+
+### Economizing when outdoor conditions are unfavorable
+
+Economizer active when outdoor air is too warm or humid. Use OAT (or enthalpy if available) vs. threshold.
+
+```yaml
+name: econ_active_warm_ambient
+description: OA damper open when outdoor conditions do not favor economizing
+type: expression
+flag: econ_when_shouldnt_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: oat
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+    column: economizer_sig
+
+params:
+  t_amb_econ_cutoff: 63.0
+  dpr_econ_min: 0.42
+
+expression: |
+  (Outside_Air_Temperature_Sensor > t_amb_econ_cutoff) & (Damper_Position_Command > dpr_econ_min)
+```
+
+### Mechanical cooling when econ could suffice
+
+Cooling valve open when outdoor air is cool enough for economizer. Opportunity to reduce mechanical cooling.
+
+```yaml
+name: mech_cool_when_econ_available
+description: Mechanical cooling active when economizing could suffice
+type: expression
+flag: cooling_when_econ_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: oat
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+    column: economizer_sig
+  Valve_Command:
+    brick: Valve_Command
+    column: cooling_sig
+
+params:
+  t_amb_econ_cutoff: 63.0
+  dpr_not_econ_max: 0.32
+
+expression: |
+  (Outside_Air_Temperature_Sensor < t_amb_econ_cutoff) & (Damper_Position_Command < dpr_not_econ_max) & (Valve_Command > 0.01)
+```
+
+### Low ventilation (estimated OA fraction)
+
+For units without airflow meters, estimate OA fraction from OAT, MAT, RAT. Flag when below minimum design OA.
+
+```yaml
+name: low_oa_fraction_estimated
+description: Estimated OA fraction below minimum (OAT, MAT, RAT method)
+type: expression
+flag: low_vent_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    column: mat
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    column: rat
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: oat
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+    column: supply_vfd_speed
+
+params:
+  oa_min_pct: 21.0
+  t_rat_oat_min_gap: 2.2
+
+expression: |
+  (Supply_Fan_Speed_Command > 0.01) & (np.abs(Return_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > t_rat_oat_min_gap) & (((Mixed_Air_Temperature_Sensor - Return_Air_Temperature_Sensor) / (Outside_Air_Temperature_Sensor - Return_Air_Temperature_Sensor) * 100) < oa_min_pct)
+```
+
+*Note: Guard against division-by-zero when outdoor and return temps are close.*
+
+### Preheat over-conditioning
+
+Preheat coil leaving temp higher than needed (e.g. above OAT when OAT > SAT SP, or above SAT SP when OAT < SAT SP). Indicates wasted heating energy.
+
+```yaml
+name: preheat_excess_temp
+description: Preheat coil leaving temp above required level
+type: expression
+flag: preheat_waste_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Preheat_Coil_Leaving_Air_Temperature_Sensor:
+    brick: Preheat_Coil_Leaving_Air_Temperature_Sensor
+    column: preheat_temp
+  Supply_Air_Temperature_Setpoint:
+    brick: Supply_Air_Temperature_Setpoint
+    column: sat_setpoint
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    column: oat
+  Valve_Command:
+    brick: Valve_Command
+    column: heating_sig
+
+params:
+  excess_tol: 2.2
+
+expression: |
+  (Valve_Command > 0.01) & (((Outside_Air_Temperature_Sensor > Supply_Air_Temperature_Setpoint) & (Preheat_Coil_Leaving_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor > excess_tol)) | ((Outside_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint) & (Preheat_Coil_Leaving_Air_Temperature_Sensor - Supply_Air_Temperature_Setpoint > excess_tol)))
+```
+
+### Blended air damper deviation
+
+Expected MAT (from OAT, RAT, damper positions) differs from measured MAT. Indicates damper leakage or faulty mixing.
+
+*Requires airflow or damper position data; logic is more involved. A simplified version compares MAT to a weighted blend of OAT and RAT when dampers suggest significant OA.*
 
 ---
 
@@ -561,13 +801,13 @@ expression: |
 
 *weather_temp_stuck (flatline) — see [Flatline Rule]({{ "flatline_rule" | relative_url }}).*
 
-### weather_temp_spike (expression)
+### Unrealistic temperature spike
 
-Unrealistic temperature change between consecutive readings.
+Temperature change between consecutive readings exceeds physical limit.
 
 ```yaml
 name: weather_temp_spike
-description: Unrealistic temperature change between consecutive readings
+description: Unrealistic temperature change between readings
 type: expression
 flag: fault_temp_spike
 
@@ -577,42 +817,21 @@ inputs:
     column: temp_f
 
 params:
-  temp_spike_f_per_hour: 15.0
+  spike_limit: 16.0
 
 expression: |
-  Outside_Air_Temperature_Sensor.diff().abs() > temp_spike_f_per_hour
+  Outside_Air_Temperature_Sensor.diff().abs() > spike_limit
 ```
 
-### weather_rh_out_of_range (expression)
+### RH bounds
 
-Relative humidity outside valid range.
+For relative humidity out-of-range, use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) — `rh_bounds` example.
 
-```yaml
-name: weather_rh_out_of_range
-description: Relative humidity outside valid range (sensor error or bad data)
-type: expression
-flag: fault_rh_out_of_range
-
-inputs:
-  Humidity_Sensor:
-    brick: Humidity_Sensor
-    column: rh_pct
-
-params:
-  rh_min: 0.0
-  rh_max: 100.0
-
-expression: |
-  (Humidity_Sensor < rh_min) | (Humidity_Sensor > rh_max)
-```
-
-### weather_gust_lt_wind (expression)
-
-Wind gust reported lower than sustained wind (sensor error).
+### Wind gust vs sustained
 
 ```yaml
 name: weather_gust_lt_wind
-description: Wind gust reported lower than sustained wind (sensor error)
+description: Wind gust reported lower than sustained wind
 type: expression
 flag: fault_gust_lt_wind
 
@@ -628,7 +847,22 @@ expression: |
   Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)
 ```
 
+---
 
+## Sensor validation (bounds & flatline)
+
+Use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) and [Flatline Rule]({{ "flatline_rule" | relative_url }}) for generic sensor checks. Typical bounds:
+
+| Sensor type        | Min   | Max    |
+|--------------------|-------|--------|
+| Zone temp          | 40    | 100    |
+| Supply air temp    | 40    | 150    |
+| Air pressure (inH2O)| -5   | 10     |
+| RH                 | 0     | 100    |
+| Chilled water temp | 35    | 100    |
+| Hot water temp     | 50    | 212    |
+| Condenser water    | 50    | 110    |
+| CO2 (ppm)          | 400   | 2000   |
 
 ---
 

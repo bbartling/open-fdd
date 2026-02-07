@@ -65,4 +65,81 @@ Full rule with additional sensors in [`open_fdd/rules/sensor_bounds.yaml`](https
 
 ---
 
+## Additional sensor bounds (zone, plant, IAQ)
+
+Typical bounds for zone, plant, and IAQ sensors:
+
+| Sensor type          | Low  | High   | Units |
+|----------------------|------|--------|-------|
+| Zone air temp        | 50   | 100    | °F    |
+| Supply air temp      | 40   | 150    | °F    |
+| CHW supply temp      | 35   | 100    | °F    |
+| HW supply temp       | 50   | 212    | °F    |
+| Condenser water temp | 50   | 110    | °F    |
+| Relative humidity    | 0    | 100    | %     |
+| CO2                  | 400  | 2000   | ppm   |
+| Air pressure (inH2O)  | -5   | 10     | inH2O |
+
+### Zone temperature bounds
+
+```yaml
+name: zone_temp_bounds
+description: Zone temperature outside comfort range
+type: bounds
+params:
+  units: imperial
+
+flag: zone_temp_flag
+
+inputs:
+  Zone_Air_Temperature_Sensor:
+    brick: Zone_Air_Temperature_Sensor
+    column: zone_temp
+    bounds:
+      imperial: [50, 100]
+      metric: [10, 38]
+```
+
+### CO2 (IAQ) bounds
+
+```yaml
+name: co2_bounds
+description: CO2 concentration outside acceptable range
+type: bounds
+flag: co2_flag
+
+params:
+  units: imperial
+
+inputs:
+  CO2_Sensor:
+    brick: CO2_Sensor
+    column: co2_ppm
+    bounds:
+      imperial: [400, 2000]
+      metric: [400, 2000]
+```
+
+### Relative humidity bounds
+
+```yaml
+name: rh_bounds
+description: Relative humidity outside valid range
+type: bounds
+flag: rh_flag
+
+params:
+  units: imperial
+
+inputs:
+  Humidity_Sensor:
+    brick: Humidity_Sensor
+    column: rh_pct
+    bounds:
+      imperial: [0, 100]
+      metric: [0, 100]
+```
+
+---
+
 **Next:** [Flatline Rule]({{ "flatline_rule" | relative_url }})
