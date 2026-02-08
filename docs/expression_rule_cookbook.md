@@ -611,6 +611,37 @@ expression: |
 
 ---
 
+## Heat pumps
+
+### Discharge cold when heating
+
+Discharge air temperature below minimum (e.g. 80°F) when the supply fan is running. Indicates the heat pump is not heating effectively—compressor, refrigerant, or reversing valve issues. Tunable via `min_discharge_temp`.
+
+```yaml
+name: hp_discharge_cold_when_heating
+description: Discharge air below minimum when fan on (heat pump not heating well)
+type: expression
+flag: hp_discharge_cold_flag
+equipment_type: [Heat_Pump]
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: sat
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+    column: supply_vfd_speed
+
+params:
+  min_discharge_temp: 80.0
+  fan_on_threshold: 0.01
+
+expression: |
+  (Supply_Fan_Speed_Command > fan_on_threshold) & (Supply_Air_Temperature_Sensor < min_discharge_temp)
+```
+
+---
+
 ## VAV zones
 
 ### Excessive heating during warm weather

@@ -1,0 +1,23 @@
+# Heat pump not heating: discharge air below threshold when fan is on
+# Owner interest: identify heat pumps not producing warm discharge during heating
+# Fault when fan on and supply/discharge air temp < min_discharge_temp (default 80°F)
+name: hp_discharge_cold_when_heating
+description: Discharge air below minimum when fan on (heat pump not heating well)
+type: expression
+flag: hp_discharge_cold_flag
+equipment_type: [Heat_Pump]
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: sat
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+    column: supply_vfd_speed
+
+params:
+  min_discharge_temp: 80.0
+  fan_on_threshold: 0.01
+
+expression: |
+  (Supply_Fan_Speed_Command > fan_on_threshold) & (Supply_Air_Temperature_Sensor < min_discharge_temp)

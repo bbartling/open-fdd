@@ -93,6 +93,7 @@ def build_report(
     methodology: Optional[str] = None,
     executive_summary: Optional[str] = None,
     recommendations: Optional[List[str]] = None,
+    rules_reference: Optional[str] = None,
 ) -> Path:
     """
     Build a Word report with charts, tables, and summaries.
@@ -107,6 +108,7 @@ def build_report(
         methodology: Optional methodology paragraph
         executive_summary: Optional pre-written summary
         recommendations: Optional list of recommended actions
+        rules_reference: Optional YAML/text of fault rules used (appended at bottom)
 
     Returns:
         Path to saved .docx file
@@ -190,6 +192,18 @@ def build_report(
             for k, v in s.items():
                 if k not in ("error",):
                     doc.add_paragraph(f"  {k}: {v}", style="List Bullet")
+
+    # Fault rules reference (for heat pumps / equipment)
+    if rules_reference:
+        doc.add_heading("Fault Rules Used", level=1)
+        doc.add_paragraph(
+            "The following rules were applied. See open-fdd expression rule cookbook for details."
+        )
+        from docx.shared import Pt
+        p = doc.add_paragraph()
+        run = p.add_run(rules_reference.strip())
+        run.font.name = "Consolas"
+        run.font.size = Pt(9)
 
     # Recommendations
     doc.add_heading("Recommended Actions", level=1)

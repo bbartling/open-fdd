@@ -4,9 +4,11 @@ Fault analytics and reporting for config-driven FDD.
 Provides fault duration, motor runtime, sensor stats, and time-range helpers.
 """
 
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pandas as pd
+
 
 
 def sensor_cols_from_column_map(column_map: Dict[str, str]) -> Dict[str, str]:
@@ -476,6 +478,82 @@ def print_bounds_episodes(
     else:
         for i, ep in enumerate(episodes, 1):
             _print_bounds_episode(i, ep)
+
+
+def load_rules_for_report(rules_dir: Path) -> str:
+    """
+    Load rule YAML files from directory and return concatenated text for report appendix.
+    Filters to equipment_type Heat_Pump if present; otherwise includes all.
+    """
+    rules_dir = Path(rules_dir)
+    if not rules_dir.is_dir():
+        return ""
+    parts = []
+    for f in sorted(rules_dir.glob("*.yaml")):
+        try:
+            text = f.read_text(encoding="utf-8")
+            parts.append(f"=== {f.name} ===\n{text}")
+        except Exception:
+            continue
+    return "\n\n".join(parts)
+
+
+def build_report_multi_equipment(
+    summary_df: pd.DataFrame,
+    output_path: Path,
+    site_name: str = "Site",
+    rules_reference: Optional[str] = None,
+) -> Path:
+    """
+    Build a simple docx report for multi-equipment FDD summary (e.g. heat pump fleet).
+    Uses fault_report and docx_generator.
+    """
+    try:
+        from docx import Document
+        from docx.shared import Pt
+    except ImportError:
+        raise ImportError("python-docx required. pip install python-docx")
+
+    from datetime import datetime
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    doc = Document()
+    doc.add_heading("HVAC Fault Detection Report", 0)
+    doc.add_paragraph(f"Site: {site_name}")
+    doc.add_paragraph(f"Report Date: {datetime.now().strftime('%Y-%m-%d')}")
+
+    doc.add_heading("Per-Equipment Fault Summary", level=1)
+    table = doc.add_table(rows=1, cols=len(summary_df.columns))
+    table.style = "Table Grid"
+    hdr = table.rows[0].cells
+    for i, col in enumerate(summary_df.columns):
+        hdr[i].text = str(col)
+    for _, row in summary_df.iterrows():
+        cells = table.add_row().cells
+        for i, col in enumerate(summary_df.columns):
+            cells[i].text = str(row[col])
+
+    if rules_reference:
+        doc.add_heading("Fault Rules Used", level=1)
+        doc.add_paragraph(
+            "The following rules were applied. See open-fdd expression rule cookbook for details."
+        )
+        p = doc.add_paragraph()
+        run = p.add_run(rules_reference.strip())
+        run.font.name = "Consolas"
+        run.font.size = Pt(9)
+
+    doc.add_heading("Recommended Actions", level=1)
+    doc.add_paragraph(
+        "Review flagged equipment with on-site staff. Verify sensors and "
+        "equipment operation during fault periods. Address persistent faults "
+        "per facilities maintenance procedures."
+    )
+
+    doc.save(str(output_path))
+    return output_path
 
 
 def _print_bounds_episode(idx: int, ep: Dict[str, Any]) -> None:
