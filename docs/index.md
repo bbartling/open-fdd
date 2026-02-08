@@ -17,6 +17,8 @@ A **rules engine** is software that runs automated checks on your data — when 
 
 All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
 
+**End-to-end framework:** [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake) is a separate repo you can clone to run open-fdd on real BAS data — ingestion (zip-of-zips), Brick model, FDD, client docx reports. Use it as a framework for building-specific projects.
+
 **Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks. See [Bounds]({{ "bounds_rule" | relative_url }}), [Flatline]({{ "flatline_rule" | relative_url }}), [Hunting]({{ "hunting_rule" | relative_url }}), [OA Fraction]({{ "oa_fraction_rule" | relative_url }}), [ERV Efficiency]({{ "erv_efficiency_rule" | relative_url }}) for those rule types.
 
 ## Docs
@@ -41,4 +43,5 @@ All fault rules in **open-fdd** with full YAML. Copy from the browser into your 
 18. **[Knowledge Map]({{ "knowledge-map" | relative_url }})** — Where to find rules, Brick, config, API
 19. **[DataFrame Contract]({{ "dataframe-contract" | relative_url }})** — Input/output requirements for DataFrames
 20. **[Config Schema]({{ "config_schema" | relative_url }})** — Rule YAML schema, equipment types
+21. **[open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake)** — End-to-end framework (ingest → Brick → FDD → docx) for real BAS data
 

@@ -118,6 +118,7 @@ print_summary(summary, "Rule A")
 | `examples/run_all_rules_brick.py` | Brick workflow entrypoint |
 | `examples/validate_data_model.py` | Pre-run validation |
 | `docs/expression_rule_cookbook.md` | Rule recipes (BRICK-based) |
+| **[open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake)** | Separate repo — end-to-end framework (ingest, Brick, FDD, docx) for real BAS data |
 
 ---
 

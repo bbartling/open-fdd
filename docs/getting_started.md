@@ -59,6 +59,8 @@ On the next page, we will run a fault rule against a CSV dataset pulled from the
 
 **Running the tutorial on your end:** You don't need to run from inside the repo. Clone the repo only to install from source (`pip install -e ".[dev]"`). Then create a folder on your desktop (e.g. `my_rules`) with your rules and data, and run the tutorial scripts from there. Future versions will be on PyPI — `pip install open-fdd` — so you won't need to clone at all.
 
+**Alternative — end-to-end framework:** For real BAS data (zip-of-zips trend exports), clone [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake). It ingests messy exports, builds Brick, runs open-fdd rules, and produces client docx reports. Use it as a framework for building-specific FDD projects.
+
 Follow along in the tutorial to get familiar with the [examples directory](https://github.com/bbartling/open-fdd/tree/master/examples). See the examples README for how to obtain the practice dataset.
 
 **Rule types vs expressions:** All rule types produce boolean (true/false) fault flags. Only the `expression` type lets you write custom logic; the others (`bounds`, `flatline`, `hunting`, `oa_fraction`, `erv_efficiency`) use built-in checks in the engine. The flatline and bounds tutorials use those built-in types.

@@ -187,4 +187,10 @@ open-fdd-core uses this when ingesting CSV: it creates points in the DB, then ge
 
 ---
 
+## End-to-end framework: open-fdd-datalake
+
+For real BAS trend exports (zip-of-zips, messy CSVs), use [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake). It ingests data, builds Brick TTL from an equipment catalog, runs open-fdd rules, and produces client docx reports. Clone it as a framework for building-specific FDD projects.
+
+---
+
 **Next:** [Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }}) — zoom in on fault events, IPython notebook

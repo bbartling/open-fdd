@@ -80,6 +80,7 @@ nav_order: 21
 | Pre-run validation | examples/validate_data_model.py |
 | Fault visualization | examples/brick_fault_viz/run_and_viz_faults.ipynb |
 | Getting started | [Getting Started]({{ "getting_started" | relative_url }}) |
+| **End-to-end framework** (ingest → Brick → FDD → docx) | [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake) — clone to run on real BAS data |
 
 ---
 

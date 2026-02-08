@@ -101,4 +101,6 @@ Many fault flags are **false positives** — the rule fired but the condition wa
 
 **See also:** [Data Model & Brick]({{ "data_model" | relative_url }}) — validate and run the Brick workflow before visualizing.
 
+**Real BAS data + client reports:** [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake) runs open-fdd on zip-of-zips trend exports, includes fault viz in a notebook, and builds client docx reports (plots, metrics, YAML appendix). Clone it as a framework for building-specific projects.
+
 **Next:** [AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }}) · [Configuration]({{ "configuration" | relative_url }})
