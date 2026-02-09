@@ -12,6 +12,7 @@ Usage:
 Required: OFDD_BACNET_SERVER_URL (diy-bacnet-server)
 Optional: OFDD_BACNET_SCRAPE_ENABLED, OFDD_BACNET_SCRAPE_INTERVAL_MIN, OFDD_DB_DSN
 """
+
 import argparse
 import logging
 import sys
@@ -82,7 +83,9 @@ def main() -> int:
 
     settings = get_platform_settings()
     if not settings.bacnet_scrape_enabled:
-        log.warning("BACnet scrape disabled. Set OFDD_BACNET_SCRAPE_ENABLED=true to enable.")
+        log.warning(
+            "BACnet scrape disabled. Set OFDD_BACNET_SCRAPE_ENABLED=true to enable."
+        )
         return 0
 
     if args.loop:

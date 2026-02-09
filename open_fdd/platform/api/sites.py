@@ -1,4 +1,5 @@
 """Sites CRUD API."""
+
 import json
 from uuid import UUID
 

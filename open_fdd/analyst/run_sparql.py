@@ -107,7 +107,9 @@ def main() -> int:
         elif p.suffix == ".sparql" and p.exists():
             query_paths.append(p)
 
-    return run_sparql_main(ttl_path=ttl_path, query_paths=query_paths or None, config=cfg)
+    return run_sparql_main(
+        ttl_path=ttl_path, query_paths=query_paths or None, config=cfg
+    )
 
 
 if __name__ == "__main__":

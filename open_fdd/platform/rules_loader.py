@@ -55,6 +55,7 @@ class HotReloadRules:
                     resolve_from_ttl,
                     get_equipment_types_from_ttl,
                 )
+
                 ttl = eff.parent / "data" / "brick_model.ttl"
                 if ttl.exists():
                     self._column_map = resolve_from_ttl(str(ttl))

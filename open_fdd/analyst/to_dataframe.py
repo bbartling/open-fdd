@@ -18,9 +18,7 @@ def load_combined_csv_from_zip(zip_path: Path) -> pd.DataFrame | None:
     """Extract and load combined CSV from inner zip."""
     with zipfile.ZipFile(zip_path, "r") as z:
         combined = [
-            n
-            for n in z.namelist()
-            if "combined" in n.lower() and n.endswith(".csv")
+            n for n in z.namelist() if "combined" in n.lower() and n.endswith(".csv")
         ]
         if not combined:
             return None
@@ -29,7 +27,9 @@ def load_combined_csv_from_zip(zip_path: Path) -> pd.DataFrame | None:
     df.columns = df.columns.str.strip().str.strip('"').str.replace("\ufeff", "")
     date_col = next((c for c in df.columns if "date" in c.lower()), df.columns[0])
     date_ser = df[date_col].astype(str).str.replace(r"\s+[A-Z]{3}$", "", regex=True)
-    df["Date"] = pd.to_datetime(date_ser, format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
+    df["Date"] = pd.to_datetime(
+        date_ser, format="%m/%d/%Y %I:%M:%S %p", errors="coerce"
+    )
     df = df.dropna(subset=["Date"])
     df = df.sort_values("Date").reset_index(drop=True)
     return df
@@ -104,7 +104,9 @@ def run_to_dataframe(config: AnalystConfig | None = None) -> None:
     big = pd.concat(all_dfs, ignore_index=True)
     big = big[["equipment_id", "timestamp", "sat", "zt", "fan_status"]]
     big.to_csv(heat_pumps_csv, index=False)
-    print(f"Saved {heat_pumps_csv}: {len(big)} rows, {big['equipment_id'].nunique()} equipment")
+    print(
+        f"Saved {heat_pumps_csv}: {len(big)} rows, {big['equipment_id'].nunique()} equipment"
+    )
 
 
 if __name__ == "__main__":

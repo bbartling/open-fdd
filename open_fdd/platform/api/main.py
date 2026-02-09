@@ -1,4 +1,5 @@
 """Open-FDD CRUD API — data model, sites, points, equipment."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

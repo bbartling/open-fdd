@@ -200,6 +200,7 @@ def build_report(
             "The following rules were applied. See open-fdd expression rule cookbook for details."
         )
         from docx.shared import Pt
+
         p = doc.add_paragraph()
         run = p.add_run(rules_reference.strip())
         run.font.name = "Consolas"

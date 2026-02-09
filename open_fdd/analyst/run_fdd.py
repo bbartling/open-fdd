@@ -74,6 +74,7 @@ def run_fdd_pipeline(
     if not rules_dir.exists():
         try:
             import open_fdd
+
             rules_dir = Path(open_fdd.__file__).parent / "rules"
         except ImportError:
             raise ImportError("open-fdd not installed")
@@ -175,9 +176,7 @@ def main(config: AnalystConfig | None = None) -> None:
         for col in flag_cols:
             total = summary[col].sum()
             if total > 0:
-                f.write(
-                    f"\n{col}: {int(total)} total fault samples across equipment\n"
-                )
+                f.write(f"\n{col}: {int(total)} total fault samples across equipment\n")
     print(f"Report saved: {report_path}")
 
 

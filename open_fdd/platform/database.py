@@ -1,4 +1,5 @@
 """Database connection and session."""
+
 from contextlib import contextmanager
 from typing import Generator
 

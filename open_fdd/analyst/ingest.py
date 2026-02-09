@@ -49,9 +49,7 @@ def _normalize_equipment_id(equipment: str) -> str:
     return f"hp_{prefix}_{num}"
 
 
-def process_inner_zip(
-    inner_path: Path, zip_parent: Path
-) -> list[dict[str, Any]]:
+def process_inner_zip(inner_path: Path, zip_parent: Path) -> list[dict[str, Any]]:
     """
     Process one inner zip. Returns list of {equipment_id, point_type, combined_col, path}.
     """
@@ -84,15 +82,17 @@ def process_inner_zip(
                 continue
             eq_id = _normalize_equipment_id(equipment)
             base = Path(pf).stem
-            rows.append({
-                "equipment_id": eq_id,
-                "equipment_label": equipment,
-                "point_type": point_type,
-                "csv_file": pf,
-                "combined_col": base,
-                "path": path_str,
-                "inner_zip": inner_path.name,
-            })
+            rows.append(
+                {
+                    "equipment_id": eq_id,
+                    "equipment_label": equipment,
+                    "point_type": point_type,
+                    "csv_file": pf,
+                    "combined_col": base,
+                    "path": path_str,
+                    "inner_zip": inner_path.name,
+                }
+            )
     return rows
 
 

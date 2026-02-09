@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 import pandas as pd
 
 
-
 def sensor_cols_from_column_map(column_map: Dict[str, str]) -> Dict[str, str]:
     """
     Return sensor entries from column_map (excludes motor/command columns).

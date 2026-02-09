@@ -34,9 +34,13 @@ class AnalystConfig:
         self.equipment_catalog = self.equipment_catalog or base / "equipment.csv"
         self.heat_pumps_csv = self.heat_pumps_csv or base / "heat_pumps.csv"
         self.brick_ttl = self.brick_ttl or base / "brick_model.ttl"
-        self.report_docx = self.report_docx or self.reports_root / "heat_pump_report.docx"
+        self.report_docx = (
+            self.report_docx or self.reports_root / "heat_pump_report.docx"
+        )
         if self.sp_data_zip is None:
-            self.sp_data_zip = Path(os.getenv("SP_DATA_ZIP", str(base.parent / "SP_Data.zip")))
+            self.sp_data_zip = Path(
+                os.getenv("SP_DATA_ZIP", str(base.parent / "SP_Data.zip"))
+            )
         if self.sp_extract_dir is None:
             self.sp_extract_dir = base.parent / "sp_extract"
 

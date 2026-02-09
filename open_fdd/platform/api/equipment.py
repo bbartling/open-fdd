@@ -1,4 +1,5 @@
 """Equipment CRUD API."""
+
 import json
 from uuid import UUID
 
@@ -35,7 +36,13 @@ def create_equipment(body: EquipmentCreate):
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO equipment (site_id, name, description, equipment_type, metadata) VALUES (%s, %s, %s, %s, %s::jsonb) RETURNING id, site_id, name, description, equipment_type, created_at",
-                (str(body.site_id), body.name, body.description, body.equipment_type, json.dumps(body.metadata_ or {})),
+                (
+                    str(body.site_id),
+                    body.name,
+                    body.description,
+                    body.equipment_type,
+                    json.dumps(body.metadata_ or {}),
+                ),
             )
             row = cur.fetchone()
         conn.commit()
@@ -94,7 +101,9 @@ def delete_equipment(equipment_id: UUID):
     """Delete equipment and its points (cascade)."""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM equipment WHERE id = %s RETURNING id", (str(equipment_id),))
+            cur.execute(
+                "DELETE FROM equipment WHERE id = %s RETURNING id", (str(equipment_id),)
+            )
             if not cur.fetchone():
                 raise HTTPException(404, "Equipment not found")
         conn.commit()

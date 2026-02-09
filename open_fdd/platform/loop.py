@@ -92,24 +92,33 @@ def run_fdd_loop(
     Run FDD on last N days of data, write fault_results to DB.
     Returns list of FDDResult written.
     """
-    from open_fdd.engine.brick_resolver import resolve_from_ttl, get_equipment_types_from_ttl
+    from open_fdd.engine.brick_resolver import (
+        resolve_from_ttl,
+        get_equipment_types_from_ttl,
+    )
     from open_fdd.engine.runner import RuleRunner, load_rules_from_dir
 
     settings = get_platform_settings()
     rules_path = rules_dir or Path(settings.rules_yaml_dir)
     if not rules_path.exists():
-        rules_path = Path(__file__).resolve().parent.parent.parent / "open_fdd" / "rules"
+        rules_path = (
+            Path(__file__).resolve().parent.parent.parent / "open_fdd" / "rules"
+        )
 
     ttl_path = brick_ttl or Path(settings.brick_ttl_dir)
     if isinstance(ttl_path, str):
         ttl_path = Path(ttl_path)
 
     column_map = resolve_from_ttl(str(ttl_path)) if ttl_path.exists() else {}
-    equipment_types = get_equipment_types_from_ttl(str(ttl_path)) if ttl_path.exists() else []
+    equipment_types = (
+        get_equipment_types_from_ttl(str(ttl_path)) if ttl_path.exists() else []
+    )
     all_rules = load_rules_from_dir(rules_path)
     rules = [
-        r for r in all_rules
-        if not r.get("equipment_type") or any(et in equipment_types for et in r.get("equipment_type", []))
+        r
+        for r in all_rules
+        if not r.get("equipment_type")
+        or any(et in equipment_types for et in r.get("equipment_type", []))
     ]
     runner = RuleRunner(rules=rules)
 
@@ -145,7 +154,9 @@ def run_fdd_loop(
             params={"units": "imperial"},
             skip_missing_columns=True,
         )
-        results = results_from_runner_output(res, site_id, eq_id, timestamp_col="timestamp")
+        results = results_from_runner_output(
+            res, site_id, eq_id, timestamp_col="timestamp"
+        )
         all_results.extend(results)
 
     if all_results:

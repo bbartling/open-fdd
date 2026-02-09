@@ -40,13 +40,15 @@ def tmp_analyst_dir(tmp_path):
     rules.mkdir()
 
     # Minimal heat pump data
-    df = pd.DataFrame({
-        "equipment_id": ["hp_1"] * 30,
-        "timestamp": pd.date_range("2024-01-15", periods=30, freq="5min"),
-        "sat": [72.0] * 15 + [70.0] * 15,  # some < 80 when heating
-        "zt": [68.0] * 30,  # zone cold
-        "fan_status": [1.0] * 30,  # fan on
-    })
+    df = pd.DataFrame(
+        {
+            "equipment_id": ["hp_1"] * 30,
+            "timestamp": pd.date_range("2024-01-15", periods=30, freq="5min"),
+            "sat": [72.0] * 15 + [70.0] * 15,  # some < 80 when heating
+            "zt": [68.0] * 30,  # zone cold
+            "fan_status": [1.0] * 30,  # fan on
+        }
+    )
     df.to_csv(data / "heat_pumps.csv", index=False)
 
     # Brick TTL for Heat_Pump (need rdfs:label for brick_resolver column_map)
@@ -64,7 +66,11 @@ def tmp_analyst_dir(tmp_path):
 
     # Copy heat pump rules
     rules_src = Path(__file__).resolve().parent.parent.parent / "rules"
-    for name in ["hp_discharge_cold_when_heating.yaml", "sensor_bounds.yaml", "sensor_flatline.yaml"]:
+    for name in [
+        "hp_discharge_cold_when_heating.yaml",
+        "sensor_bounds.yaml",
+        "sensor_flatline.yaml",
+    ]:
         src = rules_src / name
         if src.exists():
             (rules / name).write_text(src.read_text())

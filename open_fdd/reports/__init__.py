@@ -38,6 +38,7 @@ try:
         events_from_dataframe,
         events_to_summary_table,
     )
+
     _docx_available = True
 except ImportError:
     _docx_available = False

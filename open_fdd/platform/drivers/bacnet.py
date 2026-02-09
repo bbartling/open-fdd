@@ -58,7 +58,11 @@ async def _scrape_via_rpc(
     settings = get_platform_settings()
     url = (settings.bacnet_server_url or "").rstrip("/")
     if not url:
-        return {"rows_inserted": 0, "points_created": 0, "errors": ["OFDD_BACNET_SERVER_URL not set"]}
+        return {
+            "rows_inserted": 0,
+            "points_created": 0,
+            "errors": ["OFDD_BACNET_SERVER_URL not set"],
+        }
 
     rpc_base = url.rstrip("/")
     errors: list[str] = []
@@ -69,12 +73,17 @@ async def _scrape_via_rpc(
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT id FROM sites WHERE id::text = %s OR name = %s", (site_id, site_id))
+                cur.execute(
+                    "SELECT id FROM sites WHERE id::text = %s OR name = %s",
+                    (site_id, site_id),
+                )
                 row = cur.fetchone()
                 if row:
                     site_uuid = row["id"]
                 else:
-                    cur.execute("INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,))
+                    cur.execute(
+                        "INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,)
+                    )
                     site_uuid = cur.fetchone()["id"]
                     conn.commit()
                     logger.info("Created site: %s", site_id)
@@ -85,7 +94,15 @@ async def _scrape_via_rpc(
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Verify diy-bacnet-server is reachable (path = /method for fastapi-jsonrpc)
         try:
-            hello = await client.post(f"{rpc_base}/server_hello", json={"jsonrpc": "2.0", "id": "0", "method": "server_hello", "params": {}})
+            hello = await client.post(
+                f"{rpc_base}/server_hello",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "0",
+                    "method": "server_hello",
+                    "params": {},
+                },
+            )
             if hello.status_code == 200:
                 logger.info("diy-bacnet-server reachable: %s", url)
             else:
@@ -100,11 +117,15 @@ async def _scrape_via_rpc(
                 errors.append(f"Invalid device_id: {device_id_str}")
                 continue
 
-            logger.info("BACnet device %s: reading %d points (RPC)", device_id_str, len(points))
+            logger.info(
+                "BACnet device %s: reading %d points (RPC)", device_id_str, len(points)
+            )
             point_specs: list[tuple[str, int, str]] = []
             for line_num, r in points:
                 oid_str = r.get("object_identifier", "").strip().strip('"')
-                obj_name = (r.get("object_name") or "").strip() or oid_str.replace(",", "_")
+                obj_name = (r.get("object_name") or "").strip() or oid_str.replace(
+                    ",", "_"
+                )
                 point_specs.append((oid_str, line_num, obj_name))
 
             device_readings: list[tuple[str, float]] = []
@@ -118,35 +139,63 @@ async def _scrape_via_rpc(
                         "request": {
                             "device_instance": device_instance,
                             "requests": [
-                                {"object_identifier": oid, "property_identifier": "present-value"}
+                                {
+                                    "object_identifier": oid,
+                                    "property_identifier": "present-value",
+                                }
                                 for oid, _, _ in point_specs
                             ],
                         }
                     },
                 }
                 try:
-                    resp = await client.post(f"{rpc_base}/client_read_multiple", json=req)
+                    resp = await client.post(
+                        f"{rpc_base}/client_read_multiple", json=req
+                    )
                     resp.raise_for_status()
                     data = resp.json()
                     if "error" in data:
-                        raise RuntimeError(data["error"].get("message", str(data["error"])))
+                        raise RuntimeError(
+                            data["error"].get("message", str(data["error"]))
+                        )
                     result = data.get("result", {})
-                    if isinstance(result, dict) and result.get("success") and result.get("data"):
+                    if (
+                        isinstance(result, dict)
+                        and result.get("success")
+                        and result.get("data")
+                    ):
                         rpm_results = result["data"].get("results", [])
                         oid_to_spec = {s[0]: (s[1], s[2]) for s in point_specs}
                         for idx, item in enumerate(rpm_results):
                             oid_str = str(item.get("object_identifier", "")).strip()
-                            line_num, obj_name = oid_to_spec.get(oid_str, (point_specs[idx][1], point_specs[idx][2]) if idx < len(point_specs) else (0, oid_str))
+                            line_num, obj_name = oid_to_spec.get(
+                                oid_str,
+                                (
+                                    (point_specs[idx][1], point_specs[idx][2])
+                                    if idx < len(point_specs)
+                                    else (0, oid_str)
+                                ),
+                            )
                             val_raw = item.get("value")
-                            if isinstance(val_raw, str) and val_raw.startswith("Error:"):
+                            if isinstance(val_raw, str) and val_raw.startswith(
+                                "Error:"
+                            ):
                                 errors.append(f"Line {line_num} {oid_str}: {val_raw}")
                             else:
                                 val = _pv_to_float(val_raw)
                                 if val is not None:
                                     device_readings.append((obj_name, val))
-                        logger.info("BACnet RPC client_read_multiple OK for %s: %d values", device_id_str, len(device_readings))
+                        logger.info(
+                            "BACnet RPC client_read_multiple OK for %s: %d values",
+                            device_id_str,
+                            len(device_readings),
+                        )
                 except Exception as e:
-                    logger.warning("BACnet RPC client_read_multiple failed for %s (%s), falling back to client_read_property", device_id_str, e)
+                    logger.warning(
+                        "BACnet RPC client_read_multiple failed for %s (%s), falling back to client_read_property",
+                        device_id_str,
+                        e,
+                    )
 
             if not device_readings and point_specs:
                 for oid_str, line_num, obj_name in point_specs:
@@ -163,7 +212,9 @@ async def _scrape_via_rpc(
                         },
                     }
                     try:
-                        resp = await client.post(f"{rpc_base}/client_read_property", json=req)
+                        resp = await client.post(
+                            f"{rpc_base}/client_read_property", json=req
+                        )
                         resp.raise_for_status()
                         data = resp.json()
                         if "error" in data:
@@ -213,9 +264,15 @@ async def _scrape_via_rpc(
 
     logger.info(
         "BACnet scrape OK (RPC): %d readings written, %d points, ts=%s",
-        rows_inserted, points_created, ts.isoformat(),
+        rows_inserted,
+        points_created,
+        ts.isoformat(),
     )
-    return {"rows_inserted": rows_inserted, "points_created": points_created, "errors": errors}
+    return {
+        "rows_inserted": rows_inserted,
+        "points_created": points_created,
+        "errors": errors,
+    }
 
 
 async def scrape_bacnet_from_csv(
@@ -236,7 +293,11 @@ async def scrape_bacnet_from_csv(
     if errors:
         for line_num, msg in errors:
             logger.error("BACnet CSV validation: %s", msg)
-        return {"rows_inserted": 0, "points_created": 0, "errors": [msg for _, msg in errors]}
+        return {
+            "rows_inserted": 0,
+            "points_created": 0,
+            "errors": [msg for _, msg in errors],
+        }
 
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -255,8 +316,16 @@ async def scrape_bacnet_from_csv(
 
     # RPC-only: require diy-bacnet-server
     if not settings.bacnet_server_url:
-        logger.error("OFDD_BACNET_SERVER_URL required. Start diy-bacnet-server (e.g. docker compose) and set it.")
-        return {"rows_inserted": 0, "points_created": 0, "errors": ["Set OFDD_BACNET_SERVER_URL (e.g. http://localhost:8080) for RPC-driven scrape"]}
+        logger.error(
+            "OFDD_BACNET_SERVER_URL required. Start diy-bacnet-server (e.g. docker compose) and set it."
+        )
+        return {
+            "rows_inserted": 0,
+            "points_created": 0,
+            "errors": [
+                "Set OFDD_BACNET_SERVER_URL (e.g. http://localhost:8080) for RPC-driven scrape"
+            ],
+        }
 
     logger.info("BACnet scrape via RPC: %s", settings.bacnet_server_url)
     return await _scrape_via_rpc(csv_path, site_id, config_rows, by_device)

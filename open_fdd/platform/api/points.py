@@ -1,4 +1,5 @@
 """Points CRUD API — data model for timeseries references."""
+
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -116,7 +117,9 @@ def delete_point(point_id: UUID):
     """Delete a point and its timeseries (cascade)."""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM points WHERE id = %s RETURNING id", (str(point_id),))
+            cur.execute(
+                "DELETE FROM points WHERE id = %s RETURNING id", (str(point_id),)
+            )
             if not cur.fetchone():
                 raise HTTPException(404, "Point not found")
         conn.commit()

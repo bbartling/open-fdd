@@ -51,4 +51,8 @@ def test_process_inner_zip(sample_inner_zip):
     eq_ids = {r["equipment_id"] for r in rows}
     assert "hp_B203_33" in eq_ids
     point_types = {r["point_type"] for r in rows}
-    assert "dat" in point_types or "zone_temp" in point_types or "fan_status" in point_types
+    assert (
+        "dat" in point_types
+        or "zone_temp" in point_types
+        or "fan_status" in point_types
+    )

@@ -46,11 +46,13 @@ def test_fdd_event_to_row():
 
 
 def test_results_from_runner_output():
-    df = pd.DataFrame({
-        "timestamp": pd.to_datetime(["2024-01-15 10:00", "2024-01-15 10:05"]),
-        "hp_discharge_cold_flag": [0, 1],
-        "bad_sensor_flag": [0, 0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2024-01-15 10:00", "2024-01-15 10:05"]),
+            "hp_discharge_cold_flag": [0, 1],
+            "bad_sensor_flag": [0, 0],
+        }
+    )
     results = results_from_runner_output(df, "site1", "hp_1")
     assert len(results) == 1
     assert results[0].fault_id == "hp_discharge_cold_flag"
@@ -59,13 +61,20 @@ def test_results_from_runner_output():
 
 
 def test_events_from_flag_series():
-    df = pd.DataFrame({
-        "timestamp": pd.to_datetime([
-            "2024-01-15 10:00", "2024-01-15 10:05", "2024-01-15 10:10",
-            "2024-01-15 10:15", "2024-01-15 10:20",
-        ]),
-        "hp_discharge_cold_flag": [0, 1, 1, 1, 0],
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                [
+                    "2024-01-15 10:00",
+                    "2024-01-15 10:05",
+                    "2024-01-15 10:10",
+                    "2024-01-15 10:15",
+                    "2024-01-15 10:20",
+                ]
+            ),
+            "hp_discharge_cold_flag": [0, 1, 1, 1, 0],
+        }
+    )
     events = events_from_flag_series(df, "hp_discharge_cold_flag", "site1", "hp_1")
     assert len(events) == 1
     assert events[0].fault_id == "hp_discharge_cold_flag"

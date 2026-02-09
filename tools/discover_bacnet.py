@@ -12,6 +12,7 @@ Usage:
 
 Requires: pip install bacpypes3 ifaddr
 """
+
 import sys
 import asyncio
 import csv
@@ -36,7 +37,9 @@ show_warnings = False
 
 
 @bacpypes_debugging
-async def object_identifiers(app, device_address, device_identifier) -> List[ObjectIdentifier]:
+async def object_identifiers(
+    app, device_address, device_identifier
+) -> List[ObjectIdentifier]:
     """Read object list from device."""
     try:
         object_list = await app.read_property(
@@ -78,12 +81,20 @@ async def main() -> None:
     global show_warnings
     csv_rows: List[Dict[str, Any]] = []
     fieldnames = [
-        "device_id", "object_identifier", "object_type", "object_instance",
-        "object_name", "description", "present_value", "units",
+        "device_id",
+        "object_identifier",
+        "object_type",
+        "object_instance",
+        "object_name",
+        "description",
+        "present_value",
+        "units",
     ]
 
     parser = SimpleArgumentParser()
-    parser.add_argument("limits", type=int, nargs="+", help="device id or range (low high)")
+    parser.add_argument(
+        "limits", type=int, nargs="+", help="device id or range (low high)"
+    )
     parser.add_argument("-o", "--output", help="output CSV file")
     wp = parser.add_mutually_exclusive_group(required=False)
     wp.add_argument("--warnings", dest="warnings", action="store_true")
@@ -116,14 +127,19 @@ async def main() -> None:
             vendor_info = get_vendor_info(i_am.vendorID)
             sys.stderr.write(f" -> Processing {device_identifier}...\n")
 
-            object_list = await object_identifiers(app, device_address, device_identifier)
+            object_list = await object_identifiers(
+                app, device_address, device_identifier
+            )
             for object_identifier in object_list:
                 row_data = {
                     "device_id": str(device_identifier),
                     "object_identifier": str(object_identifier),
                     "object_type": object_identifier[0],
                     "object_instance": object_identifier[1],
-                    "object_name": "", "description": "", "present_value": "", "units": "",
+                    "object_name": "",
+                    "description": "",
+                    "present_value": "",
+                    "units": "",
                 }
                 object_class = vendor_info.get_object_class(object_identifier[0])
                 if object_class is None:
@@ -138,7 +154,12 @@ async def main() -> None:
                 except ErrorRejectAbortNack:
                     pass
 
-                for property_name in ("object-name", "description", "present-value", "units"):
+                for property_name in (
+                    "object-name",
+                    "description",
+                    "present-value",
+                    "units",
+                ):
                     try:
                         prop_id = PropertyIdentifier(property_name)
                         if property_list and prop_id not in property_list:
@@ -166,7 +187,11 @@ async def main() -> None:
                         pass
                 csv_rows.append(row_data)
 
-        out = open(args.output, "w", newline="", encoding="utf-8") if args.output else sys.stdout
+        out = (
+            open(args.output, "w", newline="", encoding="utf-8")
+            if args.output
+            else sys.stdout
+        )
         try:
             writer = csv.DictWriter(out, fieldnames=fieldnames)
             writer.writeheader()
