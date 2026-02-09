@@ -88,6 +88,20 @@ open-fdd/
 **Prerequisite:** diy-bacnet-server as sibling of open-fdd.  
 **Minimal:** `./scripts/bootstrap.sh --minimal` (DB + Grafana only).
 
+## Monitoring resources (edge devices)
+
+On constrained hardware, monitor RAM, CPU, and load to avoid seizures:
+
+| Command | Purpose |
+|---------|---------|
+| `free -h && uptime` | RAM (used/free/available), swap, load average |
+| `ps aux --sort=-%mem \| head -10` | Top memory consumers |
+| `ps aux --sort=-%cpu \| head -10` | Top CPU consumers |
+| `docker stats --no-stream` | Container CPU/memory |
+| `docker compose -f platform/docker-compose.yml logs -f bacnet-scraper` | Scrape activity |
+
+**Overload signs:** load average > number of CPUs, swap in use, `docker stats` showing sustained high CPU/memory. Consider `--minimal` (DB + Grafana only) or raising `OFDD_BACNET_SCRAPE_INTERVAL_MIN` if the host is underpowered.
+
 ## BACnet scraping (manual / outside Docker)
 
 | Step | Command |

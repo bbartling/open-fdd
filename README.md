@@ -118,6 +118,37 @@ Please see the online docs for setup and running HVAC fault checks with pandas.
 [pandas](https://github.com/pandas-dev/pandas) · [PyYAML](https://github.com/yaml/pyyaml) · optional: [matplotlib](https://github.com/matplotlib/matplotlib) (viz), [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL)
 
 
+## Platform stack & monitoring
+
+When running the Docker stack (`./scripts/bootstrap.sh`), the **bacnet-scraper** container polls BACnet points every 5 minutes (configurable via `OFDD_BACNET_SCRAPE_INTERVAL_MIN`) and writes to TimescaleDB. See `MONOREPO_PLAN.md` for full setup.
+
+**Check resource usage** (useful on edge devices):
+
+```bash
+free -h && uptime                              # RAM, swap, load average
+ps aux --sort=-%mem | head -10                  # top memory processes
+ps aux --sort=-%cpu | head -10                  # top CPU processes
+docker stats --no-stream                        # container CPU/memory
+docker compose -f platform/docker-compose.yml logs -f bacnet-scraper   # scrape activity
+```
+
+**Signs of overload:** high load average (> cores), swap in use, `docker stats` showing sustained high CPU/memory. See `MONOREPO_PLAN.md` for more.
+
+**After machine seizure or reboot:** TimescaleDB and Grafana may have exited. Restart the full stack:
+
+```bash
+docker compose -f platform/docker-compose.yml up -d
+```
+
+**"could not translate host name 'db'"** — The bacnet-scraper cannot reach TimescaleDB. The db container is down. Start it with `docker compose -f platform/docker-compose.yml up -d db grafana`.
+
+**405 Method Not Allowed** on BACnet RPC — The scraper image may be outdated. Rebuild and restart:
+
+```bash
+docker compose -f platform/docker-compose.yml build bacnet-scraper
+docker compose -f platform/docker-compose.yml up -d bacnet-scraper
+```
+
 ## Contributing
 
 Open FDD is under construction but will be looking for testers and contributors soon, especially to complete a future open-source fault rule cookbook.
