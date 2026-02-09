@@ -66,7 +66,8 @@ async def _scrape_via_rpc(
 
     rpc_base = url.rstrip("/")
     errors: list[str] = []
-    readings: list[tuple[datetime, str, str, float]] = []
+    # (ts, site_id, external_id, value, bacnet_device_id, object_identifier)
+    readings: list[tuple[datetime, str, str, float, str, str]] = []
     ts = datetime.utcnow()
 
     site_uuid = None
@@ -128,7 +129,8 @@ async def _scrape_via_rpc(
                 )
                 point_specs.append((oid_str, line_num, obj_name))
 
-            device_readings: list[tuple[str, float]] = []
+            # (obj_name, val, oid_str) for points upsert
+            device_readings: list[tuple[str, float, str]] = []
 
             if len(point_specs) > 1:
                 req = {
@@ -168,6 +170,7 @@ async def _scrape_via_rpc(
                         oid_to_spec = {s[0]: (s[1], s[2]) for s in point_specs}
                         for idx, item in enumerate(rpm_results):
                             oid_str = str(item.get("object_identifier", "")).strip()
+                            oid_from_spec = point_specs[idx][0] if idx < len(point_specs) else oid_str
                             line_num, obj_name = oid_to_spec.get(
                                 oid_str,
                                 (
@@ -184,7 +187,7 @@ async def _scrape_via_rpc(
                             else:
                                 val = _pv_to_float(val_raw)
                                 if val is not None:
-                                    device_readings.append((obj_name, val))
+                                    device_readings.append((obj_name, val, oid_from_spec))
                         logger.info(
                             "BACnet RPC client_read_multiple OK for %s: %d values",
                             device_id_str,
@@ -225,26 +228,40 @@ async def _scrape_via_rpc(
                         if isinstance(result, dict) and "present-value" in result:
                             val = _pv_to_float(result["present-value"])
                             if val is not None:
-                                device_readings.append((obj_name, val))
+                                device_readings.append((obj_name, val, oid_str))
                     except Exception as e:
                         errors.append(f"Line {line_num} {oid_str}: {e}")
 
-            for obj_name, val in device_readings:
-                readings.append((ts, str(site_uuid), obj_name, val))
+            bacnet_device_id = str(device_instance)
+            for obj_name, val, oid_str in device_readings:
+                readings.append(
+                    (ts, str(site_uuid), obj_name, val, bacnet_device_id, oid_str)
+                )
 
     rows_inserted = 0
     points_created = 0
     if readings:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                for ts_r, sid, ext_id, val in readings:
+                for (
+                    ts_r,
+                    sid,
+                    ext_id,
+                    val,
+                    bacnet_device_id,
+                    object_identifier,
+                ) in readings:
                     cur.execute(
                         """
-                        INSERT INTO points (site_id, external_id) VALUES (%s, %s)
-                        ON CONFLICT (site_id, external_id) DO UPDATE SET external_id = EXCLUDED.external_id
+                        INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (site_id, external_id) DO UPDATE SET
+                          bacnet_device_id = EXCLUDED.bacnet_device_id,
+                          object_identifier = EXCLUDED.object_identifier,
+                          object_name = EXCLUDED.object_name
                         RETURNING id
                         """,
-                        (site_uuid, ext_id),
+                        (site_uuid, ext_id, bacnet_device_id, object_identifier, ext_id),
                     )
                     pid = cur.fetchone()["id"]
                     cur.execute(

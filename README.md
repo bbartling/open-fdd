@@ -149,6 +149,8 @@ docker compose -f platform/docker-compose.yml build bacnet-scraper
 docker compose -f platform/docker-compose.yml up -d bacnet-scraper
 ```
 
+**Grafana datasource error** — If the TimescaleDB datasource fails, add it manually: Connections → Data sources → Add → PostgreSQL. Host: `db`, Port: `5432`, Database: `openfdd`, User: `postgres`, Password: `postgres`, SSL: Disable. Save & test.
+
 ## Contributing
 
 Open FDD is under construction but will be looking for testers and contributors soon, especially to complete a future open-source fault rule cookbook.

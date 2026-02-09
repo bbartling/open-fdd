@@ -1,5 +1,9 @@
 # Open-FDD Monorepo Plan
 
+## What is Open-FDD?
+
+Open-FDD is an open-source edge analytics platform for smart buildings that ingests BACnet and other OT telemetry, stores it in TimescaleDB, and runs rule-based fault detection and diagnostics locally with Grafana dashboards and APIs. As the open alternative to proprietary tools like SkyFoundry's SkySpark, it gives operators full control, lower cost, and cloud-agnostic deployment while already powering real-world HVAC optimization and commissioning workflows.
+
 ## Goal
 Single monolithic repo: open-fdd (rules engine) + open-fdd-datalake (analyst) + open-fdd-core (IoT/platform) + BACnet/Open-Meteo drivers.
 
@@ -87,6 +91,65 @@ open-fdd/
 **Stack:** TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper (loop), CRUD API.  
 **Prerequisite:** diy-bacnet-server as sibling of open-fdd.  
 **Minimal:** `./scripts/bootstrap.sh --minimal` (DB + Grafana only).
+
+### Bootstrap script (`scripts/bootstrap.sh`)
+
+One script to bring up the platform. Run from repo root (e.g. `./scripts/bootstrap.sh`).
+
+| Invocation | What it does |
+|------------|--------------|
+| `./scripts/bootstrap.sh` | Full stack: builds and starts DB, Grafana, diy-bacnet-server, bacnet-scraper, API. Waits for Postgres ready (~15s), then prints URLs. |
+| `./scripts/bootstrap.sh --verify` | Only checks: lists containers and tests DB reachability. Does not start anything. |
+| `./scripts/bootstrap.sh --minimal` | DB + Grafana only (no BACnet server, scraper, or API). Use on constrained hardware or when scraping externally. |
+
+**Requirements:** `docker` and `docker compose` (or `docker-compose`) in PATH.  
+**After adding/editing dashboards or datasource YAML:** Recreate Grafana so it reloads provisioning:  
+`docker compose -f platform/docker-compose.yml up -d --force-recreate grafana`
+
+### Service ports
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| API | 8000 | CRUD API, Swagger docs |
+| Grafana | 3000 | Dashboards |
+| TimescaleDB | 5432 | PostgreSQL |
+| diy-bacnet-server | 8080 | JSON-RPC API (HTTP) |
+| diy-bacnet-server | 47808 | BACnet/IP (UDP) |
+
+`bacnet-server` uses `network_mode: host`, so it listens on the host's 8080 and 47808. The others map ports via Docker.
+
+### URLs (from LAN)
+
+Replace `192.168.204.16` with your edge device's IP (`hostname -I`):
+
+| Service | URL |
+|---------|-----|
+| Grafana | http://192.168.204.16:3000 |
+| Open-FDD API | http://192.168.204.16:8000/docs |
+| BACnet Swagger | http://192.168.204.16:8080/docs |
+
+### Stop, restart, reboot
+
+```bash
+# Stop stack
+docker compose -f platform/docker-compose.yml down
+
+# Restart stack
+docker compose -f platform/docker-compose.yml up -d
+
+# Reboot: containers stop and do NOT start automatically unless you configure
+# Docker or systemd to start them on boot (e.g. restart: unless-stopped + Docker enabled)
+```
+
+### Quick health checks
+
+```bash
+# Scraper activity
+docker logs openfdd_bacnet_scraper --tail 15
+
+# RAM, swap, load, container stats
+free -h && uptime && echo "---" && docker stats --no-stream
+```
 
 ## Monitoring resources (edge devices)
 
@@ -247,15 +310,92 @@ Run `--validate-only` before scraping to catch these.
 
 ---
 
-## Grafana: prebuilt dashboards
+## Grafana: datasource and dashboards
 
-Pre-provisioned in `platform/grafana/`:
+### OpenFDD Timescale datasource
+
+The **TimescaleDB** datasource is provisioned from `platform/grafana/provisioning/datasources/datasource.yml`. Grafana loads it on startup. Dashboards expect this datasource **UID: `openfdd_timescale`** (name shown in UI: "TimescaleDB").
+
+**Provisioned settings:**
+
+| Setting | Value | Note |
+|---------|--------|------|
+| Host | `db:5432` | Use `db` when Grafana runs in Docker (same compose network). For Grafana on host, use `localhost:5432`. |
+| Database | `openfdd` | Must be set in `jsonData.database`; "default database" in UI will not apply. |
+| User | `postgres` | Or a read-only user (e.g. `grafanareader`) if you create one. |
+| Password | (in secureJsonData) | e.g. `postgres` for default install. |
+| SSL / TLS | **Disable** | Require SSL causes "SSL is not enabled on the server" against the default DB container. |
+| Version | 1600 (PostgreSQL 16) | Optional; `timescaledb: true` for TimescaleDB features. |
+
+**If the datasource shows an error (e.g. after first run or after DB restart):**
+
+1. **Connections → Data sources → Add data source → PostgreSQL.**
+2. **Name:** TimescaleDB (or any; UID should be `openfdd_timescale` if you want existing dashboards to work without re-linking).
+3. **Host:** `db` (from Docker) or `localhost` if Grafana is on host. **Port:** `5432`.
+4. **Database:** `openfdd`.
+5. **User / Password:** e.g. `postgres` / `postgres`.
+6. **TLS/SSL mode:** **Disable**.
+7. **Save & test.**
+
+**Bootstrap note:** `./scripts/bootstrap.sh` starts DB and Grafana and waits for Postgres. If Grafana starts before the DB is ready, the provisioned datasource may fail its first connection; reload the datasource (Save & test) or restart Grafana after DB is up.
+
+### Prebuilt dashboards
+
+Dashboards are **JSON files** in `platform/grafana/dashboards/` (bacnet_timeseries.json, fault_results.json). Grafana loads them via provisioning on startup. Edit the JSON to change panels/variables; edits in the Grafana UI are saved to Grafana's DB, not back to these files.
 
 | Dashboard | Purpose |
 |-----------|---------|
-| **BACnet Timeseries** | `timeseries_readings` joined with `points` — all point values over time. Variable: `$point` to filter by point name. |
-| **Fault Results** | `fault_results` — fault flags over time. Variable: `$equipment` to filter by equipment. |
+| **BACnet Timeseries** | `timeseries_readings` + `points`. Variables: `$site`, `$device` (bacnet_device_id), `$point`. Default time range: last 6h; refresh: 1m. |
+| **Fault Results** | `fault_results` over time. Variable: `$equipment`. |
 
-**Provisioning:** Datasource `TimescaleDB` (openfdd) and dashboards load automatically when Grafana starts. No manual setup.
+**Add custom panels:** Grafana → Dashboards → Open-FDD → Edit. Variables use `SELECT ...` queries; edit SQL in panel settings.
 
-**Add custom panels:** Grafana → Dashboards → Open-FDD → Edit. Variables use `SELECT DISTINCT ...` queries; edit SQL in panel settings.
+---
+
+## Database design & troubleshooting
+
+### Current schema (TimescaleDB)
+
+| Table | Purpose |
+|-------|---------|
+| `sites` | Buildings/facilities (id, name) |
+| `points` | Timeseries references: external_id, site_id, bacnet_device_id, object_identifier, object_name, equipment_id (optional), brick_type, fdd_input |
+| `equipment` | Devices (AHU, VAV, etc.); optional hierarchy; currently often empty |
+| `timeseries_readings` | Hypertable: ts, site_id, point_id, value |
+| `fault_results` | Hypertable: ts, site_id, equipment_id, fault_id, flag_value, evidence |
+| `fault_events` | Fault episodes (start_ts, end_ts) |
+| `weather_hourly_raw` | Open-Meteo history (when enabled) |
+| `weather_fault_daily` | Daily weather fault summaries |
+
+**Device vs equipment:** `bacnet_device_id` on points = BACnet device instance (e.g. 3456789). Grafana filters by this. `equipment` = logical system (AHU, VAV) that may map to one or more devices; used by FDD rules and fault_results.
+
+### Inspect database
+
+```bash
+cd ~/open-fdd/platform
+
+# List tables
+docker compose exec db psql -U postgres -d openfdd -c "\dt"
+
+# Sites
+docker compose exec db psql -U postgres -d openfdd -c "SELECT id, name FROM sites ORDER BY name;"
+
+# Equipment (often empty; filled when Brick/equipment hierarchy exists)
+docker compose exec db psql -U postgres -d openfdd -c "SELECT id, site_id, name FROM equipment ORDER BY name LIMIT 20;"
+
+# Points (external_id = point name, bacnet_device_id = device instance)
+docker compose exec db psql -U postgres -d openfdd -c "SELECT id, site_id, bacnet_device_id, external_id FROM points ORDER BY external_id LIMIT 20;"
+
+# Latest readings
+docker compose exec db psql -U postgres -d openfdd -c "SELECT tr.ts, p.external_id, tr.value FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id ORDER BY tr.ts DESC LIMIT 10;"
+```
+
+### Troubleshooting database
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| "could not translate host name 'db'" | DB container down (e.g. after machine seizure) | `docker compose -f platform/docker-compose.yml up -d db grafana` |
+| Grafana datasource error | Provisioning failed or DB unreachable | See **Grafana: datasource and dashboards** above. Add manually: Host `db`, Port `5432`, Database `openfdd`, User `postgres`, Password `postgres`, TLS/SSL Disable. |
+| Device dropdown empty in Grafana | `points.bacnet_device_id` all NULL | Rebuild scraper and wait for next scrape; scraper now populates bacnet_device_id |
+| No timeseries data | Scraper not running or RPC errors | `docker logs openfdd_bacnet_scraper --tail 30`; check OFDD_BACNET_SERVER_URL, diy-bacnet-server running |
+| Duplicate key on points | Same (site_id, external_id) from different devices | Current UNIQUE(site_id, external_id) can conflict if two devices have same point name; use bacnet_device_id in external_id or add composite unique |
