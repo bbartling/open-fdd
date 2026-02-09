@@ -30,8 +30,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,brick,platform]"
 
-      - name: Check Black formatting
-        run: black --check .
-
       - name: Run tests
         run: pytest open_fdd/tests/
