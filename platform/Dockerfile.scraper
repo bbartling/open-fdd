@@ -1,0 +1,18 @@
+# BACnet scraper — runs run_bacnet_scrape.py in loop via diy-bacnet-server RPC
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install open-fdd with platform + bacnet deps
+COPY pyproject.toml README.md MANIFEST.in ./
+COPY open_fdd ./open_fdd
+COPY tools ./tools
+RUN pip install --no-cache-dir -e ".[platform,bacnet]"
+
+# Config mounted at runtime; default CSV
+ENV OFDD_BACNET_SCRAPE_CSV=/app/config/bacnet_discovered.csv
+
+# Run scraper in loop (CSV from OFDD_BACNET_SCRAPE_CSV or default)
+CMD ["sh", "-c", "python -u tools/run_bacnet_scrape.py ${OFDD_BACNET_SCRAPE_CSV:-/app/config/bacnet_discovered.csv} --loop"]

@@ -1,0 +1,101 @@
+# Open-FDD platform stack: TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper, API.
+# Run: docker compose -f platform/docker-compose.yml up -d
+# Or: ./scripts/bootstrap.sh
+#
+# Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
+# Rules YAML and config are mounted from repo — edit on host, containers see changes.
+
+services:
+  # BACnet/IP gateway — always-on server, JSON-RPC on 8080
+  bacnet-server:
+    build:
+      context: ../../diy-bacnet-server
+      dockerfile: Dockerfile
+    image: diy-bacnet-server:latest
+    container_name: openfdd_bacnet_server
+    network_mode: host
+    command: >
+      python3 -u -m bacpypes_server.main
+      --name OpenFDDGateway
+      --instance 3456788
+      --public
+    restart: unless-stopped
+    # BACnet/IP: UDP 47808. API: http://localhost:8080/docs
+
+  # BACnet scraper — reads points via RPC, writes to TimescaleDB
+  bacnet-scraper:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile.scraper
+    image: openfdd-bacnet-scraper:latest
+    container_name: openfdd_bacnet_scraper
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
+      OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+      OFDD_BACNET_SCRAPE_ENABLED: "true"
+      OFDD_BACNET_SCRAPE_INTERVAL_MIN: "5"
+    volumes:
+      - ../config:/app/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      bacnet-server:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: openfdd_timescale
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d openfdd"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: openfdd
+    ports:
+      - "5432:5432"
+    volumes:
+      - openfdd_db:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: openfdd_grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+
+  # CRUD API — sites, points, equipment, timeseries (data model)
+  api:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile.api
+    image: openfdd-api:latest
+    container_name: openfdd_api
+    ports:
+      - "8000:8000"
+    environment:
+      OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+    volumes:
+      - ../open_fdd/rules:/app/open_fdd/rules:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  openfdd_db:
+  grafana_data:

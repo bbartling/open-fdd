@@ -1,0 +1,20 @@
+# Equipment hierarchy: Site → Equipment → Points
+# How the Brick model is structured
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?equipment ?equipment_label ?equipment_type ?point ?point_class ?rule_input WHERE {
+    ?site a brick:Site .
+    ?equipment brick:isPartOf ?site .
+    ?equipment rdfs:label ?equipment_label .
+    ?equipment ofdd:equipmentType ?equipment_type .
+    ?point brick:isPointOf ?equipment .
+    ?point ofdd:mapsToRuleInput ?rule_input .
+    ?point a ?brick_type .
+    FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+    BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?point_class)
+}
+ORDER BY ?equipment ?point
+LIMIT 30

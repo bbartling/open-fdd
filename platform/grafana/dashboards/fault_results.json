@@ -1,0 +1,44 @@
+{
+  "uid": "fault-results",
+  "title": "Fault Results (open-fdd)",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Fault flags by fault_id",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
+      "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, fault_id AS metric, SUM(flag_value) AS value FROM fault_results WHERE $__timeFilter(ts) GROUP BY ts, fault_id ORDER BY ts",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Faults by equipment (variable)",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 10},
+      "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, fault_id AS metric, flag_value AS value FROM fault_results WHERE equipment_id = '$equipment' AND $__timeFilter(ts) ORDER BY ts",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "equipment",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+        "query": "SELECT DISTINCT equipment_id FROM fault_results WHERE equipment_id != '' ORDER BY equipment_id",
+        "refresh": 1
+      }
+    ]
+  }
+}

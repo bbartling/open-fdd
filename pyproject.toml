@@ -49,6 +49,18 @@ brick = [
 docx = [
     "python-docx",
 ]
+platform = [
+    "psycopg2-binary",
+    "requests",
+    "pydantic-settings",
+    "fastapi",
+    "uvicorn[standard]",
+]
+bacnet = [
+    "bacpypes3",
+    "ifaddr",
+    "httpx",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"

@@ -1,0 +1,13 @@
+# Duplicate points per equipment (should be empty)
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+
+SELECT ?equipment_id ?point_type (COUNT(?point) AS ?count) WHERE {
+    ?equipment a brick:Heat_Pump .
+    BIND(REPLACE(STR(?equipment), ".*#", "") AS ?equipment_id)
+    ?point brick:isPointOf ?equipment .
+    ?point ofdd:mapsToRuleInput ?point_type .
+}
+GROUP BY ?equipment_id ?equipment ?point_type
+HAVING (COUNT(?point) > 1)

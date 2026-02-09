@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: "Open-FDD"
+    orgId: 1
+    folder: "Open-FDD"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

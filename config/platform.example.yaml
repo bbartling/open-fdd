@@ -1,0 +1,20 @@
+# Platform config example — copy to platform.yaml and edit
+# OFDD_ env vars override these
+
+# FDD loop
+rule_interval_hours: 3
+lookback_days: 3
+rolling_window: 6
+
+# Rules: default open_fdd/rules; analyst override for tuning
+rules_yaml_dir: "open_fdd/rules"
+datalake_rules_dir: "analyst/rules"  # analyst YAML override; checked first
+
+# BACnet driver
+bacnet_enabled: true
+bacnet_scrape_interval_min: 5
+bacnet_config_csv: "config/bacnet_device.csv"
+
+# Open-Meteo driver
+open_meteo_enabled: true
+open_meteo_interval_hours: 24

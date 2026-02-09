@@ -1,0 +1,12 @@
+# Site and aggregate counts — overview of model structure
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?site ?site_label (COUNT(DISTINCT ?equipment) AS ?equipment_count) (COUNT(?point) AS ?point_count) WHERE {
+    ?site a brick:Site .
+    ?site rdfs:label ?site_label .
+    ?equipment brick:isPartOf ?site .
+    ?point brick:isPointOf ?equipment .
+}
+GROUP BY ?site ?site_label

@@ -1,0 +1,17 @@
+# Flatline detection — sensor stuck at constant value
+name: sensor_flatline
+description: Fault if sensor value does not change over window (stuck sensor)
+type: flatline
+flag: flatline_flag
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    column: sat
+  Zone_Temperature_Sensor:
+    brick: Zone_Temperature_Sensor
+    column: zt
+
+params:
+  tolerance: 0.000001
+  window: 40

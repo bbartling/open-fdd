@@ -1,0 +1,45 @@
+{
+  "uid": "bacnet-timeseries",
+  "title": "BACnet Timeseries",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "All point values",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12},
+      "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) ORDER BY tr.ts",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Single point (select from dropdown)",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 12},
+      "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT tr.ts AS time, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE p.external_id = '$point' AND $__timeFilter(tr.ts) ORDER BY tr.ts",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "point",
+        "type": "query",
+        "datasource": {"type": "postgres", "uid": "openfdd_timescale"},
+        "query": "SELECT DISTINCT external_id FROM points ORDER BY external_id",
+        "refresh": 1,
+        "includeAll": false
+      }
+    ]
+  }
+}

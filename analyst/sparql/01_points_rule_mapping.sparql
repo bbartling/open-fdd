@@ -1,0 +1,16 @@
+# Points with ofdd:mapsToRuleInput — Brick class → CSV column mapping
+# Used by open-fdd to resolve rule inputs to DataFrame columns
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?point ?brick_class ?label ?rule_input WHERE {
+    ?point ofdd:mapsToRuleInput ?rule_input .
+    ?point a ?brick_type .
+    FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+    BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
+    ?point rdfs:label ?label .
+}
+ORDER BY ?brick_class ?rule_input
+LIMIT 20

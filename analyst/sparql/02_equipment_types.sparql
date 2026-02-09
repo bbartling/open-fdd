@@ -1,0 +1,7 @@
+# Equipment types in the model — used to filter which rules apply
+
+PREFIX ofdd: <http://openfdd.local/ontology#>
+
+SELECT DISTINCT ?equipmentType WHERE {
+    ?equipment ofdd:equipmentType ?equipmentType .
+}

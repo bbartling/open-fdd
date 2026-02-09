@@ -1,0 +1,11 @@
+# Equipment missing sat, zt, or fan_status (should be empty)
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+
+SELECT ?equipment_id (COUNT(?point) AS ?point_count) WHERE {
+    ?equipment a brick:Heat_Pump .
+    BIND(REPLACE(STR(?equipment), ".*#", "") AS ?equipment_id)
+    ?point brick:isPointOf ?equipment .
+}
+GROUP BY ?equipment_id ?equipment
+HAVING (COUNT(?point) != 3)
