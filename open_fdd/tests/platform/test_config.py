@@ -19,5 +19,8 @@ def test_platform_settings_defaults():
         assert s.rolling_window == 6
         assert s.bacnet_scrape_interval_min == 5
         assert s.open_meteo_interval_hours == 24
+        assert s.open_meteo_latitude == 41.88
+        assert s.open_meteo_longitude == -87.63
+        assert s.open_meteo_site_id == "default"
     finally:
         get_platform_settings.cache_clear()

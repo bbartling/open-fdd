@@ -6,15 +6,24 @@ rule_interval_hours: 3
 lookback_days: 3
 rolling_window: 6
 
-# Rules: default open_fdd/rules; analyst override for tuning
+# Rules: default open_fdd/rules; analyst override for tuning (standalone CSV pipeline)
 rules_yaml_dir: "open_fdd/rules"
 datalake_rules_dir: "analyst/rules"  # analyst YAML override; checked first
+
+# Data model: Brick TTL for FDD column mapping (Brick class → external_id). Optional if using points.brick_type/fdd_input.
+# TTL can live in config/ (e.g. config/brick_model.ttl) and be generated from DB export or from BACnet CSV.
+# brick_ttl_dir: "config"   # directory containing brick model TTL (platform uses first .ttl or brick_ttl path)
 
 # BACnet driver
 bacnet_enabled: true
 bacnet_scrape_interval_min: 5
 bacnet_config_csv: "config/bacnet_device.csv"
 
-# Open-Meteo driver
+# Open-Meteo driver (weather → timeseries_readings for FDD rules)
 open_meteo_enabled: true
 open_meteo_interval_hours: 24
+open_meteo_latitude: 41.88
+open_meteo_longitude: -87.63
+open_meteo_timezone: America/Chicago
+open_meteo_days_back: 3
+open_meteo_site_id: default

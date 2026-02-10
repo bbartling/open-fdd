@@ -88,7 +88,7 @@ open-fdd/
 | 5. API (CRUD) | http://localhost:8000/docs |
 | 6. BACnet server | http://localhost:8080/docs (diy-bacnet-server Swagger) |
 
-**Stack:** TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper (loop), CRUD API.  
+**Stack:** TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper (loop), weather-scraper (Open-Meteo loop), CRUD API.  
 **Prerequisite:** diy-bacnet-server as sibling of open-fdd.  
 **Minimal:** `./scripts/bootstrap.sh --minimal` (DB + Grafana only).
 
@@ -98,11 +98,12 @@ One script to bring up the platform. Run from repo root (e.g. `./scripts/bootstr
 
 | Invocation | What it does |
 |------------|--------------|
-| `./scripts/bootstrap.sh` | Full stack: builds and starts DB, Grafana, diy-bacnet-server, bacnet-scraper, API. Waits for Postgres ready (~15s), then prints URLs. |
+| `./scripts/bootstrap.sh` | Full stack: builds and starts DB, Grafana, diy-bacnet-server, bacnet-scraper, weather-scraper, API. Waits for Postgres ready (~15s), then prints URLs. |
 | `./scripts/bootstrap.sh --verify` | Only checks: lists containers and tests DB reachability. Does not start anything. |
 | `./scripts/bootstrap.sh --minimal` | DB + Grafana only (no BACnet server, scraper, or API). Use on constrained hardware or when scraping externally. |
 
 **Requirements:** `docker` and `docker compose` (or `docker-compose`) in PATH.  
+**Schema/migrations:** New installs get the full schema from `platform/sql/` (mounted into the DB container as init scripts). After Postgres is up, bootstrap also runs idempotent migrations `004_fdd_input.sql` and `005_bacnet_points.sql` so **existing** DBs get new columns (e.g. `fdd_input`) without manual steps.  
 **After adding/editing dashboards or datasource YAML:** Recreate Grafana so it reloads provisioning:  
 `docker compose -f platform/docker-compose.yml up -d --force-recreate grafana`
 
@@ -150,6 +151,39 @@ docker logs openfdd_bacnet_scraper --tail 15
 # RAM, swap, load, container stats
 free -h && uptime && echo "---" && docker stats --no-stream
 ```
+
+### Ensure data is flowing via the API
+
+Use the CRUD API to confirm scrapers are writing and the app sees sites, points, and (via Grafana) time-series data.
+
+**Copy-paste curl checks:**
+
+```bash
+curl -s http://localhost:8000/health && echo ""
+curl -s http://localhost:8000/sites | head -c 300
+curl -s http://localhost:8000/points | head -c 500
+curl -s http://localhost:8000/data-model/export | head -c 600
+```
+
+**Commands reference:**
+
+| Goal | Command |
+|------|---------|
+| Run all tests | `pytest open_fdd/tests/ -v` |
+| Run data-model tests | `pytest open_fdd/tests/platform/test_data_model_ttl.py open_fdd/tests/platform/test_data_model_api.py -v` |
+| API up | `curl -s http://localhost:8000/health` |
+| Sites in DB | `curl -s http://localhost:8000/sites` |
+| Points in DB | `curl -s http://localhost:8000/points` |
+| Data-model export | `curl -s http://localhost:8000/data-model/export` |
+| Time-series data | Grafana → BACnet Timeseries dashboard |
+| Scraper activity | `docker logs openfdd_bacnet_scraper --tail 15` and `docker logs openfdd_weather_scraper --tail 15` |
+
+**Expected:** `/health` → `{"status":"ok"}`; `/sites` → JSON array of sites; `/points` → JSON array of points (empty until scrapers run); `/data-model/export` → points as JSON. Time-series: use Grafana.
+
+**If /points returns 500:** Often `column fdd_input does not exist` — the DB was created before migration 004. Run: `docker compose -f platform/docker-compose.yml exec db psql -U postgres -d openfdd -c "ALTER TABLE points ADD COLUMN IF NOT EXISTS fdd_input text;"` (or re-run bootstrap; it now applies 004 and 005 after Postgres is up).
+
+**If /data-model/export returns 404:** Rebuild API image so it includes data-model routes: `docker compose -f platform/docker-compose.yml build api && docker compose -f platform/docker-compose.yml up -d api`.
+
 
 ## Monitoring resources (edge devices)
 
@@ -253,7 +287,37 @@ export OFDD_BACNET_SCRAPE_ENABLED=false
 export OFDD_BACNET_SCRAPE_ENABLED=true
 ```
 
-### 6. Run scraper (once or loop)
+### 6. Open-Meteo weather (optional)
+
+Weather is fetched from the Open-Meteo archive API (hourly temp, RH, dewpoint, wind, gust) and stored in `timeseries_readings` under a site. Used by weather FDD rules (e.g. `weather_rh_out_of_range`, `weather_gust_lt_wind`).
+
+**Config (env or `config/platform.yaml`):**
+
+| Setting | Env var | Default | Description |
+|---------|---------|---------|-------------|
+| Enable | `OFDD_OPEN_METEO_ENABLED` | true | Set false to disable. |
+| Interval | `OFDD_OPEN_METEO_INTERVAL_HOURS` | 24 | How often to fetch (e.g. once per day). |
+| Latitude | `OFDD_OPEN_METEO_LATITUDE` | 41.88 | Site latitude. |
+| Longitude | `OFDD_OPEN_METEO_LONGITUDE` | -87.63 | Site longitude. |
+| Timezone | `OFDD_OPEN_METEO_TIMEZONE` | America/Chicago | For hourly timestamps. |
+| Days back | `OFDD_OPEN_METEO_DAYS_BACK` | 3 | Number of days of history per fetch. |
+| Site | `OFDD_OPEN_METEO_SITE_ID` | default | Site name or UUID to store weather under (created if missing). |
+
+**Docker:** The `weather-scraper` service runs `tools/run_weather_fetch.py --loop` with the above env vars. Override in `docker-compose.yml` or use a `config/platform.yaml` mount to set your coordinates.
+
+**One-shot or loop (host):**
+
+```bash
+# One-shot (uses OFDD_* env vars)
+OFDD_OPEN_METEO_LATITUDE=40.71 OFDD_OPEN_METEO_LONGITUDE=-74.01 python tools/run_weather_fetch.py
+
+# Loop every N hours
+OFDD_OPEN_METEO_INTERVAL_HOURS=24 python tools/run_weather_fetch.py --loop
+```
+
+**Disable in Docker:** Set `OFDD_OPEN_METEO_ENABLED: "false"` for the weather-scraper service, or remove the service from the compose file.
+
+### 7. Run BACnet scraper (once or loop)
 
 ```bash
 # One-shot scrape (requires OFDD_BACNET_SERVER_URL)
@@ -266,13 +330,13 @@ OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py -
 python tools/run_bacnet_scrape.py --validate-only
 ```
 
-### 7. BACnet read strategy (RPC-only)
+### 8. BACnet read strategy (RPC-only)
 
 Scraper is **RPC-only** via diy-bacnet-server. Uses `client_read_multiple` (RPM) when a device has 2+ points (one request for all present-values). Falls back to `client_read_property` when:
 - client_read_multiple fails (timeout, device error, etc.)
 - Device has only 1 point
 
-### 8. Logs (RPC-driven)
+### 9. Logs (RPC-driven)
 
 Logs show: RPC URL, diy-bacnet-server reachability, devices, points read, rows written, errors.
 
@@ -284,20 +348,53 @@ Logs show: RPC URL, diy-bacnet-server reachability, devices, points read, rows w
 2025-02-01 10:00:03 [INFO] open_fdd.bacnet: BACnet scrape OK (RPC): 25 readings written, 25 points, ts=2025-02-01T10:00:02Z
 ```
 
-### 9. Rules YAML (host-editable)
+### 10. Rules YAML (host-editable)
 
 Rules live in `open_fdd/rules/`. When using Docker, the API container mounts them read-only. Edit YAML on the host; no rebuild needed. The analyst area (`analyst/rules/`) and `open_fdd/rules/` are both used for FDD tuning.
 
-### 10. Data model (CRUD API)
+### 11. Data model (CRUD API)
 
 The API at http://localhost:8000/docs exposes:
 - **Sites** — buildings/facilities
 - **Points** — timeseries references (external_id, brick_type, fdd_input, equipment_id)
 - **Equipment** — devices (AHU, VAV, etc.)
+- **Data model** (under `/data-model`): export points as JSON, bulk-import brick_type/fdd_input, generate TTL from DB, run SPARQL against current model.
+
+**Data-model API (CRUD + TTL in sync):** Single source of truth = DB. Unit tests in `open_fdd/tests/platform/test_data_model_ttl.py` and `test_data_model_api.py` validate TTL generation from DB and the export/import/ttl/sparql endpoints (mocked DB). Deleting a site/equipment/point via CRUD updates the DB; GET `/data-model/ttl` always generates TTL from current DB (no separate file drift). Use **GET /data-model/export** to list points (raw names `external_id`, time-series refs `point_id`, `site_id`, optional `brick_type`/`fdd_input`). Send that JSON to an LLM to add best-fit BRICK class per point, then **PUT /data-model/import** with `points: [{ point_id, brick_type?, fdd_input? }]` to update the DB. **GET /data-model/ttl** returns Brick TTL (optionally `?save=true` to write `config/brick_model.ttl`). **POST /data-model/sparql** runs a SPARQL query against that TTL (you can run queries **right in Swagger**: Try it out → edit the example query → Execute); **POST /data-model/sparql/upload** accepts a `.sparql` file. All data-model routes have **Try it out** examples in the API docs. Use SPARQL to validate time-series refs, BRICK mapping, no orphans (e.g. analyst/sparql queries).
 
 Schema: `platform/sql/` (sites, points, equipment, timeseries_readings, fault_results). Analyst SPARQL validates Brick model in `analyst/sparql/`.
 
-### 11. CSV error handling
+### 11a. Data modeling: Brick TTL and time-series references
+
+**Analyst (standalone CSV) vs platform (DB + Grafana):**
+
+- **Analyst** (`analyst/`, `open_fdd/analyst/`): Standalone CSV pipeline for one-off or offline analysis. Ingest zip-of-CSVs → equipment catalog → `to_dataframe` → heat_pumps.csv. **Brick TTL** is built from an equipment catalog CSV via `open_fdd.analyst.brick_model.build_brick_ttl(catalog_path)`: each row is an equipment/point; TTL emits Brick classes (e.g. Heat_Pump, Supply_Air_Temperature_Sensor), `rdfs:label` = column name in the DataFrame (e.g. "sat", "zt"), and `ofdd:mapsToRuleInput` for rule inputs. Rules then use `column_map` from `resolve_from_ttl(ttl_path)` so Brick class names map to those column names. This path does **not** use the database; it is for CSV-only workflows. See `analyst/README.md`.
+- **Platform (DB + Grafana)**: Source of truth is TimescaleDB. Points in `points` have `external_id` (time-series identifier, e.g. BACnet object_name "SA-T", "ZoneTemp"), plus optional `brick_type` (Brick class) and `fdd_input` (rule input name). FDD loop loads timeseries by site/equipment and builds a DataFrame whose columns are `external_id`s; it uses a **Brick TTL** only to get `column_map` (Brick class → label). For TTL to work with DB data, **rdfs:label in TTL must be the point’s external_id** so that the runner can map Brick classes to the actual column names (external_id) in the DataFrame.
+
+**Starting the data modeling process (platform / Grafana-driven):**
+
+1. **Points from BACnet**  
+   Scraper writes to `points` with `external_id` = BACnet `object_name` (from `config/bacnet_discovered.csv`). So the CSV’s `object_name` column is the time-series reference (and matches Grafana point dropdowns).
+
+2. **Where the data model can live**  
+   - **In the DB**: Set `points.brick_type` (e.g. `Supply_Air_Temperature_Sensor`) and `points.fdd_input` (e.g. `sat`) via the CRUD API (PATCH /points/{id}). Equipment: set `equipment_type` (e.g. AHU, VAV_AHU) for rule filtering. No TTL required if we add a `resolve_from_db()` path that builds `column_map` from these columns (brick_type/fdd_input → external_id).  
+   - **In a TTL file**: Put a Brick TTL in config (e.g. `config/brick_model.ttl` or `config/site_default.ttl`). Each point in TTL should have `rdfs:label` = that point’s **external_id** (so column_map becomes Brick class → external_id). TTL can be generated from the DB (export sites/points/equipment → TTL) or from the BACnet CSV (map object_type/object_name to Brick class; label = object_name).
+
+3. **CRUD API and data model**  
+   - **List/export time-series references**: Existing GET /points and GET /sites already expose point names (`external_id`) and DB refs (site_id, point id). Optional: add GET /sites/{id}/points/export or GET /data-model that returns a simple list of (site, external_id, point_id, brick_type, fdd_input) for Grafana or scripts.  
+   - **Modify data model**: PATCH /points/{id} supports `brick_type`, `fdd_input`, `equipment_id`; PATCH /equipment supports `equipment_type`. So “primitive” data model editing is already: update brick_type and fdd_input on points, equipment_type on equipment.  
+   - **TTL in config**: Config can point to a TTL path (e.g. `brick_ttl_dir: "config"` and a file `config/brick_model.ttl`). Optional future: API endpoint to export current DB → TTL and save to config, or to accept TTL upload and backfill points (e.g. set brick_type/fdd_input from TTL).
+
+4. **Suggested flow**  
+   - Run BACnet discovery → trim `config/bacnet_discovered.csv`.  
+   - Run scraper → points in DB with `external_id` = object_name.  
+   - **Option A**: Assign Brick types in DB via API (PATCH point with brick_type, fdd_input); add `resolve_from_db()` in the FDD loop so no TTL is required.  
+   - **Option B**: Generate TTL from DB (tool or API “export data model”) or from BACnet CSV (tool: CSV → TTL with rdfs:label = object_name), place in `config/`, set `brick_ttl_dir`/path to that file. FDD loop keeps using `resolve_from_ttl()`.  
+   - Grafana: use existing dashboards (site/device/point from DB). Any “data model” UI can sit on top of the same CRUD API (sites, points, equipment).
+
+**Summary:** Analyst = standalone CSV and CSV-built TTL; leave it as-is for offline/one-off analysis. Platform = DB + Grafana; data model = points.brick_type / points.fdd_input (and equipment.equipment_type), optionally mirrored in a TTL under config. CRUD already allows editing the data model via points and equipment; optional additions are export endpoints (points list, DB → TTL) and TTL path in config.
+
+### 12. CSV error handling
 
 If the CSV has fat-finger errors, validation reports line numbers:
 

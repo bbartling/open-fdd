@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from open_fdd.platform.config import get_platform_settings
-from open_fdd.platform.api import sites, points, equipment
+from open_fdd.platform.api import data_model, sites, points, equipment
 
 settings = get_platform_settings()
 app = FastAPI(
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(sites.router)
 app.include_router(points.router)
 app.include_router(equipment.router)
+app.include_router(data_model.router)
 
 
 @app.get("/")

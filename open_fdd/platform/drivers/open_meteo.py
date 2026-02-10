@@ -133,9 +133,10 @@ def run_open_meteo_fetch(
     lat: float,
     lon: float,
     days_back: int = 3,
+    timezone: str = "America/Chicago",
 ) -> dict:
     """Fetch last N days of weather, store in DB."""
     end_d = date.today()
     start_d = end_d - timedelta(days=days_back)
-    df = fetch_open_meteo(lat, lon, start_d, end_d)
+    df = fetch_open_meteo(lat, lon, start_d, end_d, timezone=timezone)
     return store_weather_for_site(site_id, df)

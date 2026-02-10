@@ -72,6 +72,10 @@ for i in $(seq 1 30); do
   [[ $i -eq 30 ]] && { echo "Postgres failed to start"; exit 1; }
 done
 
+echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
+(cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql) 2>/dev/null || true
+(cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql) 2>/dev/null || true
+
 echo ""
 echo "=== Bootstrap complete ==="
 echo "  DB:       localhost:5432/openfdd  (postgres/postgres)"

@@ -120,7 +120,21 @@ Please see the online docs for setup and running HVAC fault checks with pandas.
 
 ## Platform stack & monitoring
 
-When running the Docker stack (`./scripts/bootstrap.sh`), the **bacnet-scraper** container polls BACnet points every 5 minutes (configurable via `OFDD_BACNET_SCRAPE_INTERVAL_MIN`) and writes to TimescaleDB. See `MONOREPO_PLAN.md` for full setup.
+**Quick start:** From repo root run `./scripts/bootstrap.sh` to start the full stack (TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper, weather-scraper, API). Use `./scripts/bootstrap.sh --minimal` for DB + Grafana only. **Prerequisite:** [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as a sibling directory for BACnet ingestion.
+
+| Step | Command / URL |
+|------|----------------|
+| Start stack | `./scripts/bootstrap.sh` |
+| Verify | `./scripts/bootstrap.sh --verify` |
+| Grafana | http://localhost:3000 (admin/admin) → Open-FDD folder |
+| API docs | http://localhost:8000/docs |
+| BACnet Swagger | http://localhost:8080/docs (when diy-bacnet-server is running) |
+
+- **BACnet:** bacnet-scraper polls points every 5 min (configurable via `OFDD_BACNET_SCRAPE_INTERVAL_MIN`); requires diy-bacnet-server and `config/bacnet_discovered.csv` (or `OFDD_BACNET_SCRAPE_CSV`).
+- **Weather:** weather-scraper fetches Open-Meteo once per day (configurable via `OFDD_OPEN_METEO_INTERVAL_HOURS`). Set `OFDD_OPEN_METEO_LATITUDE`, `OFDD_OPEN_METEO_LONGITUDE` (and optional `OFDD_OPEN_METEO_TIMEZONE`, `OFDD_OPEN_METEO_SITE_ID`) for your site; disable with `OFDD_OPEN_METEO_ENABLED=false`.
+- **Grafana datasource:** If the TimescaleDB datasource fails, add it manually: Host `db`, Port `5432`, Database `openfdd`, User/Password `postgres`, **SSL: Disable**. See [MONOREPO_PLAN.md](MONOREPO_PLAN.md) for full datasource and dashboard notes.
+
+Full setup (discovery, CSV trim, env vars, troubleshooting): **[MONOREPO_PLAN.md](MONOREPO_PLAN.md)**.
 
 **Check resource usage** (useful on edge devices):
 
@@ -129,7 +143,8 @@ free -h && uptime                              # RAM, swap, load average
 ps aux --sort=-%mem | head -10                  # top memory processes
 ps aux --sort=-%cpu | head -10                  # top CPU processes
 docker stats --no-stream                        # container CPU/memory
-docker compose -f platform/docker-compose.yml logs -f bacnet-scraper   # scrape activity
+docker compose -f platform/docker-compose.yml logs -f bacnet-scraper   # BACnet scrape activity
+docker compose -f platform/docker-compose.yml logs -f openfdd_weather_scraper   # Open-Meteo weather fetch
 ```
 
 **Signs of overload:** high load average (> cores), swap in use, `docker stats` showing sustained high CPU/memory. See `MONOREPO_PLAN.md` for more.

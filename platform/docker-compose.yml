@@ -45,6 +45,28 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # Open-Meteo weather scraper — fetch once per interval (e.g. daily), write to TimescaleDB
+  weather-scraper:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile.scraper
+    image: openfdd-bacnet-scraper:latest
+    container_name: openfdd_weather_scraper
+    command: ["python", "-u", "tools/run_weather_fetch.py", "--loop"]
+    environment:
+      OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+      OFDD_OPEN_METEO_ENABLED: "true"
+      OFDD_OPEN_METEO_INTERVAL_HOURS: "24"
+      OFDD_OPEN_METEO_LATITUDE: "41.88"
+      OFDD_OPEN_METEO_LONGITUDE: "-87.63"
+      OFDD_OPEN_METEO_TIMEZONE: "America/Chicago"
+      OFDD_OPEN_METEO_DAYS_BACK: "3"
+      OFDD_OPEN_METEO_SITE_ID: "default"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   db:
     image: timescale/timescaledb:latest-pg16
     container_name: openfdd_timescale

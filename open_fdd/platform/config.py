@@ -33,6 +33,13 @@ class PlatformSettings(BaseSettings):
     bacnet_scrape_enabled: bool = True
     open_meteo_enabled: bool = True
 
+    # Open-Meteo: geo and fetch window (used when open_meteo_enabled)
+    open_meteo_latitude: float = 41.88
+    open_meteo_longitude: float = -87.63
+    open_meteo_timezone: str = "America/Chicago"
+    open_meteo_days_back: int = 3
+    open_meteo_site_id: str = "default"  # site name or UUID to store weather under
+
     # BACnet: use diy-bacnet-server JSON-RPC when set (e.g. http://localhost:8080)
     bacnet_server_url: Optional[str] = None
 
