@@ -7,9 +7,11 @@ Points use rdfs:label = external_id (time-series reference) and optional ofdd:ma
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
 
 BRICK = "https://brickschema.org/schema/Brick#"
@@ -66,13 +68,13 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             site_ids = [str(s["id"]) for s in sites]
             cur.execute(
                 """SELECT id, site_id, name, equipment_type FROM equipment
-                   WHERE site_id = ANY(%s) ORDER BY site_id, name""",
+                   WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, name""",
                 (site_ids,),
             )
             equipment = cur.fetchall()
             cur.execute(
                 """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id
-                   FROM points WHERE site_id = ANY(%s) ORDER BY site_id, external_id""",
+                   FROM points WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, external_id""",
                 (site_ids,),
             )
             points_rows = cur.fetchall()
@@ -127,3 +129,21 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             lines.append("")
 
     return "\n".join(lines)
+
+
+def sync_ttl_to_file(site_id: UUID | None = None) -> None:
+    """
+    Write current DB state as Brick TTL to config file. Called automatically on any
+    CRUD that affects sites/equipment/points. Path from OFDD_BRICK_TTL_PATH (default: config/brick_model.ttl).
+    Falls back to /tmp/brick_model.ttl if config path is not writable (e.g. Docker read-only).
+    """
+    ttl = build_ttl_from_db(site_id=site_id)
+    path_str = getattr(get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl")
+    path = Path(path_str)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(ttl, encoding="utf-8")
+    except OSError:
+        Path("/tmp/brick_model.ttl").write_text(ttl, encoding="utf-8")

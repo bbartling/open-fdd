@@ -1,8 +1,9 @@
 """
-Minimal continuous FDD loop.
+Continuous FDD loop: periodic rule runs with hot-reload.
 
-Reads timeseries from DB → runs rules → writes fault_results to TimescaleDB.
-Designed for Grafana; orchestration/alerts layer on later.
+Every run (default every 3 hours): loads rules from YAML (analyst changes apply immediately),
+pulls last N days of data into pandas, runs all rules, writes fault_results.
+Analysts tune rules in YAML, spot-check in Grafana, no restart needed.
 """
 
 from __future__ import annotations
@@ -16,7 +17,67 @@ from psycopg2.extras import execute_values
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
+from open_fdd.platform.site_resolver import resolve_site_uuid
 from open_fdd.schema import FDDResult, results_from_runner_output
+
+
+def load_timeseries_for_site(
+    site_id: str,
+    start_ts: datetime,
+    end_ts: datetime,
+    column_map: dict[str, str],
+) -> Optional[pd.DataFrame]:
+    """
+    Load all timeseries_readings for a site into a DataFrame (BACnet + weather).
+    Columns = external_id; column_map applied for Brick resolution.
+    """
+    site_uuid = resolve_site_uuid(site_id, create_if_empty=False)
+    if site_uuid is None:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT p.id, p.external_id
+                FROM points p
+                WHERE p.site_id = %s
+                ORDER BY p.external_id
+                """,
+                (str(site_uuid),),
+            )
+            rows = cur.fetchall()
+    if not rows:
+        return None
+
+    point_ids = [r["id"] for r in rows]
+    ext_ids = [r["external_id"] for r in rows]
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tr.ts, p.external_id, tr.value
+                FROM timeseries_readings tr
+                JOIN points p ON tr.point_id = p.id
+                WHERE tr.point_id = ANY(%s::uuid[])
+                  AND tr.ts >= %s AND tr.ts <= %s
+                ORDER BY tr.ts
+                """,
+                (point_ids, start_ts, end_ts),
+            )
+            rows = cur.fetchall()
+
+    if not rows:
+        return None
+
+    df = pd.DataFrame(rows)
+    df = df.pivot_table(index="ts", columns="external_id", values="value")
+    df = df.reset_index()
+    csv_cols = {ext: column_map.get(ext, ext) for ext in ext_ids}
+    df = df.rename(columns=csv_cols)
+    df["timestamp"] = pd.to_datetime(df["ts"])
+    return df
 
 
 def load_timeseries_for_equipment(
@@ -83,14 +144,15 @@ def load_timeseries_for_equipment(
 
 
 def run_fdd_loop(
-    site_id: str = "default",
+    site_id: Optional[str] = None,
     rules_dir: Optional[Path] = None,
     brick_ttl: Optional[Path] = None,
-    lookback_days: int = 3,
+    lookback_days: Optional[int] = None,
 ) -> list[FDDResult]:
     """
     Run FDD on last N days of data, write fault_results to DB.
-    Returns list of FDDResult written.
+    Loads rules from YAML every run (analyst edits apply immediately).
+    Runs all rules (sensor + weather) against site-level data.
     """
     from open_fdd.engine.brick_resolver import (
         resolve_from_ttl,
@@ -99,20 +161,35 @@ def run_fdd_loop(
     from open_fdd.engine.runner import RuleRunner, load_rules_from_dir
 
     settings = get_platform_settings()
-    rules_path = rules_dir or Path(settings.rules_yaml_dir)
-    if not rules_path.exists():
-        rules_path = (
-            Path(__file__).resolve().parent.parent.parent / "open_fdd" / "rules"
-        )
+    lookback = lookback_days if lookback_days is not None else settings.lookback_days
 
-    ttl_path = brick_ttl or Path(settings.brick_ttl_dir)
+    # Rules: analyst/rules (datalake) first if configured, else open_fdd/rules
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    if rules_dir is not None:
+        rules_path = Path(rules_dir)
+    elif getattr(settings, "datalake_rules_dir", None):
+        rules_path = repo_root / settings.datalake_rules_dir
+        if not rules_path.exists():
+            rules_path = repo_root / settings.rules_yaml_dir
+    else:
+        rules_path = Path(settings.rules_yaml_dir)
+        if not rules_path.is_absolute():
+            rules_path = repo_root / rules_path
+    if not rules_path.exists():
+        rules_path = repo_root / "open_fdd" / "rules"
+
+    ttl_path = brick_ttl or Path(getattr(settings, "brick_ttl_path", None) or settings.brick_ttl_dir)
     if isinstance(ttl_path, str):
         ttl_path = Path(ttl_path)
+    if not ttl_path.is_absolute():
+        ttl_path = repo_root / ttl_path
 
     column_map = resolve_from_ttl(str(ttl_path)) if ttl_path.exists() else {}
     equipment_types = (
         get_equipment_types_from_ttl(str(ttl_path)) if ttl_path.exists() else []
     )
+
+    # Load rules every run (hot reload for analyst tuning)
     all_rules = load_rules_from_dir(rules_path)
     rules = [
         r
@@ -123,28 +200,29 @@ def run_fdd_loop(
     runner = RuleRunner(rules=rules)
 
     end_ts = datetime.utcnow()
-    start_ts = end_ts - timedelta(days=lookback_days)
+    start_ts = end_ts - timedelta(days=lookback)
 
-    # Get equipment from DB; fallback to site_id as single "equipment" for MVP
+    # Sites to run: one site or all
     with get_conn() as conn:
         with conn.cursor() as cur:
-            try:
+            if site_id:
+                site_uuid = resolve_site_uuid(site_id, create_if_empty=False)
+                if site_uuid is None:
+                    return []
                 cur.execute(
-                    "SELECT id, name FROM equipment WHERE site_id::text = %s",
-                    (site_id,),
+                    "SELECT id, name FROM sites WHERE id = %s",
+                    (str(site_uuid),),
                 )
-                equipment_rows = cur.fetchall()
-            except Exception:
-                equipment_rows = [{"id": None, "name": site_id}]
-
-    if not equipment_rows:
-        equipment_rows = [{"id": None, "name": site_id}]
+            else:
+                cur.execute("SELECT id, name FROM sites ORDER BY name")
+            site_rows = cur.fetchall()
 
     all_results: list[FDDResult] = []
-    for eq in equipment_rows:
-        eq_id = eq["name"]
-        df = load_timeseries_for_equipment(site_id, eq_id, start_ts, end_ts, column_map)
-        if df is None or len(df) < 10:
+    for row in site_rows:
+        sid = str(row["id"])
+        site_name = row["name"] or sid
+        df = load_timeseries_for_site(sid, start_ts, end_ts, column_map)
+        if df is None or len(df) < 6:
             continue
         res = runner.run(
             df,
@@ -155,7 +233,7 @@ def run_fdd_loop(
             skip_missing_columns=True,
         )
         results = results_from_runner_output(
-            res, site_id, eq_id, timestamp_col="timestamp"
+            res, site_name, site_name, timestamp_col="timestamp"
         )
         all_results.extend(results)
 

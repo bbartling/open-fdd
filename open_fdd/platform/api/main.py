@@ -12,6 +12,12 @@ app = FastAPI(
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "data-model",
+            "description": "**Brick data modeling workflow:** 1) Create site via POST /sites (required first). 2) GET /data-model/export — copy JSON (point_id, external_id, site_id). 3) Add brick_type, rule_input (= time-series ref, often external_id e.g. HTG-O), site_id, equipment_id per point. 4) PUT /data-model/import — send full payload. TTL auto-syncs to config/brick_model.ttl on every CRUD/import. 5) GET /data-model/ttl, POST /data-model/sparql — validate.",
+        },
+    ],
 )
 
 app.add_middleware(

@@ -58,7 +58,7 @@ def test_data_model_export_returns_point_refs():
     assert data[0]["external_id"] == "SA-T"
     assert data[0]["point_id"] == str(point_id)
     assert data[0]["brick_type"] == "Supply_Air_Temperature_Sensor"
-    assert data[0]["fdd_input"] == "sat"
+    assert data[0]["rule_input"] == "sat"
 
 
 def test_data_model_ttl_generated_from_db():
@@ -137,13 +137,37 @@ def test_data_model_import_updates_points():
     conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
     body = {
         "points": [
-            {"point_id": str(uuid4()), "brick_type": "Supply_Air_Temperature_Sensor", "fdd_input": "sat"}
+            {"point_id": str(uuid4()), "brick_type": "Supply_Air_Temperature_Sensor", "rule_input": "sat"}
         ]
     }
-    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn):
+    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn), patch(
+        "open_fdd.platform.api.data_model.sync_ttl_to_file"
+    ):
         r = client.put("/data-model/import", json=body)
     assert r.status_code == 200
     data = r.json()
     assert "updated" in data
     assert "total" in data
     assert data["total"] == 1
+
+
+def test_data_model_import_accepts_fdd_input_deprecated():
+    """Backward compat: fdd_input still works, maps to rule_input."""
+    cursor = MagicMock()
+    cursor.rowcount = 1
+    cursor.execute.return_value = None
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    body = {
+        "points": [
+            {"point_id": str(uuid4()), "brick_type": "Cooling_Valve_Command", "fdd_input": "CLG-O"}
+        ]
+    }
+    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn), patch(
+        "open_fdd.platform.api.data_model.sync_ttl_to_file"
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 200

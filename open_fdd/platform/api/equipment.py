@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from open_fdd.platform.database import get_conn
+from open_fdd.platform.data_model_ttl import sync_ttl_to_file
 from open_fdd.platform.api.models import EquipmentCreate, EquipmentRead, EquipmentUpdate
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
@@ -46,6 +47,10 @@ def create_equipment(body: EquipmentCreate):
             )
             row = cur.fetchone()
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return EquipmentRead.model_validate(dict(row))
 
 
@@ -93,6 +98,10 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
         conn.commit()
     if not row:
         raise HTTPException(404, "Equipment not found")
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return EquipmentRead.model_validate(dict(row))
 
 
@@ -107,4 +116,8 @@ def delete_equipment(equipment_id: UUID):
             if not cur.fetchone():
                 raise HTTPException(404, "Equipment not found")
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return {"status": "deleted"}

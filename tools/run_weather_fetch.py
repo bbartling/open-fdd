@@ -36,20 +36,13 @@ def setup_logging(verbose: bool = False) -> None:
 
 
 def resolve_site_uuid(site_id: str) -> uuid.UUID:
-    """Resolve site name or UUID string to UUID; create site if missing."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM sites WHERE id::text = %s OR name = %s",
-                (site_id, site_id),
-            )
-            row = cur.fetchone()
-            if row:
-                return row["id"]
-            cur.execute("INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,))
-            site_uuid = cur.fetchone()["id"]
-            conn.commit()
-            return site_uuid
+    """Resolve site name or UUID to UUID; use existing site if requested one missing (avoid duplicate default)."""
+    from open_fdd.platform.site_resolver import resolve_site_uuid as _resolve
+
+    result = _resolve(site_id, create_if_empty=True)
+    if result is None:
+        raise ValueError("No site available")
+    return result
 
 
 def main() -> int:

@@ -364,7 +364,22 @@ The API at http://localhost:8000/docs exposes:
 
 Schema: `platform/sql/` (sites, points, equipment, timeseries_readings, fault_results). Analyst SPARQL validates Brick model in `analyst/sparql/`.
 
-### 11a. Data modeling: Brick TTL and time-series references
+### 11a. FDD rule loop (periodic runs with hot-reload)
+
+The **fdd-loop** service runs every N hours (default 3), pulls last N days of data into pandas, loads rules from YAML (every run), runs all rules (sensor + weather), writes `fault_results`. Analyst edits to `analyst/rules/*.yaml` take effect on the next run; no restart.
+
+| Setting | Env var | Default | Description |
+|---------|---------|---------|-------------|
+| Interval | `OFDD_RULE_INTERVAL_HOURS` | 3 | Hours between runs |
+| Lookback | `OFDD_LOOKBACK_DAYS` | 3 | Days of data per run |
+| Rules dir | `OFDD_DATALAKE_RULES_DIR` | analyst/rules | YAML rules (checked first) |
+| TTL | `OFDD_BRICK_TTL_PATH` | config/brick_model.ttl | Brick model for column_map |
+
+**One-shot:** `python tools/run_rule_loop.py`  
+**Loop:** `python tools/run_rule_loop.py --loop`  
+**Docker:** `fdd-loop` service in docker-compose. Mount `analyst/rules` and `config` so YAML and TTL are editable on host.
+
+### 11b. Data modeling: Brick TTL and time-series references
 
 **Analyst (standalone CSV) vs platform (DB + Grafana):**
 
@@ -451,18 +466,151 @@ Dashboards are **JSON files** in `platform/grafana/dashboards/` (bacnet_timeseri
 
 ## Database design & troubleshooting
 
-### Current schema (TimescaleDB)
+### Database schema (TimescaleDB)
+
+**Stack:** TimescaleDB (PostgreSQL + time-series hypertables). Schema in `platform/sql/` (001_init.sql, 002_crud_schema.sql, 003_equipment.sql, 004_fdd_input.sql, 005_bacnet_points.sql).
+
+#### Core tables
+
+**sites** — Buildings/facilities.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Unique ID |
+| name | text | Display name (e.g. "bens_office") |
+| description | text | Optional |
+| metadata | jsonb | Optional metadata |
+| created_at | timestamptz | Creation time |
+
+---
+
+**equipment** — Devices under a site (AHU, VAV, heat pump, etc.).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Unique ID |
+| site_id | uuid (FK→sites) | Parent site |
+| name | text | Display name |
+| description | text | Optional |
+| equipment_type | text | Brick-style type (e.g. AHU, VAV) |
+| metadata | jsonb | Optional |
+| created_at | timestamptz | Creation time |
+
+---
+
+**points** — Sensor/actuator catalog (Brick-style); links to timeseries.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Unique ID |
+| site_id | uuid (FK→sites) | Site |
+| equipment_id | uuid (FK→equipment) | Optional; device this point belongs to |
+| external_id | text | Logical name (e.g. "SA-T", "ZoneTemp"); unique per site |
+| brick_type | text | Brick class (e.g. Supply_Air_Temperature_Sensor) |
+| fdd_input | text | Rule input name for FDD (e.g. "sat") |
+| unit | text | Unit (e.g. degrees-fahrenheit) |
+| description | text | Optional |
+| bacnet_device_id | text | Optional; BACnet device reference |
+| object_identifier | text | Optional; BACnet object ID |
+| object_name | text | Optional; BACnet object name |
+| created_at | timestamptz | Creation time |
+
+**Unique:** `(site_id, external_id)`
+
+---
+
+**timeseries_readings** (hypertable) — Time-series values for points; partitioned by time.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| ts | timestamptz | Timestamp |
+| site_id | text | Site reference |
+| point_id | uuid (FK→points) | Point |
+| value | double precision | Measured value |
+| job_id | uuid (FK) | Optional; ingest job |
+
+---
+
+**fault_results** (hypertable) — FDD fault flags over time.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| ts | timestamptz | Timestamp |
+| site_id | text | Site |
+| equipment_id | text | Equipment identifier |
+| fault_id | text | Fault rule ID |
+| flag_value | int | 0 or 1 |
+| evidence | jsonb | Optional rule evidence |
+
+---
+
+**fault_events** — Fault episodes (start/end) for annotations (e.g. Grafana).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Unique ID |
+| site_id | text | Site |
+| equipment_id | text | Equipment |
+| fault_id | text | Fault rule ID |
+| start_ts | timestamptz | Start time |
+| end_ts | timestamptz | End time |
+| duration_seconds | int | Duration |
+| evidence | jsonb | Optional |
+
+---
+
+**ingest_jobs** — Metadata for CSV ingest runs.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid (PK) | Unique ID |
+| site_id | uuid (FK→sites) | Site |
+| name | text | Job label |
+| format | text | "wide" or "long" |
+| point_columns | text[] | Point columns |
+| row_count | int | Row count |
+| created_at | timestamptz | Creation time |
+
+---
+
+**weather_hourly_raw** (hypertable) — Weather time-series.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| ts | timestamptz | Timestamp |
+| site_id | text | Site |
+| point_key | text | Weather variable (e.g. temp_f) |
+| value | double precision | Value |
+
+---
+
+**weather_fault_daily** / **weather_fault_events** — Weather-related fault aggregates and events.
+
+#### Hierarchy
+
+```
+sites
+  └── equipment (optional)
+        └── points
+  └── points (site-level if equipment_id is null)
+
+points → timeseries_readings (one point → many readings)
+```
+
+#### Quick reference
 
 | Table | Purpose |
 |-------|---------|
-| `sites` | Buildings/facilities (id, name) |
-| `points` | Timeseries references: external_id, site_id, bacnet_device_id, object_identifier, object_name, equipment_id (optional), brick_type, fdd_input |
-| `equipment` | Devices (AHU, VAV, etc.); optional hierarchy; currently often empty |
-| `timeseries_readings` | Hypertable: ts, site_id, point_id, value |
-| `fault_results` | Hypertable: ts, site_id, equipment_id, fault_id, flag_value, evidence |
-| `fault_events` | Fault episodes (start_ts, end_ts) |
-| `weather_hourly_raw` | Open-Meteo history (when enabled) |
-| `weather_fault_daily` | Daily weather fault summaries |
+| sites | Buildings/facilities |
+| equipment | Devices (AHU, VAV, etc.) under a site |
+| points | Sensor/actuator catalog with Brick types, rule inputs |
+| timeseries_readings | Time-series values for points |
+| fault_results | FDD fault flags over time |
+| fault_events | Fault episodes (start/end) |
+| ingest_jobs | CSV ingest metadata |
+| weather_* | Weather data and weather-related faults |
+
+Hypertables use TimescaleDB time partitioning for efficient time-range queries.
 
 **Device vs equipment:** `bacnet_device_id` on points = BACnet device instance (e.g. 3456789). Grafana filters by this. `equipment` = logical system (AHU, VAV) that may map to one or more devices; used by FDD rules and fault_results.
 

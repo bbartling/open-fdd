@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from open_fdd.platform.database import get_conn
+from open_fdd.platform.data_model_ttl import sync_ttl_to_file
 from open_fdd.platform.api.models import PointCreate, PointRead, PointUpdate
 
 router = APIRouter(prefix="/points", tags=["points"])
@@ -57,6 +58,10 @@ def create_point(body: PointCreate):
             )
             row = cur.fetchone()
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return PointRead.model_validate(dict(row))
 
 
@@ -109,6 +114,10 @@ def update_point(point_id: UUID, body: PointUpdate):
         conn.commit()
     if not row:
         raise HTTPException(404, "Point not found")
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return PointRead.model_validate(dict(row))
 
 
@@ -123,4 +132,8 @@ def delete_point(point_id: UUID):
             if not cur.fetchone():
                 raise HTTPException(404, "Point not found")
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return {"status": "deleted"}

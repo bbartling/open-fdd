@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from open_fdd.platform.database import get_conn
+from open_fdd.platform.data_model_ttl import sync_ttl_to_file
 from open_fdd.platform.api.models import SiteCreate, SiteRead, SiteUpdate
 
 router = APIRouter(prefix="/sites", tags=["sites"])
@@ -34,6 +35,10 @@ def create_site(body: SiteCreate):
             )
             row = cur.fetchone()
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass  # CRUD succeeds even if TTL sync fails (e.g. read-only filesystem)
     return SiteRead.model_validate(dict(row))
 
 
@@ -78,6 +83,10 @@ def update_site(site_id: UUID, body: SiteUpdate):
         conn.commit()
     if not row:
         raise HTTPException(404, "Site not found")
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return SiteRead.model_validate(dict(row))
 
 
@@ -90,4 +99,8 @@ def delete_site(site_id: UUID):
             if not cur.fetchone():
                 raise HTTPException(404, "Site not found")
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return {"status": "deleted"}

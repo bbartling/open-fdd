@@ -15,7 +15,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.database import get_conn
-from open_fdd.platform.data_model_ttl import build_ttl_from_db
+from open_fdd.platform.data_model_ttl import build_ttl_from_db, sync_ttl_to_file
 
 router = APIRouter(prefix="/data-model", tags=["data-model"])
 
@@ -31,27 +31,32 @@ class PointExportRow(BaseModel):
     equipment_id: str | None
     equipment_name: str | None
     brick_type: str | None
-    fdd_input: str | None
+    rule_input: str | None = Field(
+        None,
+        description="Name FDD rules use to reference this point's timeseries. Usually = external_id (e.g. HTG-O, CLG-O) or a short alias (e.g. htg_cmd). Maps to DB column fdd_input.",
+    )
     unit: str | None
 
 
 @router.get(
     "/export",
     response_model=list[PointExportRow],
-    summary="Export points as JSON",
-    response_description="List of points with time-series refs (point_id, site_id) and raw names (external_id). Add brick_type/fdd_input via PUT /import.",
+    summary="Step 1: Export points for Brick mapping",
+    response_description="JSON list with point_id, external_id, site_name. Use point_id when building the import body.",
 )
 def export_points(
-    site_id: UUID | None = Query(
+    site_id: str | None = Query(
         None,
-        description="Filter by site UUID. Omit to export all sites.",
-        examples=["a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"],
+        description="Filter by site: UUID, name (e.g. BensOffice), or description. Omit for all sites.",
     ),
 ):
-    """Export points as JSON: raw point names (external_id), time-series refs (point_id, site_id), and optional brick_type/fdd_input. Use for LLM to add best-fit BRICK then PUT /data-model/import. **Try it out:** leave site_id empty to get all points, or paste a site UUID from GET /sites."""
+    """**Step 1 of Brick workflow.** Export all points as JSON. Use site_id = name (e.g. BensOffice) or UUID. Copy the response; add brick_type, rule_input, then PUT /data-model/import."""
+    _site_id = _resolve_site_filter(site_id)
+    if site_id and site_id.strip() and _site_id is None:
+        raise HTTPException(404, f"No site found for name/description: {site_id!r}")
     with get_conn() as conn:
         with conn.cursor() as cur:
-            if site_id:
+            if _site_id:
                 cur.execute(
                     """
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
@@ -62,7 +67,7 @@ def export_points(
                     WHERE p.site_id = %s
                     ORDER BY p.external_id
                     """,
-                    (str(site_id),),
+                    (str(_site_id),),
                 )
             else:
                 cur.execute(
@@ -85,20 +90,38 @@ def export_points(
             equipment_id=str(r["equipment_id"]) if r.get("equipment_id") else None,
             equipment_name=r.get("equipment_name"),
             brick_type=r.get("brick_type"),
-            fdd_input=r.get("fdd_input"),
+            rule_input=r.get("fdd_input"),
             unit=r.get("unit"),
         )
         for r in rows
     ]
 
 
-# --- Import: bulk update brick_type / fdd_input from LLM-enriched JSON ---
+# --- Import: bulk update full BRICK data model (points, site, equipment, rule_input) ---
 
 
 class PointImportRow(BaseModel):
-    point_id: str = Field(..., description="Point UUID from GET /data-model/export")
+    point_id: str = Field(..., description="Point UUID from GET /data-model/export or GET /points")
+    site_id: str | None = Field(None, description="Move point to this site (UUID from GET /sites)")
+    equipment_id: str | None = Field(None, description="Assign point to this equipment (UUID from GET /equipment)")
+    external_id: str | None = Field(None, description="Rename time-series reference (e.g. HTG-O, ZoneTemp)")
     brick_type: str | None = Field(None, description="BRICK class e.g. Supply_Air_Temperature_Sensor")
-    fdd_input: str | None = Field(None, description="Rule input name e.g. sat")
+    rule_input: str | None = Field(
+        None,
+        description="Name FDD rules use for this point. Usually = external_id (e.g. HTG-O) or alias (e.g. htg_cmd). Deprecated: fdd_input also accepted.",
+    )
+    fdd_input: str | None = Field(None, description="Deprecated. Use rule_input instead.")
+    unit: str | None = Field(None, description="e.g. degrees-fahrenheit, percent")
+    description: str | None = Field(None, description="Human-readable description")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"point_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "brick_type": "Supply_Air_Temperature_Sensor", "rule_input": "sat"},
+                {"point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22", "brick_type": "Zone_Air_Temperature_Sensor", "rule_input": "ZoneTemp"},
+            ]
+        }
+    }
 
 
 class DataModelImportBody(BaseModel):
@@ -111,12 +134,12 @@ class DataModelImportBody(BaseModel):
                     {
                         "point_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
                         "brick_type": "Supply_Air_Temperature_Sensor",
-                        "fdd_input": "sat",
+                        "rule_input": "sat",
                     },
                     {
                         "point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22",
-                        "brick_type": "Zone_Temperature_Sensor",
-                        "fdd_input": "zt",
+                        "brick_type": "Zone_Air_Temperature_Sensor",
+                        "rule_input": "zt",
                     },
                 ]
             }
@@ -126,22 +149,38 @@ class DataModelImportBody(BaseModel):
 
 @router.put(
     "/import",
-    summary="Bulk update BRICK mapping",
-    response_description="Count of points updated.",
+    summary="Step 3: Import Brick mapping",
+    response_description="Count of points updated (e.g. { \"updated\": 30, \"total\": 30 }).",
 )
 def import_data_model(body: DataModelImportBody):
-    """Bulk update points with brick_type and/or fdd_input (e.g. from LLM-enriched export). Use point_id from GET /data-model/export. DB is source of truth; next GET /data-model/ttl will reflect these. **Try it out:** use the example body and replace point_id with real UUIDs from your export."""
+    """**Step 3 of Brick workflow.** Full BRICK data modeling: update brick_type, rule_input (or fdd_input), site_id, equipment_id, external_id, unit, description per point. Sites created via POST /sites. Body: `{\"points\": [{\"point_id\": \"uuid\", \"brick_type\": \"...\", \"rule_input\": \"HTG-O\", \"equipment_id\": \"...\"}, ...]}`. TTL auto-syncs on import."""
     updated = 0
     with get_conn() as conn:
         with conn.cursor() as cur:
             for row in body.points:
                 updates, params = [], []
+                if row.site_id is not None:
+                    updates.append("site_id = %s")
+                    params.append(row.site_id)
+                if row.equipment_id is not None:
+                    updates.append("equipment_id = %s")
+                    params.append(row.equipment_id)
+                if row.external_id is not None:
+                    updates.append("external_id = %s")
+                    params.append(row.external_id)
                 if row.brick_type is not None:
                     updates.append("brick_type = %s")
                     params.append(row.brick_type)
-                if row.fdd_input is not None:
+                ri = row.rule_input if row.rule_input is not None else row.fdd_input
+                if ri is not None:
                     updates.append("fdd_input = %s")
-                    params.append(row.fdd_input)
+                    params.append(ri)
+                if row.unit is not None:
+                    updates.append("unit = %s")
+                    params.append(row.unit)
+                if row.description is not None:
+                    updates.append("description = %s")
+                    params.append(row.description)
                 if not updates:
                     continue
                 params.append(row.point_id)
@@ -152,35 +191,65 @@ def import_data_model(body: DataModelImportBody):
                 if cur.rowcount:
                     updated += 1
         conn.commit()
+    try:
+        sync_ttl_to_file()
+    except Exception:
+        pass
     return {"updated": updated, "total": len(body.points)}
 
 
 # --- TTL: generate from DB (always in sync with CRUD) ---
 
 
+def _resolve_site_filter(site_filter: str | None) -> UUID | None:
+    """Resolve site_id param: UUID, site name, or description. Returns None if empty. Omit param for all sites."""
+    if not site_filter or not site_filter.strip():
+        return None
+    s = site_filter.strip()
+    try:
+        return UUID(s)
+    except ValueError:
+        pass
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id FROM sites WHERE name ILIKE %s OR description ILIKE %s LIMIT 1""",
+                (s, s),
+            )
+            row = cur.fetchone()
+    return UUID(str(row["id"])) if row else None
+
+
 @router.get(
     "/ttl",
     response_class=PlainTextResponse,
-    summary="Generate Brick TTL from DB",
+    summary="Step 4: View Brick TTL",
     response_description="Turtle (text/turtle) of current data model.",
 )
 def get_ttl(
-    site_id: UUID | None = Query(
+    site_id: str | None = Query(
         None,
-        description="Only include this site. Omit for all sites.",
+        description="Filter by site: UUID, site name (e.g. BensOffice), or description. Omit for all sites.",
     ),
     save: bool = Query(
-        False,
-        description="If true, write TTL to config/brick_model.ttl on server.",
+        True,
+        description="Write TTL to config/brick_model.ttl (default: true). Also auto-synced on every CRUD/import.",
     ),
 ):
-    """Generate Brick TTL from current DB. Always reflects current sites/equipment/points. **Try it out:** leave params default to get full model as Turtle."""
-    ttl = build_ttl_from_db(site_id=site_id)
+    """Generate Brick TTL from current DB. Use site_id = site name (e.g. BensOffice) or description—no need for UUID. Omit for all sites."""
+    _site_id = _resolve_site_filter(site_id)
+    if site_id and site_id.strip() and _site_id is None:
+        raise HTTPException(404, f"No site found for name/description: {site_id!r}")
+    ttl = build_ttl_from_db(site_id=_site_id)
     if save:
-        path = Path("config/brick_model.ttl")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(ttl, encoding="utf-8")
-        return PlainTextResponse(ttl, media_type="text/turtle")
+        try:
+            sync_ttl_to_file(site_id=_site_id)
+        except Exception as e:
+            # Still return TTL; save is best-effort (Docker may have read-only filesystem)
+            resp = PlainTextResponse(ttl, media_type="text/turtle")
+            resp.headers["X-TTL-Save"] = "failed"
+            resp.headers["X-TTL-Save-Error"] = str(e)[:200]
+            return resp
     return PlainTextResponse(ttl, media_type="text/turtle")
 
 
@@ -229,7 +298,7 @@ def _run_sparql_on_ttl(ttl_content: str, query: str) -> list[dict]:
 
 @router.post(
     "/sparql",
-    summary="Run SPARQL in Swagger",
+    summary="Step 5: Run SPARQL (validate)",
     response_description="Query result bindings as JSON.",
 )
 def run_sparql(

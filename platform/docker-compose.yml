@@ -100,6 +100,30 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
 
+  # FDD rule loop — every N hours, loads rules from YAML, pulls last N days, runs all rules, writes fault_results
+  # Analyst edits YAML on host; next run picks up changes (no restart)
+  fdd-loop:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile.scraper
+    image: openfdd-bacnet-scraper:latest
+    container_name: openfdd_fdd_loop
+    command: ["python", "-u", "tools/run_rule_loop.py", "--loop"]
+    environment:
+      OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+      OFDD_RULE_INTERVAL_HOURS: "3"
+      OFDD_LOOKBACK_DAYS: "3"
+      OFDD_DATALAKE_RULES_DIR: "analyst/rules"
+      OFDD_BRICK_TTL_PATH: "config/brick_model.ttl"
+    volumes:
+      - ../open_fdd:/app/open_fdd:ro
+      - ../analyst/rules:/app/analyst/rules:ro
+      - ../config:/app/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   # CRUD API — sites, points, equipment, timeseries (data model)
   api:
     build:
@@ -113,6 +137,7 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
+      - ../config:/app/config
     depends_on:
       db:
         condition: service_healthy

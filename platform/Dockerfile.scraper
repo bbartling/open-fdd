@@ -9,7 +9,7 @@ WORKDIR /app
 COPY pyproject.toml README.md MANIFEST.in ./
 COPY open_fdd ./open_fdd
 COPY tools ./tools
-RUN pip install --no-cache-dir -e ".[platform,bacnet]"
+RUN pip install --no-cache-dir -e ".[platform,bacnet,brick]"
 
 # Config mounted at runtime; default CSV
 ENV OFDD_BACNET_SCRAPE_CSV=/app/config/bacnet_discovered.csv

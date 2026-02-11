@@ -615,11 +615,12 @@ expression: |
 
 ### Discharge cold when heating
 
-Discharge air temperature below minimum (e.g. 80°F) when the supply fan is running. Indicates the heat pump is not heating effectively—compressor, refrigerant, or reversing valve issues. Tunable via `min_discharge_temp`.
+Discharge air temperature below minimum (e.g. 80°F) when the supply fan is running. Indicates the heat pump is not heating effectively—compressor, refrigerant, or reversing valve issues. Tunable via `min_discharge_temp`. Heat pump not heating: fan on + zone cold (heating mode) but discharge still cold Zone temp < 69°F = heating mode; discharge should be warm when heating
 
 ```yaml
+
 name: hp_discharge_cold_when_heating
-description: Discharge air below minimum when fan on (heat pump not heating well)
+description: Discharge air below minimum when fan on and zone is cold (heating mode)
 type: expression
 flag: hp_discharge_cold_flag
 equipment_type: [Heat_Pump]
@@ -628,16 +629,21 @@ inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     column: sat
-  Supply_Fan_Speed_Command:
-    brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
+  Zone_Temperature_Sensor:
+    brick: Zone_Temperature_Sensor
+    column: zt
+  Supply_Fan_Status:
+    brick: Supply_Fan_Status
+    column: fan_status
 
 params:
-  min_discharge_temp: 80.0
+  min_discharge_temp: 85
+  zone_cold_threshold: 69.0   # zone < 69 = heating mode
   fan_on_threshold: 0.01
 
 expression: |
-  (Supply_Fan_Speed_Command > fan_on_threshold) & (Supply_Air_Temperature_Sensor < min_discharge_temp)
+  (Supply_Fan_Status > fan_on_threshold) & (Zone_Temperature_Sensor < zone_cold_threshold) & (Supply_Air_Temperature_Sensor < min_discharge_temp)
+
 ```
 
 ---

@@ -19,6 +19,7 @@ from typing import Optional
 
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.config import get_platform_settings
+from open_fdd.platform.site_resolver import resolve_site_uuid
 
 logger = logging.getLogger("open_fdd.bacnet")
 
@@ -72,22 +73,10 @@ async def _scrape_via_rpc(
 
     site_uuid = None
     try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id FROM sites WHERE id::text = %s OR name = %s",
-                    (site_id, site_id),
-                )
-                row = cur.fetchone()
-                if row:
-                    site_uuid = row["id"]
-                else:
-                    cur.execute(
-                        "INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,)
-                    )
-                    site_uuid = cur.fetchone()["id"]
-                    conn.commit()
-                    logger.info("Created site: %s", site_id)
+        site_uuid = resolve_site_uuid(site_id)
+        if site_uuid is None:
+            logger.error("No site found and cannot create")
+            return {"rows_inserted": 0, "points_created": 0, "errors": ["No site available"]}
     except Exception as db_err:
         logger.error("DB error: %s", db_err)
         return {"rows_inserted": 0, "points_created": 0, "errors": [str(db_err)]}
