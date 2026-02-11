@@ -70,16 +70,14 @@ def export_points(
                     (str(_site_id),),
                 )
             else:
-                cur.execute(
-                    """
+                cur.execute("""
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
                            p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit
                     FROM points p
                     LEFT JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
                     ORDER BY p.site_id, p.external_id
-                    """
-                )
+                    """)
             rows = cur.fetchall()
     return [
         PointExportRow(
@@ -101,24 +99,44 @@ def export_points(
 
 
 class PointImportRow(BaseModel):
-    point_id: str = Field(..., description="Point UUID from GET /data-model/export or GET /points")
-    site_id: str | None = Field(None, description="Move point to this site (UUID from GET /sites)")
-    equipment_id: str | None = Field(None, description="Assign point to this equipment (UUID from GET /equipment)")
-    external_id: str | None = Field(None, description="Rename time-series reference (e.g. HTG-O, ZoneTemp)")
-    brick_type: str | None = Field(None, description="BRICK class e.g. Supply_Air_Temperature_Sensor")
+    point_id: str = Field(
+        ..., description="Point UUID from GET /data-model/export or GET /points"
+    )
+    site_id: str | None = Field(
+        None, description="Move point to this site (UUID from GET /sites)"
+    )
+    equipment_id: str | None = Field(
+        None, description="Assign point to this equipment (UUID from GET /equipment)"
+    )
+    external_id: str | None = Field(
+        None, description="Rename time-series reference (e.g. HTG-O, ZoneTemp)"
+    )
+    brick_type: str | None = Field(
+        None, description="BRICK class e.g. Supply_Air_Temperature_Sensor"
+    )
     rule_input: str | None = Field(
         None,
         description="Name FDD rules use for this point. Usually = external_id (e.g. HTG-O) or alias (e.g. htg_cmd). Deprecated: fdd_input also accepted.",
     )
-    fdd_input: str | None = Field(None, description="Deprecated. Use rule_input instead.")
+    fdd_input: str | None = Field(
+        None, description="Deprecated. Use rule_input instead."
+    )
     unit: str | None = Field(None, description="e.g. degrees-fahrenheit, percent")
     description: str | None = Field(None, description="Human-readable description")
 
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {"point_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "brick_type": "Supply_Air_Temperature_Sensor", "rule_input": "sat"},
-                {"point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22", "brick_type": "Zone_Air_Temperature_Sensor", "rule_input": "ZoneTemp"},
+                {
+                    "point_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+                    "brick_type": "Supply_Air_Temperature_Sensor",
+                    "rule_input": "sat",
+                },
+                {
+                    "point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22",
+                    "brick_type": "Zone_Air_Temperature_Sensor",
+                    "rule_input": "ZoneTemp",
+                },
             ]
         }
     }
@@ -150,7 +168,7 @@ class DataModelImportBody(BaseModel):
 @router.put(
     "/import",
     summary="Step 3: Import Brick mapping",
-    response_description="Count of points updated (e.g. { \"updated\": 30, \"total\": 30 }).",
+    response_description='Count of points updated (e.g. { "updated": 30, "total": 30 }).',
 )
 def import_data_model(body: DataModelImportBody):
     """**Step 3 of Brick workflow.** Full BRICK data modeling: update brick_type, rule_input (or fdd_input), site_id, equipment_id, external_id, unit, description per point. Sites created via POST /sites. Body: `{\"points\": [{\"point_id\": \"uuid\", \"brick_type\": \"...\", \"rule_input\": \"HTG-O\", \"equipment_id\": \"...\"}, ...]}`. TTL auto-syncs on import."""
@@ -292,7 +310,9 @@ def _run_sparql_on_ttl(ttl_content: str, query: str) -> list[dict]:
         raise HTTPException(400, f"SPARQL error: {e}") from e
     bindings = []
     for row in results:
-        bindings.append({str(k): str(v) if v is not None else None for k, v in row.asdict().items()})
+        bindings.append(
+            {str(k): str(v) if v is not None else None for k, v in row.asdict().items()}
+        )
     return bindings
 
 

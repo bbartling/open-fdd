@@ -178,7 +178,9 @@ def run_fdd_loop(
     if not rules_path.exists():
         rules_path = repo_root / "open_fdd" / "rules"
 
-    ttl_path = brick_ttl or Path(getattr(settings, "brick_ttl_path", None) or settings.brick_ttl_dir)
+    ttl_path = brick_ttl or Path(
+        getattr(settings, "brick_ttl_path", None) or settings.brick_ttl_dir
+    )
     if isinstance(ttl_path, str):
         ttl_path = Path(ttl_path)
     if not ttl_path.is_absolute():

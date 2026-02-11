@@ -9,32 +9,48 @@ Open-FDD is an edge analytics platform for smart buildings. This section describ
 
 ---
 
+
 ## Architecture
 
+
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           Open-FDD Edge Platform                            │
+├────────────────────────────────────────────────────────────────────────────┤
+
+INGEST LAYER
+──────────────────────────────────────────────────────────────────────────────
+  BACnet Scraper        Weather API         DIY BACnet Server
+  (BAS devices)         (Open-Meteo)        (sim/edge points)
+        │                    │                    │
+        └────────────────────┴────────────────────┘
+                              ▼
+
+STORAGE LAYER
+──────────────────────────────────────────────────────────────────────────────
+  PostgreSQL + TimescaleDB
+
+  Semantic Model (relational)         Time-Series (hypertable)
+  ──────────────────────────         ─────────────────────────
+  sites                              telemetry
+  equipment                          (time, point_id, value)
+  devices                            fault_results
+  points (Brick-typed)
+
+                              ▼
+
+ANALYTICS LAYER
+──────────────────────────────────────────────────────────────────────────────
+  Periodic FDD / AFDD Engine
+  (open-fdd rules + pandas + Brick discovery)
+
+                              ▼
+
+ACCESS LAYER
+──────────────────────────────────────────────────────────────────────────────
+  REST API (Swagger/OpenAPI)     Grafana dashboards / reporting
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Open-FDD Edge Platform                       │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ BACnet       │  │ Open-Meteo   │  │ diy-bacnet   │  ← Data       │
-│  │ Scraper      │  │ Weather      │  │ -server      │    sources    │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                 │                 │                        │
-│         └─────────────────┼─────────────────┘                        │
-│                           ▼                                          │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │                    TimescaleDB (PostgreSQL)                    │   │
-│  │  sites │ equipment │ points │ timeseries_readings │ fault_results │
-│  └──────────────────────────────────────────────────────────────┘   │
-│                           │                                          │
-│         ┌─────────────────┼─────────────────┐                        │
-│         ▼                 ▼                 ▼                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ FDD Loop     │  │ REST API     │  │ Grafana      │               │
-│  │ (periodic)   │  │ (Swagger)    │  │ (dashboards) │               │
-│  └──────────────┘  └──────────────┘  └──────────────┘               │
-└─────────────────────────────────────────────────────────────────────┘
-```
+
 
 ---
 
@@ -48,7 +64,8 @@ Open-FDD is an edge analytics platform for smart buildings. This section describ
 | **BACnet scraper** | Polls diy-bacnet-server via JSON-RPC. Writes readings to `timeseries_readings`. |
 | **Weather scraper** | Fetches from Open-Meteo archive API (temp, RH, dewpoint, wind). |
 | **FDD loop** | Runs every N hours. Loads last N days of data, reloads rules from YAML, runs all rules, writes `fault_results`. Hot-reload: analyst edits YAML → next run picks up changes. |
-| **diy-bacnet-server** | BACnet/IP JSON-RPC bridge. Discovered devices/points → CSV; scraper reads present-value via RPC. |
+| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP JSON-RPC bridge. Discovered devices/points → CSV; scraper reads present-value via RPC. |
+
 
 ---
 

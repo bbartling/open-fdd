@@ -34,9 +34,7 @@ def resolve_site_uuid(site_id: str, create_if_empty: bool = True) -> UUID | None
             if not create_if_empty:
                 return None
 
-            cur.execute(
-                "INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,)
-            )
+            cur.execute("INSERT INTO sites (name) VALUES (%s) RETURNING id", (site_id,))
             site_uuid = cur.fetchone()["id"]
             conn.commit()
             return site_uuid

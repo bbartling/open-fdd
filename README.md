@@ -58,28 +58,73 @@ result = runner.run(df, timestamp_col="timestamp", rolling_window=3)
 
 ---
 
-## Documentation
+## Online Documentation
 
 [📖 Docs](https://bbartling.github.io/open-fdd/)
-
-- [Overview](https://bbartling.github.io/open-fdd/overview)
-- [Getting Started](https://bbartling.github.io/open-fdd/getting_started)
-- [Concepts](https://bbartling.github.io/open-fdd/concepts/) — Points, equipment, sites
-- [BACnet](https://bbartling.github.io/open-fdd/bacnet/) — Discovery, scraping
-- [Rules](https://bbartling.github.io/open-fdd/rules/) — Rule types, expression cookbook
-- [API Reference](https://bbartling.github.io/open-fdd/api/)
 
 ---
 
 ## Platform configuration
 
-- **BACnet:** Scraper polls diy-bacnet-server. Set `OFDD_BACNET_SCRAPE_INTERVAL_MIN`, `OFDD_BACNET_URL`. Requires `config/bacnet_discovered.csv` or `OFDD_BACNET_SCRAPE_CSV`.
-- **Weather:** Open-Meteo scraper. Set `OFDD_OPEN_METEO_LATITUDE`, `OFDD_OPEN_METEO_LONGITUDE`, `OFDD_OPEN_METEO_TIMEZONE`. Disable with `OFDD_OPEN_METEO_ENABLED=false`.
-- **Rules:** `OFDD_DATALAKE_RULES_DIR` (default: analyst/rules). YAML edits apply on next FDD run (hot-reload).
+Open-FDD is **configuration-file driven**.
+You edit one file — `platform.yaml` — to tell the system **where data comes from**, **how often to run**, and **which rules to apply**. No code changes or rebuilds are required.
 
-Full setup and troubleshooting: **[MONOREPO_PLAN.md](MONOREPO_PLAN.md)**.
+### Data sources
+
+* **BACnet devices** – Uses **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** to read live BAS points over BACnet/IP. Discovered devices and points are exported to CSV, then the scraper continuously polls their present values.
+* **Weather** – Uses the free **[Open-Meteo](https://open-meteo.com/)** API to add outdoor temperature, humidity, and wind data to the time-series database for economizer and weather-dependent faults.
+* **Rules** – Fault rules are simple **[YAML](https://yaml.org/)** files in `analyst/rules`. Edit a rule and it automatically applies on the next run (no restart needed).
+
+### How it works
+
+1. Scrape data
+2. Store it in the database
+3. Run fault rules on a schedule
+4. View results in dashboards or the API
+
+All behavior is controlled through `platform.yaml` (or optional `OFDD_*` environment variables for Docker/edge deployments), making the platform portable across buildings and easy to tune without touching code.
 
 ---
+
+## Platform config example
+
+Copy to `platform.yaml` and edit.
+Environment variables (`OFDD_*`) override these values.
+
+```yaml
+# FDD rule loop: periodic runs
+# Each run loads YAML rules, pulls recent history from TimescaleDB into pandas,
+# evaluates faults, and writes results back to the database.
+
+rule_interval_hours: 3    # run every 3 hours
+lookback_days: 3          # historical window loaded per run
+rolling_window: 6         # consecutive samples required to flag fault
+
+# Rules: analyst overrides first (hot reload), then defaults
+rules_yaml_dir: "open_fdd/rules"
+datalake_rules_dir: "analyst/rules"
+
+# Optional Brick TTL model for semantic mapping (Brick → points)
+# If omitted, the system uses points.brick_type / fdd_input from the database
+# brick_ttl_dir: "config"
+
+# BACnet driver (edge scraping via diy-bacnet-server)
+bacnet_enabled: true
+bacnet_scrape_interval_min: 5
+bacnet_config_csv: "config/bacnet_device.csv"
+
+# Open-Meteo weather driver
+open_meteo_enabled: true
+open_meteo_interval_hours: 24
+open_meteo_latitude: 41.88
+open_meteo_longitude: -87.63
+open_meteo_timezone: America/Chicago
+open_meteo_days_back: 3
+open_meteo_site_id: default
+```
+
+---
+
 
 ## Dependencies
 

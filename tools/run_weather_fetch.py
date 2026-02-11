@@ -46,7 +46,9 @@ def resolve_site_uuid(site_id: str) -> uuid.UUID:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Open-Meteo weather fetch → TimescaleDB")
+    parser = argparse.ArgumentParser(
+        description="Open-Meteo weather fetch → TimescaleDB"
+    )
     parser.add_argument(
         "--loop",
         action="store_true",

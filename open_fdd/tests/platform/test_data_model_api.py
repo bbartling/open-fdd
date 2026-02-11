@@ -28,7 +28,10 @@ def _mock_conn_with_cursor(fetchall_result):
 
 
 def test_data_model_export_empty():
-    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: _mock_conn_with_cursor([])):
+    with patch(
+        "open_fdd.platform.api.data_model.get_conn",
+        side_effect=lambda: _mock_conn_with_cursor([]),
+    ):
         r = client.get("/data-model/export")
     assert r.status_code == 200
     assert r.json() == []
@@ -50,7 +53,10 @@ def test_data_model_export_returns_point_refs():
             "unit": "degF",
         }
     ]
-    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: _mock_conn_with_cursor(rows)):
+    with patch(
+        "open_fdd.platform.api.data_model.get_conn",
+        side_effect=lambda: _mock_conn_with_cursor(rows),
+    ):
         r = client.get("/data-model/export")
     assert r.status_code == 200
     data = r.json()
@@ -137,11 +143,16 @@ def test_data_model_import_updates_points():
     conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
     body = {
         "points": [
-            {"point_id": str(uuid4()), "brick_type": "Supply_Air_Temperature_Sensor", "rule_input": "sat"}
+            {
+                "point_id": str(uuid4()),
+                "brick_type": "Supply_Air_Temperature_Sensor",
+                "rule_input": "sat",
+            }
         ]
     }
-    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn), patch(
-        "open_fdd.platform.api.data_model.sync_ttl_to_file"
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
     ):
         r = client.put("/data-model/import", json=body)
     assert r.status_code == 200
@@ -163,11 +174,16 @@ def test_data_model_import_accepts_fdd_input_deprecated():
     conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
     body = {
         "points": [
-            {"point_id": str(uuid4()), "brick_type": "Cooling_Valve_Command", "fdd_input": "CLG-O"}
+            {
+                "point_id": str(uuid4()),
+                "brick_type": "Cooling_Valve_Command",
+                "fdd_input": "CLG-O",
+            }
         ]
     }
-    with patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn), patch(
-        "open_fdd.platform.api.data_model.sync_ttl_to_file"
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
     ):
         r = client.put("/data-model/import", json=body)
     assert r.status_code == 200

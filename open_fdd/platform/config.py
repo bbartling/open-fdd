@@ -14,7 +14,9 @@ class PlatformSettings(BaseSettings):
 
     db_dsn: str = "postgresql://postgres:postgres@localhost:5432/openfdd"
     brick_ttl_dir: str = "data/brick"
-    brick_ttl_path: str = "config/brick_model.ttl"  # auto-synced on CRUD; FDD loop reads this
+    brick_ttl_path: str = (
+        "config/brick_model.ttl"  # auto-synced on CRUD; FDD loop reads this
+    )
     app_title: str = "Open-FDD API"
     app_version: str = "0.1.0"
     debug: bool = False

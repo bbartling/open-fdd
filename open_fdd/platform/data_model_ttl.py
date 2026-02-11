@@ -138,7 +138,9 @@ def sync_ttl_to_file(site_id: UUID | None = None) -> None:
     Falls back to /tmp/brick_model.ttl if config path is not writable (e.g. Docker read-only).
     """
     ttl = build_ttl_from_db(site_id=site_id)
-    path_str = getattr(get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl")
+    path_str = getattr(
+        get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl"
+    )
     path = Path(path_str)
     if not path.is_absolute():
         path = Path.cwd() / path

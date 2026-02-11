@@ -76,7 +76,11 @@ async def _scrape_via_rpc(
         site_uuid = resolve_site_uuid(site_id)
         if site_uuid is None:
             logger.error("No site found and cannot create")
-            return {"rows_inserted": 0, "points_created": 0, "errors": ["No site available"]}
+            return {
+                "rows_inserted": 0,
+                "points_created": 0,
+                "errors": ["No site available"],
+            }
     except Exception as db_err:
         logger.error("DB error: %s", db_err)
         return {"rows_inserted": 0, "points_created": 0, "errors": [str(db_err)]}
@@ -159,7 +163,11 @@ async def _scrape_via_rpc(
                         oid_to_spec = {s[0]: (s[1], s[2]) for s in point_specs}
                         for idx, item in enumerate(rpm_results):
                             oid_str = str(item.get("object_identifier", "")).strip()
-                            oid_from_spec = point_specs[idx][0] if idx < len(point_specs) else oid_str
+                            oid_from_spec = (
+                                point_specs[idx][0]
+                                if idx < len(point_specs)
+                                else oid_str
+                            )
                             line_num, obj_name = oid_to_spec.get(
                                 oid_str,
                                 (
@@ -176,7 +184,9 @@ async def _scrape_via_rpc(
                             else:
                                 val = _pv_to_float(val_raw)
                                 if val is not None:
-                                    device_readings.append((obj_name, val, oid_from_spec))
+                                    device_readings.append(
+                                        (obj_name, val, oid_from_spec)
+                                    )
                         logger.info(
                             "BACnet RPC client_read_multiple OK for %s: %d values",
                             device_id_str,
@@ -250,7 +260,13 @@ async def _scrape_via_rpc(
                           object_name = EXCLUDED.object_name
                         RETURNING id
                         """,
-                        (site_uuid, ext_id, bacnet_device_id, object_identifier, ext_id),
+                        (
+                            site_uuid,
+                            ext_id,
+                            bacnet_device_id,
+                            object_identifier,
+                            ext_id,
+                        ),
                     )
                     pid = cur.fetchone()["id"]
                     cur.execute(

@@ -43,7 +43,10 @@ def main() -> int:
         help="Run every N hours (OFDD_RULE_INTERVAL_HOURS)",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Debug logging",
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Debug logging",
     )
     args = parser.parse_args()
 
@@ -68,7 +71,11 @@ def main() -> int:
             return 1
 
     if args.loop:
-        log.info("FDD loop started: every %d hours, lookback %d days", interval_hours, lookback_days)
+        log.info(
+            "FDD loop started: every %d hours, lookback %d days",
+            interval_hours,
+            lookback_days,
+        )
         while True:
             _run()
             sleep_sec = interval_hours * 3600
