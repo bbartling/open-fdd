@@ -1,5 +1,5 @@
-title: "open-fdd"
-description: "Config-driven FDD for HVAC — YAML rules, pandas, Brick"
+title: "Open-FDD"
+description: "Open-source edge analytics for smart buildings — BACnet, TimescaleDB, Grafana, rule-based FDD"
 baseurl: "/open-fdd"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
@@ -10,3 +10,6 @@ aux_links:
   "PyPI": "https://pypi.org/project/open-fdd/"
 
 footer_content: "MIT License"
+
+# Optional: search
+search_enabled: false

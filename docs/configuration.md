@@ -1,75 +1,84 @@
 ---
 title: Configuration
-nav_order: 14
+nav_order: 12
 ---
 
 # Configuration
 
-Rules are YAML files. Each rule has `name`, `type`, `flag`, `inputs`, and optionally `params` and `expression`.
+---
 
-## Rule types
+## Platform (YAML)
 
-| Type | Description |
-|------|-------------|
-| `bounds` | Value outside [low, high]; supports `units: metric` |
-| `flatline` | Sensor stuck (rolling spread &lt; tolerance) |
-| `expression` | Pandas/numpy expression |
-| `hunting` | Excessive AHU state changes (PID hunting) |
-| `oa_fraction` | OA fraction / design airflow error |
-| `erv_efficiency` | ERV effectiveness out of range |
+Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via environment).
 
-## Expression rule
+| Key | Default | Description |
+|-----|---------|-------------|
+| `rule_interval_hours` | 3 | FDD loop run interval |
+| `lookback_days` | 3 | Days of data to load per run |
+| `rolling_window` | 6 | Consecutive samples to flag fault |
+| `rules_yaml_dir` | open_fdd/rules | Fallback rules directory |
+| `datalake_rules_dir` | analyst/rules | Primary rules (hot-reload) |
+| `bacnet_enabled` | true | Enable BACnet scraper |
+| `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
+| `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config |
+| `open_meteo_enabled` | true | Enable weather scraper |
+| `open_meteo_interval_hours` | 24 | Weather poll interval |
+| `open_meteo_latitude` | 41.88 | Site latitude |
+| `open_meteo_longitude` | -87.63 | Site longitude |
+| `open_meteo_timezone` | America/Chicago | Timezone |
+| `open_meteo_days_back` | 3 | Days of archive to fetch |
+| `open_meteo_site_id` | default | Site ID for weather points |
 
-Use **BRICK class names** as input keys for Brick model compatibility. The input key is the variable name in the expression:
+---
+
+## Environment
+
+`OFDD_`-prefixed vars override YAML:
+
+| Variable | Description |
+|----------|-------------|
+| `OFDD_DB_HOST` | TimescaleDB host |
+| `OFDD_DB_PORT` | TimescaleDB port |
+| `OFDD_DB_NAME` | Database name |
+| `OFDD_DB_USER` | Database user |
+| `OFDD_DB_PASSWORD` | Database password |
+| `OFDD_BACNET_URL` | diy-bacnet-server base URL |
+| `OFDD_DATALAKE_RULES_DIR` | Rules directory (analyst/rules) |
+| `OFDD_PLATFORM_YAML` | Path to platform.yaml |
+
+---
+
+## Rule YAML
+
+Each rule file has:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Rule identifier |
+| `type` | Yes | bounds, flatline, expression, hunting, oa_fraction, erv_efficiency |
+| `flag` | Yes | Output column suffix (e.g. `bad_sensor`) |
+| `inputs` | Yes | List or dict of input refs |
+| `params` | No | Type-specific params |
+| `expression` | For expression | Pandas expression string |
+
+---
+
+## Bounds rule
 
 ```yaml
-name: my_rule
-type: expression
-flag: my_flag
-
-inputs:
-  Supply_Air_Temperature_Sensor:
-    brick: Supply_Air_Temperature_Sensor
-    column: sat
-  Supply_Air_Temperature_Setpoint:
-    brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
-
-params:
-  err_thres: 1.0
-
-expression: |
-  (Supply_Air_Temperature_Sensor < Supply_Air_Temperature_Setpoint - err_thres) & (Supply_Air_Temperature_Sensor > 0)
-```
-
-When using a Brick TTL, `column_map` keys are BRICK class names; the runner resolves columns from the model.
-
-## Bounds rule (bad data)
-
-Inputs use BRICK class names; `column_map` keys match:
-
-```yaml
-name: bad_sensor_check
+name: sensor_bounds
 type: bounds
-flag: bad_sensor_flag
-
-params:
-  units: imperial
-
+flag: bad_sensor
 inputs:
-  Supply_Air_Temperature_Sensor:
-    brick: Supply_Air_Temperature_Sensor
-    column: Supply_Air_Temperature_Sensor
-    bounds:
-      imperial: [40, 150]
-      metric: [4, 66]
-  Return_Air_Temperature_Sensor:
-    brick: Return_Air_Temperature_Sensor
-    column: Return_Air_Temperature_Sensor
-    bounds:
-      imperial: [40, 100]
-      metric: [4, 38]
+  - oat
+  - sat
+params:
+  low: 40
+  high: 90
+  # or units: metric for °C
 ```
+
+---
 
 ## Flatline rule
 
@@ -77,45 +86,14 @@ inputs:
 name: sensor_flatline
 type: flatline
 flag: flatline_flag
-
-inputs:
-  Supply_Air_Temperature_Sensor:
-    brick: Supply_Air_Temperature_Sensor
-    column: Supply_Air_Temperature_Sensor
-  Outside_Air_Temperature_Sensor:
-    brick: Outside_Air_Temperature_Sensor
-    column: Outside_Air_Temperature_Sensor
-
+inputs: [oat, sat]
 params:
   tolerance: 0.000001
   window: 12
 ```
 
-## BRICK metadata in YAML
-
-Rules can include `brick` and `equipment_type` for documentation and future filtering:
-
-```yaml
-name: oat_too_high_free_cooling
-type: expression
-flag: rule_g_flag
-equipment_type: [AHU, VAV_AHU]
-
-inputs:
-  Outside_Air_Temperature_Sensor:
-    brick: Outside_Air_Temperature_Sensor
-    column: oat
-  Supply_Air_Temperature_Setpoint:
-    brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
-  Damper_Position_Command:
-    brick: Damper_Position_Command
-    column: economizer_sig
-```
-
-- **`brick`** — Brick class name. Used for column resolution: `column_map` can be keyed by Brick class (e.g. `Supply_Air_Temperature_Sensor`), and the runner resolves columns via BRICK first. When the same Brick class appears multiple times (e.g. two `Valve_Command`), use `BrickClass|rule_input` in the column map.
-- **`equipment_type`** — Equipment types this rule applies to. When using `run_all_rules_brick.py` with a Brick TTL, only rules whose `equipment_type` matches the model's `ofdd:equipmentType` are run. See [Data Model & Brick]({{ "data_model" | relative_url }}).
-
 ---
 
-**Next:** [API Reference]({{ "api_reference" | relative_url }}) — RuleRunner, brick_resolver, example scripts
+## Expression rule
+
+Use Brick class names or column refs as input keys. See [Rules Overview](rules/overview) and [Expression Rule Cookbook](expression_rule_cookbook).

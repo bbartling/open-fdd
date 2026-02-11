@@ -1,6 +1,7 @@
 ---
 title: Expression Rule Cookbook
-nav_order: 8
+parent: Rules
+nav_order: 2
 ---
 
 # Expression Rule Cookbook
@@ -615,7 +616,7 @@ expression: |
 
 ### Discharge cold when heating
 
-Discharge air temperature below minimum (e.g. 80°F) when the supply fan is running. Indicates the heat pump is not heating effectively—compressor, refrigerant, or reversing valve issues. Tunable via `min_discharge_temp`. Heat pump not heating: fan on + zone cold (heating mode) but discharge still cold Zone temp < 69°F = heating mode; discharge should be warm when heating
+Flags when discharge air temperature is below a minimum (e.g. 80°F) while the supply fan is running. Indicates the heat pump is not heating effectively—possible issues with compressor, refrigerant, or reversing valve. Tunable via `min_discharge_temp`. Logic: if zone temp < 69°F (heating mode), the discharge should be warm; a cold discharge with the fan on and a cold zone indicates the heat pump is failing to heat.
 
 ```yaml
 
@@ -638,7 +639,7 @@ inputs:
 
 params:
   min_discharge_temp: 85
-  zone_cold_threshold: 69.0   # zone < 69 = heating mode
+  zone_cold_threshold: 69.0
   fan_on_threshold: 0.01
 
 expression: |

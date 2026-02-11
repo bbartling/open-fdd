@@ -3,45 +3,70 @@ title: Home
 nav_order: 1
 ---
 
-# open-fdd
+# Open-FDD
 
-**Config-driven Fault Detection and Diagnostics (FDD)** for HVAC systems. Define fault rules in YAML, run them against pandas DataFrames. Inspired by ASHRAE/NIST guidelines and common FDD patterns.
+**Open-source edge analytics for smart buildings.** Ingest BACnet and other OT telemetry, store it in TimescaleDB, and run rule-based fault detection and diagnostics locally with Grafana dashboards and APIs. The open alternative to proprietary tools like SkyFoundry’s SkySpark — full control, lower cost, cloud-agnostic. Deploy behind the firewall; cloud companies can integrate via REST and Grafana.
+
+---
 
 ## What it does
 
-A **rules engine** is software that runs automated checks on your data — when a condition is met (e.g., duct static too low, sensor stuck), it flags a fault. For mechanical engineers and facility managers, that means less manual digging through BAS trends and faster detection of HVAC problems. open-fdd is a rules engine built on **pandas**, the free, open-source Python library for tabular data. A **DataFrame** is a table of rows and columns (like a spreadsheet) — pandas DataFrames give you fast, vectorized math ideal for time-series sensor data from your building. Define fault rules in YAML (bounds, flatline, custom expressions, hunting, OA fraction, ERV), run them against your DataFrame, and get boolean fault flags. Optional BRICK model support lets you map rule inputs from a semantic building model. The **Fault Rule Cookbook** offers ready-made recipes online; pick what you need and copy into your project.
+Open-FDD is an **edge analytics and rules engine** for building automation. It:
 
-**AI-friendly:** Python and pandas are staples of modern data science — most projects use them in some form. In the age of AI, open-fdd fits easily with your existing AI tooling. Use your preferred AI assistant to translate expensive proprietary FDD equations into Python, pandas, and NumPy — easy peasy.
+- **Ingests** BACnet points via diy-bacnet-server (JSON-RPC) and weather via Open-Meteo
+- **Stores** telemetry in TimescaleDB with a Brick-semantic data model
+- **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) on a configurable schedule
+- **Exposes** REST APIs for sites, points, equipment, data-model export/import, TTL generation, SPARQL validation
+- **Visualizes** timeseries and fault results in Grafana
 
-**Smart buildings & IoT:** Coupled with modern smart-building IoT data modeling efforts (e.g., BRICK), this could be a powerful solution. Pandas is used widely across many domains and scales to massive datasets — it just needs to be tailored to smart-building fault detection and diagnostics. The FDD industry is notoriously proprietary and expensive. A free, open-source option that executes FDD effectively has been missing, but it can be.
+Operators and integrators get full control, lower cost, and no vendor lock-in. Already powering HVAC optimization and commissioning workflows.
 
-All fault rules in **open-fdd** with full YAML. Copy from the browser into your project — create a folder like `my_rules` on your desktop, save each rule as a `.yaml` file, and run the tutorial from there. Rules also live in [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules).
+---
 
-**End-to-end framework:** [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake) is a separate repo you can clone to run open-fdd on real BAS data — ingestion (zip-of-zips), Brick model, FDD, client docx reports. Use it as a framework for building-specific projects.
+## Quick start
 
-**Rule types:** `bounds` · `flatline` · `expression` · `hunting` · `oa_fraction` · `erv_efficiency` — All produce boolean (true/false) fault flags, but only `expression` lets you write custom logic; the others use built-in checks. See [Bounds]({{ "bounds_rule" | relative_url }}), [Flatline]({{ "flatline_rule" | relative_url }}), [Hunting]({{ "hunting_rule" | relative_url }}), [OA Fraction]({{ "oa_fraction_rule" | relative_url }}), [ERV Efficiency]({{ "erv_efficiency_rule" | relative_url }}) for those rule types.
+```bash
+git clone https://github.com/bbartling/open-fdd.git
+cd open-fdd
+./scripts/bootstrap.sh
+```
 
-## Docs
+- **Grafana:** http://localhost:3000 (admin/admin)
+- **API:** http://localhost:8000/docs
+- **BACnet Swagger:** http://localhost:8080/docs
 
-1. **[Getting Started]({{ "getting_started" | relative_url }})** — Install, run AHU7 scripts
-2. **[Bounds Rule]({{ "bounds_rule" | relative_url }})** — Sensor out-of-range (built-in)
-3. **[Flatline Rule]({{ "flatline_rule" | relative_url }})** — Stuck sensor detection (built-in)
-4. **[Hunting Rule]({{ "hunting_rule" | relative_url }})** — Excessive AHU state changes (built-in)
-5. **[OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }})** — OA fraction calc error (built-in)
-6. **[ERV Efficiency Rule]({{ "erv_efficiency_rule" | relative_url }})** — ERV effectiveness (built-in, custom)
-7. **[Expression Rule Cookbook]({{ "expression_rule_cookbook" | relative_url }})** — Custom expression rules (AHU, chiller, weather)
-8. **[Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})** — Stuck sensor detection
-9. **[Sensor Bounds Tutorial]({{ "bounds_sensor_tuntorial" | relative_url }})** — Out-of-range sensor values
-10. **[SPARQL & Validate Prereq]({{ "sparql_validate_prereq" | relative_url }})** — Test SPARQL, validate model before faults
-11. **[Data Model & Brick]({{ "data_model" | relative_url }})** — Run faults, Brick TTL, column map
-12. **[Fault Visualization & Zooming]({{ "fault_visualization" | relative_url }})** — Zoom in on fault events, IPython notebook
-13. **[AI-Assisted FDD Roadmap]({{ "ai_assisted_fdd_roadmap" | relative_url }})** — Coming soon (Open FDD AI)
-14. **[ML for FDD Ideas]({{ "ml_fdd_ideas" | relative_url }})** — Machine learning ideas, anomaly detection, threshold tuning
-15. **[Configuration]({{ "configuration" | relative_url }})** — Rule types, YAML structure
-16. **[API Reference]({{ "api_reference" | relative_url }})** — RuleRunner, reports, brick_resolver
-17. **[AI Agents Guide]({{ "ai_agents" | relative_url }})** — Structured context for AI agents and automation, Brick workflow
-18. **[Knowledge Map]({{ "knowledge-map" | relative_url }})** — Where to find rules, Brick, config, API
-19. **[DataFrame Contract]({{ "dataframe-contract" | relative_url }})** — Input/output requirements for DataFrames
-20. **[Config Schema]({{ "config_schema" | relative_url }})** — Rule YAML schema, equipment types
-21. **[open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake)** — End-to-end framework (ingest → Brick → FDD → docx) for real BAS data
+---
 
+## Documentation
+
+| Section | Description |
+|---------|--------------|
+| [System Overview](overview) | Architecture, services, data flow |
+| [Getting Started](getting_started) | Install, bootstrap, first run |
+| [Concepts](concepts/points) | Points, equipment, sites, time-series |
+| [BACnet](bacnet/overview) | Discovery, scraping, RPC |
+| [System Modeling](modeling/overview) | Brick TTL, data-model API, SPARQL |
+| [Rules](rules/overview) | Rule types, expression cookbook |
+| [How-to Guides](howto/verification) | Verification, logs, data flow checks |
+| [Configuration](configuration) | Platform config, rule YAML |
+| [API Reference](api/platform) | REST API, engine API |
+
+---
+
+## Stack
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| API | 8000 | CRUD API, Swagger docs |
+| Grafana | 3000 | Dashboards |
+| TimescaleDB | 5432 | PostgreSQL |
+| diy-bacnet-server | 8080 | JSON-RPC API (HTTP) |
+| diy-bacnet-server | 47808 | BACnet/IP (UDP) |
+
+---
+
+## For cloud and edge
+
+- **Edge:** Run analytics and rules locally, behind the firewall. No telemetry leaves the building until you choose.
+- **Cloud:** Use Open-FDD as a data source. APIs and Grafana feed any cloud-based analytics, dashboards, or ML pipelines.
+- **Hybrid:** Edge analytics + cloud reporting, tuning, or fleet management.

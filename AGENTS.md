@@ -1,62 +1,64 @@
-# Agent Contract — open-fdd
+# Agent Guidelines — Open-FDD
 
-You are an assistant operating on **open-fdd**, a config-driven FDD (Fault Detection and Diagnostics) library for HVAC systems. Follow these rules strictly.
+Guidance for AI assistants working on **Open-FDD**, an open-source edge analytics platform for smart buildings.
+
+---
+
+## Project Summary
+
+Open-FDD ingests BACnet and Open-Meteo telemetry, stores it in TimescaleDB, and runs YAML-defined FDD rules. It exposes REST APIs and Grafana dashboards. Deployable behind the firewall; cloud-agnostic.
+
+**Stack:** API (FastAPI), Grafana, TimescaleDB, BACnet scraper, weather scraper, FDD loop, diy-bacnet-server.
+
+---
+
+## Where to Look (ordered)
+
+1. **docs/** — Main documentation: overview, concepts, BACnet, modeling, rules, API reference
+2. **docs/api/platform.md** — REST API (sites, points, equipment, data-model)
+3. **docs/api/engine.md** — RuleRunner, load_rule, run()
+4. **docs/expression_rule_cookbook.md** — Expression rule recipes
+5. **docs/configuration.md** — Platform YAML, env vars, rule YAML
+6. **analyst/README.md** — Legacy CSV/analyst workflows (archived)
+7. **open_fdd/** — Source code; docstrings are ground truth
 
 ---
 
 ## Capabilities
 
-- **Load CSV → DataFrame → run rules → return DataFrame + summaries**
-- Load YAML rules from `open_fdd/rules/` or custom paths
-- Resolve columns from Brick TTL via `resolve_from_ttl()`
-- Run `RuleRunner.run()` to add fault flag columns
-- Call `summarize_fault()`, `print_summary()` for analytics
-- Generate fault events, plot zoom charts, build reports (when dependencies available)
+- **Platform:** REST CRUD for sites, equipment, points; data-model export/import, TTL generation, SPARQL
+- **Engine:** Load YAML rules, run RuleRunner against DataFrames, resolve columns via Brick TTL or column_map
+- **Rules:** bounds, flatline, expression, hunting, oa_fraction, erv_efficiency
+- **Reports:** summarize_fault, print_summary, get_fault_events, all_fault_events (when dependencies available)
 
 ---
 
 ## Non-capabilities (strict)
 
-- **Do not invent columns.** Only use columns that exist in the input DataFrame or that rules explicitly add.
-- **Do not hallucinate rule names.** Rule names and flags come from YAML files. Check `open_fdd/rules/` or the cookbook.
-- **Do not claim a function exists** unless it appears in `docs/api_reference.md` or `open_fdd/**` docstrings.
+- **Do not invent columns.** Only use columns that exist in the input DataFrame or that rules add.
+- **Do not hallucinate rule names.** Rule names and flags come from YAML. Check `open_fdd/rules/` or `analyst/rules/`.
+- **Do not claim a function exists** unless it appears in `open_fdd/**` or the docs.
 - **Do not assume optional dependencies** (rdflib, python-docx, matplotlib) are installed unless stated.
 
 ---
 
-## Where to look (ordered)
+## Data Contracts
 
-1. **docs/api_reference.md** — Public API: RuleRunner, load_rule, reports, brick_resolver
-2. **docs/expression_rule_cookbook.md** — Rule recipes (BRICK-based)
-3. **docs/ai_agents.md** — Agent-oriented overview
-4. **docs/knowledge-map.md** — Map of where info lives
-5. **docs/dataframe-contract.md** — Input/output DataFrame requirements
-6. **docs/configuration.md** — Rule types, YAML structure
-7. **docs/config_schema.md** — Config schema (equipment types, rule structure)
-8. **examples/** — Scripts and notebooks
-9. **open_fdd/** — Source code; read docstrings for ground truth
+### Input DataFrame (Engine)
 
----
+- Columns matching rule inputs (via `column` in YAML or `column_map`)
+- Optional `timestamp` column (default name)
+- Numeric dtypes for sensor/command columns
 
-## Data contracts
+### Output (Engine)
 
-### Input DataFrame
+- Fault flag columns: `*_flag`, boolean, True = fault
+- One column per rule
 
-- **Required:** Columns matching rule inputs (via `column` in YAML or `column_map`)
-- **Optional:** `timestamp` column (default name; used for time-based checks)
-- **Index:** Row index unused; use `timestamp_col` for ordering
-- **Dtypes:** Numeric for sensor/command columns; timestamps parseable if provided
+### API
 
-### Output columns
-
-- **Fault flags:** One column per rule, named by `flag` in YAML (e.g. `rule_a_flag`, `hunting_flag`, `bad_sensor_flag`)
-- **Values:** Boolean (True = fault at that timestamp)
-- **Naming:** `*_flag` convention; no `fc1_flag` — use `rule_a_flag` etc. per cookbook
-
-### Episodes
-
-- **Episode:** Contiguous run of `True` for a flag. Use `get_fault_events()` or `all_fault_events()` from reports.
-- **Severity:** Not defined in core; rules produce boolean only.
+- Sites, equipment, points: JSON CRUD
+- Data-model: export (JSON), import (JSON), ttl (text/turtle), sparql (POST with query)
 
 ---
 
@@ -66,14 +68,14 @@ You are an assistant operating on **open-fdd**, a config-driven FDD (Fault Detec
 |------|---------|
 | **flag** | Output column name; boolean, True = fault |
 | **episode** | Contiguous timestamps where a flag is True |
-| **rule** | YAML config: name, type, flag, inputs, params, expression |
-| **equipment_type** | Filter for Brick: AHU, VAV_AHU, VAV, etc. Only rules whose equipment_type matches the model run |
-| **mapping** | `column_map`: {BRICK_class or rule_input: DataFrame column name} |
-| **rule_input** | Key in rule inputs; variable name in expression; often BRICK class |
+| **rule_input** | Key in rule inputs; variable in expression; often BRICK class |
+| **column_map** | {rule_input or BRICK_class: DataFrame column name} |
+| **external_id** | Raw point ID from source (e.g. BACnet object name) |
 
 ---
 
-## Public vs internal
+## Public API
 
-- **Public:** `RuleRunner`, `load_rule`, `resolve_from_ttl`, `get_equipment_types_from_ttl`, `summarize_fault`, `summarize_all_faults`, `print_summary`, `get_fault_events`, `all_fault_events`, `analyze_bounds_episodes`, `analyze_flatline_episodes`, `bounds_map_from_rule`
-- **Internal:** `open_fdd.engine.checks` (check_bounds, check_expression, etc.), `open_fdd.reports.fault_viz` internals — may change without notice
+- **Engine:** RuleRunner, load_rule, load_rules_from_dir, bounds_map_from_rule
+- **Reports:** summarize_fault, summarize_all_faults, print_summary, get_fault_events, all_fault_events
+- **Brick:** resolve_from_ttl, get_equipment_types_from_ttl (when rdflib available)
