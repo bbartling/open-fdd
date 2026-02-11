@@ -7,7 +7,9 @@
 
 ![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 
-**Open-source edge AFDD for smart buildings.** Ingest BACnet and Open-Meteo telemetry, store it in TimescaleDB, and run rule-based fault detection with Grafana and APIs. Cloud IoT platforms can integrate Open-FDD at the edge for easy setup—keep OT and FDD local instead of in your cloud. The open alternative to SkySpark; deploy behind the firewall, full control, cloud-agnostic.
+Open-FDD is an open source fault detection framework for HVAC systems. Proprietary fault-detection tools for HVAC systems are costly and difficult to integrate as users must develop their own fault rules, and Open-FDD is the only out-of-the-box solution providing continuous fault detection that runs on your infrastructure with pre-defined fault rules.
+
+Open-FDD ingests BACnet and Open-Meteo telemetry out of the box, stores it in TimescaleDB, runs prebuilt fault rules, and provides monitoring in Grafana with API access for integration — all directly at the edge.
 
 ---
 
