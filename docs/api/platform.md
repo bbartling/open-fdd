@@ -108,6 +108,36 @@ Run SPARQL with uploaded TTL file (multipart). Use when validating external TTL.
 
 ---
 
+## Bulk Download
+
+### POST /download/csv
+
+Bulk download timeseries as CSV. Specify site, date range, and optional point filter.
+
+**Body:**
+
+```json
+{
+  "site_id": "default",
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-31",
+  "format": "wide",
+  "point_ids": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `site_id` | string | Site name or UUID |
+| `start_date` | date | Start of range |
+| `end_date` | date | End of range |
+| `format` | string | `wide` (pivot by point) or `long` (ts, point_key, value) |
+| `point_ids` | string[] | Optional; limit to these point UUIDs |
+
+**Response:** CSV file attachment (`openfdd_export_{start}_{end}.csv`).
+
+---
+
 ## OpenAPI
 
 - Swagger: http://localhost:8000/docs

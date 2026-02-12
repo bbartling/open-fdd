@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SiteCreate(BaseModel):
@@ -20,14 +20,13 @@ class SiteUpdate(BaseModel):
 
 
 class SiteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     description: Optional[str] = None
     metadata: Optional[dict] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class PointCreate(BaseModel):
@@ -49,6 +48,8 @@ class PointUpdate(BaseModel):
 
 
 class PointRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     site_id: UUID
     external_id: str
@@ -58,9 +59,6 @@ class PointRead(BaseModel):
     description: Optional[str] = None
     equipment_id: Optional[UUID] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class EquipmentCreate(BaseModel):
@@ -79,12 +77,11 @@ class EquipmentUpdate(BaseModel):
 
 
 class EquipmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     site_id: UUID
     name: str
     description: Optional[str] = None
     equipment_type: Optional[str] = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True

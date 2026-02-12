@@ -124,12 +124,6 @@ python examples/run_all_rules_brick.py --validate-first
 
 ---
 
-## open-fdd-datalake (External Framework)
-
-For real BAS trend exports (zip-of-zips): [open-fdd-datalake](https://github.com/bbartling/open-fdd-datalake). Ingest → Brick TTL → FDD → docx reports. Clone as framework for building-specific projects.
-
----
-
 ## Current Platform (AFDD) vs Analyst
 
 | Aspect | Analyst (legacy) | Platform (current) |
@@ -141,4 +135,4 @@ For real BAS trend exports (zip-of-zips): [open-fdd-datalake](https://github.com
 | Viz | Jupyter notebook | Grafana |
 | API | None | REST CRUD + Swagger |
 
-**Analyst rules** (`analyst/rules/*.yaml`) are still used by the platform FDD loop when `OFDD_DATALAKE_RULES_DIR` points here. Edit YAML on host; changes apply on next run (no restart).
+**Analyst rules** (`analyst/rules/*.yaml`) are used by the platform FDD loop when `OFDD_DATALAKE_RULES_DIR` or `datalake_rules_dir` points here. Edit YAML on host; changes apply on next run (no restart).

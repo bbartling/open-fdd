@@ -68,6 +68,16 @@ def main() -> int:
             return 0
         except Exception as e:
             log.exception("FDD run failed: %s", e)
+            # Hint when DB is unavailable
+            try:
+                import psycopg2
+
+                if isinstance(e, psycopg2.OperationalError):
+                    log.info(
+                        "Tip: rule loop needs TimescaleDB. Start platform: ./scripts/bootstrap.sh or docker compose -f platform/docker-compose.yml up -d"
+                    )
+            except ImportError:
+                pass
             return 1
 
     if args.loop:

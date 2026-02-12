@@ -6,7 +6,6 @@ color_scheme: "light"
 
 aux_links:
   "GitHub": "https://github.com/bbartling/open-fdd"
-  "open-fdd-datalake": "https://github.com/bbartling/open-fdd-datalake"
   "PyPI": "https://pypi.org/project/open-fdd/"
 
 footer_content: "MIT License"

@@ -37,6 +37,8 @@ This builds and starts the full stack: TimescaleDB, Grafana, API, BACnet scraper
 
 Lists containers and tests DB reachability.
 
+**Bootstrap options:** `--verify` (check status), `--minimal` (DB + Grafana only), `--reset-grafana` (wipe Grafana volume, re-apply provisioning).
+
 ---
 
 ## 3. Access services
@@ -48,6 +50,14 @@ Lists containers and tests DB reachability.
 | BACnet Swagger | http://localhost:8080/docs |
 
 Default Grafana login: admin / admin.
+
+**Grafana provisioning:** TimescaleDB datasource and Open-FDD dashboards are provisioned from config. No manual setup needed. Dashboards appear under **Open-FDD**: BACnet Timeseries, Fault Results, System Resources (host + Docker container metrics). If dashboards show "no datasource" or wrong DB, run:
+
+```bash
+./scripts/bootstrap.sh --reset-grafana
+```
+
+This wipes Grafana's volume and re-applies provisioning. DB and other services are unchanged.
 
 ---
 

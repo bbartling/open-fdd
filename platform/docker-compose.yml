@@ -91,10 +91,14 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/"
+      GF_DASHBOARDS_DEFAULT_HOME: "Open-FDD"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -119,6 +123,24 @@ services:
       - ../open_fdd:/app/open_fdd:ro
       - ../analyst/rules:/app/analyst/rules:ro
       - ../config:/app/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Host/container resource stats — memory, load, docker stats → host_metrics, container_metrics
+  host-stats:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile.hoststats
+    image: openfdd-hoststats:latest
+    container_name: openfdd_host_stats
+    environment:
+      OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+      OFDD_HOST_STATS_INTERVAL_SEC: "60"
+    volumes:
+      - /proc:/host/proc:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy

@@ -69,6 +69,31 @@ docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT COUNT(*)
 
 ---
 
+## Grafana (provisioning)
+
+Provisioning files live in `platform/grafana/`:
+
+| Path | Purpose |
+|------|---------|
+| `provisioning/datasources/datasource.yml` | TimescaleDB datasource (uid: openfdd_timescale, default DB: openfdd) |
+| `provisioning/dashboards/dashboards.yml` | Loads JSON from `/var/lib/grafana/dashboards` |
+| `dashboards/*.json` | BACnet Timeseries, Fault Results, System Resources (host + Docker) |
+
+Verify provisioning is mounted:
+
+```bash
+docker exec openfdd_grafana ls -la /etc/grafana/provisioning/datasources/
+docker exec openfdd_grafana ls -la /var/lib/grafana/dashboards/
+```
+
+If datasource or dashboards are wrong after a previous Grafana run:
+
+```bash
+./scripts/bootstrap.sh --reset-grafana
+```
+
+---
+
 ## FDD loop (rule runner)
 
 ```bash

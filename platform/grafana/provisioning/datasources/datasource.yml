@@ -6,6 +6,9 @@ datasources:
     access: proxy
     url: db:5432
     user: postgres
+    isDefault: true
+    version: 1
+    editable: false
     secureJsonData:
       password: postgres
     jsonData:

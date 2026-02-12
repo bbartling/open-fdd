@@ -6,7 +6,7 @@ nav_order: 1
 
 # BACnet Integration
 
-Open-FDD uses diy-bacnet-server as a BACnet/IP-to-JSON-RPC bridge for discovery and data acquisition.
+Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as a BACnet/IP-to-JSON-RPC bridge for discovery and data acquisition.
 
 ---
 
@@ -14,7 +14,7 @@ Open-FDD uses diy-bacnet-server as a BACnet/IP-to-JSON-RPC bridge for discovery 
 
 | Component | Purpose |
 |-----------|---------|
-| **diy-bacnet-server** | BACnet/IP UDP listener + HTTP JSON-RPC API. Discovers devices and objects; exposes present-value reads. |
+| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP UDP listener + HTTP JSON-RPC API. Discovers devices and objects; exposes present-value reads. Swagger: http://localhost:8080/docs |
 | **BACnet scraper** | Platform service. Polls diy-bacnet-server on a schedule, writes readings to TimescaleDB. |
 | **Discovery CSV** | Exported object list from BACnet. Used to build points and column maps. |
 

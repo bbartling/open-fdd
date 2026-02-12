@@ -43,7 +43,7 @@ df = pd.DataFrame({
 })
 
 runner = RuleRunner(rules_path="open_fdd/rules")
-result = runner.run(df, timestamp_col="timestamp", rolling_window=3)
+result = runner.run(df, timestamp_col="timestamp", rolling_window=3, skip_missing_columns=True)
 # result has fault flag columns (e.g. bad_sensor_flag)
 ```
 

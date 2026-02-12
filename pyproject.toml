@@ -63,6 +63,9 @@ bacnet = [
     "ifaddr",
     "httpx",
 ]
+monitoring = [
+    "docker",
+]
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"
@@ -82,3 +85,7 @@ target-version = ["py39"]
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]
 pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:rdflib",
+    "ignore::DeprecationWarning:pyparsing",
+]

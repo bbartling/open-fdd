@@ -33,7 +33,8 @@ cd open-fdd
 
 - **Grafana:** http://localhost:3000 (admin/admin)
 - **API:** http://localhost:8000/docs
-- **BACnet Swagger:** http://localhost:8080/docs
+- **BACnet Swagger:** http://localhost:8080/docs ([diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server))
+
 
 ---
 

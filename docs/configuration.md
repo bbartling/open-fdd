@@ -17,7 +17,7 @@ Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via envi
 | `lookback_days` | 3 | Days of data to load per run |
 | `rolling_window` | 6 | Consecutive samples to flag fault |
 | `rules_yaml_dir` | open_fdd/rules | Fallback rules directory |
-| `datalake_rules_dir` | analyst/rules | Primary rules (hot-reload) |
+| `datalake_rules_dir` | analyst/rules | Analyst rules directory (hot-reload) |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config |
@@ -43,7 +43,7 @@ Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via envi
 | `OFDD_DB_USER` | Database user |
 | `OFDD_DB_PASSWORD` | Database password |
 | `OFDD_BACNET_URL` | diy-bacnet-server base URL |
-| `OFDD_DATALAKE_RULES_DIR` | Rules directory (analyst/rules) |
+| `OFDD_DATALAKE_RULES_DIR` | Analyst rules path (default: analyst/rules) |
 | `OFDD_PLATFORM_YAML` | Path to platform.yaml |
 
 ---

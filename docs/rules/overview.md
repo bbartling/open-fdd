@@ -49,7 +49,7 @@ params:
 
 ## Running rules
 
-- **Platform:** FDD loop loads rules from `OFDD_DATALAKE_RULES_DIR`, runs on schedule.
+- **Platform:** FDD loop loads rules from the analyst rules directory (`OFDD_DATALAKE_RULES_DIR`), runs on schedule.
 - **Standalone:** `RuleRunner(rules_path=...)` or `RuleRunner(rules=[...])`; call `run(df, ...)`.
 
 ---

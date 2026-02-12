@@ -3,9 +3,10 @@
 # open-fdd bootstrap: full Docker stack (DB, Grafana, BACnet server, scraper, API).
 #
 # Usage:
-#   ./scripts/bootstrap.sh           # Start full stack
+#   ./scripts/bootstrap.sh            # Start full stack
 #   ./scripts/bootstrap.sh --verify   # Check what's running
-#   ./scripts/bootstrap.sh --minimal # DB + Grafana only (no BACnet)
+#   ./scripts/bootstrap.sh --minimal  # DB + Grafana only (no BACnet)
+#   ./scripts/bootstrap.sh --reset-grafana  # Wipe Grafana volume (fix provisioning); restarts Grafana
 #
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (for BACnet stack).
 #
@@ -19,11 +20,13 @@ PLATFORM_DIR="$REPO_ROOT/platform"
 
 VERIFY_ONLY=false
 MINIMAL=false
+RESET_GRAFANA=false
 for arg in "$@"; do
   case "$arg" in
     --verify) VERIFY_ONLY=true ;;
     --minimal) MINIMAL=true ;;
-    -h|--help) echo "Usage: $0 [--verify|--minimal]"; exit 0 ;;
+    --reset-grafana) RESET_GRAFANA=true ;;
+    -h|--help) echo "Usage: $0 [--verify|--minimal|--reset-grafana]"; exit 0 ;;
   esac
 done
 
@@ -46,6 +49,20 @@ verify() {
 if $VERIFY_ONLY; then
   check_prereqs
   verify
+  exit 0
+fi
+
+if $RESET_GRAFANA; then
+  check_prereqs
+  cd "$PLATFORM_DIR"
+  echo "=== Resetting Grafana (wipe volume, re-apply provisioning) ==="
+  docker compose stop grafana 2>/dev/null || true
+  docker compose rm -f grafana 2>/dev/null || true
+  vol=$(docker volume ls -q | grep grafana_data | head -1)
+  [[ -n "$vol" ]] && docker volume rm "$vol" || true
+  echo "Starting Grafana with fresh provisioning..."
+  docker compose up -d grafana
+  echo "Done. Open http://localhost:3000 (admin/admin)"
   exit 0
 fi
 
@@ -75,6 +92,7 @@ done
 echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql) 2>/dev/null || true
+(cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/006_host_metrics.sql) 2>/dev/null || true
 
 echo ""
 echo "=== Bootstrap complete ==="

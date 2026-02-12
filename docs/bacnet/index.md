@@ -6,4 +6,4 @@ has_children: true
 
 # BACnet
 
-BACnet discovery, diy-bacnet-server, and data acquisition.
+BACnet discovery, [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server), and data acquisition. **Swagger:** http://localhost:8080/docs

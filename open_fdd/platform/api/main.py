@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from open_fdd.platform.config import get_platform_settings
-from open_fdd.platform.api import data_model, sites, points, equipment
+from open_fdd.platform.api import data_model, download, sites, points, equipment
 
 settings = get_platform_settings()
 app = FastAPI(
@@ -15,8 +15,9 @@ app = FastAPI(
     openapi_tags=[
         {
             "name": "data-model",
-            "description": "**Brick data modeling workflow:** 1) Create site via POST /sites (required first). 2) GET /data-model/export — copy JSON (point_id, external_id, site_id). 3) Add brick_type, rule_input (= time-series ref, often external_id e.g. HTG-O), site_id, equipment_id per point. 4) PUT /data-model/import — send full payload. TTL auto-syncs to config/brick_model.ttl on every CRUD/import. 5) GET /data-model/ttl, POST /data-model/sparql — validate.",
+            "description": "Export/import points, TTL generation, SPARQL validation.",
         },
+        {"name": "download", "description": "Bulk timeseries CSV download."},
     ],
 )
 
@@ -32,6 +33,7 @@ app.include_router(sites.router)
 app.include_router(points.router)
 app.include_router(equipment.router)
 app.include_router(data_model.router)
+app.include_router(download.router)
 
 
 @app.get("/")
