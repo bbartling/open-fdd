@@ -59,10 +59,10 @@ ACCESS LAYER
 | Service | Description |
 |---------|-------------|
 | **API** | FastAPI CRUD for sites, equipment, points. Data-model export/import, TTL generation, SPARQL validation. Swagger at `/docs`. |
-| **Grafana** | Pre-provisioned TimescaleDB datasource + dashboards (BACnet timeseries, fault results). Edit config in `platform/grafana/`; use `--reset-grafana` if provisioning doesn't apply. |
+| **Grafana** | Pre-provisioned TimescaleDB datasource + dashboards (BACnet timeseries, Fault Results, System Resources, Weather). Edit config in `platform/grafana/`; use `--reset-grafana` if provisioning doesn't apply. |
 | **TimescaleDB** | PostgreSQL with TimescaleDB extension. Single source of truth for metadata and time-series. |
 | **BACnet scraper** | Polls diy-bacnet-server via JSON-RPC. Writes readings to `timeseries_readings`. |
-| **Weather scraper** | Fetches from Open-Meteo archive API (temp, RH, dewpoint, wind). |
+| **Weather scraper** | Fetches from Open-Meteo ERA5 (temp, RH, dewpoint, wind, solar/radiation, cloud cover). |
 | **FDD loop** | Runs every N hours. Loads last N days of data, reloads rules from YAML, runs all rules, writes `fault_results`. Hot-reload: analyst edits YAML → next run picks up changes. |
 | **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP JSON-RPC bridge. Discovered devices/points → CSV; scraper reads present-value via RPC. |
 

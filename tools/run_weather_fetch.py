@@ -2,8 +2,9 @@
 """
 Run Open-Meteo weather fetch: once or on an interval → TimescaleDB.
 
-Fetches hourly weather (temp, RH, dewpoint, wind, gust) from Open-Meteo archive API,
-stores in timeseries_readings under a site (points: temp_f, rh_pct, dewpoint_f, wind_mph, gust_mph).
+Fetches hourly weather from Open-Meteo ERA5 archive API, stores in timeseries_readings.
+Points: temp_f, rh_pct, dewpoint_f, wind_mph, gust_mph, wind_dir_deg,
+shortwave_wm2, direct_wm2, diffuse_wm2, gti_wm2, cloud_pct.
 
 Usage:
   python tools/run_weather_fetch.py

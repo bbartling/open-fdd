@@ -1,0 +1,105 @@
+{
+  "uid": "weather",
+  "title": "Weather (Open-Meteo)",
+  "schemaVersion": 42,
+  "editable": true,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "5m",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Temperature & Humidity",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.external_id IN ('temp_f', 'rh_pct') ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "temp_f" }, "properties": [{ "id": "unit", "value": "fahrenheit" }] },
+          { "matcher": { "id": "byName", "options": "rh_pct" }, "properties": [{ "id": "unit", "value": "percent" }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Dew Point",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.external_id = 'dewpoint_f' ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "unit": "fahrenheit", "custom": { "fillOpacity": 10 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Wind",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.external_id IN ('wind_mph', 'gust_mph', 'wind_dir_deg') ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "wind_dir_deg" }, "properties": [{ "id": "unit", "value": "deg" }, { "id": "custom.axisPlacement", "value": "right" }] }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Solar / Radiation (W/m²)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.external_id IN ('shortwave_wm2', 'direct_wm2', 'diffuse_wm2', 'gti_wm2') ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "fillOpacity": 10 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cloud Cover",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.external_id = 'cloud_pct' ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10 } } }
+    },
+    {
+      "type": "timeseries",
+      "title": "All Weather Variables",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.bacnet_device_id IS NULL ORDER BY tr.ts ASC",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 5 } } }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "site",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+        "query": "SELECT name AS __text, id::text AS __value FROM sites ORDER BY name",
+        "refresh": 1,
+        "includeAll": false
+      }
+    ]
+  }
+}

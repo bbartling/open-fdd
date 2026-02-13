@@ -4,161 +4,131 @@
 @prefix : <http://openfdd.local/site#> .
 
 
-:site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5 a brick:Site ;
-    rdfs:label "bens_office" .
+:site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e a brick:Site ;
+    rdfs:label "default" .
 
-:site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points a brick:Equipment ;
+:site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points a brick:Equipment ;
     rdfs:label "Points" ;
-    brick:isPartOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5 ;
+    brick:isPartOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e ;
     ofdd:equipmentType "Unknown" .
 
-:pt_4883ad9e_a9cb_44df_b989_89ad00b95206 a brick:Cooling_Valve_Command ;
+:pt_9f46e9b5_fa06_4163_972a_11c2644db7d7 a brick:Point ;
     rdfs:label "CLG-O" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "CLG-O" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_9dfc6b8e_9ee0_40f9_8706_296a08d01b38 a brick:Supply_Air_Static_Pressure_Sensor ;
+:pt_d8563eaa_62a3_4215_99de_fa11fac715b5 a brick:Point ;
     rdfs:label "DAP-P" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "DAP-P" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_0ee674dc_ef7e_4507_af5c_9aa7b12a61cd a brick:Supply_Air_Static_Pressure_Setpoint ;
+:pt_83b3bbe0_8f2e_4acd_ae91_f4a79aac128d a brick:Point ;
     rdfs:label "DAP-SP" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "DAP-SP" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_8d8d55c4_abc2_4624_b7ec_037b6b8b7f6e a brick:Outside_Air_Damper_Position_Command ;
+:pt_4b88895f_af6e_41bb_8d16_51e3ef8843d0 a brick:Point ;
     rdfs:label "DPR-O" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "DPR-O" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_d7bd38e8_f654_4a72_8b4a_e061b40ee50d a brick:Electrical_Power_Sensor ;
+:pt_d5bf6e6a_f03b_44ed_ac9e_18cb04f9d175 a brick:Point ;
     rdfs:label "ELEC-PWR" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "ELEC-PWR" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_53ce9793_fa08_4db5_9cce_b6ce34f94afc a brick:Heating_Valve_Command ;
+:pt_a4232848_3e85_4f49_9348_a9b81b7885b5 a brick:Point ;
     rdfs:label "HTG-O" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "HTG-O" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_a67e3495_ab86_4d2a_89ae_8c4d831e3cda a brick:Mixed_Air_Temperature_Sensor ;
+:pt_a5a6733d_c2c6_4778_ad8d_33107d3b19ff a brick:Point ;
     rdfs:label "MA-T" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "MA-T" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_c7c1b84b_d1bc_47b5_922e_198a173378df a brick:Outside_Air_Temperature_Sensor ;
+:pt_d356222b_7ab8_48bf_8b0f_56d55167ec04 a brick:Point ;
     rdfs:label "OA-T" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "OA-T" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_18be468e_f5ed_4d56_8df0_061c4d265474 a brick:Outside_Air_Temperature_Sensor ;
+:pt_235b092f_77a9_4ee4_a2f9_1e251f7f55f1 a brick:Point ;
     rdfs:label "OAT-NETWORK" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "OAT-NETWORK" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_8ec839fe_f5ed_48f8_aa74_7f28c36af542 a brick:Schedule ;
+:pt_e23ec034_91b3_4bec_9e36_33adb610a8f4 a brick:Point ;
     rdfs:label "Occ-Schedule" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "Occ-Schedule" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_5fe50677_7632_4774_9de3_099e869c7d1f a brick:Schedule ;
+:pt_5d8901d3_3731_44f1_8362_a5d25be8e124 a brick:Point ;
     rdfs:label "Office-Hours-Schedule" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "Office-Hours-Schedule" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_4e39ca80_9793_44db_8468_985af5aef1da a brick:Return_Air_Temperature_Sensor ;
+:pt_b84de8b3_4508_4cf3_86ea_b5b3c55aa4d9 a brick:Point ;
     rdfs:label "RA-T" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "RA-T" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_8e223eed_2c85_4c03_9e96_19f6efe829a1 a brick:Supply_Air_Flow_Sensor ;
+:pt_3af9bbf1_a2cc_4e8d_bdd2_09e30db6bcc0 a brick:Point ;
     rdfs:label "SA-FLOW" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SA-FLOW" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_7da9a509_a64b_4c8b_974c_2f7a48834ff4 a brick:Supply_Air_Temperature_Sensor ;
+:pt_72a08c09_bc55_40fa_adf6_69e9f883de9b a brick:Point ;
     rdfs:label "SA-T" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SA-T" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_ff131d8d_0b80_4a37_ab3a_c41a4f386add a brick:Supply_Air_Temperature_Setpoint ;
+:pt_a04ea53e_aaac_41e0_90c0_c3237c94c113 a brick:Point ;
     rdfs:label "SAT-SP" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SAT-SP" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_3411ad6e_1887_4665_affa_aafae19fc858 a brick:Supply_Fan_Command ;
+:pt_6a671c9c_bd61_4245_a62c_6ada7636cbc1 a brick:Point ;
     rdfs:label "SF-C" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SF-C" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_50ba5823_0d3a_457d_b66c_c55486179a3b a brick:Supply_Fan_Speed_Command ;
+:pt_439b6179_37f7_4c59_9962_a8cf2e3e6f67 a brick:Point ;
     rdfs:label "SF-O" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SF-O" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_740fb4b7_74d8_46cf_b27e_e8f411451428 a brick:Supply_Fan_Status ;
+:pt_e681fc96_c8c1_4971_abd8_56f633ef2e94 a brick:Point ;
     rdfs:label "SF-S" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "SF-S" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_696003b2_3b05_46e8_a882_243abe51387a a brick:Damper_Position_Command ;
+:pt_854ba784_94a7_4bd4_961f_b7a646c09231 a brick:Point ;
     rdfs:label "VAVDamperCmd" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "VAVDamperCmd" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_1875b30e_e179_4ef2_b4ba_307ff815ff94 a brick:VAV_Air_Flow_Sensor ;
+:pt_32002699_a039_4b45_9145_578f6008dc11 a brick:Point ;
     rdfs:label "VAVFlow" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "VAVFlow" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_1e9f4ede_5d0c_4236_a181_df209e497727 a brick:VAV_Air_Flow_Setpoint ;
+:pt_4c7ee976_7c4b_480c_b94d_e1ff0a149e21 a brick:Point ;
     rdfs:label "VAVFlowSpt" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "VAVFlowSpt" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_c7798299_7a18_43c7_8ae6_e674440b30f9 a brick:Zone_Cooling_Temperature_Setpoint ;
+:pt_1335e3ee_852f_4e0e_a492_7b8e19ef4bf2 a brick:Point ;
     rdfs:label "ZoneCoolingSpt" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "ZoneCoolingSpt" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_9079d84f_0be0_4613_a468_1daa119b31f1 a brick:Cooling_Demand_Sensor ;
+:pt_a3d84313_8b98_49db_8e9f_00e815b66ecd a brick:Point ;
     rdfs:label "ZoneDemand" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "ZoneDemand" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_757d5e18_3b80_4b20_8a8b_e7fd98b16fca a brick:Zone_Air_Temperature_Sensor ;
+:pt_cd117cb9_9e33_4d39_8847_4f5f435f3842 a brick:Point ;
     rdfs:label "ZoneTemp" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "ZoneTemp" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_5ac4dc3b_4ea9_42d5_a0d7_87b40cb47a41 a brick:Dew_Point_Temperature_Sensor ;
+:pt_eb876613_f95a_4bea_bc0e_10be8d606a12 a brick:Point ;
     rdfs:label "dewpoint_f" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "dewpoint_f" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_92989ffc_051d_49fe_a2f2_fb71d4e18d70 a brick:Wind_Gust_Speed_Sensor ;
+:pt_0b2f7868_bcde_4332_8cc9_de5b12e11706 a brick:Point ;
     rdfs:label "gust_mph" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "gust_mph" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_7a2d5c34_a1ff_4faf_a7cf_a0c9f422c2cb a brick:Occupancy_Status ;
+:pt_c7be5c81_1e31_4f42_a12e_1c8467091c82 a brick:Point ;
     rdfs:label "occupied-bv" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "occupied-bv" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_15bac85d_6b20_4715_9414_d5439b28ef03 a brick:Outside_Air_Humidity_Sensor ;
+:pt_577a275c_52bd_4fd9_bf29_fd8b89a4d6b9 a brick:Point ;
     rdfs:label "rh_pct" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "rh_pct" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_7e8b6d97_ee8e_436a_a7ce_dd524e0d5f38 a brick:Outside_Air_Temperature_Sensor ;
+:pt_722848b4_48cc_4c84_a0ad_589b365b217a a brick:Point ;
     rdfs:label "temp_f" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "temp_f" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
-:pt_47757e83_cb78_4a90_8bfa_b2e6228e489d a brick:Wind_Speed_Sensor ;
+:pt_75418f27_26af_45bc_b1e8_733b898236b0 a brick:Point ;
     rdfs:label "wind_mph" ;
-    brick:isPointOf :site_86d32457_fe01_4d1a_b54a_2a4fdb6aaef5_points ;
-    ofdd:mapsToRuleInput "wind_mph" .
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 

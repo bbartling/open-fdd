@@ -29,6 +29,41 @@ Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via envi
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
+**Open-Meteo weather points** (stored in `timeseries_readings`, `external_id`):
+
+| Point | Description |
+|-------|-------------|
+| `temp_f` | Temperature (°F) |
+| `rh_pct` | Relative humidity (%) |
+| `dewpoint_f` | Dew point (°F) |
+| `wind_mph` | Wind speed (mph) |
+| `gust_mph` | Wind gusts (mph) |
+| `wind_dir_deg` | Wind direction (degrees) |
+| `shortwave_wm2` | Shortwave radiation (W/m²) |
+| `direct_wm2` | Direct radiation (W/m²) |
+| `diffuse_wm2` | Diffuse radiation (W/m²) |
+| `gti_wm2` | Global tilted irradiance (W/m²) |
+| `cloud_pct` | Cloud cover (%) |
+
+---
+
+## Edge / resource limits
+
+For edge deployments with limited disk, bootstrap applies:
+
+| Limit | Value | Where |
+|-------|-------|-------|
+| **Docker logs** | 100 MB × 3 files (~300 MB per container) | `platform/docker-compose.yml` — `x-log-opts` |
+| **Data retention** | 1 year (365 days) | `platform/sql/007_retention.sql` — TimescaleDB `add_retention_policy` |
+
+**Log rotation:** Containers use `json-file` driver with `max-size: 100m`, `max-file: 3`. Prevents logs from filling disk.
+
+**Data retention:** Drops chunks older than 1 year from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. Typical edge (BACnet + weather, ~hourly) stays under ~200 GB. To change: edit `INTERVAL '365 days'` in `007_retention.sql` (e.g. `'180 days'`, `'2 years'`).
+
+**200 GB hard cap:** Not enforced automatically. If you need a strict limit, add cron or systemd to run `SELECT drop_chunks(...)` when disk usage exceeds a threshold, or use LVM/disk quotas at the host.
+
+**Accessing logs:** `docker logs <container> --tail 50` (e.g. `openfdd_weather_scraper`, `openfdd_bacnet_scraper`). See [Verification](howto/verification#logs).
+
 ---
 
 ## Environment

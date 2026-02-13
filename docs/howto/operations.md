@@ -20,6 +20,17 @@ Reboot: containers stop unless Docker or systemd is configured to start them on 
 
 ---
 
+## When to rebuild
+
+| Change | Action |
+|--------|--------|
+| **Log limits, retention SQL, Grafana dashboards** | `docker compose up -d` (restart). Log limits and new dashboards apply after restart. |
+| **Open-Meteo driver** (new weather points: solar, cloud, wind_dir) | Rebuild weather-scraper: `docker compose build weather-scraper && docker compose up -d weather-scraper` |
+| **API, FDD loop, BACnet scraper code** | `docker compose up -d --build` (rebuild affected services) |
+| **Grafana dashboards missing** | `./scripts/bootstrap.sh --reset-grafana` |
+
+---
+
 ## Resource check
 
 ```bash

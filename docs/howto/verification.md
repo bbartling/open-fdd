@@ -36,6 +36,8 @@ docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, valu
 
 ## Logs
 
+**Access:** All containers use log rotation (100 MB × 3 files per container). See [Configuration → Edge limits](configuration#edge--resource-limits).
+
 All containers (last 50 lines):
 
 ```bash
@@ -49,9 +51,10 @@ docker logs openfdd_api --tail 30
 docker logs openfdd_bacnet_scraper --tail 30
 docker logs openfdd_weather_scraper --tail 30
 docker logs openfdd_fdd_loop --tail 30
+docker logs openfdd_host_stats --tail 30
 ```
 
-Follow:
+Follow logs live:
 
 ```bash
 docker compose -f platform/docker-compose.yml logs -f --tail 20
@@ -63,7 +66,7 @@ docker compose -f platform/docker-compose.yml logs -f --tail 20
 
 ```bash
 docker logs openfdd_weather_scraper --tail 30
-curl -s 'http://localhost:8000/points' | grep -E 'temp_f|rh_pct'
+curl -s 'http://localhost:8000/points' | grep -E 'temp_f|rh_pct|shortwave_wm2|cloud_pct'
 docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT COUNT(*) FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id WHERE p.external_id = 'temp_f';"
 ```
 
@@ -77,7 +80,13 @@ Provisioning files live in `platform/grafana/`:
 |------|---------|
 | `provisioning/datasources/datasource.yml` | TimescaleDB datasource (uid: openfdd_timescale, default DB: openfdd) |
 | `provisioning/dashboards/dashboards.yml` | Loads JSON from `/var/lib/grafana/dashboards` |
-| `dashboards/*.json` | BACnet Timeseries, Fault Results, System Resources (host + Docker) |
+| `dashboards/*.json` | BACnet Timeseries, Fault Results, System Resources (host + Docker), **Weather (Open-Meteo)** |
+
+**Dashboards:**
+- **BACnet Timeseries** — BAS point values by site/device
+- **Fault Results** — FDD fault flags over time
+- **System Resources** — Host memory, load, container CPU/memory
+- **Weather (Open-Meteo)** — Temp, humidity, dew point, wind, solar/radiation, cloud cover (select site in dropdown)
 
 Verify provisioning is mounted:
 
@@ -99,3 +108,9 @@ If datasource or dashboards are wrong after a previous Grafana run:
 ```bash
 docker logs openfdd_fdd_loop --tail 50
 ```
+
+---
+
+## Database retention
+
+Data retention is 1 year by default (TimescaleDB drops chunks older than 365 days). Keeps disk under ~200 GB for typical edge. To change: edit `platform/sql/007_retention.sql` (e.g. `'180 days'`, `'2 years'`). See [Configuration → Edge limits](configuration#edge--resource-limits).

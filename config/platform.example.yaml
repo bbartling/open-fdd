@@ -1,5 +1,9 @@
 # Platform config example — copy to platform.yaml and edit
 # OFDD_ env vars override these
+#
+# Edge / resource limits (bootstrap applies these):
+# - Docker logs: 100 MB per file, 3 files max (300 MB per container) — in docker-compose
+# - Data retention: 1 year (TimescaleDB 007_retention.sql); edit interval for 200 GB target
 
 # FDD rule loop: periodic runs (sensor + weather rules)
 # Every run loads rules from YAML (analyst edits apply immediately), pulls last N days into pandas

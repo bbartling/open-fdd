@@ -2,6 +2,7 @@
 Open-Meteo driver: fetch historical weather, write to timeseries_readings.
 
 Configurable interval (e.g. once per day). Used for FDD rules that need OAT.
+Includes solar/radiation, cloud cover, wind direction for load modeling and analysis.
 """
 
 from __future__ import annotations
@@ -11,27 +12,64 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 import uuid
 
+import numpy as np
 import pandas as pd
 import requests
 from psycopg2.extras import execute_values
 
 from open_fdd.platform.database import get_conn
 
-WEATHER_POINTS = ["temp_f", "rh_pct", "dewpoint_f", "wind_mph", "gust_mph"]
+WEATHER_POINTS = [
+    "temp_f",
+    "rh_pct",
+    "dewpoint_f",
+    "wind_mph",
+    "gust_mph",
+    "wind_dir_deg",
+    "shortwave_wm2",
+    "direct_wm2",
+    "diffuse_wm2",
+    "gti_wm2",
+    "cloud_pct",
+]
 OPEN_METEO_FIELDS = [
     "temperature_2m",
     "relative_humidity_2m",
     "dew_point_2m",
     "wind_speed_10m",
+    "wind_direction_10m",
     "wind_gusts_10m",
+    "shortwave_radiation",
+    "direct_radiation",
+    "diffuse_radiation",
+    "global_tilted_irradiance",
+    "cloud_cover",
 ]
 COLUMN_MAP = {
     "temperature_2m": "temp_f",
     "relative_humidity_2m": "rh_pct",
     "dew_point_2m": "dewpoint_f",
     "wind_speed_10m": "wind_mph",
+    "wind_direction_10m": "wind_dir_deg",
     "wind_gusts_10m": "gust_mph",
+    "shortwave_radiation": "shortwave_wm2",
+    "direct_radiation": "direct_wm2",
+    "diffuse_radiation": "diffuse_wm2",
+    "global_tilted_irradiance": "gti_wm2",
+    "cloud_cover": "cloud_pct",
 }
+
+
+def _get_hourly_array(hourly: dict, key: str, n: int) -> Optional[np.ndarray]:
+    """Return numpy array for hourly key if present, else None."""
+    if key not in hourly:
+        return None
+    return np.array(hourly[key], dtype=float)
+
+
+def _c_to_f(c: np.ndarray) -> np.ndarray:
+    """Convert Celsius to Fahrenheit."""
+    return c * 9.0 / 5.0 + 32.0
 
 
 def fetch_open_meteo(
@@ -42,7 +80,8 @@ def fetch_open_meteo(
     timezone: str = "America/Chicago",
     base_url: str = "https://archive-api.open-meteo.com/v1/era5",
 ) -> pd.DataFrame:
-    """Fetch hourly weather from Open-Meteo archive."""
+    """Fetch hourly weather from Open-Meteo ERA5 archive. Includes temp, RH, dew point,
+    wind, solar/radiation, and cloud cover."""
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -50,8 +89,6 @@ def fetch_open_meteo(
         "end_date": end_date.isoformat(),
         "hourly": ",".join(OPEN_METEO_FIELDS),
         "timezone": timezone,
-        "temperature_unit": "fahrenheit",
-        "wind_speed_unit": "mph",
     }
     resp = requests.get(base_url, params=params, timeout=60)
     resp.raise_for_status()
@@ -60,16 +97,61 @@ def fetch_open_meteo(
     times = hourly.get("time", [])
     if not times:
         raise RuntimeError("No hourly.time in Open-Meteo response.")
-
-    df = pd.DataFrame({"ts": pd.to_datetime(times)})
-    for field in OPEN_METEO_FIELDS:
-        df[COLUMN_MAP[field]] = hourly.get(field, [None] * len(df))
+    n = len(times)
 
     tz = ZoneInfo(timezone)
-    if df["ts"].dt.tz is None:
-        df["ts"] = df["ts"].dt.tz_localize(tz)
+    ts = pd.to_datetime(times)
+    if ts.tz is None:
+        ts = ts.tz_localize(tz)
     else:
-        df["ts"] = df["ts"].dt.tz_convert(tz)
+        ts = ts.tz_convert(tz)
+    df = pd.DataFrame({"ts": ts})
+
+    # Core (required): API returns °C, km/h; we convert to °F, mph for BAS consistency
+    temp_c = _get_hourly_array(hourly, "temperature_2m", n)
+    rh = _get_hourly_array(hourly, "relative_humidity_2m", n)
+    if temp_c is None or rh is None:
+        raise RuntimeError("temperature_2m and relative_humidity_2m are required.")
+    df["temp_f"] = np.round(_c_to_f(temp_c), 2)
+    df["rh_pct"] = np.round(rh.astype(float), 2)
+
+    # Dew point (prefer API; fallback to Magnus formula from temp_c + rh)
+    dew_c = _get_hourly_array(hourly, "dew_point_2m", n)
+    if dew_c is not None:
+        df["dewpoint_f"] = np.round(_c_to_f(dew_c), 2)
+    else:
+        a, b = 17.27, 237.7
+        alpha = (a * temp_c) / (b + temp_c) + np.log(np.clip(rh / 100.0, 1e-6, 100))
+        dew_calc = (b * alpha) / (a - alpha)
+        df["dewpoint_f"] = np.round(_c_to_f(dew_calc), 2)
+
+    # Wind: API returns km/h; convert to mph (km/h * 0.621371 ≈ mph, or m/s * 2.237)
+    wind_speed = _get_hourly_array(hourly, "wind_speed_10m", n)
+    wind_gust = _get_hourly_array(hourly, "wind_gusts_10m", n)
+    wind_dir = _get_hourly_array(hourly, "wind_direction_10m", n)
+    KMH_TO_MPH = 0.621371
+    if wind_speed is not None:
+        df["wind_mph"] = np.round(wind_speed * KMH_TO_MPH, 2)
+    if wind_gust is not None:
+        df["gust_mph"] = np.round(wind_gust * KMH_TO_MPH, 2)
+    if wind_dir is not None:
+        df["wind_dir_deg"] = np.round(wind_dir, 1)
+
+    # Solar/radiation (W/m²) — no conversion
+    for api_key, col in [
+        ("shortwave_radiation", "shortwave_wm2"),
+        ("direct_radiation", "direct_wm2"),
+        ("diffuse_radiation", "diffuse_wm2"),
+        ("global_tilted_irradiance", "gti_wm2"),
+    ]:
+        arr = _get_hourly_array(hourly, api_key, n)
+        if arr is not None:
+            df[col] = np.round(arr.astype(float), 2)
+
+    # Cloud cover (%)
+    cloud = _get_hourly_array(hourly, "cloud_cover", n)
+    if cloud is not None:
+        df["cloud_pct"] = np.round(cloud, 2)
 
     return df
 

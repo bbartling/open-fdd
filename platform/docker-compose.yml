@@ -4,6 +4,12 @@
 #
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
 # Rules YAML and config are mounted from repo — edit on host, containers see changes.
+#
+# Edge limits: log rotation 100MB×3 per container; data retention 1yr (007_retention.sql).
+
+x-log-opts: &log-opts
+  max-size: "100m"
+  max-file: "3"
 
 services:
   # BACnet/IP gateway — always-on server, JSON-RPC on 8080
@@ -14,6 +20,9 @@ services:
     image: diy-bacnet-server:latest
     container_name: openfdd_bacnet_server
     network_mode: host
+    logging:
+      driver: json-file
+      options: *log-opts
     command: >
       python3 -u -m bacpypes_server.main
       --name OpenFDDGateway
@@ -44,6 +53,9 @@ services:
       bacnet-server:
         condition: service_started
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
 
   # Open-Meteo weather scraper — fetch once per interval (e.g. daily), write to TimescaleDB
   weather-scraper:
@@ -66,6 +78,9 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
 
   db:
     image: timescale/timescaledb:latest-pg16
@@ -84,6 +99,9 @@ services:
     volumes:
       - openfdd_db:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d
+    logging:
+      driver: json-file
+      options: *log-opts
 
   grafana:
     image: grafana/grafana:latest
@@ -103,6 +121,9 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+    logging:
+      driver: json-file
+      options: *log-opts
 
   # FDD rule loop — every N hours, loads rules from YAML, pulls last N days, runs all rules, writes fault_results
   # Analyst edits YAML on host; next run picks up changes (no restart)
@@ -127,6 +148,9 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
 
   # Host/container resource stats — memory, load, docker stats → host_metrics, container_metrics
   host-stats:
@@ -145,6 +169,9 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
 
   # CRUD API — sites, points, equipment, timeseries (data model)
   api:
@@ -164,6 +191,9 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
 
 volumes:
   openfdd_db:
