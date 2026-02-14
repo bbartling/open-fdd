@@ -78,6 +78,51 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (basic 
 
 ---
 
+## Throttling and rate limiting
+
+### 1. No API rate limiting by default
+
+Open-FDD does **not** rate-limit incoming HTTP requests to the API. There is no built-in cap on how often clients can call the API. If you need to limit how often external clients (e.g. a busy integration or cloud poller) can call the API, add rate limiting at the reverse proxy (e.g. Caddy with a rate-limit module) or with rate-limit middleware in front of the app.
+
+### 2. Outbound: OT/building network is paced
+
+The application **does** throttle its own outbound traffic to the building and OT network. We do not continuously hammer BACnet or other building systems. Load is paced by configuration:
+
+| Component | Config | Effect |
+|-----------|--------|--------|
+| **BACnet scraper** | `bacnet_scrape_interval_min` (e.g. 5) | Polls points on a fixed interval (e.g. every 5 minutes), not in a burst. |
+| **FDD rule loop** | `rule_interval_hours` (e.g. 3) | Runs fault detection on a schedule (e.g. every 3 hours); each run pulls data from the DB, not from BACnet. |
+| **Weather scraper** | `open_meteo_interval_hours` (e.g. 24) | Fetches weather once per interval (e.g. daily). |
+
+So outbound load on the OT network is predictable and tunable. Adjust these intervals in `config/platform.yaml` or via `OFDD_*` environment variables to match your network and building needs. See [Configuration](configuration).
+
+### 3. Inbound: rate limiting at the reverse proxy (e.g. Caddy)
+
+If you need to **throttle incoming traffic** to the API—for example to protect the API and OT network from aggressive polling, misconfigured integrators, or abuse—enforce rate limiting at the reverse proxy or with middleware. Open-FDD does not implement this itself; use Caddy (with a rate-limit module), nginx, or application middleware.
+
+**Using Caddy for rate limiting**
+
+Caddy can throttle requests per client (e.g. per IP or per authenticated user) when configured with a rate-limiting capability. The standard Caddy build does not include an HTTP rate-limit directive; you add it by building Caddy with a module (e.g. `xcaddy build --with github.com/mholt/caddy-ratelimit`) or by using a distribution that includes one. Once available, you configure a rate-limit zone in the Caddyfile (e.g. limit by `{remote_host}` or by a header), then apply it to the blocks that proxy to the API (and optionally Grafana). Typical choices are a cap per IP (e.g. 60 requests per minute) or per client identity when using auth. Exceeding the limit returns `429 Too Many Requests`; the client can retry after the window resets.
+
+Example (conceptual; syntax depends on the module you use):
+
+```caddyfile
+:8088 {
+  rate_limit {
+    zone api { key {remote_host} events 60 duration 1m }
+  }
+  handle /api/* {
+    rate_limit api
+    reverse_proxy api:8000
+  }
+  # ... basic_auth and other handle blocks
+}
+```
+
+Adjust the zone (events per duration) to match your OT network and integration requirements. For official options and current syntax, see [Caddy’s module documentation](https://caddyserver.com/docs/modules/) and the documentation for the rate-limit module you build or install.
+
+---
+
 ## TLS (optional): self-signed certificates
 
 The project **default is non-TLS**. If you want HTTPS in front of Caddy:
@@ -118,4 +163,5 @@ Mount `cert.pem` and `key.pem` into the Caddy container and reference them in `t
 - **Passwords:** Change default by running `caddy hash-password` and updating the Caddyfile; use strong passwords for Grafana and Postgres.
 - **Unencrypted by default:** API, Grafana, TimescaleDB, and BACnet API are plain HTTP/TCP; protect them with network isolation and Caddy (and optional TLS).
 - **Hardening:** Strong passwords, expose only Caddy, keep DB and internal services off the public internet, keep software updated.
+- **Throttling:** (1) No API rate limiting by default. (2) Outbound traffic to the OT/building network is paced (BACnet scrape, FDD loop, weather intervals). (3) To throttle incoming API traffic, use the reverse proxy (e.g. Caddy with a rate-limiting module) or middleware.
 - **TLS:** Optional; default is non-TLS. Add self-signed or Let’s Encrypt via Caddy when you need HTTPS.

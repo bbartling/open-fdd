@@ -99,6 +99,14 @@ docker compose exec fdd-loop python tools/run_rule_loop.py
 
 ---
 
+## Throttling and rate limiting
+
+1. **No API rate limiting by default** — The API does not throttle incoming requests. Clients can call as often as they like unless you add rate limiting elsewhere.
+2. **OT/building network is paced** — Outbound traffic to the building is throttled by configuration: BACnet scraper polls on an interval (e.g. every 5 minutes), the FDD loop runs on a schedule (e.g. every 3 hours), and the weather scraper runs on an interval (e.g. daily). We do not continuously hammer the BACnet or OT network; you can tune these intervals in platform config.
+3. **Adding incoming rate limiting** — To limit how often external clients can call the API (e.g. for a busy integration or to protect the OT network), add rate limiting at the reverse proxy (e.g. Caddy with a rate-limit module) or with middleware. See [Security — Throttling and rate limiting](security#throttling-and-rate-limiting).
+
+---
+
 ## Resource check
 
 ```bash
