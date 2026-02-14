@@ -12,44 +12,8 @@ Open-FDD is an edge analytics platform for smart buildings. This section describ
 
 ## Architecture
 
+![Open-FDD Edge Platform Architecture](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd-schematic.png)
 
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                           Open-FDD Edge Platform                            │
-├────────────────────────────────────────────────────────────────────────────┤
-
-INGEST LAYER
-──────────────────────────────────────────────────────────────────────────────
-  BACnet Scraper        Weather API         DIY BACnet Server
-  (BAS devices)         (Open-Meteo)        (sim/edge points)
-        │                    │                    │
-        └────────────────────┴────────────────────┘
-                              ▼
-
-STORAGE LAYER
-──────────────────────────────────────────────────────────────────────────────
-  PostgreSQL + TimescaleDB
-
-  Semantic Model (relational)         Time-Series (hypertable)
-  ──────────────────────────         ─────────────────────────
-  sites                              telemetry
-  equipment                          (time, point_id, value)
-  devices                            fault_results
-  points (Brick-typed)
-
-                              ▼
-
-ANALYTICS LAYER
-──────────────────────────────────────────────────────────────────────────────
-  Periodic FDD / AFDD Engine
-  (open-fdd rules + pandas + Brick discovery)
-
-                              ▼
-
-ACCESS LAYER
-──────────────────────────────────────────────────────────────────────────────
-  REST API (Swagger/OpenAPI)     Grafana dashboards / reporting
-```
 
 
 ---
