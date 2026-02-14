@@ -164,9 +164,7 @@ def post_download_csv(body: DownloadRequest):
     site_uuid = resolve_site_uuid(body.site_id, create_if_empty=False)
     if site_uuid is None:
         raise HTTPException(404, f"No site found for: {body.site_id!r}")
-    rows = _fetch_timeseries(
-        site_uuid, body.start_date, body.end_date, body.point_ids
-    )
+    rows = _fetch_timeseries(site_uuid, body.start_date, body.end_date, body.point_ids)
     if not rows:
         raise HTTPException(404, "No data for the given criteria")
     csv_body = _timeseries_to_csv(rows, body.format)

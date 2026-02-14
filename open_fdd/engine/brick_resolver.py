@@ -62,7 +62,11 @@ def resolve_from_ttl(ttl_path: Union[str, Path]) -> Dict[str, str]:
     for row in rows:
         brick_class = str(row.brick_class)
         label = str(row.label).strip('"')
-        rule_input = str(row.rule_input).strip('"') if row.rule_input and str(row.rule_input).strip() else None
+        rule_input = (
+            str(row.rule_input).strip('"')
+            if row.rule_input and str(row.rule_input).strip()
+            else None
+        )
 
         if brick_counts[brick_class] > 1 and rule_input:
             key = f"{brick_class}|{rule_input}"

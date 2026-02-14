@@ -54,23 +54,44 @@ In production deployments, Open-FDD is intended to sit behind a Caddy reverse pr
 * Endpoint access control
 * Secure remote access
 
-Example production architecture:
+Example Production Architecture on the Building’s Operational Technology (OT) LAN
 
-```
-Building Network
+The bundled Caddyfile routes **API paths** (e.g. `/docs`, `/api/*`, `/sites*`, `/analytics/*`, `/health`) to the Open-FDD API and all other paths to **Grafana at root** (`/`). Path-prefix routing (e.g. `/api` and `/grafana`) can be configured via a custom Caddyfile and Grafana subpath; see [Security & Caddy](docs/security.md).
+
+**Option 1 — Caddy on the Open-FDD host, vendor edge device on a separate host**
+
+Building Network (OT LAN)
    │
-   ├── Open-FDD Stack (Docker)
-   │      ├── API
-   │      ├── Grafana
-   │      ├── TimescaleDB
-   │      └── BACnet Server
+   ├── Open-FDD Host (Docker)
+   │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
+   │      │      ├── API paths (/docs, /api/*, /sites, /analytics, …) → Open-FDD API
+   │      │      └── / → Grafana
+   │      ├── TimescaleDB (internal)
+   │      └── BACnet Server (internal)
    │
-   └── Caddy Reverse Proxy (HTTPS + auth)
-```
+   └── Vendor Edge Gateway (X / Y / Z)
+          ├── Pulls data from Open-FDD via Caddy URL (LAN)
+          └── Secure Export to Cloud Platform (Vendor-managed)
 
-Caddy provides secure access to internal services without exposing raw ports externally.
+Caddy provides secure access to internal services without exposing raw ports externally. The Vendor Edge Gateway represents any third-party or cloud-connected service on the OT network. Secure export of data to external cloud platforms is the responsibility of the vendor or integration partner—not Open-FDD.
 
-For a ready-made setup with **basic auth** (default user `openfdd`, default password `xyz`), optional Caddy is in `platform/docker-compose.yml` and configured in `platform/caddy/Caddyfile`. See **[Security and Caddy bootstrap](docs/security.md)** for bootstrapping, password change, which services are unencrypted by default, hardening best practices, and optional TLS (including self-signed certs). The project defaults to non-TLS.
+Open-FDD operates strictly as a behind-the-firewall AFDD engine and API layer. It does not initiate outbound cloud connections or manage external data transmission.
+
+
+**Option 2 — Vendor runs Open-FDD inside their own Docker stack**
+
+Building Network (OT LAN)
+   │
+   ├── Open-FDD Host (Docker)
+   │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
+   │      │      ├── API paths → Open-FDD API
+   │      │      └── / → Grafana
+   │      ├── TimescaleDB (internal)
+   │      ├── BACnet Server (internal)
+   │      └── Vendor Edge Gateway (X / Y / Z)
+   │             ├── Pulls data from Open-FDD via Caddy (internal)
+   │             └── Secure Export to Cloud Platform (Vendor-managed)
+
 
 ---
 
@@ -119,7 +140,9 @@ open_meteo_site_id: default
 
 ---
 
-Standalone (Python + Pandas)
+
+## Standalone (Python + Pandas)
+
 
 Open-FDD v2 will be published to PyPI as a standalone package for CSV-based analysis or for companies that want to embed DataFrame-driven FDD into existing analytics workflows. The AFDD engine is built on Pandas, Python’s high-performance data analysis library. This enables rule execution directly on DataFrames without requiring the full Docker-based platform deployment.
 
@@ -159,7 +182,7 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 ## Contributing
 
-Contributions welcome — especially rule recipes, BACnet integration tests, and documentation. See the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook) for patterns.
+Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
 ---
 

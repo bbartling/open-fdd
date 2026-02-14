@@ -48,10 +48,11 @@ cd open-fdd
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC |
 | [System Modeling](modeling/overview) | Brick TTL, data-model API, SPARQL |
 | [Rules](rules/overview) | Rule types, expression cookbook |
-| [How-to Guides](howto/verification) | Verification, operations, [danger zone](howto/danger_zone) |
+| [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
-| [API Reference](api/platform) | REST API, engine API |
+| [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
+| [Contributing](https://github.com/bbartling/open-fdd/blob/master/CONTRIBUTING.md) | How to contribute (bugs, rules, docs) |
 
 ---
 

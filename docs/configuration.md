@@ -26,8 +26,8 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `rule_interval_hours` | 3 | FDD loop run interval |
-| `lookback_days` | 3 | Days of data to load per run |
+| `rule_interval_hours` | 3 | FDD loop run interval (when no trigger file: run every N hours) |
+| `lookback_days` | 3 | Days of data loaded per run (each run pulls last N days into the rule engine) |
 | `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |

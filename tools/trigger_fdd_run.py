@@ -39,7 +39,9 @@ def main() -> int:
             from open_fdd.platform.config import get_platform_settings
 
             settings = get_platform_settings()
-            path_str = getattr(settings, "fdd_trigger_file", None) or "config/.run_fdd_now"
+            path_str = (
+                getattr(settings, "fdd_trigger_file", None) or "config/.run_fdd_now"
+            )
             path = Path(path_str)
         except Exception:
             path = Path("config/.run_fdd_now")

@@ -114,7 +114,14 @@ def get_motor_runtime(
                       point_brick_type = EXCLUDED.point_brick_type,
                       updated_at = now()
                     """,
-                    (site_id, start_date, end_date, hours, point["external_id"], point["brick_type"]),
+                    (
+                        site_id,
+                        start_date,
+                        end_date,
+                        hours,
+                        point["external_id"],
+                        point["brick_type"],
+                    ),
                 )
                 conn.commit()
     except Exception:
@@ -163,7 +170,10 @@ def get_fault_summary(
             )
             rows = cur.fetchall()
 
-    by_fault = [{"fault_id": r["fault_id"], "count": r["count"], "flag_sum": r["flag_sum"]} for r in rows]
+    by_fault = [
+        {"fault_id": r["fault_id"], "count": r["count"], "flag_sum": r["flag_sum"]}
+        for r in rows
+    ]
     return {
         "site_id": site_id,
         "period": {"start": str(start_date), "end": str(end_date)},

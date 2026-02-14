@@ -13,3 +13,4 @@ inputs:
 params:
   tolerance: 0.000001
   window: 40
+  # rolling_window: 6   # optional: require N consecutive True samples before flagging (omit = flag on any True)

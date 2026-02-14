@@ -28,7 +28,7 @@ When you delete via the API (Swagger or `test_crud_api.py`):
 | **Equipment** | Points (with that equipment_id), timeseries for those points |
 | **Point** | timeseries_readings for that point |
 
-`DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` remove the entity and all dependent data. This is **permanent**.
+`DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` remove the entity and all dependent data. This is **permanent**. After each delete (and after every create/update on sites, equipment, or points), the **Brick TTL** (`config/brick_model.ttl`) is **regenerated from the current DB** and written to disk, so the Brick data model stays in sync with CRUD and timeseries. See [System Modeling](modeling/overview).
 
 ---
 
@@ -42,26 +42,47 @@ To change retention: edit the `INTERVAL` in `platform/sql/007_retention.sql` and
 
 ## How to purge (intentional wipe)
 
-### Option 1: Drop and recreate the database
+### Start completely from scratch (recommended)
 
-**DANGER: All data is lost.**
+**DANGER: All data is lost — database, Grafana, and all container state.**
+
+To blast away the project and start over with a clean DB and Grafana:
+
+```bash
+cd open-fdd/platform
+docker compose down -v
+cd ..
+./scripts/bootstrap.sh
+```
+
+- **`down -v`** removes containers and **named volumes** (`openfdd_db`, `grafana_data`). All timeseries, fault results, sites, points, and Grafana dashboards are gone.
+- **`bootstrap.sh`** brings the stack back up, creates a fresh DB (init scripts run automatically), applies migrations, and leaves you with an empty project ready to reconfigure.
+
+---
+
+### Option 1: Drop and recreate the database only
+
+**DANGER: All DB data is lost.** Grafana volume is unchanged.
 
 ```bash
 cd platform
 docker compose exec db psql -U postgres -c "DROP DATABASE openfdd;"
 docker compose exec db psql -U postgres -c "CREATE DATABASE openfdd;"
-# Re-apply all migrations (see bootstrap.sh for the sequence)
+# From repo root, re-run bootstrap to apply migrations:
+# ./scripts/bootstrap.sh
 ```
 
-### Option 2: Nuclear reset (containers + volumes)
+### Option 2: Nuclear reset (containers + volumes, manual)
 
 **DANGER: DB volume, Grafana volume, and all containers removed.**
 
+Same effect as “Start completely from scratch” but without calling bootstrap:
+
 ```bash
 cd platform
-docker compose down -v   # -v removes named volumes (openfdd_db, grafana_data)
+docker compose down -v
 docker compose up -d --build
-# Then re-run migrations as in bootstrap.sh
+# Then from repo root: ./scripts/bootstrap.sh (waits for Postgres, applies migrations)
 ```
 
 ### Option 3: Delete via API

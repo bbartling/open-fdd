@@ -6,6 +6,7 @@ flag: bad_sensor_flag
 
 params:
   units: imperial
+  # rolling_window: 6   # optional: require N consecutive True samples before flagging (omit = flag on any True)
 
 inputs:
   Supply_Air_Temperature_Sensor:

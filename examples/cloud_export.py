@@ -27,7 +27,9 @@ TIMEOUT = 60.0
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export timeseries + faults from Open-FDD API")
+    parser = argparse.ArgumentParser(
+        description="Export timeseries + faults from Open-FDD API"
+    )
     parser.add_argument("--site", default="default", help="Site name or UUID")
     parser.add_argument("--days", type=int, default=7, help="Days to fetch")
     args = parser.parse_args()
@@ -36,7 +38,9 @@ def main():
     start = end - timedelta(days=args.days)
     base = API_BASE.rstrip("/")
 
-    print(f"=== Open-FDD cloud export example ===\nAPI: {base}\nSite: {args.site}\nRange: {start} to {end}\n")
+    print(
+        f"=== Open-FDD cloud export example ===\nAPI: {base}\nSite: {args.site}\nRange: {start} to {end}\n"
+    )
 
     with httpx.Client(timeout=TIMEOUT) as client:
         # --- Faults (JSON) ---
@@ -54,7 +58,9 @@ def main():
             print(f"    OK: {count} fault records")
             if faults:
                 for f in faults[:3]:
-                    print(f"      - {f.get('ts')} {f.get('site_id')} {f.get('fault_id')} flag={f.get('flag_value')}")
+                    print(
+                        f"      - {f.get('ts')} {f.get('site_id')} {f.get('fault_id')} flag={f.get('flag_value')}"
+                    )
                 if len(faults) > 3:
                     print(f"      ... and {len(faults) - 3} more")
             print()
@@ -85,7 +91,9 @@ def main():
             if data.get("status") == "NO DATA":
                 print(f"    {data.get('status')}: {data.get('reason', '')[:60]}...")
             else:
-                print(f"    OK: {data.get('motor_runtime_hours', 0)} h ({data.get('point', {}).get('external_id', '?')})")
+                print(
+                    f"    OK: {data.get('motor_runtime_hours', 0)} h ({data.get('point', {}).get('external_id', '?')})"
+                )
         else:
             print(f"    Error {r.status_code}\n")
         print()
@@ -110,7 +118,9 @@ def main():
             print(f"    OK: {len(lines)} rows")
             if len(lines) > 1:
                 cols = lines[0].split(",")
-                print(f"      Columns: {len(cols)} ({', '.join(cols[:5])}{'...' if len(cols) > 5 else ''})")
+                print(
+                    f"      Columns: {len(cols)} ({', '.join(cols[:5])}{'...' if len(cols) > 5 else ''})"
+                )
             print()
 
         # --- Fault summary ---
@@ -121,7 +131,9 @@ def main():
         )
         if r.status_code == 200:
             data = r.json()
-            print(f"    OK: {data.get('total_faults', 0)} total, {len(data.get('by_fault_id', []))} fault types")
+            print(
+                f"    OK: {data.get('total_faults', 0)} total, {len(data.get('by_fault_id', []))} fault types"
+            )
         else:
             print(f"    Error {r.status_code}\n")
         print()

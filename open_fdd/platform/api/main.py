@@ -6,7 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from open_fdd.platform.config import get_platform_settings
-from open_fdd.platform.api import analytics, data_model, download, sites, points, equipment, run_fdd
+from open_fdd.platform.api import (
+    analytics,
+    data_model,
+    download,
+    sites,
+    points,
+    equipment,
+    run_fdd,
+)
 
 settings = get_platform_settings()
 

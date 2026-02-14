@@ -87,7 +87,8 @@ def main() -> int:
             "FDD loop started: every %d hours, lookback %d days (touch %s to run now)",
             interval_hours,
             lookback_days,
-            getattr(settings, "fdd_trigger_file", "config/.run_fdd_now") or "config/.run_fdd_now",
+            getattr(settings, "fdd_trigger_file", "config/.run_fdd_now")
+            or "config/.run_fdd_now",
         )
         sleep_sec = interval_hours * 3600
         trigger_path = getattr(settings, "fdd_trigger_file", None)
@@ -106,8 +107,14 @@ def main() -> int:
                     if p.exists():
                         try:
                             p.unlink()
-                        except OSError:
-                            pass
+                        except OSError as e:
+                            log.warning(
+                                "Trigger file detected but could not remove %s (%s). "
+                                "Loop will re-trigger every 60s until file is gone. "
+                                "If running in Docker, ensure config volume is writable.",
+                                p,
+                                e,
+                            )
                         log.info("Trigger file detected → running now, timer reset")
                         _run()
                         elapsed = 0  # reset timer

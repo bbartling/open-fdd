@@ -18,7 +18,7 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (basic 
    - **Default username:** `openfdd`
    - **Default password:** `xyz` (for local/testing only; change before any production or exposed use)
 
-   Caddy proxies to the API and Grafana; all routes require this one basic-auth credential.
+   The bundled Caddyfile routes API paths (e.g. `/docs`, `/api/*`, `/sites*`, `/analytics/*`, `/health`) to the Open-FDD API and all other paths to Grafana at `/`. All routes require this one basic-auth credential.
 
 3. **Without Caddy:** You can still use the services directly (no auth):
    - API: http://localhost:8000/docs  

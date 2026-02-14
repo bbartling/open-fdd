@@ -56,6 +56,15 @@ Or re-run `./scripts/bootstrap.sh` (idempotent; safe for existing DBs).
 
 **What “run now” means:** Run the fault rules immediately and (if using the loop) reset the countdown to the next scheduled run.
 
+### How the schedule works
+
+| Trigger file `config/.run_fdd_now` | Behavior |
+|------------------------------------|----------|
+| **Absent** (or deleted after use)   | Loop runs every **config duration** (`rule_interval_hours`, e.g. 3 h). Each run loads **`lookback_days`** of data (e.g. 3 days) and executes all rules. |
+| **Present**                        | Loop detects it within **60 seconds**, runs FDD immediately, **deletes the file**, and resets the timer. Then back to the normal interval. |
+
+So: no trigger file → runs on the configured interval with configured lookback. Create the file (or call `POST /run-fdd`) when you want one run now and then resume the normal schedule.
+
 ### Option A: Trigger the running loop (recommended when fdd-loop is in Docker)
 
 The fdd-loop container runs on a schedule (e.g. every 3 hours). While it’s sleeping, it checks every **60 seconds** for the file `config/.run_fdd_now`. If that file exists, it runs FDD right away, deletes the file, and resets the timer. So creating that file = “run now and reset timer.”
@@ -107,9 +116,12 @@ docker compose exec db psql -U postgres -d openfdd -c "\dt"
 
 ---
 
-## Unit tests
+## Unit tests and formatter
 
 ```bash
-cd /home/ben/open-fdd
+# From repo root
 .venv/bin/python -m pytest open_fdd/tests/ -v
+.venv/bin/python -m black .
 ```
+
+See [Quick reference](howto/quick_reference) for a one-page cheat sheet.

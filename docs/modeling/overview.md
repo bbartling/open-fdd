@@ -13,13 +13,13 @@ Open-FDD uses a Brick-semantic data model for equipment and points. Rules resolv
 ## Flow
 
 ```
-Sites + Equipment + Points (DB)
+Sites + Equipment + Points (DB)  ← single source of truth
          │
          ▼
-  Data-model export
+  Data-model export / CRUD
          │
          ▼
-  Brick TTL (config/brick_model.ttl)
+  Brick TTL (config/brick_model.ttl)  ← reserialized on every create/update/delete
          │
          ▼
   FDD column_map (external_id → rule_input)
@@ -27,6 +27,8 @@ Sites + Equipment + Points (DB)
          ▼
   RuleRunner
 ```
+
+**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/brick_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](howto/danger_zone#crud-deletes--cascade-behavior).
 
 ---
 
