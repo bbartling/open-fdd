@@ -10,6 +10,22 @@ Rules are YAML-defined checks run against time-series DataFrames. Each rule prod
 
 ---
 
+## Where to place your rules
+
+**One place only:** put your project rules in **`analyst/rules/`** (`.yaml` files). The FDD loop loads from this directory every run. Copy or adapt examples from `open_fdd/rules/` (sensor bounds, flatline, weather, AHU). To write new rules, see the [Expression Rule Cookbook](expression_rule_cookbook) and online docs.
+
+Config: `rules_dir: "analyst/rules"` (or `OFDD_RULES_DIR`). If that path doesn’t exist, the loop falls back to `open_fdd/rules`.
+
+---
+
+## Hot reload (edit → run → view in Grafana)
+
+1. **Edit** a rule in `analyst/rules/*.yaml` (or add a new one).
+2. **Run** FDD: wait for the next scheduled run, or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Operations](howto/operations)).
+3. **View** fault results in Grafana (Fault Results dashboard). No restart needed — the loop reloads all rules from disk on every run.
+
+---
+
 ## Rule types
 
 | Type | Purpose |
@@ -35,7 +51,10 @@ inputs:
 params:
   low: 40
   high: 90
+  rolling_window: 6   # optional: require N consecutive True samples before flagging
 ```
+
+**Per-rule rolling window:** Set `params.rolling_window` (e.g. `6`) in a rule to require that many consecutive True samples before the fault is flagged. Omit for “flag on any True.” See `sensor_flatline.yaml`, `weather_temp_stuck.yaml`.
 
 ---
 
@@ -49,7 +68,7 @@ params:
 
 ## Running rules
 
-- **Platform:** FDD loop loads rules from the analyst rules directory (`OFDD_DATALAKE_RULES_DIR`), runs on schedule.
+- **Platform:** FDD loop loads rules from `rules_dir` (default `analyst/rules`) each run; edit YAML and trigger a run to see changes in Grafana.
 - **Standalone:** `RuleRunner(rules_path=...)` or `RuleRunner(rules=[...])`; call `run(df, ...)`.
 
 ---

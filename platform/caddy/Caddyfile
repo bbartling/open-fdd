@@ -1,0 +1,47 @@
+# Open-FDD reverse proxy with basic auth (default: non-TLS).
+# See docs/security.md for bootstrap, password change, and optional TLS.
+#
+# Default user: openfdd. Default password: xyz (change in production: caddy hash-password, then replace hash below).
+
+:8088 {
+	basic_auth /* {
+		openfdd $2b$12$7XIpN2rKDKjZtQ6ULGalNuKl1syddMWE3Fx17xx1xP7O1bygH5Smi
+	}
+
+	# API (Swagger, CRUD, analytics)
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /docs* {
+		reverse_proxy api:8000
+	}
+	handle /openapi.json {
+		reverse_proxy api:8000
+	}
+	handle /analytics/* {
+		reverse_proxy api:8000
+	}
+	handle /sites* {
+		reverse_proxy api:8000
+	}
+	handle /equipment* {
+		reverse_proxy api:8000
+	}
+	handle /points* {
+		reverse_proxy api:8000
+	}
+	handle /timeseries* {
+		reverse_proxy api:8000
+	}
+	handle /faults* {
+		reverse_proxy api:8000
+	}
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	# Grafana
+	handle /* {
+		reverse_proxy grafana:3000
+	}
+}

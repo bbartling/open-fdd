@@ -110,9 +110,17 @@ Run SPARQL with uploaded TTL file (multipart). Use when validating external TTL.
 
 ## Bulk Download
 
+CSV exports are **Excel-friendly** (UTF-8 BOM, ISO timestamps). Wide format = timestamp column on left, one column per point — opens directly in Excel.
+
+### GET /download/csv
+
+Download timeseries (researcher-friendly). Use for bookmarking or simple curl.
+
+**Query params:** `site_id`, `start_date`, `end_date`, `format` (default `wide`)
+
 ### POST /download/csv
 
-Bulk download timeseries as CSV. Specify site, date range, and optional point filter.
+Same as GET but supports `point_ids` filter in the body.
 
 **Body:**
 
@@ -131,14 +139,62 @@ Bulk download timeseries as CSV. Specify site, date range, and optional point fi
 | `site_id` | string | Site name or UUID |
 | `start_date` | date | Start of range |
 | `end_date` | date | End of range |
-| `format` | string | `wide` (pivot by point) or `long` (ts, point_key, value) |
+| `format` | string | `wide` (pivot by point, Excel default) or `long` (ts, point_key, value) |
 | `point_ids` | string[] | Optional; limit to these point UUIDs |
 
-**Response:** CSV file attachment (`openfdd_export_{start}_{end}.csv`).
+**Response:** CSV attachment (`openfdd_timeseries_{start}_{end}.csv`).
+
+---
+
+### GET /download/faults
+
+Export fault results for MSI/cloud integration. Poll this endpoint (e.g. cron, scheduler) to sync faults into your platform.
+
+**Query params:** `start_date`, `end_date`, `site_id` (optional; omit for all sites), `format` (default `csv`)
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `site_id` | string | Optional. Site name or UUID; omit for all sites |
+| `start_date` | date | Start of range |
+| `end_date` | date | End of range |
+| `format` | string | `csv` (Excel-friendly) or `json` (for REST/ETL) |
+
+**Response:**
+
+- **CSV:** `openfdd_faults_{start}_{end}.csv` (ts, site_id, equipment_id, fault_id, flag_value, evidence)
+- **JSON:** `{"faults": [...], "count": N}`
+
+---
+
+## Fault analytics (data-model driven)
+
+### GET /analytics/motor-runtime
+
+Motor runtime hours from fan/VFD points. **Data-model driven:** if no point with brick_type (Supply_Fan_Status, Supply_Fan_Speed_Command, VFD, etc.), returns `NO DATA`.
+
+**Query params:** `site_id`, `start_date`, `end_date`
+
+**Response:** `{"motor_runtime_hours": 123.45, "point": {...}}` or `{"status": "NO DATA", "reason": "..."}`
+
+Caches to `analytics_motor_runtime` for Grafana. Poll this (or run cron) to populate.
+
+### GET /analytics/fault-summary
+
+Fault counts by fault_id. **Query params:** `start_date`, `end_date`, `site_id` (optional).
+
+---
+
+## Trigger FDD run
+
+### POST /run-fdd
+
+Trigger an immediate FDD rule run and reset the loop timer (when fdd-loop runs with `--loop`). Touches the trigger file; the loop picks it up within 60 seconds.
+
+**Response:** `{"status": "triggered", "path": "..."}`
 
 ---
 
 ## OpenAPI
 
-- Swagger: http://localhost:8000/docs
+- Swagger: http://localhost:8000/docs (version shown = installed open-fdd package)
 - ReDoc: http://localhost:8000/redoc

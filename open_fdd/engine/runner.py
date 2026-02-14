@@ -133,9 +133,15 @@ class RuleRunner:
                 mask = self._evaluate_rule(
                     rule, result, timestamp_col, run_params, global_col_map
                 )
-                if rolling_window and rolling_window > 1:
-                    rolling_sum = mask.astype(int).rolling(window=rolling_window).sum()
-                    result[flag_name] = (rolling_sum >= rolling_window).astype(int)
+                # Per-rule rolling_window (params.rolling_window), else global
+                rw = (rule.get("params") or {}).get("rolling_window")
+                if rw is None:
+                    rw = rule.get("rolling_window")
+                if rw is None:
+                    rw = rolling_window
+                if rw and rw > 1:
+                    rolling_sum = mask.astype(int).rolling(window=rw).sum()
+                    result[flag_name] = (rolling_sum >= rw).astype(int)
                 else:
                     result[flag_name] = mask.astype(int)
             except (KeyError, NameError) as e:
@@ -163,9 +169,9 @@ class RuleRunner:
         params = {**(rule.get("params") or {}), **(run_params or {})}
         global_col_map = column_map or {}
 
-        # Resolve column mappings: BRICK class first, then rule input name
-        # column_map keys can be Brick class (Supply_Air_Temperature_Sensor),
-        # BrickClass|rule_input for disambiguation, or rule input (sat)
+        # Resolve column mappings from Brick TTL (SPARQL-driven). Rules declare Brick class;
+        # column_map from resolve_from_ttl provides Brick class → DataFrame column (rdfs:label).
+        # column fallback is optional for standalone/CSV use when no TTL is available.
         col_map = {}
         for key, val in inputs.items():
             if isinstance(val, str):
@@ -175,7 +181,6 @@ class RuleRunner:
                 inp = val if isinstance(val, dict) else {}
                 col = inp.get("column", key)
                 brick_class = inp.get("brick")
-            # Lookup order: Brick class, BrickClass|column (disambiguation), column, key, literal
             resolved = col
             if global_col_map:
                 if brick_class:

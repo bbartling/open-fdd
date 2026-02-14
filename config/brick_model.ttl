@@ -108,8 +108,24 @@
     rdfs:label "ZoneTemp" ;
     brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
+:pt_82fdecc0_fa5a_4e21_a664_fe96da4a1919 a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
 :pt_eb876613_f95a_4bea_bc0e_10be8d606a12 a brick:Point ;
     rdfs:label "dewpoint_f" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
+:pt_8ee87f37_b6b7_4654_9cb0_b1695980df8b a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
+:pt_63129cde_4994_45a9_9c7a_a53b9c5c8f60 a brick:Point ;
+    rdfs:label "direct_wm2" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
+:pt_2eac645e_6c09_4acf_acf0_f73d536bb4f2 a brick:Point ;
+    rdfs:label "gti_wm2" ;
     brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
 :pt_0b2f7868_bcde_4332_8cc9_de5b12e11706 a brick:Point ;
@@ -124,8 +140,16 @@
     rdfs:label "rh_pct" ;
     brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
+:pt_0a6dce55_4b6d_4634_ac29_1e280ac02e17 a brick:Point ;
+    rdfs:label "shortwave_wm2" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
 :pt_722848b4_48cc_4c84_a0ad_589b365b217a a brick:Point ;
     rdfs:label "temp_f" ;
+    brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
+
+:pt_a24509ef_75b1_4590_b3ea_2d50b1787cb4 a brick:Point ;
+    rdfs:label "wind_dir_deg" ;
     brick:isPointOf :site_5e69ecae_0f25_40d2_bf87_f137e03ddf8e_points .
 
 :pt_75418f27_26af_45bc_b1e8_733b898236b0 a brick:Point ;

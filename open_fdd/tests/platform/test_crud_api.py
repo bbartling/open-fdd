@@ -146,9 +146,10 @@ def test_sites_patch():
 
 
 def test_sites_delete():
-    conn = _mock_conn(fetchone={"id": uuid4()})
+    sid = uuid4()
+    conn = _mock_conn(fetchone={"id": sid, "name": "TestSite"})
     with _patch_db(conn), patch("open_fdd.platform.api.sites.sync_ttl_to_file"):
-        r = client.delete(f"/sites/{uuid4()}")
+        r = client.delete(f"/sites/{sid}")
     assert r.status_code == 200
     assert r.json()["status"] == "deleted"
 

@@ -163,16 +163,12 @@ def run_fdd_loop(
     settings = get_platform_settings()
     lookback = lookback_days if lookback_days is not None else settings.lookback_days
 
-    # Rules: analyst/rules (datalake) first if configured, else open_fdd/rules
+    # Rules: one place (analyst/rules); fallback to open_fdd/rules if missing
     repo_root = Path(__file__).resolve().parent.parent.parent
     if rules_dir is not None:
         rules_path = Path(rules_dir)
-    elif getattr(settings, "datalake_rules_dir", None):
-        rules_path = repo_root / settings.datalake_rules_dir
-        if not rules_path.exists():
-            rules_path = repo_root / settings.rules_yaml_dir
     else:
-        rules_path = Path(settings.rules_yaml_dir)
+        rules_path = Path(settings.rules_dir)
         if not rules_path.is_absolute():
             rules_path = repo_root / rules_path
     if not rules_path.exists():
@@ -220,27 +216,46 @@ def run_fdd_loop(
             site_rows = cur.fetchall()
 
     all_results: list[FDDResult] = []
-    for row in site_rows:
-        sid = str(row["id"])
-        site_name = row["name"] or sid
-        df = load_timeseries_for_site(sid, start_ts, end_ts, column_map)
-        if df is None or len(df) < 6:
-            continue
-        res = runner.run(
-            df,
-            timestamp_col="timestamp",
-            rolling_window=settings.rolling_window,
-            column_map=column_map,
-            params={"units": "imperial"},
-            skip_missing_columns=True,
-        )
-        results = results_from_runner_output(
-            res, site_name, site_name, timestamp_col="timestamp"
-        )
-        all_results.extend(results)
+    sites_processed = 0
+    try:
+        for row in site_rows:
+            sid = str(row["id"])
+            site_name = row["name"] or sid
+            df = load_timeseries_for_site(sid, start_ts, end_ts, column_map)
+            if df is None or len(df) < 6:
+                continue
+            sites_processed += 1
+            res = runner.run(
+                df,
+                timestamp_col="timestamp",
+                rolling_window=getattr(settings, "rolling_window", None),
+                column_map=column_map,
+                params={"units": "imperial"},
+                skip_missing_columns=True,
+            )
+            results = results_from_runner_output(
+                res, site_name, site_name, timestamp_col="timestamp"
+            )
+            all_results.extend(results)
 
-    if all_results:
-        _write_fault_results(all_results)
+        if all_results:
+            _write_fault_results(all_results)
+
+        _write_fdd_run_log(
+            run_ts=datetime.utcnow(),
+            status="ok",
+            sites_processed=sites_processed,
+            faults_written=len(all_results),
+        )
+    except Exception as e:
+        _write_fdd_run_log(
+            run_ts=datetime.utcnow(),
+            status="error",
+            sites_processed=sites_processed,
+            faults_written=0,
+            error_message=str(e)[:500],
+        )
+        raise
 
     return all_results
 
@@ -258,5 +273,25 @@ def _write_fault_results(results: list[FDDResult]) -> None:
                 """,
                 rows,
                 page_size=500,
+            )
+            conn.commit()
+
+
+def _write_fdd_run_log(
+    run_ts: datetime,
+    status: str,
+    sites_processed: int,
+    faults_written: int,
+    error_message: Optional[str] = None,
+) -> None:
+    """Record FDD run status for Grafana fault runner panel."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO fdd_run_log (run_ts, status, sites_processed, faults_written, error_message)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (run_ts, status, sites_processed, faults_written, error_message),
             )
             conn.commit()

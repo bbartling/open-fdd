@@ -16,7 +16,7 @@ Open-FDD is an **edge analytics and rules engine** for building automation. It:
 - **Ingests** BACnet points via diy-bacnet-server (JSON-RPC) and weather via Open-Meteo
 - **Stores** telemetry in TimescaleDB with a Brick-semantic data model
 - **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) on a configurable schedule
-- **Exposes** REST APIs for sites, points, equipment, data-model export/import, TTL generation, SPARQL validation
+- **Exposes** REST APIs for sites, points, equipment, data-model export/import, bulk timeseries and fault download (Excel-friendly CSV, JSON for cloud), TTL generation, SPARQL validation
 - **Visualizes** timeseries and fault results in Grafana
 
 Operators and integrators get full control, lower cost, and no vendor lock-in. Already powering HVAC optimization and commissioning workflows.
@@ -48,7 +48,8 @@ cd open-fdd
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC |
 | [System Modeling](modeling/overview) | Brick TTL, data-model API, SPARQL |
 | [Rules](rules/overview) | Rule types, expression cookbook |
-| [How-to Guides](howto/verification) | Verification, logs, data flow checks |
+| [How-to Guides](howto/verification) | Verification, operations, [danger zone](howto/danger_zone) |
+| [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | REST API, engine API |
 
@@ -69,5 +70,5 @@ cd open-fdd
 ## For cloud and edge
 
 - **Edge:** Run analytics and rules locally, behind the firewall. No telemetry leaves the building until you choose.
-- **Cloud:** Use Open-FDD as a data source. APIs and Grafana feed any cloud-based analytics, dashboards, or ML pipelines.
+- **Cloud:** Use Open-FDD as a data source. Poll `GET /download/faults` and `GET /download/csv` for bulk export; APIs and Grafana feed any cloud-based analytics, dashboards, or ML pipelines.
 - **Hybrid:** Edge analytics + cloud reporting, tuning, or fleet management.

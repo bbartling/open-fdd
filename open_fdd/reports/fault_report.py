@@ -2,6 +2,8 @@
 Fault analytics and reporting for config-driven FDD.
 
 Provides fault duration, motor runtime, sensor stats, and time-range helpers.
+Data-model driven: if no motor_col (fan/VFD) in the data model, motor runtime
+is skipped (NO DATA). API: GET /analytics/motor-runtime, GET /analytics/fault-summary.
 """
 
 from pathlib import Path

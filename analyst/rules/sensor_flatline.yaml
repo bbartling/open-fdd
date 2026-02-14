@@ -1,4 +1,4 @@
-# Flatline detection — sensor stuck at constant value
+# Flatline detection — resolved from Brick TTL (brick_type + rdfs:label)
 name: sensor_flatline
 description: Fault if sensor value does not change over window (stuck sensor)
 type: flatline
@@ -7,10 +7,8 @@ flag: flatline_flag
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: SA-T
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
-    column: ZoneTemp
 
 params:
   tolerance: 0.000001

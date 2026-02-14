@@ -135,4 +135,4 @@ python examples/run_all_rules_brick.py --validate-first
 | Viz | Jupyter notebook | Grafana |
 | API | None | REST CRUD + Swagger |
 
-**Analyst rules** (`analyst/rules/*.yaml`) are used by the platform FDD loop when `OFDD_DATALAKE_RULES_DIR` or `datalake_rules_dir` points here. Edit YAML on host; changes apply on next run (no restart).
+**Project rules** live in `analyst/rules/*.yaml`. The platform FDD loop loads from here every run (hot reload). Edit YAML on host; trigger a run (or wait for schedule) and view results in Grafana. See [Rules overview](docs/rules/overview) and [Configuration](docs/configuration).

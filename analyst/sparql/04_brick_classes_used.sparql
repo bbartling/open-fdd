@@ -4,7 +4,6 @@ PREFIX brick: <https://brickschema.org/schema/Brick#>
 PREFIX ofdd: <http://openfdd.local/ontology#>
 
 SELECT ?brick_class (COUNT(?point) AS ?count) WHERE {
-    ?point ofdd:mapsToRuleInput ?rule_input .
     ?point a ?brick_type .
     FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
     BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)

@@ -9,11 +9,10 @@
 # Every run loads rules from YAML (analyst edits apply immediately), pulls last N days into pandas
 rule_interval_hours: 3   # run every 3 hours
 lookback_days: 3         # pull 3 days of data each run
-rolling_window: 6       # consecutive samples to flag fault
 
-# Rules: analyst/rules first (for tuning), else open_fdd/rules
-rules_yaml_dir: "open_fdd/rules"
-datalake_rules_dir: "analyst/rules"  # analyst YAML; checked first (hot reload each run)
+
+# Rules: put your project rules here (hot reload — edit YAML, next FDD run picks up; see docs)
+rules_dir: "analyst/rules"
 
 # Data model: Brick TTL for FDD column mapping (Brick class → external_id). Optional if using points.brick_type/fdd_input.
 # TTL can live in config/ (e.g. config/brick_model.ttl) and be generated from DB export or from BACnet CSV.

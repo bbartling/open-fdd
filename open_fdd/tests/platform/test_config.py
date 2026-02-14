@@ -16,7 +16,6 @@ def test_platform_settings_defaults():
         assert s.db_dsn.startswith("postgresql://")
         assert s.rule_interval_hours == 3
         assert s.lookback_days == 3
-        assert s.rolling_window == 6
         assert s.bacnet_scrape_interval_min == 5
         assert s.open_meteo_interval_hours == 24
         assert s.open_meteo_latitude == 41.88

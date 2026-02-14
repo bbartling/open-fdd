@@ -1,4 +1,4 @@
-# Sensor bounds — sat, zt only (heat pump points)
+# Sensor bounds — resolved from Brick TTL (brick_type + rdfs:label)
 name: bad_sensor_check
 description: Returns fault if sensor is out of range
 type: bounds
@@ -10,13 +10,11 @@ params:
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: SA-T
     bounds:
       imperial: [40, 150]
       metric: [4, 66]
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
-    column: ZoneTemp
     bounds:
       imperial: [40, 100]
       metric: [4, 38]

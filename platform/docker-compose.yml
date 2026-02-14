@@ -138,7 +138,7 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_RULE_INTERVAL_HOURS: "3"
       OFDD_LOOKBACK_DAYS: "3"
-      OFDD_DATALAKE_RULES_DIR: "analyst/rules"
+      OFDD_RULES_DIR: "analyst/rules"
       OFDD_BRICK_TTL_PATH: "config/brick_model.ttl"
     volumes:
       - ../open_fdd:/app/open_fdd:ro
@@ -190,6 +190,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
+
+  # Optional: Caddy reverse proxy with basic auth (see platform/caddy/ and docs/security.md)
+  caddy:
+    image: caddy:2
+    container_name: openfdd_caddy
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - grafana
     restart: unless-stopped
     logging:
       driver: json-file

@@ -64,7 +64,7 @@ runner.add_rule(load_rule("new_rule.yaml"))
 result_df = runner.run(
     df,
     timestamp_col="timestamp",
-    rolling_window=6,
+    rolling_window=6,  # optional global fallback; prefer params.rolling_window per rule
     params={"units": "metric"},
     skip_missing_columns=False,
     column_map={"oat": "OAT (°F)", "sat": "SAT (°F)"},
@@ -75,7 +75,7 @@ result_df = runner.run(
 |-----------|------|-------------|
 | `df` | DataFrame | Input time-series. Columns = data. |
 | `timestamp_col` | str | Timestamp column (default: "timestamp") |
-| `rolling_window` | int | Consecutive True samples to flag fault |
+| `rolling_window` | int | Optional global fallback; each rule can set `params.rolling_window` |
 | `params` | dict | Override params (e.g. units for bounds) |
 | `skip_missing_columns` | bool | Skip rules with missing columns instead of raising |
 | `column_map` | dict | {rule_input: df_column}. From Brick TTL or manual. |

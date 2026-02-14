@@ -3,7 +3,8 @@
 End-to-end CRUD API test against localhost:8000.
 
 Creates: site → equipment → points, then deletes in reverse order.
-Verifies each operation with GET/list checks in between.
+Deletes cascade: point → timeseries; equipment → points; site → equipment, points,
+  fault_results, fault_events. See docs/howto/danger_zone.md.
 
 Usage:
   python tools/test_crud_api.py
@@ -28,8 +29,8 @@ BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
 def _request(
     method: str, path: str, *, json_body: dict | None = None
-) -> tuple[int, dict | list | None]:
-    """Send HTTP request, return (status_code, parsed_json)."""
+) -> tuple[int, dict | list | str | None]:
+    """Send HTTP request, return (status_code, parsed_json or raw text for CSV)."""
     url = f"{BASE_URL.rstrip('/')}{path}"
     if httpx:
         with httpx.Client(timeout=30.0) as client:
@@ -45,8 +46,13 @@ def _request(
         req.data = json.dumps(json_body).encode()
     try:
         with urllib.request.urlopen(req) as res:
-            body = res.read().decode()
-            return res.status, json.loads(body) if body else None
+            body = res.read().decode("utf-8-sig")  # handle BOM in CSV responses
+            if not body:
+                return res.status, None
+            try:
+                return res.status, json.loads(body)
+            except json.JSONDecodeError:
+                return res.status, body
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         try:
@@ -255,7 +261,17 @@ def run():
     print("    OK (verified 404)\n")
 
     # --- Download (may 404 if no timeseries) ---
-    print("[21] POST /download/csv (smoke test)")
+    print("[21] GET /download/csv (smoke test)")
+    code, body = _request(
+        "GET",
+        "/download/csv?site_id=default&start_date=2024-01-01&end_date=2024-01-31&format=wide",
+    )
+    assert code in (200, 404), f"Unexpected {code}"
+    if code == 200 and isinstance(body, str):
+        assert "timestamp" in body.lower() or "," in body  # CSV with header
+    print(f"    OK (status {code})\n")
+
+    print("[22] POST /download/csv (smoke test)")
     code, _ = _request(
         "POST",
         "/download/csv",
@@ -266,11 +282,31 @@ def run():
             "format": "wide",
         },
     )
-    # 404 = no data (OK), 200 = has data
     assert code in (200, 404), f"Unexpected {code}"
     print(f"    OK (status {code})\n")
 
-    print("=== All 21 checks passed ===\n")
+    # --- Faults export (MSI/cloud) ---
+    print("[23] GET /download/faults?format=json (smoke test)")
+    code, data = _request(
+        "GET",
+        "/download/faults?start_date=2024-01-01&end_date=2024-01-31&format=json",
+    )
+    assert code == 200, f"Unexpected {code}"
+    assert isinstance(data, dict) and "faults" in data and "count" in data
+    print(f"    OK (faults={data['count']})\n")
+
+    print("[24] GET /download/faults?format=csv (smoke test)")
+    code, body = _request(
+        "GET",
+        "/download/faults?start_date=2024-01-01&end_date=2024-01-31&format=csv",
+    )
+    assert code == 200, f"Unexpected {code}"
+    # Empty faults = minimal CSV (header only or empty); non-empty has ts, site_id, etc.
+    if isinstance(body, str) and body.strip():
+        assert "ts" in body or "site_id" in body or "," in body
+    print("    OK\n")
+
+    print("=== All 24 checks passed ===\n")
 
 
 if __name__ == "__main__":

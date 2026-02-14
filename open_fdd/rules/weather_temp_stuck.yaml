@@ -12,4 +12,5 @@ inputs:
 
 params:
   tolerance: 0.2    # degF max spread in window
-  window: 6         # samples (e.g. 6 hours for hourly data)
+  window: 6          # samples for flatline check (e.g. 6 hours for hourly data)
+  rolling_window: 6 # consecutive True samples required before flagging

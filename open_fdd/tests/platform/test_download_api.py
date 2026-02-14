@@ -91,7 +91,7 @@ def test_download_csv_200_wide():
             },
         )
     assert r.status_code == 200
-    assert r.headers["content-type"] == "text/csv; charset=utf-8"
+    assert "text/csv" in r.headers["content-type"]
     assert "attachment" in r.headers["content-disposition"]
     body = r.text
     assert "timestamp" in body

@@ -7,17 +7,28 @@ nav_order: 12
 
 ---
 
+## Platform config file
+
+**Where:** Copy `config/platform.example.yaml` to your config file. The platform looks for:
+
+- **Environment:** `OFDD_*` vars (e.g. `OFDD_RULE_INTERVAL_HOURS=6`) override any file.
+- **File:** By default the app does not read a YAML path from env; pydantic-settings loads from `.env` and env vars. To use a **named file** (e.g. `platform.yaml`, `my_site.yaml`), set `OFDD_ENV_FILE` or place `.env` in the working directory and point it there, or pass env vars when starting containers.
+
+**Docker:** Set env in `platform/docker-compose.yml` under each service’s `environment:` (e.g. `OFDD_RULE_INTERVAL_HOURS: "6"`). To use a custom config file, mount it and set `OFDD_ENV_FILE` to its path, or set individual `OFDD_*` vars.
+
+**Rename / multiple configs:** Use different env files (e.g. `platform-prod.env`, `platform-building-a.env`) and start with `docker compose --env-file platform-building-a.env up -d`, or set `OFDD_*` in that file. No built-in “config name” selector; use env files or env vars per deployment.
+
+---
+
 ## Platform (YAML)
 
-Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via environment).
+Example keys (see `config/platform.example.yaml`). Copy to your file or set via `OFDD_*` env.
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `rule_interval_hours` | 3 | FDD loop run interval |
 | `lookback_days` | 3 | Days of data to load per run |
-| `rolling_window` | 6 | Consecutive samples to flag fault |
-| `rules_yaml_dir` | open_fdd/rules | Fallback rules directory |
-| `datalake_rules_dir` | analyst/rules | Analyst rules directory (hot-reload) |
+| `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config |
@@ -28,6 +39,10 @@ Copy `config/platform.example.yaml` to `platform/platform.yaml` (or set via envi
 | `open_meteo_timezone` | America/Chicago | Timezone |
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
+
+**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Rules overview](rules/overview) and the [Expression Rule Cookbook](rules/expression_rule_cookbook).
+
+**Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Rules](rules/overview).
 
 **Open-Meteo weather points** (stored in `timeseries_readings`, `external_id`):
 
@@ -78,7 +93,7 @@ For edge deployments with limited disk, bootstrap applies:
 | `OFDD_DB_USER` | Database user |
 | `OFDD_DB_PASSWORD` | Database password |
 | `OFDD_BACNET_URL` | diy-bacnet-server base URL |
-| `OFDD_DATALAKE_RULES_DIR` | Analyst rules path (default: analyst/rules) |
+| `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |
 | `OFDD_PLATFORM_YAML` | Path to platform.yaml |
 
 ---

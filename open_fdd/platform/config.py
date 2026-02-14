@@ -24,9 +24,8 @@ class PlatformSettings(BaseSettings):
     # FDD loop
     rule_interval_hours: int = 3
     lookback_days: int = 3
-    rolling_window: int = 6  # consecutive samples to flag fault
-    rules_yaml_dir: str = "rules"
-    datalake_rules_dir: Optional[str] = None  # analyst YAML override
+    fdd_trigger_file: Optional[str] = "config/.run_fdd_now"  # touch to run now + reset timer
+    rules_dir: str = "analyst/rules"  # single place for project rules (hot reload each run)
 
     # Driver intervals
     bacnet_scrape_interval_min: int = 5

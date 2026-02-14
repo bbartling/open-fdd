@@ -51,7 +51,7 @@ Lists containers and tests DB reachability.
 
 Default Grafana login: admin / admin.
 
-**Grafana provisioning:** TimescaleDB datasource and Open-FDD dashboards are provisioned from config. No manual setup needed. Dashboards appear under **Open-FDD**: BACnet Timeseries, Fault Results, System Resources (host + container metrics), **Weather (Open-Meteo)** (temp, solar, wind, cloud). If dashboards show "no datasource" or wrong DB, run:
+**Grafana provisioning:** TimescaleDB datasource and Open-FDD dashboards are provisioned from config. No manual setup needed. Dashboards appear under **Open-FDD**: BACnet Timeseries, **Fault Results** (fault runner status, last run time, weather faults, fault flags by fault_id), System Resources (host + container metrics), **Weather (Open-Meteo)** (temp, solar, wind, cloud). If dashboards show "no datasource" or wrong DB, run:
 
 ```bash
 ./scripts/bootstrap.sh --reset-grafana

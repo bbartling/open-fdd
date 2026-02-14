@@ -10,19 +10,23 @@ A reference for building fault detection rules in open-fdd. Rules use **YAML** w
 
 ---
 
-## BRICK naming convention
+## BRICK naming convention (TTL-driven)
 
-All rule inputs in this cookbook use **BRICK class names** as input keys (e.g. `Supply_Air_Temperature_Sensor`, `Mixed_Air_Temperature_Sensor`). The `column` field is the fallback DataFrame column when no `column_map` is provided. When using a Brick TTL, `column_map` keys are BRICK class names; the runner resolves each input via the model. For multiple instances of the same Brick class (e.g. heating vs cooling valve), use semantic input names (`Heating_Valve_Command`, `Cooling_Valve_Command`) with `brick: Valve_Command` and disambiguate in `column_map` with `Valve_Command|heating_sig`.
+Rule inputs use **BRICK class names** as keys (e.g. `Supply_Air_Temperature_Sensor`). The **Brick TTL** (from `config/brick_model.ttl` or DB) is the source of truth: SPARQL resolves Brick type + `rdfs:label` → DataFrame column. Rules should not hardcode `column`; the data model provides the mapping. See `analyst/sparql/01_points_rule_mapping.sparql`.
+
+- **Platform (DB):** Points have `brick_type` and `external_id`; TTL is built from DB. PATCH points or use data-model import to set `brick_type` (e.g. `Supply_Air_Temperature_Sensor` for SA-T).
+- **Standalone/CSV:** If no TTL, use optional `column` as fallback (e.g. `column: sat`).
+- **Disambiguation:** When multiple points share a Brick class, use `ofdd:mapsToRuleInput` in TTL; the runner resolves `BrickClass|rule_input`.
 
 ---
 
 ## How to define expressions
 
-1. **Inputs** — Map BRICK classes or column names to DataFrame columns. Each input key becomes the variable name in the expression. Use BRICK class names as keys for Brick model compatibility.
+1. **Inputs** — Declare BRICK classes (`brick: Supply_Air_Temperature_Sensor`). The runner resolves these via the Brick TTL (SPARQL) to DataFrame columns. Omit `column` when using TTL. For standalone CSV without TTL, add `column: col_name` as fallback.
 2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
 3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
 
-**Minimal example:**
+**Minimal example (TTL-driven; no column):**
 
 ```yaml
 name: high_temp_check
@@ -32,7 +36,6 @@ flag: high_temp_flag
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
 
 params:
   max_temp: 90.0
@@ -40,6 +43,8 @@ params:
 expression: |
   Supply_Air_Temperature_Sensor > max_temp
 ```
+
+The Brick TTL maps `Supply_Air_Temperature_Sensor` → the actual column (e.g. `SA-T`). Set `points.brick_type` in the DB and sync TTL, or use `column: sat` when running standalone without a Brick model.
 
 ---
 

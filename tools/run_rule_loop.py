@@ -7,12 +7,12 @@ of site data into pandas, runs all rules (sensor + weather), writes fault_result
 Analyst edits to YAML take effect on the next run; no restart required.
 
 Usage:
-  python tools/run_rule_loop.py           # one-shot
-  python tools/run_rule_loop.py --loop    # every OFDD_RULE_INTERVAL_HOURS
-  OFDD_RULE_INTERVAL_HOURS=6 OFDD_LOOKBACK_DAYS=1 python tools/run_rule_loop.py --loop
+  python tools/run_rule_loop.py           # one-shot (run now, exit)
+  python tools/run_rule_loop.py --loop   # scheduled loop (checks trigger file every 60s)
+  python tools/trigger_fdd_run.py        # touch trigger file → loop runs now + resets timer
 
-Config (env or .env): OFDD_RULE_INTERVAL_HOURS, OFDD_LOOKBACK_DAYS, OFDD_DATALAKE_RULES_DIR,
-  OFDD_RULES_YAML_DIR, OFDD_BRICK_TTL_PATH, OFDD_DB_DSN.
+When --loop: touch config/.run_fdd_now (or OFDD_FDD_TRIGGER_FILE) to run immediately
+and restart the interval. Useful after rule edits.
 """
 
 import argparse
@@ -25,6 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.loop import run_fdd_loop
+
+TRIGGER_POLL_SEC = 60  # check for trigger file every N seconds
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -82,15 +84,34 @@ def main() -> int:
 
     if args.loop:
         log.info(
-            "FDD loop started: every %d hours, lookback %d days",
+            "FDD loop started: every %d hours, lookback %d days (touch %s to run now)",
             interval_hours,
             lookback_days,
+            getattr(settings, "fdd_trigger_file", "config/.run_fdd_now") or "config/.run_fdd_now",
         )
+        sleep_sec = interval_hours * 3600
+        trigger_path = getattr(settings, "fdd_trigger_file", None)
+
         while True:
             _run()
-            sleep_sec = interval_hours * 3600
-            log.info("Sleeping %d s until next run", sleep_sec)
-            time.sleep(sleep_sec)
+            elapsed = 0
+            while elapsed < sleep_sec:
+                nap = min(TRIGGER_POLL_SEC, sleep_sec - elapsed)
+                time.sleep(nap)
+                elapsed += nap
+                if trigger_path:
+                    p = Path(trigger_path)
+                    if not p.is_absolute():
+                        p = Path.cwd() / p
+                    if p.exists():
+                        try:
+                            p.unlink()
+                        except OSError:
+                            pass
+                        log.info("Trigger file detected → running now, timer reset")
+                        _run()
+                        elapsed = 0  # reset timer
+            log.info("Next run in %d h", interval_hours)
     else:
         return _run()
 

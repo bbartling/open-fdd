@@ -1,0 +1,63 @@
+{
+  "uid": "fault-analytics",
+  "title": "Fault Analytics (open-fdd)",
+  "schemaVersion": 42,
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Motor runtime (h)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(runtime_hours)::text, 'NO DATA') AS value FROM analytics_motor_runtime WHERE (site_id = '$site' OR '$site' = 'All') AND period_start <= $__timeTo()::date AND period_end >= $__timeFrom()::date",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "NO DATA": { "text": "NO DATA", "color": "gray" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "table",
+      "title": "Motor runtime by site",
+      "gridPos": { "x": 6, "y": 0, "w": 12, "h": 4 },
+      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT site_id, point_external_id, point_brick_type, runtime_hours, period_start, period_end, updated_at FROM analytics_motor_runtime WHERE period_start <= $__timeTo()::date AND period_end >= $__timeFrom()::date ORDER BY site_id",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "content": "**Data-model driven.** No fan/VFD point (brick_type) = NO DATA. Populate via `GET /analytics/motor-runtime` or cron. Add points with Supply_Fan_Status, Supply_Fan_Speed_Command, etc.",
+        "mode": "markdown"
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "site",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
+        "query": "SELECT name AS __text, name AS __value FROM sites UNION ALL SELECT 'All', 'All' ORDER BY __value",
+        "refresh": 1,
+        "includeAll": true,
+        "current": { "text": "All", "value": "All" }
+      }
+    ]
+  }
+}

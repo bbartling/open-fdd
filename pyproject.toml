@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "0.2.0"
+version = "2.0.0"
 description = "Fault Detection and Diagnostics for HVAC systems — config-driven, pandas-based"
 readme = "README.md"
 license = { text = "MIT" }
@@ -53,6 +53,7 @@ docx = [
 platform = [
     "psycopg2-binary",
     "requests",
+    "httpx",
     "pydantic-settings",
     "fastapi",
     "uvicorn[standard]",
