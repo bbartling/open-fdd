@@ -61,6 +61,8 @@ The bundled Caddyfile routes **API paths** (e.g. `/docs`, `/api/*`, `/sites*`, `
 **Option 1 — Caddy on the Open-FDD host, vendor edge device on a separate host**
 
 Building Network (OT LAN)
+
+```
    │
    ├── Open-FDD Host (Docker)
    │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
@@ -72,6 +74,7 @@ Building Network (OT LAN)
    └── Vendor Edge Gateway (X / Y / Z)
           ├── Pulls data from Open-FDD via Caddy URL (LAN)
           └── Secure Export to Cloud Platform (Vendor-managed)
+```
 
 Caddy provides secure access to internal services without exposing raw ports externally. The Vendor Edge Gateway represents any third-party or cloud-connected service on the OT network. Secure export of data to external cloud platforms is the responsibility of the vendor or integration partner—not Open-FDD.
 
@@ -81,6 +84,8 @@ Open-FDD operates strictly as a behind-the-firewall AFDD engine and API layer. I
 **Option 2 — Vendor runs Open-FDD inside their own Docker stack**
 
 Building Network (OT LAN)
+
+```
    │
    ├── Open-FDD Host (Docker)
    │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
@@ -91,7 +96,7 @@ Building Network (OT LAN)
    │      └── Vendor Edge Gateway (X / Y / Z)
    │             ├── Pulls data from Open-FDD via Caddy (internal)
    │             └── Secure Export to Cloud Platform (Vendor-managed)
-
+```
 
 ---
 
