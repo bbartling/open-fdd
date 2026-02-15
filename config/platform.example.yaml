@@ -3,7 +3,7 @@
 #
 # Edge / resource limits: set at bootstrap (platform/.env) or via bootstrap args.
 # See Getting Started: --retention-days, --log-max-size, --log-max-files.
-
+git
 # FDD rule loop: periodic runs (sensor + weather rules)
 # Every run loads rules from YAML (analyst edits apply immediately), pulls last N days into pandas
 rule_interval_hours: 3   # run every 3 hours

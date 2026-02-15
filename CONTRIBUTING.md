@@ -2,7 +2,9 @@
 
 First off, thanks for taking the time to contribute!
 
-Open-FDD is in **Alpha**. The most valuable contributions right now are **bug reports** and **FDD rules**—especially from mechanical engineers and building professionals who can add and refine fault-detection rules using the [Expression Rule Cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook). All types of contributions are encouraged. See the [Table of Contents](#table-of-contents) for different ways to help and how this project handles them. Please read the relevant section before contributing; it helps maintainers and keeps things smooth for everyone.
+Open-FDD is in **Alpha**. The most valuable contributions right now are **bug reports** and **FDD rules**—especially from mechanical engineers and building professionals who can add and refine fault-detection rules using the [Expression Rule Cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook). All types of contributions are encouraged.
+
+**Phase focus:** Alpha emphasizes platform stability, driver implementation beyond BACnet, and API changes for specific integration needs. Beta (planned) will focus more on Brick data modeling (e.g. ASHRAE 223P), mechanical engineering and consulting input into the expression rule cookbook, and better default Grafana dashboards for HVAC analytics. See the [Table of Contents](#table-of-contents) for different ways to help and how this project handles them. Please read the relevant section before contributing; it helps maintainers and keeps things smooth for everyone.
 
 > If you like the project but don't have time to contribute, that's fine. Other ways to support it:
 > - Star the [repository](https://github.com/bbartling/open-fdd)
@@ -133,7 +135,7 @@ To contribute a rule or cookbook change:
 
 ## Improving the Documentation
 
-Documentation lives in the `docs/` directory and is published at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/). Improvements are welcome:
+Documentation lives in the `docs/` directory and is published at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Just the Docs theme). Improvements are welcome:
 
 - Fix typos, clarify wording, or update steps.
 - Add examples or how-tos (e.g. for the [Expression Rule Cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook), [Operations](https://bbartling.github.io/open-fdd/howto/operations), or BACnet).

@@ -53,7 +53,7 @@ cd open-fdd
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
-| [Contributing](https://github.com/bbartling/open-fdd/blob/master/CONTRIBUTING.md) | How to contribute (bugs, rules, docs) |
+| [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
 
 ---
 
