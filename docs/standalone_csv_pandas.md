@@ -1,9 +1,11 @@
 ---
-title: Standalone CSV & pandas (future)
+title: Standalone FDD with pandas
 nav_order: 11
 ---
 
-# Standalone CSV & pandas (future)
+# Standalone FDD with pandas
+
+**Pandas** is the open-source Python library for tabular and time-series data: DataFrames, indexing, aggregation, and a huge ecosystem of tools. It grew out of work by Wes McKinney at AQR (2008) and became a NumFOCUS project; it is now the de facto standard for data manipulation and analysis in Python and is so widely used in modern data science that it is hard to imagine doing data work without it. In Open-FDD, pandas is the **heart of number crunching**—all rule evaluation runs over pandas DataFrames—and it is a natural fit for FDD: time-aligned sensor columns, rolling windows, bounds and expression checks, and fault flags map directly onto DataFrame operations.
 
 A **future version** of Open-FDD on PyPI will offer a **standalone FDD mode** built around CSV files and pandas DataFrames. No database or edge platform required: load timeseries from CSV (or any DataFrame), run the same YAML rules and engine, and produce fault outputs as CSV-style reports or DataFrames. This will support:
 
