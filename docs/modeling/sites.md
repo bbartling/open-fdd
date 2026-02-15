@@ -1,7 +1,7 @@
 ---
 title: Sites
-parent: Concepts
-nav_order: 3
+parent: Data modeling
+nav_order: 2
 ---
 
 # Sites
@@ -30,5 +30,5 @@ All time-series and equipment queries can be filtered by `site_id`. Grafana dash
 - `GET /sites` — List sites
 - `GET /sites/{id}` — Get one
 - `POST /sites` — Create
-- `PUT /sites/{id}` — Update
-- `DELETE /sites/{id}` — Delete
+- `PATCH /sites/{id}` — Update
+- `DELETE /sites/{id}` — Delete (cascades to equipment, points, timeseries, fault results; see [Danger zone](howto/danger_zone))

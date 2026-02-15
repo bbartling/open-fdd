@@ -9,16 +9,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
   Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   supply_err_thres: 1.0

@@ -1,6 +1,6 @@
 # Cloud export example
 
-Hit the Open-FDD API and print timeseries + faults. **The rest is on you** — adapt this to POST to your cloud API, data warehouse, or analytics platform.
+Pull fault and timeseries data from the Open-FDD API. Use this as a **starting point** for how your cloud or MSI integration can get Open-FDD data to your platform (replace the script’s output with your own send logic: REST POST, S3, IoT Hub, etc.). See the docs: [Concepts → Cloud export example](https://github.com/bbartling/open-fdd/blob/master/docs/concepts/cloud_export.md).
 
 ## Run locally
 

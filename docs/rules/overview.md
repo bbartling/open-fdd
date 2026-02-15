@@ -1,12 +1,12 @@
 ---
-title: Rules Overview
-parent: Rules
+title: Overview
+parent: Fault rules for HVAC
 nav_order: 1
 ---
 
-# FDD Rules
+# Fault rules
 
-Rules are YAML-defined checks run against time-series DataFrames. Each rule produces a boolean fault flag.
+Fault rules are YAML-defined checks run against time-series DataFrames. Each rule produces a boolean fault flag. **Open-FDD is 100% Brick-model driven:** rule inputs refer only to Brick classes; column mapping comes from the Brick TTL via SPARQL and [Brick external timeseries references](https://docs.brickschema.org/metadata/external-representations.html#timeseries) ([timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html)), which Open-FDD embraces at the heart of FDD.
 
 ---
 
@@ -20,9 +20,11 @@ Config: `rules_dir: "analyst/rules"` (or `OFDD_RULES_DIR`). If that path doesn�
 
 ## Hot reload (edit → run → view in Grafana)
 
-1. **Edit** a rule in `analyst/rules/*.yaml` (or add a new one).
-2. **Run** FDD: wait for the next scheduled run, or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Operations](howto/operations)).
-3. **View** fault results in Grafana (Fault Results dashboard). No restart needed — the loop reloads all rules from disk on every run.
+Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics): rule YAML files contain the fault logic and **params** (thresholds, tolerances, windows) for tuning. The FDD maintainer edits these files as needed; the rule runner does **not** need a restart.
+
+1. **Edit** a rule in `analyst/rules/*.yaml` (or add a new one). Change `params` (e.g. `low`, `high`, `tolerance`, `rolling_window`) to tune fault sensitivity.
+2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Operations](howto/operations)).
+3. **View** fault results in Grafana (Fault Results dashboard). Every run reloads all rules from disk, so the next run uses the latest YAML and params — hot reload style.
 
 ---
 
@@ -41,13 +43,17 @@ Config: `rules_dir: "analyst/rules"` (or `OFDD_RULES_DIR`). If that path doesn�
 
 ## YAML structure
 
+Inputs use **Brick class names** only; the Brick TTL (SPARQL) resolves each to a DataFrame column via external timeseries references. No `column` in YAML.
+
 ```yaml
 name: sensor_bounds
 type: bounds
 flag: bad_sensor
 inputs:
-  - oat
-  - sat
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
 params:
   low: 40
   high: 90
@@ -58,11 +64,10 @@ params:
 
 ---
 
-## Input resolution
+## Input resolution (100% Brick)
 
-- **Brick:** Rule inputs (e.g. `oat`) map via `ofdd:mapsToRuleInput` to `external_id`.
-- **Column map:** `external_id` → DataFrame column names.
-- **Fallback:** Direct `column` in YAML if no TTL mapping.
+- **Brick TTL:** Each rule input declares a Brick class (e.g. `brick: Supply_Air_Temperature_Sensor`). The engine resolves Brick points via SPARQL to their [external timeseries reference](https://docs.brickschema.org/metadata/external-representations.html#timeseries) (`ref:TimeseriesReference` / `ref:hasTimeseriesId`), yielding the DataFrame column name. See [Brick timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html).
+- **Column map:** Built from the Brick model (e.g. `rdfs:label` or external_id) → column names; no `column` in rule YAML.
 
 ---
 

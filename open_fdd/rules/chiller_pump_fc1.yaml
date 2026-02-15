@@ -7,13 +7,10 @@ flag: dp_pump_flag
 inputs:
   Differential_Pressure_Sensor:
     brick: Differential_Pressure_Sensor
-    column: diff_pressure
   Differential_Pressure_Setpoint:
     brick: Differential_Pressure_Setpoint
-    column: diff_pressure_setpoint
   Pump_Speed_Command:
     brick: Pump_Speed_Command
-    column: pump_speed
 
 params:
   diff_pressure_err_thres: 2.0

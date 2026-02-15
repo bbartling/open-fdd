@@ -5,7 +5,7 @@ nav_order: 1
 
 # Open-FDD
 
-**Open-source edge analytics for smart buildings.** Ingest BACnet and other OT telemetry, store it in TimescaleDB, and run rule-based fault detection and diagnostics locally with Grafana dashboards and APIs. The open alternative to proprietary tools like SkyFoundry’s SkySpark — full control, lower cost, cloud-agnostic. Deploy behind the firewall; cloud companies can integrate via REST and Grafana.
+Open-FDD is an open-source Automated Fault Detection and Diagnostics (AFDD) platform specifically designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational system data into actionable cost-saving insights while providing a secure integration layer that any cloud platform can leverage without vendor lock-in. Independent U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs, representing meaningful annual cost reductions depending on facility size and energy spend.
 
 ---
 
@@ -44,14 +44,15 @@ cd open-fdd
 |---------|--------------|
 | [System Overview](overview) | Architecture, services, data flow |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
-| [Concepts](concepts/points) | Points, equipment, sites, time-series |
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC |
-| [System Modeling](modeling/overview) | Brick TTL, data-model API, SPARQL |
-| [Rules](rules/overview) | Rule types, expression cookbook |
+| [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, data-model API |
+| [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
+| [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
+| [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](https://github.com/bbartling/open-fdd/blob/master/CONTRIBUTING.md) | How to contribute (bugs, rules, docs) |
 
 ---
@@ -68,8 +69,10 @@ cd open-fdd
 
 ---
 
-## For cloud and edge
+## Behind the firewall; cloud export is vendor-led
 
-- **Edge:** Run analytics and rules locally, behind the firewall. No telemetry leaves the building until you choose.
-- **Cloud:** Use Open-FDD as a data source. Poll `GET /download/faults` and `GET /download/csv` for bulk export; APIs and Grafana feed any cloud-based analytics, dashboards, or ML pipelines.
-- **Hybrid:** Edge analytics + cloud reporting, tuning, or fleet management.
+Open-FDD runs **inside the building, behind the firewall**. It is not designed for and does not support being exposed directly to the internet. Analytics and rules run locally; telemetry stays on-premises unless you choose to export it.
+
+**Cloud and deeper FDD:** Cloud-based FDD providers, monitoring-based Cx (commissioning) firms, and FDD consulting or IoT/MSI contractors can provide their **own** data-export and integration processes. Those processes run independently of Open-FDD—typically on the building or OT network (e.g. a vendor edge gateway or integrator tool) that pulls from the Open-FDD API (e.g. `GET /download/faults`, `GET /download/csv`) over the LAN and then transmits to the cloud as that vendor sees fit. Open-FDD does not initiate outbound cloud connections or manage external data transmission; that responsibility is on the MSI, IoT contractor, or cloud FDD provider. The project focuses on **HVAC and energy efficiency** and the workflows that existing monitoring-based Cx and FDD consulting firms specialize in. For a minimal working example of how a vendor can pull fault and timeseries data from the API and use it as a starting point for their cloud pipeline, see the [Cloud export example](concepts/cloud_export) and the script `examples/cloud_export.py`.
+
+**Data stays with the client.** Data is managed and retained by the building owner or operator. Because Open-FDD is open-source and free, and the data model and APIs are standard, you can switch cloud-based MSI or FDD providers without losing your data or your existing data model—the platform and your historical data remain in your control.

@@ -10,10 +10,8 @@ equipment_type: [Heat_Pump]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   min_discharge_temp: 80.0

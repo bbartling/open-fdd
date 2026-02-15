@@ -9,13 +9,10 @@ equipment_type: [AHU_ERV]
 inputs:
   ERV_Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: erv_oat_enter
   ERV_Discharge_Air_Temperature_Sensor:
     brick: Discharge_Air_Temperature_Sensor
-    column: erv_oat_leaving
   ERV_Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: erv_eat_enter
 
 params:
   erv_efficiency_min_heating: 0.5

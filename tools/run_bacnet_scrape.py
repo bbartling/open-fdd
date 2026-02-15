@@ -5,15 +5,19 @@ Run BACnet scrape: RPC-driven via diy-bacnet-server → TimescaleDB.
 Reads points from CSV config via diy-bacnet-server JSON-RPC (client_read_property,
 client_read_multiple), writes to timeseries_readings.
 
-Usage:
+Single gateway (local or remote):
   OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py
-  OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py --loop
+  OFDD_BACNET_SITE_ID=building-a OFDD_DB_DSN=... python tools/run_bacnet_scrape.py --loop
 
-Required: OFDD_BACNET_SERVER_URL (diy-bacnet-server)
-Optional: OFDD_BACNET_SCRAPE_ENABLED, OFDD_BACNET_SCRAPE_INTERVAL_MIN, OFDD_DB_DSN
+Multiple gateways (central aggregator; OFDD_BACNET_GATEWAYS = JSON array):
+  OFDD_BACNET_GATEWAYS='[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"}]' python tools/run_bacnet_scrape.py --loop
+
+Required (single): OFDD_BACNET_SERVER_URL
+Optional: OFDD_BACNET_SITE_ID, OFDD_BACNET_SCRAPE_ENABLED, OFDD_BACNET_SCRAPE_INTERVAL_MIN, OFDD_DB_DSN
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -31,18 +35,23 @@ def setup_logging(verbose: bool = False) -> None:
     logging.basicConfig(level=level, format=fmt, datefmt="%Y-%m-%d %H:%M:%S")
 
 
+def _resolve_csv_path(csv_str: str, cwd: Path) -> Path:
+    p = Path(csv_str)
+    return (cwd / p) if not p.is_absolute() else p
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="BACnet scrape → TimescaleDB")
     parser.add_argument(
         "csv",
         nargs="?",
         default="config/bacnet_discovered.csv",
-        help="Path to BACnet CSV config",
+        help="Path to BACnet CSV config (ignored when OFDD_BACNET_GATEWAYS is set)",
     )
     parser.add_argument(
         "--site",
         default="default",
-        help="Site ID for timeseries",
+        help="Site ID for timeseries (overridden by OFDD_BACNET_SITE_ID when default)",
     )
     parser.add_argument(
         "--loop",
@@ -64,10 +73,67 @@ def main() -> int:
 
     setup_logging(args.verbose)
     log = logging.getLogger("open_fdd.bacnet")
+    cwd = Path.cwd()
 
-    csv_path = Path(args.csv)
-    if not csv_path.is_absolute():
-        csv_path = Path.cwd() / csv_path
+    from open_fdd.platform.config import get_platform_settings
+    from open_fdd.platform.drivers.bacnet import run_bacnet_scrape
+
+    settings = get_platform_settings()
+
+    # Multi-gateway mode (central aggregator)
+    if settings.bacnet_gateways:
+        try:
+            gateways = json.loads(settings.bacnet_gateways)
+        except (json.JSONDecodeError, TypeError) as e:
+            log.error("OFDD_BACNET_GATEWAYS invalid JSON: %s", e)
+            return 1
+        if not isinstance(gateways, list) or not gateways:
+            log.error("OFDD_BACNET_GATEWAYS must be a non-empty JSON array")
+            return 1
+        if not settings.bacnet_scrape_enabled:
+            log.warning("BACnet scrape disabled.")
+            return 0
+        interval_sec = settings.bacnet_scrape_interval_min * 60
+        while True:
+            total_rows, total_points, total_errors = 0, 0, 0
+            for gw in gateways:
+                url = gw.get("url") or gw.get("server_url")
+                site_id = gw.get("site_id", "default")
+                config_csv = gw.get("config_csv") or gw.get("csv")
+                if not url or not config_csv:
+                    log.warning("Gateway missing url or config_csv: %s", gw)
+                    continue
+                csv_path = _resolve_csv_path(config_csv, cwd)
+                if not csv_path.exists():
+                    log.warning("Gateway CSV not found: %s", csv_path)
+                    continue
+                try:
+                    result = run_bacnet_scrape(csv_path, site_id, "bacnet", server_url=url)
+                except Exception as e:
+                    log.exception("Gateway %s failed: %s", site_id, e)
+                    continue
+                total_rows += result["rows_inserted"]
+                total_points += result["points_created"]
+                total_errors += len(result["errors"])
+                log.info(
+                    "Gateway %s (%s): %d rows, %d points",
+                    site_id,
+                    url,
+                    result["rows_inserted"],
+                    result["points_created"],
+                )
+            if not args.loop:
+                return 0
+            log.info(
+                "Multi-gateway cycle done: %d rows, %d points; sleeping %d s",
+                total_rows,
+                total_points,
+                interval_sec,
+            )
+            time.sleep(interval_sec)
+
+    # Single-gateway mode
+    csv_path = _resolve_csv_path(args.csv, cwd)
 
     if args.validate_only:
         errors = validate_bacnet_csv(csv_path)
@@ -78,26 +144,25 @@ def main() -> int:
             print(f"ERROR line {line_num}: {msg}", file=sys.stderr)
         return 1
 
-    from open_fdd.platform.config import get_platform_settings
-    from open_fdd.platform.drivers.bacnet import run_bacnet_scrape
-
-    settings = get_platform_settings()
     if not settings.bacnet_scrape_enabled:
         log.warning(
             "BACnet scrape disabled. Set OFDD_BACNET_SCRAPE_ENABLED=true to enable."
         )
         return 0
 
+    site_id = args.site if args.site != "default" else settings.bacnet_site_id
+
     if args.loop:
         interval_sec = settings.bacnet_scrape_interval_min * 60
         log.info(
-            "BACnet scrape loop: csv=%s interval=%d min",
+            "BACnet scrape loop: csv=%s site=%s interval=%d min",
             csv_path,
+            site_id,
             settings.bacnet_scrape_interval_min,
         )
         while True:
             try:
-                result = run_bacnet_scrape(csv_path, args.site)
+                result = run_bacnet_scrape(csv_path, site_id, server_url=settings.bacnet_server_url)
                 log.info(
                     "Scrape cycle: %d rows, %d points, %d errors",
                     result["rows_inserted"],
@@ -108,7 +173,7 @@ def main() -> int:
                 log.exception("Scrape failed: %s", e)
             time.sleep(interval_sec)
     else:
-        result = run_bacnet_scrape(csv_path, args.site)
+        result = run_bacnet_scrape(csv_path, site_id, server_url=settings.bacnet_server_url)
         if result["errors"] and result["rows_inserted"] == 0:
             for e in result["errors"]:
                 log.error("%s", e)

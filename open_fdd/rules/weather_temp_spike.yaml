@@ -8,7 +8,6 @@ flag: fault_temp_spike
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: temp_f
 
 params:
   temp_spike_f_per_hour: 15.0

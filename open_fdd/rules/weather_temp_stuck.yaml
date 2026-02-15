@@ -8,7 +8,6 @@ flag: fault_temp_stuck
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: temp_f
 
 params:
   tolerance: 0.2    # degF max spread in window

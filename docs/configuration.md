@@ -31,7 +31,9 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
-| `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config |
+| `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config (single gateway) |
+| `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
+| `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id, config_csv}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
 | `open_meteo_enabled` | true | Enable weather scraper |
 | `open_meteo_interval_hours` | 24 | Weather poll interval |
 | `open_meteo_latitude` | 41.88 | Site latitude |
@@ -40,9 +42,16 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
-**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Rules overview](rules/overview) and the [Expression Rule Cookbook](rules/expression_rule_cookbook).
+**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](rules/expression_rule_cookbook).
 
-**Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Rules](rules/overview).
+**Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
+
+**BACnet: single gateway, remote gateways, central aggregator**
+
+- **Single building (or one remote gateway):** Set `OFDD_BACNET_SERVER_URL` and optionally `OFDD_BACNET_SITE_ID` (e.g. `building-a`). The scraper tags all readings with that site. On a **remote** gateway (diy-bacnet-server + scraper on another subnet), point `OFDD_DB_DSN` at the central Open-FDD DB and set `OFDD_BACNET_SITE_ID` to the site name/UUID used on the central API so data is attributed to that building.
+- **Central aggregator (multiple remote gateways):** On the central host, do **not** run local bacnet-server/bacnet-scraper; run only DB, API, Grafana, FDD loop, and (optional) weather. Set `OFDD_BACNET_GATEWAYS` to a JSON array, e.g.  
+  `[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"},{"url":"http://10.1.2.1:8080","site_id":"building-b","config_csv":"config/bacnet_b.csv"}]`  
+  and run one scraper container (or cron) that polls each URL and writes to the central DB with the given `site_id`. Alternatively, deploy one scraper per building elsewhere, each with `OFDD_DB_DSN=central` and `OFDD_BACNET_SITE_ID=<that building>`.
 
 **Open-Meteo weather points** (stored in `timeseries_readings`, `external_id`):
 
@@ -64,18 +73,17 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 
 ## Edge / resource limits
 
-For edge deployments with limited disk, bootstrap applies:
+For edge deployments with limited disk, set these at bootstrap (or in `platform/.env`). See [Getting Started — Bootstrap options](getting_started#bootstrap-options).
 
-| Limit | Value | Where |
-|-------|-------|-------|
-| **Docker logs** | 100 MB × 3 files (~300 MB per container) | `platform/docker-compose.yml` — `x-log-opts` |
-| **Data retention** | 1 year (365 days) | `platform/sql/007_retention.sql` — TimescaleDB `add_retention_policy` |
+| Setting | Default | Bootstrap arg | Env (platform/.env) |
+|---------|---------|---------------|---------------------|
+| **Data retention** | 365 days | `--retention-days N` | `OFDD_RETENTION_DAYS` |
+| **Docker log size** | 100m per file | `--log-max-size SIZE` | `OFDD_LOG_MAX_SIZE` |
+| **Docker log files** | 3 | `--log-max-files N` | `OFDD_LOG_MAX_FILES` |
 
-**Log rotation:** Containers use `json-file` driver with `max-size: 100m`, `max-file: 3`. Prevents logs from filling disk.
+**Data retention:** TimescaleDB drops chunks older than the configured interval from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. Set at first run, e.g. `./scripts/bootstrap.sh --retention-days 180`, or set `OFDD_RETENTION_DAYS` in `platform/.env` before running bootstrap.
 
-**Data retention:** Drops chunks older than 1 year from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. Typical edge (BACnet + weather, ~hourly) stays under ~200 GB. To change: edit `INTERVAL '365 days'` in `007_retention.sql` (e.g. `'180 days'`, `'2 years'`).
-
-**200 GB hard cap:** Not enforced automatically. If you need a strict limit, add cron or systemd to run `SELECT drop_chunks(...)` when disk usage exceeds a threshold, or use LVM/disk quotas at the host.
+**Log rotation:** Containers use `json-file` driver; size and file count come from the table above. Restart the stack after changing so new values apply.
 
 **Accessing logs:** `docker logs <container> --tail 50` (e.g. `openfdd_weather_scraper`, `openfdd_bacnet_scraper`). See [Verification](howto/verification#logs).
 
@@ -92,58 +100,9 @@ For edge deployments with limited disk, bootstrap applies:
 | `OFDD_DB_NAME` | Database name |
 | `OFDD_DB_USER` | Database user |
 | `OFDD_DB_PASSWORD` | Database password |
-| `OFDD_BACNET_URL` | diy-bacnet-server base URL |
+| `OFDD_BACNET_SERVER_URL` | diy-bacnet-server base URL (e.g. http://localhost:8080) |
+| `OFDD_BACNET_SITE_ID` | Site to tag when scraping (default: default; use on remote gateways) |
+| `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id, config_csv} for central aggregator |
 | `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |
 | `OFDD_PLATFORM_YAML` | Path to platform.yaml |
 
----
-
-## Rule YAML
-
-Each rule file has:
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Rule identifier |
-| `type` | Yes | bounds, flatline, expression, hunting, oa_fraction, erv_efficiency |
-| `flag` | Yes | Output column suffix (e.g. `bad_sensor`) |
-| `inputs` | Yes | List or dict of input refs |
-| `params` | No | Type-specific params |
-| `expression` | For expression | Pandas expression string |
-
----
-
-## Bounds rule
-
-```yaml
-name: sensor_bounds
-type: bounds
-flag: bad_sensor
-inputs:
-  - oat
-  - sat
-params:
-  low: 40
-  high: 90
-  # or units: metric for °C
-```
-
----
-
-## Flatline rule
-
-```yaml
-name: sensor_flatline
-type: flatline
-flag: flatline_flag
-inputs: [oat, sat]
-params:
-  tolerance: 0.000001
-  window: 12
-```
-
----
-
-## Expression rule
-
-Use Brick class names or column refs as input keys. See [Rules Overview](rules/overview) and [Expression Rule Cookbook](expression_rule_cookbook).

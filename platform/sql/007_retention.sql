@@ -1,6 +1,5 @@
--- Data retention: drop hypertable chunks older than 1 year.
--- Keeps disk under ~200 GB for typical edge (sites, BACnet, weather).
--- To change: edit the INTERVAL below (e.g. '180 days', '2 years').
+-- Data retention: drop hypertable chunks older than the configured interval.
+-- Default 365 days; override at bootstrap with --retention-days N or OFDD_RETENTION_DAYS in platform/.env.
 
 -- timeseries_readings: BACnet, weather telemetry
 SELECT add_retention_policy('timeseries_readings', drop_after => INTERVAL '365 days', if_not_exists => true);

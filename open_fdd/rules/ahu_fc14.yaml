@@ -9,19 +9,14 @@ equipment_type: [AHU, VAV_AHU]  # requires Cooling_Coil_Entering/Leaving_Air_Tem
 inputs:
   Cooling_Coil_Entering_Air_Temperature_Sensor:
     brick: Cooling_Coil_Entering_Air_Temperature_Sensor
-    column: clg_coil_enter_temp
   Cooling_Coil_Leaving_Air_Temperature_Sensor:
     brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
-    column: clg_coil_leave_temp
   Heating_Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Cooling_Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   coil_enter_err_thres: 1.0

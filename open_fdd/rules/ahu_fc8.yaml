@@ -8,16 +8,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
 
 params:
   delta_t_supply_fan: 0.5

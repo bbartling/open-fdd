@@ -52,12 +52,13 @@ async def _scrape_via_rpc(
     site_id: str,
     config_rows: list[tuple[int, dict]],
     by_device: dict[str, list[tuple[int, dict]]],
+    server_url: Optional[str] = None,
 ) -> dict:
-    """Scrape via diy-bacnet-server JSON-RPC API."""
+    """Scrape via diy-bacnet-server JSON-RPC API. server_url overrides settings when set."""
     import httpx
 
     settings = get_platform_settings()
-    url = (settings.bacnet_server_url or "").rstrip("/")
+    url = (server_url or settings.bacnet_server_url or "").rstrip("/")
     if not url:
         return {
             "rows_inserted": 0,
@@ -301,6 +302,7 @@ async def scrape_bacnet_from_csv(
     csv_path: Path,
     site_id: str,
     equipment_id: str,
+    server_url: Optional[str] = None,
 ) -> dict:
     """
     Read present-value for each row in CSV, insert into timeseries_readings.
@@ -336,8 +338,9 @@ async def scrape_bacnet_from_csv(
             by_device[did] = []
         by_device[did].append((line_num, r))
 
-    # RPC-only: require diy-bacnet-server
-    if not settings.bacnet_server_url:
+    # RPC-only: require URL (from arg or settings)
+    server_url = server_url or settings.bacnet_server_url
+    if not server_url:
         logger.error(
             "OFDD_BACNET_SERVER_URL required. Start diy-bacnet-server (e.g. docker compose) and set it."
         )
@@ -349,14 +352,17 @@ async def scrape_bacnet_from_csv(
             ],
         }
 
-    logger.info("BACnet scrape via RPC: %s", settings.bacnet_server_url)
-    return await _scrape_via_rpc(csv_path, site_id, config_rows, by_device)
+    logger.info("BACnet scrape via RPC: %s (site=%s)", server_url, site_id)
+    return await _scrape_via_rpc(csv_path, site_id, config_rows, by_device, server_url=server_url)
 
 
 def run_bacnet_scrape(
     csv_path: Path,
     site_id: str = "default",
     equipment_id: str = "bacnet",
+    server_url: Optional[str] = None,
 ) -> dict:
-    """Synchronous wrapper for scrape_bacnet_from_csv."""
-    return asyncio.run(scrape_bacnet_from_csv(csv_path, site_id, equipment_id))
+    """Synchronous wrapper for scrape_bacnet_from_csv. server_url overrides OFDD_BACNET_SERVER_URL when set."""
+    return asyncio.run(
+        scrape_bacnet_from_csv(csv_path, site_id, equipment_id, server_url=server_url)
+    )

@@ -113,4 +113,4 @@ docker logs openfdd_fdd_loop --tail 50
 
 ## Database retention
 
-Data retention is 1 year by default (TimescaleDB drops chunks older than 365 days). Keeps disk under ~200 GB for typical edge. To change: edit `platform/sql/007_retention.sql` (e.g. `'180 days'`, `'2 years'`). See [Configuration → Edge limits](configuration#edge--resource-limits).
+Data retention is set at bootstrap (default 365 days). TimescaleDB drops chunks older than the configured interval. To change: use `--retention-days N` when running bootstrap or set `OFDD_RETENTION_DAYS` in `platform/.env`. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).

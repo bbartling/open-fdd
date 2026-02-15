@@ -119,4 +119,4 @@ bounds = bounds_map_from_rule(rule, units="metric")
 | `oa_fraction` | check_oa_fraction | (rule-specific) |
 | `erv_efficiency` | check_erv_efficiency | (rule-specific) |
 
-See [Rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook) for YAML structure and examples.
+See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook) for YAML structure and examples.

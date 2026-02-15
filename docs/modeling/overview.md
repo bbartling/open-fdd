@@ -1,10 +1,10 @@
 ---
-title: System Modeling Overview
-parent: Modeling
+title: Overview
+parent: Data modeling
 nav_order: 1
 ---
 
-# System Modeling
+# Data model flow
 
 Open-FDD uses a Brick-semantic data model for equipment and points. Rules resolve inputs via `ofdd:mapsToRuleInput` in TTL.
 

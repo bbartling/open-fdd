@@ -108,7 +108,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 **We especially welcome contributions from mechanical engineers and building professionals** who can add or improve FDD rules.
 
-- **Where rules live:** [Rules overview](https://bbartling.github.io/open-fdd/rules/overview) — put project rules in **`analyst/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
+- **Where rules live:** [Fault rules overview](https://bbartling.github.io/open-fdd/rules/overview) — put project rules in **`analyst/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
 - **How to write rules:** [Expression Rule Cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook) — expression-type rules use YAML with BRICK-style inputs, params, and pandas/NumPy expressions. The cookbook includes AHU-style rules (e.g. GL36-inspired) and patterns you can adapt.
 - **What to contribute:**
   - **New rule YAMLs** for common faults (AHU, VAV, plant, sensors) that others can reuse.

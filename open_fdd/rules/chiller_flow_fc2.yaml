@@ -7,10 +7,8 @@ flag: flow_high_flag
 inputs:
   Water_Flow_Sensor:
     brick: Water_Flow_Sensor
-    column: flow
   Pump_Speed_Command:
     brick: Pump_Speed_Command
-    column: pump_speed
 
 params:
   flow_error_threshold: 1000.0

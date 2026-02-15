@@ -1,7 +1,7 @@
 ---
 title: Equipment
-parent: Concepts
-nav_order: 2
+parent: Data modeling
+nav_order: 3
 ---
 
 # Equipment
@@ -37,5 +37,5 @@ Site
 - `GET /equipment` — List equipment (filter by site)
 - `GET /equipment/{id}` — Get one
 - `POST /equipment` — Create
-- `PUT /equipment/{id}` — Update
-- `DELETE /equipment/{id}` — Delete
+- `PATCH /equipment/{id}` — Update
+- `DELETE /equipment/{id}` — Delete (cascades to points and their timeseries; see [Danger zone](howto/danger_zone))

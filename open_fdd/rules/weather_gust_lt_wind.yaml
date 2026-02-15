@@ -8,10 +8,8 @@ flag: fault_gust_lt_wind
 inputs:
   Wind_Gust_Speed_Sensor:
     brick: Wind_Gust_Speed_Sensor
-    column: gust_mph
   Wind_Speed_Sensor:
     brick: Wind_Speed_Sensor
-    column: wind_mph
 
 expression: |
   Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)

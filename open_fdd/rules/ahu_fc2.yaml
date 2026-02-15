@@ -9,16 +9,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: rat
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   mix_err_thres: 1.0

@@ -135,4 +135,4 @@ python examples/run_all_rules_brick.py --validate-first
 | Viz | Jupyter notebook | Grafana |
 | API | None | REST CRUD + Swagger |
 
-**Project rules** live in `analyst/rules/*.yaml`. The platform FDD loop loads from here every run (hot reload). Edit YAML on host; trigger a run (or wait for schedule) and view results in Grafana. See [Rules overview](docs/rules/overview) and [Configuration](docs/configuration).
+**Project rules** live in `analyst/rules/*.yaml`. The platform FDD loop loads from here every run (hot reload). Edit YAML on host; trigger a run (or wait for schedule) and view results in Grafana. See [Fault rules overview](docs/rules/overview) and [Configuration](docs/configuration).

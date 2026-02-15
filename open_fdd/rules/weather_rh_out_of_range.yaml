@@ -8,7 +8,6 @@ flag: fault_rh_out_of_range
 inputs:
   Humidity_Sensor:
     brick: Humidity_Sensor
-    column: rh_pct
 
 params:
   rh_min: 0.0

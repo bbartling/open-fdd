@@ -2,6 +2,8 @@
 
 This document describes how to protect Open-FDD endpoints with **Caddy** (basic auth), which services are **unencrypted by default**, and **hardening** best practices. The project defaults to **non-TLS**; TLS (including self-signed certificates) is optional.
 
+**What is Caddy?** If you’re from the controls/OT side and new to IT security: **Caddy** is a small web server that sits in front of the Open-FDD web interfaces (the API docs and Grafana dashboards). Think of it as a single front door: instead of opening the API and Grafana directly, you open Caddy at one address (e.g. port 8088). Caddy can require a **username and password** (basic auth) so only people who have that login can reach those pages. It can also add **HTTPS** (encrypted traffic) if you need it. By default, Open-FDD does **not** run Caddy—the API and Grafana are reachable without a password on the same network. This doc explains how to turn Caddy on so you have one protected entry point.
+
 ---
 
 ## Quick bootstrap with Caddy and basic auth
@@ -86,15 +88,16 @@ Open-FDD does **not** rate-limit incoming HTTP requests to the API. There is no 
 
 ### 2. Outbound: OT/building network is paced
 
-The application **does** throttle its own outbound traffic to the building and OT network. We do not continuously hammer BACnet or other building systems. Load is paced by configuration:
+The application **does** throttle its own outbound traffic to the building and OT network. We do not continuously hammer BACnet or other building systems. Load is paced by configuration **and by which points you scrape**:
 
 | Component | Config | Effect |
 |-----------|--------|--------|
 | **BACnet scraper** | `bacnet_scrape_interval_min` (e.g. 5) | Polls points on a fixed interval (e.g. every 5 minutes), not in a burst. |
+| **BACnet scraper** | **Discovery CSV** | The scraper only polls points listed in its CSV config. **Throttling is critically dependent on this file:** the more rows you keep, the more traffic to the OT network. Best practice is to **scrape only the points you need** for FDD and HVAC health—typically a fraction of discovered points (on the order of ~20% for a typical HVAC system). Do not configure Open-FDD to scrape every point discovered on the BACnet network. See [BACnet overview → Discovery first, then curate the CSV](bacnet/overview#discovery-first-then-curate-the-csv). |
 | **FDD rule loop** | `rule_interval_hours` (e.g. 3) | Runs fault detection on a schedule (e.g. every 3 hours); each run pulls data from the DB, not from BACnet. |
 | **Weather scraper** | `open_meteo_interval_hours` (e.g. 24) | Fetches weather once per interval (e.g. daily). |
 
-So outbound load on the OT network is predictable and tunable. Adjust these intervals in `config/platform.yaml` or via `OFDD_*` environment variables to match your network and building needs. See [Configuration](configuration).
+So outbound load on the OT network is predictable and tunable. **Run [BACnet discovery](bacnet/overview#discovery-first-then-curate-the-csv) before starting the scraper**, curate the CSV to a minimal set of points, then adjust intervals in `config/platform.yaml` or via `OFDD_*` environment variables. See [Configuration](configuration).
 
 ### 3. Inbound: rate limiting at the reverse proxy (e.g. Caddy)
 

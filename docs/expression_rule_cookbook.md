@@ -1,6 +1,6 @@
 ---
 title: Expression Rule Cookbook
-parent: Rules
+parent: Fault rules for HVAC
 nav_order: 2
 ---
 
@@ -10,19 +10,18 @@ A reference for building fault detection rules in open-fdd. Rules use **YAML** w
 
 ---
 
-## BRICK naming convention (TTL-driven)
+## 100% Brick-model driven (no column in rules)
 
-Rule inputs use **BRICK class names** as keys (e.g. `Supply_Air_Temperature_Sensor`). The **Brick TTL** (from `config/brick_model.ttl` or DB) is the source of truth: SPARQL resolves Brick type + `rdfs:label` → DataFrame column. Rules should not hardcode `column`; the data model provides the mapping. See `analyst/sparql/01_points_rule_mapping.sparql`.
+Rule inputs use **Brick class names** only (e.g. `Supply_Air_Temperature_Sensor`). The **Brick TTL** is the source of truth: SPARQL resolves each Brick point to its [external timeseries reference](https://docs.brickschema.org/metadata/external-representations.html#timeseries) (`ref:TimeseriesReference` / `ref:hasTimeseriesId`), which yields the DataFrame column. Open-FDD embraces [Brick timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html) at the heart of FDD — **rules never reference `column`**; the data model provides the mapping. See `analyst/sparql/01_points_rule_mapping.sparql`.
 
 - **Platform (DB):** Points have `brick_type` and `external_id`; TTL is built from DB. PATCH points or use data-model import to set `brick_type` (e.g. `Supply_Air_Temperature_Sensor` for SA-T).
-- **Standalone/CSV:** If no TTL, use optional `column` as fallback (e.g. `column: sat`).
 - **Disambiguation:** When multiple points share a Brick class, use `ofdd:mapsToRuleInput` in TTL; the runner resolves `BrickClass|rule_input`.
 
 ---
 
 ## How to define expressions
 
-1. **Inputs** — Declare BRICK classes (`brick: Supply_Air_Temperature_Sensor`). The runner resolves these via the Brick TTL (SPARQL) to DataFrame columns. Omit `column` when using TTL. For standalone CSV without TTL, add `column: col_name` as fallback.
+1. **Inputs** — Declare Brick classes only (`brick: Supply_Air_Temperature_Sensor`). The runner resolves these via the Brick TTL (SPARQL) and Brick external timeseries references to DataFrame columns. Do not add `column` in YAML.
 2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
 3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
 
@@ -44,7 +43,7 @@ expression: |
   Supply_Air_Temperature_Sensor > max_temp
 ```
 
-The Brick TTL maps `Supply_Air_Temperature_Sensor` → the actual column (e.g. `SA-T`). Set `points.brick_type` in the DB and sync TTL, or use `column: sat` when running standalone without a Brick model.
+The Brick TTL (and SPARQL) maps each Brick class to the actual column via external timeseries references. Set `points.brick_type` in the DB and sync TTL so the engine can resolve columns from the Brick model.
 
 ---
 
@@ -66,13 +65,10 @@ equipment_type: [VAV_AHU]
 inputs:
   Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
-    column: duct_static
   Supply_Air_Static_Pressure_Setpoint:
     brick: Supply_Air_Static_Pressure_Setpoint
-    column: duct_static_setpoint
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   sp_margin: 0.12
@@ -97,16 +93,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: rat
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   blend_tol: 1.15
@@ -131,16 +123,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: rat
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   blend_tol: 1.15
@@ -167,16 +155,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   blend_tol: 1.15
@@ -203,16 +187,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
   Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   supply_err_thres: 1.0
@@ -235,16 +215,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
 
 params:
   fan_delta_t: 0.55
@@ -270,16 +246,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
 
 params:
   oat_tol: 1.15
@@ -305,16 +277,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   oat_tol: 1.15
@@ -338,13 +306,10 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   oat_tol: 1.15
@@ -368,16 +333,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   fan_delta_t: 0.55
@@ -403,16 +364,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   sat_tol: 1.15
@@ -436,19 +393,14 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Cooling_Coil_Entering_Air_Temperature_Sensor:
     brick: Cooling_Coil_Entering_Air_Temperature_Sensor
-    column: clg_coil_enter_temp
   Cooling_Coil_Leaving_Air_Temperature_Sensor:
     brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
-    column: clg_coil_leave_temp
   Heating_Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Cooling_Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   enter_tol: 1.15
@@ -473,19 +425,14 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Heating_Coil_Entering_Air_Temperature_Sensor:
     brick: Heating_Coil_Entering_Air_Temperature_Sensor
-    column: htg_coil_enter_temp
   Heating_Coil_Leaving_Air_Temperature_Sensor:
     brick: Heating_Coil_Leaving_Air_Temperature_Sensor
-    column: htg_coil_leave_temp
   Heating_Valve_Command:
     brick: Valve_Command
-    column: heating_sig
   Cooling_Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   enter_tol: 1.15
@@ -517,13 +464,10 @@ flag: dp_pump_flag
 inputs:
   Differential_Pressure_Sensor:
     brick: Differential_Pressure_Sensor
-    column: diff_pressure
   Differential_Pressure_Setpoint:
     brick: Differential_Pressure_Setpoint
-    column: diff_pressure_setpoint
   Pump_Speed_Command:
     brick: Pump_Speed_Command
-    column: pump_speed
 
 params:
   dp_margin: 2.2
@@ -547,10 +491,8 @@ flag: flow_high_flag
 inputs:
   Water_Flow_Sensor:
     brick: Water_Flow_Sensor
-    column: flow
   Pump_Speed_Command:
     brick: Pump_Speed_Command
-    column: pump_speed
 
 params:
   flow_hi_limit: 1100.0
@@ -574,13 +516,10 @@ flag: chw_temp_fault
 inputs:
   Chilled_Water_Supply_Temperature_Sensor:
     brick: Chilled_Water_Supply_Temperature_Sensor
-    column: chw_supply_temp
   Chilled_Water_Supply_Temperature_Setpoint:
     brick: Chilled_Water_Supply_Temperature_Setpoint
-    column: chw_supply_sp
   Pump_Speed_Command:
     brick: Pump_Speed_Command
-    column: pump_speed
 
 params:
   sp_band: 2.2
@@ -602,7 +541,6 @@ flag: chiller_runtime_fault
 inputs:
   Chiller_Status:
     brick: Chiller_Status
-    column: chiller_run
 
 params:
   # For 5-min data: 23 hours ≈ 276 samples; max_runtime = count of "on" samples in window
@@ -634,13 +572,10 @@ equipment_type: [Heat_Pump]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
-    column: zt
   Supply_Fan_Status:
     brick: Supply_Fan_Status
-    column: fan_status
 
 params:
   min_discharge_temp: 85
@@ -670,10 +605,8 @@ equipment_type: [VAV]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Reheat_Valve_Command:
     brick: Valve_Command
-    column: reheat_sig
 
 params:
   t_amb_cutoff: 78.0
@@ -697,7 +630,6 @@ equipment_type: [VAV]
 inputs:
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: damper_pos
 
 params:
   full_open_pct: 97.5
@@ -729,10 +661,8 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
 
 params:
   t_amb_econ_cutoff: 63.0
@@ -756,13 +686,10 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Damper_Position_Command:
     brick: Damper_Position_Command
-    column: economizer_sig
   Valve_Command:
     brick: Valve_Command
-    column: cooling_sig
 
 params:
   t_amb_econ_cutoff: 63.0
@@ -786,16 +713,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: rat
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   oa_min_pct: 21.0
@@ -821,16 +744,12 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Preheat_Coil_Leaving_Air_Temperature_Sensor:
     brick: Preheat_Coil_Leaving_Air_Temperature_Sensor
-    column: preheat_temp
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
-    column: sat_setpoint
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
   Valve_Command:
     brick: Valve_Command
-    column: heating_sig
 
 params:
   excess_tol: 2.2
@@ -864,7 +783,6 @@ flag: fault_temp_spike
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: temp_f
 
 params:
   spike_limit: 16.0
@@ -888,10 +806,8 @@ flag: fault_gust_lt_wind
 inputs:
   Wind_Gust_Speed_Sensor:
     brick: Wind_Gust_Speed_Sensor
-    column: gust_mph
   Wind_Speed_Sensor:
     brick: Wind_Speed_Sensor
-    column: wind_mph
 
 expression: |
   Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)
@@ -916,4 +832,4 @@ Use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) and [Flatline Rule]({{
 
 ---
 
-**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tuntorial" | relative_url }})
+**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tutorial" | relative_url }})

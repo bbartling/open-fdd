@@ -10,13 +10,10 @@ equipment_type: [VAV_AHU]
 inputs:
   Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
-    column: duct_static
   Supply_Air_Static_Pressure_Setpoint:
     brick: Supply_Air_Static_Pressure_Setpoint
-    column: duct_static_setpoint
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
-    column: supply_vfd_speed
 
 params:
   static_err_thres: 0.1      # inches H2O

@@ -1,7 +1,7 @@
 ---
 title: Points
-parent: Concepts
-nav_order: 1
+parent: Data modeling
+nav_order: 4
 ---
 
 # Points
@@ -20,7 +20,7 @@ Each point has:
 | `site_id` | FK to sites |
 | `equipment_id` | FK to equipment (nullable) |
 | `external_id` | Raw identifier from source (e.g. BACnet object name) |
-| `rule_input` | Column name used by FDD rules (e.g. `oat`, `sat`) |
+| `fdd_input` | Column name used by FDD rules (e.g. `oat`, `sat`); data-model API uses `rule_input` |
 | `brick_type` | Optional Brick class (e.g. `Outside_Air_Temperature_Sensor`) |
 | `name` | Optional display name |
 
@@ -44,9 +44,19 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 
 - **BACnet layer:** `external_id` = BACnet object name (from discovery CSV)
 - **Weather layer:** `external_id` = `temp_f`, `rh_pct`, `dewpoint_f`, etc.
-- **Rule layer:** `rule_input` maps to DataFrame column names used by YAML rules
+- **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.
+
+---
+
+## API
+
+- `GET /points` — List points (filter by site or equipment)
+- `GET /points/{id}` — Get one
+- `POST /points` — Create
+- `PATCH /points/{id}` — Update
+- `DELETE /points/{id}` — Delete (cascades to timeseries_readings; see [Danger zone](howto/danger_zone))
 
 ---
 

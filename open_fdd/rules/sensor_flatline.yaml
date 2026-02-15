@@ -7,10 +7,8 @@ flag: flatline_flag
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
-    column: zt
 
 params:
   tolerance: 0.000001

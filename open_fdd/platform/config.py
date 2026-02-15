@@ -48,6 +48,10 @@ class PlatformSettings(BaseSettings):
 
     # BACnet: use diy-bacnet-server JSON-RPC when set (e.g. http://localhost:8080)
     bacnet_server_url: Optional[str] = None
+    # Site to tag when scraping (single gateway or remote gateway pushing to central)
+    bacnet_site_id: str = "default"
+    # Optional: multiple gateways (central aggregator). JSON array of {"url", "site_id", "config_csv"}
+    bacnet_gateways: Optional[str] = None
 
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 

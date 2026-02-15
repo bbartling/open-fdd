@@ -1,9 +1,8 @@
 # Platform config example — copy to platform.yaml and edit
 # OFDD_ env vars override these
 #
-# Edge / resource limits (bootstrap applies these):
-# - Docker logs: 100 MB per file, 3 files max (300 MB per container) — in docker-compose
-# - Data retention: 1 year (TimescaleDB 007_retention.sql); edit interval for 200 GB target
+# Edge / resource limits: set at bootstrap (platform/.env) or via bootstrap args.
+# See Getting Started: --retention-days, --log-max-size, --log-max-files.
 
 # FDD rule loop: periodic runs (sensor + weather rules)
 # Every run loads rules from YAML (analyst edits apply immediately), pulls last N days into pandas
@@ -18,10 +17,16 @@ rules_dir: "analyst/rules"
 # TTL can live in config/ (e.g. config/brick_model.ttl) and be generated from DB export or from BACnet CSV.
 # brick_ttl_dir: "config"   # directory containing brick model TTL (platform uses first .ttl or brick_ttl path)
 
-# BACnet driver
+# BACnet driver (single building or remote gateway pushing to central)
 bacnet_enabled: true
 bacnet_scrape_interval_min: 5
 bacnet_config_csv: "config/bacnet_device.csv"
+# Site to tag when scraping (use for remote gateways: same site_id as created on central API)
+bacnet_site_id: "default"
+
+# Optional: multiple gateways (central aggregator only). JSON array; each item: url, site_id, config_csv.
+# When set, bacnet_server_url and bacnet_config_csv are ignored; scraper polls each gateway in turn.
+# bacnet_gateways: '[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"},{"url":"http://10.1.2.1:8080","site_id":"building-b","config_csv":"config/bacnet_b.csv"}]'
 
 # Open-Meteo driver (weather → timeseries_readings for FDD rules)
 open_meteo_enabled: true

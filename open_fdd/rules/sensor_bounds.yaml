@@ -12,64 +12,53 @@ params:
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
-    column: sat
     bounds:
       imperial: [40, 150]    # degF
       metric: [4, 66]        # degC
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
-    column: zt
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
-    column: rat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
-    column: mat
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
-    column: oat
     bounds:
       imperial: [-40, 120]
       metric: [-40, 49]
   Humidity_Sensor:
     brick: Humidity_Sensor
-    column: rh
     bounds: [0, 100]   # same for both
   Chilled_Water_Supply_Temperature_Sensor:
     brick: Chilled_Water_Supply_Temperature_Sensor
-    column: chwt
     bounds:
       imperial: [35, 100]    # degF
       metric: [2, 38]        # degC
   Hot_Water_Supply_Temperature_Sensor:
     brick: Hot_Water_Supply_Temperature_Sensor
-    column: hwt
     bounds:
       imperial: [50, 212]
       metric: [10, 100]
   Condenser_Water_Temperature_Sensor:
     brick: Condenser_Water_Temperature_Sensor
-    column: cwt
     bounds:
       imperial: [50, 110]
       metric: [10, 43]
   CO2_Sensor:
     brick: CO2_Sensor
-    column: co2
     bounds: [400, 2000]   # same for both
   # Air pressure (inH2O vs Pa) — use column that matches your data
   Discharge_Air_Static_Pressure_Sensor:
     brick: Discharge_Air_Static_Pressure_Sensor
-    column: ap
     bounds:
       imperial: [-5, 10]    # inH2O
       metric: [-1244, 2488] # Pa

@@ -5,11 +5,12 @@
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
 # Rules YAML and config are mounted from repo — edit on host, containers see changes.
 #
-# Edge limits: log rotation 100MB×3 per container; data retention 1yr (007_retention.sql).
+# Edge limits: log rotation and data retention set at bootstrap or via platform/.env
+# (OFDD_LOG_MAX_SIZE, OFDD_LOG_MAX_FILES, OFDD_RETENTION_DAYS).
 
 x-log-opts: &log-opts
-  max-size: "100m"
-  max-file: "3"
+  max-size: "${OFDD_LOG_MAX_SIZE:-100m}"
+  max-file: "${OFDD_LOG_MAX_FILES:-3}"
 
 services:
   # BACnet/IP gateway — always-on server, JSON-RPC on 8080
@@ -31,7 +32,10 @@ services:
     restart: unless-stopped
     # BACnet/IP: UDP 47808. API: http://localhost:8080/docs
 
-  # BACnet scraper — reads points via RPC, writes to TimescaleDB
+  # BACnet scraper — reads points via RPC, writes to TimescaleDB.
+  # Single gateway: OFDD_BACNET_SERVER_URL + OFDD_BACNET_SITE_ID (site tag for central DB).
+  # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id, config_csv}.
+  # Central-only (no local BACnet): omit bacnet-server and bacnet-scraper; remote gateways push via OFDD_DB_DSN + OFDD_BACNET_SITE_ID.
   bacnet-scraper:
     build:
       context: ..
@@ -45,6 +49,7 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_BACNET_SCRAPE_ENABLED: "true"
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "5"
+      OFDD_BACNET_SITE_ID: "default"
     volumes:
       - ../config:/app/config:ro
     depends_on:

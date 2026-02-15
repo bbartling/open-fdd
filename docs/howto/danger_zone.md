@@ -28,15 +28,15 @@ When you delete via the API (Swagger or `test_crud_api.py`):
 | **Equipment** | Points (with that equipment_id), timeseries for those points |
 | **Point** | timeseries_readings for that point |
 
-`DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` remove the entity and all dependent data. This is **permanent**. After each delete (and after every create/update on sites, equipment, or points), the **Brick TTL** (`config/brick_model.ttl`) is **regenerated from the current DB** and written to disk, so the Brick data model stays in sync with CRUD and timeseries. See [System Modeling](modeling/overview).
+`DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` remove the entity and all dependent data. This is **permanent**. After each delete (and after every create/update on sites, equipment, or points), the **Brick TTL** (`config/brick_model.ttl`) is **regenerated from the current DB** and written to disk, so the Brick data model stays in sync with CRUD and timeseries. See [Data modeling](modeling/overview).
 
 ---
 
 ## Data retention policy
 
-`007_retention.sql` adds TimescaleDB retention: chunks older than **1 year** are dropped from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. This is automatic; no manual action.
+Bootstrap applies TimescaleDB retention (default **365 days**): chunks older than the configured interval are dropped from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. This is automatic; no manual action.
 
-To change retention: edit the `INTERVAL` in `platform/sql/007_retention.sql` and re-apply (or adjust via TimescaleDB functions).
+To set retention: run bootstrap with `--retention-days N` or set `OFDD_RETENTION_DAYS` in `platform/.env` before bootstrap. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
 
 ---
 

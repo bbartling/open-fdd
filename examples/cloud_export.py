@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """
-Example: Hit Open-FDD API and print timeseries + faults.
+Cloud export example: pull fault and timeseries data from the Open-FDD API.
 
-For MSI/cloud integrators: use this as a starting point. Replace the print()
-calls with your cloud API (e.g. POST to Azure IoT, AWS, SkySpark, etc.).
+This script is a **starting place** for how vendor X, Y, or Z (cloud FDD providers,
+MSI, commissioning firms, IoT contractors) can use Open-FDD to get data to their
+cloud for deeper insights. Open-FDD runs behind the firewall and does not push
+data out; your process runs on the building or OT network, pulls from the API
+over the LAN, then sends to your cloud (REST POST, S3, IoT Hub, SkySpark, etc.).
+
+Replace the print/output handling with your own cloud send logic. See
+docs/concepts/cloud_export.md and the "Behind the firewall; cloud export is
+vendor-led" section on the docs home.
 
 Usage:
   python examples/cloud_export.py
-  API_BASE=http://localhost:8000 python examples/cloud_export.py
-  API_BASE=http://your-openfdd:8000 python examples/cloud_export.py --site default
+  python examples/cloud_export.py --site default --days 14
+  API_BASE=http://your-openfdd:8000 python examples/cloud_export.py
 """
 
 import argparse
@@ -26,9 +33,19 @@ API_BASE = os.environ.get("API_BASE", "http://localhost:8000")
 TIMEOUT = 60.0
 
 
+def _get(client, base, path, params):
+    """GET and return (response, None) or (None, error_message)."""
+    r = client.get(f"{base}{path}", params=params)
+    if r.status_code == 200:
+        return r, None
+    if r.status_code == 404:
+        return None, "404 (no data or site not found)"
+    return None, f"{r.status_code}: {r.text[:150]}"
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Export timeseries + faults from Open-FDD API"
+        description="Export timeseries + faults from Open-FDD API (cloud vendor starting point)"
     )
     parser.add_argument("--site", default="default", help="Site name or UUID")
     parser.add_argument("--days", type=int, default=7, help="Days to fetch")
@@ -37,110 +54,123 @@ def main():
     end = date.today()
     start = end - timedelta(days=args.days)
     base = API_BASE.rstrip("/")
+    fault_params = {"start_date": start, "end_date": end}
 
     print(
-        f"=== Open-FDD cloud export example ===\nAPI: {base}\nSite: {args.site}\nRange: {start} to {end}\n"
+        f"=== Open-FDD cloud export example ===\n"
+        f"API: {base}\nSite: {args.site}\nRange: {start} to {end}\n"
     )
 
     with httpx.Client(timeout=TIMEOUT) as client:
-        # --- Faults (JSON) ---
+        # 1. Faults (JSON)
         print("[1] GET /download/faults (JSON)")
-        r = client.get(
-            f"{base}/download/faults",
-            params={"start_date": start, "end_date": end, "format": "json"},
+        r, err = _get(
+            client, base, "/download/faults", {**fault_params, "format": "json"}
         )
-        if r.status_code != 200:
-            print(f"    Error {r.status_code}: {r.text[:200]}\n")
+        if err:
+            print(f"    {err}\n")
         else:
             data = r.json()
             faults = data.get("faults", [])
             count = data.get("count", len(faults))
             print(f"    OK: {count} fault records")
-            if faults:
-                for f in faults[:3]:
-                    print(
-                        f"      - {f.get('ts')} {f.get('site_id')} {f.get('fault_id')} flag={f.get('flag_value')}"
-                    )
-                if len(faults) > 3:
-                    print(f"      ... and {len(faults) - 3} more")
+            for f in faults[:3]:
+                print(
+                    f"      - {f.get('ts')} {f.get('site_id')} "
+                    f"{f.get('fault_id')} flag={f.get('flag_value')}"
+                )
+            if len(faults) > 3:
+                print(f"      ... and {len(faults) - 3} more")
             print()
 
-        # --- Faults (CSV) ---
+        # 2. Faults (CSV)
         print("[2] GET /download/faults (CSV)")
-        r = client.get(
-            f"{base}/download/faults",
-            params={"start_date": start, "end_date": end, "format": "csv"},
+        r, err = _get(
+            client, base, "/download/faults", {**fault_params, "format": "csv"}
         )
-        if r.status_code != 200:
-            print(f"    Error {r.status_code}\n")
+        if err:
+            print(f"    {err}\n")
         else:
             lines = r.text.strip().split("\n")
             print(f"    OK: {len(lines)} lines (incl. header)")
-            if len(lines) > 1:
+            if lines:
                 print(f"      Header: {lines[0][:80]}...")
             print()
 
-        # --- Fault analytics (motor runtime, data-model driven) ---
+        # 3. Motor runtime (data-model driven)
         print("[3] GET /analytics/motor-runtime")
-        r = client.get(
-            f"{base}/analytics/motor-runtime",
-            params={"site_id": args.site, "start_date": start, "end_date": end},
+        r, err = _get(
+            client,
+            base,
+            "/analytics/motor-runtime",
+            {
+                "site_id": args.site,
+                "start_date": start,
+                "end_date": end,
+            },
         )
-        if r.status_code == 200:
+        if err:
+            print(f"    {err}\n")
+        else:
             data = r.json()
             if data.get("status") == "NO DATA":
-                print(f"    {data.get('status')}: {data.get('reason', '')[:60]}...")
+                print(f"    NO DATA: {data.get('reason', '')[:60]}...")
             else:
+                pt = data.get("point", {})
                 print(
-                    f"    OK: {data.get('motor_runtime_hours', 0)} h ({data.get('point', {}).get('external_id', '?')})"
+                    f"    OK: {data.get('motor_runtime_hours', 0)} h "
+                    f"({pt.get('external_id', '?')})"
                 )
-        else:
-            print(f"    Error {r.status_code}\n")
-        print()
+            print()
 
-        # --- Timeseries (CSV) ---
+        # 4. Timeseries (CSV)
         print("[4] GET /download/csv (timeseries)")
-        r = client.get(
-            f"{base}/download/csv",
-            params={
+        r, err = _get(
+            client,
+            base,
+            "/download/csv",
+            {
                 "site_id": args.site,
                 "start_date": start,
                 "end_date": end,
                 "format": "wide",
             },
         )
-        if r.status_code == 404:
-            print("    No data (404) or site not found\n")
-        elif r.status_code != 200:
-            print(f"    Error {r.status_code}\n")
+        if err:
+            print(f"    {err}\n")
         else:
             lines = r.text.strip().split("\n")
             print(f"    OK: {len(lines)} rows")
             if len(lines) > 1:
                 cols = lines[0].split(",")
-                print(
-                    f"      Columns: {len(cols)} ({', '.join(cols[:5])}{'...' if len(cols) > 5 else ''})"
-                )
+                suffix = "..." if len(cols) > 5 else ""
+                print(f"      Columns: {len(cols)} ({', '.join(cols[:5])}{suffix})")
             print()
 
-        # --- Fault summary ---
+        # 5. Fault summary
         print("[5] GET /analytics/fault-summary")
-        r = client.get(
-            f"{base}/analytics/fault-summary",
-            params={"start_date": start, "end_date": end},
+        r, err = _get(
+            client,
+            base,
+            "/analytics/fault-summary",
+            fault_params,
         )
-        if r.status_code == 200:
-            data = r.json()
-            print(
-                f"    OK: {data.get('total_faults', 0)} total, {len(data.get('by_fault_id', []))} fault types"
-            )
+        if err:
+            print(f"    {err}\n")
         else:
-            print(f"    Error {r.status_code}\n")
-        print()
+            data = r.json()
+            by_id = data.get("by_fault_id", [])
+            print(
+                f"    OK: {data.get('total_faults', 0)} total, "
+                f"{len(by_id)} fault types"
+            )
+            print()
 
-    print("--- The rest is on you ---")
-    print("Send the JSON/CSV to your cloud API, data warehouse, or analytics platform.")
-    print("Example: POST to your REST endpoint, write to S3, push to IoT Hub, etc.\n")
+    print("--- Next: send data to your cloud ---")
+    print(
+        "Replace this script's output with your pipeline: POST to your API, "
+        "write to S3, push to IoT Hub, etc. See docs/concepts/cloud_export.md\n"
+    )
 
 
 if __name__ == "__main__":
