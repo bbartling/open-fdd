@@ -1,10 +1,20 @@
 """Tests for weather fault rules."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from open_fdd.engine import RuleRunner
-from pathlib import Path
+
+# Weather rules use Brick class names; test DataFrame uses Open-Meteo column names.
+# Pass this column_map so the runner resolves Brick -> actual df columns.
+WEATHER_COLUMN_MAP = {
+    "Humidity_Sensor": "rh_pct",
+    "Wind_Gust_Speed_Sensor": "gust_mph",
+    "Wind_Speed_Sensor": "wind_mph",
+    "Outside_Air_Temperature_Sensor": "temp_f",
+}
 
 
 @pytest.fixture
@@ -43,6 +53,7 @@ def test_weather_rules_load(weather_df):
             "tolerance": 0.2,
             "window": 6,
         },
+        column_map=WEATHER_COLUMN_MAP,
         skip_missing_columns=True,
     )
     assert "fault_rh_out_of_range" in result.columns
@@ -59,11 +70,19 @@ def test_weather_rh_out_of_range(weather_df):
         r for r in runner._rules if r.get("name") == "weather_rh_out_of_range"
     ]
 
-    result = runner.run(weather_df, params={"rh_min": 0, "rh_max": 100})
+    result = runner.run(
+        weather_df,
+        params={"rh_min": 0, "rh_max": 100},
+        column_map=WEATHER_COLUMN_MAP,
+    )
     # All rh in 50-86, within [0,100]
     assert result["fault_rh_out_of_range"].sum() == 0
 
-    result2 = runner.run(weather_df, params={"rh_min": 70, "rh_max": 85})
+    result2 = runner.run(
+        weather_df,
+        params={"rh_min": 70, "rh_max": 85},
+        column_map=WEATHER_COLUMN_MAP,
+    )
     # Some rh < 70 or > 85
     assert result2["fault_rh_out_of_range"].sum() > 0
 
@@ -81,5 +100,5 @@ def test_weather_gust_lt_wind(weather_df):
         r for r in runner._rules if r.get("name") == "weather_gust_lt_wind"
     ]
 
-    result = runner.run(df)
+    result = runner.run(df, column_map=WEATHER_COLUMN_MAP)
     assert result["fault_gust_lt_wind"].sum() >= 2

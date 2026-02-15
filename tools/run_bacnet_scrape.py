@@ -108,7 +108,9 @@ def main() -> int:
                     log.warning("Gateway CSV not found: %s", csv_path)
                     continue
                 try:
-                    result = run_bacnet_scrape(csv_path, site_id, "bacnet", server_url=url)
+                    result = run_bacnet_scrape(
+                        csv_path, site_id, "bacnet", server_url=url
+                    )
                 except Exception as e:
                     log.exception("Gateway %s failed: %s", site_id, e)
                     continue
@@ -162,7 +164,9 @@ def main() -> int:
         )
         while True:
             try:
-                result = run_bacnet_scrape(csv_path, site_id, server_url=settings.bacnet_server_url)
+                result = run_bacnet_scrape(
+                    csv_path, site_id, server_url=settings.bacnet_server_url
+                )
                 log.info(
                     "Scrape cycle: %d rows, %d points, %d errors",
                     result["rows_inserted"],
@@ -173,7 +177,9 @@ def main() -> int:
                 log.exception("Scrape failed: %s", e)
             time.sleep(interval_sec)
     else:
-        result = run_bacnet_scrape(csv_path, site_id, server_url=settings.bacnet_server_url)
+        result = run_bacnet_scrape(
+            csv_path, site_id, server_url=settings.bacnet_server_url
+        )
         if result["errors"] and result["rows_inserted"] == 0:
             for e in result["errors"]:
                 log.error("%s", e)

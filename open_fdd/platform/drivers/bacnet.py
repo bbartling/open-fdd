@@ -353,7 +353,9 @@ async def scrape_bacnet_from_csv(
         }
 
     logger.info("BACnet scrape via RPC: %s (site=%s)", server_url, site_id)
-    return await _scrape_via_rpc(csv_path, site_id, config_rows, by_device, server_url=server_url)
+    return await _scrape_via_rpc(
+        csv_path, site_id, config_rows, by_device, server_url=server_url
+    )
 
 
 def run_bacnet_scrape(
