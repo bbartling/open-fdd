@@ -191,7 +191,9 @@ def store_weather_for_site(
                     if pd.notna(val):
                         try:
                             v = float(val)
-                        except (TypeError, ValueError):
+                        except TypeError:
+                            continue
+                        except ValueError:
                             continue
                         rows.append((ts, site_id_str, point_ids[col], v, None))
 

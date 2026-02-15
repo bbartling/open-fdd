@@ -29,6 +29,7 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `rule_interval_hours` | 3 | FDD loop run interval (when no trigger file: run every N hours) |
 | `lookback_days` | 3 | Days of data loaded per run (each run pulls last N days into the rule engine) |
 | `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
+| `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config (single gateway) |

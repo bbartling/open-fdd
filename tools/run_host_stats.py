@@ -117,7 +117,11 @@ def _get_container_metrics() -> list[dict]:
                     if sys_delta and sys_delta > 0:
                         num_cpus = s2.get("cpu_stats", {}).get("online_cpus", 1) or 1
                         cpu = min(100.0, (cpu_delta / sys_delta) * num_cpus * 100)
-                except (KeyError, TypeError, ZeroDivisionError):
+                except KeyError:
+                    pass
+                except TypeError:
+                    pass
+                except ZeroDivisionError:
                     pass
             s = s2
             mem_usage = s.get("memory_stats", {}).get("usage", 0) or 0

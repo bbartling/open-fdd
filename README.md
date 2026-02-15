@@ -32,6 +32,20 @@ cd open-fdd
 
 This will start the full AFDD edge stack locally.
 
+### Development: run tests and Black (after clone)
+
+To run the test suite and formatter locally (no Docker required for tests):
+
+```bash
+cd open-fdd
+python3 -m venv .venv
+.venv/bin/pip install -e ".[test]"
+.venv/bin/python -m pytest open_fdd/tests/ -v
+.venv/bin/black .
+```
+
+The `test` extra includes pytest, black, httpx, FastAPI, rdflib, and platform deps so all tests pass. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
+
 ---
 
 ## 🔌 Service Endpoints

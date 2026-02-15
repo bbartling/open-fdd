@@ -95,7 +95,9 @@ def load_timeseries_for_equipment(
 
     try:
         site_uuid = uuid.UUID(site_id)
-    except (ValueError, TypeError):
+    except ValueError:
+        site_uuid = site_id
+    except TypeError:
         site_uuid = site_id
 
     with get_conn() as conn:

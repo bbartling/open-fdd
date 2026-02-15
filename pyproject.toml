@@ -37,9 +37,23 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
-    "black==26.1.0",
+    "black[jupyter]",
     "pre-commit",
     "httpx",
+]
+# One-shot install for clone + run tests + black: pip install -e ".[test]"
+test = [
+    "pytest",
+    "black[jupyter]",
+    "pre-commit",
+    "httpx",
+    "psycopg2-binary",
+    "requests",
+    "pydantic-settings",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "rdflib",
 ]
 viz = [
     "matplotlib",
@@ -81,7 +95,7 @@ open_fdd = ["rules/*.yaml"]
 
 [tool.black]
 line-length = 88
-target-version = ["py39"]
+target-version = ["py314"]
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]

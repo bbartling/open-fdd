@@ -34,7 +34,9 @@ def _pv_to_float(pv) -> Optional[float]:
     if hasattr(pv, "__float__"):
         try:
             return float(pv)
-        except (TypeError, ValueError):
+        except TypeError:
+            pass
+        except ValueError:
             pass
     s = str(pv).lower().strip()
     if s in ("active", "true", "1", "closed"):
@@ -43,7 +45,9 @@ def _pv_to_float(pv) -> Optional[float]:
         return 0.0
     try:
         return float(pv)
-    except (TypeError, ValueError):
+    except TypeError:
+        return None
+    except ValueError:
         return None
 
 
@@ -108,7 +112,10 @@ async def _scrape_via_rpc(
         for device_id_str, points in by_device.items():
             try:
                 device_instance = int(device_id_str.split(",")[-1].strip())
-            except (ValueError, IndexError):
+            except ValueError:
+                errors.append(f"Invalid device_id: {device_id_str}")
+                continue
+            except IndexError:
                 errors.append(f"Invalid device_id: {device_id_str}")
                 continue
 
