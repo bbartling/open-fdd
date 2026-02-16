@@ -16,22 +16,20 @@ def list_points(site_id: UUID | None = None, equipment_id: UUID | None = None):
     """List points, optionally filtered by site or equipment."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cols = "id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at"
             if equipment_id:
                 cur.execute(
-                    """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at
-                       FROM points WHERE equipment_id = %s ORDER BY external_id""",
+                    f"""SELECT {cols} FROM points WHERE equipment_id = %s ORDER BY external_id""",
                     (str(equipment_id),),
                 )
             elif site_id:
                 cur.execute(
-                    """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at
-                       FROM points WHERE site_id = %s ORDER BY external_id""",
+                    f"""SELECT {cols} FROM points WHERE site_id = %s ORDER BY external_id""",
                     (str(site_id),),
                 )
             else:
                 cur.execute(
-                    """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at
-                       FROM points ORDER BY site_id, external_id"""
+                    f"""SELECT {cols} FROM points ORDER BY site_id, external_id"""
                 )
             rows = cur.fetchall()
     return [PointRead.model_validate(dict(r)) for r in rows]
@@ -43,9 +41,9 @@ def create_point(body: PointCreate):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO points (site_id, external_id, brick_type, fdd_input, unit, description, equipment_id)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)
-                   RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at""",
+                """INSERT INTO points (site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at""",
                 (
                     str(body.site_id),
                     body.external_id,
@@ -54,6 +52,9 @@ def create_point(body: PointCreate):
                     body.unit,
                     body.description,
                     str(body.equipment_id) if body.equipment_id else None,
+                    body.bacnet_device_id,
+                    body.object_identifier,
+                    body.object_name,
                 ),
             )
             row = cur.fetchone()
@@ -71,7 +72,7 @@ def get_point(point_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at
+                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at
                    FROM points WHERE id = %s""",
                 (str(point_id),),
             )
@@ -100,6 +101,15 @@ def update_point(point_id: UUID, body: PointUpdate):
     if body.equipment_id is not None:
         updates.append("equipment_id = %s")
         params.append(str(body.equipment_id))
+    if body.bacnet_device_id is not None:
+        updates.append("bacnet_device_id = %s")
+        params.append(body.bacnet_device_id)
+    if body.object_identifier is not None:
+        updates.append("object_identifier = %s")
+        params.append(body.object_identifier)
+    if body.object_name is not None:
+        updates.append("object_name = %s")
+        params.append(body.object_name)
     if not updates:
         return get_point(point_id)
     params.append(str(point_id))
@@ -107,7 +117,7 @@ def update_point(point_id: UUID, body: PointUpdate):
         with conn.cursor() as cur:
             cur.execute(
                 f"""UPDATE points SET {', '.join(updates)} WHERE id = %s
-                    RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, created_at""",
+                    RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at""",
                 params,
             )
             row = cur.fetchone()

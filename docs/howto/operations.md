@@ -32,7 +32,9 @@ Reboot: containers stop unless Docker or systemd is configured to start them on 
 |--------|--------|
 | **Log limits, retention SQL, Grafana dashboards** | `docker compose up -d` (restart). Log limits and new dashboards apply after restart. |
 | **Open-Meteo driver** (new weather points: solar, cloud, wind_dir) | Rebuild weather-scraper: `docker compose build weather-scraper && docker compose up -d weather-scraper` |
-| **API code** (download, data-model, main) | `docker compose build api && docker compose up -d api` |
+| **API code** (download, data-model, main, config UI at /app/) | `./scripts/bootstrap.sh --build api` or `docker compose build api && docker compose up -d api` |
+| **BACnet from config UI** | API container must reach diy-bacnet-server: `OFDD_BACNET_SERVER_URL` is set in docker-compose to `http://host.docker.internal:8080` (bacnet-server on host). Restart API after changing. |
+| **All containers** (full rebuild and restart) | `./scripts/bootstrap.sh --build-all` — no DB wait or migrations; exits after `docker compose build && docker compose up -d`. |
 | **FDD loop, BACnet scraper code** | `docker compose build bacnet-scraper fdd-loop` (or `--build`); fdd-loop also mounts `open_fdd` from host, so host code changes apply on restart. |
 | **Grafana dashboards missing** | `./scripts/bootstrap.sh --reset-grafana` |
 

@@ -22,7 +22,7 @@ This project is an open-source stack; a cloud or MSI vendor can develop their ow
 
 | Service | Description |
 |---------|-------------|
-| **API** | FastAPI CRUD for sites, equipment, points. Data-model export/import, TTL generation, SPARQL validation. Swagger at `/docs`. |
+| **API** | FastAPI CRUD for sites, equipment, points. Data-model export/import, TTL generation, SPARQL validation. Swagger at `/docs`. Config UI (HA-style data model tree, BACnet test) at `/app/`. |
 | **Grafana** | Pre-provisioned TimescaleDB datasource + dashboards (BACnet timeseries, Fault Results, System Resources, Weather). Edit config in `platform/grafana/`; use `--reset-grafana` if provisioning doesn't apply. |
 | **TimescaleDB** | PostgreSQL with TimescaleDB extension. Single source of truth for metadata and time-series. |
 | **BACnet scraper** | Polls diy-bacnet-server via JSON-RPC. Writes readings to `timeseries_readings`. |

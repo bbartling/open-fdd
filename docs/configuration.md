@@ -32,9 +32,10 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
-| `bacnet_config_csv` | config/bacnet_device.csv | BACnet device config (single gateway) |
+| `bacnet_use_data_model` | true | Prefer scraping points from the data model (points with `bacnet_device_id`/`object_identifier`); fall back to CSV if none. Env: `OFDD_BACNET_USE_DATA_MODEL`. |
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
 | `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id, config_csv}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
+| `bacnet_config_csv` | config/bacnet_discovered.csv | CSV path when using CSV path (fallback or `--csv-only`). Single gateway. |
 | `open_meteo_enabled` | true | Enable weather scraper |
 | `open_meteo_interval_hours` | 24 | Weather poll interval |
 | `open_meteo_latitude` | 41.88 | Site latitude |
@@ -102,6 +103,7 @@ For edge deployments with limited disk, set these at bootstrap (or in `platform/
 | `OFDD_DB_USER` | Database user |
 | `OFDD_DB_PASSWORD` | Database password |
 | `OFDD_BACNET_SERVER_URL` | diy-bacnet-server base URL (e.g. http://localhost:8080) |
+| `OFDD_BACNET_USE_DATA_MODEL` | Prefer data-model scrape; fall back to CSV if no BACnet points in DB (default: true) |
 | `OFDD_BACNET_SITE_ID` | Site to tag when scraping (default: default; use on remote gateways) |
 | `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id, config_csv} for central aggregator |
 | `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |

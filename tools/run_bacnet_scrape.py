@@ -64,6 +64,16 @@ def main() -> int:
         help="Validate CSV and exit",
     )
     parser.add_argument(
+        "--data-model",
+        action="store_true",
+        help="Use only data-model scrape (no CSV fallback)",
+    )
+    parser.add_argument(
+        "--csv-only",
+        action="store_true",
+        help="Use only CSV config (skip data-model)",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -76,7 +86,10 @@ def main() -> int:
     cwd = Path.cwd()
 
     from open_fdd.platform.config import get_platform_settings
-    from open_fdd.platform.drivers.bacnet import run_bacnet_scrape
+    from open_fdd.platform.drivers.bacnet import (
+        run_bacnet_scrape,
+        run_bacnet_scrape_data_model,
+    )
 
     settings = get_platform_settings()
 
@@ -136,6 +149,10 @@ def main() -> int:
 
     # Single-gateway mode
     csv_path = _resolve_csv_path(args.csv, cwd)
+    use_data_model = args.data_model or (
+        settings.bacnet_use_data_model and not args.csv_only
+    )
+    site_id = args.site if args.site != "default" else settings.bacnet_site_id
 
     if args.validate_only:
         errors = validate_bacnet_csv(csv_path)
@@ -152,21 +169,41 @@ def main() -> int:
         )
         return 0
 
-    site_id = args.site if args.site != "default" else settings.bacnet_site_id
+    def _run_single() -> dict:
+        if use_data_model:
+            result = run_bacnet_scrape_data_model(
+                site_id=site_id, server_url=settings.bacnet_server_url
+            )
+            if (
+                result["rows_inserted"] > 0
+                or result["points_created"] > 0
+                or result["errors"]
+            ):
+                return result
+            if not args.data_model and csv_path.exists():
+                log.info(
+                    "No BACnet points in data model; falling back to CSV %s", csv_path
+                )
+                return run_bacnet_scrape(
+                    csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url
+                )
+            return result
+        return run_bacnet_scrape(
+            csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url
+        )
 
     if args.loop:
         interval_sec = settings.bacnet_scrape_interval_min * 60
         log.info(
-            "BACnet scrape loop: csv=%s site=%s interval=%d min",
+            "BACnet scrape loop: data_model=%s csv=%s site=%s interval=%d min",
+            use_data_model,
             csv_path,
             site_id,
             settings.bacnet_scrape_interval_min,
         )
         while True:
             try:
-                result = run_bacnet_scrape(
-                    csv_path, site_id, server_url=settings.bacnet_server_url
-                )
+                result = _run_single()
                 log.info(
                     "Scrape cycle: %d rows, %d points, %d errors",
                     result["rows_inserted"],
@@ -177,9 +214,7 @@ def main() -> int:
                 log.exception("Scrape failed: %s", e)
             time.sleep(interval_sec)
     else:
-        result = run_bacnet_scrape(
-            csv_path, site_id, server_url=settings.bacnet_server_url
-        )
+        result = _run_single()
         if result["errors"] and result["rows_inserted"] == 0:
             for e in result["errors"]:
                 log.error("%s", e)

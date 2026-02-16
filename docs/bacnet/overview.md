@@ -15,8 +15,9 @@ Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server
 | Component | Purpose |
 |-----------|---------|
 | **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP UDP listener + HTTP JSON-RPC API. Discovers devices and objects; exposes present-value reads. Swagger: http://localhost:8080/docs |
-| **BACnet scraper** | Platform service. Polls diy-bacnet-server on a schedule, writes readings to TimescaleDB. |
-| **Discovery CSV** | Exported object list from BACnet. Used to build points and column maps. |
+| **BACnet scraper** | Platform service. Polls diy-bacnet-server on a schedule; **reads points from the data model** (points with `bacnet_device_id` and `object_identifier`) or, if none, from a **CSV config** (fallback). Writes readings to TimescaleDB. |
+| **Data model** | Sites, equipment, and points with BACnet addressing (`bacnet_device_id`, `object_identifier`, `object_name`). Single source of truth for what to scrape when using the data-model path. |
+| **Discovery CSV** | Optional. Legacy/fallback: curated object list; scraper uses it when no points in the data model have BACnet addressing. |
 
 ---
 
@@ -31,35 +32,36 @@ Only **one** process on the host can use port 47808 (BACnet/IP). Run discovery *
 
 ---
 
-## Discovery first, then curate the CSV
+## Discovery and getting points into the data model
 
-**You must run BACnet discovery and curate the resulting CSV before Open-FDD can scrape data.** The discovery script produces a CSV that the BACnet driver uses as its **config**—the scraper only polls points listed in that file.
+The scraper can run in two ways: **data-model first** (recommended) or **CSV fallback**. For the data-model path, you add points with BACnet addressing to the data model (sites, equipment, points) and the scraper polls only those points. Optionally you can still use a curated CSV when no such points exist.
 
-### 1. Run discovery (before starting diy-bacnet-server)
+### Option A: Data model (recommended)
 
-The discovery script uses BACnet directly and binds to port 47808. **Do not start diy-bacnet-server or any other BACnet application** while discovering, or you will get a port conflict.
+1. **Run Who-Is and point discovery** — Use the Open-FDD Config UI (`/app/`) or the API. From the BACnet panel you can call **Test connection**, **Who-Is range**, and **Point discovery** (these proxy to diy-bacnet-server). diy-bacnet-server must be running (e.g. `./scripts/bootstrap.sh` starts it).
+2. **Import discovery into the data model** — Send the point-discovery result to `POST /bacnet/import-discovery`. The API creates site/equipment/points with `bacnet_device_id`, `object_identifier`, `object_name`, and a default Brick type. You can also create or edit points via CRUD (`POST /points`, `PATCH /points/{id}`) and set these fields.
+3. **Run the scraper** — The BACnet scraper (e.g. bacnet-scraper container or `tools/run_bacnet_scrape.py`) loads points that have `bacnet_device_id` and `object_identifier` from the database and polls only those via diy-bacnet-server. No CSV is required.
 
-```bash
-# From repo root. Requires: pip install bacpypes3 ifaddr
-python tools/discover_bacnet.py 3456789 -o config/bacnet_discovered.csv
-# Or use the wrapper (same deps):
-./scripts/discover_bacnet.sh 3456789 -o config/bacnet_discovered.csv
-```
+See [Points](modeling/points#bacnet-addressing) for the BACnet fields and [Platform API → BACnet](api/platform#bacnet-proxy-and-import) for the endpoints.
 
-Replace `3456789` with your device instance or range (e.g. `1 3456799` for a range). See [discover_bacnet.py](https://github.com/bbartling/open-fdd/blob/master/tools/discover_bacnet.py) for options (e.g. `--addr` for subnet).
+### Option B: CSV (legacy / fallback)
 
-### 2. Curate the CSV: keep only points needed for FDD
+If you prefer or need a file-based config:
 
-The discovery script lists **every** BACnet object reported by each device. The vast majority of points in a typical building are not needed for HVAC health or FDD (e.g. internal diagnostics, unused objects). **You must edit the CSV and remove rows for points you do not need.**
+1. **Run discovery (before starting diy-bacnet-server)** — The discovery script uses BACnet directly and binds to port 47808. Do not start diy-bacnet-server while discovering (port conflict).
 
-- **Best practice:** Scrape only the points that are critical for FDD and HVAC/OT telemetry. In a typical HVAC system, roughly on the order of **20%** of discovered points may be sufficient for FDD; the rest can be removed from the CSV.
-- **Do not** configure Open-FDD to scrape every point in the BACnet network. Keeping the CSV minimal reduces load on the OT network and aligns with [Security → Throttling](security#2-outbound-otbuilding-network-is-paced): throttling of outbound traffic depends on both poll interval and **how many points** you scrape.
+   ```bash
+   python tools/discover_bacnet.py 3456789 -o config/bacnet_discovered.csv
+   # Or: ./scripts/discover_bacnet.sh 3456789 -o config/bacnet_discovered.csv
+   ```
 
-After curating, save the file (e.g. as `config/bacnet_discovered.csv` or `config/bacnet_device.csv`) and point the scraper at it via `OFDD_BACNET_SCRAPE_CSV` or the default path used by the platform.
+2. **Curate the CSV** — Keep only points needed for FDD (typically a fraction of discovered points; see [Security → Throttling](security#2-outbound-otbuilding-network-is-paced)). Save as e.g. `config/bacnet_discovered.csv`.
 
-### 3. Then start the platform
+3. **Run the scraper** — With `OFDD_BACNET_USE_DATA_MODEL=false` or `--csv-only`, the scraper uses the CSV. If data-model is enabled (default) but no points in the DB have BACnet addressing, the scraper falls back to the CSV when the file exists.
 
-Start diy-bacnet-server and the BACnet scraper (e.g. `./scripts/bootstrap.sh`). The scraper will read the curated CSV and poll only those points via diy-bacnet-server.
+### Port note
+
+Only **one** process on the host can use port 47808 (BACnet/IP). For **script-based discovery** (Option B), run discovery before starting diy-bacnet-server. For **API/UI discovery** (Option A), diy-bacnet-server is already running and you use the API/Config UI to run Who-Is and point discovery.
 
 ---
 
@@ -67,10 +69,10 @@ Start diy-bacnet-server and the BACnet scraper (e.g. `./scripts/bootstrap.sh`). 
 
 The BACnet scraper:
 
-- Reads the CSV config (curated discovery output) to know which points to poll
-- Calls diy-bacnet-server JSON-RPC for each row in the CSV
-- Maps object references (device + object type + instance) to `point_id`
-- Writes `(point_id, ts, value)` to `timeseries_readings`
+- **Data-model path (default):** Loads points from the DB where `bacnet_device_id` and `object_identifier` are set; groups by device; calls diy-bacnet-server JSON-RPC (present-value) for each; writes `(point_id, ts, value)` to `timeseries_readings`.
+- **CSV path (fallback):** Reads the curated CSV to know which points to poll; same RPC and write flow.
+
+Throttling depends on **how many points** are defined (in the data model or in the CSV) and the poll interval. See [Security → Throttling](security#2-outbound-otbuilding-network-is-paced).
 
 ---
 
@@ -78,7 +80,8 @@ The BACnet scraper:
 
 Scraper config via environment:
 
-- `OFDD_BACNET_SERVER_URL` — diy-bacnet-server base URL (default: http://localhost:8080)
-- `OFDD_BACNET_SCRAPE_CSV` — Path to the **curated** discovery CSV (default: config/bacnet_discovered.csv)
+- `OFDD_BACNET_SERVER_URL` — diy-bacnet-server base URL (e.g. http://localhost:8080). Required for RPC.
+- `OFDD_BACNET_USE_DATA_MODEL` — Prefer data-model scrape when points have BACnet addressing; fall back to CSV if none (default: true). Use `--data-model` or `--csv-only` in `tools/run_bacnet_scrape.py` to override.
 - `OFDD_BACNET_SCRAPE_INTERVAL_MIN` — Poll interval in minutes (default: 5)
+- `OFDD_BACNET_SCRAPE_CSV` — Path to CSV when using CSV path (default: config/bacnet_discovered.csv). Used by scraper container when CSV fallback is active.
 - `OFDD_DB_*` — TimescaleDB connection

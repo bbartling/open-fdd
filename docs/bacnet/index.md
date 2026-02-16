@@ -12,7 +12,11 @@ BACnet is the **default data driver** for Open-FDD. Discovery, [diy-bacnet-serve
 
 ## Setup (do this before the platform scrapes data)
 
-1. **Run BACnet discovery first** — Before starting diy-bacnet-server or the Open-FDD stack, run the discovery script. Only one BACnet process can bind to port 47808 (UDP) on the OS; discovery uses that port, so run it while no other BACnet application is running. See [BACnet overview → Discovery first, then curate the CSV](bacnet/overview#discovery-first-then-curate-the-csv).
-2. **Curate the discovery CSV** — The script discovers **every** point on the BACnet network. You must remove rows for points that are not needed for FDD and HVAC health. Typically only a small subset of points (on the order of ~20% for a typical HVAC system) are needed; scraping every point is unnecessary and increases OT load. See [Security → Throttling](security#2-outbound-otbuilding-network-is-paced).
-3. **Save the CSV as the driver config** — The BACnet scraper reads `config/bacnet_discovered.csv` (or the path you set) as its list of points to poll. Use the curated file.
-4. **Then start the platform** — Run `./scripts/bootstrap.sh` (or start diy-bacnet-server and bacnet-scraper). The scraper will use the CSV to pull only the points you kept.
+**Recommended: data model**
+
+1. **Start the platform** (including diy-bacnet-server) — e.g. `./scripts/bootstrap.sh`.
+2. **Discover devices and points** — In the Config UI (`/app/`) use the BACnet panel: Who-Is range, then Point discovery per device. Or call the API: `POST /bacnet/whois_range`, `POST /bacnet/point_discovery`.
+3. **Import into the data model** — Send the point-discovery result to `POST /bacnet/import-discovery`. This creates sites, equipment, and points with BACnet addressing. Alternatively create points via CRUD and set `bacnet_device_id`, `object_identifier`, `object_name`.
+4. **Scraper runs automatically** — The bacnet-scraper container (or `tools/run_bacnet_scrape.py`) loads points from the data model and polls only those. No CSV needed.
+
+**Optional: CSV path** — If you prefer a file-based config, run the discovery script (while diy-bacnet-server is not running), curate the CSV, then start the platform. With data-model enabled (default), the scraper uses the CSV only when no points in the DB have BACnet addressing. See [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model) and [Security → Throttling](security#2-outbound-otbuilding-network-is-paced).

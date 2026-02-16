@@ -89,17 +89,35 @@ CRUD for points (sensors, setpoints, commands) that reference timeseries. Deleti
 
 **Create body (POST /points):**
 
-| Field        | Type   | Required | Description |
-|--------------|--------|----------|-------------|
-| site_id      | UUID   | yes      | Parent site |
-| external_id  | string | yes      | BACnet/OT identifier (e.g. object name) |
-| equipment_id | UUID   | no       | Parent equipment |
-| brick_type   | string | no       | Brick class (e.g. Supply_Air_Temperature_Sensor) |
-| fdd_input    | string | no       | Name FDD rules use for this point (defaults to external_id) |
-| unit         | string | no       | Unit of measure |
-| description  | string | no       | Optional |
+| Field              | Type   | Required | Description |
+|--------------------|--------|----------|-------------|
+| site_id            | UUID   | yes      | Parent site |
+| external_id        | string | yes      | BACnet/OT identifier (e.g. object name) |
+| equipment_id       | UUID   | no       | Parent equipment |
+| brick_type         | string | no       | Brick class (e.g. Supply_Air_Temperature_Sensor) |
+| fdd_input          | string | no       | Name FDD rules use for this point (defaults to external_id) |
+| unit               | string | no       | Unit of measure |
+| description        | string | no       | Optional |
+| bacnet_device_id   | string | no       | BACnet device instance (e.g. 3456789). With object_identifier, enables data-model scrape for this point. |
+| object_identifier  | string | no       | BACnet object ID (e.g. analog-input,1). |
+| object_name        | string | no       | BACnet object name (often same as external_id). |
 
-**Update body (PATCH /points/{id}):** Same fields; omit to leave unchanged.
+**Update body (PATCH /points/{id}):** Same fields; omit to leave unchanged. Responses (GET/POST/PATCH) include `bacnet_device_id`, `object_identifier`, `object_name` when set.
+
+---
+
+## BACnet proxy and import
+
+The API proxies to diy-bacnet-server for discovery and can import results into the data model.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
+| POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
+| POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
+| POST   | /bacnet/import-discovery | **Import** Who-Is and/or point-discovery results into the data model. Creates site, equipment (one per device), and points with `bacnet_device_id`, `object_identifier`, `object_name`, and default Brick type. Body: `site_id` (optional), `point_discoveries`: `[{device_instance, objects: [{object_identifier, object_name}]}]`, optionally `devices` from Who-Is for names. |
+
+Config UI at `/app/` provides a BACnet panel to run these and expand raw JSON. To create points from discovery, call `POST /bacnet/import-discovery` with the point-discovery result (and optionally Who-Is for device names).
 
 ---
 

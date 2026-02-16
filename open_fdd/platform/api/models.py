@@ -37,6 +37,9 @@ class PointCreate(BaseModel):
     unit: Optional[str] = Field(None, max_length=32)
     description: Optional[str] = None
     equipment_id: Optional[UUID] = None
+    bacnet_device_id: Optional[str] = Field(None, max_length=64)
+    object_identifier: Optional[str] = Field(None, max_length=128)
+    object_name: Optional[str] = Field(None, max_length=256)
 
 
 class PointUpdate(BaseModel):
@@ -45,6 +48,9 @@ class PointUpdate(BaseModel):
     unit: Optional[str] = Field(None, max_length=32)
     description: Optional[str] = None
     equipment_id: Optional[UUID] = None
+    bacnet_device_id: Optional[str] = Field(None, max_length=64)
+    object_identifier: Optional[str] = Field(None, max_length=128)
+    object_name: Optional[str] = Field(None, max_length=256)
 
 
 class PointRead(BaseModel):
@@ -58,6 +64,9 @@ class PointRead(BaseModel):
     unit: Optional[str] = None
     description: Optional[str] = None
     equipment_id: Optional[UUID] = None
+    bacnet_device_id: Optional[str] = None
+    object_identifier: Optional[str] = None
+    object_name: Optional[str] = None
     created_at: datetime
 
 

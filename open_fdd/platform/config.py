@@ -52,6 +52,8 @@ class PlatformSettings(BaseSettings):
     bacnet_site_id: str = "default"
     # Optional: multiple gateways (central aggregator). JSON array of {"url", "site_id", "config_csv"}
     bacnet_gateways: Optional[str] = None
+    # Prefer data-model scrape over CSV when points have BACnet addressing (fall back to CSV if no points)
+    bacnet_use_data_model: bool = True
 
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 

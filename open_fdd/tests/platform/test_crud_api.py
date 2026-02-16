@@ -234,6 +234,9 @@ def test_points_create():
         "unit": "degF",
         "description": None,
         "equipment_id": None,
+        "bacnet_device_id": None,
+        "object_identifier": None,
+        "object_name": None,
         "created_at": "2024-01-01T00:00:00",
     }
     conn = _mock_conn(fetchone=row)
@@ -250,6 +253,44 @@ def test_points_create():
         )
     assert r.status_code == 200
     assert r.json()["external_id"] == "SA-T"
+
+
+def test_points_create_with_bacnet_fields():
+    site_id = uuid4()
+    pt_id = uuid4()
+    row = {
+        "id": pt_id,
+        "site_id": site_id,
+        "external_id": "DAP-P",
+        "brick_type": "Sensor",
+        "fdd_input": None,
+        "unit": None,
+        "description": None,
+        "equipment_id": None,
+        "bacnet_device_id": "3456789",
+        "object_identifier": "analog-input,1",
+        "object_name": "DAP-P",
+        "created_at": "2024-01-01T00:00:00",
+    }
+    conn = _mock_conn(fetchone=row)
+    with _patch_db(conn), patch("open_fdd.platform.api.points.sync_ttl_to_file"):
+        r = client.post(
+            "/points",
+            json={
+                "site_id": str(site_id),
+                "external_id": "DAP-P",
+                "bacnet_device_id": "3456789",
+                "object_identifier": "analog-input,1",
+                "object_name": "DAP-P",
+                "brick_type": "Sensor",
+            },
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["external_id"] == "DAP-P"
+    assert data["bacnet_device_id"] == "3456789"
+    assert data["object_identifier"] == "analog-input,1"
+    assert data["object_name"] == "DAP-P"
 
 
 def test_points_get_404():
@@ -271,6 +312,9 @@ def test_points_patch():
         "unit": None,
         "description": None,
         "equipment_id": None,
+        "bacnet_device_id": None,
+        "object_identifier": None,
+        "object_name": None,
         "created_at": "2024-01-01T00:00:00",
     }
     conn = _mock_conn(fetchone=row)
@@ -280,6 +324,64 @@ def test_points_patch():
         )
     assert r.status_code == 200
     assert r.json()["brick_type"] == "Zone_Temperature_Sensor"
+
+
+def test_points_list_includes_bacnet_fields():
+    site_id = uuid4()
+    pt_id = uuid4()
+    rows = [
+        {
+            "id": pt_id,
+            "site_id": site_id,
+            "external_id": "ai-1",
+            "brick_type": "Sensor",
+            "fdd_input": None,
+            "unit": None,
+            "description": None,
+            "equipment_id": None,
+            "bacnet_device_id": "123",
+            "object_identifier": "analog-input,1",
+            "object_name": "ai-1",
+            "created_at": "2024-01-01T00:00:00",
+        }
+    ]
+    conn = _mock_conn(fetchall=rows)
+    with _patch_db(conn):
+        r = client.get("/points")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["bacnet_device_id"] == "123"
+    assert data[0]["object_identifier"] == "analog-input,1"
+    assert data[0]["object_name"] == "ai-1"
+
+
+def test_points_patch_bacnet_fields():
+    pt_id = uuid4()
+    site_id = uuid4()
+    row = {
+        "id": pt_id,
+        "site_id": site_id,
+        "external_id": "pt",
+        "brick_type": "Point",
+        "fdd_input": None,
+        "unit": None,
+        "description": None,
+        "equipment_id": None,
+        "bacnet_device_id": "999",
+        "object_identifier": "analog-value,2",
+        "object_name": "pt",
+        "created_at": "2024-01-01T00:00:00",
+    }
+    conn = _mock_conn(fetchone=row)
+    with _patch_db(conn), patch("open_fdd.platform.api.points.sync_ttl_to_file"):
+        r = client.patch(
+            f"/points/{pt_id}",
+            json={"bacnet_device_id": "999", "object_identifier": "analog-value,2"},
+        )
+    assert r.status_code == 200
+    assert r.json()["bacnet_device_id"] == "999"
+    assert r.json()["object_identifier"] == "analog-value,2"
 
 
 def test_points_delete():

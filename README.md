@@ -9,7 +9,7 @@
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
 ![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/2ZYXJN6p)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
 ![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 

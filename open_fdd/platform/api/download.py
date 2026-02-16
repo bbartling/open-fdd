@@ -1,8 +1,12 @@
 """Bulk download API — timeseries and faults.
 
-Supports two primary use cases:
-1. Researcher: Excel-friendly CSV (wide format, BOM, ISO timestamps) — open directly in Excel.
-2. MSI/Cx firm: REST export for cloud integration — poll /download/faults or /download/csv.
+Defaults are tuned for Excel/Sheets users (e.g. mechanical engineers): timestamp
+column on the left, one column per point in wide format, UTF-8 BOM and ISO
+timestamps so files open cleanly—like a BAS trend export, not a raw DB dump.
+
+Use cases:
+1. Excel/Sheets: GET /download/csv (wide default), GET /download/faults (format=csv).
+2. MSI/Cx: REST export — poll /download/faults or /download/csv (JSON for faults).
 """
 
 from datetime import date
@@ -238,6 +242,17 @@ def get_download_faults(
     df = pd.DataFrame(rows)
     if not df.empty:
         df["ts"] = pd.to_datetime(df["ts"])
+        df = df.rename(columns={"ts": "timestamp"})
+        # Excel/Sheets-friendly: timestamp on left, clean column order (like BAS trend export)
+        col_order = [
+            "timestamp",
+            "site_id",
+            "equipment_id",
+            "fault_id",
+            "flag_value",
+            "evidence",
+        ]
+        df = df[[c for c in col_order if c in df.columns]]
     csv_body = _to_excel_csv(df)
     return StreamingResponse(
         iter([csv_body]),

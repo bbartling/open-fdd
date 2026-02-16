@@ -19,10 +19,15 @@ Each point has:
 | `id` | UUID primary key |
 | `site_id` | FK to sites |
 | `equipment_id` | FK to equipment (nullable) |
-| `external_id` | Raw identifier from source (e.g. BACnet object name) |
+| `external_id` | Raw identifier from source (e.g. BACnet object name); unique per site |
 | `fdd_input` | Column name used by FDD rules (e.g. `oat`, `sat`); data-model API uses `rule_input` |
 | `brick_type` | Optional Brick class (e.g. `Outside_Air_Temperature_Sensor`) |
-| `name` | Optional display name |
+| `unit` | Optional unit of measure |
+| `description` | Optional |
+| **BACnet addressing** | |
+| `bacnet_device_id` | Optional. BACnet device instance (e.g. `3456789`). With `object_identifier`, used by the BACnet scraper to poll this point. |
+| `object_identifier` | Optional. BACnet object ID (e.g. `analog-input,1`). |
+| `object_name` | Optional. BACnet object name (often same as `external_id`). |
 
 ---
 
@@ -42,11 +47,15 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 
 ## Layers and mapping
 
-- **BACnet layer:** `external_id` = BACnet object name (from discovery CSV)
+- **BACnet layer:** Points that have `bacnet_device_id` and `object_identifier` are scraped by the BACnet driver (data-model path). You can add them via CRUD or by **importing discovery** with `POST /bacnet/import-discovery` (Who-Is + point-discovery results). `external_id` is typically the BACnet object name.
 - **Weather layer:** `external_id` = `temp_f`, `rh_pct`, `dewpoint_f`, etc.
-- **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules
+- **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules.
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.
+
+### BACnet addressing
+
+Points with `bacnet_device_id` and `object_identifier` set are used by the BACnet scraper (data-model path). Add them via CRUD or by importing discovery: `POST /bacnet/import-discovery`. See [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model).
 
 ---
 

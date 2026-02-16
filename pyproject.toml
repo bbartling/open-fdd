@@ -91,7 +91,7 @@ Repository = "https://github.com/bbartling/open-fdd"
 include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
-open_fdd = ["rules/*.yaml"]
+open_fdd = ["rules/*.yaml", "platform/static/*"]
 
 [tool.black]
 line-length = 88

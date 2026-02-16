@@ -188,8 +188,12 @@ services:
     container_name: openfdd_api
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
+      # From inside the API container, bacnet-server (network_mode: host) is on the host:
+      OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config

@@ -1,0 +1,242 @@
+/* Open-FDD config UI — Bootstrap 5 + logo theme overrides */
+
+:root {
+  --ofdd-primary: #2D5482;
+  --ofdd-bg: #F7F7F4;
+  --ofdd-text: #2C2C2C;
+  --ofdd-border: #d8d8d4;
+  --ofdd-danger: #c62828;
+  --ofdd-success: #2e7d32;
+  --ofdd-sidebar-width: 220px;
+}
+
+/* Theme overrides */
+.text-ofdd-primary { color: var(--ofdd-primary) !important; }
+.btn-ofdd-primary {
+  background-color: var(--ofdd-primary);
+  border-color: var(--ofdd-primary);
+  color: #fff;
+}
+.btn-ofdd-primary:hover {
+  background-color: #244a6b;
+  border-color: #244a6b;
+  color: #fff;
+}
+.btn-outline-ofdd {
+  color: var(--ofdd-primary);
+  border-color: var(--ofdd-border);
+}
+.btn-outline-ofdd:hover {
+  background-color: rgba(45, 84, 130, 0.08);
+  border-color: var(--ofdd-primary);
+  color: var(--ofdd-primary);
+}
+
+body {
+  background: var(--ofdd-bg);
+  color: var(--ofdd-text);
+}
+
+/* Sidebar */
+.ofdd-sidebar {
+  width: var(--ofdd-sidebar-width);
+  min-height: calc(100vh - 56px);
+  flex-shrink: 0;
+}
+.ofdd-nav-link {
+  color: var(--ofdd-text);
+  border-radius: 0.375rem;
+}
+.ofdd-nav-link:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--ofdd-text);
+}
+.ofdd-nav-link.nav-active {
+  color: var(--ofdd-primary);
+  font-weight: 500;
+}
+
+/* Main content */
+.ofdd-main {
+  max-width: 900px;
+}
+
+/* Tree (keep existing behavior, tidy up) */
+.tree .tree-node {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  cursor: default;
+  user-select: none;
+}
+.tree .tree-node:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.tree .tree-twisty {
+  width: 1rem;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.65rem;
+  color: #6c757d;
+}
+.tree .tree-twisty.tree-no-children {
+  visibility: hidden;
+  cursor: default;
+}
+.tree .tree-twisty::before { content: "▶"; }
+.tree .tree-node.tree-expanded .tree-twisty:not(.tree-no-children)::before { content: "▼"; }
+.tree .tree-node[data-kind="site"] .icon::before { content: "🏢"; }
+.tree .tree-node[data-kind="equipment"] .icon::before { content: "⚙"; }
+.tree .tree-node[data-kind="point"] .icon::before { content: "•"; }
+.tree .tree-children {
+  list-style: none;
+  padding-left: 1.25rem;
+  margin: 0 0 0 0.5rem;
+  border-left: 1px solid var(--ofdd-border);
+  display: block;
+}
+.tree .tree-children.tree-collapsed { display: none !important; }
+.tree .tree-node .label { flex: 1; }
+.tree .tree-node .meta { font-size: 0.8rem; color: #6c757d; }
+.tree-loading, .tree-empty, .tree-error { padding: 0.75rem; color: #6c757d; }
+.tree-error { color: var(--ofdd-danger); }
+.tree-empty-inline {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  color: #495057;
+  list-style: none;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 0.25rem;
+  margin: 0.15rem 0;
+}
+
+/* BACnet status badge in header */
+.bacnet-badge {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background: #f0f0f0;
+}
+.bacnet-badge .bacnet-dot { font-weight: bold; }
+.bacnet-online { background: rgba(46, 125, 50, 0.15); color: var(--ofdd-success); }
+.bacnet-online .bacnet-dot { color: var(--ofdd-success); }
+.bacnet-offline { background: rgba(198, 40, 40, 0.1); color: var(--ofdd-danger); }
+.bacnet-offline .bacnet-dot { color: var(--ofdd-danger); }
+.bacnet-unknown { color: #6c757d; }
+.bacnet-unknown .bacnet-dot { color: #6c757d; }
+
+/* BACnet actions stacked vertically */
+.bacnet-actions { display: flex; flex-direction: column; gap: 1.25rem; }
+.bacnet-action-row { display: flex; flex-direction: column; gap: 0.25rem; }
+.bacnet-action-row .form-label { margin-bottom: 0; }
+
+/* BACnet result card (BAS-style) */
+.bacnet-result-card {
+  background: #fff;
+  border: 1px solid var(--ofdd-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.bacnet-result-card.bacnet-result-error {
+  border-color: rgba(198, 40, 40, 0.4);
+  background: rgba(198, 40, 40, 0.04);
+}
+.bacnet-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.bacnet-status-dot.success { background: var(--ofdd-success); }
+.bacnet-status-dot.danger { background: var(--ofdd-danger); }
+.bacnet-devices-table { font-size: 0.875rem; }
+.bacnet-devices-table th { font-weight: 600; color: #495057; }
+.bacnet-result-card .bacnet-result-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ofdd-border);
+}
+.bacnet-result-card .bacnet-result-body { margin-top: 0.5rem; }
+.bacnet-objects-tree {
+  padding-left: 1rem;
+  margin-left: 0.25rem;
+  border-left: 2px solid var(--ofdd-border);
+  list-style: none;
+}
+.bacnet-object-item {
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.bacnet-object-item:last-child { border-bottom: none; }
+.bacnet-oid {
+  font-size: 0.8em;
+  color: #495057;
+  margin-right: 0.5rem;
+  font-family: ui-monospace, monospace;
+}
+.bacnet-obj-name { color: var(--ofdd-text); }
+.bacnet-raw-details summary { cursor: pointer; user-select: none; }
+.bacnet-raw-pre {
+  margin: 0.5rem 0 0 0;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.bacnet-result-loading { color: #6c757d; }
+
+/* Context menu (above navbar and modals) */
+.context-menu {
+  background: #fff;
+  border: 1px solid var(--ofdd-border);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0;
+  min-width: 120px;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  z-index: 1090;
+}
+.context-menu.hidden { display: none !important; }
+.context-menu .dropdown-item { cursor: pointer; }
+.context-menu .dropdown-item:hover { background: rgba(0, 0, 0, 0.04); }
+
+/* Toast */
+.toast {
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.375rem;
+  background: #fff;
+  border: 1px solid var(--ofdd-border);
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  z-index: 1051;
+}
+.toast.hidden { display: none !important; }
+.toast.success { border-left: 4px solid var(--ofdd-success); }
+.toast.error { border-left: 4px solid var(--ofdd-danger); }
+.toast-container .toast { margin: 0 auto; }
+#toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Card body min height for tree panel */
+#panel-tree .card-body {
+  min-height: 200px;
+}
+
+/* Panel visibility */
+.panel.hidden { display: none !important; }
