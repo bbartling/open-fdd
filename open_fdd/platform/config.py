@@ -18,7 +18,7 @@ class PlatformSettings(BaseSettings):
         "config/brick_model.ttl"  # auto-synced on CRUD; FDD loop reads this
     )
     app_title: str = "Open-FDD API"
-    app_version: str = "0.1.0"
+    app_version: str = "2.0.1"
     debug: bool = False
 
     # FDD loop
