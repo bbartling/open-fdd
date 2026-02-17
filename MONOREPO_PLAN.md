@@ -23,7 +23,7 @@ open-fdd/
 │   ├── sql/               # 001_init … 009_analytics_motor_runtime (migrations)
 │   ├── grafana/            # provisioning/datasources, provisioning/dashboards, dashboards/*.json
 │   └── caddy/              # Caddyfile (optional reverse proxy)
-├── config/                 # brick_model.ttl (synced from DB), BACnet CSV(s) optional
+├── config/                 # brick_model.ttl (Brick + BACnet discovery, one file), BACnet CSV(s) optional
 ├── scripts/                # bootstrap.sh, discover_bacnet.sh, fake_*_faults.py
 ├── tools/
 │   ├── discover_bacnet.py  # BACnet discovery → CSV (bacpypes3)
@@ -51,7 +51,7 @@ All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and 
 | `OFDD_APP_VERSION` | 0.1.0 | API version (e.g. in `/` and docs). |
 | `OFDD_DEBUG` | false | Debug mode. |
 | `OFDD_BRICK_TTL_DIR` | data/brick | Unused in current flow. |
-| `OFDD_BRICK_TTL_PATH` | config/brick_model.ttl | Path to Brick TTL file; synced from DB on CRUD. |
+| `OFDD_BRICK_TTL_PATH` | config/brick_model.ttl | Unified TTL file (Brick section synced from DB; BACnet discovery section appended by discovery-to-rdf). |
 | **FDD loop** | | |
 | `OFDD_RULE_INTERVAL_HOURS` | 3 | FDD run interval (hours). |
 | `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
@@ -108,6 +108,10 @@ Tests live under `open_fdd/tests/`. Run: `pytest` or `pytest open_fdd/tests/ -v`
 - **test_schema.py** — FDD result/event to row; results from runner output; events from flag series.
 
 ---
+
+## Data Model Sync Processes
+
+The data model is still synced to the single TTL file so the FDD loop and other readers see the latest Brick and BACnet data. We keep the BACnet section in memory so each sync doesn’t have to read the file, and we debounce writes so a burst of CRUDs triggers one write about 250 ms after the last change instead of one write per operation. The file on disk stays correct; we just do fewer reads and batch the writes.
 
 ## Database design & troubleshooting
 

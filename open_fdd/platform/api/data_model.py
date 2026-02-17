@@ -265,7 +265,7 @@ def get_ttl(
     ttl = build_ttl_from_db(site_id=_site_id)
     if save:
         try:
-            sync_ttl_to_file(site_id=_site_id)
+            sync_ttl_to_file(immediate=True)
         except Exception as e:
             # Still return TTL; save is best-effort (Docker may have read-only filesystem)
             resp = PlainTextResponse(ttl, media_type="text/turtle")

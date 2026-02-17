@@ -3,16 +3,28 @@ Generate Brick TTL from current DB state (sites, equipment, points).
 
 Single source of truth = DB. TTL is derived for FDD column_map and SPARQL validation.
 Points use rdfs:label = external_id (time-series reference) and optional ofdd:mapsToRuleInput = fdd_input.
+
+One unified TTL file (config/brick_model.ttl): Brick section first, then BACnet discovery
+section after BACNET_SECTION_MARKER. CRUD and discovery-to-rdf both read/write this file.
 """
 
 from __future__ import annotations
 
+import atexit
+import threading
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
+
+BACNET_SECTION_MARKER = "# --- BACnet discovery ---"
+
+# In-memory cache: (path, bacnet_section) so we avoid reading the file on every sync.
+_bacnet_cache: tuple[Path, str | None] | None = None
+_sync_timer: threading.Timer | None = None
+_sync_timer_lock = threading.Lock()
 
 BRICK = "https://brickschema.org/schema/Brick#"
 OFDD = "http://openfdd.local/ontology#"
@@ -131,55 +143,166 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
     return "\n".join(lines)
 
 
-def sync_ttl_to_file(site_id: UUID | None = None) -> None:
-    """
-    Write current DB state as Brick TTL to config file. Called automatically on any
-    CRUD that affects sites/equipment/points. Path from OFDD_BRICK_TTL_PATH (default: config/brick_model.ttl).
-    Falls back to /tmp/brick_model.ttl if config path is not writable (e.g. Docker read-only).
-    """
-    ttl = build_ttl_from_db(site_id=site_id)
+def _get_unified_ttl_path() -> Path:
+    """Path for the single TTL file (Brick + BACnet sections)."""
     path_str = getattr(
         get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl"
-    )
-    path = Path(path_str)
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(ttl, encoding="utf-8")
-    except OSError:
-        Path("/tmp/brick_model.ttl").write_text(ttl, encoding="utf-8")
-
-
-def get_bacnet_scan_ttl_path() -> Path:
-    """Path where BACnet discovery-to-rdf TTL is stored."""
-    path_str = getattr(
-        get_platform_settings(), "bacnet_scan_ttl_path", "config/bacnet_scan.ttl"
     )
     p = Path(path_str)
     return (Path.cwd() / p) if not p.is_absolute() else p
 
 
-def get_bacnet_scan_ttl() -> str | None:
-    """Read current BACnet scan TTL if file exists and has content."""
-    path = get_bacnet_scan_ttl_path()
+def _read_unified_sections(path: Path) -> tuple[str, str | None]:
+    """Read unified TTL file; return (brick_section, bacnet_section_or_none)."""
     if not path.exists():
-        return None
-    text = path.read_text(encoding="utf-8").strip()
-    return text if text else None
+        return "", None
+    text = path.read_text(encoding="utf-8")
+    if BACNET_SECTION_MARKER not in text:
+        return text.rstrip(), None
+    brick, _, bacnet = text.partition(BACNET_SECTION_MARKER)
+    bacnet = bacnet.lstrip("\n").rstrip()
+    return brick.rstrip(), bacnet if bacnet else None
+
+
+def _remove_legacy_bacnet_scan_ttl(unified_path: Path) -> None:
+    """Remove config/bacnet_scan.ttl if it exists (legacy or recreated by old process)."""
+    legacy = Path.cwd() / "config" / "bacnet_scan.ttl"
+    if legacy.exists() and legacy.resolve() != unified_path.resolve():
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
+
+
+def _get_bacnet_section_cached(path: Path) -> str | None:
+    """Return BACnet section, using in-memory cache when path matches to avoid file read."""
+    global _bacnet_cache
+    if _bacnet_cache is not None and _bacnet_cache[0] == path:
+        return _bacnet_cache[1]
+    _, bacnet = _read_unified_sections(path)
+    _bacnet_cache = (path, bacnet)
+    return bacnet
+
+
+def _do_sync() -> None:
+    """Write full Brick TTL + cached BACnet section to disk. Always uses full model (site_id=None)."""
+    global _sync_timer
+    path = _get_unified_ttl_path()
+    brick_ttl = build_ttl_from_db(site_id=None)
+    bacnet_ttl = _get_bacnet_section_cached(path)
+    combined = brick_ttl
+    if bacnet_ttl:
+        combined = f"{brick_ttl}\n\n{BACNET_SECTION_MARKER}\n\n{bacnet_ttl}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(combined, encoding="utf-8")
+    except OSError:
+        Path("/tmp/brick_model.ttl").write_text(combined, encoding="utf-8")
+    _remove_legacy_bacnet_scan_ttl(path)
+    with _sync_timer_lock:
+        _sync_timer = None
+
+
+def _flush_sync() -> None:
+    """Timer callback or atexit: run pending sync only if one was scheduled."""
+    global _sync_timer
+    with _sync_timer_lock:
+        t = _sync_timer
+        _sync_timer = None
+    if t is not None:
+        t.cancel()
+        _do_sync()
+
+
+def sync_ttl_to_file(
+    site_id: UUID | None = None,
+    *,
+    immediate: bool = False,
+) -> None:
+    """
+    Write current DB state as Brick TTL to the unified config file. Preserves any
+    BACnet discovery section (from in-memory cache when possible). Path from
+    OFDD_BRICK_TTL_PATH. Falls back to /tmp/brick_model.ttl if not writable.
+
+    When immediate=False (default), sync is debounced by ~250ms so rapid CRUD
+    triggers one write. When immediate=True (e.g. GET /data-model/ttl?save=true),
+    writes immediately. File always contains the full model (site_id is ignored
+    for the on-disk file).
+    """
+    if immediate:
+        with _sync_timer_lock:
+            if _sync_timer is not None:
+                _sync_timer.cancel()
+                _sync_timer = None
+        _do_sync()
+        return
+    with _sync_timer_lock:
+        if _sync_timer is not None:
+            _sync_timer.cancel()
+        _sync_timer = threading.Timer(0.25, _flush_sync)
+        _sync_timer.start()
+
+
+# Flush any pending sync on process exit so the file is not stale
+atexit.register(_flush_sync)
+
+# Remove legacy config/bacnet_scan.ttl on load so an old API process can't leave it behind
+def _cleanup_legacy_bacnet_file_on_load() -> None:
+    legacy = Path.cwd() / "config" / "bacnet_scan.ttl"
+    if legacy.exists():
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
+
+
+_cleanup_legacy_bacnet_file_on_load()
+
+
+def get_bacnet_scan_ttl_path() -> Path:
+    """Path of the unified TTL file (BACnet section is stored after Brick in same file)."""
+    return _get_unified_ttl_path()
+
+
+def get_bacnet_scan_ttl() -> str | None:
+    """Read BACnet discovery section from the unified TTL file (uses cache when set)."""
+    path = _get_unified_ttl_path()
+    bacnet = _get_bacnet_section_cached(path)
+    if bacnet is not None:
+        return bacnet
+    # One-time migration: merge legacy config/bacnet_scan.ttl into unified file, then remove it
+    legacy = Path.cwd() / "config" / "bacnet_scan.ttl"
+    if legacy.exists():
+        text = legacy.read_text(encoding="utf-8").strip()
+        if text:
+            store_bacnet_scan_ttl(text)
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
+            return text
+    return None
 
 
 def store_bacnet_scan_ttl(ttl: str) -> None:
     """
-    Store BACnet discovery TTL (from diy-bacnet-server client_discovery_to_rdf).
-    Merged into SPARQL graph when get_ttl_for_sparql() is used.
+    Append BACnet discovery TTL to the unified file (from discovery-to-rdf).
+    Brick section is preserved; SPARQL sees both via get_ttl_for_sparql().
+    Updates in-memory BACnet cache so the next sync does not re-read the file.
     """
-    path = get_bacnet_scan_ttl_path()
+    global _bacnet_cache
+    path = _get_unified_ttl_path()
+    brick_ttl, _ = _read_unified_sections(path)
+    if not brick_ttl:
+        brick_ttl = _prefixes()
+    combined = f"{brick_ttl}\n\n{BACNET_SECTION_MARKER}\n\n{ttl.strip()}"
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        path.write_text(ttl, encoding="utf-8")
+        path.write_text(combined, encoding="utf-8")
     except OSError:
-        Path("/tmp/bacnet_scan.ttl").write_text(ttl, encoding="utf-8")
+        Path("/tmp/brick_model.ttl").write_text(combined, encoding="utf-8")
+    _bacnet_cache = (path, ttl.strip())
+    _remove_legacy_bacnet_scan_ttl(path)
 
 
 def _rdf_value_to_int(v: Any) -> int:

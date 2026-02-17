@@ -16,8 +16,9 @@ Features covered:
   - BACnet proxy: server_hello, whois_range, point_discovery, discovery-to-rdf (store TTL + optional import_into_data_model)
   - CRUD: sites, equipment, points (create, get, list, PATCH, delete)
   - Data model: GET /data-model/ttl, GET /data-model/export, POST /data-model/sparql (TTL in sync after CRUD and import)
-  - SPARQL: site/equipment/point labels, BACnet devices in merged graph (bacnet_scan + DB TTL)
+  - SPARQL: site/equipment/point labels, BACnet devices in merged graph (unified brick_model.ttl)
   - Download: CSV timeseries, faults (JSON/CSV)
+
   - Lifecycle: create site → (optional) BACnet discovery-to-rdf with import → CRUD points/equipment → delete BACnet points/equipment → delete site; SPARQL checks at each stage
 
 Usage:
@@ -30,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from uuid import UUID, uuid4
 
 try:
@@ -239,6 +241,10 @@ def run():
                     expected_bacnet_point_labels.append(_name)
         print("    OK\n")
 
+        # Ensure no legacy TTL file before discovery-to-rdf (API must write only to brick_model.ttl)
+        legacy_ttl = Path("config/bacnet_scan.ttl")
+        if legacy_ttl.exists():
+            legacy_ttl.unlink()
         print(
             "[2c] POST /bacnet/discovery-to-rdf (import_into_data_model=true → site/equipment/points + brick_model.ttl)"
         )
@@ -254,6 +260,18 @@ def run():
             timeout=120.0,
         )
         assert ok(code), f"discovery-to-rdf failed: {code} {rdf_resp}"
+        if legacy_ttl.exists():
+            try:
+                legacy_ttl.unlink()
+            except OSError:
+                pass
+            print(
+                f"\n  FAIL: {BASE_URL} recreated config/bacnet_scan.ttl. The API is running OLD code.\n"
+                "  Restart the API so it uses the unified TTL (only brick_model.ttl):\n"
+                "    Docker: docker compose up -d --build api\n"
+                "    Local:  stop uvicorn and start it again from this repo.\n"
+            )
+            sys.exit(1)
         imp = rdf_resp.get("import_result") or {}
         points_created = imp.get("points_created", 0)
         if rdf_resp.get("import_error"):
@@ -309,7 +327,7 @@ def run():
                 f"    OK — equipment {expected_eq_name!r}, {len(expected_bacnet_point_labels)} points in model (SPARQL)\n"
             )
 
-            # [2e] SPARQL: merged graph contains BACnet RDF (bacnet_scan.ttl + DB TTL)
+            # [2e] SPARQL: merged graph contains BACnet RDF (unified brick_model.ttl = Brick + BACnet)
             print("[2e] SPARQL: bacnet:Device in merged graph (BACnet RDF + BRICK)")
             bacnet_q = """
             PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>

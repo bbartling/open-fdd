@@ -19,7 +19,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   Data-model export / CRUD
          │
          ▼
-  Brick TTL (config/brick_model.ttl)  ← reserialized on every create/update/delete (watch the file on disk to see changes)
+  Brick TTL (config/brick_model.ttl)  ← Brick section reserialized on every create/update/delete; same file can include a BACnet discovery section (one file for SPARQL)
          │
          ▼
   FDD column_map (external_id → rule_input)

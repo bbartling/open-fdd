@@ -22,7 +22,7 @@ Open-FDD treats the **building as a knowledge graph**: sites, equipment, and poi
 ## Flow
 
 1. **Discovery → RDF** — Open-FDD calls diy-bacnet-server’s `client_discovery_to_rdf` or `client_discovery_to_rdf_device`. The gateway uses bacpypes3’s BACnetGraph to build RDF; returns TTL + summary.
-2. **Store + optional auto-import** — Open-FDD stores the TTL in `config/bacnet_scan.ttl` and merges it for SPARQL. Set **`import_into_data_model: true`** in the request body to parse the TTL and create site/equipment/points in the DB; `config/brick_model.ttl` is then synced from the DB. One call does discovery, RDF, and data model.
+2. **Store + optional auto-import** — Open-FDD appends the BACnet discovery TTL to the unified semantic model file `config/brick_model.ttl` (Brick section + BACnet section). SPARQL sees both. Set **`import_into_data_model: true`** to parse the TTL and create site/equipment/points in the DB; the Brick section of `config/brick_model.ttl` is then synced from the DB. One call does discovery, RDF, and data model.
 3. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`).
 
 ---

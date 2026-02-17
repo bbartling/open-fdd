@@ -45,7 +45,7 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 ## Data flow
 
 1. **Ingestion:** BACnet scraper and weather scraper write to `timeseries_readings` (point_id, ts, value).
-2. **Data model (knowledge graph):** The building is represented as a single semantic model: sites, equipment, points in the DB, with Brick TTL derived and merged with BACnet discovery RDF (from **bacpypes3** in diy-bacnet-server). CRUD and BACnet discovery both update this model; SPARQL queries it. Points have `external_id`, optional `brick_type`, `rule_input`; TTL auto-syncs to `config/brick_model.ttl` (and optional BACnet scan TTL).
+2. **Data model (knowledge graph):** The building is represented as a single semantic model: sites, equipment, points in the DB, with Brick TTL derived and merged with BACnet discovery RDF (from **bacpypes3** in diy-bacnet-server). CRUD and BACnet discovery both update this model; SPARQL queries it. Points have `external_id`, optional `brick_type`, `rule_input`. One TTL file `config/brick_model.ttl` holds the Brick section (synced from DB) plus the BACnet discovery section (appended by discovery-to-rdf).
 3. **FDD (Python/pandas):** The FDD loop pulls data into a pandas DataFrame, runs YAML rules, writes `fault_results` to the database. Fault logic lives in the rule runner; the database is read/write storage.
 4. **Visualization:** Grafana queries TimescaleDB for timeseries and fault results.
 
