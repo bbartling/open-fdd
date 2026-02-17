@@ -21,10 +21,37 @@ Open-FDD treats the **building as a knowledge graph**: sites, equipment, and poi
 
 ## Flow
 
-1. **Discovery → RDF** — Open-FDD calls diy-bacnet-server’s `client_discovery_to_rdf` or `client_discovery_to_rdf_device` (per-device). The gateway uses bacpypes3’s BACnetGraph to build RDF from Who-Is + object-list + key properties; returns TTL + summary.
-2. **Merge** — Open-FDD stores the TTL (e.g. `config/bacnet_scan.ttl`) and merges it with DB-derived TTL for SPARQL. One graph: CRUD data + BACnet scan.
-3. **Import-discovery** — Who-Is + point_discovery → `POST /bacnet/import-discovery` creates equipment and points in the DB; TTL resyncs so the graph stays consistent.
-4. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`). Optionally later: SPARQL-driven point list.
+1. **Discovery → RDF** — Open-FDD calls diy-bacnet-server’s `client_discovery_to_rdf` or `client_discovery_to_rdf_device`. The gateway uses bacpypes3’s BACnetGraph to build RDF; returns TTL + summary.
+2. **Store + optional auto-import** — Open-FDD stores the TTL in `config/bacnet_scan.ttl` and merges it for SPARQL. Set **`import_into_data_model: true`** in the request body to parse the TTL and create site/equipment/points in the DB; `config/brick_model.ttl` is then synced from the DB. One call does discovery, RDF, and data model.
+3. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`).
+
+---
+
+## Try it (Swagger → RDF)
+
+Use the BACnet gateway Swagger, then optionally push the result into Open-FDD so the TTL is stored and merged into the knowledge graph.
+
+**1. Who-Is (see devices)**  
+- Open **http://localhost:8080/docs** (or http://*&lt;host-ip&gt;*:8080/docs).  
+- Find **POST /client_whois_range**, click *Try it out*.  
+- Body (or use defaults): `{"request": {"start_instance": 1, "end_instance": 4194303}}`.  
+- Execute. Note a **device instance** from the response (e.g. `3456789`).
+
+**2. Discovery → RDF (one device)**  
+- Find **POST /client_discovery_to_rdf_device**, *Try it out*.  
+- Body: `{"instance": {"device_instance": 3456789}}` (use the instance from step 1).  
+- Execute. Wait a few seconds. Response has **`ttl`** (Turtle string) and **`summary`** (e.g. `devices: 1`, `objects: 19`).  
+- Optional: copy a bit of the `ttl` value to confirm it’s BACnet RDF (e.g. `bacnet:Device`, `bacnet://3456789`).
+
+**3. Store, merge, and import in one call**  
+- Open **http://localhost:8000/docs** (or http://*&lt;host-ip&gt;*:8000/docs).  
+- Find **POST /bacnet/discovery-to-rdf**.  
+- Body (omit `url`; set **import_into_data_model: true** to create site/equipment/points and sync `config/brick_model.ttl`):  
+  `{"request": {"start_instance": 3456789, "end_instance": 3456789}, "import_into_data_model": true}`.  
+- Execute. Open-FDD calls the gateway, stores the TTL, parses it into devices and points, creates them in the DB, and syncs brick_model.ttl.  
+- Check: **GET /data-model/ttl** or **POST /data-model/sparql** (e.g. `?s a bacnet:Device` or Brick points).
+
+**Quick recap:** One call to **discovery-to-rdf** with `import_into_data_model: true` does discovery, RDF merge, and data model (brick_model.ttl). No separate import step.
 
 ---
 

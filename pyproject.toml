@@ -96,6 +96,7 @@ open_fdd = ["rules/*.yaml", "platform/static/*"]
 [tool.black]
 line-length = 88
 target-version = ["py314"]
+extend-exclude = "open_fdd/platform/data_model_ttl\\.py"
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]

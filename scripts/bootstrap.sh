@@ -100,6 +100,12 @@ verify() {
     echo "DB: localhost:5432/openfdd (OK)"
   else
     echo "DB: not reachable"
+    echo "  → Start stack: ./scripts/bootstrap.sh  (or: cd platform && docker compose up -d db grafana)"
+  fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_grafana; then
+    echo "Grafana: running — http://localhost:3000 (or http://<this-host-ip>:3000 from another machine)"
+  else
+    echo "Grafana: not running — start stack: ./scripts/bootstrap.sh  (listens on 0.0.0.0:3000 when up)"
   fi
   echo ""
   echo "=== Feature checks (BACnet + API) ==="

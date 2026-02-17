@@ -74,3 +74,6 @@
 
 :site_2dd35011_6f6a_4912_8880_0e6404998845 a brick:Site ;
     rdfs:label "test-crud-site" .
+
+:site_958c324a_381d_40ba_8ac1_f8a2a22ef082 a brick:Site ;
+    rdfs:label "test-crud-site-3cd5dedf" .

@@ -8,7 +8,11 @@ from fastapi import APIRouter, Body, HTTPException
 from open_fdd.platform.bacnet_brick import object_identifier_to_brick
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
-from open_fdd.platform.data_model_ttl import sync_ttl_to_file, store_bacnet_scan_ttl
+from open_fdd.platform.data_model_ttl import (
+    parse_bacnet_ttl_to_discovery,
+    store_bacnet_scan_ttl,
+    sync_ttl_to_file,
+)
 from open_fdd.platform.site_resolver import resolve_site_uuid
 
 router = APIRouter(prefix="/bacnet", tags=["BACnet"])
@@ -17,11 +21,15 @@ _BASE_PAYLOAD = {"jsonrpc": "2.0", "id": "0"}
 
 
 def _bacnet_url(body: dict) -> str:
+    """Resolve BACnet gateway URL. When Open-FDD runs in Docker, omit url in body
+    or pass localhost: we use OFDD_BACNET_SERVER_URL (e.g. host.docker.internal:8080)
+    so the container can reach the gateway on the host."""
     url = (body.get("url") or "").strip().rstrip("/")
-    if not url:
-        url = (get_platform_settings().bacnet_server_url or "").strip().rstrip("/")
-    if not url:
-        url = "http://localhost:8080"
+    server_url = (get_platform_settings().bacnet_server_url or "").strip().rstrip("/")
+    if url and ("localhost" in url or "127.0.0.1" in url) and server_url:
+        url = server_url
+    elif not url:
+        url = server_url or "http://localhost:8080"
     return url
 
 
@@ -44,10 +52,16 @@ def _post_rpc(base_url: str, method: str, params: dict, timeout: float = 10.0) -
 
 
 @router.post("/server_hello", summary="BACnet server hello")
-def bacnet_server_hello(body: dict = Body(default={})):
+def bacnet_server_hello(
+    body: dict = Body(
+        default={},
+        examples={"default": {"value": {}}},
+        description='Optional: {"url": "http://..."}. Omit to use server default (host.docker.internal:8080 in Docker).',
+    )
+):
     """
     Call diy-bacnet-server `server_hello`. Backend hits the BACnet gateway (same host or OT LAN).
-    Body: `{"url": "http://localhost:8080"}` (optional; uses OFDD_BACNET_SERVER_URL or localhost:8080).
+    Omit url to use server default (when in Docker, server uses host.docker.internal:8080).
     """
     url = _bacnet_url(body or {})
     if not url.startswith("http"):
@@ -57,10 +71,20 @@ def bacnet_server_hello(body: dict = Body(default={})):
 
 
 @router.post("/whois_range", summary="BACnet Who-Is range")
-def bacnet_whois_range(body: dict = Body(default={})):
+def bacnet_whois_range(
+    body: dict = Body(
+        default={},
+        examples={
+            "default": {
+                "value": {"request": {"start_instance": 1, "end_instance": 3456799}}
+            }
+        },
+        description="Optional url; request.start_instance and request.end_instance (0–4194303).",
+    )
+):
     """
     Call diy-bacnet-server `client_whois_range` to discover devices in an instance range.
-    Body: `{"url": "http://...", "request": {"start_instance": 1, "end_instance": 3456799}}`.
+    Omit url to use server default (host.docker.internal:8080 when Open-FDD runs in Docker).
     """
     url = _bacnet_url(body or {})
     if not url.startswith("http"):
@@ -72,10 +96,16 @@ def bacnet_whois_range(body: dict = Body(default={})):
 
 
 @router.post("/point_discovery", summary="BACnet point discovery")
-def bacnet_point_discovery(body: dict = Body(default={})):
+def bacnet_point_discovery(
+    body: dict = Body(
+        default={},
+        examples={"default": {"value": {"instance": {"device_instance": 3456789}}}},
+        description="instance.device_instance (0–4194303). Optional url.",
+    )
+):
     """
     Call diy-bacnet-server `client_point_discovery` for a device instance.
-    Body: `{"url": "http://...", "instance": {"device_instance": 3456789}}`.
+    Omit url to use server default.
     """
     url = _bacnet_url(body or {})
     if not url.startswith("http"):
@@ -87,12 +117,25 @@ def bacnet_point_discovery(body: dict = Body(default={})):
 
 
 @router.post("/discovery-to-rdf", summary="BACnet discovery to RDF (BRICK merge)")
-def bacnet_discovery_to_rdf(body: dict = Body(default={})):
+def bacnet_discovery_to_rdf(
+    body: dict = Body(
+        default={},
+        examples={
+            "default": {
+                "value": {
+                    "request": {"start_instance": 3456789, "end_instance": 3456789},
+                    "import_into_data_model": True,
+                }
+            }
+        },
+        description="request (start/end_instance). Set import_into_data_model: true to create site/equipment/points from the scan and sync config/brick_model.ttl. Omit url to use server default.",
+    )
+):
     """
-    Call diy-bacnet-server `client_discovery_to_rdf`: Who-Is + deep scan, build RDF
-    with BACnetGraph, return TTL and summary. Open-FDD stores the TTL and merges it
-    into the SPARQL graph so CRUD + BACnet topology stay in sync.
-    Body: `{"url": "http://...", "request": {"start_instance": 1, "end_instance": 3456799}}`.
+    Call diy-bacnet-server `client_discovery_to_rdf`: Who-Is + deep scan, build RDF,
+    return TTL and summary. Open-FDD stores the TTL and merges it for SPARQL.
+    Set **import_into_data_model: true** to parse the TTL and create site/equipment/points
+    in the DB (same as auto-import); config/brick_model.ttl is then synced from the DB.
     """
     url = _bacnet_url(body or {})
     if not url.startswith("http"):
@@ -104,7 +147,7 @@ def bacnet_discovery_to_rdf(body: dict = Body(default={})):
     )
     if not result.get("ok") or not result.get("body"):
         return result
-    # Success: store TTL so SPARQL sees merged graph (DB + BACnet)
+    ttl_value = None
     try:
         res = result["body"]
         rpc_result = res.get("result") if isinstance(res, dict) else None
@@ -112,182 +155,46 @@ def bacnet_discovery_to_rdf(body: dict = Body(default={})):
         if isinstance(ttl_value, str) and ttl_value.strip():
             store_bacnet_scan_ttl(ttl_value)
     except Exception:
-        pass  # still return the RPC response
+        pass
+    # Auto-import: parse TTL → create site/equipment/points → sync brick_model.ttl
+    if (
+        params.get("import_into_data_model")
+        and isinstance(ttl_value, str)
+        and ttl_value.strip()
+    ):
+        try:
+            site_id = (params.get("site_id") or "").strip() or None
+            create_site = params.get("create_site", True)
+            devices, point_discoveries = parse_bacnet_ttl_to_discovery(ttl_value)
+            if point_discoveries:
+                imp = _create_site_equipment_points_from_discovery(
+                    site_id=site_id or "default",
+                    create_site=create_site,
+                    devices=devices,
+                    point_discoveries=point_discoveries,
+                )
+                result["import_result"] = imp
+                sync_ttl_to_file()
+        except Exception as e:
+            result["import_error"] = str(e)
     return result
 
 
-def _normalize_import_body(body: dict) -> tuple[list[dict], list[dict]]:
-    """
-    Extract (devices, point_discoveries) from import-discovery body.
-    Accepts normalized form or raw API response shapes.
-    - devices: [ { device_instance, name? } ]
-    - point_discoveries: [ { device_instance, objects: [ { object_identifier, object_name?, object_type? } ] } ]
-    """
-    devices: list[dict] = []
-    point_discoveries: list[dict] = []
-
-    if body.get("devices") and isinstance(body["devices"], list):
-        for d in body["devices"]:
-            if isinstance(d, dict) and d.get("device_instance") is not None:
-                devices.append(
-                    {
-                        "device_instance": int(d["device_instance"]),
-                        "name": (d.get("name") or d.get("object_name") or "").strip()
-                        or None,
-                    }
-                )
-    elif body.get("whois_result") and isinstance(body["whois_result"], dict):
-        # Raw whois API response: body.result.data or body.result
-        res = body["whois_result"].get("body") or body["whois_result"]
-        data = res.get("result") or {}
-        if isinstance(data, dict):
-            data = data.get("data") or data.get("devices") or []
-        if isinstance(data, list):
-            for d in data:
-                if isinstance(d, dict) and d.get("device_instance") is not None:
-                    devices.append(
-                        {
-                            "device_instance": int(d["device_instance"]),
-                            "name": (
-                                d.get("name") or d.get("object_name") or ""
-                            ).strip()
-                            or None,
-                        }
-                    )
-
-    if body.get("point_discoveries") and isinstance(body["point_discoveries"], list):
-        for pd in body["point_discoveries"]:
-            if isinstance(pd, dict) and pd.get("device_instance") is not None:
-                objs = pd.get("objects") or pd.get("results") or []
-                if not isinstance(objs, list):
-                    objs = []
-                point_discoveries.append(
-                    {
-                        "device_instance": int(pd["device_instance"]),
-                        "objects": [
-                            {
-                                "object_identifier": (
-                                    o.get("object_identifier")
-                                    or o.get("object_id")
-                                    or ""
-                                ).strip(),
-                                "object_name": (
-                                    o.get("object_name") or o.get("name") or ""
-                                ).strip()
-                                or None,
-                                "object_type": (o.get("object_type") or "").strip()
-                                or None,
-                            }
-                            for o in objs
-                            if isinstance(o, dict)
-                            and (o.get("object_identifier") or o.get("object_id"))
-                        ],
-                    }
-                )
-    elif body.get("point_discovery_result") and isinstance(
-        body["point_discovery_result"], dict
-    ):
-        import json as _json
-
-        raw = (
-            body["point_discovery_result"].get("body") or body["point_discovery_result"]
-        )
-        res = raw
-        if isinstance(raw, str):
-            try:
-                res = _json.loads(raw)
-            except Exception:
-                res = {}
-        if not isinstance(res, dict):
-            res = {}
-        # Support both JSON-RPC wrapped (res.result) and raw BaseResponse (res = result)
-        result = res.get("result")
-        if result is None and ("data" in res or "success" in res):
-            result = res
-        result = result if isinstance(result, dict) else {}
-        inner = result.get("data") or {}
-        if not isinstance(inner, dict):
-            inner = {}
-        di = (
-            result.get("device_instance")
-            or inner.get("device_instance")
-            or body.get("device_instance")
-            or body.get("deviceInstance")
-        )
-        objs = (
-            result.get("objects") or inner.get("objects") or result.get("results") or []
-        )
-        if not isinstance(objs, list):
-            objs = []
-        if di is not None:
-            point_discoveries.append(
-                {
-                    "device_instance": int(di),
-                    "objects": [
-                        {
-                            "object_identifier": (
-                                o.get("object_identifier") or o.get("object_id") or ""
-                            ).strip(),
-                            "object_name": (
-                                o.get("object_name") or o.get("name") or ""
-                            ).strip()
-                            or None,
-                            "object_type": (o.get("object_type") or "").strip() or None,
-                        }
-                        for o in objs
-                        if isinstance(o, dict)
-                        and (o.get("object_identifier") or o.get("object_id"))
-                    ],
-                }
-            )
-        # Unconditional fallback: body has device_instance but we parsed nothing
-        if not point_discoveries and (
-            body.get("device_instance") is not None
-            or body.get("deviceInstance") is not None
-        ):
-            di_fallback = body.get("device_instance") or body.get("deviceInstance")
-            point_discoveries.append(
-                {"device_instance": int(di_fallback), "objects": []}
-            )
-
-    # Top-level fallback: client sent device_instance (with or without point_discovery_result)
-    if not point_discoveries and (
-        body.get("device_instance") is not None
-        or body.get("deviceInstance") is not None
-    ):
-        di_any = body.get("device_instance") or body.get("deviceInstance")
-        point_discoveries.append({"device_instance": int(di_any), "objects": []})
-
-    return devices, point_discoveries
-
-
-@router.post("/import-discovery", summary="Import BACnet discovery into data model")
-def bacnet_import_discovery(body: dict = Body(default={})):
-    """
-    Create site/equipment/points from Who-Is and point-discovery results.
-    Body: site_id (optional), create_site (optional), devices (optional), point_discoveries (required for points),
-    or whois_result / point_discovery_result (raw API response shapes).
-    Creates one equipment per device (e.g. "BACnet device 3456789"), then points with BACnet addressing and BRICK type.
-    """
-    site_id = (body.get("site_id") or "").strip() or None
-    create_site = body.get("create_site", True)
-    devices, point_discoveries = _normalize_import_body(body or {})
-
+def _create_site_equipment_points_from_discovery(
+    site_id: str,
+    create_site: bool,
+    devices: list[dict],
+    point_discoveries: list[dict],
+) -> dict:
+    """Create site/equipment/points from parsed discovery (devices + point_discoveries)."""
     device_names: dict[int, str] = {
-        d["device_instance"]: (d["name"] or f"BACnet device {d['device_instance']}")
+        d["device_instance"]: (d.get("name") or f"BACnet device {d['device_instance']}")
         for d in devices
     }
-
-    if not point_discoveries:
-        raise HTTPException(
-            422,
-            "Provide point_discoveries (or point_discovery_result) with device_instance and objects",
-        )
-
-    site_uuid = resolve_site_uuid(site_id or "default", create_if_empty=create_site)
+    site_uuid = resolve_site_uuid(site_id, create_if_empty=create_site)
     if not site_uuid:
         raise HTTPException(400, "No site available and create_site is false")
-
+    points_created = 0
     with get_conn() as conn:
         with conn.cursor() as cur:
             equipment_by_device: dict[int, Any] = {}
@@ -311,8 +218,6 @@ def bacnet_import_discovery(body: dict = Body(default={})):
                         (str(site_uuid), name),
                     )
                     equipment_by_device[di] = cur.fetchone()["id"]
-
-            points_created = 0
             for pd in point_discoveries:
                 eq_id = equipment_by_device.get(pd["device_instance"])
                 for o in pd.get("objects") or []:
@@ -346,10 +251,6 @@ def bacnet_import_discovery(body: dict = Body(default={})):
                     )
                     points_created += 1
         conn.commit()
-    try:
-        sync_ttl_to_file()
-    except Exception:
-        pass
     return {
         "status": "imported",
         "points_created": points_created,

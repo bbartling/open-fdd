@@ -115,9 +115,9 @@ The API proxies to diy-bacnet-server for discovery and can import results into t
 | POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
 | POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
 | POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
-| POST   | /bacnet/import-discovery | **Import** Who-Is and/or point-discovery results into the data model. Creates site, equipment (one per device), and points with `bacnet_device_id`, `object_identifier`, `object_name`, and default Brick type. Body: `site_id` (optional), `point_discoveries`: `[{device_instance, objects: [{object_identifier, object_name}]}]`, optionally `devices` from Who-Is for names. |
+| POST   | /bacnet/discovery-to-rdf | **Discovery → RDF** (and optional **import**). Calls the BACnet gateway, stores TTL, merges for SPARQL. Set **`import_into_data_model: true`** to parse the TTL and create site/equipment/points (syncs `config/brick_model.ttl`). Body: `request` (start/end_instance), optional `url`, `import_into_data_model`, `site_id`, `create_site`. |
 
-Config UI at `/app/` provides a BACnet panel to run these and expand raw JSON. To create points from discovery, call `POST /bacnet/import-discovery` with the point-discovery result (and optionally Who-Is for device names).
+Config UI at `/app/` provides a BACnet panel. To create points from discovery in one step, call `POST /bacnet/discovery-to-rdf` with `import_into_data_model: true`.
 
 ---
 

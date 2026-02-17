@@ -182,6 +182,82 @@ def store_bacnet_scan_ttl(ttl: str) -> None:
         Path("/tmp/bacnet_scan.ttl").write_text(ttl, encoding="utf-8")
 
 
+def _rdf_value_to_int(v: Any) -> int:
+    if v is None:
+        return 0
+    try:
+        return int(getattr(v, "value", v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _rdf_value_to_str(v: Any) -> str:
+    if v is None:
+        return ""
+    return str(getattr(v, "value", v)).strip()
+
+
+def parse_bacnet_ttl_to_discovery(ttl: str) -> tuple[list[dict], list[dict]]:
+    """
+    Parse BACnet RDF TTL (from discovery-to-rdf) into devices and point_discoveries
+    for creating site/equipment/points in the DB. Returns (devices, point_discoveries).
+    """
+    try:
+        from rdflib import Graph
+
+        g = Graph()
+        g.parse(data=ttl, format="turtle")
+    except Exception:
+        return [], []
+
+    BACNET = "http://data.ashrae.org/bacnet/2020#"
+    q = """
+    PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+    SELECT ?di ?oid ?oname WHERE {
+      ?device a bacnet:Device ;
+              bacnet:device-instance ?di ;
+              bacnet:contains ?obj .
+      ?obj bacnet:object-identifier ?oid .
+      OPTIONAL { ?obj bacnet:object-name ?oname }
+    }
+    """
+    rows: list[tuple[int, str, str | None]] = []
+    for row in g.query(q):
+        di = _rdf_value_to_int(row.di)
+        oid = _rdf_value_to_str(row.oid)
+        oname = _rdf_value_to_str(row.oname) if row.oname else None
+        if oid:
+            rows.append((di, oid, oname or None))
+
+    # Build devices: one per device_instance; name from device object if present
+    device_names: dict[int, str] = {}
+    for di, oid, oname in rows:
+        if oid.startswith("device,"):
+            try:
+                inst = int(oid.split(",", 1)[1])
+                if inst == di and oname:
+                    device_names[di] = oname
+            except (ValueError, IndexError):
+                pass
+    devices = [
+        {"device_instance": di, "name": device_names.get(di) or f"BACnet device {di}"}
+        for di in sorted({r[0] for r in rows})
+    ]
+
+    # point_discoveries: per device, list of {object_identifier, object_name}
+    by_device: dict[int, list[dict]] = {}
+    for di, oid, oname in rows:
+        by_device.setdefault(di, []).append(
+            {"object_identifier": oid, "object_name": oname or oid.replace(",", "_")}
+        )
+    point_discoveries = [
+        {"device_instance": di, "objects": objs}
+        for di in sorted(by_device.keys())
+        for objs in [by_device[di]]
+    ]
+    return devices, point_discoveries
+
+
 def get_ttl_for_sparql(site_id: UUID | None = None) -> str:
     """
     TTL used for SPARQL: DB-derived TTL merged with BACnet scan TTL (if present).
