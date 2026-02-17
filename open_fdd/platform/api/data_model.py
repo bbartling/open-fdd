@@ -15,7 +15,11 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.database import get_conn
-from open_fdd.platform.data_model_ttl import build_ttl_from_db, sync_ttl_to_file
+from open_fdd.platform.data_model_ttl import (
+    build_ttl_from_db,
+    get_ttl_for_sparql,
+    sync_ttl_to_file,
+)
 
 router = APIRouter(prefix="/data-model", tags=["data-model"])
 
@@ -333,8 +337,8 @@ def run_sparql(
         ],
     ),
 ):
-    """Run a SPARQL query **right here in Swagger**: use the example body or paste your own query, then **Try it out** → Execute. The query runs against the current data model (TTL generated from DB). Returns bindings as JSON. Use to validate time-series refs, BRICK mapping, no orphans. For .sparql files use POST /data-model/sparql/upload."""
-    ttl = build_ttl_from_db()
+    """Run a SPARQL query **right here in Swagger**: use the example body or paste your own query, then **Try it out** → Execute. The query runs against the current data model (TTL from DB merged with BACnet scan when present). Returns bindings as JSON. Use to validate time-series refs, BRICK mapping, no orphans. For .sparql files use POST /data-model/sparql/upload."""
+    ttl = get_ttl_for_sparql()
     return {"bindings": _run_sparql_on_ttl(ttl, body.query)}
 
 
@@ -353,5 +357,5 @@ async def run_sparql_upload(
     if not file.filename or not file.filename.lower().endswith(".sparql"):
         raise HTTPException(400, "Upload a .sparql file")
     query = (await file.read()).decode("utf-8")
-    ttl = build_ttl_from_db()
+    ttl = get_ttl_for_sparql()
     return {"bindings": _run_sparql_on_ttl(ttl, query)}

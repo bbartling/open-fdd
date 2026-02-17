@@ -149,3 +149,55 @@ def sync_ttl_to_file(site_id: UUID | None = None) -> None:
         path.write_text(ttl, encoding="utf-8")
     except OSError:
         Path("/tmp/brick_model.ttl").write_text(ttl, encoding="utf-8")
+
+
+def get_bacnet_scan_ttl_path() -> Path:
+    """Path where BACnet discovery-to-rdf TTL is stored."""
+    path_str = getattr(
+        get_platform_settings(), "bacnet_scan_ttl_path", "config/bacnet_scan.ttl"
+    )
+    p = Path(path_str)
+    return (Path.cwd() / p) if not p.is_absolute() else p
+
+
+def get_bacnet_scan_ttl() -> str | None:
+    """Read current BACnet scan TTL if file exists and has content."""
+    path = get_bacnet_scan_ttl_path()
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8").strip()
+    return text if text else None
+
+
+def store_bacnet_scan_ttl(ttl: str) -> None:
+    """
+    Store BACnet discovery TTL (from diy-bacnet-server client_discovery_to_rdf).
+    Merged into SPARQL graph when get_ttl_for_sparql() is used.
+    """
+    path = get_bacnet_scan_ttl_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(ttl, encoding="utf-8")
+    except OSError:
+        Path("/tmp/bacnet_scan.ttl").write_text(ttl, encoding="utf-8")
+
+
+def get_ttl_for_sparql(site_id: UUID | None = None) -> str:
+    """
+    TTL used for SPARQL: DB-derived TTL merged with BACnet scan TTL (if present).
+    Single graph so queries see both BRICK (sites/equipment/points) and BACnet devices/objects.
+    """
+    db_ttl = build_ttl_from_db(site_id=site_id)
+    bacnet_ttl = get_bacnet_scan_ttl()
+    if not bacnet_ttl:
+        return db_ttl
+    try:
+        from rdflib import Graph
+
+        g = Graph()
+        g.parse(data=db_ttl, format="turtle")
+        g.parse(data=bacnet_ttl, format="turtle")
+        out = g.serialize(format="turtle")
+        return out.decode("utf-8") if isinstance(out, bytes) else out
+    except Exception:
+        return db_ttl

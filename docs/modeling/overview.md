@@ -6,7 +6,7 @@ nav_order: 1
 
 # Data model flow
 
-Open-FDD uses a Brick-semantic data model for equipment and points. Rules resolve inputs via `ofdd:mapsToRuleInput` in TTL.
+Open-FDD uses a **Brick-semantic data model** (knowledge graph) for sites, equipment, and points. BACnet discovery RDF (from bacpypes3 in diy-bacnet-server) is merged into the same graph. CRUD and discovery both update the model; SPARQL is used to query and validate it. Rules resolve inputs via `ofdd:mapsToRuleInput` in TTL.
 
 ---
 

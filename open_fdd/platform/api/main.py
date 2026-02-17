@@ -46,7 +46,7 @@ app = FastAPI(
         },
         {
             "name": "BACnet",
-            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery). Backend hits the gateway; use same host or OT LAN URL.",
+            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery, discovery-to-rdf). Backend hits the gateway; use same host or OT LAN URL. discovery-to-rdf stores TTL and merges into SPARQL graph.",
         },
     ],
 )

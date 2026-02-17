@@ -45,9 +45,9 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 ## Data flow
 
 1. **Ingestion:** BACnet scraper and weather scraper write to `timeseries_readings` (point_id, ts, value).
-2. **Data modeling:** Points have `external_id` (e.g. BACnet object name), optional `brick_type`, `rule_input`. Data-model API exports/imports mappings; TTL auto-syncs to `config/brick_model.ttl`.
-3. **FDD (Python/pandas):** The database does **not** compute faults. The FDD loop **pulls** data out of the database into a pandas DataFrame, runs the rule engine (YAML rules) in Python/pandas, flags faults, and **writes** results back to the database (`fault_results`). All fault logic runs in the rule runner; the database is read and write storage. This design keeps analytics in Python, so the same pipeline can be extended beyond rule-based FDD (e.g. ML or other data science) if desired.
-4. **Visualization:** Humans view timeseries and fault results in Grafana, which queries TimescaleDB.
+2. **Data model (knowledge graph):** The building is represented as a single semantic model: sites, equipment, points in the DB, with Brick TTL derived and merged with BACnet discovery RDF (from **bacpypes3** in diy-bacnet-server). CRUD and BACnet discovery both update this model; SPARQL queries it. Points have `external_id`, optional `brick_type`, `rule_input`; TTL auto-syncs to `config/brick_model.ttl` (and optional BACnet scan TTL).
+3. **FDD (Python/pandas):** The FDD loop pulls data into a pandas DataFrame, runs YAML rules, writes `fault_results` to the database. Fault logic lives in the rule runner; the database is read/write storage.
+4. **Visualization:** Grafana queries TimescaleDB for timeseries and fault results.
 
 ---
 
@@ -65,4 +65,4 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 - **Equipment** — Devices (AHUs, VAVs, heat pumps). Belong to a site.
 - **Points** — Time-series references. Have `external_id` (raw name), `rule_input` (FDD column ref), optional `brick_type` (Brick class).
 - **Fault rules** — YAML files (bounds, flatline, hunting, expression). Run against DataFrame; produce boolean fault flags. See [Fault rules for HVAC](rules/overview).
-- **Brick TTL** — Semantic model. Maps Brick classes → `external_id` for rule resolution.
+- **Brick TTL** — Semantic model (knowledge graph). Maps Brick classes → `external_id` for rule resolution. Merged with BACnet RDF from diy-bacnet-server (bacpypes3); queryable via SPARQL.

@@ -44,7 +44,7 @@ cd open-fdd
 |---------|--------------|
 | [System Overview](overview) | Architecture, services, data flow |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
-| [BACnet](bacnet/overview) | Discovery, scraping, RPC |
+| [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, data-model API |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException
 from open_fdd.platform.bacnet_brick import object_identifier_to_brick
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
-from open_fdd.platform.data_model_ttl import sync_ttl_to_file
+from open_fdd.platform.data_model_ttl import sync_ttl_to_file, store_bacnet_scan_ttl
 from open_fdd.platform.site_resolver import resolve_site_uuid
 
 router = APIRouter(prefix="/bacnet", tags=["BACnet"])
@@ -86,6 +86,36 @@ def bacnet_point_discovery(body: dict = Body(default={})):
     return result
 
 
+@router.post("/discovery-to-rdf", summary="BACnet discovery to RDF (BRICK merge)")
+def bacnet_discovery_to_rdf(body: dict = Body(default={})):
+    """
+    Call diy-bacnet-server `client_discovery_to_rdf`: Who-Is + deep scan, build RDF
+    with BACnetGraph, return TTL and summary. Open-FDD stores the TTL and merges it
+    into the SPARQL graph so CRUD + BACnet topology stay in sync.
+    Body: `{"url": "http://...", "request": {"start_instance": 1, "end_instance": 3456799}}`.
+    """
+    url = _bacnet_url(body or {})
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    params = body or {}
+    request = params.get("request") or {"start_instance": 1, "end_instance": 3456799}
+    result = _post_rpc(
+        url, "client_discovery_to_rdf", {"request": request}, timeout=120.0
+    )
+    if not result.get("ok") or not result.get("body"):
+        return result
+    # Success: store TTL so SPARQL sees merged graph (DB + BACnet)
+    try:
+        res = result["body"]
+        rpc_result = res.get("result") if isinstance(res, dict) else None
+        ttl_value = rpc_result.get("ttl") if isinstance(rpc_result, dict) else None
+        if isinstance(ttl_value, str) and ttl_value.strip():
+            store_bacnet_scan_ttl(ttl_value)
+    except Exception:
+        pass  # still return the RPC response
+    return result
+
+
 def _normalize_import_body(body: dict) -> tuple[list[dict], list[dict]]:
     """
     Extract (devices, point_discoveries) from import-discovery body.
@@ -157,42 +187,76 @@ def _normalize_import_body(body: dict) -> tuple[list[dict], list[dict]]:
     elif body.get("point_discovery_result") and isinstance(
         body["point_discovery_result"], dict
     ):
-        res = (
+        import json as _json
+
+        raw = (
             body["point_discovery_result"].get("body") or body["point_discovery_result"]
         )
-        result = res.get("result") or {}
-        if isinstance(result, dict):
-            di = result.get("device_instance")
-            objs = (
-                result.get("objects")
-                or result.get("data")
-                or result.get("results")
-                or []
+        res = raw
+        if isinstance(raw, str):
+            try:
+                res = _json.loads(raw)
+            except Exception:
+                res = {}
+        if not isinstance(res, dict):
+            res = {}
+        # Support both JSON-RPC wrapped (res.result) and raw BaseResponse (res = result)
+        result = res.get("result")
+        if result is None and ("data" in res or "success" in res):
+            result = res
+        result = result if isinstance(result, dict) else {}
+        inner = result.get("data") or {}
+        if not isinstance(inner, dict):
+            inner = {}
+        di = (
+            result.get("device_instance")
+            or inner.get("device_instance")
+            or body.get("device_instance")
+            or body.get("deviceInstance")
+        )
+        objs = (
+            result.get("objects") or inner.get("objects") or result.get("results") or []
+        )
+        if not isinstance(objs, list):
+            objs = []
+        if di is not None:
+            point_discoveries.append(
+                {
+                    "device_instance": int(di),
+                    "objects": [
+                        {
+                            "object_identifier": (
+                                o.get("object_identifier") or o.get("object_id") or ""
+                            ).strip(),
+                            "object_name": (
+                                o.get("object_name") or o.get("name") or ""
+                            ).strip()
+                            or None,
+                            "object_type": (o.get("object_type") or "").strip() or None,
+                        }
+                        for o in objs
+                        if isinstance(o, dict)
+                        and (o.get("object_identifier") or o.get("object_id"))
+                    ],
+                }
             )
-            if di is not None and isinstance(objs, list):
-                point_discoveries.append(
-                    {
-                        "device_instance": int(di),
-                        "objects": [
-                            {
-                                "object_identifier": (
-                                    o.get("object_identifier")
-                                    or o.get("object_id")
-                                    or ""
-                                ).strip(),
-                                "object_name": (
-                                    o.get("object_name") or o.get("name") or ""
-                                ).strip()
-                                or None,
-                                "object_type": (o.get("object_type") or "").strip()
-                                or None,
-                            }
-                            for o in objs
-                            if isinstance(o, dict)
-                            and (o.get("object_identifier") or o.get("object_id"))
-                        ],
-                    }
-                )
+        # Unconditional fallback: body has device_instance but we parsed nothing
+        if not point_discoveries and (
+            body.get("device_instance") is not None
+            or body.get("deviceInstance") is not None
+        ):
+            di_fallback = body.get("device_instance") or body.get("deviceInstance")
+            point_discoveries.append(
+                {"device_instance": int(di_fallback), "objects": []}
+            )
+
+    # Top-level fallback: client sent device_instance (with or without point_discovery_result)
+    if not point_discoveries and (
+        body.get("device_instance") is not None
+        or body.get("deviceInstance") is not None
+    ):
+        di_any = body.get("device_instance") or body.get("deviceInstance")
+        point_discoveries.append({"device_instance": int(di_any), "objects": []})
 
     return devices, point_discoveries
 

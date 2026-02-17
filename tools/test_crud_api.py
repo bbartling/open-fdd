@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
+# If run with bash, re-exec with Python (e.g. "bash tools/test_crud_api.py" still works)
+""":'
+exec python3 "$0" "$@"
 """
-End-to-end CRUD API test against localhost:8000.
 
-Creates: site → equipment → points, then deletes in reverse order.
-Deletes cascade: point → timeseries; equipment → points; site → equipment, points,
-  fault_results, fault_events. See docs/howto/danger_zone.md.
+"""
+End-to-end CRUD API test: hits Open-FDD API only (no direct calls to diy-bacnet-server).
+
+All requests go to the Open-FDD API (--base-url). For BACnet (e.g. discovery-to-rdf),
+the test sends --bacnet-url in the request body so the Open-FDD backend can proxy to
+the diy-bacnet-server Docker container. Flow: test → Open-FDD API → (API proxies to) diy-bacnet.
+
+Covers: CRUD (sites, equipment, points), SPARQL (TTL in sync), and optional discovery-to-rdf
+via Open-FDD POST /bacnet/discovery-to-rdf.
+
+Defaults: Open-FDD at localhost:8000; bacnet-url localhost:8080 (so API can reach diy-bacnet container).
 
 Usage:
-  python tools/test_crud_api.py
-  BASE_URL=http://localhost:8000 python tools/test_crud_api.py
+  python3 tools/test_crud_api.py
+  python3 tools/test_crud_api.py --skip-bacnet   # skip discovery-to-rdf
+  python3 tools/test_crud_api.py --base-url http://localhost:8000 --bacnet-url http://localhost:8080
 """
 
+import argparse
 import json
 import os
 import sys
-from uuid import UUID
+from uuid import UUID, uuid4
 
 try:
     import httpx
@@ -24,16 +36,18 @@ except ImportError:
 
     httpx = None
 
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
+# Set by main() from args (env overrides args)
+BASE_URL = "http://localhost:8000"
+BACNET_URL = ""
 
 
 def _request(
-    method: str, path: str, *, json_body: dict | None = None
+    method: str, path: str, *, json_body: dict | None = None, timeout: float = 30.0
 ) -> tuple[int, dict | list | str | None]:
     """Send HTTP request, return (status_code, parsed_json or raw text for CSV)."""
     url = f"{BASE_URL.rstrip('/')}{path}"
     if httpx:
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=timeout) as client:
             r = client.request(method, url, json=json_body)
             try:
                 return r.status_code, r.json() if r.content else None
@@ -45,7 +59,7 @@ def _request(
         req.add_header("Content-Type", "application/json")
         req.data = json.dumps(json_body).encode()
     try:
-        with urllib.request.urlopen(req) as res:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
             body = res.read().decode("utf-8-sig")  # handle BOM in CSV responses
             if not body:
                 return res.status, None
@@ -68,8 +82,50 @@ def ok(code: int) -> bool:
     return 200 <= code < 300
 
 
+def _sparql(query: str) -> list[dict]:
+    """Run SPARQL against Open-FDD data model (DB + BACnet scan TTL when present). Return bindings."""
+    code, data = _request("POST", "/data-model/sparql", json_body={"query": query})
+    assert ok(code), f"SPARQL failed: {code} {data}"
+    assert isinstance(data, dict) and "bindings" in data
+    return data["bindings"]
+
+
+def _sparql_site_labels() -> list[str]:
+    q = """
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?site_label WHERE { ?site a brick:Site . ?site rdfs:label ?site_label }
+    """
+    rows = _sparql(q)
+    return [r.get("site_label") or "" for r in rows if r.get("site_label")]
+
+
+def _sparql_point_labels() -> list[str]:
+    q = """
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?pt_label WHERE { ?pt brick:isPointOf ?eq . ?pt rdfs:label ?pt_label }
+    """
+    rows = _sparql(q)
+    return [r.get("pt_label") or "" for r in rows if r.get("pt_label")]
+
+
+def _sparql_equipment_labels() -> list[str]:
+    q = """
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?eq_label WHERE { ?eq brick:isPartOf ?site . ?eq rdfs:label ?eq_label }
+    """
+    rows = _sparql(q)
+    return [r.get("eq_label") or "" for r in rows if r.get("eq_label")]
+
+
 def run():
-    print(f"\n=== Open-FDD CRUD API Test ===\nBase URL: {BASE_URL}\n")
+    print(
+        f"\n=== Open-FDD CRUD API Test (CRUD + RDF + SPARQL) ===\nBase URL: {BASE_URL}\n"
+    )
+    if BACNET_URL:
+        print(f"BACNET_URL: {BACNET_URL} (discovery-to-rdf enabled)\n")
 
     # --- Health ---
     print("[1] GET /health")
@@ -78,22 +134,150 @@ def run():
     assert data.get("status") == "ok"
     print("    OK\n")
 
+    # --- BACnet discovery-to-rdf (range scan; can be slow — uses 120s timeout) ---
+    if BACNET_URL:
+        print(
+            "[1b] POST /bacnet/discovery-to-rdf (Who-Is + deep scan → TTL stored & merged)"
+        )
+        code, data = _request(
+            "POST",
+            "/bacnet/discovery-to-rdf",
+            json_body={
+                "url": BACNET_URL,
+                "request": {"start_instance": 1, "end_instance": 3456800},
+            },
+            timeout=120.0,
+        )
+        assert ok(code), f"discovery-to-rdf failed: {code} {data}"
+        body = data.get("body") if isinstance(data, dict) else data
+        result = body.get("result") if isinstance(body, dict) else None
+        if isinstance(result, dict):
+            assert "ttl" in result and "summary" in result
+            summary = result["summary"]
+            print(
+                f"    OK — devices={summary.get('devices', 0)}, objects={summary.get('objects', 0)}\n"
+            )
+        else:
+            print("    OK (gateway response)\n")
+    else:
+        print(
+            "[1b] SKIP /bacnet/discovery-to-rdf (use --bacnet-url or --skip-bacnet)\n"
+        )
+
+    # Unique site name per run so [20b] SPARQL assertion isn't affected by leftover sites from previous runs
+    test_site_name = f"test-crud-site-{uuid4().hex[:8]}"
+
     # --- Create site ---
     print("[2] POST /sites")
     code, site = _request(
         "POST",
         "/sites",
-        json_body={"name": "test-crud-site", "description": "Script test site"},
+        json_body={"name": test_site_name, "description": "Script test site"},
     )
     assert ok(code), f"Expected 201/200, got {code}: {site}"
     site_id = site["id"]
     print(f"    OK → site_id={site_id}\n")
 
+    # --- BACnet device 3456789: point_discovery → import-discovery → validate in BRICK (only when BACNET_URL set) ---
+    bacnet_equipment_id = None
+    bacnet_point_ids: list[dict] = []  # [{"id": uuid, "external_id": str}, ...]
+    DEVICE_3456789 = 3456789
+
+    if BACNET_URL:
+        print(f"[2b] POST /bacnet/point_discovery (device {DEVICE_3456789})")
+        code, pd_resp = _request(
+            "POST",
+            "/bacnet/point_discovery",
+            json_body={
+                "url": BACNET_URL,
+                "instance": {"device_instance": DEVICE_3456789},
+            },
+        )
+        assert ok(code), f"point_discovery failed: {code} {pd_resp}"
+        print("    OK\n")
+
+        print("[2c] POST /bacnet/import-discovery (device + points into data model)")
+        code, imp = _request(
+            "POST",
+            "/bacnet/import-discovery",
+            json_body={
+                "url": BACNET_URL,
+                "site_id": site_id,
+                "create_site": False,
+                "device_instance": DEVICE_3456789,
+                "point_discovery_result": pd_resp,
+            },
+        )
+        assert ok(code), f"import-discovery failed: {code} {imp}"
+        points_created = imp.get("points_created", 0)
+        print(f"    OK — points_created={points_created}\n")
+
+        # Expected point labels from discovery (for SPARQL-only data model validation)
+        _body = pd_resp.get("body") if isinstance(pd_resp, dict) else pd_resp
+        _res = _body.get("result") if isinstance(_body, dict) else {}
+        if (
+            not _res
+            and isinstance(_body, dict)
+            and ("data" in _body or "success" in _body)
+        ):
+            _res = _body
+        _data = _res.get("data") or {} if isinstance(_res, dict) else {}
+        _objs = _data.get("objects") or _res.get("objects") or []
+        expected_bacnet_point_labels = []
+        for _o in _objs:
+            if isinstance(_o, dict):
+                _name = (
+                    _o.get("object_name")
+                    or _o.get("name")
+                    or _o.get("object_identifier")
+                    or ""
+                ).strip()
+                if _name:
+                    expected_bacnet_point_labels.append(_name)
+
+        # Resolve equipment and point IDs only for later CRUD deletes (not for data model assertion)
+        code, eq_list = _request("GET", f"/equipment?site_id={site_id}")
+        assert ok(code)
+        for eq in eq_list or []:
+            if eq.get("name") == f"BACnet device {DEVICE_3456789}":
+                bacnet_equipment_id = eq["id"]
+                break
+        if bacnet_equipment_id:
+            code, pt_list = _request(
+                "GET", f"/points?equipment_id={bacnet_equipment_id}"
+            )
+            assert ok(code)
+            bacnet_point_ids = [
+                {
+                    "id": p["id"],
+                    "external_id": p.get("external_id")
+                    or p.get("object_identifier")
+                    or "",
+                }
+                for p in (pt_list or [])
+            ]
+
+        # [2d] Data model validation only via SPARQL (no assertion from GET response)
+        print("[2d] SPARQL: BACnet device and points in BRICK")
+        eq_labels = _sparql_equipment_labels()
+        expected_eq_name = f"BACnet device {DEVICE_3456789}"
+        assert (
+            expected_eq_name in eq_labels
+        ), f"Expected {expected_eq_name!r} in equipment labels: {eq_labels}"
+        pt_labels = _sparql_point_labels()
+        for expected_label in expected_bacnet_point_labels:
+            assert (
+                expected_label in pt_labels
+            ), f"Expected point {expected_label!r} in SPARQL labels: {pt_labels}"
+        print(
+            f"    OK — equipment {expected_eq_name!r}, {len(expected_bacnet_point_labels)} points in model (SPARQL)\n"
+        )
+
     # --- Get site ---
     print("[3] GET /sites/{id}")
     code, got = _request("GET", f"/sites/{site_id}")
     assert ok(code)
-    assert got["name"] == "test-crud-site"
+    assert got["name"] == test_site_name
     print("    OK\n")
 
     # --- List sites ---
@@ -102,6 +286,12 @@ def run():
     assert ok(code)
     assert any(s["id"] == site_id for s in sites)
     print(f"    OK ({len(sites)} sites)\n")
+
+    # --- SPARQL: site in TTL after create ---
+    print("[4b] SPARQL: site labels (TTL in sync)")
+    labels = _sparql_site_labels()
+    assert test_site_name in labels, f"Expected {test_site_name!r} in {labels}"
+    print(f"    OK — {labels}\n")
 
     # --- PATCH site ---
     print("[5] PATCH /sites/{id}")
@@ -210,6 +400,14 @@ def run():
     assert any(p["id"] == point1_id for p in pts)
     print("    OK\n")
 
+    # --- SPARQL: point labels in TTL after create ---
+    print("[14b] SPARQL: point labels (TTL in sync)")
+    pt_labels = _sparql_point_labels()
+    assert (
+        "SA-T" in pt_labels and "OAT" in pt_labels
+    ), f"Expected SA-T, OAT in {pt_labels}"
+    print(f"    OK — {pt_labels}\n")
+
     # --- PATCH point ---
     print("[15] PATCH /points/{id}")
     code, patched = _request(
@@ -236,6 +434,13 @@ def run():
     assert code == 404
     print("    OK (verified 404)\n")
 
+    # --- SPARQL: SA-T gone from TTL ---
+    print("[17b] SPARQL: SA-T removed from TTL")
+    pt_labels = _sparql_point_labels()
+    assert "SA-T" not in pt_labels, f"SA-T should be gone: {pt_labels}"
+    assert "OAT" in pt_labels, f"OAT should remain: {pt_labels}"
+    print(f"    OK — {pt_labels}\n")
+
     # --- Delete point 2 ---
     print("[18] DELETE /points/{id} (OAT)")
     code, _ = _request("DELETE", f"/points/{point2_id}")
@@ -243,6 +448,14 @@ def run():
     code, _ = _request("GET", f"/points/{point2_id}")
     assert code == 404
     print("    OK (verified 404)\n")
+
+    # --- SPARQL: no points for our equipment (or OAT gone) ---
+    print("[18b] SPARQL: point labels after delete OAT")
+    pt_labels = _sparql_point_labels()
+    assert (
+        "OAT" not in pt_labels and "SA-T" not in pt_labels
+    ), f"Both points should be gone: {pt_labels}"
+    print(f"    OK — {pt_labels}\n")
 
     # --- Delete equipment ---
     print("[19] DELETE /equipment/{id}")
@@ -252,6 +465,56 @@ def run():
     assert code == 404
     print("    OK (verified 404)\n")
 
+    # --- SPARQL: equipment gone from TTL ---
+    print("[19b] SPARQL: equipment labels (test-ahu-1 gone)")
+    eq_labels = _sparql_equipment_labels()
+    assert "test-ahu-1" not in eq_labels, f"test-ahu-1 should be gone: {eq_labels}"
+    print(f"    OK — {eq_labels}\n")
+
+    # --- BACnet device 3456789: CRUD delete a few points, then equipment; validate in CRUD + SPARQL ---
+    if bacnet_equipment_id:
+        if bacnet_point_ids:
+            to_delete = bacnet_point_ids[:2]  # delete up to 2 points
+            for i, bp in enumerate(to_delete):
+                pid, ext = bp["id"], bp.get("external_id") or bp["id"]
+                print(f"[19c.{i+1}] DELETE /points/{{id}} (BACnet point {ext})")
+                code, _ = _request("DELETE", f"/points/{pid}")
+                assert ok(code)
+                code, _ = _request("GET", f"/points/{pid}")
+                assert code == 404
+                print("    OK (verified 404)\n")
+            print("[19d] SPARQL: deleted BACnet points removed from TTL")
+            pt_labels_after = _sparql_point_labels()
+            for bp in to_delete:
+                ext = (bp.get("external_id") or "").strip()
+                if ext:
+                    assert (
+                        ext not in pt_labels_after
+                    ), f"Point {ext!r} should be gone: {pt_labels_after}"
+            print(f"    OK — {pt_labels_after}\n")
+
+            # Delete remaining BACnet points (so we can delete equipment)
+            for bp in bacnet_point_ids[2:]:
+                pid = bp["id"]
+                print("[19e] DELETE /points/{id} (remaining BACnet point)")
+                code, _ = _request("DELETE", f"/points/{pid}")
+                assert ok(code)
+                print("    OK\n")
+
+        print("[19f] DELETE /equipment/{id} (BACnet device 3456789)")
+        code, _ = _request("DELETE", f"/equipment/{bacnet_equipment_id}")
+        assert ok(code)
+        code, _ = _request("GET", f"/equipment/{bacnet_equipment_id}")
+        assert code == 404
+        print("    OK (verified 404)\n")
+
+        print("[19g] SPARQL: BACnet device 3456789 removed from TTL")
+        eq_labels = _sparql_equipment_labels()
+        assert (
+            f"BACnet device {DEVICE_3456789}" not in eq_labels
+        ), f"BACnet device should be gone: {eq_labels}"
+        print(f"    OK — {eq_labels}\n")
+
     # --- Delete site ---
     print("[20] DELETE /sites/{id}")
     code, _ = _request("DELETE", f"/sites/{site_id}")
@@ -259,6 +522,14 @@ def run():
     code, _ = _request("GET", f"/sites/{site_id}")
     assert code == 404
     print("    OK (verified 404)\n")
+
+    # --- SPARQL: site gone from TTL ---
+    print("[20b] SPARQL: site labels (test site gone)")
+    site_labels = _sparql_site_labels()
+    assert (
+        test_site_name not in site_labels
+    ), f"{test_site_name!r} should be gone: {site_labels}"
+    print(f"    OK — {site_labels}\n")
 
     # --- Download (may 404 if no timeseries) ---
     print("[21] GET /download/csv (smoke test)")
@@ -301,13 +572,46 @@ def run():
         "/download/faults?start_date=2024-01-01&end_date=2024-01-31&format=csv",
     )
     assert code == 200, f"Unexpected {code}"
-    # Empty faults = minimal CSV (header only or empty); non-empty has ts, site_id, etc.
-    if isinstance(body, str) and body.strip():
-        assert "ts" in body or "site_id" in body or "," in body
+    # Empty faults = BOM only or header-only CSV (no ts/site_id); non-empty has timestamp, site_id, commas
+    if isinstance(body, str) and len(body.strip()) > 10:
+        assert "ts" in body or "site_id" in body or "timestamp" in body or "," in body
     print("    OK\n")
 
-    print("=== All 24 checks passed ===\n")
+    print("=== All CRUD + SPARQL checks passed ===\n")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Open-FDD CRUD + SPARQL e2e test. Hits Open-FDD API only; API proxies to diy-bacnet when needed."
+    )
+    parser.add_argument(
+        "--base-url",
+        default="http://localhost:8000",
+        help="Open-FDD API base URL — only server the test calls (default: http://localhost:8000)",
+    )
+    parser.add_argument(
+        "--bacnet-url",
+        default="http://localhost:8080",
+        help="URL sent to Open-FDD so it can proxy to diy-bacnet-server (default: localhost:8080 for Docker)",
+    )
+    parser.add_argument(
+        "--skip-bacnet",
+        action="store_true",
+        help="Skip discovery-to-rdf (don’t send BACnet request through Open-FDD)",
+    )
+    args = parser.parse_args()
+
+    global BASE_URL, BACNET_URL
+    BASE_URL = (os.environ.get("BASE_URL") or args.base_url).strip().rstrip("/")
+    if args.skip_bacnet:
+        BACNET_URL = ""
+    else:
+        BACNET_URL = (
+            (os.environ.get("BACNET_URL") or args.bacnet_url).strip().rstrip("/")
+        )
+
+    run()
 
 
 if __name__ == "__main__":
-    run()
+    main()
