@@ -1,6 +1,7 @@
 """Open-FDD CRUD API — data model, sites, points, equipment."""
 
 import importlib.metadata
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI
@@ -22,6 +23,24 @@ from open_fdd.platform.api import (
 settings = get_platform_settings()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load in-memory graph from brick_model.ttl and start background sync thread."""
+    from open_fdd.platform.graph_model import (
+        load_from_file,
+        start_sync_thread,
+        write_ttl_to_file,
+    )
+
+    load_from_file()
+    write_ttl_to_file()  # ensure file exists and health state is set
+    start_sync_thread()
+    yield
+    from open_fdd.platform.graph_model import stop_sync_thread
+
+    stop_sync_thread()
+
+
 def _app_version() -> str:
     """Open-FDD version from installed package; updates with pip install."""
     try:
@@ -33,6 +52,7 @@ def _app_version() -> str:
 app = FastAPI(
     title=settings.app_title,
     version=_app_version(),
+    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_tags=[
@@ -46,7 +66,7 @@ app = FastAPI(
         },
         {
             "name": "BACnet",
-            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery, discovery-to-rdf). Backend hits the gateway; use same host or OT LAN URL. discovery-to-rdf stores TTL and merges into SPARQL graph.",
+            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery, point_discovery_to_graph). Backend hits the gateway; use same host or OT LAN URL. point_discovery_to_graph updates the in-memory graph and SPARQL.",
         },
     ],
 )
@@ -92,7 +112,11 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    from open_fdd.platform.graph_model import get_serialization_status
+
+    out = {"status": "ok"}
+    out.update(get_serialization_status())
+    return out
 
 
 @app.post(

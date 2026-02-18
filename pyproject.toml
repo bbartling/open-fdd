@@ -96,7 +96,8 @@ open_fdd = ["rules/*.yaml", "platform/static/*"]
 [tool.black]
 line-length = 88
 target-version = ["py314"]
-extend-exclude = "open_fdd/platform/data_model_ttl\\.py"
+# Exclude files that trigger Black bugs or are intentionally unformatted (e2e script).
+extend-exclude = "open_fdd/platform/data_model_ttl\\.py|tools/graph_and_crud_test\\.py"
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]

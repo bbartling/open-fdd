@@ -5,7 +5,7 @@ Single source of truth = DB. TTL is derived for FDD column_map and SPARQL valida
 Points use rdfs:label = external_id (time-series reference) and optional ofdd:mapsToRuleInput = fdd_input.
 
 One unified TTL file (config/brick_model.ttl): Brick section first, then BACnet discovery
-section after BACNET_SECTION_MARKER. CRUD and discovery-to-rdf both read/write this file.
+section after BACNET_SECTION_MARKER. CRUD and point_discovery_to_graph update the in-memory graph; sync writes this file.
 """
 
 from __future__ import annotations
@@ -185,20 +185,14 @@ def _get_bacnet_section_cached(path: Path) -> str | None:
 
 
 def _do_sync() -> None:
-    """Write full Brick TTL + cached BACnet section to disk. Always uses full model (site_id=None)."""
+    """Write in-memory graph (Brick from DB + BACnet) to disk via graph_model."""
     global _sync_timer
-    path = _get_unified_ttl_path()
-    brick_ttl = build_ttl_from_db(site_id=None)
-    bacnet_ttl = _get_bacnet_section_cached(path)
-    combined = brick_ttl
-    if bacnet_ttl:
-        combined = f"{brick_ttl}\n\n{BACNET_SECTION_MARKER}\n\n{bacnet_ttl}"
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        path.write_text(combined, encoding="utf-8")
-    except OSError:
-        Path("/tmp/brick_model.ttl").write_text(combined, encoding="utf-8")
-    _remove_legacy_bacnet_scan_ttl(path)
+        from open_fdd.platform.graph_model import write_ttl_to_file
+        write_ttl_to_file()
+    except Exception:
+        pass
+    _remove_legacy_bacnet_scan_ttl(_get_unified_ttl_path())
     with _sync_timer_lock:
         _sync_timer = None
 
@@ -229,6 +223,7 @@ def sync_ttl_to_file(
     writes immediately. File always contains the full model (site_id is ignored
     for the on-disk file).
     """
+    global _sync_timer
     if immediate:
         with _sync_timer_lock:
             if _sync_timer is not None:
@@ -286,23 +281,17 @@ def get_bacnet_scan_ttl() -> str | None:
 
 def store_bacnet_scan_ttl(ttl: str) -> None:
     """
-    Append BACnet discovery TTL to the unified file (from discovery-to-rdf).
-    Brick section is preserved; SPARQL sees both via get_ttl_for_sparql().
-    Updates in-memory BACnet cache so the next sync does not re-read the file.
+    Merge BACnet TTL into in-memory graph (legacy path; primary path is point_discovery_to_graph).
+    Next serialize (interval or route) will write full graph to file.
     """
+    try:
+        from open_fdd.platform.graph_model import merge_bacnet_ttl
+        merge_bacnet_ttl(ttl)
+    except Exception:
+        pass
     global _bacnet_cache
     path = _get_unified_ttl_path()
-    brick_ttl, _ = _read_unified_sections(path)
-    if not brick_ttl:
-        brick_ttl = _prefixes()
-    combined = f"{brick_ttl}\n\n{BACNET_SECTION_MARKER}\n\n{ttl.strip()}"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(combined, encoding="utf-8")
-    except OSError:
-        Path("/tmp/brick_model.ttl").write_text(combined, encoding="utf-8")
     _bacnet_cache = (path, ttl.strip())
-    _remove_legacy_bacnet_scan_ttl(path)
 
 
 def _rdf_value_to_int(v: Any) -> int:
@@ -322,7 +311,7 @@ def _rdf_value_to_str(v: Any) -> str:
 
 def parse_bacnet_ttl_to_discovery(ttl: str) -> tuple[list[dict], list[dict]]:
     """
-    Parse BACnet RDF TTL (from discovery-to-rdf) into devices and point_discoveries
+    Parse BACnet RDF TTL into devices and point_discoveries
     for creating site/equipment/points in the DB. Returns (devices, point_discoveries).
     """
     try:
@@ -383,20 +372,22 @@ def parse_bacnet_ttl_to_discovery(ttl: str) -> tuple[list[dict], list[dict]]:
 
 def get_ttl_for_sparql(site_id: UUID | None = None) -> str:
     """
-    TTL used for SPARQL: DB-derived TTL merged with BACnet scan TTL (if present).
-    Single graph so queries see both BRICK (sites/equipment/points) and BACnet devices/objects.
+    TTL used for SPARQL: in-memory graph (Brick from DB + BACnet). Single graph for both.
     """
-    db_ttl = build_ttl_from_db(site_id=site_id)
-    bacnet_ttl = get_bacnet_scan_ttl()
-    if not bacnet_ttl:
-        return db_ttl
     try:
-        from rdflib import Graph
-
-        g = Graph()
-        g.parse(data=db_ttl, format="turtle")
-        g.parse(data=bacnet_ttl, format="turtle")
-        out = g.serialize(format="turtle")
-        return out.decode("utf-8") if isinstance(out, bytes) else out
+        from open_fdd.platform.graph_model import get_ttl_for_sparql as _graph_ttl
+        return _graph_ttl(site_id=site_id)
     except Exception:
-        return db_ttl
+        db_ttl = build_ttl_from_db(site_id=site_id)
+        bacnet_ttl = get_bacnet_scan_ttl()
+        if not bacnet_ttl:
+            return db_ttl
+        try:
+            from rdflib import Graph
+            g = Graph()
+            g.parse(data=db_ttl, format="turtle")
+            g.parse(data=bacnet_ttl, format="turtle")
+            out = g.serialize(format="turtle")
+            return out.decode("utf-8") if isinstance(out, bytes) else out
+        except Exception:
+            return db_ttl

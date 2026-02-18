@@ -6,7 +6,7 @@ parent: BACnet
 
 # BACnet, RDF, and BRICK
 
-Open-FDD treats the **building as a knowledge graph**: sites, equipment, and points (and BACnet topology) live in a single semantic model. CRUD and BACnet discovery both write into that model; SPARQL is the way to query it. No separate CSV or CLI scripts—discovery and import are API-driven.
+Open-FDD treats the **building as a knowledge graph**: sites, equipment, and points (and BACnet topology) live in a single semantic model. CRUD and **POST /bacnet/point_discovery_to_graph** update this model; SPARQL queries it.
 
 ---
 
@@ -14,55 +14,34 @@ Open-FDD treats the **building as a knowledge graph**: sites, equipment, and poi
 
 | Layer | Responsibility |
 |-------|----------------|
-| **diy-bacnet-server** | BACnet → RDF. Uses **bacpypes3** RDF support (Joel Bender’s `BACnetGraph` in `bacpypes3.rdf`). RPCs: Who-Is, point discovery, and **discovery-to-RDF** (single device or range): deep scan → build graph → return TTL. No RDF logic in Open-FDD. |
-| **Open-FDD** | Merge BACnet TTL into the BRICK graph, own CRUD (sites, equipment, points), sync TTL from DB, run SPARQL over the combined model. |
+| **diy-bacnet-server** | BACnet RPCs: Who-Is, point discovery (returns JSON objects per device). Open-FDD calls these. |
+| **Open-FDD** | Calls point discovery, builds clean BACnet TTL from the JSON, merges into the in-memory graph (Brick from DB + BACnet). CRUD owns sites, equipment, points. SPARQL runs over the combined model; sync writes `config/brick_model.ttl`. |
 
 ---
 
 ## Flow
 
-1. **Discovery → RDF** — Open-FDD calls diy-bacnet-server’s `client_discovery_to_rdf` or `client_discovery_to_rdf_device`. The gateway uses bacpypes3’s BACnetGraph to build RDF; returns TTL + summary.
-2. **Store + optional auto-import** — Open-FDD appends the BACnet discovery TTL to the unified semantic model file `config/brick_model.ttl` (Brick section + BACnet section). SPARQL sees both. Set **`import_into_data_model: true`** to parse the TTL and create site/equipment/points in the DB; the Brick section of `config/brick_model.ttl` is then synced from the DB. One call does discovery, RDF, and data model.
-3. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`).
+1. **Point discovery** — Open-FDD calls **POST /bacnet/point_discovery** (gateway RPC) for a device instance; gateway returns a list of objects (object_identifier, object_name, etc.).
+2. **Point discovery to graph** — **POST /bacnet/point_discovery_to_graph** (same instance, `update_graph: true`) turns that JSON into clean BACnet TTL and updates the in-memory graph; optionally writes `config/brick_model.ttl`. SPARQL and **GET /data-model/ttl** see Brick + BACnet.
+3. **Points in DB** — Create or edit points via CRUD (set `bacnet_device_id`, `object_identifier`, `object_name`). Optionally **GET /data-model/export** then LLM or human adds Brick types then **PUT /data-model/import**.
+4. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`).
 
 ---
 
-## Try it (Swagger → RDF)
+## Try it (Open-FDD Swagger)
 
-Use the BACnet gateway Swagger, then optionally push the result into Open-FDD so the TTL is stored and merged into the knowledge graph.
+**1. Who-Is**  
+- Open **http://localhost:8000/docs**. Find **POST /bacnet/whois_range**. Body: `{"request": {"start_instance": 1, "end_instance": 3456800}}`. Execute; note a device instance (e.g. `3456789`).
 
-**1. Who-Is (see devices)**  
-- Open **http://localhost:8080/docs** (or http://*&lt;host-ip&gt;*:8080/docs).  
-- Find **POST /client_whois_range**, click *Try it out*.  
-- Body (or use defaults): `{"request": {"start_instance": 1, "end_instance": 4194303}}`.  
-- Execute. Note a **device instance** from the response (e.g. `3456789`).
+**2. Point discovery to graph**  
+- Find **POST /bacnet/point_discovery_to_graph**. Body: `{"instance": {"device_instance": 3456789}, "update_graph": true, "write_file": true}`. Execute. Open-FDD calls the gateway, gets point discovery JSON, builds BACnet TTL, and updates the in-memory graph and file.
 
-**2. Discovery → RDF (one device)**  
-- Find **POST /client_discovery_to_rdf_device**, *Try it out*.  
-- Body: `{"instance": {"device_instance": 3456789}}` (use the instance from step 1).  
-- Execute. Wait a few seconds. Response has **`ttl`** (Turtle string) and **`summary`** (e.g. `devices: 1`, `objects: 19`).  
-- Optional: copy a bit of the `ttl` value to confirm it’s BACnet RDF (e.g. `bacnet:Device`, `bacnet://3456789`).
-
-**3. Store, merge, and import in one call**  
-- Open **http://localhost:8000/docs** (or http://*&lt;host-ip&gt;*:8000/docs).  
-- Find **POST /bacnet/discovery-to-rdf**.  
-- Body (omit `url`; set **import_into_data_model: true** to create site/equipment/points and sync `config/brick_model.ttl`):  
-  `{"request": {"start_instance": 3456789, "end_instance": 3456789}, "import_into_data_model": true}`.  
-- Execute. Open-FDD calls the gateway, stores the TTL, parses it into devices and points, creates them in the DB, and syncs brick_model.ttl.  
-- Check: **GET /data-model/ttl** or **POST /data-model/sparql** (e.g. `?s a bacnet:Device` or Brick points).
-
-**Quick recap:** One call to **discovery-to-rdf** with `import_into_data_model: true` does discovery, RDF merge, and data model (brick_model.ttl). No separate import step.
-
----
-
-## Payload format
-
-The discovery-to-RDF RPC returns a **JSON object** with a `ttl` key whose value is a **string** — the full Turtle document. The RDF is not sent as JSON-LD or nested structures; it’s Turtle text inside the JSON response. That stays easy to handle: JSON encoding/decoding preserves the string, Open-FDD writes it to file and merges it with rdflib using `format="turtle"`. No extra parsing or re-serialization of “nasty” JSON as RDF.
+**3. Check**  
+- **GET /data-model/ttl** or **POST /data-model/sparql** (e.g. `SELECT ?dev WHERE { ?dev a bacnet:Device }`).
 
 ---
 
 ## Summary
 
-- **Building as knowledge graph**: one semantic model (BRICK + BACnet), updated by CRUD and by BACnet discovery.
-- **BACnet RDF** is implemented in **diy-bacnet-server** using **bacpypes3**’s built-in RDF (BACnetGraph); Open-FDD merges and queries, does not reimplement BACnet semantics.
-- **SPARQL** validates and queries the combined model; all “what’s in the data model” checks use SPARQL, not ad-hoc REST parsing.
+- **Building as knowledge graph**: one semantic model (BRICK + BACnet), updated by CRUD and by **point_discovery_to_graph**.
+- **BACnet in the graph** is produced by Open-FDD from point discovery JSON (clean TTL); SPARQL validates and queries the combined model.

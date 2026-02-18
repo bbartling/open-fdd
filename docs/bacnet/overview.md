@@ -39,7 +39,7 @@ The scraper can run in two ways: **data-model first** (recommended) or **CSV fal
 ### Option A: Data model (recommended)
 
 1. **Run Who-Is and point discovery** — Use the Open-FDD Config UI (`/app/`) or the API. From the BACnet panel you can call **Test connection**, **Who-Is range**, and **Point discovery** (these proxy to diy-bacnet-server). diy-bacnet-server must be running (e.g. `./scripts/bootstrap.sh` starts it).
-2. **Import into the data model** — Call `POST /bacnet/discovery-to-rdf` with **`import_into_data_model: true`**. The API runs discovery, stores the RDF, parses it, and creates site/equipment/points with `bacnet_device_id`, `object_identifier`, `object_name`, and Brick type; `config/brick_model.ttl` is synced from the DB. You can also create or edit points via CRUD.
+2. **Graph and data model** — Call **POST /bacnet/point_discovery_to_graph** (device instance) to put BACnet devices and points into the in-memory graph and sync `config/brick_model.ttl`. Create points in the DB via CRUD (set `bacnet_device_id`, `object_identifier`, `object_name`) or use **GET /data-model/export** then LLM/human tagging then **PUT /data-model/import**.
 3. **Run the scraper** — The BACnet scraper (e.g. bacnet-scraper container or `tools/run_bacnet_scrape.py`) loads points that have `bacnet_device_id` and `object_identifier` from the database and polls only those via diy-bacnet-server. No CSV is required.
 
 See [Points](modeling/points#bacnet-addressing) for the BACnet fields and [Platform API → BACnet](api/platform#bacnet-proxy-and-import) for the endpoints.

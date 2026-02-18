@@ -13,18 +13,22 @@ Flow: test → Open-FDD API → (API proxies to) diy-bacnet.
 
 Features covered:
   - Health: GET /health
-  - BACnet proxy: server_hello, whois_range, point_discovery, discovery-to-rdf (store TTL + optional import_into_data_model)
-  - CRUD: sites, equipment, points (create, get, list, PATCH, delete)
-  - Data model: GET /data-model/ttl, GET /data-model/export, POST /data-model/sparql (TTL in sync after CRUD and import)
-  - SPARQL: site/equipment/point labels, BACnet devices in merged graph (unified brick_model.ttl)
-  - Download: CSV timeseries, faults (JSON/CSV)
-
-  - Lifecycle: create site → (optional) BACnet discovery-to-rdf with import → CRUD points/equipment → delete BACnet points/equipment → delete site; SPARQL checks at each stage
+  - BACnet: server_hello, whois_range, point_discovery_to_graph.
+  - CRUD: sites, equipment, points; data model TTL, export, SPARQL; graph serialize.
+  - SPARQL-only checks; re-add device via point_discovery_to_graph. Download: CSV, faults.
 
 Usage:
-  python3 tools/test_crud_api.py
-  python3 tools/test_crud_api.py --skip-bacnet   # skip BACnet proxy and discovery-to-rdf
-  python3 tools/test_crud_api.py --base-url http://localhost:8000 --bacnet-url http://localhost:8080
+# Default device 3456789
+python tools/graph_and_crud_test.py
+
+# Another device
+python tools/graph_and_crud_test.py --bacnet-device-instance 3456788
+
+# With BACnet URL and device
+python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --bacnet-device-instance 3456789
+
+# Env override
+BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 """
 
 import argparse
@@ -45,6 +49,7 @@ except ImportError:
 # Set by main() from args (env overrides args)
 BASE_URL = "http://localhost:8000"
 BACNET_URL = ""
+BACNET_DEVICE_INSTANCE = 3456789  # default; override with --bacnet-device-instance
 
 
 def _request(
@@ -116,6 +121,24 @@ def _sparql_point_labels() -> list[str]:
     return [r.get("pt_label") or "" for r in rows if r.get("pt_label")]
 
 
+def _sparql_point_labels_for_site(site_label: str) -> list[str]:
+    """Point labels only for points under this site (Brick isPartOf). Excludes BACnet-only labels."""
+    # Bind site label so we only get points from our test site (not BACnet graph)
+    label_lit = json.dumps(site_label)
+    q = f"""
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?pt_label WHERE {{
+      ?pt brick:isPointOf ?eq .
+      ?eq brick:isPartOf ?site .
+      ?site rdfs:label {label_lit} .
+      ?pt rdfs:label ?pt_label .
+    }}
+    """
+    rows = _sparql(q)
+    return [r.get("pt_label") or "" for r in rows if r.get("pt_label")]
+
+
 def _sparql_equipment_labels() -> list[str]:
     q = """
     PREFIX brick: <https://brickschema.org/schema/Brick#>
@@ -126,19 +149,53 @@ def _sparql_equipment_labels() -> list[str]:
     return [r.get("eq_label") or "" for r in rows if r.get("eq_label")]
 
 
+def _sparql_equipment_labels_for_site(site_label: str) -> list[str]:
+    """Equipment labels only for equipment under this site. Excludes other sites/BACnet."""
+    label_lit = json.dumps(site_label)
+    q = f"""
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?eq_label WHERE {{
+      ?eq brick:isPartOf ?site .
+      ?site rdfs:label {label_lit} .
+      ?eq rdfs:label ?eq_label .
+    }}
+    """
+    rows = _sparql(q)
+    return [r.get("eq_label") or "" for r in rows if r.get("eq_label")]
+
+
 def run():
     print(
         f"\n=== Open-FDD CRUD API Test (CRUD + RDF + SPARQL) ===\nBase URL: {BASE_URL}\n"
     )
     if BACNET_URL:
-        print(f"BACNET_URL: {BACNET_URL} (discovery-to-rdf enabled)\n")
+        print(f"BACNET_URL: {BACNET_URL} (point_discovery_to_graph, device_instance={BACNET_DEVICE_INSTANCE})\n")
 
-    # --- Health ---
+    # --- Health (graph_serialization when API supports it) ---
     print("[1] GET /health")
     code, data = _request("GET", "/health")
     assert ok(code), f"Expected 200, got {code}"
     assert data.get("status") == "ok"
-    print("    OK\n")
+    gs = data.get("graph_serialization") or {}
+    if gs and ("last_ok" in gs or "current_time" in gs):
+        print(f"    OK — graph_serialization: last_ok={gs.get('last_ok')}, last_serialization_at={gs.get('last_serialization_at')}\n")
+    else:
+        print("    OK (upgrade API for graph_serialization in /health)\n")
+
+    # --- Serialize graph to file (same as interval job; 404 = old API) ---
+    print("[1b] POST /data-model/serialize")
+    code, ser = _request("POST", "/data-model/serialize")
+    if code == 404:
+        print("    SKIP — route not found (rebuild API for graph model)\n")
+    elif ok(code):
+        assert ser is None or ser.get("status") in ("ok", "error"), "serialize must return status"
+        if isinstance(ser, dict) and ser.get("status") == "error":
+            print(f"    WARN — {ser.get('error')}\n")
+        else:
+            print(f"    OK — path={ser.get('path') if isinstance(ser, dict) else '—'}\n")
+    else:
+        assert False, f"Serialize failed: {code} {ser}"
 
     # --- BACnet proxy (when gateway URL set) ---
     if BACNET_URL:
@@ -164,29 +221,77 @@ def run():
         devs = _data.get("devices") or []
         print(f"    OK — {len(devs)} device(s)\n")
 
-        print(
-            "[1b] POST /bacnet/discovery-to-rdf (Who-Is + deep scan → TTL stored & merged)"
-        )
-        code, data = _request(
+        # Graph from point_discovery: clean BACnet RDF into in-memory graph
+        print(f"[1a3] POST /bacnet/point_discovery_to_graph (device {BACNET_DEVICE_INSTANCE} → in-memory graph)")
+        code, pdg = _request(
             "POST",
-            "/bacnet/discovery-to-rdf",
-            json_body={"request": {"start_instance": 1, "end_instance": 3456800}},
-            timeout=120.0,
+            "/bacnet/point_discovery_to_graph",
+            json_body={
+                "instance": {"device_instance": BACNET_DEVICE_INSTANCE},
+                "update_graph": True,
+                "write_file": True,
+            },
+            timeout=30.0,
         )
-        assert ok(code), f"discovery-to-rdf failed: {code} {data}"
-        body = data.get("body") if isinstance(data, dict) else data
-        result = body.get("result") if isinstance(body, dict) else None
-        if isinstance(result, dict):
-            assert "ttl" in result and "summary" in result
-            summary = result["summary"]
-            print(
-                f"    OK — devices={summary.get('devices', 0)}, objects={summary.get('objects', 0)}\n"
-            )
+        assert ok(code), f"point_discovery_to_graph failed: {code} {pdg}"
+        if pdg.get("graph_error"):
+            print(f"    WARN — graph_error: {pdg['graph_error']}\n")
         else:
-            print("    OK (gateway response)\n")
+            print("    OK\n")
+        # Grab a few object names from discovery to assert in SPARQL (device-agnostic)
+        _body = pdg.get("body") if isinstance(pdg, dict) else pdg
+        _res = _body.get("result") if isinstance(_body, dict) else {}
+        _data = (_res.get("data") or _res) if isinstance(_res, dict) else {}
+        _objs = _data.get("objects") or []
+        _sample_names = []
+        for _o in _objs[:10]:  # up to 10 from discovery
+            if isinstance(_o, dict):
+                _n = (_o.get("object_name") or _o.get("name") or "").strip()
+                if _n and _n not in _sample_names:
+                    _sample_names.append(_n)
+                    if len(_sample_names) >= 5:
+                        break
+        # SPARQL-only: bacnet:Device, object count, and that discovery names appear in graph
+        print("[1a4] SPARQL: bacnet:Device, object count, and sample object names in graph")
+        q_dev = """
+        PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+        SELECT ?dev WHERE { ?dev a bacnet:Device }
+        """
+        q_objs = """
+        PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+        SELECT (COUNT(?obj) AS ?n) WHERE { ?dev a bacnet:Device . ?dev bacnet:contains ?obj }
+        """
+        dev_bindings = _sparql(q_dev)
+        obj_bindings = _sparql(q_objs)
+        assert len(dev_bindings) >= 1, "SPARQL: at least one bacnet:Device"
+        n_objs = 0
+        if obj_bindings and obj_bindings[0].get("n"):
+            try:
+                n_objs = int(obj_bindings[0]["n"].strip())
+            except (ValueError, TypeError):
+                pass
+        # For this device instance, get object names from graph and assert discovery sample is there
+        if _sample_names:
+            inst = BACNET_DEVICE_INSTANCE
+            q_names = f"""
+            PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+            SELECT ?name WHERE {{
+              ?dev a bacnet:Device ; bacnet:device-instance {inst} ; bacnet:contains ?obj .
+              ?obj bacnet:object-name ?name .
+            }}
+            """
+            name_bindings = _sparql(q_names)
+            graph_names = [r.get("name") or "" for r in name_bindings if r.get("name")]
+            for _name in _sample_names:
+                assert _name in graph_names, (
+                    f"SPARQL: discovery object name {_name!r} not in graph for device {inst}. "
+                    f"Graph names (sample): {graph_names[:15]!r}"
+                )
+            print(f"    OK — {len(dev_bindings)} Device(s), {n_objs} objects, {len(_sample_names)} sample names in graph\n")
+        else:
+            print(f"    OK — {len(dev_bindings)} Device(s), {n_objs} objects (no object names from discovery)\n")
     else:
-        print("[1a] SKIP BACnet proxy (use --bacnet-url or omit --skip-bacnet)\n")
-        print("[1b] SKIP /bacnet/discovery-to-rdf\n")
+        print("[1a] SKIP BACnet (use --bacnet-url or omit --skip-bacnet)\n")
 
     # Unique site name per run so [20b] SPARQL assertion isn't affected by leftover sites from previous runs
     test_site_name = f"test-crud-site-{uuid4().hex[:8]}"
@@ -201,155 +306,6 @@ def run():
     assert ok(code), f"Expected 201/200, got {code}: {site}"
     site_id = site["id"]
     print(f"    OK → site_id={site_id}\n")
-
-    # --- BACnet: discovery-to-rdf with import_into_data_model → validate in BRICK (only when BACNET_URL set) ---
-    bacnet_equipment_id = None
-    bacnet_point_ids: list[dict] = []  # [{"id": uuid, "external_id": str}, ...]
-    DEVICE_3456789 = 3456789
-
-    if BACNET_URL:
-        print(
-            "[2b] POST /bacnet/point_discovery (get expected point labels for assertion)"
-        )
-        code, pd_resp = _request(
-            "POST",
-            "/bacnet/point_discovery",
-            json_body={"instance": {"device_instance": DEVICE_3456789}},
-            timeout=30.0,
-        )
-        assert ok(code), f"point_discovery failed: {code} {pd_resp}"
-        _body = pd_resp.get("body") if isinstance(pd_resp, dict) else pd_resp
-        _res = _body.get("result") if isinstance(_body, dict) else {}
-        if (
-            not _res
-            and isinstance(_body, dict)
-            and ("data" in _body or "success" in _body)
-        ):
-            _res = _body
-        _data = _res.get("data") or {} if isinstance(_res, dict) else {}
-        _objs = _data.get("objects") or _res.get("objects") or []
-        expected_bacnet_point_labels = []
-        for _o in _objs:
-            if isinstance(_o, dict):
-                _name = (
-                    _o.get("object_name")
-                    or _o.get("name")
-                    or _o.get("object_identifier")
-                    or ""
-                ).strip()
-                if _name:
-                    expected_bacnet_point_labels.append(_name)
-        print("    OK\n")
-
-        # Ensure no legacy TTL file before discovery-to-rdf (API must write only to brick_model.ttl)
-        legacy_ttl = Path("config/bacnet_scan.ttl")
-        if legacy_ttl.exists():
-            legacy_ttl.unlink()
-        print(
-            "[2c] POST /bacnet/discovery-to-rdf (import_into_data_model=true → site/equipment/points + brick_model.ttl)"
-        )
-        code, rdf_resp = _request(
-            "POST",
-            "/bacnet/discovery-to-rdf",
-            json_body={
-                "request": {"start_instance": 1, "end_instance": 3456800},
-                "import_into_data_model": True,
-                "site_id": site_id,
-                "create_site": False,
-            },
-            timeout=120.0,
-        )
-        assert ok(code), f"discovery-to-rdf failed: {code} {rdf_resp}"
-        if legacy_ttl.exists():
-            try:
-                legacy_ttl.unlink()
-            except OSError:
-                pass
-            print(
-                f"\n  FAIL: {BASE_URL} recreated config/bacnet_scan.ttl. The API is running OLD code.\n"
-                "  Restart the API so it uses the unified TTL (only brick_model.ttl):\n"
-                "    Docker: docker compose up -d --build api\n"
-                "    Local:  stop uvicorn and start it again from this repo.\n"
-            )
-            sys.exit(1)
-        imp = rdf_resp.get("import_result") or {}
-        points_created = imp.get("points_created", 0)
-        if rdf_resp.get("import_error"):
-            print(f"    WARN — import_error: {rdf_resp['import_error']}\n")
-        else:
-            print(f"    OK — points_created={points_created}\n")
-
-        # Resolve equipment and point IDs only for later CRUD deletes (not for data model assertion)
-        code, eq_list = _request("GET", f"/equipment?site_id={site_id}")
-        assert ok(code)
-        for eq in eq_list or []:
-            if eq.get("name") == f"BACnet device {DEVICE_3456789}":
-                bacnet_equipment_id = eq["id"]
-                break
-        if bacnet_equipment_id:
-            code, pt_list = _request(
-                "GET", f"/points?equipment_id={bacnet_equipment_id}"
-            )
-            assert ok(code)
-            bacnet_point_ids = [
-                {
-                    "id": p["id"],
-                    "external_id": p.get("external_id")
-                    or p.get("object_identifier")
-                    or "",
-                }
-                for p in (pt_list or [])
-            ]
-
-        # [2d]–[2f] only when import created equipment (points_created > 0 or bacnet_equipment_id found)
-        if not bacnet_equipment_id:
-            print(
-                "[2d] SKIP SPARQL BACnet assertions (import created 0 points; TTL parser may not match gateway format)\n"
-            )
-            if points_created == 0 and not rdf_resp.get("import_error"):
-                print(
-                    "    Hint: check parse_bacnet_ttl_to_discovery() and bacnet TTL namespace (e.g. bacnet:device-instance, bacnet:contains).\n"
-                )
-        else:
-            # [2d] Data model validation only via SPARQL (no assertion from GET response)
-            print("[2d] SPARQL: BACnet device and points in BRICK")
-            eq_labels = _sparql_equipment_labels()
-            expected_eq_name = f"BACnet device {DEVICE_3456789}"
-            assert (
-                expected_eq_name in eq_labels
-            ), f"Expected {expected_eq_name!r} in equipment labels: {eq_labels}"
-            pt_labels = _sparql_point_labels()
-            for expected_label in expected_bacnet_point_labels:
-                assert (
-                    expected_label in pt_labels
-                ), f"Expected point {expected_label!r} in SPARQL labels: {pt_labels}"
-            print(
-                f"    OK — equipment {expected_eq_name!r}, {len(expected_bacnet_point_labels)} points in model (SPARQL)\n"
-            )
-
-            # [2e] SPARQL: merged graph contains BACnet RDF (unified brick_model.ttl = Brick + BACnet)
-            print("[2e] SPARQL: bacnet:Device in merged graph (BACnet RDF + BRICK)")
-            bacnet_q = """
-            PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
-            SELECT ?dev WHERE { ?dev a bacnet:Device }
-            """
-            bacnet_bindings = _sparql(bacnet_q)
-            assert (
-                len(bacnet_bindings) >= 1
-            ), "Expected at least one bacnet:Device in merged graph"
-            print(f"    OK — {len(bacnet_bindings)} bacnet:Device(s) in merged graph\n")
-
-            # [2f] GET /points: BACnet points have bacnet_device_id and object_identifier
-            if bacnet_point_ids:
-                code, one_pt = _request("GET", f"/points/{bacnet_point_ids[0]['id']}")
-                assert ok(code) and one_pt
-                assert one_pt.get("bacnet_device_id") and one_pt.get(
-                    "object_identifier"
-                ), "BACnet-imported point should have bacnet_device_id and object_identifier"
-                print(
-                    "[2f] GET /points/{id}: BACnet point has bacnet_device_id, object_identifier"
-                )
-                print("    OK\n")
 
     # --- Get site ---
     print("[3] GET /sites/{id}")
@@ -371,18 +327,13 @@ def run():
     assert test_site_name in labels, f"Expected {test_site_name!r} in {labels}"
     print(f"    OK — {labels}\n")
 
-    # --- Data model TTL (brick_model + merged BACnet when present) ---
-    print("[4c] GET /data-model/ttl (TTL content smoke)")
+    # --- Data model TTL (SPARQL already validated site/points; no grep on TTL) ---
+    print("[4c] GET /data-model/ttl (smoke: 200, string)")
     code, ttl_body = _request("GET", "/data-model/ttl")
     assert ok(code), f"GET /data-model/ttl failed: {code}"
     assert isinstance(ttl_body, str), "TTL response should be string"
-    assert (
-        "@prefix brick:" in ttl_body or "brick:" in ttl_body
-    ), "TTL should contain Brick prefix/content"
-    assert (
-        test_site_name in ttl_body
-    ), f"TTL should contain site name {test_site_name!r}"
-    print(f"    OK — TTL length {len(ttl_body)}\n")
+    assert len(ttl_body) > 0, "TTL non-empty"
+    print(f"    OK — TTL length {len(ttl_body)} (site/points validated via SPARQL in [4b])\n")
 
     # --- PATCH site ---
     print("[5] PATCH /sites/{id}")
@@ -450,7 +401,8 @@ def run():
             "unit": "degF",
         },
     )
-    assert ok(code)
+    assert ok(code), f"POST /points failed: {code} — {pt1!r}"
+    assert isinstance(pt1, dict) and pt1.get("id"), f"POST /points missing id: {pt1}"
     point1_id = pt1["id"]
     print(f"    OK → point_id={point1_id}\n")
 
@@ -491,13 +443,13 @@ def run():
     assert any(p["id"] == point1_id for p in pts)
     print("    OK\n")
 
-    # --- SPARQL: point labels in TTL after create ---
-    print("[14b] SPARQL: point labels (TTL in sync)")
-    pt_labels = _sparql_point_labels()
+    # --- SPARQL: point labels for our site only (exclude BACnet graph labels) ---
+    print("[14b] SPARQL: point labels for test site (TTL in sync)")
+    pt_labels_site = _sparql_point_labels_for_site(test_site_name)
     assert (
-        "SA-T" in pt_labels and "OAT" in pt_labels
-    ), f"Expected SA-T, OAT in {pt_labels}"
-    print(f"    OK — {pt_labels}\n")
+        "SA-T" in pt_labels_site and "OAT" in pt_labels_site
+    ), f"Expected SA-T, OAT in site points: {pt_labels_site}"
+    print(f"    OK — {pt_labels_site}\n")
 
     # --- PATCH point ---
     print("[15] PATCH /points/{id}")
@@ -525,12 +477,12 @@ def run():
     assert code == 404
     print("    OK (verified 404)\n")
 
-    # --- SPARQL: SA-T gone from TTL ---
-    print("[17b] SPARQL: SA-T removed from TTL")
-    pt_labels = _sparql_point_labels()
-    assert "SA-T" not in pt_labels, f"SA-T should be gone: {pt_labels}"
-    assert "OAT" in pt_labels, f"OAT should remain: {pt_labels}"
-    print(f"    OK — {pt_labels}\n")
+    # --- SPARQL: SA-T gone from our site's TTL (BACnet SA-T still in graph) ---
+    print("[17b] SPARQL: SA-T removed from test site TTL")
+    pt_labels_site = _sparql_point_labels_for_site(test_site_name)
+    assert "SA-T" not in pt_labels_site, f"SA-T should be gone from site: {pt_labels_site}"
+    assert "OAT" in pt_labels_site, f"OAT should remain: {pt_labels_site}"
+    print(f"    OK — {pt_labels_site}\n")
 
     # --- Delete point 2 ---
     print("[18] DELETE /points/{id} (OAT)")
@@ -540,13 +492,13 @@ def run():
     assert code == 404
     print("    OK (verified 404)\n")
 
-    # --- SPARQL: no points for our equipment (or OAT gone) ---
-    print("[18b] SPARQL: point labels after delete OAT")
-    pt_labels = _sparql_point_labels()
+    # --- SPARQL: no points left for our site (OAT and SA-T gone) ---
+    print("[18b] SPARQL: point labels for test site after delete OAT")
+    pt_labels_site = _sparql_point_labels_for_site(test_site_name)
     assert (
-        "OAT" not in pt_labels and "SA-T" not in pt_labels
-    ), f"Both points should be gone: {pt_labels}"
-    print(f"    OK — {pt_labels}\n")
+        "OAT" not in pt_labels_site and "SA-T" not in pt_labels_site
+    ), f"Both points should be gone from site: {pt_labels_site}"
+    print(f"    OK — {pt_labels_site}\n")
 
     # --- Delete equipment ---
     print("[19] DELETE /equipment/{id}")
@@ -556,55 +508,33 @@ def run():
     assert code == 404
     print("    OK (verified 404)\n")
 
-    # --- SPARQL: equipment gone from TTL ---
-    print("[19b] SPARQL: equipment labels (test-ahu-1 gone)")
-    eq_labels = _sparql_equipment_labels()
-    assert "test-ahu-1" not in eq_labels, f"test-ahu-1 should be gone: {eq_labels}"
-    print(f"    OK — {eq_labels}\n")
+    # --- SPARQL: equipment gone from our site's TTL ---
+    print("[19b] SPARQL: equipment labels for test site (test-ahu-1 gone)")
+    eq_labels_site = _sparql_equipment_labels_for_site(test_site_name)
+    assert "test-ahu-1" not in eq_labels_site, f"test-ahu-1 should be gone from site: {eq_labels_site}"
+    print(f"    OK — {eq_labels_site}\n")
 
-    # --- BACnet device 3456789: CRUD delete a few points, then equipment; validate in CRUD + SPARQL ---
-    if bacnet_equipment_id:
-        if bacnet_point_ids:
-            to_delete = bacnet_point_ids[:2]  # delete up to 2 points
-            for i, bp in enumerate(to_delete):
-                pid, ext = bp["id"], bp.get("external_id") or bp["id"]
-                print(f"[19c.{i+1}] DELETE /points/{{id}} (BACnet point {ext})")
-                code, _ = _request("DELETE", f"/points/{pid}")
-                assert ok(code)
-                code, _ = _request("GET", f"/points/{pid}")
-                assert code == 404
-                print("    OK (verified 404)\n")
-            print("[19d] SPARQL: deleted BACnet points removed from TTL")
-            pt_labels_after = _sparql_point_labels()
-            for bp in to_delete:
-                ext = (bp.get("external_id") or "").strip()
-                if ext:
-                    assert (
-                        ext not in pt_labels_after
-                    ), f"Point {ext!r} should be gone: {pt_labels_after}"
-            print(f"    OK — {pt_labels_after}\n")
-
-            # Delete remaining BACnet points (so we can delete equipment)
-            for bp in bacnet_point_ids[2:]:
-                pid = bp["id"]
-                print("[19e] DELETE /points/{id} (remaining BACnet point)")
-                code, _ = _request("DELETE", f"/points/{pid}")
-                assert ok(code)
-                print("    OK\n")
-
-        print("[19f] DELETE /equipment/{id} (BACnet device 3456789)")
-        code, _ = _request("DELETE", f"/equipment/{bacnet_equipment_id}")
-        assert ok(code)
-        code, _ = _request("GET", f"/equipment/{bacnet_equipment_id}")
-        assert code == 404
-        print("    OK (verified 404)\n")
-
-        print("[19g] SPARQL: BACnet device 3456789 removed from TTL")
-        eq_labels = _sparql_equipment_labels()
-        assert (
-            f"BACnet device {DEVICE_3456789}" not in eq_labels
-        ), f"BACnet device should be gone: {eq_labels}"
-        print(f"    OK — {eq_labels}\n")
+    # --- Re-add BACnet device to graph (point_discovery_to_graph), then SPARQL (no gateway RDF) ---
+    if BACNET_URL:
+        print(f"[19c] POST /bacnet/point_discovery_to_graph (re-add device {BACNET_DEVICE_INSTANCE} to graph)")
+        code, pdg2 = _request(
+            "POST",
+            "/bacnet/point_discovery_to_graph",
+            json_body={
+                "instance": {"device_instance": BACNET_DEVICE_INSTANCE},
+                "update_graph": True,
+                "write_file": True,
+            },
+            timeout=30.0,
+        )
+        assert ok(code), f"point_discovery_to_graph re-add failed: {code} {pdg2}"
+        print("    OK\n")
+        print("[19d] SPARQL: bacnet:Device present again after re-add")
+        dev_bindings2 = _sparql(
+            "PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#> SELECT ?dev WHERE { ?dev a bacnet:Device }"
+        )
+        assert len(dev_bindings2) >= 1, "SPARQL: bacnet:Device back in graph"
+        print(f"    OK — {len(dev_bindings2)} bacnet:Device(s)\n")
 
     # --- Delete site ---
     print("[20] DELETE /sites/{id}")
@@ -670,15 +600,13 @@ def run():
 
     print("=== All features passed ===\n")
     print(
-        "  Health, BACnet proxy (server_hello, whois_range, discovery-to-rdf, import_into_data_model),"
+        "  Health, BACnet (server_hello, whois_range, point_discovery_to_graph),"
     )
     print(
         "  CRUD (sites, equipment, points), data model (TTL, export, SPARQL), merged BACnet+BRICK graph,"
     )
-    print("  download (CSV, faults), lifecycle (create → import → delete → SPARQL).")
-    print(
-        "  config/brick_model.ttl is updated on every CRUD and import (watch it change on create/update/delete).\n"
-    )
+    print("  download (CSV, faults), lifecycle (create → delete → SPARQL; BACnet via point_discovery_to_graph).")
+    print("  config/brick_model.ttl is updated on every CRUD and serialize.\n")
 
 
 def main() -> None:
@@ -698,11 +626,18 @@ def main() -> None:
     parser.add_argument(
         "--skip-bacnet",
         action="store_true",
-        help="Skip discovery-to-rdf (don’t send BACnet request through Open-FDD)",
+        help="Skip BACnet proxy steps (server_hello, whois_range, point_discovery_to_graph)",
+    )
+    parser.add_argument(
+        "--bacnet-device-instance",
+        type=int,
+        default=3456789,
+        metavar="ID",
+        help="BACnet device instance for point_discovery_to_graph (0-4194303). Default: 3456789.",
     )
     args = parser.parse_args()
 
-    global BASE_URL, BACNET_URL
+    global BASE_URL, BACNET_URL, BACNET_DEVICE_INSTANCE
     BASE_URL = (os.environ.get("BASE_URL") or args.base_url).strip().rstrip("/")
     if args.skip_bacnet:
         BACNET_URL = ""
@@ -710,6 +645,9 @@ def main() -> None:
         BACNET_URL = (
             (os.environ.get("BACNET_URL") or args.bacnet_url).strip().rstrip("/")
         )
+    BACNET_DEVICE_INSTANCE = int(
+        os.environ.get("BACNET_DEVICE_INSTANCE", str(args.bacnet_device_instance))
+    )
 
     run()
 

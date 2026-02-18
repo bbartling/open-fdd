@@ -115,9 +115,9 @@ The API proxies to diy-bacnet-server for discovery and can import results into t
 | POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
 | POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
 | POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
-| POST   | /bacnet/discovery-to-rdf | **Discovery → RDF** (and optional **import**). Calls the BACnet gateway, stores TTL, merges for SPARQL. Set **`import_into_data_model: true`** to parse the TTL and create site/equipment/points (syncs `config/brick_model.ttl`). Body: `request` (start/end_instance), optional `url`, `import_into_data_model`, `site_id`, `create_site`. |
+| POST   | /bacnet/point_discovery_to_graph | **Point discovery → in-memory graph**. Calls the gateway for point discovery (device instance), builds BACnet TTL from JSON, updates the graph and optionally writes `config/brick_model.ttl`. Body: `instance` (device_instance), optional `update_graph`, `write_file`, `url`. |
 
-Config UI at `/app/` provides a BACnet panel. To create points from discovery in one step, call `POST /bacnet/discovery-to-rdf` with `import_into_data_model: true`.
+Config UI at `/app/` provides a BACnet panel. Use **POST /bacnet/point_discovery_to_graph** to put BACnet devices/points into the graph; create points in the DB via CRUD or data-model export/import.
 
 ---
 

@@ -1,8 +1,10 @@
 """
-Data model API: export/import points (JSON for LLM), TTL from DB, run SPARQL.
+Data model API: export/import points (JSON for LLM Brick tagging), TTL from DB, SPARQL.
 
-Single source of truth = DB. TTL is generated from DB. CRUD mutations (delete site/equipment/point)
-already update the DB; GET /data-model/ttl always reflects current state.
+Workflow: Discover BACnet (whois, point_discovery_to_graph) and create/curate points via CRUD.
+Export JSON (GET /data-model/export) → LLM or human adds brick_type/rule_input → PUT /data-model/import.
+Import only updates BRICK/tagging fields; BACnet refs and point_id are never cleared, so timeseries
+and BACnet bindings stay valid. Single source of truth = DB; TTL = DB + in-memory graph (BACnet).
 """
 
 from __future__ import annotations
@@ -14,11 +16,17 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.data_model_ttl import (
     build_ttl_from_db,
     get_ttl_for_sparql,
     sync_ttl_to_file,
+)
+from open_fdd.platform.graph_model import (
+    get_serialization_status,
+    serialize_to_ttl,
+    write_ttl_to_file,
 )
 
 router = APIRouter(prefix="/data-model", tags=["data-model"])
@@ -28,6 +36,8 @@ router = APIRouter(prefix="/data-model", tags=["data-model"])
 
 
 class PointExportRow(BaseModel):
+    """One point in the data-model export. point_id is stable for import; BACnet refs identify the device/object."""
+
     point_id: str
     site_id: str
     site_name: str | None
@@ -37,16 +47,25 @@ class PointExportRow(BaseModel):
     brick_type: str | None
     rule_input: str | None = Field(
         None,
-        description="Name FDD rules use to reference this point's timeseries. Usually = external_id (e.g. HTG-O, CLG-O) or a short alias (e.g. htg_cmd). Maps to DB column fdd_input.",
+        description="Name FDD rules use to reference this point's timeseries. Usually = external_id or alias. Maps to DB fdd_input.",
     )
     unit: str | None
+    bacnet_device_id: str | None = Field(
+        None, description="BACnet device reference; preserved on import."
+    )
+    object_identifier: str | None = Field(
+        None, description="BACnet object ID (e.g. analog-input,1); preserved on import."
+    )
+    object_name: str | None = Field(
+        None, description="BACnet object name; preserved on import."
+    )
 
 
 @router.get(
     "/export",
     response_model=list[PointExportRow],
-    summary="Step 1: Export points for Brick mapping",
-    response_description="JSON list with point_id, external_id, site_name. Use point_id when building the import body.",
+    summary="Export data model as JSON (for LLM Brick tagging)",
+    response_description="JSON list of points with point_id, external_id, site_name, brick_type, rule_input, and BACnet refs (bacnet_device_id, object_identifier, object_name). Use point_id in import body.",
 )
 def export_points(
     site_id: str | None = Query(
@@ -54,7 +73,7 @@ def export_points(
         description="Filter by site: UUID, name (e.g. BensOffice), or description. Omit for all sites.",
     ),
 ):
-    """**Step 1 of Brick workflow.** Export all points as JSON. Use site_id = name (e.g. BensOffice) or UUID. Copy the response; add brick_type, rule_input, then PUT /data-model/import."""
+    """Export points as JSON for AI-enhanced data modeling. After BACnet discovery and CRUD, send this payload to an LLM (or human) to fill brick_type and rule_input; then PUT /data-model/import. BACnet and timeseries refs are preserved on import."""
     _site_id = _resolve_site_filter(site_id)
     if site_id and site_id.strip() and _site_id is None:
         raise HTTPException(404, f"No site found for name/description: {site_id!r}")
@@ -64,7 +83,8 @@ def export_points(
                 cur.execute(
                     """
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
-                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit
+                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
+                           p.bacnet_device_id, p.object_identifier, p.object_name
                     FROM points p
                     LEFT JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
@@ -76,7 +96,8 @@ def export_points(
             else:
                 cur.execute("""
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
-                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit
+                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
+                           p.bacnet_device_id, p.object_identifier, p.object_name
                     FROM points p
                     LEFT JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
@@ -94,6 +115,9 @@ def export_points(
             brick_type=r.get("brick_type"),
             rule_input=r.get("fdd_input"),
             unit=r.get("unit"),
+            bacnet_device_id=r.get("bacnet_device_id"),
+            object_identifier=r.get("object_identifier"),
+            object_name=r.get("object_name"),
         )
         for r in rows
     ]
@@ -171,11 +195,11 @@ class DataModelImportBody(BaseModel):
 
 @router.put(
     "/import",
-    summary="Step 3: Import Brick mapping",
+    summary="Import Brick mapping (preserves BACnet and timeseries refs)",
     response_description='Count of points updated (e.g. { "updated": 30, "total": 30 }).',
 )
 def import_data_model(body: DataModelImportBody):
-    """**Step 3 of Brick workflow.** Full BRICK data modeling: update brick_type, rule_input (or fdd_input), site_id, equipment_id, external_id, unit, description per point. Sites created via POST /sites. Body: `{\"points\": [{\"point_id\": \"uuid\", \"brick_type\": \"...\", \"rule_input\": \"HTG-O\", \"equipment_id\": \"...\"}, ...]}`. TTL auto-syncs on import."""
+    """Update brick_type, rule_input, site_id, equipment_id, external_id, unit, description per point. Only the fields you send are updated; bacnet_device_id, object_identifier, object_name and point_id are never cleared, so timeseries and BACnet bindings stay valid. TTL auto-syncs on import."""
     updated = 0
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -245,8 +269,8 @@ def _resolve_site_filter(site_filter: str | None) -> UUID | None:
 @router.get(
     "/ttl",
     response_class=PlainTextResponse,
-    summary="Step 4: View Brick TTL",
-    response_description="Turtle (text/turtle) of current data model.",
+    summary="View Brick + BACnet TTL",
+    response_description="Turtle (text/turtle) of current data model (DB + in-memory graph).",
 )
 def get_ttl(
     site_id: str | None = Query(
@@ -258,21 +282,53 @@ def get_ttl(
         description="Write TTL to config/brick_model.ttl (default: true). Also auto-synced on every CRUD/import.",
     ),
 ):
-    """Generate Brick TTL from current DB. Use site_id = site name (e.g. BensOffice) or description—no need for UUID. Omit for all sites."""
+    """Return full data model TTL (Brick from DB + BACnet from in-memory graph). Omit for all sites."""
     _site_id = _resolve_site_filter(site_id)
     if site_id and site_id.strip() and _site_id is None:
         raise HTTPException(404, f"No site found for name/description: {site_id!r}")
-    ttl = build_ttl_from_db(site_id=_site_id)
+    try:
+        ttl = serialize_to_ttl()
+    except Exception:
+        ttl = build_ttl_from_db(site_id=_site_id)
     if save:
         try:
-            sync_ttl_to_file(immediate=True)
+            ok, err = write_ttl_to_file()
+            if not ok and err:
+                resp = PlainTextResponse(ttl, media_type="text/turtle")
+                resp.headers["X-TTL-Save"] = "failed"
+                resp.headers["X-TTL-Save-Error"] = (err or "")[:200]
+                return resp
         except Exception as e:
-            # Still return TTL; save is best-effort (Docker may have read-only filesystem)
             resp = PlainTextResponse(ttl, media_type="text/turtle")
             resp.headers["X-TTL-Save"] = "failed"
             resp.headers["X-TTL-Save-Error"] = str(e)[:200]
             return resp
     return PlainTextResponse(ttl, media_type="text/turtle")
+
+
+# --- Serialize: write in-memory graph to config/brick_model.ttl (same as interval job) ---
+
+
+@router.post(
+    "/serialize",
+    summary="Serialize graph to TTL file",
+    response_description="Status and path; same function runs on the background interval.",
+)
+def serialize_graph_to_file():
+    """Serialize the in-memory graph (Brick + BACnet) to config/brick_model.ttl. Same as the 5‑minute background sync."""
+    ok, err = write_ttl_to_file()
+    status = get_serialization_status()
+    if ok:
+        return {
+            "status": "ok",
+            "path": str(get_platform_settings().brick_ttl_path),
+            **status["graph_serialization"],
+        }
+    return {
+        "status": "error",
+        "error": err,
+        **status["graph_serialization"],
+    }
 
 
 # --- SPARQL: run query against current TTL (from DB) ---
@@ -322,7 +378,7 @@ def _run_sparql_on_ttl(ttl_content: str, query: str) -> list[dict]:
 
 @router.post(
     "/sparql",
-    summary="Step 5: Run SPARQL (validate)",
+    summary="Run SPARQL (validate)",
     response_description="Query result bindings as JSON.",
 )
 def run_sparql(

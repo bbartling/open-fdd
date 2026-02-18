@@ -46,6 +46,9 @@ class PlatformSettings(BaseSettings):
     open_meteo_days_back: int = 3
     open_meteo_site_id: str = "default"  # site name or UUID to store weather under
 
+    # Graph model: sync in-memory graph to brick_model.ttl every N minutes
+    graph_sync_interval_min: int = 5
+
     # BACnet: use diy-bacnet-server JSON-RPC when set (e.g. http://localhost:8080)
     bacnet_server_url: Optional[str] = None
     # Site to tag when scraping (single gateway or remote gateway pushing to central)

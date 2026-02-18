@@ -67,6 +67,40 @@ def test_data_model_export_returns_point_refs():
     assert data[0]["rule_input"] == "sat"
 
 
+def test_data_model_export_includes_bacnet_refs():
+    """Export includes bacnet_device_id, object_identifier, object_name for LLM/AI tagging workflow."""
+    site_id = uuid4()
+    point_id = uuid4()
+    rows = [
+        {
+            "id": point_id,
+            "site_id": site_id,
+            "site_name": "Office",
+            "external_id": "SA-T",
+            "equipment_id": None,
+            "equipment_name": None,
+            "brick_type": None,
+            "fdd_input": None,
+            "unit": "degF",
+            "bacnet_device_id": "3456789",
+            "object_identifier": "analog-input,1",
+            "object_name": "Supply Air Temp",
+        }
+    ]
+    with patch(
+        "open_fdd.platform.api.data_model.get_conn",
+        side_effect=lambda: _mock_conn_with_cursor(rows),
+    ):
+        r = client.get("/data-model/export")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["bacnet_device_id"] == "3456789"
+    assert data[0]["object_identifier"] == "analog-input,1"
+    assert data[0]["object_name"] == "Supply Air Temp"
+    assert data[0]["point_id"] == str(point_id)
+
+
 def test_data_model_ttl_generated_from_db():
     site_id = uuid4()
     sites = [{"id": site_id, "name": "Default"}]
@@ -187,3 +221,131 @@ def test_data_model_import_accepts_fdd_input_deprecated():
     ):
         r = client.put("/data-model/import", json=body)
     assert r.status_code == 200
+
+
+def _sample_object_names_from_point_discovery_response(
+    pdg_response: dict, max_names: int = 5
+) -> list[str]:
+    """Extract up to max_names unique object names from point_discovery_to_graph response (e2e contract)."""
+    body = pdg_response.get("body") if isinstance(pdg_response, dict) else pdg_response
+    res = body.get("result") if isinstance(body, dict) else {}
+    data = (res.get("data") or res) if isinstance(res, dict) else {}
+    objs = data.get("objects") or []
+    names = []
+    for o in objs[: max_names * 2]:  # look at a few more in case of blanks/dupes
+        if isinstance(o, dict):
+            n = (o.get("object_name") or o.get("name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+                if len(names) >= max_names:
+                    break
+    return names
+
+
+def test_sample_object_names_from_point_discovery_response():
+    """Parsing point_discovery_to_graph response yields up to 5 unique object names (e2e contract)."""
+    assert _sample_object_names_from_point_discovery_response({}) == []
+    assert _sample_object_names_from_point_discovery_response({"body": {}}) == []
+    assert (
+        _sample_object_names_from_point_discovery_response(
+            {"body": {"result": {"data": {"objects": []}}}}
+        )
+        == []
+    )
+    assert _sample_object_names_from_point_discovery_response(
+        {
+            "body": {
+                "result": {
+                    "data": {
+                        "objects": [
+                            {"object_name": "SA-T"},
+                            {"object_name": "ZoneTemp"},
+                        ]
+                    }
+                }
+            }
+        }
+    ) == ["SA-T", "ZoneTemp"]
+    assert _sample_object_names_from_point_discovery_response(
+        {"body": {"result": {"data": {"objects": [{"name": "DAP-P"}]}}}},
+        max_names=5,
+    ) == ["DAP-P"]
+    # duplicates and blanks skipped; cap at max
+    r = {
+        "body": {
+            "result": {
+                "data": {
+                    "objects": [
+                        {"object_name": "A"},
+                        {"object_name": ""},
+                        {"object_name": "A"},
+                        {"object_name": "B"},
+                        {"object_name": "C"},
+                        {"object_name": "D"},
+                        {"object_name": "E"},
+                    ]
+                }
+            }
+        }
+    }
+    assert _sample_object_names_from_point_discovery_response(r, max_names=5) == [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+    ]
+
+
+_BACNET_TTL_FOR_SPARQL = """@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<bacnet://3456789> a bacnet:Device ;
+    bacnet:device-instance 3456789 ;
+    bacnet:contains <bacnet://3456789/analog-input,1>, <bacnet://3456789/analog-input,2> .
+<bacnet://3456789/analog-input,1> bacnet:object-name "SA-T" .
+<bacnet://3456789/analog-input,2> bacnet:object-name "ZoneTemp" .
+"""
+
+
+def test_sparql_bacnet_device_and_object_names():
+    """SPARQL over TTL that contains BACnet returns Device and object-name bindings (e2e graph path)."""
+    with patch(
+        "open_fdd.platform.api.data_model.get_ttl_for_sparql",
+        return_value=_BACNET_TTL_FOR_SPARQL,
+    ):
+        r = client.post(
+            "/data-model/sparql",
+            json={
+                "query": """
+                PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+                SELECT ?dev WHERE { ?dev a bacnet:Device }
+                """,
+            },
+        )
+    assert r.status_code == 200
+    bindings = r.json().get("bindings") or []
+    assert len(bindings) >= 1
+    assert any("dev" in b for b in bindings)
+
+    with patch(
+        "open_fdd.platform.api.data_model.get_ttl_for_sparql",
+        return_value=_BACNET_TTL_FOR_SPARQL,
+    ):
+        r2 = client.post(
+            "/data-model/sparql",
+            json={
+                "query": """
+                PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+                SELECT ?name WHERE {
+                  ?dev a bacnet:Device ; bacnet:device-instance 3456789 ; bacnet:contains ?obj .
+                  ?obj bacnet:object-name ?name .
+                }
+                """,
+            },
+        )
+    assert r2.status_code == 200
+    names = [
+        b.get("name") or "" for b in (r2.json().get("bindings") or []) if b.get("name")
+    ]
+    assert "SA-T" in names
+    assert "ZoneTemp" in names

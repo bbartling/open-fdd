@@ -14,7 +14,7 @@ open-fdd/
 │   │   ├── api/           # CRUD (sites, points, equipment), bacnet, data_model, download, analytics, run_fdd
 │   │   ├── drivers/       # open_meteo, bacnet (RPC + data-model scrape), bacnet_validate
 │   │   ├── bacnet_brick.py # BACnet object_type → BRICK class mapping
-│   │   ├── config.py, database.py, data_model_ttl.py, site_resolver.py
+│   │   ├── config.py, database.py, data_model_ttl.py, graph_model.py, site_resolver.py
 │   │   ├── loop.py, rules_loader.py
 │   │   └── static/        # Config UI (index.html, app.js, styles.css)
 │   └── tests/             # analyst/, engine/, platform/, test_schema.py
@@ -29,14 +29,11 @@ open-fdd/
 │   ├── discover_bacnet.py  # BACnet discovery → CSV (bacpypes3)
 │   ├── run_bacnet_scrape.py # Scrape loop/CLI (data-model or CSV, RPC via diy-bacnet-server)
 │   ├── run_weather_fetch.py, run_rule_loop.py, run_host_stats.py
+│   ├── graph_and_crud_test.py  # CRUD + RDF + SPARQL e2e (point_discovery_to_graph, optional --bacnet-device-instance)
 │   ├── trigger_fdd_run.py, test_crud_api.py
 │   └── ...
 └── examples/               # cloud_export, brick_resolver, run_all_rules_brick, etc.
 ```
-
-
-
----
 
 ## Environmental Variables
 
@@ -51,7 +48,8 @@ All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and 
 | `OFDD_APP_VERSION` | 0.1.0 | API version (e.g. in `/` and docs). |
 | `OFDD_DEBUG` | false | Debug mode. |
 | `OFDD_BRICK_TTL_DIR` | data/brick | Unused in current flow. |
-| `OFDD_BRICK_TTL_PATH` | config/brick_model.ttl | Unified TTL file (Brick section synced from DB; BACnet discovery section appended by discovery-to-rdf). |
+| `OFDD_BRICK_TTL_PATH` | config/brick_model.ttl | Unified TTL file. Brick triples synced from DB; BACnet triples from point_discovery (in-memory graph). Written by graph_model sync (interval or on demand). |
+| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Minutes between serializing the in-memory graph to brick_model.ttl. |
 | **FDD loop** | | |
 | `OFDD_RULE_INTERVAL_HOURS` | 3 | FDD run interval (hours). |
 | `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
@@ -95,23 +93,28 @@ Tests live under `open_fdd/tests/`. Run: `pytest` or `pytest open_fdd/tests/ -v`
 - **engine/test_brick_resolver.py** — Resolve column map from TTL, accept str path, equipment types, disambiguation with mapsToRuleInput.
 - **engine/test_runner.py** — Expression rule, bounds rule, out-of-range, flatline, from-dir, FC3 expression, bounds metric units, column map override/Brick class, FC4 hunting.
 - **engine/test_weather_rules.py** — Load weather rules, RH out of range, gust &lt; wind.
-- **platform/test_bacnet_api.py** — Import-discovery 422 when no point_discoveries; import normalized point_discoveries; parse raw point_discovery_result.
+- **platform/test_bacnet_api.py** — parse_bacnet_ttl_to_discovery (devices and point_discoveries from TTL).
 - **platform/test_bacnet_brick.py** — object_type_to_brick (analog, binary, with instance, case-insensitive, unknown); object_identifier_to_brick.
 - **platform/test_bacnet_driver.py** — get_bacnet_points_from_data_model empty, normalized rows, filter by site_id.
 - **platform/test_config.py** — Platform settings defaults.
 - **platform/test_crud_api.py** — Sites list/create/get/patch/delete (incl. 404); equipment list/create/get/delete; points list/create/get/patch/delete, create with BACnet fields, list/patch BACnet fields.
-- **platform/test_data_model_api.py** — Data model export empty/point refs, TTL from DB, SPARQL bindings, import updates points, deprecated fdd_input.
+- **platform/test_data_model_api.py** — Data model export empty/point refs, TTL from DB, SPARQL bindings (Brick + BACnet), import updates points, deprecated fdd_input; sample object names from point_discovery response; SPARQL bacnet:Device and object-name bindings.
 - **platform/test_data_model_ttl.py** — Prefixes, escape, build TTL empty DB, one site one point, site with equipment and points.
 - **platform/test_download_api.py** — Download CSV 404 (site not found, no data), 200 wide/long; download faults 404, 200 CSV/JSON.
+- **platform/test_graph_model.py** — bacnet_ttl_from_point_discovery (empty objects, device and object names, name fallback, quote escaping).
 - **platform/test_rules_loader.py** — Rules dir hash, empty hash, hot reload rules.
 - **platform/test_site_resolver.py** — resolve_site_uuid by UUID, by name, not found with other sites, empty table create false/true.
 - **test_schema.py** — FDD result/event to row; results from runner output; events from flag series.
 
 ---
 
+## Data model API: export/import for AI-enhanced Brick tagging
+
+**GET /data-model/export** returns a JSON list of all points (optionally filtered by site) including `point_id`, `external_id`, `site_name`, `brick_type`, `rule_input`, `unit`, and **BACnet refs** (`bacnet_device_id`, `object_identifier`, `object_name`). Intended workflow: after BACnet discovery and CRUD, the setup person exports this JSON, sends it to an LLM (or uses a local tool) to fill in BRICK types and rule inputs, then **PUT /data-model/import** with the revised payload. Import updates only the fields you send (brick_type, rule_input, site_id, equipment_id, external_id, unit, description); it never clears `point_id` or BACnet columns, so timeseries and BACnet bindings remain valid. **GET /data-model/ttl** and **POST /data-model/sparql** then reflect the merged Brick + BACnet graph for FDD and validation.
+
 ## Data Model Sync Processes
 
-The data model is still synced to the single TTL file so the FDD loop and other readers see the latest Brick and BACnet data. We keep the BACnet section in memory so each sync doesn’t have to read the file, and we debounce writes so a burst of CRUDs triggers one write about 250 ms after the last change instead of one write per operation. The file on disk stays correct; we just do fewer reads and batch the writes.
+The data model is synced to the single TTL file so the FDD loop and other readers see the latest Brick and BACnet data. The live store is an **in-memory RDF graph** in `platform/graph_model.py`: an rdflib `Graph()` (triple store: subject–predicate–object). Brick triples are refreshed from the DB on sync; BACnet triples are updated from point_discovery JSON. SPARQL and TTL export read from this graph, so we don’t re-read the file on every request. We keep the BACnet section in memory and debounce writes so a burst of CRUDs triggers one write about 250 ms after the last change instead of one write per operation. The file on disk stays correct with fewer reads and batched writes. At API startup the lifespan loads the graph from file, does one initial write, then starts a **background thread** (`graph_model._sync_loop`) that serializes the graph to `config/brick_model.ttl` every **OFDD_GRAPH_SYNC_INTERVAL_MIN** (default 5) minutes; **POST /data-model/serialize** does the same on demand.
 
 ## Database design & troubleshooting
 

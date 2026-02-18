@@ -295,5 +295,6 @@ fi
 echo ""
 echo "Verify all services: ./scripts/bootstrap.sh --verify"
 echo "Test CRUD + SPARQL:  python tools/test_crud_api.py  (optional: BACNET_URL=http://localhost:8080)"
+echo "Test graph + CRUD:  python tools/graph_and_crud_test.py  (in-memory graph, serialize, SPARQL; optional: BACNET_URL=...)"
 echo "View logs: docker compose -f platform/docker-compose.yml logs -f"
 echo ""

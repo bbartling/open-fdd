@@ -31,6 +31,7 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
 | `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
+| `graph_sync_interval_min` | 5 | Minutes between serializing the in-memory graph to `brick_model.ttl` (API background thread). Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_use_data_model` | true | Prefer scraping points from the data model (points with `bacnet_device_id`/`object_identifier`); fall back to CSV if none. Env: `OFDD_BACNET_USE_DATA_MODEL`. |
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |

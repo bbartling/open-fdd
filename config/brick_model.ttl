@@ -1,82 +1,673 @@
-@prefix brick: <https://brickschema.org/schema/Brick#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix ofdd: <http://openfdd.local/ontology#> .
 @prefix : <http://openfdd.local/site#> .
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
+<bacnet://123456> a bacnet:Device ;
+    bacnet:contains <bacnet://123456/binary-value,1>,
+        <bacnet://123456/calendar,1>,
+        <bacnet://123456/device,123456>,
+        <bacnet://123456/network-port,1>,
+        <bacnet://123456/schedule,1> ;
+    bacnet:device-address [ rdfs:label "192.168.204.14" ;
+            bacnet:mac-address "c0a8cc0ebac0"^^xsd:hexBinary ;
+            bacnet:network-number "0"^^xsd:nonNegativeInteger ] ;
+    bacnet:device-instance 123456 .
 
-:site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9 a brick:Site ;
-    rdfs:label "default" .
+<bacnet://3456788> a bacnet:Device ;
+    rdfs:label "BACnet device 3456788" ;
+    bacnet:device-address [ rdfs:label "" ] ;
+    bacnet:device-instance 3456788 .
 
-:site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points a brick:Equipment ;
-    rdfs:label "Points" ;
-    brick:isPartOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9 ;
-    ofdd:equipmentType "Unknown" .
+<bacnet://3456789> a bacnet:Device ;
+    rdfs:label "BensFakeAhu" ;
+    bacnet:contains <bacnet://3456789/analog-input,1>,
+        <bacnet://3456789/analog-input,2>,
+        <bacnet://3456789/analog-input,3>,
+        <bacnet://3456789/analog-input,4>,
+        <bacnet://3456789/analog-input,5>,
+        <bacnet://3456789/analog-input,6>,
+        <bacnet://3456789/analog-input,7>,
+        <bacnet://3456789/analog-output,1>,
+        <bacnet://3456789/analog-output,2>,
+        <bacnet://3456789/analog-output,3>,
+        <bacnet://3456789/analog-output,4>,
+        <bacnet://3456789/analog-value,1>,
+        <bacnet://3456789/analog-value,2>,
+        <bacnet://3456789/analog-value,3>,
+        <bacnet://3456789/binary-input,1>,
+        <bacnet://3456789/binary-output,1>,
+        <bacnet://3456789/device,3456789>,
+        <bacnet://3456789/multi-state-value,1>,
+        <bacnet://3456789/network-port,1> ;
+    bacnet:device-address [ rdfs:label "192.168.204.13" ] ;
+    bacnet:device-instance 3456789 .
 
-:pt_a64b2603_b41a_40a5_bdb3_f349abfe5723 a brick:Point ;
-    rdfs:label "cloud_pct" ;
-    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+<bacnet://3456790> a bacnet:Device ;
+    bacnet:contains <bacnet://3456790/analog-input,1>,
+        <bacnet://3456790/analog-input,2>,
+        <bacnet://3456790/analog-output,1>,
+        <bacnet://3456790/analog-value,1>,
+        <bacnet://3456790/analog-value,2>,
+        <bacnet://3456790/analog-value,3>,
+        <bacnet://3456790/device,3456790>,
+        <bacnet://3456790/network-port,1> ;
+    bacnet:device-address [ rdfs:label "192.168.204.12" ;
+            bacnet:mac-address "c0a8cc0cbac0"^^xsd:hexBinary ;
+            bacnet:network-number "0"^^xsd:nonNegativeInteger ] ;
+    bacnet:device-instance 3456790 .
 
-:pt_49bfa947_bc31_4ee1_b8d4_c18628dafe19 a brick:Point ;
-    rdfs:label "dewpoint_f" ;
-    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+:eq_54ef5719_3f01_4e79_acdf_56108a41e7fa a brick:Air_Handling_Unit ;
+    rdfs:label "test-ahu-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:isPartOf :site_8837e419_f4f9_448c_8a32_b845b9aee7ea .
 
-:pt_86e8a75d_7d1b_43d3_815f_1302760b30e1 a brick:Point ;
-    rdfs:label "diffuse_wm2" ;
-    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+:eq_5aff7c17_d8d7_4e7c_b417_26ca01b0f923 a brick:Air_Handling_Unit ;
+    rdfs:label "test-ahu-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:isPartOf :site_5ab239d6_e4cf_4c6b_b32b_a2fcfdf93633 .
+
+:eq_bde2952d_73a3_46fc_9a19_6593dbe09e0d a brick:Air_Handling_Unit ;
+    rdfs:label "test-ahu-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:isPartOf :site_f4e7fe09_9ddb_45fa_ac17_81420023079f .
+
+:pt_05b8ee04_75c6_49ec_b8ee_66fe1cb95f77 a brick:State ;
+    rdfs:label "SF-S" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_0a7b37ce_73e7_4e95_a9e2_d85c3a625b7a a brick:Sensor ;
+    rdfs:label "SAT-SP" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_0bba8963_3306_48e1_b176_e72a7bc8b9c8 a brick:Sensor ;
+    rdfs:label "HTG-O" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_0c6fdba2_32c0_4695_a9e7_ed2470140cef a brick:State ;
+    rdfs:label "SF-C" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
 
 :pt_1a2670ab_dced_4c55_9ba6_b893152e4c51 a brick:Point ;
     rdfs:label "direct_wm2" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
 
-:pt_e30291b9_565c_4d03_a06d_78672f770711 a brick:Point ;
-    rdfs:label "gti_wm2" ;
-    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+:pt_2071e96b_05ce_4d18_9f50_eedeaf420a96 a brick:Point ;
+    rdfs:label "BensFakeVAV" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
+:pt_217e4165_4912_412b_a374_0fb1d712f3e5 a brick:Sensor ;
+    rdfs:label "VAVFlow" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
+:pt_22916f32_4883_4df7_b359_e9b97b943b50 a brick:Outside_Air_Temperature_Sensor ;
+    rdfs:label "OAT" ;
+    ofdd:mapsToRuleInput "oat" ;
+    brick:isPointOf :site_5ab239d6_e4cf_4c6b_b32b_a2fcfdf93633_points .
+
+:pt_22c9a3ca_d7a6_4bff_bd92_81a993610e40 a brick:Sensor ;
+    rdfs:label "CLG-O" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_22e4d2ac_88b5_4751_9e4f_4cabf8605396 a brick:State ;
+    rdfs:label "occupied-bv" ;
+    brick:isPointOf :eq_f482d507_7731_4827_b4b3_d69271e9811c .
+
+:pt_252f04b5_73ed_4e64_86af_3f22c5619f6a a brick:Sensor ;
+    rdfs:label "ZoneCoolingSpt" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
 
 :pt_2637aafd_8df4_41fc_a667_0ee9b963b8c2 a brick:Point ;
     rdfs:label "gust_mph" ;
-    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
-
-:pt_564ccbf9_75a2_479a_b143_8449278670a7 a brick:Point ;
-    rdfs:label "rh_pct" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
 
 :pt_28628f81_68d4_4182_9139_47bfa6b40b63 a brick:Point ;
     rdfs:label "shortwave_wm2" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
 
+:pt_2f397514_316a_4530_b6a3_613a576a92c3 a brick:Sensor ;
+    rdfs:label "SA-FLOW" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_2fb220ae_18f6_400d_bd4f_9501f309f345 a brick:Sensor ;
+    rdfs:label "VAVFlowSpt" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
 :pt_313709b7_fc5a_4549_aff0_eb2c0c385b8a a brick:Point ;
     rdfs:label "temp_f" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_3368bea1_02db_459b_854c_dbae1745f449 a brick:Sensor ;
+    rdfs:label "SAT-SP" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_3aa10099_5eef_45e3_bfbb_6e95104dc323 a brick:Sensor ;
+    rdfs:label "VAVDamperCmd" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_3cb76851_26c7_4694_9e30_767ad05d2a46 a brick:State ;
+    rdfs:label "Occ-Schedule" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_49bfa947_bc31_4ee1_b8d4_c18628dafe19 a brick:Point ;
+    rdfs:label "dewpoint_f" ;
+    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_4c55e042_73d6_4fdc_b285_38e3bd9dd886 a brick:Sensor ;
+    rdfs:label "CLG-O" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_543cf0d2_9f97_455b_ab01_e6938499e367 a brick:Point ;
+    rdfs:label "BensScheduleServer" ;
+    brick:isPointOf :eq_8c3ac774_de85_420c_a921_7beb28beb3ae .
+
+:pt_560aabdd_1a9f_42e8_b8e4_fe83b312d630 a brick:Point ;
+    rdfs:label "BensFakeAhu" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_564ccbf9_75a2_479a_b143_8449278670a7 a brick:Point ;
+    rdfs:label "rh_pct" ;
+    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_58de4afb_b70b_4dfd_8a3e_53219ae0e6d0 a brick:Sensor ;
+    rdfs:label "OA-T" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_590bb8e7_7b6a_435c_8911_205f16e1e039 a brick:Sensor ;
+    rdfs:label "RA-T" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_5a145e78_1574_46ab_bb65_fadeecf140e5 a brick:Sensor ;
+    rdfs:label "DPR-O" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_5c5dd00b_1ce7_43df_807b_11938a763353 a brick:Sensor ;
+    rdfs:label "OA-T" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_5e4fc66d_b2aa_4397_9aec_c6858ee6a2f5 a brick:Sensor ;
+    rdfs:label "SA-T" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_61d416c4_0f8a_430c_bd84_bdfd5dac943f a brick:Sensor ;
+    rdfs:label "DAP-SP" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_636862e0_fee7_4b5a_85d6_de2aac0badbd a brick:Sensor ;
+    rdfs:label "ELEC-PWR" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_6c92ce94_23d2_4e4b_be72_8f94d2cb2037 a brick:Point ;
+    rdfs:label "Office-Hours-Schedule" ;
+    brick:isPointOf :eq_f482d507_7731_4827_b4b3_d69271e9811c .
+
+:pt_6d39d459_424f_44eb_a988_ae9d7f076e42 a brick:Sensor ;
+    rdfs:label "DAP-P" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_7a8d63b5_9aaf_48a9_b905_b4e218c3a70a a brick:Sensor ;
+    rdfs:label "ELEC-PWR" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_7f05b096_95cc_441e_8882_a67460f5082c a brick:Point ;
+    rdfs:label "BensFakeVAV" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_82c67074_ed47_4fd0_a0eb_7942dcc8f84a a brick:Sensor ;
+    rdfs:label "MA-T" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_83a976f1_08e2_4719_9a7c_e0910df89a21 a brick:Sensor ;
+    rdfs:label "HTG-O" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_86e8a75d_7d1b_43d3_815f_1302760b30e1 a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_88cd15f6_c72f_4bf8_95e5_eb3a233a66a7 a brick:Point ;
+    rdfs:label "Office-Hours-Schedule" ;
+    brick:isPointOf :eq_8c3ac774_de85_420c_a921_7beb28beb3ae .
+
+:pt_8fe6f51b_5e1f_4cb6_be8d_61afee3e83a4 a brick:State ;
+    rdfs:label "Occ-Schedule" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_9052c403_2370_4ad8_99d2_c4b474a08119 a brick:Sensor ;
+    rdfs:label "DPR-O" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_92f993e9_fc43_42b1_aa9b_e18ef913076a a brick:Sensor ;
+    rdfs:label "ZoneDemand" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_94c6c9e7_cbb1_4b61_ad35_612eb298d372 a brick:Sensor ;
+    rdfs:label "DAP-SP" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_95e67614_9e19_4915_9353_5139818e4611 a brick:Sensor ;
+    rdfs:label "VAVFlow" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
 
 :pt_98721882_7922_497f_950b_66e52bc8e0da a brick:Point ;
     rdfs:label "wind_dir_deg" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
 
+:pt_993e56fb_f178_486c_83f1_4ff404c3788a a brick:Point ;
+    rdfs:label "NetworkPort-1" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
+:pt_9d0c1471_b5ce_43e1_93a8_542bb9301906 a brick:Sensor ;
+    rdfs:label "DAP-P" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_a075ce2c_3354_4145_9187_b06e2f28de23 a brick:Sensor ;
+    rdfs:label "SF-O" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_a64b2603_b41a_40a5_bdb3_f349abfe5723 a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_a8b3ba38_2f4e_45d9_91b8_1144930a7c27 a brick:Sensor ;
+    rdfs:label "MA-T" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_a9296767_bc9b_43ce_9c09_336646195a1d a brick:Sensor ;
+    rdfs:label "RA-T" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_a954bcdb_98cd_4112_b827_c7ff8178c34f a brick:Sensor ;
+    rdfs:label "ZoneTemp" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_b059251d_6e2e_40fe_ab30_0d18ec3285f3 a brick:Point ;
+    rdfs:label "Holiday-Calendar" ;
+    brick:isPointOf :eq_8c3ac774_de85_420c_a921_7beb28beb3ae .
+
+:pt_b83a3acb_c655_4ba8_822e_330dc812e72e a brick:State ;
+    rdfs:label "SF-S" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_b9464717_ef3a_4cfc_b422_a6c3d879978e a brick:Sensor ;
+    rdfs:label "OAT-NETWORK" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_bd848c12_03a1_43d7_8726_29650bf239d8 a brick:Sensor ;
+    rdfs:label "ZoneTemp" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
+:pt_c304f1fa_8e1c_4f65_be70_e53666e7e75f a brick:Sensor ;
+    rdfs:label "VAVFlowSpt" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
 :pt_c32e6386_4e2c_4e6e_98a8_df84432b133e a brick:Point ;
     rdfs:label "wind_mph" ;
     brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
 
+:pt_c6745193_3f19_48a5_834a_4134869725e1 a brick:State ;
+    rdfs:label "occupied-bv" ;
+    brick:isPointOf :eq_8c3ac774_de85_420c_a921_7beb28beb3ae .
+
+:pt_caa8b086_c78b_43a9_99a9_6b3fea6f36a3 a brick:Sensor ;
+    rdfs:label "SA-T" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_cc00d076_d6ea_4db2_ad20_e4037930b234 a brick:Sensor ;
+    rdfs:label "OAT-NETWORK" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_ce556439_3cb6_49fa_b570_96c41e5b8378 a brick:Point ;
+    rdfs:label "Holiday-Calendar" ;
+    brick:isPointOf :eq_f482d507_7731_4827_b4b3_d69271e9811c .
+
+:pt_db15bb6e_3a30_453a_b4b6_dc505b84e2df a brick:Point ;
+    rdfs:label "BensFakeAhu" ;
+    brick:isPointOf :eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 .
+
+:pt_e30291b9_565c_4d03_a06d_78672f770711 a brick:Point ;
+    rdfs:label "gti_wm2" ;
+    brick:isPointOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points .
+
+:pt_e315bdab_9b66_4b97_ba17_02f9e5ba8199 a brick:State ;
+    rdfs:label "SF-C" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_e39d858b_1709_4318_81cf_ee9e3ffc3c1c a brick:Point ;
+    rdfs:label "BensScheduleServer" ;
+    brick:isPointOf :eq_f482d507_7731_4827_b4b3_d69271e9811c .
+
+:pt_e7d96f89_dacb_4e42_9566_6593f4e1ba7b a brick:Point ;
+    rdfs:label "NetworkPort-1" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_f5c31ddf_0be8_4f9d_ac39_3da8ad8dbd29 a brick:Sensor ;
+    rdfs:label "ZoneCoolingSpt" ;
+    brick:isPointOf :eq_706464fc_4b32_4d08_b7aa_98703432484d .
+
+:pt_f63cf472_eaaa_4f45_8342_7d86b9772c69 a brick:Sensor ;
+    rdfs:label "VAVDamperCmd" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
+
+:pt_f7f7fda6_e41d_4e5a_b944_3b1e247f93be a brick:Sensor ;
+    rdfs:label "SA-FLOW" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_f854bc39_1280_4511_a68c_1af87dc78d76 a brick:Sensor ;
+    rdfs:label "SF-O" ;
+    brick:isPointOf :eq_36723efe_7359_4979_80fa_c7b7d28a56e9 .
+
+:pt_fcef39f7_0a16_4a27_ba8d_0453bed8802b a brick:Sensor ;
+    rdfs:label "ZoneDemand" ;
+    brick:isPointOf :eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 .
 
 :site_2428cfbb_ec49_4d58_b2e5_d19de46f90a8 a brick:Site ;
     rdfs:label "test-crud-site" .
 
-:site_a846e509_c2a0_4f7d_891b_a801373c0230 a brick:Site ;
-    rdfs:label "test-crud-site" .
+:site_28df6344_22bb_45b9_abd3_627a9e9c6114 a brick:Site ;
+    rdfs:label "test-crud-site-51bbf9f7" .
 
-:site_c9595ad2_b323_415d_aeed_aa7555a1da5c a brick:Site ;
+:site_2dd35011_6f6a_4912_8880_0e6404998845 a brick:Site ;
     rdfs:label "test-crud-site" .
 
 :site_4c665077_8b94_423a_bfc6_1b45dd33eace a brick:Site ;
     rdfs:label "test-crud-site" .
 
-:site_b28fe08c_db8e_44de_8143_878ba97e9ac9 a brick:Site ;
-    rdfs:label "test-crud-site" .
-
-:site_2dd35011_6f6a_4912_8880_0e6404998845 a brick:Site ;
-    rdfs:label "test-crud-site" .
+:site_7a0c9b68_cbc7_47e1_883a_3f1ed4a75656 a brick:Site ;
+    rdfs:label "test-crud-site-6d44b4ec" .
 
 :site_958c324a_381d_40ba_8ac1_f8a2a22ef082 a brick:Site ;
     rdfs:label "test-crud-site-3cd5dedf" .
 
-:site_28df6344_22bb_45b9_abd3_627a9e9c6114 a brick:Site ;
-    rdfs:label "test-crud-site-51bbf9f7" .
+:site_a846e509_c2a0_4f7d_891b_a801373c0230 a brick:Site ;
+    rdfs:label "test-crud-site" .
+
+:site_b28fe08c_db8e_44de_8143_878ba97e9ac9 a brick:Site ;
+    rdfs:label "test-crud-site" .
+
+:site_c9595ad2_b323_415d_aeed_aa7555a1da5c a brick:Site ;
+    rdfs:label "test-crud-site" .
+
+<bacnet://123456/binary-value,1> bacnet:description "Mirrors Schedule(1) presentValue (active when non-zero)" ;
+    bacnet:object-identifier "binary-value,1" ;
+    bacnet:object-name "occupied-bv" ;
+    bacnet:object-type bacnet:ObjectType.binary-value ;
+    bacnet:present-value bacnet:BinaryPV.active .
+
+<bacnet://123456/calendar,1> bacnet:description "Global Holiday List (used for Schedule exceptions)" ;
+    bacnet:object-identifier "calendar,1" ;
+    bacnet:object-name "Holiday-Calendar" ;
+    bacnet:object-type bacnet:ObjectType.calendar .
+
+<bacnet://123456/device,123456> bacnet:object-identifier "device,123456" ;
+    bacnet:object-name "BensScheduleServer" ;
+    bacnet:object-type bacnet:ObjectType.device .
+
+<bacnet://123456/network-port,1> bacnet:object-identifier "network-port,1" ;
+    bacnet:object-name "NetworkPort-1" ;
+    bacnet:object-type bacnet:ObjectType.network-port ;
+    bacnet:out-of-service false ;
+    bacnet:reliability bacnet:Reliability.no-fault-detected .
+
+<bacnet://123456/schedule,1> bacnet:description "M-F 8-5; weekend closed; holidays closed via Calendar(1)" ;
+    bacnet:object-identifier "schedule,1" ;
+    bacnet:object-name "Office-Hours-Schedule" ;
+    bacnet:object-type bacnet:ObjectType.schedule ;
+    bacnet:present-value "<bacpypes3.constructeddata.AnyAtomic object at 0x76107ead20d0>" ;
+    bacnet:reliability bacnet:Reliability.no-fault-detected .
+
+<bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "DAP-P" .
+
+<bacnet://3456789/analog-input,2> bacnet:object-identifier "analog-input,2" ;
+    bacnet:object-name "SA-T" .
+
+<bacnet://3456789/analog-input,3> bacnet:object-identifier "analog-input,3" ;
+    bacnet:object-name "MA-T" .
+
+<bacnet://3456789/analog-input,4> bacnet:object-identifier "analog-input,4" ;
+    bacnet:object-name "RA-T" .
+
+<bacnet://3456789/analog-input,5> bacnet:object-identifier "analog-input,5" ;
+    bacnet:object-name "SA-FLOW" .
+
+<bacnet://3456789/analog-input,6> bacnet:object-identifier "analog-input,6" ;
+    bacnet:object-name "OA-T" .
+
+<bacnet://3456789/analog-input,7> bacnet:object-identifier "analog-input,7" ;
+    bacnet:object-name "ELEC-PWR" .
+
+<bacnet://3456789/analog-output,1> bacnet:object-identifier "analog-output,1" ;
+    bacnet:object-name "SF-O" .
+
+<bacnet://3456789/analog-output,2> bacnet:object-identifier "analog-output,2" ;
+    bacnet:object-name "HTG-O" .
+
+<bacnet://3456789/analog-output,3> bacnet:object-identifier "analog-output,3" ;
+    bacnet:object-name "CLG-O" .
+
+<bacnet://3456789/analog-output,4> bacnet:object-identifier "analog-output,4" ;
+    bacnet:object-name "DPR-O" .
+
+<bacnet://3456789/analog-value,1> bacnet:object-identifier "analog-value,1" ;
+    bacnet:object-name "DAP-SP" .
+
+<bacnet://3456789/analog-value,2> bacnet:object-identifier "analog-value,2" ;
+    bacnet:object-name "SAT-SP" .
+
+<bacnet://3456789/analog-value,3> bacnet:object-identifier "analog-value,3" ;
+    bacnet:object-name "OAT-NETWORK" .
+
+<bacnet://3456789/binary-input,1> bacnet:object-identifier "binary-input,1" ;
+    bacnet:object-name "SF-S" .
+
+<bacnet://3456789/binary-output,1> bacnet:object-identifier "binary-output,1" ;
+    bacnet:object-name "SF-C" .
+
+<bacnet://3456789/device,3456789> bacnet:object-identifier "device,3456789" ;
+    bacnet:object-name "BensFakeAhu" .
+
+<bacnet://3456789/multi-state-value,1> bacnet:object-identifier "multi-state-value,1" ;
+    bacnet:object-name "Occ-Schedule" .
+
+<bacnet://3456789/network-port,1> bacnet:object-identifier "network-port,1" ;
+    bacnet:object-name "NetworkPort-1" .
+
+<bacnet://3456790/analog-input,1> bacnet:description "Zone Air Temperature" ;
+    bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "ZoneTemp" ;
+    bacnet:object-type bacnet:ObjectType.analog-input ;
+    bacnet:present-value "72.88766479492188"^^xsd:float ;
+    bacnet:units bacnet:EngineeringUnits.degrees-fahrenheit .
+
+<bacnet://3456790/analog-input,2> bacnet:description "Measured VAV Airflow" ;
+    bacnet:object-identifier "analog-input,2" ;
+    bacnet:object-name "VAVFlow" ;
+    bacnet:object-type bacnet:ObjectType.analog-input ;
+    bacnet:present-value "371.1269836425781"^^xsd:float ;
+    bacnet:units bacnet:EngineeringUnits.cubic-feet-per-minute .
+
+<bacnet://3456790/analog-output,1> bacnet:description "VAV Damper Command (%)" ;
+    bacnet:object-identifier "analog-output,1" ;
+    bacnet:object-name "VAVDamperCmd" ;
+    bacnet:object-type bacnet:ObjectType.analog-output ;
+    bacnet:present-value "50.0"^^xsd:float ;
+    bacnet:priority-array "<PriorityArray _obj=None>" ;
+    bacnet:units bacnet:EngineeringUnits.percent .
+
+<bacnet://3456790/analog-value,1> bacnet:description "Zone Cooling Setpoint" ;
+    bacnet:object-identifier "analog-value,1" ;
+    bacnet:object-name "ZoneCoolingSpt" ;
+    bacnet:object-type bacnet:ObjectType.analog-value ;
+    bacnet:present-value "72.0"^^xsd:float ;
+    bacnet:priority-array "[<bacpypes3.basetypes.PriorityValue object at 0x76107e19b930>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19b690>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19ba10>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19baf0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19bbd0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19bcb0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19bd90>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19be70>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19b230>, <bacpypes3.basetypes.PriorityValue object at 0x76107e19b850>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0210>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d02f0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d03d0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d04b0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0590>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0670>]" ;
+    bacnet:units bacnet:EngineeringUnits.degrees-fahrenheit .
+
+<bacnet://3456790/analog-value,2> bacnet:description "Cooling Loop Output / Zone Demand (0–100%)" ;
+    bacnet:object-identifier "analog-value,2" ;
+    bacnet:object-name "ZoneDemand" ;
+    bacnet:object-type bacnet:ObjectType.analog-value ;
+    bacnet:present-value "77.66983795166016"^^xsd:float ;
+    bacnet:priority-array "[<bacpypes3.basetypes.PriorityValue object at 0x76107e1d0130>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0750>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0910>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d09f0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0ad0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0bb0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0c90>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0d70>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0e50>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d0f30>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1010>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d10f0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d11d0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d12b0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1390>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1470>]" ;
+    bacnet:units bacnet:EngineeringUnits.percent .
+
+<bacnet://3456790/analog-value,3> bacnet:description "VAV Airflow Setpoint" ;
+    bacnet:object-identifier "analog-value,3" ;
+    bacnet:object-name "VAVFlowSpt" ;
+    bacnet:object-type bacnet:ObjectType.analog-value ;
+    bacnet:present-value "800.0"^^xsd:float ;
+    bacnet:priority-array "[<bacpypes3.basetypes.PriorityValue object at 0x76107e1d0830>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1550>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1710>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d17f0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d18d0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d19b0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1a90>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1b70>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1c50>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1d30>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1e10>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1ef0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d1fd0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d20b0>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d2190>, <bacpypes3.basetypes.PriorityValue object at 0x76107e1d2270>]" ;
+    bacnet:units bacnet:EngineeringUnits.cubic-feet-per-minute .
+
+<bacnet://3456790/device,3456790> bacnet:object-identifier "device,3456790" ;
+    bacnet:object-name "BensFakeVAV" ;
+    bacnet:object-type bacnet:ObjectType.device .
+
+<bacnet://3456790/network-port,1> bacnet:object-identifier "network-port,1" ;
+    bacnet:object-name "NetworkPort-1" ;
+    bacnet:object-type bacnet:ObjectType.network-port ;
+    bacnet:out-of-service false ;
+    bacnet:reliability bacnet:Reliability.no-fault-detected .
+
+:site_5ab239d6_e4cf_4c6b_b32b_a2fcfdf93633_points a brick:Equipment ;
+    rdfs:label "Points" ;
+    ofdd:equipmentType "Unknown" ;
+    brick:isPartOf :site_5ab239d6_e4cf_4c6b_b32b_a2fcfdf93633 .
+
+:site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9 a brick:Site ;
+    rdfs:label "default" .
+
+:site_5ab239d6_e4cf_4c6b_b32b_a2fcfdf93633 a brick:Site ;
+    rdfs:label "test-crud-site-1a87e67c" .
+
+:eq_8c3ac774_de85_420c_a921_7beb28beb3ae a brick:BACnet ;
+    rdfs:label "BensScheduleServer" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_8837e419_f4f9_448c_8a32_b845b9aee7ea .
+
+:eq_f482d507_7731_4827_b4b3_d69271e9811c a brick:BACnet ;
+    rdfs:label "BensScheduleServer" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_f4e7fe09_9ddb_45fa_ac17_81420023079f .
+
+:site_8837e419_f4f9_448c_8a32_b845b9aee7ea a brick:Site ;
+    rdfs:label "test-crud-site-e474daab" .
+
+:site_f4e7fe09_9ddb_45fa_ac17_81420023079f a brick:Site ;
+    rdfs:label "test-crud-site-db37a0db" .
+
+:eq_706464fc_4b32_4d08_b7aa_98703432484d a brick:BACnet ;
+    rdfs:label "BensFakeVAV" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_8837e419_f4f9_448c_8a32_b845b9aee7ea .
+
+:eq_9e04acdc_9445_42a0_87ce_db58a0a79d79 a brick:BACnet ;
+    rdfs:label "BensFakeVAV" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_f4e7fe09_9ddb_45fa_ac17_81420023079f .
+
+:site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9_points a brick:Equipment ;
+    rdfs:label "Points" ;
+    ofdd:equipmentType "Unknown" ;
+    brick:isPartOf :site_862d73c3_3847_41d5_8bb4_7cd30da5f4f9 .
+
+:eq_36723efe_7359_4979_80fa_c7b7d28a56e9 a brick:BACnet ;
+    rdfs:label "BensFakeAhu" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_f4e7fe09_9ddb_45fa_ac17_81420023079f .
+
+:eq_dd0b0d77_9222_4d45_b042_853097c6dbf0 a brick:BACnet ;
+    rdfs:label "BensFakeAhu" ;
+    ofdd:equipmentType "BACnet" ;
+    brick:isPartOf :site_8837e419_f4f9_448c_8a32_b845b9aee7ea .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.14" ;
+    bacnet:mac-address "c0a8cc0ebac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" ;
+    bacnet:mac-address "c0a8cc0dbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.12" ;
+    bacnet:mac-address "c0a8cc0cbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" ;
+    bacnet:mac-address "c0a8cc0dbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.14" ;
+    bacnet:mac-address "c0a8cc0ebac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" ;
+    bacnet:mac-address "c0a8cc0dbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.12" ;
+    bacnet:mac-address "c0a8cc0cbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.14" ;
+    bacnet:mac-address "c0a8cc0ebac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" ;
+    bacnet:mac-address "c0a8cc0dbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.12" ;
+    bacnet:mac-address "c0a8cc0cbac0"^^xsd:hexBinary ;
+    bacnet:network-number "0"^^xsd:nonNegativeInteger .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "" .
+
+[] rdfs:label "" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
+[] rdfs:label "192.168.204.13" .
+
