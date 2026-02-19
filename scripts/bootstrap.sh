@@ -11,6 +11,9 @@
 #   ./scripts/bootstrap.sh --build api bacnet-scraper   # Rebuild and restart multiple services
 #   ./scripts/bootstrap.sh --build-all  # Rebuild and restart all containers (no DB wait/migrations)
 #   ./scripts/bootstrap.sh --update     # Git pull open-fdd + diy-bacnet-server (sibling), rebuild all, restart (keeps TimescaleDB data)
+#   ./scripts/bootstrap.sh --update --maintenance  # Same as --update, plus safe prune (stopped containers, dangling images, build cache) before rebuild; volumes kept
+#   ./scripts/bootstrap.sh --update --maintenance --verify  # Update + prune + rebuild, then curl localhost:8080 (BACnet) and localhost:8000 (API) to confirm both are up
+# If diy-bacnet-server is not present as a sibling, bootstrap clones it (override: DIY_BACNET_REPO_URL).
 #   ./scripts/bootstrap.sh --maintenance  # Safe Docker prune: remove stopped containers, dangling images, build cache (never touches volumes)
 #   ./scripts/bootstrap.sh --update --maintenance  # Pull, prune, then rebuild and restart
 #   ./scripts/bootstrap.sh --reset-grafana  # Wipe Grafana volume (fix provisioning); restarts Grafana
@@ -18,6 +21,7 @@
 #   ./scripts/bootstrap.sh --log-max-size 50m --log-max-files 2   # Docker log rotation (default 100m, 3)
 #
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (for BACnet stack).
+# If the sibling is missing, bootstrap will clone it (see ensure_diy_bacnet_sibling below).
 #
 
 set -e
@@ -76,7 +80,10 @@ while [[ $i -lt ${#args[@]} ]]; do
       echo "Usage: $0 [--verify|--minimal|--update|--maintenance|--reset-grafana|--build SERVICE ...|--build-all] [--retention-days N] [--log-max-size SIZE] [--log-max-files N]"
       echo "  --verify            Show running services and DB status."
       echo "  --update            Git pull open-fdd + diy-bacnet-server (sibling), rebuild all images, restart stack. Keeps TimescaleDB data."
-      echo "  --maintenance       Safe Docker prune: stopped containers, dangling images, build cache. Does NOT prune volumes (DB data safe)."
+      echo "  --update --maintenance  Same as --update, then run safe prune before rebuild (containers, images, build cache; volumes kept)."
+      echo "  --update --maintenance --verify  Update, prune, rebuild, then run health checks (curl BACnet :8080, API :8000, DB)."
+      echo "  --verify            Run health checks only (curl localhost:8080 diy-bacnet-server, localhost:8000 API, DB). Use with --update to verify after update."
+      echo "  --maintenance       Safe Docker prune only: stopped containers, dangling images, build cache. Does NOT prune volumes (DB data safe)."
       echo "  --build SERVICE ... Rebuild and restart only these services (e.g. --build api). Then exit."
       echo "  --build-all         Rebuild and restart all containers. Then exit (no DB wait/migrations)."
       echo "  --retention-days N  TimescaleDB drop chunks older than N days (default 365)."
@@ -87,9 +94,60 @@ while [[ $i -lt ${#args[@]} ]]; do
   i=$(( i + 1 ))
 done
 
+# Default repo to clone when diy-bacnet-server sibling is missing (override with DIY_BACNET_REPO_URL)
+DIY_BACNET_REPO_URL="${DIY_BACNET_REPO_URL:-https://github.com/bbartling/diy-bacnet-server.git}"
+
 check_prereqs() {
   command -v docker >/dev/null 2>&1 || { echo "Missing: docker"; exit 1; }
   command -v docker compose >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1 || { echo "Missing: docker compose"; exit 1; }
+}
+
+# Clone diy-bacnet-server as sibling of open-fdd if missing (so docker compose build bacnet-server works)
+ensure_diy_bacnet_sibling() {
+  local parent_dir
+  parent_dir="$(cd "$REPO_ROOT/.." && pwd)"
+  local sibling="$parent_dir/diy-bacnet-server"
+  if [[ -d "$sibling" ]]; then
+    return 0
+  fi
+  command -v git >/dev/null 2>&1 || { echo "Missing: git (required to clone diy-bacnet-server). Clone it manually: git clone $DIY_BACNET_REPO_URL $sibling"; exit 1; }
+  echo "=== Cloning diy-bacnet-server (sibling of open-fdd) ==="
+  (cd "$parent_dir" && git clone "$DIY_BACNET_REPO_URL" diy-bacnet-server) || { echo "Clone failed. Clone manually: git clone $DIY_BACNET_REPO_URL $sibling"; exit 1; }
+  echo "Cloned: $sibling"
+}
+
+# Persist edge settings to platform/.env (so compose picks up log opts). Must be defined before --update uses it.
+write_edge_env() {
+  local env_file="$PLATFORM_DIR/.env"
+  [[ -f "$env_file" ]] || touch "$env_file"
+  for key in OFDD_RETENTION_DAYS OFDD_LOG_MAX_SIZE OFDD_LOG_MAX_FILES; do
+    case "$key" in
+      OFDD_RETENTION_DAYS) val="$RETENTION_DAYS" ;;
+      OFDD_LOG_MAX_SIZE) val="$LOG_MAX_SIZE" ;;
+      OFDD_LOG_MAX_FILES) val="$LOG_MAX_FILES" ;;
+    esac
+    if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+      sed -i "s|^${key}=.*|${key}=${val}|" "$env_file"
+    else
+      echo "${key}=${val}" >> "$env_file"
+    fi
+  done
+}
+
+# Try a command up to max_tries times, sleeping sleep_sec between attempts. Return 0 on first success.
+curl_retry() {
+  local max_tries="${1:-5}"
+  local sleep_sec="${2:-10}"
+  shift 2
+  local try=1
+  while [[ $try -le $max_tries ]]; do
+    if curl -sf --connect-timeout 3 "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    [[ $try -lt $max_tries ]] && sleep "$sleep_sec"
+    try=$(( try + 1 ))
+  done
+  return 1
 }
 
 verify() {
@@ -108,21 +166,22 @@ verify() {
     echo "Grafana: not running — start stack: ./scripts/bootstrap.sh  (listens on 0.0.0.0:3000 when up)"
   fi
   echo ""
-  echo "=== Feature checks (BACnet + API) ==="
-  if curl -sf -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}' >/dev/null 2>&1; then
+  echo "=== Feature checks (BACnet + API, up to 5 tries / 10s apart) ==="
+  if curl_retry 5 10 -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}'; then
     echo "BACnet: http://localhost:8080 (OK — server_hello responded)"
   else
-    echo "BACnet: http://localhost:8080 (not reachable or no response)"
+    echo "BACnet: http://localhost:8080 (not reachable or no response after 5 tries)"
   fi
-  if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+  if curl_retry 5 10 http://localhost:8000/health; then
     echo "API:    http://localhost:8000 (OK — /health responded)"
   else
-    echo "API:    http://localhost:8000 (not reachable; run full stack without --minimal)"
+    echo "API:    http://localhost:8000 (not reachable after 5 tries; run full stack without --minimal)"
   fi
   echo ""
 }
 
-if $VERIFY_ONLY; then
+# Verify-only mode: run health checks and exit (unless we're also doing --update, then verify runs at end of update)
+if $VERIFY_ONLY && ! $UPDATE_PULL_REBUILD; then
   check_prereqs
   verify
   exit 0
@@ -144,21 +203,38 @@ fi
 
 if $UPDATE_PULL_REBUILD; then
   check_prereqs
+  ensure_diy_bacnet_sibling
   write_edge_env
   echo "=== Update: git pull + rebuild (data in TimescaleDB retained) ==="
+  DIY_BACNET="$REPO_ROOT/../diy-bacnet-server"
+  PRE_OPENFDD=""
+  PRE_BACNET=""
+  [[ -d "$REPO_ROOT/.git" ]] && PRE_OPENFDD=$(cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null) || true
+  [[ -d "$DIY_BACNET/.git" ]] && PRE_BACNET=$(cd "$DIY_BACNET" && git rev-parse HEAD 2>/dev/null) || true
+
   if [[ -d "$REPO_ROOT/.git" ]]; then
     echo "Pulling open-fdd..."
     (cd "$REPO_ROOT" && git pull --rebase 2>/dev/null || git pull 2>/dev/null) || true
   else
     echo "Skipping open-fdd git pull (not a git repo)."
   fi
-  DIY_BACNET="$REPO_ROOT/../diy-bacnet-server"
   if [[ -d "$DIY_BACNET/.git" ]]; then
     echo "Pulling diy-bacnet-server (sibling)..."
     (cd "$DIY_BACNET" && git pull --rebase 2>/dev/null || git pull 2>/dev/null) || true
   else
     echo "Skipping diy-bacnet-server git pull (sibling not found or not a git repo)."
   fi
+
+  POST_OPENFDD=""
+  POST_BACNET=""
+  [[ -d "$REPO_ROOT/.git" ]] && POST_OPENFDD=$(cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null) || true
+  [[ -d "$DIY_BACNET/.git" ]] && POST_BACNET=$(cd "$DIY_BACNET" && git rev-parse HEAD 2>/dev/null) || true
+  SKIP_BUILD=false
+  if [[ -n "$PRE_OPENFDD" && -n "$POST_OPENFDD" && "$PRE_OPENFDD" = "$POST_OPENFDD" ]] && \
+     [[ -n "$PRE_BACNET" && -n "$POST_BACNET" && "$PRE_BACNET" = "$POST_BACNET" ]]; then
+    SKIP_BUILD=true
+  fi
+
   if $MAINTENANCE_ONLY; then
     echo "Running Docker maintenance (prune) before rebuild..."
     docker container prune -f
@@ -166,31 +242,45 @@ if $UPDATE_PULL_REBUILD; then
     docker builder prune -f 2>/dev/null || true
   fi
   cd "$PLATFORM_DIR"
-  echo "Rebuilding all images and restarting stack..."
-  docker compose build && docker compose up -d
+  if $SKIP_BUILD; then
+    echo "No new commits in open-fdd or diy-bacnet-server; skipping image rebuild, restarting containers only."
+    docker compose up -d
+  else
+    echo "Rebuilding all images and restarting stack..."
+    docker compose build && docker compose up -d
+  fi
   cd "$REPO_ROOT"
-  echo "=== Waiting for Postgres (~15s) ==="
-  for i in $(seq 1 30); do
-    if docker exec openfdd_timescale pg_isready -U postgres -d openfdd 2>/dev/null; then
-      echo "Postgres ready"
-      break
-    fi
-    sleep 1
-    [[ $i -eq 30 ]] && { echo "Postgres failed to start"; exit 1; }
-  done
-  echo "=== Applying migrations (idempotent) ==="
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/006_host_metrics.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && sed "s/365 days/${RETENTION_DAYS} days/g" sql/007_retention.sql | docker compose exec -T db psql -U postgres -d openfdd -f -) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
-  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
+  if ! $SKIP_BUILD; then
+    echo "=== Waiting for Postgres (~15s) ==="
+    for i in $(seq 1 30); do
+      if docker exec openfdd_timescale pg_isready -U postgres -d openfdd 2>/dev/null; then
+        echo "Postgres ready"
+        break
+      fi
+      sleep 1
+      [[ $i -eq 30 ]] && { echo "Postgres failed to start"; exit 1; }
+    done
+    echo "=== Applying migrations (idempotent) ==="
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/006_host_metrics.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && sed "s/365 days/${RETENTION_DAYS} days/g" sql/007_retention.sql | docker compose exec -T db psql -U postgres -d openfdd -f -) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
+    (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
+  else
+    echo "Skipping Postgres wait and migrations (no new commits; schema unchanged)."
+  fi
   echo ""
   echo "=== Update complete ==="
   echo "  DB data retained. API: http://localhost:8000  BACnet: http://localhost:8080"
-  echo "  Verify: ./scripts/bootstrap.sh --verify"
+  if $VERIFY_ONLY; then
+    echo ""
+    verify
+  else
+    echo "  Verify: ./scripts/bootstrap.sh --verify"
+  fi
   exit 0
 fi
 
@@ -232,26 +322,10 @@ if [[ -n "$BUILD_SERVICES_STR" ]]; then
   exit 0
 fi
 
-# Persist edge settings to platform/.env before starting stack (so compose picks up log opts)
-write_edge_env() {
-  local env_file="$PLATFORM_DIR/.env"
-  [[ -f "$env_file" ]] || touch "$env_file"
-  for key in OFDD_RETENTION_DAYS OFDD_LOG_MAX_SIZE OFDD_LOG_MAX_FILES; do
-    case "$key" in
-      OFDD_RETENTION_DAYS) val="$RETENTION_DAYS" ;;
-      OFDD_LOG_MAX_SIZE) val="$LOG_MAX_SIZE" ;;
-      OFDD_LOG_MAX_FILES) val="$LOG_MAX_FILES" ;;
-    esac
-    if grep -q "^${key}=" "$env_file" 2>/dev/null; then
-      sed -i "s|^${key}=.*|${key}=${val}|" "$env_file"
-    else
-      echo "${key}=${val}" >> "$env_file"
-    fi
-  done
-}
 write_edge_env
 
 check_prereqs
+ensure_diy_bacnet_sibling
 cd "$PLATFORM_DIR"
 
 if $MINIMAL; then

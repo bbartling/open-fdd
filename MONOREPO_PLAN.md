@@ -20,7 +20,7 @@ open-fdd/
 │   └── tests/             # analyst/, engine/, platform/, test_schema.py
 ├── analyst/                # Entry points: sparql, rules, run_all.sh; rules YAML
 ├── platform/               # docker-compose, Dockerfiles, SQL, grafana, caddy
-│   ├── sql/               # 001_init … 010_equipment_feeds (migrations)
+│   ├── sql/               # 001_init … 011_polling (migrations)
 │   ├── grafana/            # provisioning/datasources, provisioning/dashboards, dashboards/*.json
 │   └── caddy/              # Caddyfile (optional reverse proxy)
 ├── config/                 # brick_model.ttl (Brick + BACnet discovery, one file), BACnet CSV(s) optional
@@ -133,6 +133,25 @@ Once scraping is running, the data model (sites, equipment, points with BACnet r
 ## Data Model Sync Processes
 
 The data model is synced to the single TTL file so the FDD loop and other readers see the latest Brick and BACnet data. The live store is an **in-memory RDF graph** in `platform/graph_model.py`: an rdflib `Graph()` (triple store: subject–predicate–object). Brick triples are refreshed from the DB on sync; BACnet triples are updated from point_discovery JSON. SPARQL and TTL export read from this graph, so we don’t re-read the file on every request. We keep the BACnet section in memory and debounce writes so a burst of CRUDs triggers one write about 250 ms after the last change instead of one write per operation. The file on disk stays correct with fewer reads and batched writes. At API startup the lifespan loads the graph from file, does one initial write, then starts a **background thread** (`graph_model._sync_loop`) that serializes the graph to `config/brick_model.ttl` every **OFDD_GRAPH_SYNC_INTERVAL_MIN** (default 5) minutes; **POST /data-model/serialize** does the same on demand.
+
+## Bootstrap and client updates (data safety)
+
+**Safe for clients with existing data:** `./scripts/bootstrap.sh --update --maintenance --verify` (and plain `--update`) are designed so **TimescaleDB and application data are not wiped** when you run updates on a client that already has data.
+
+- **Git pull** — Only updates repo files; does not touch the database or volumes.
+- **Maintenance (--maintenance)** — Runs `docker container prune`, `docker image prune`, `docker builder prune`. It does **not** run `docker volume prune`. DB and Grafana data live in Docker volumes, so they are preserved.
+- **Rebuild / up** — Rebuilds images and runs `docker compose up -d`. Existing named volumes (e.g. TimescaleDB data, Grafana data) are reused; containers are recreated but attach to the same volumes.
+- **Migrations** — Scripts in `platform/sql/` are **idempotent** (e.g. `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`). They add new tables/columns when you pull code that adds a new migration; they do not drop tables or delete data. When no new commits were pulled, the script skips the migration step entirely.
+
+**When could data be lost or corrupted?**
+
+- **Bootstrap never prunes volumes.** So the only ways DB or Grafana data get wiped are:
+  - **Manual volume prune** — e.g. `docker volume prune` or `docker system prune -a --volumes`. Don’t use `--volumes` on a host that has client data you care about.
+  - **--reset-grafana** — Wipes the Grafana volume only (dashboards/settings). TimescaleDB is untouched.
+  - **Bad migration** — A future migration that used `DROP TABLE`, `TRUNCATE`, or `DELETE` without care could remove data. Current migrations are additive only; review any new migration before deploying.
+  - **Recreating the DB container with a new volume** — e.g. removing the TimescaleDB volume and starting fresh. Bootstrap does not do that.
+
+**Recommendation:** For client sites, run `./scripts/bootstrap.sh --update --maintenance --verify` to pull latest code, prune build/container cruft, restart services, and confirm BACnet + API respond. Back up the DB (e.g. `pg_dump` or volume backup) before major upgrades if the client requires a recovery guarantee.
 
 ## Database design & troubleshooting
 
