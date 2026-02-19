@@ -1,10 +1,15 @@
 """BACnet proxy routes — Open-FDD backend calls diy-bacnet-server (local or OT LAN)."""
 
+import json
+from typing import Annotated
+
 import httpx
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Query
+from pydantic import BaseModel, Field
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.graph_model import (
+    get_ttl_path_resolved,
     update_bacnet_from_point_discovery,
     write_ttl_to_file as graph_write_ttl,
 )
@@ -14,10 +19,195 @@ router = APIRouter(prefix="/bacnet", tags=["BACnet"])
 _BASE_PAYLOAD = {"jsonrpc": "2.0", "id": "0"}
 
 
-def _bacnet_url(body: dict) -> str:
-    """Resolve BACnet gateway URL. When Open-FDD runs in Docker, omit url in body
-    or pass localhost: we use OFDD_BACNET_SERVER_URL (e.g. host.docker.internal:8080)
-    so the container can reach the gateway on the host."""
+def _get_gateways_list() -> list[dict]:
+    """Return list of {id, url, site_id?} from config (default + bacnet_gateways). Used for GET /bacnet/gateways and gateway resolution."""
+    s = get_platform_settings()
+    default_url = (s.bacnet_server_url or "http://localhost:8080").strip().rstrip("/")
+    out = [{"id": "default", "url": default_url, "description": "Config default (OFDD_BACNET_SERVER_URL)"}]
+    if s.bacnet_gateways:
+        try:
+            gw = json.loads(s.bacnet_gateways)
+            if isinstance(gw, list):
+                for i, g in enumerate(gw):
+                    if isinstance(g, dict) and g.get("url"):
+                        out.append({
+                            "id": str(i),
+                            "url": str(g["url"]).strip().rstrip("/"),
+                            "site_id": g.get("site_id"),
+                            "description": f"Gateway {i} ({g.get('site_id', '')})",
+                        })
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return out
+
+
+def _resolve_gateway_url(gateway_id: str | None) -> str | None:
+    """Resolve gateway id (e.g. 'default', '0') to URL. Returns None if not found or gateway_id is None."""
+    if not gateway_id:
+        return None
+    for g in _get_gateways_list():
+        if g["id"] == gateway_id:
+            return g["url"]
+    return None
+
+
+def _gateway_enum() -> list[str]:
+    """Gateway ids for Swagger dropdown (built at import so enum is stable)."""
+    return [g["id"] for g in _get_gateways_list()]
+
+
+# --- Request body models (Swagger schema + examples) ---
+
+
+class WhoIsRequestRange(BaseModel):
+    """Instance range for BACnet Who-Is (0–4194303)."""
+
+    start_instance: int = Field(
+        default=1,
+        ge=0,
+        le=4194303,
+        description="Start device instance",
+    )
+    end_instance: int = Field(
+        default=3456799,
+        ge=0,
+        le=4194303,
+        description="End device instance",
+    )
+
+
+class WhoIsBody(BaseModel):
+    """Body for POST /bacnet/whois_range. Matches diy-bacnet-server client_whois_range."""
+
+    url: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Gateway URL; omit to use server default (or use ?gateway= from GET /bacnet/gateways)",
+    )
+    request: WhoIsRequestRange | None = Field(
+        default_factory=lambda: WhoIsRequestRange(),
+        description="Instance range for Who-Is",
+    )
+
+
+WHOIS_EXAMPLES = {
+    "default": {
+        "summary": "Default range (1–3.4M); change start/end as needed",
+        "value": {"url": None, "request": {"start_instance": 1, "end_instance": 3456799}},
+    },
+    "low": {
+        "summary": "Low instance IDs (1–999)",
+        "value": {"url": None, "request": {"start_instance": 1, "end_instance": 999}},
+    },
+    "high": {
+        "summary": "Full BACnet range (1–4194303)",
+        "value": {"url": None, "request": {"start_instance": 1, "end_instance": 4194303}},
+    },
+}
+
+
+class PointDiscoveryInstance(BaseModel):
+    """Device instance for point discovery (0–4194303)."""
+
+    device_instance: int = Field(
+        default=3456789,
+        ge=0,
+        le=4194303,
+        description="BACnet device instance number",
+    )
+
+
+class PointDiscoveryBody(BaseModel):
+    """Body for POST /bacnet/point_discovery. Matches diy-bacnet-server client_point_discovery."""
+
+    url: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Gateway URL; omit to use server default (or use ?gateway= from GET /bacnet/gateways)",
+    )
+    instance: PointDiscoveryInstance | None = Field(
+        default_factory=lambda: PointDiscoveryInstance(),
+        description="Device to discover; change device_instance only",
+    )
+
+
+POINT_DISCOVERY_EXAMPLES = {
+    "default": {
+        "summary": "Change device_instance only; returns object list",
+        "value": {"url": None, "instance": {"device_instance": 3456789}},
+    },
+    "device_1234": {
+        "summary": "Device instance 1234",
+        "value": {"url": None, "instance": {"device_instance": 1234}},
+    },
+}
+
+
+class PointDiscoveryToGraphBody(BaseModel):
+    """Body for POST /bacnet/point_discovery_to_graph. Discovery + merge into graph + optional TTL file."""
+
+    url: str | None = Field(
+        default=None,
+        examples=[None],
+        description="Gateway URL; omit to use server default (or use ?gateway= from GET /bacnet/gateways)",
+    )
+    instance: PointDiscoveryInstance | None = Field(
+        default_factory=lambda: PointDiscoveryInstance(),
+        description="Device to discover; change device_instance only",
+    )
+    update_graph: bool = Field(
+        default=True,
+        description="Merge BACnet RDF into in-memory graph",
+    )
+    write_file: bool = Field(
+        default=True,
+        description="Write config/brick_model.ttl; BACnet also at GET /data-model/ttl",
+    )
+
+
+POINT_DISCOVERY_TO_GRAPH_EXAMPLES = {
+    "default": {
+        "summary": "Change device_instance only; graph + TTL file",
+        "value": {
+            "url": None,
+            "instance": {"device_instance": 3456789},
+            "update_graph": True,
+            "write_file": True,
+        },
+    },
+    "device_1234": {
+        "summary": "Device 1234, graph + config/brick_model.ttl",
+        "value": {
+            "url": None,
+            "instance": {"device_instance": 1234},
+            "update_graph": True,
+            "write_file": True,
+        },
+    },
+    "graph_only": {
+        "summary": "In-memory graph only (no file write)",
+        "value": {
+            "url": None,
+            "instance": {"device_instance": 3456789},
+            "update_graph": True,
+            "write_file": False,
+        },
+    },
+}
+
+
+def _body_to_dict(body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBody | dict) -> dict:
+    """Normalize body to dict for _bacnet_url and RPC params."""
+    if hasattr(body, "model_dump"):
+        return body.model_dump(exclude_none=True, by_alias=False)
+    return body or {}
+
+
+def _bacnet_url(body: dict, override_url: str | None = None) -> str:
+    """Resolve BACnet gateway URL. override_url (from ?gateway=) wins; else body.url; else config default.
+    When Open-FDD runs in Docker, use OFDD_BACNET_SERVER_URL (e.g. http://bacnet:8080 or host.docker.internal:8080)."""
+    if override_url:
+        return override_url.strip().rstrip("/")
     url = (body.get("url") or "").strip().rstrip("/")
     server_url = (get_platform_settings().bacnet_server_url or "").strip().rstrip("/")
     if url and ("localhost" in url or "127.0.0.1" in url) and server_url:
@@ -25,6 +215,24 @@ def _bacnet_url(body: dict) -> str:
     elif not url:
         url = server_url or "http://localhost:8080"
     return url
+
+
+# Gateway id enum for Swagger dropdown (built when module loads)
+GATEWAY_ID_ENUM = _gateway_enum()
+
+
+@router.get(
+    "/gateways",
+    summary="List configured BACnet gateways",
+    response_description="List of {id, url, description?}. Use id in ?gateway= on whois_range, point_discovery, point_discovery_to_graph.",
+)
+def bacnet_gateways():
+    """
+    Return gateways from config: default (OFDD_BACNET_SERVER_URL) plus entries from OFDD_BACNET_GATEWAYS.
+    Use the **id** in the query parameter **gateway** on BACnet POST endpoints to target a specific gateway.
+    Docker: set OFDD_BACNET_SERVER_URL to sibling container (e.g. http://bacnet:8080) or host (e.g. http://host.docker.internal:8080).
+    """
+    return _get_gateways_list()
 
 
 def _post_rpc(base_url: str, method: str, params: dict, timeout: float = 10.0) -> dict:
@@ -66,46 +274,47 @@ def bacnet_server_hello(
 
 @router.post("/whois_range", summary="BACnet Who-Is range")
 def bacnet_whois_range(
-    body: dict = Body(
-        default={},
-        examples={
-            "default": {
-                "value": {"request": {"start_instance": 1, "end_instance": 3456799}}
-            }
-        },
-        description="Optional url; request.start_instance and request.end_instance (0–4194303).",
-    )
+    body: Annotated[WhoIsBody, Body(examples=WHOIS_EXAMPLES)],
+    gateway: str | None = Query(
+        None,
+        description="Gateway id from GET /bacnet/gateways (e.g. default). Omit to use body.url or config default.",
+        enum=GATEWAY_ID_ENUM,
+    ),
 ):
     """
     Call diy-bacnet-server `client_whois_range` to discover devices in an instance range.
-    Omit url to use server default (host.docker.internal:8080 when Open-FDD runs in Docker).
+    Use **gateway** dropdown or GET /bacnet/gateways to pick a configured gateway. Omit url in body to use config.
     """
-    url = _bacnet_url(body or {})
+    params = _body_to_dict(body)
+    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
-    params = body or {}
-    request = params.get("request") or {"start_instance": 1, "end_instance": 3456799}
+    req = body.request
+    request = req.model_dump() if req else {"start_instance": 1, "end_instance": 3456799}
     result = _post_rpc(url, "client_whois_range", {"request": request})
     return result
 
 
 @router.post("/point_discovery", summary="BACnet point discovery")
 def bacnet_point_discovery(
-    body: dict = Body(
-        default={},
-        examples={"default": {"value": {"instance": {"device_instance": 3456789}}}},
-        description="instance.device_instance (0–4194303). Optional url.",
-    )
+    body: Annotated[PointDiscoveryBody, Body(examples=POINT_DISCOVERY_EXAMPLES)],
+    gateway: str | None = Query(
+        None,
+        description="Gateway id from GET /bacnet/gateways (e.g. default). Omit to use body.url or config default.",
+        enum=GATEWAY_ID_ENUM,
+    ),
 ):
     """
     Call diy-bacnet-server `client_point_discovery` for a device instance.
-    Omit url to use server default.
+    Returns object list; use with POST /points (bacnet_device_id, object_identifier, object_name).
+    Use **gateway** dropdown or omit to use config default.
     """
-    url = _bacnet_url(body or {})
+    params = _body_to_dict(body)
+    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
-    params = body or {}
-    instance = params.get("instance") or {"device_instance": 3456789}
+    inst = body.instance
+    instance = inst.model_dump() if inst else {"device_instance": 3456789}
     result = _post_rpc(url, "client_point_discovery", {"instance": instance})
     return result
 
@@ -114,34 +323,30 @@ def bacnet_point_discovery(
     "/point_discovery_to_graph", summary="BACnet point discovery → in-memory graph"
 )
 def bacnet_point_discovery_to_graph(
-    body: dict = Body(
-        default={},
-        examples={
-            "default": {
-                "value": {
-                    "instance": {"device_instance": 3456789},
-                    "update_graph": True,
-                    "write_file": True,
-                }
-            }
-        },
-        description="instance.device_instance. Set update_graph=true to update in-memory graph with clean BACnet RDF (no bacpypes repr). write_file=true to serialize to brick_model.ttl.",
-    )
+    body: Annotated[
+        PointDiscoveryToGraphBody, Body(examples=POINT_DISCOVERY_TO_GRAPH_EXAMPLES)
+    ],
+    gateway: str | None = Query(
+        None,
+        description="Gateway id from GET /bacnet/gateways (e.g. default). Omit to use body.url or config default.",
+        enum=GATEWAY_ID_ENUM,
+    ),
 ):
     """
-    Call point_discovery, then update the in-memory graph with clean BACnet TTL from the JSON.
-    Puts clean BACnet RDF into the in-memory graph and optionally writes config/brick_model.ttl.
+    Call point_discovery, then merge BACnet RDF into the in-memory graph (and optionally brick_model.ttl).
+    BACnet RDF is visible at GET /data-model/ttl. Use **gateway** dropdown or omit to use config default.
     """
-    url = _bacnet_url(body or {})
+    params = _body_to_dict(body)
+    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
-    params = body or {}
-    instance = params.get("instance") or {"device_instance": 3456789}
+    inst = body.instance
+    instance = inst.model_dump() if inst else {"device_instance": 3456789}
     dev_inst = instance.get("device_instance")
     result = _post_rpc(url, "client_point_discovery", {"instance": instance})
     if not result.get("ok") or not result.get("body"):
         return result
-    if not params.get("update_graph"):
+    if not body.update_graph:
         return result
     try:
         res = result["body"]
@@ -166,8 +371,11 @@ def bacnet_point_discovery_to_graph(
             objs,
             device_name=dev_name,
         )
-        if params.get("write_file", True):
-            graph_write_ttl()
+        if body.write_file:
+            write_ok, write_err = graph_write_ttl()
+            result["write_ok"] = write_ok
+            result["write_error"] = write_err
+            result["write_path"] = get_ttl_path_resolved()
     except Exception as e:
         result["graph_error"] = str(e)
     return result

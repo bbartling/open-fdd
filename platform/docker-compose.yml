@@ -181,12 +181,14 @@ services:
       options: *log-opts
 
   # CRUD API — sites, points, equipment, timeseries (data model)
+  # config volume must be rw so brick_model.ttl is written to the host (same path as mount).
   api:
     build:
       context: ..
       dockerfile: platform/Dockerfile.api
     image: openfdd-api:latest
     container_name: openfdd_api
+    working_dir: /app
     ports:
       - "8000:8000"
     extra_hosts:
@@ -195,6 +197,8 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       # From inside the API container, bacnet-server (network_mode: host) is on the host:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
+      # Absolute path so writes always go to the mounted volume (../config → /app/config)
+      OFDD_BRICK_TTL_PATH: /app/config/brick_model.ttl
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config

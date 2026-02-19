@@ -20,7 +20,7 @@ open-fdd/
 │   └── tests/             # analyst/, engine/, platform/, test_schema.py
 ├── analyst/                # Entry points: sparql, rules, run_all.sh; rules YAML
 ├── platform/               # docker-compose, Dockerfiles, SQL, grafana, caddy
-│   ├── sql/               # 001_init … 009_analytics_motor_runtime (migrations)
+│   ├── sql/               # 001_init … 010_equipment_feeds (migrations)
 │   ├── grafana/            # provisioning/datasources, provisioning/dashboards, dashboards/*.json
 │   └── caddy/              # Caddyfile (optional reverse proxy)
 ├── config/                 # brick_model.ttl (Brick + BACnet discovery, one file), BACnet CSV(s) optional
@@ -110,7 +110,25 @@ Tests live under `open_fdd/tests/`. Run: `pytest` or `pytest open_fdd/tests/ -v`
 
 ## Data model API: export/import for AI-enhanced Brick tagging
 
-**GET /data-model/export** returns a JSON list of all points (optionally filtered by site) including `point_id`, `external_id`, `site_name`, `brick_type`, `rule_input`, `unit`, and **BACnet refs** (`bacnet_device_id`, `object_identifier`, `object_name`). Intended workflow: after BACnet discovery and CRUD, the setup person exports this JSON, sends it to an LLM (or uses a local tool) to fill in BRICK types and rule inputs, then **PUT /data-model/import** with the revised payload. Import updates only the fields you send (brick_type, rule_input, site_id, equipment_id, external_id, unit, description); it never clears `point_id` or BACnet columns, so timeseries and BACnet bindings remain valid. **GET /data-model/ttl** and **POST /data-model/sparql** then reflect the merged Brick + BACnet graph for FDD and validation.
+**GET /data-model/export** returns a JSON list of all **points in the DB** (optionally filtered by site): `point_id`, `external_id`, `site_name`, `brick_type`, `rule_input`, `unit`, and BACnet refs. Use this when points already exist and you only need to tag them.
+
+**GET /data-model/export-bacnet** returns BACnet objects from the **in-memory graph** (discovery from point_discovery_to_graph). One row per object; `point_id` is set when that object already has a point in the DB, else null. Add `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`) in an editor or via LLM, then **PUT /data-model/import** to create or update points. This is the path when you have discovery but no points yet.
+
+**PUT /data-model/import** updates existing points by `point_id`, or **creates** new points when `point_id` is omitted and `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are provided (e.g. from export-bacnet after LLM tagging). Optional **equipment** array updates `feeds_equipment_id` / `fed_by_equipment_id` for Brick relationships. Import never clears BACnet columns; after all updates the backend rebuilds the RDF from the DB and serializes to TTL (in-memory graph + file). **GET /data-model/ttl**, **POST /data-model/sparql**, **GET /data-model/check**, **POST /data-model/reset** as before.
+
+## BACnet discovery → export-bacnet → LLM → import → scraping (single source of truth)
+
+End-to-end flow so the data model is the single source of truth for BACnet device/point addresses and timeseries references (aligned with proprietary flows like brick_tagger + run_queries + check_integrity):
+
+1. **Discover** — POST /bacnet/whois_range, then POST /bacnet/point_discovery_to_graph per device. Graph and `config/brick_model.ttl` now have BACnet RDF.
+2. **Sites/equipment** — Create site(s) and equipment via CRUD (POST /sites, POST /equipment). Note site_id and equipment_id for tagging.
+3. **Export for tagging** — GET /data-model/export-bacnet. Returns all discovered BACnet objects; rows already in DB have point_id/site_id/etc. filled.
+4. **Tag** — Edit JSON in a text editor or send to an LLM (see **LLM tagging workflow** below): set `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`, `unit`, and equipment `feeds_equipment_id`/`fed_by_equipment_id`). For new rows ensure `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are set.
+5. **Import** — PUT /data-model/import with the tagged JSON (body: `points` and optional `equipment`). Creates new points (no point_id), updates existing points (with point_id), and updates equipment feeds/fed_by. Backend rebuilds RDF from DB and serializes TTL.
+6. **Scraping** — BACnet scraper (data-model path) loads points where `bacnet_device_id` and `object_identifier` are set, polls diy-bacnet-server, writes to `timeseries_readings` with correct `point_id` and `external_id`. Grafana dashboards use the same data model and timeseries refs.
+7. **Integrity** — GET /data-model/check for triple/orphan counts; POST /data-model/sparql for ad-hoc checks. FDD rules use Brick types and rule_input from the same points.
+
+Once scraping is running, the data model (sites, equipment, points with BACnet refs and tags) stays the single source of truth; TTL, timeseries, and dashboards stay in sync.
 
 ## Data Model Sync Processes
 
@@ -122,7 +140,7 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 
 ### Database schema (TimescaleDB)
 
-**Stack:** TimescaleDB (PostgreSQL + time-series hypertables). Schema in `platform/sql/` (001_init.sql, 002_crud_schema.sql, 003_equipment.sql, 004_fdd_input.sql, 005_bacnet_points.sql).
+**Stack:** TimescaleDB (PostgreSQL + time-series hypertables). Schema in `platform/sql/` (001_init.sql through 010_equipment_feeds.sql; see docs/howto/operations.md for applying new migrations).
 
 #### Core tables
 
@@ -148,6 +166,8 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 | description | text | Optional |
 | equipment_type | text | Brick-style type (e.g. AHU, VAV) |
 | metadata | jsonb | Optional |
+| feeds_equipment_id | uuid (FK→equipment) | Optional; Brick: this equipment feeds that one |
+| fed_by_equipment_id | uuid (FK→equipment) | Optional; Brick: this equipment is fed by that one |
 | created_at | timestamptz | Creation time |
 
 ---
@@ -167,6 +187,7 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 | bacnet_device_id | text | Optional; BACnet device reference |
 | object_identifier | text | Optional; BACnet object ID |
 | object_name | text | Optional; BACnet object name |
+| polling | boolean | Default true; if false, BACnet scraper skips this point |
 | created_at | timestamptz | Creation time |
 
 **Unique:** `(site_id, external_id)`
@@ -238,3 +259,19 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 
 ---
 
+## LLM tagging workflow (export-bacnet → LLM → import)
+
+1. **Export** — GET `/data-model/export-bacnet` (e.g. `http://<backend>:8000/data-model/export-bacnet`). Returns JSON of all discovered BACnet objects; rows already in the DB include `point_id`, `site_id`, etc.
+2. **Clean** — Remove or omit points not needed for HVAC BACnet polling (e.g. non-HVAC objects, duplicates, or devices not used on this job). Keep only the points that should be tagged and later polled.
+3. **Tag with LLM** — Send the cleaned JSON to an external LLM using the prompt below. The mechanical engineer provides feeds/fed-by relationships and iterates with the LLM until satisfied.
+4. **Import** — Mechanical engineer copies the completed JSON into the open-fdd backend via **PUT /data-model/import**. The backend updates the data model (points and optional equipment relationships), rebuilds the RDF from the DB, and serializes to TTL. Set **`polling`** to `false` on points that should not be polled by the BACnet scraper; the scraper only polls points where `polling` is true (default).
+
+### Prompt to the LLM
+
+Use this (or adapt it) when sending the export-bacnet JSON to an external LLM for Brick tagging:
+
+- **Task:** You are helping tag BACnet discovery data for the Open-FDD building analytics platform. The input is a JSON array of BACnet objects (device instance, object identifier, object name, and optionally existing point_id/site_id/equipment_id).
+- **Brick tagging:** For each object, set or suggest: `site_id` (UUID from the building/site), `external_id` (time-series key, e.g. from object name), `brick_type` (BRICK class, e.g. Supply_Air_Temperature_Sensor, Zone_Air_Temperature_Sensor), `rule_input` (name FDD rules use), and optionally `equipment_id`, `unit`.
+- **Feeds relationships:** A mechanical engineer will provide which equipment feeds or is fed by which other equipment (Brick `feeds` / `isFedBy`). You will incorporate their `feeds_equipment_id` and `fed_by_equipment_id` (equipment UUIDs) into the JSON where appropriate.
+- **Iteration:** Work with the mechanical engineer until they are satisfied with the tagging and relationships.
+- **Output:** Return the completed JSON array. The mechanical engineer will copy it into the open-fdd backend (PUT /data-model/import) for use on the job. The backend will create or update points and equipment relationships, then refresh the in-memory data model and TTL for BACnet scraping and FDD.

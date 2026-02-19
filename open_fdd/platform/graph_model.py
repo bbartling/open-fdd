@@ -51,6 +51,11 @@ def _get_ttl_path() -> Path:
     return (Path.cwd() / p) if not p.is_absolute() else p
 
 
+def get_ttl_path_resolved() -> str:
+    """Resolved absolute path for config/brick_model.ttl (for API responses so caller can verify where file was written)."""
+    return str(_get_ttl_path().resolve())
+
+
 def _escape(s: str) -> str:
     if s is None:
         return ""
@@ -90,9 +95,7 @@ def bacnet_ttl_from_point_discovery(
     dev_label = device_name or f"BACnet device {device_instance}"
     lines.append(f"{dev_uri} a bacnet:Device ;")
     lines.append(f'    rdfs:label "{_escape(dev_label)}" ;')
-    lines.append(
-        f'    bacnet:device-address [ rdfs:label "{_escape(device_address)}" ] ;'
-    )
+    lines.append(f'    bacnet:device-address "{_escape(device_address)}" ;')
     lines.append(f"    bacnet:device-instance {device_instance} ;")
     obj_refs = []
     for o in objects:
@@ -239,17 +242,28 @@ def update_bacnet_from_point_discovery(
     Update in-memory graph with BACnet device from point_discovery JSON.
     Removes existing BACnet triples for this device, adds clean triples from objects.
     """
-    from rdflib import Graph, Namespace, URIRef
+    from rdflib import BNode, Graph, RDFS, URIRef
 
     g = _ensure_graph()
-    bacnet_ns = Namespace(BACNET_NS)
-    base_uri = f"bacnet://{device_instance}"
+    device_uri = URIRef(f"bacnet://{device_instance}")
     with _graph_lock:
+        # Remove any orphaned blank nodes that were device-address (old format): (bnode, rdfs:label, "IP") with no (device, device-address, bnode).
+        for s, p, o in list(g.triples((None, RDFS.label, None))):
+            if isinstance(s, BNode):
+                g.remove((s, p, o))
+        # Remove any blank node that was used as device-address for THIS device (in case it was just parsed from file).
+        dev_addr = URIRef(BACNET_NS + "device-address")
+        for s, p, o in list(g.triples((device_uri, dev_addr, None))):
+            if isinstance(o, BNode):
+                for t in list(g.triples((o, None, None))):
+                    g.remove(t)
+                g.remove((s, p, o))
+        # Remove all triples for this device and its objects (URIs under bacnet://device_instance).
+        base_uri = f"bacnet://{device_instance}"
         to_remove = [
             (s, p, o)
             for s, p, o in g
-            if isinstance(s, URIRef)
-            and str(s).startswith(base_uri)
+            if (isinstance(s, URIRef) and str(s).startswith(base_uri))
             or (isinstance(o, URIRef) and str(o).startswith(base_uri))
         ]
         for t in to_remove:
@@ -298,7 +312,7 @@ def write_ttl_to_file() -> tuple[bool, str | None]:
 
 
 def get_serialization_status() -> dict:
-    """For /health: last result, error if any, last time, current time."""
+    """For /health: last result, error if any, last time, current time, and resolved path."""
     with _serialization_lock:
         ok = _last_serialization_ok
         err = _last_serialization_error
@@ -310,6 +324,7 @@ def get_serialization_status() -> dict:
             "last_error": err,
             "last_serialization_at": at.isoformat() if at else None,
             "current_time": now.isoformat(),
+            "path_resolved": get_ttl_path_resolved(),
         }
     }
 
@@ -317,6 +332,50 @@ def get_serialization_status() -> dict:
 def get_ttl_for_sparql(site_id: UUID | None = None) -> str:
     """TTL string for SPARQL: full in-memory graph (Brick from DB + BACnet)."""
     return serialize_to_ttl()
+
+
+def graph_integrity_check() -> dict:
+    """
+    Run integrity checks on the in-memory graph. Flags orphan blank nodes (e.g. leftover
+    device-address bnodes) and returns counts. For use by GET /data-model/check.
+    """
+    from rdflib import BNode, RDF, URIRef
+
+    g = _ensure_graph()
+    with _graph_lock:
+        triple_count = len(g)
+        bnode_as_subject = {s for s, _, _ in g if isinstance(s, BNode)}
+        bnode_as_object = {o for _, _, o in g if isinstance(o, BNode)}
+        orphan_bnodes = bnode_as_subject - bnode_as_object
+        orphan_count = len(orphan_bnodes)
+        brick_site = URIRef("https://brickschema.org/schema/Brick#Site")
+        bacnet_device = URIRef(BACNET_NS + "Device")
+        sites = sum(1 for _ in g.triples((None, RDF.type, brick_site)))
+        bacnet_devices = sum(1 for _ in g.triples((None, RDF.type, bacnet_device)))
+    warnings = []
+    if orphan_count:
+        warnings.append(
+            f"{orphan_count} orphan blank node(s) in graph (e.g. leftover device-address nodes); run POST /data-model/reset or re-run point_discovery_to_graph to clean."
+        )
+    return {
+        "triple_count": triple_count,
+        "blank_node_count": len(bnode_as_subject),
+        "orphan_blank_nodes": orphan_count,
+        "sites": sites,
+        "bacnet_devices": bacnet_devices,
+        "warnings": warnings,
+    }
+
+
+def reset_graph_to_db_only() -> None:
+    """
+    Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet
+    triples and any orphaned blank nodes. Call write_ttl_to_file() after to persist.
+    """
+    g = _ensure_graph()
+    with _graph_lock:
+        g.remove((None, None, None))
+    sync_brick_from_db()
 
 
 def _sync_loop() -> None:

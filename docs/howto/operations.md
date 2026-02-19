@@ -42,12 +42,14 @@ Reboot: containers stop unless Docker or systemd is configured to start them on 
 
 ## New SQL migrations
 
-When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql`, `009_analytics_motor_runtime.sql`):
+When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql` … `011_polling.sql`):
 
 ```bash
 cd platform
 docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql
 docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql
+docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql
+docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql
 ```
 
 Or re-run `./scripts/bootstrap.sh` (idempotent; safe for existing DBs).

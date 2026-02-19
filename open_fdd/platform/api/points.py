@@ -16,7 +16,7 @@ def list_points(site_id: UUID | None = None, equipment_id: UUID | None = None):
     """List points, optionally filtered by site or equipment."""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cols = "id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at"
+            cols = "id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, COALESCE(polling, true) AS polling, created_at"
             if equipment_id:
                 cur.execute(
                     f"""SELECT {cols} FROM points WHERE equipment_id = %s ORDER BY external_id""",
@@ -40,10 +40,11 @@ def create_point(body: PointCreate):
     """Create a point."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            polling = body.polling if body.polling is not None else True
             cur.execute(
-                """INSERT INTO points (site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at""",
+                """INSERT INTO points (site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, polling)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, COALESCE(polling, true) AS polling, created_at""",
                 (
                     str(body.site_id),
                     body.external_id,
@@ -55,6 +56,7 @@ def create_point(body: PointCreate):
                     body.bacnet_device_id,
                     body.object_identifier,
                     body.object_name,
+                    polling,
                 ),
             )
             row = cur.fetchone()
@@ -72,7 +74,7 @@ def get_point(point_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at
+                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, COALESCE(polling, true) AS polling, created_at
                    FROM points WHERE id = %s""",
                 (str(point_id),),
             )
@@ -110,6 +112,9 @@ def update_point(point_id: UUID, body: PointUpdate):
     if body.object_name is not None:
         updates.append("object_name = %s")
         params.append(body.object_name)
+    if body.polling is not None:
+        updates.append("polling = %s")
+        params.append(body.polling)
     if not updates:
         return get_point(point_id)
     params.append(str(point_id))
@@ -117,7 +122,7 @@ def update_point(point_id: UUID, body: PointUpdate):
         with conn.cursor() as cur:
             cur.execute(
                 f"""UPDATE points SET {', '.join(updates)} WHERE id = %s
-                    RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, created_at""",
+                    RETURNING id, site_id, external_id, brick_type, fdd_input, unit, description, equipment_id, bacnet_device_id, object_identifier, object_name, COALESCE(polling, true) AS polling, created_at""",
                 params,
             )
             row = cur.fetchone()

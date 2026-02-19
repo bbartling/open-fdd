@@ -45,6 +45,7 @@ def get_bacnet_points_from_data_model(
                     JOIN sites s ON s.id = p.site_id
                     WHERE p.bacnet_device_id IS NOT NULL AND p.object_identifier IS NOT NULL
                       AND (s.id::text = %s OR s.name = %s)
+                      AND COALESCE(p.polling, true) = true
                     ORDER BY p.bacnet_device_id, p.object_identifier
                     """,
                     (site_id, site_id),
@@ -55,6 +56,7 @@ def get_bacnet_points_from_data_model(
                     SELECT id, site_id, external_id, bacnet_device_id, object_identifier, object_name
                     FROM points
                     WHERE bacnet_device_id IS NOT NULL AND object_identifier IS NOT NULL
+                      AND COALESCE(polling, true) = true
                     ORDER BY site_id, bacnet_device_id, object_identifier
                     """,
                 )

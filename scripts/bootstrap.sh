@@ -185,6 +185,8 @@ if $UPDATE_PULL_REBUILD; then
   (cd "$PLATFORM_DIR" && sed "s/365 days/${RETENTION_DAYS} days/g" sql/007_retention.sql | docker compose exec -T db psql -U postgres -d openfdd -f -) 2>/dev/null || true
   (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql) 2>/dev/null || true
   (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql) 2>/dev/null || true
+  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
+  (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
   echo ""
   echo "=== Update complete ==="
   echo "  DB data retained. API: http://localhost:8000  BACnet: http://localhost:8080"
@@ -280,6 +282,8 @@ echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
 (cd "$PLATFORM_DIR" && sed "s/365 days/${RETENTION_DAYS} days/g" sql/007_retention.sql | docker compose exec -T db psql -U postgres -d openfdd -f -) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql) 2>/dev/null || true
+(cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
+(cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
 
 echo ""
 echo "=== Bootstrap complete ==="

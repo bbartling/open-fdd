@@ -15,6 +15,9 @@ def test_bacnet_ttl_from_point_discovery_empty_objects():
     assert "bacnet:Device" in ttl
     assert "bacnet:device-instance 3456789" in ttl
     assert "bacnet://3456789" in ttl
+    assert (
+        'bacnet:device-address "192.168.1.1"' in ttl
+    )  # literal, not blank node (avoids orphan accumulation)
     assert "bacnet:contains" not in ttl or " ." in ttl  # no object refs
 
 

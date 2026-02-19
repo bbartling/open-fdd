@@ -37,6 +37,43 @@ def test_data_model_export_empty():
     assert r.json() == []
 
 
+def test_data_model_export_bacnet_returns_list():
+    """GET /data-model/export-bacnet returns 200 and a list (from graph BACnet discovery)."""
+    minimal_bacnet_ttl = """
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<bacnet://3456789> a bacnet:Device ;
+    rdfs:label "AHU1" ;
+    bacnet:device-instance 3456789 ;
+    bacnet:contains <bacnet://3456789/analog-input,1> .
+<bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "SA-T" .
+"""
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value=minimal_bacnet_ttl,
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=lambda: _mock_conn_with_cursor([]),
+        ),
+    ):
+        r = client.get("/data-model/export-bacnet")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    # Find the analog-input row (discovery may also include device,...)
+    row = next(
+        (r for r in data if r.get("object_identifier") == "analog-input,1"), data[0]
+    )
+    assert row["bacnet_device_id"] == "3456789"
+    assert row["object_identifier"] == "analog-input,1"
+    assert row.get("object_name") == "SA-T"
+    assert "point_id" in row
+
+
 def test_data_model_export_returns_point_refs():
     site_id = uuid4()
     point_id = uuid4()

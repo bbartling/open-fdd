@@ -14,12 +14,17 @@ brick_ttl_dir: "config"
 # BACnet DRIVER CONFIGURATION
 bacnet_enabled: true
 bacnet_scrape_interval_min: 5
-bacnet_config_csv: "config/bacnet_device.csv"
-bacnet_site_id: "default"
+
+# diy-bacnet-server URL (API + Swagger use this when request body omits url, or use ?gateway=default).
+# Env: OFDD_BACNET_SERVER_URL.
+# Docker same host: use sibling service name (e.g. http://bacnet:8080) or host (e.g. http://host.docker.internal:8080).
+# LAN/remote: use the device URL (e.g. http://192.168.1.50:8080).
+bacnet_server_url: "http://localhost:8080"
 
 # Optional: multiple gateways (central aggregator only). JSON array; each item: url, site_id, config_csv.
-# When set, bacnet_server_url and bacnet_config_csv are ignored; scraper polls each gateway in turn.
-# Docs: https://bbartling.github.io/open-fdd/configuration#platform-yaml
+# When set, bacnet_server_url and bacnet_config_csv are ignored for the scraper; API still uses bacnet_server_url
+# as "default" and adds these as gateway ids "0", "1", ... (use GET /bacnet/gateways; ?gateway= on BACnet endpoints).
+# Env: OFDD_BACNET_GATEWAYS.
 # bacnet_gateways: '[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"},{"url":"http://10.1.2.1:8080","site_id":"building-b","config_csv":"config/bacnet_b.csv"}]'
 
 # Open-Meteo WEATHER FETCH CONFIGURATION

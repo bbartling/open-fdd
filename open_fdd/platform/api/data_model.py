@@ -21,10 +21,14 @@ from open_fdd.platform.database import get_conn
 from open_fdd.platform.data_model_ttl import (
     build_ttl_from_db,
     get_ttl_for_sparql,
+    parse_bacnet_ttl_to_discovery,
     sync_ttl_to_file,
 )
 from open_fdd.platform.graph_model import (
     get_serialization_status,
+    get_ttl_path_resolved,
+    graph_integrity_check,
+    reset_graph_to_db_only,
     serialize_to_ttl,
     write_ttl_to_file,
 )
@@ -59,6 +63,132 @@ class PointExportRow(BaseModel):
     object_name: str | None = Field(
         None, description="BACnet object name; preserved on import."
     )
+    polling: bool = Field(
+        True,
+        description="If true, BACnet scraper polls this point; set false to exclude from scrape. Preserved on import.",
+    )
+
+
+class BacnetExportRow(BaseModel):
+    """One BACnet object from discovery (graph). point_id is set if already in DB; omit for new points. Fill site_id, external_id, brick_type, rule_input (and optionally equipment_id) then PUT /data-model/import to create/update points for scraping."""
+
+    point_id: str | None = Field(
+        None,
+        description="Existing point UUID if already in DB; null for new. Import uses this to update or uses bacnet_device_id+object_identifier+site_id+external_id to create.",
+    )
+    bacnet_device_id: str = Field(
+        ..., description="BACnet device instance (e.g. 3456789)."
+    )
+    object_identifier: str = Field(
+        ..., description="BACnet object (e.g. analog-input,1)."
+    )
+    object_name: str | None = Field(
+        None, description="BACnet object name from discovery."
+    )
+    site_id: str | None = None
+    site_name: str | None = None
+    equipment_id: str | None = None
+    equipment_name: str | None = None
+    external_id: str | None = Field(
+        None,
+        description="Time-series key; suggest object_name or short id. Required on import for new points.",
+    )
+    brick_type: str | None = None
+    rule_input: str | None = Field(
+        None, description="FDD rule reference; maps to fdd_input."
+    )
+    unit: str | None = None
+    polling: bool = Field(
+        True,
+        description="If true, BACnet scraper polls this point; set false to exclude from scrape.",
+    )
+
+
+@router.get(
+    "/export-bacnet",
+    response_model=list[BacnetExportRow],
+    summary="Export BACnet discovery as JSON (for LLM tagging then import)",
+)
+def export_bacnet_from_graph(
+    site_id: str | None = Query(
+        None,
+        description="If set, only include objects that already belong to this site (by existing point). Omit to export all discovered BACnet objects.",
+    ),
+):
+    """Export BACnet devices/objects from the in-memory graph (point_discovery_to_graph). Returns one row per object; point_id is set when that object already has a point in the DB. Add site_id, external_id, brick_type, rule_input (and optionally equipment_id) in editor or via LLM, then PUT /data-model/import to create/update points. Scraper then uses points with bacnet_device_id+object_identifier."""
+    ttl = serialize_to_ttl()
+    devices, point_discoveries = parse_bacnet_ttl_to_discovery(ttl)
+    if not point_discoveries:
+        return []
+
+    # Load existing points with BACnet refs to fill point_id, site_id, etc.
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT p.id, p.site_id, s.name AS site_name, p.equipment_id, e.name AS equipment_name,
+                       p.external_id, p.brick_type, p.fdd_input, p.unit,
+                       p.bacnet_device_id, p.object_identifier, p.object_name,
+                       COALESCE(p.polling, true) AS polling
+                FROM points p
+                LEFT JOIN sites s ON s.id = p.site_id
+                LEFT JOIN equipment e ON e.id = p.equipment_id
+                WHERE p.bacnet_device_id IS NOT NULL AND p.object_identifier IS NOT NULL
+                """)
+            existing = {
+                (str(r["bacnet_device_id"]), str(r["object_identifier"]).strip()): r
+                for r in cur.fetchall()
+            }
+
+    _site_id = _resolve_site_filter(site_id) if site_id else None
+    out: list[BacnetExportRow] = []
+    for pd in point_discoveries:
+        dev_inst = pd.get("device_instance")
+        if dev_inst is None:
+            continue
+        dev_str = str(dev_inst)
+        for obj in pd.get("objects") or []:
+            oid = (obj.get("object_identifier") or "").strip()
+            oname = (obj.get("object_name") or "").strip() or None
+            if not oid:
+                continue
+            key = (dev_str, oid)
+            row = existing.get(key)
+            if _site_id and row and str(row["site_id"]) != str(_site_id):
+                continue
+            if row:
+                out.append(
+                    BacnetExportRow(
+                        point_id=str(row["id"]),
+                        bacnet_device_id=dev_str,
+                        object_identifier=oid,
+                        object_name=oname or row.get("object_name"),
+                        site_id=str(row["site_id"]) if row.get("site_id") else None,
+                        site_name=row.get("site_name"),
+                        equipment_id=(
+                            str(row["equipment_id"])
+                            if row.get("equipment_id")
+                            else None
+                        ),
+                        equipment_name=row.get("equipment_name"),
+                        external_id=row.get("external_id"),
+                        brick_type=row.get("brick_type"),
+                        rule_input=row.get("fdd_input"),
+                        unit=row.get("unit"),
+                        polling=bool(row.get("polling", True)),
+                    ),
+                )
+            else:
+                out.append(
+                    BacnetExportRow(
+                        point_id=None,
+                        bacnet_device_id=dev_str,
+                        object_identifier=oid,
+                        object_name=oname,
+                        external_id=oname or oid.replace(",", "_"),
+                        polling=True,
+                    )
+                )
+    return out
 
 
 @router.get(
@@ -84,7 +214,8 @@ def export_points(
                     """
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
                            p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
-                           p.bacnet_device_id, p.object_identifier, p.object_name
+                           p.bacnet_device_id, p.object_identifier, p.object_name,
+                           COALESCE(p.polling, true) AS polling
                     FROM points p
                     LEFT JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
@@ -97,7 +228,8 @@ def export_points(
                 cur.execute("""
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
                            p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
-                           p.bacnet_device_id, p.object_identifier, p.object_name
+                           p.bacnet_device_id, p.object_identifier, p.object_name,
+                           COALESCE(p.polling, true) AS polling
                     FROM points p
                     LEFT JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
@@ -118,6 +250,7 @@ def export_points(
             bacnet_device_id=r.get("bacnet_device_id"),
             object_identifier=r.get("object_identifier"),
             object_name=r.get("object_name"),
+            polling=bool(r.get("polling", True)),
         )
         for r in rows
     ]
@@ -127,30 +260,46 @@ def export_points(
 
 
 class PointImportRow(BaseModel):
-    point_id: str = Field(
-        ..., description="Point UUID from GET /data-model/export or GET /points"
+    point_id: str | None = Field(
+        None,
+        description="Point UUID to update (from GET /data-model/export or export-bacnet). Omit with bacnet_device_id+object_identifier+site_id+external_id to create a new point.",
     )
     site_id: str | None = Field(
-        None, description="Move point to this site (UUID from GET /sites)"
+        None,
+        description="Site UUID (GET /sites). Required when creating a point; optional when updating.",
     )
     equipment_id: str | None = Field(
         None, description="Assign point to this equipment (UUID from GET /equipment)"
     )
     external_id: str | None = Field(
-        None, description="Rename time-series reference (e.g. HTG-O, ZoneTemp)"
+        None,
+        description="Time-series reference (e.g. HTG-O, ZoneTemp). Required when creating a point.",
     )
+    bacnet_device_id: str | None = Field(
+        None,
+        description="BACnet device instance (e.g. 3456789). Required when creating from export-bacnet.",
+    )
+    object_identifier: str | None = Field(
+        None,
+        description="BACnet object (e.g. analog-input,1). Required when creating from export-bacnet.",
+    )
+    object_name: str | None = Field(None, description="BACnet object name (optional).")
     brick_type: str | None = Field(
         None, description="BRICK class e.g. Supply_Air_Temperature_Sensor"
     )
     rule_input: str | None = Field(
         None,
-        description="Name FDD rules use for this point. Usually = external_id (e.g. HTG-O) or alias (e.g. htg_cmd). Deprecated: fdd_input also accepted.",
+        description="Name FDD rules use for this point. Usually = external_id (e.g. HTG-O) or alias. Deprecated: fdd_input also accepted.",
     )
     fdd_input: str | None = Field(
         None, description="Deprecated. Use rule_input instead."
     )
     unit: str | None = Field(None, description="e.g. degrees-fahrenheit, percent")
     description: str | None = Field(None, description="Human-readable description")
+    polling: bool | None = Field(
+        None,
+        description="If true, BACnet scraper polls this point; false to exclude from scrape. Omit to leave unchanged (update) or default true (create).",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -161,17 +310,37 @@ class PointImportRow(BaseModel):
                     "rule_input": "sat",
                 },
                 {
-                    "point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22",
-                    "brick_type": "Zone_Air_Temperature_Sensor",
-                    "rule_input": "ZoneTemp",
+                    "site_id": "<uuid>",
+                    "external_id": "SA-T",
+                    "bacnet_device_id": "3456789",
+                    "object_identifier": "analog-input,2",
+                    "object_name": "SA-T",
+                    "brick_type": "Supply_Air_Temperature_Sensor",
+                    "rule_input": "sat",
                 },
             ]
         }
     }
 
 
+class EquipmentImportRow(BaseModel):
+    """Optional equipment relationship updates on import. Only listed fields are updated."""
+
+    equipment_id: str = Field(..., description="Equipment UUID to update (from GET /equipment)")
+    feeds_equipment_id: str | None = Field(
+        None, description="Brick: this equipment feeds that one (equipment UUID)."
+    )
+    fed_by_equipment_id: str | None = Field(
+        None, description="Brick: this equipment is fed by that one (equipment UUID)."
+    )
+
+
 class DataModelImportBody(BaseModel):
     points: list[PointImportRow]
+    equipment: list[EquipmentImportRow] = Field(
+        default_factory=list,
+        description="Optional: update equipment feeds/fed_by; RDF is rebuilt and serialized after import.",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -183,7 +352,11 @@ class DataModelImportBody(BaseModel):
                         "rule_input": "sat",
                     },
                     {
-                        "point_id": "b1ffcd00-0d1c-5fg9-cc7e-7cc0ce491b22",
+                        "site_id": "<site-uuid>",
+                        "external_id": "ZoneTemp",
+                        "bacnet_device_id": "3456790",
+                        "object_identifier": "analog-input,1",
+                        "object_name": "ZoneTemp",
                         "brick_type": "Zone_Air_Temperature_Sensor",
                         "rule_input": "zt",
                     },
@@ -195,53 +368,107 @@ class DataModelImportBody(BaseModel):
 
 @router.put(
     "/import",
-    summary="Import Brick mapping (preserves BACnet and timeseries refs)",
-    response_description='Count of points updated (e.g. { "updated": 30, "total": 30 }).',
+    summary="Import Brick mapping (create or update points; preserves BACnet refs)",
+    response_description='Count created/updated (e.g. { "created": 5, "updated": 25, "total": 30 }).',
 )
 def import_data_model(body: DataModelImportBody):
-    """Update brick_type, rule_input, site_id, equipment_id, external_id, unit, description per point. Only the fields you send are updated; bacnet_device_id, object_identifier, object_name and point_id are never cleared, so timeseries and BACnet bindings stay valid. TTL auto-syncs on import."""
+    """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export-bacnet after LLM tagging). Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
+    created = 0
     updated = 0
     with get_conn() as conn:
         with conn.cursor() as cur:
             for row in body.points:
+                if row.point_id:
+                    # Update existing point
+                    updates, params = [], []
+                    if row.site_id is not None:
+                        updates.append("site_id = %s")
+                        params.append(row.site_id)
+                    if row.equipment_id is not None:
+                        updates.append("equipment_id = %s")
+                        params.append(row.equipment_id)
+                    if row.external_id is not None:
+                        updates.append("external_id = %s")
+                        params.append(row.external_id)
+                    if row.brick_type is not None:
+                        updates.append("brick_type = %s")
+                        params.append(row.brick_type)
+                    ri = row.rule_input if row.rule_input is not None else row.fdd_input
+                    if ri is not None:
+                        updates.append("fdd_input = %s")
+                        params.append(ri)
+                    if row.unit is not None:
+                        updates.append("unit = %s")
+                        params.append(row.unit)
+                    if row.description is not None:
+                        updates.append("description = %s")
+                        params.append(row.description)
+                    if row.polling is not None:
+                        updates.append("polling = %s")
+                        params.append(row.polling)
+                    if updates:
+                        params.append(row.point_id)
+                        cur.execute(
+                            f"""UPDATE points SET {", ".join(updates)} WHERE id = %s""",
+                            params,
+                        )
+                        if cur.rowcount:
+                            updated += 1
+                else:
+                    # Create new point: require site_id, external_id, bacnet_device_id, object_identifier
+                    if not all(
+                        [
+                            row.site_id,
+                            row.external_id,
+                            row.bacnet_device_id,
+                            row.object_identifier,
+                        ]
+                    ):
+                        continue
+                    _polling = row.polling if row.polling is not None else True
+                    cur.execute(
+                        """INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name, equipment_id, brick_type, fdd_input, unit, description, polling)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (
+                            row.site_id,
+                            row.external_id,
+                            row.bacnet_device_id,
+                            row.object_identifier,
+                            row.object_name,
+                            row.equipment_id,
+                            row.brick_type,
+                            (
+                                row.rule_input
+                                if row.rule_input is not None
+                                else row.fdd_input
+                            ),
+                            row.unit,
+                            row.description,
+                            _polling,
+                        ),
+                    )
+                    if cur.rowcount:
+                        created += 1
+            for eq in body.equipment:
                 updates, params = [], []
-                if row.site_id is not None:
-                    updates.append("site_id = %s")
-                    params.append(row.site_id)
-                if row.equipment_id is not None:
-                    updates.append("equipment_id = %s")
-                    params.append(row.equipment_id)
-                if row.external_id is not None:
-                    updates.append("external_id = %s")
-                    params.append(row.external_id)
-                if row.brick_type is not None:
-                    updates.append("brick_type = %s")
-                    params.append(row.brick_type)
-                ri = row.rule_input if row.rule_input is not None else row.fdd_input
-                if ri is not None:
-                    updates.append("fdd_input = %s")
-                    params.append(ri)
-                if row.unit is not None:
-                    updates.append("unit = %s")
-                    params.append(row.unit)
-                if row.description is not None:
-                    updates.append("description = %s")
-                    params.append(row.description)
-                if not updates:
-                    continue
-                params.append(row.point_id)
-                cur.execute(
-                    f"""UPDATE points SET {", ".join(updates)} WHERE id = %s""",
-                    params,
-                )
-                if cur.rowcount:
-                    updated += 1
+                if eq.feeds_equipment_id is not None:
+                    updates.append("feeds_equipment_id = %s::uuid")
+                    params.append(eq.feeds_equipment_id)
+                if eq.fed_by_equipment_id is not None:
+                    updates.append("fed_by_equipment_id = %s::uuid")
+                    params.append(eq.fed_by_equipment_id)
+                if updates:
+                    params.append(eq.equipment_id)
+                    cur.execute(
+                        f"""UPDATE equipment SET {", ".join(updates)} WHERE id = %s""",
+                        params,
+                    )
         conn.commit()
     try:
         sync_ttl_to_file()
     except Exception:
         pass
-    return {"updated": updated, "total": len(body.points)}
+    return {"created": created, "updated": updated, "total": len(body.points)}
 
 
 # --- TTL: generate from DB (always in sync with CRUD) ---
@@ -318,10 +545,53 @@ def serialize_graph_to_file():
     """Serialize the in-memory graph (Brick + BACnet) to config/brick_model.ttl. Same as the 5‑minute background sync."""
     ok, err = write_ttl_to_file()
     status = get_serialization_status()
+    resolved_path = get_ttl_path_resolved()
     if ok:
         return {
             "status": "ok",
             "path": str(get_platform_settings().brick_ttl_path),
+            "path_resolved": resolved_path,
+            **status["graph_serialization"],
+        }
+    return {
+        "status": "error",
+        "error": err,
+        "path_resolved": resolved_path,
+        **status["graph_serialization"],
+    }
+
+
+# --- Check: integrity and orphan detection ---
+
+
+@router.get(
+    "/check",
+    summary="Data model integrity check",
+    response_description="Triple counts, orphan blank nodes, warnings.",
+)
+def data_model_check():
+    """Run integrity checks on the in-memory graph. Flags orphan blank nodes (e.g. leftover device-address nodes from old TTL). Use POST /data-model/reset to clear graph to DB-only and remove orphans."""
+    return graph_integrity_check()
+
+
+# --- Reset: clear graph to DB-only (removes BACnet and orphans), then serialize ---
+
+
+@router.post(
+    "/reset",
+    summary="Reset graph to DB-only (clear BACnet and orphans; Brick repopulated from DB)",
+    response_description="Status; graph is Brick-only after reset, file rewritten.",
+)
+def data_model_reset():
+    """Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet triples and orphaned blank nodes, then writes config/brick_model.ttl. Brick triples come from the database—so if the DB still has sites/equipment/points, the TTL will still contain them. To get an empty data model: delete all sites via CRUD (DELETE /sites/{id} for each; cascade removes equipment and points), then POST /data-model/reset."""
+    reset_graph_to_db_only()
+    ok, err = write_ttl_to_file()
+    status = get_serialization_status()
+    if ok:
+        return {
+            "status": "ok",
+            "path": str(get_platform_settings().brick_ttl_path),
+            "message": "Graph reset to DB-only. BACnet and orphans removed; Brick repopulated from database (TTL still has whatever sites/equipment/points exist in DB). To empty the model, delete all sites via CRUD first, then reset.",
             **status["graph_serialization"],
         }
     return {

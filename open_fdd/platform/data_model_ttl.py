@@ -43,8 +43,10 @@ def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
     pt_uri = f":pt_{pid}"
     brick_type = p.get("brick_type") or "Point"
     label = _escape(p["external_id"])
+    polling = p.get("polling", True)
     lines.append(f"{pt_uri} a brick:{brick_type} ;")
     lines.append(f'    rdfs:label "{label}" ;')
+    lines.append(f"    ofdd:polling {'true' if polling else 'false'} ;")
     if p.get("fdd_input"):
         lines.append(f"    brick:isPointOf {parent_uri} ;")
         lines.append(f'    ofdd:mapsToRuleInput "{_escape(p["fdd_input"])}" .')
@@ -79,13 +81,13 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
 
             site_ids = [str(s["id"]) for s in sites]
             cur.execute(
-                """SELECT id, site_id, name, equipment_type FROM equipment
+                """SELECT id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id FROM equipment
                    WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, name""",
                 (site_ids,),
             )
             equipment = cur.fetchall()
             cur.execute(
-                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id
+                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id, COALESCE(polling, true) AS polling
                    FROM points WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, external_id""",
                 (site_ids,),
             )
@@ -122,6 +124,15 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             lines.append(f"{eref} a brick:{etype} ;")
             lines.append(f'    rdfs:label "{ename}" ;')
             lines.append(f"    brick:isPartOf {sref} ;")
+            feeds_id = e.get("feeds_equipment_id")
+            fed_by_id = e.get("fed_by_equipment_id")
+            extra: list[str] = []
+            if feeds_id:
+                extra.append(f"brick:feeds :eq_{str(feeds_id).replace('-', '_')}")
+            if fed_by_id:
+                extra.append(f"brick:isFedBy :eq_{str(fed_by_id).replace('-', '_')}")
+            if extra:
+                lines.append("    " + " ;\n    ".join(extra) + " ;")
             lines.append(f'    ofdd:equipmentType "{etype}" .')
             lines.append("")
             for p in pts_by_eq.get(eid, []):
