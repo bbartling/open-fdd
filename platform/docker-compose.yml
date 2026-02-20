@@ -2,6 +2,9 @@
 # Run: docker compose -f platform/docker-compose.yml up -d
 # Or: ./scripts/bootstrap.sh
 #
+# Only one service runs BACnet scrape: bacnet-scraper (openfdd_bacnet_scraper).
+# weather-scraper and fdd-loop use the same image but different commands; logs: docker logs -f openfdd_bacnet_scraper
+#
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
 # Rules YAML and config are mounted from repo — edit on host, containers see changes.
 #

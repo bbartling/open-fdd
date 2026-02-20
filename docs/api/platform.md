@@ -112,45 +112,48 @@ The API proxies to diy-bacnet-server for discovery and can import results into t
 
 | Method | Path | Description |
 |--------|------|-------------|
+| GET    | /bacnet/gateways      | List configured gateways (default from OFDD_BACNET_SERVER_URL plus OFDD_BACNET_GATEWAYS). Use the returned `id` in `?gateway=` on BACnet POST endpoints. |
 | POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
 | POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
 | POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
 | POST   | /bacnet/point_discovery_to_graph | **Point discovery → in-memory graph**. Calls the gateway for point discovery (device instance), builds BACnet TTL from JSON, updates the graph and optionally writes `config/brick_model.ttl`. Body: `instance` (device_instance), optional `update_graph`, `write_file`, `url`. |
 
-Config UI at `/app/` provides a BACnet panel. Use **POST /bacnet/point_discovery_to_graph** to put BACnet devices/points into the graph; create points in the DB via CRUD or data-model export/import.
+Config UI at `/app/` provides a BACnet panel. Use **POST /bacnet/point_discovery_to_graph** to put BACnet devices/points into the graph; create points in the DB via CRUD or [data-model export/import](../modeling/ai_assisted_tagging).
 
 ---
 
 ## Data model
 
-Brick-semantic data model: export points, bulk import (brick_type, rule_input), generate TTL, run SPARQL. TTL is also auto-synced on every CRUD and import.
+Brick-semantic data model: **single export route** (BACnet discovery + DB points), bulk import (points + optional equipment feeds), TTL, SPARQL. TTL is auto-synced on every CRUD and import. For the **AI-assisted tagging** workflow (export → LLM/human → import), see [AI-assisted data modeling](../modeling/ai_assisted_tagging).
 
 ### GET /data-model/export
 
-Export points as JSON for editing and re-import. Optional site filter.
+**Single export route:** Returns one JSON array of BACnet discovery (from graph) plus all DB points. Use for LLM Brick tagging; then PUT /data-model/import.
 
-| Query param | Type   | Required | Description |
-|-------------|--------|----------|-------------|
-| site_id     | string | no       | Site UUID or name; omit for all sites |
+| Query param   | Type    | Required | Description |
+|---------------|---------|----------|-------------|
+| site_id       | string  | no       | Site UUID or name; omit for all sites |
+| bacnet_only   | boolean | no       | If true, return only rows with `bacnet_device_id` and `object_identifier` (discovery rows). Default false = full dump. |
 
-**Response:** `200 OK` — JSON array of point objects (`point_id`, `site_id`, `external_id`, `brick_type`, `fdd_input`, `unit`, `equipment_id`, etc.).
+**Response:** `200 OK` — JSON array. Each row: `point_id` (null if unimported), `bacnet_device_id`, `object_identifier`, `object_name`, `site_id`, `site_name`, `equipment_id`, `equipment_name`, `external_id`, `brick_type`, `rule_input`, `unit`, **`polling`** (default false for unimported). Points to poll for the BACnet scraper = rows where **polling === true**.
 
 ---
 
 ### PUT /data-model/import
 
-Bulk create/update points (and optionally sites/equipment). Used for Brick workflow: export → add brick_type/rule_input → import. TTL is regenerated after import.
+Bulk create/update **points** and optionally update **equipment** feeds/fed_by. The API accepts **only** two top-level keys: **points** and **equipment** (no sites, equipments, or relationships). Used for Brick workflow: export → tag (brick_type, rule_input, polling, equipment relationships) → import. TTL is regenerated after import.
 
-**Body:** `{"points": [{ "point_id": "uuid", "brick_type": "...", "rule_input": "sat", ... }, ...]}`
+**Body:** `{"points": [...], "equipment": [...]}` (equipment optional).
 
 | Field (per point) | Type   | Description |
 |-------------------|--------|-------------|
-| point_id          | UUID   | Required for updates |
-| brick_type        | string | Brick class |
-| rule_input        | string | Name FDD rules use (maps to fdd_input in DB) |
-| site_id, equipment_id, external_id, unit, description | optional | |
+| point_id          | UUID   | Omit to create; set to update existing |
+| site_id, external_id | required for create | Real UUIDs from GET /sites; external_id = time-series key |
+| bacnet_device_id, object_identifier | required for create from discovery | From export |
+| brick_type, rule_input, equipment_id, unit, polling | optional | polling = true for points to log (BACnet scraper) |
+| equipment (array) | optional | Each item: `equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id` (Brick feeds/isFedBy; UUIDs from GET /equipment) |
 
-**Response:** `200 OK` — `{"updated": N, "errors": []}`
+**Response:** `200 OK` — e.g. `{"created": N, "updated": M, "total": ...}`
 
 ---
 

@@ -7,7 +7,6 @@
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
@@ -39,12 +38,13 @@ To run the test suite and formatter locally (no Docker required for tests):
 ```bash
 cd open-fdd
 python3 -m venv .venv
-.venv/bin/pip install -e ".[test]"
-.venv/bin/python -m pytest open_fdd/tests/ -v
-.venv/bin/black .
+source .venv/bin/activate   # or: .venv/bin/activate on Windows
+pip install -e ".[dev]"
+pytest open_fdd/tests/ -v
+black .
 ```
 
-The `test` extra includes pytest, black, httpx, FastAPI, rdflib, and platform deps so all tests pass. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
+Use the **`dev`** extra so all dependencies (pytest, black, psycopg2, pydantic-settings, FastAPI, rdflib, etc.) are installed and every test passes. If you see `ModuleNotFoundError` for `psycopg2` or `pydantic`, run pytest with the venv’s Python (e.g. `python -m pytest`) after `pip install -e ".[dev]"`. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
 
 ---
 

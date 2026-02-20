@@ -9,13 +9,59 @@ params:
   # rolling_window: 6   # optional: require N consecutive True samples before flagging (omit = flag on any True)
 
 inputs:
+  # AHU temperature sensors
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
     bounds:
       imperial: [40, 150]
       metric: [4, 66]
+
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    bounds:
+      imperial: [20, 120]
+      metric: [-7, 49]
+
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    bounds:
+      imperial: [-40, 130]
+      metric: [-40, 54]
+
+  # AHU airside sensors
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+    bounds:
+      imperial: [0.0, 6.0]     # inH2O (typical duct static range)
+      metric: [0.0, 1500.0]    # Pa (rough equivalent)
+
+  Supply_Air_Flow_Sensor:
+    brick: Supply_Air_Flow_Sensor
+    bounds:
+      imperial: [0, 50000]     # cfm (broad catch-all)
+      metric: [0, 23500]       # L/s (broad catch-all)
+
+  Power_Sensor:
+    brick: Power_Sensor
+    bounds:
+      imperial: [0, 500]       # kW (broad catch-all)
+      metric: [0, 500]         # kW
+
+  # Zone/VAV sensors
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
     bounds:
       imperial: [40, 100]
       metric: [4, 38]
+
+  Zone_Air_Flow_Sensor:
+    brick: Zone_Air_Flow_Sensor
+    bounds:
+      imperial: [0, 5000]      # cfm (broad catch-all for a VAV)
+      metric: [0, 2350]        # L/s

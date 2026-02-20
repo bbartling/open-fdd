@@ -51,10 +51,10 @@ Sites + Equipment + Points (DB)  ← single source of truth
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /data-model/export` | Export sites, equipment, points as JSON |
-| `POST /data-model/import` | Import JSON (creates/updates) |
-| `GET /data-model/ttl` | Generate Brick TTL from DB |
-| `POST /data-model/sparql` | Run SPARQL query against TTL |
+| `GET /data-model/export` | Single export route: BACnet discovery + DB points (optional `?bacnet_only=true`, `?site_id=...`). Use for [AI-assisted tagging](ai_assisted_tagging). |
+| `PUT /data-model/import` | Import JSON: **points** (required) and optional **equipment** (feeds/fed_by). Creates/updates points; does not accept sites or equipments. |
+| `GET /data-model/ttl` | Generate Brick TTL from DB (and in-memory BACnet graph). Optional `?save=true` to write to file. |
+| `POST /data-model/sparql` | Run SPARQL query against the current data model. |
 
 ---
 

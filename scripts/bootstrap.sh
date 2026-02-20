@@ -1,27 +1,37 @@
 #!/bin/bash
 #
-# open-fdd bootstrap: full Docker stack (DB, Grafana, BACnet server, scraper, API).
+# open-fdd bootstrap: full Docker stack — DB, Grafana, BACnet server, BACnet scraper, weather scraper, FDD loop, host-stats, API, Caddy.
 #
+# Build and start everything (from repo root):
+#   ./scripts/bootstrap.sh
+# (Runs: cd platform && docker compose up -d --build — builds all images and starts all services.)
+#
+# Logs:
+#   docker logs -f openfdd_fdd_loop 
+#   docker logs -f openfdd_api
+#   docker logs -f openfdd_bacnet_scraper
+#   docker logs -f openfdd_weather_scraper
+#   docker logs -f openfdd_weather_scraper 
+
 # Usage:
-#   ./scripts/bootstrap.sh            # Start full stack (builds all images)
+#   ./scripts/bootstrap.sh            # Build and start full stack (all services)
 #   ./scripts/bootstrap.sh --verify   # Check what's running
-#   ./scripts/bootstrap.sh --minimal  # Raw BACnet only: DB + Grafana + BACnet server + scraper (no FDD, weather, API)
-#   ./scripts/bootstrap.sh --build bacnet-server   # Rebuild diy-bacnet-server image (e.g. after pulling latest from GitHub in sibling repo)
-#   ./scripts/bootstrap.sh --build api   # Rebuild and restart only the API (e.g. after editing config UI static files)
-#   ./scripts/bootstrap.sh --build api bacnet-scraper   # Rebuild and restart multiple services
-#   ./scripts/bootstrap.sh --build-all  # Rebuild and restart all containers (no DB wait/migrations)
-#   ./scripts/bootstrap.sh --update     # Git pull open-fdd + diy-bacnet-server (sibling), rebuild all, restart (keeps TimescaleDB data)
-#   ./scripts/bootstrap.sh --update --maintenance  # Same as --update, plus safe prune (stopped containers, dangling images, build cache) before rebuild; volumes kept
-#   ./scripts/bootstrap.sh --update --maintenance --verify  # Update + prune + rebuild, then curl localhost:8080 (BACnet) and localhost:8000 (API) to confirm both are up
+#   ./scripts/bootstrap.sh --minimal  # Raw BACnet only: DB + Grafana + bacnet-server + bacnet-scraper (no FDD, weather, API)
+#   ./scripts/bootstrap.sh --build bacnet-server   # Rebuild diy-bacnet-server (e.g. after pulling sibling repo)
+#   ./scripts/bootstrap.sh --build api   # Rebuild and restart only the API
+#   ./scripts/bootstrap.sh --build api bacnet-scraper fdd-loop weather-scraper   # Rebuild API + scrapers + FDD loop
+#   ./scripts/bootstrap.sh --build-all  # Rebuild all images and start all containers (deploys everything; no DB wait/migrations)
+#   ./scripts/bootstrap.sh --update     # Git pull open-fdd + diy-bacnet-server, rebuild all, restart (keeps DB)
+#   ./scripts/bootstrap.sh --update --maintenance  # Same as --update, plus safe prune before rebuild; volumes kept
+#   ./scripts/bootstrap.sh --update --maintenance --verify  # Update + prune + rebuild, then curl :8080 and :8000
 # If diy-bacnet-server is not present as a sibling, bootstrap clones it (override: DIY_BACNET_REPO_URL).
-#   ./scripts/bootstrap.sh --maintenance  # Safe Docker prune: remove stopped containers, dangling images, build cache (never touches volumes)
-#   ./scripts/bootstrap.sh --update --maintenance  # Pull, prune, then rebuild and restart
+#   ./scripts/bootstrap.sh --maintenance  # Safe Docker prune only (containers, images, build cache; no volumes)
 #   ./scripts/bootstrap.sh --reset-grafana  # Wipe Grafana volume (fix provisioning); restarts Grafana
 #   ./scripts/bootstrap.sh --retention-days 180   # TimescaleDB retention (default 365)
 #   ./scripts/bootstrap.sh --log-max-size 50m --log-max-files 2   # Docker log rotation (default 100m, 3)
 #
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (for BACnet stack).
-# If the sibling is missing, bootstrap will clone it (see ensure_diy_bacnet_sibling below).
+# If the sibling is missing, bootstrap clones it (see ensure_diy_bacnet_sibling below).
 #
 
 set -e

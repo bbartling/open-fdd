@@ -45,7 +45,7 @@ cd open-fdd
 | [System Overview](overview) | Architecture, services, data flow |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |
-| [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, data-model API |
+| [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
@@ -54,6 +54,8 @@ cd open-fdd
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
+
+**For maintainers and AI agents:** High-level dev notes (tests, BACnet scrape, env vars) are in the repo root as **MONOREPO_PLAN.md**. Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in **AGENTS.md**.
 
 ---
 

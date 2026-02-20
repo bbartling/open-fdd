@@ -83,7 +83,14 @@ def main():
         print("OK:", data.get("message", data.get("path", "")))
     else:
         print("OK:", data)
-    print("\nData model is now empty (no sites, no Brick triples, no BACnet).")
+    # 3. Verify empty (same BASE_URL you use for curl must be used here)
+    code2, data2 = _request("GET", "/sites")
+    if code2 == 200 and isinstance(data2, list) and len(data2) == 0:
+        print("\nData model is now empty (no sites, no Brick triples, no BACnet).")
+        print("GET /data-model/ttl?save=true on this same BASE_URL will return empty TTL.")
+    else:
+        print("\nReset completed. GET /sites returned:", len(data2) if isinstance(data2, list) else data2)
+        print("If you see data in GET /data-model/ttl, use the same BASE_URL for both script and curl.")
 
 
 if __name__ == "__main__":

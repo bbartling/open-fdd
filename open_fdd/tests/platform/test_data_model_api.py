@@ -28,17 +28,23 @@ def _mock_conn_with_cursor(fetchall_result):
 
 
 def test_data_model_export_empty():
-    with patch(
-        "open_fdd.platform.api.data_model.get_conn",
-        side_effect=lambda: _mock_conn_with_cursor([]),
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value="@prefix brick: <https://brickschema.org/schema/Brick#> .\n",
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=lambda: _mock_conn_with_cursor([]),
+        ),
     ):
         r = client.get("/data-model/export")
     assert r.status_code == 200
     assert r.json() == []
 
 
-def test_data_model_export_bacnet_returns_list():
-    """GET /data-model/export-bacnet returns 200 and a list (from graph BACnet discovery)."""
+def test_data_model_export_bacnet_only_returns_list():
+    """GET /data-model/export?bacnet_only=true returns 200 and list of BACnet discovery rows."""
     minimal_bacnet_ttl = """
 @prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -59,12 +65,11 @@ def test_data_model_export_bacnet_returns_list():
             side_effect=lambda: _mock_conn_with_cursor([]),
         ),
     ):
-        r = client.get("/data-model/export-bacnet")
+        r = client.get("/data-model/export?bacnet_only=true")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
     assert len(data) >= 1
-    # Find the analog-input row (discovery may also include device,...)
     row = next(
         (r for r in data if r.get("object_identifier") == "analog-input,1"), data[0]
     )
@@ -88,11 +93,21 @@ def test_data_model_export_returns_point_refs():
             "brick_type": "Supply_Air_Temperature_Sensor",
             "fdd_input": "sat",
             "unit": "degF",
+            "bacnet_device_id": None,
+            "object_identifier": None,
+            "object_name": None,
+            "polling": True,
         }
     ]
-    with patch(
-        "open_fdd.platform.api.data_model.get_conn",
-        side_effect=lambda: _mock_conn_with_cursor(rows),
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value="@prefix brick: <https://brickschema.org/schema/Brick#> .\n",
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=lambda: _mock_conn_with_cursor(rows),
+        ),
     ):
         r = client.get("/data-model/export")
     assert r.status_code == 200
@@ -122,11 +137,18 @@ def test_data_model_export_includes_bacnet_refs():
             "bacnet_device_id": "3456789",
             "object_identifier": "analog-input,1",
             "object_name": "Supply Air Temp",
+            "polling": True,
         }
     ]
-    with patch(
-        "open_fdd.platform.api.data_model.get_conn",
-        side_effect=lambda: _mock_conn_with_cursor(rows),
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value="@prefix brick: <https://brickschema.org/schema/Brick#> .\n",
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=lambda: _mock_conn_with_cursor(rows),
+        ),
     ):
         r = client.get("/data-model/export")
     assert r.status_code == 200

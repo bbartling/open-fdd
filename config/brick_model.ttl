@@ -6,7 +6,7 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 <bacnet://3456789> a bacnet:Device ;
-    rdfs:label "BensFakeAhu" ;
+    rdfs:label "BACnet device 3456789" ;
     bacnet:contains <bacnet://3456789/analog-input,1>,
         <bacnet://3456789/analog-input,2>,
         <bacnet://3456789/analog-input,3>,
@@ -23,79 +23,147 @@
         <bacnet://3456789/analog-value,3>,
         <bacnet://3456789/binary-input,1>,
         <bacnet://3456789/binary-output,1>,
-        <bacnet://3456789/device,3456789>,
         <bacnet://3456789/multi-state-value,1>,
         <bacnet://3456789/network-port,1> ;
     bacnet:device-address "192.168.204.13" ;
     bacnet:device-instance 3456789 .
 
 <bacnet://3456790> a bacnet:Device ;
-    rdfs:label "BensFakeVAV" ;
+    rdfs:label "BACnet device 3456790" ;
     bacnet:contains <bacnet://3456790/analog-input,1>,
         <bacnet://3456790/analog-input,2>,
         <bacnet://3456790/analog-output,1>,
         <bacnet://3456790/analog-value,1>,
         <bacnet://3456790/analog-value,2>,
         <bacnet://3456790/analog-value,3>,
-        <bacnet://3456790/device,3456790>,
         <bacnet://3456790/network-port,1> ;
     bacnet:device-address "192.168.204.12" ;
     bacnet:device-instance 3456790 .
 
-:pt_187a0008_854a_4a37_9e85_38493bff6929 a brick:Point ;
-    rdfs:label "wind_dir_deg" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
+:eq_8ca2c8e6_997b_43f8_82c0_7ce4fa0c249d a brick:VAV ;
+    rdfs:label "BensFakeVavBox" ;
+    ofdd:equipmentType "VAV" ;
+    brick:isPartOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f .
 
-:pt_429301c8_1038_4326_a2f9_7b583866e5c6 a brick:Point ;
-    rdfs:label "gti_wm2" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
+:eq_ad00b6c4_ea1e_4efb_8a61_00140967d0d1 a brick:Air_Handling_Unit ;
+    rdfs:label "BensFakeAhu" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:isPartOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f .
 
-:pt_4e20429e_f904_43ee_9125_d6d8e1e5bc73 a brick:Point ;
-    rdfs:label "temp_f" ;
+:pt_0d6e162b_1626_4241_ade7_64b9291b025c a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" ;
     ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
+    brick:isPointOf :eq_d43af781_f1a6_49fb_8bda_1814ba50df59 .
 
-:pt_53f77945_cc61_4e06_bc2d_74226c71727e a brick:Point ;
-    rdfs:label "rh_pct" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_56e5ccb5_9e8b_4b1e_b2ca_cfab989e3729 a brick:Point ;
-    rdfs:label "gust_mph" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_7c35e3ba_3277_4d95_9680_802c68a5a2d4 a brick:Point ;
-    rdfs:label "shortwave_wm2" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_a1c4d1a9_69b1_4d44_bfed_a9c73905321a a brick:Point ;
-    rdfs:label "cloud_pct" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_aa4dc628_0647_4255_8304_f69a7e22da85 a brick:Point ;
-    rdfs:label "direct_wm2" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_bf3a5233_bf93_4e93_a83b_891e2b539fc9 a brick:Point ;
-    rdfs:label "dewpoint_f" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_c93e1677_672c_4622_a3a4_3054b5083a44 a brick:Point ;
-    rdfs:label "diffuse_wm2" ;
-    ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
-
-:pt_f76dcbab_fbb5_4690_9a1a_6d98d7369ad4 a brick:Point ;
+:pt_1d667f0c_2879_475b_b3a9_aebb15da9023 a brick:Point ;
     rdfs:label "wind_mph" ;
     ofdd:polling true ;
-    brick:isPointOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points .
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_1e2c1f01_24d8_4dc8_b520_eba4527d2a42 a brick:Point ;
+    rdfs:label "temp_f" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_2bc31ad8_3613_4787_82b0_d514950b8480 a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_51da5fa8_2831_4263_9f44_147b0e375e11 .
+
+:pt_31f11c81_e312_4811_9533_019f0a5c072e a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_40c527fc_f2a8_4a7a_8f6a_f6a4a3d27dab a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_92d3e590_1c64_4915_9d38_750382d2c6af .
+
+:pt_4e91776e_e0da_4900_b400_fc63e618bc6c a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_cb411c94_d91f_41df_b41d_9d03b89abe55 .
+
+:pt_70ff1bc2_162f_4fc8_84a4_8e333edaa021 a brick:Point ;
+    rdfs:label "rh_pct" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_74dcf2d5_cc05_4a48_b73a_fafc1b4c38bf a brick:Point ;
+    rdfs:label "dewpoint_f" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_89dd7ece_56f8_4f59_a702_326f7a8ebb20 a brick:Point ;
+    rdfs:label "direct_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_92201f79_f623_4d69_9d21_35f8ae4b92a1 a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_b944e490_6011_41b3_815e_15bae1960b7c a brick:Zone_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:mapsToRuleInput "Zone_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_27bd6392_afb4_4d82_8338_48cdb6f4a029 .
+
+:pt_bbcf01b1_a807_459d_935a_ecd2a8f4da72 a brick:Zone_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:mapsToRuleInput "Zone_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_2d651d72_8da7_45a3_9e67_5be698b6807d .
+
+:pt_d0704db2_04ee_4815_ae30_e181635a1879 a brick:Point ;
+    rdfs:label "gust_mph" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_d74d63c2_bb5c_4e6f_9dc7_727f0b18f72a a brick:Point ;
+    rdfs:label "shortwave_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_dc60a251_46b3_4d30_9021_a0693ec65d9c a brick:Point ;
+    rdfs:label "gti_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_e3a40324_7cd4_44f8_8830_1f34b4922452 a brick:Zone_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:mapsToRuleInput "Zone_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_c61608ad_ce9e_4140_8d2d_4fbdb427718d .
+
+:pt_e6f31171_a095_4a87_a18e_e4f02e5a0eee a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_fcf01a5f_e645_42d1_a142_849bdb90d32a .
+
+:pt_f3c711ed_f4d0_490a_8839_df3a3190fdb1 a brick:Zone_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:mapsToRuleInput "Zone_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_91fb7692_1570_4dea_ac97_dc812a4774fc .
+
+:pt_f7e914cd_f456_4635_9adc_6028c395af6c a brick:Point ;
+    rdfs:label "wind_dir_deg" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points .
+
+:pt_ff5c4973_f247_4061_aa4c_afd437a2319e a brick:Zone_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:mapsToRuleInput "Zone_Temperature_Sensor" ;
+    ofdd:polling true ;
+    brick:isPointOf :eq_2b7fa584_9118_4876_a3bd_a06013b7f514 .
 
 <bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
     bacnet:object-name "DAP-P" .
@@ -145,9 +213,6 @@
 <bacnet://3456789/binary-output,1> bacnet:object-identifier "binary-output,1" ;
     bacnet:object-name "SF-C" .
 
-<bacnet://3456789/device,3456789> bacnet:object-identifier "device,3456789" ;
-    bacnet:object-name "BensFakeAhu" .
-
 <bacnet://3456789/multi-state-value,1> bacnet:object-identifier "multi-state-value,1" ;
     bacnet:object-name "Occ-Schedule" .
 
@@ -172,17 +237,124 @@
 <bacnet://3456790/analog-value,3> bacnet:object-identifier "analog-value,3" ;
     bacnet:object-name "VAVFlowSpt" .
 
-<bacnet://3456790/device,3456790> bacnet:object-identifier "device,3456790" ;
-    bacnet:object-name "BensFakeVAV" .
-
 <bacnet://3456790/network-port,1> bacnet:object-identifier "network-port,1" ;
     bacnet:object-name "NetworkPort-1" .
 
-:site_c740fd6d_359d_4fd3_9055_7754f936e2cf a brick:Site ;
+:eq_27bd6392_afb4_4d82_8338_48cdb6f4a029 a brick:HVAC_Zone ;
+    rdfs:label "ZONE-1" ;
+    ofdd:equipmentType "HVAC_Zone" ;
+    brick:isFedBy :eq_fbd03d12_e196_425c_b346_cb02b4a802cb ;
+    brick:isPartOf :site_e6bd489f_b32c_4365_a164_1f482cc41e48 .
+
+:eq_2b7fa584_9118_4876_a3bd_a06013b7f514 a brick:HVAC_Zone ;
+    rdfs:label "ZONE-1" ;
+    ofdd:equipmentType "HVAC_Zone" ;
+    brick:isFedBy :eq_35b96ffb_47a7_4ec4_907f_298078aabb42 ;
+    brick:isPartOf :site_a5ef19bd_d9da_4b92_afcb_ca23a3acd488 .
+
+:eq_2d651d72_8da7_45a3_9e67_5be698b6807d a brick:HVAC_Zone ;
+    rdfs:label "ZONE-1" ;
+    ofdd:equipmentType "HVAC_Zone" ;
+    brick:isFedBy :eq_9cf9708e_6c57_4064_a3cc_9b948163585c ;
+    brick:isPartOf :site_05338220_bac4_44e6_82be_872113a986bc .
+
+:eq_35b96ffb_47a7_4ec4_907f_298078aabb42 a brick:Variable_Air_Volume_Box ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Variable_Air_Volume_Box" ;
+    brick:feeds :eq_2b7fa584_9118_4876_a3bd_a06013b7f514 ;
+    brick:isFedBy :eq_d43af781_f1a6_49fb_8bda_1814ba50df59 ;
+    brick:isPartOf :site_a5ef19bd_d9da_4b92_afcb_ca23a3acd488 .
+
+:eq_51d5ec42_64d0_4fdc_9683_1973cff6e4d9 a brick:Variable_Air_Volume_Box ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Variable_Air_Volume_Box" ;
+    brick:feeds :eq_91fb7692_1570_4dea_ac97_dc812a4774fc ;
+    brick:isFedBy :eq_92d3e590_1c64_4915_9d38_750382d2c6af ;
+    brick:isPartOf :site_a24c0f38_7cde_45b1_a330_d0ca92618f99 .
+
+:eq_51da5fa8_2831_4263_9f44_147b0e375e11 a brick:Air_Handling_Unit ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:feeds :eq_fbd03d12_e196_425c_b346_cb02b4a802cb ;
+    brick:isPartOf :site_e6bd489f_b32c_4365_a164_1f482cc41e48 .
+
+:eq_91fb7692_1570_4dea_ac97_dc812a4774fc a brick:HVAC_Zone ;
+    rdfs:label "ZONE-1" ;
+    ofdd:equipmentType "HVAC_Zone" ;
+    brick:isFedBy :eq_51d5ec42_64d0_4fdc_9683_1973cff6e4d9 ;
+    brick:isPartOf :site_a24c0f38_7cde_45b1_a330_d0ca92618f99 .
+
+:eq_92d3e590_1c64_4915_9d38_750382d2c6af a brick:Air_Handling_Unit ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:feeds :eq_51d5ec42_64d0_4fdc_9683_1973cff6e4d9 ;
+    brick:isPartOf :site_a24c0f38_7cde_45b1_a330_d0ca92618f99 .
+
+:eq_9cf9708e_6c57_4064_a3cc_9b948163585c a brick:Variable_Air_Volume_Box ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Variable_Air_Volume_Box" ;
+    brick:feeds :eq_2d651d72_8da7_45a3_9e67_5be698b6807d ;
+    brick:isFedBy :eq_fcf01a5f_e645_42d1_a142_849bdb90d32a ;
+    brick:isPartOf :site_05338220_bac4_44e6_82be_872113a986bc .
+
+:eq_b6e5984c_640f_41d3_aa64_cf03abb5cbd3 a brick:Variable_Air_Volume_Box ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Variable_Air_Volume_Box" ;
+    brick:feeds :eq_c61608ad_ce9e_4140_8d2d_4fbdb427718d ;
+    brick:isFedBy :eq_cb411c94_d91f_41df_b41d_9d03b89abe55 ;
+    brick:isPartOf :site_17a3db3b_a612_4ad2_b425_f5734939519c .
+
+:eq_c61608ad_ce9e_4140_8d2d_4fbdb427718d a brick:HVAC_Zone ;
+    rdfs:label "ZONE-1" ;
+    ofdd:equipmentType "HVAC_Zone" ;
+    brick:isFedBy :eq_b6e5984c_640f_41d3_aa64_cf03abb5cbd3 ;
+    brick:isPartOf :site_17a3db3b_a612_4ad2_b425_f5734939519c .
+
+:eq_cb411c94_d91f_41df_b41d_9d03b89abe55 a brick:Air_Handling_Unit ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:feeds :eq_b6e5984c_640f_41d3_aa64_cf03abb5cbd3 ;
+    brick:isPartOf :site_17a3db3b_a612_4ad2_b425_f5734939519c .
+
+:eq_d43af781_f1a6_49fb_8bda_1814ba50df59 a brick:Air_Handling_Unit ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:feeds :eq_35b96ffb_47a7_4ec4_907f_298078aabb42 ;
+    brick:isPartOf :site_a5ef19bd_d9da_4b92_afcb_ca23a3acd488 .
+
+:eq_fbd03d12_e196_425c_b346_cb02b4a802cb a brick:Variable_Air_Volume_Box ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Variable_Air_Volume_Box" ;
+    brick:feeds :eq_27bd6392_afb4_4d82_8338_48cdb6f4a029 ;
+    brick:isFedBy :eq_51da5fa8_2831_4263_9f44_147b0e375e11 ;
+    brick:isPartOf :site_e6bd489f_b32c_4365_a164_1f482cc41e48 .
+
+:eq_fcf01a5f_e645_42d1_a142_849bdb90d32a a brick:Air_Handling_Unit ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Air_Handling_Unit" ;
+    brick:feeds :eq_9cf9708e_6c57_4064_a3cc_9b948163585c ;
+    brick:isPartOf :site_05338220_bac4_44e6_82be_872113a986bc .
+
+:site_05338220_bac4_44e6_82be_872113a986bc a brick:Site ;
+    rdfs:label "demo-import-afa3f5bf" .
+
+:site_17a3db3b_a612_4ad2_b425_f5734939519c a brick:Site ;
+    rdfs:label "demo-import-0b552001" .
+
+:site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f a brick:Site ;
     rdfs:label "BensOffice" .
 
-:site_c740fd6d_359d_4fd3_9055_7754f936e2cf_points a brick:Equipment ;
+:site_a24c0f38_7cde_45b1_a330_d0ca92618f99 a brick:Site ;
+    rdfs:label "demo-import-6bb347c8" .
+
+:site_a5ef19bd_d9da_4b92_afcb_ca23a3acd488 a brick:Site ;
+    rdfs:label "demo-import-da0d3d56" .
+
+:site_e6bd489f_b32c_4365_a164_1f482cc41e48 a brick:Site ;
+    rdfs:label "demo-import-744aa7df" .
+
+:site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f_points a brick:Equipment ;
     rdfs:label "Points" ;
     ofdd:equipmentType "Unknown" ;
-    brick:isPartOf :site_c740fd6d_359d_4fd3_9055_7754f936e2cf .
+    brick:isPartOf :site_7b3160f2_4e52_4192_acc6_2cb1e5f2ad9f .
 

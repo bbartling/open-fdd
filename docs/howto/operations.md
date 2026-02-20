@@ -10,7 +10,7 @@ nav_order: 2
 
 ## Bootstrap does not purge data
 
-`./scripts/bootstrap.sh` does **not** wipe the database. It starts containers and runs migrations (idempotent). Only `--reset-grafana` wipes Grafana's volume. See [Danger zone](danger_zone) for when data is purged.
+`./scripts/bootstrap.sh` does **not** wipe the database. It starts containers and runs migrations (idempotent). Only `--reset-grafana` wipes Grafana's volume. See [Danger zone](howto/danger_zone) for when data is purged.
 
 ---
 
@@ -131,7 +131,7 @@ docker compose exec db psql -U postgres -d openfdd -c "\dt"
 ## Unit tests and formatter
 
 ```bash
-# From repo root
+# From repo root (install once: pip install -e ".[dev]")
 .venv/bin/python -m pytest open_fdd/tests/ -v
 .venv/bin/python -m black .
 ```

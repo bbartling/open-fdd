@@ -20,15 +20,15 @@ This page documents **when database or dashboard data can be deleted** and **how
 
 ## CRUD deletes — cascade behavior
 
-When you delete via the API (Swagger or `test_crud_api.py`):
+When you delete via the API (Swagger, CRUD UI, or scripts):
 
 | Delete | Cascades to |
 |--------|-------------|
-| **Site** | Equipment, points, timeseries_readings, fault_results, fault_events, ingest_jobs |
-| **Equipment** | Points (with that equipment_id), timeseries for those points |
-| **Point** | timeseries_readings for that point |
+| **Site** | Equipment, points, **timeseries_readings**, fault_results, fault_events, ingest_jobs |
+| **Equipment** | Points (with that equipment_id), **timeseries_readings** for those points |
+| **Point** | **timeseries_readings** for that point |
 
-`DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` remove the entity and all dependent data. This is **permanent**. After each delete (and after every create/update on sites, equipment, or points), the **Brick TTL** (`config/brick_model.ttl`) is **regenerated from the current DB** and written to disk, so the Brick data model stays in sync with CRUD and timeseries. See [Data modeling](modeling/overview).
+So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/brick_model.ttl`) is regenerated and written to disk. See [Data modeling](modeling/overview).
 
 ---
 
@@ -85,7 +85,16 @@ docker compose up -d --build
 # Then from repo root: ./scripts/bootstrap.sh (waits for Postgres, applies migrations)
 ```
 
-### Option 3: Delete via API
+### Option 3: Empty data model via API (sites + reset)
+
+To clear the **data model** (Brick TTL and in-memory graph) but keep the stack and DB schema:
+
+1. **Delete every site** via the API (e.g. `python tools/delete_all_sites_and_reset.py`, or `GET /sites` then `DELETE /sites/{id}` for each). Cascade removes equipment, points, and timeseries.
+2. **POST /data-model/reset** — Clears the in-memory graph and repopulates from the DB only (Brick). BACnet triples and orphans are removed; the graph now has only what’s in the DB. Since the DB has no sites, the TTL is effectively empty and is written to `config/brick_model.ttl`.
+
+**Important:** `GET /data-model/ttl` (and `?save=true`) always reflects the **current DB**: it syncs Brick from the DB, then serializes the graph. So if you still see sites/points in the TTL after “delete all sites + reset”, you are either (1) calling a **different** API host (e.g. script used `localhost:8000` but you curl `192.168.204.16:8000`), or (2) another process (e.g. weather scraper) re-created a site/points before you fetched the TTL. Use the same `BASE_URL` for the script and for curl, and run `GET /sites` after the script to confirm the list is empty.
+
+### Option 4: Delete via API (specific entities)
 
 Use CRUD deletes to remove specific sites, equipment, or points. Data cascades as described above.
 

@@ -12,6 +12,8 @@ rules_dir: "analyst/rules"
 brick_ttl_dir: "config"   
 
 # BACnet DRIVER CONFIGURATION
+# bacnet_enabled: enable/disable periodic scrape. Env: OFDD_BACNET_SCRAPE_ENABLED (true/false).
+# When enabled, points with polling=true in the data model are read via diy-bacnet client_read_multiple (one request per device).
 bacnet_enabled: true
 bacnet_scrape_interval_min: 5
 

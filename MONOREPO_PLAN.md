@@ -1,5 +1,10 @@
 # Open-FDD Monorepo Plan
 
+**Dev notes (high level, for maintainers).** This file is not the user-facing docs — see **docs/** (and [docs index](docs/index.md)) for architecture, getting started, data modeling, and API reference. For AI-assisted data modeling and the LLM tagging prompt, see **AGENTS.md** and [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md).
+
+Venv: `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"` (not `.[test]` — dev has full deps). Tests: `pytest open_fdd/tests/ -v` (93 passed). BACnet scrape: see **Run BACnet scrape** and **Confirm BACnet is scraping** below.
+
+---
 
 ## Directory Structure
 
@@ -85,7 +90,7 @@ Optional / legacy: `OFDD_PLATFORM_YAML`, `OFDD_ENV_FILE` (see docs/configuration
 
 ## Unit Tests
 
-Tests live under `open_fdd/tests/`. Run: `pytest` or `pytest open_fdd/tests/ -v` (from repo root, with venv active).
+Tests live under `open_fdd/tests/`. From repo root with venv active: `pip install -e ".[dev]"` then `pytest open_fdd/tests/ -v` (or just `pytest`).
 
 - **analyst/test_brick_model.py** — Build Brick TTL from analyst config.
 - **analyst/test_ingest.py** — Parse path, normalize equipment ID, process inner zip (CSV ingest).
@@ -108,27 +113,75 @@ Tests live under `open_fdd/tests/`. Run: `pytest` or `pytest open_fdd/tests/ -v`
 
 ---
 
+## Run BACnet scrape
+
+From repo root with venv active and DB + diy-bacnet-server reachable:
+
+- **One shot (data-model path):**  
+  `OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py --data-model`  
+  Uses points in the DB that have `bacnet_device_id`, `object_identifier`, and `polling=true`; calls diy-bacnet **client_read_multiple** per device; writes to `timeseries_readings`.
+
+- **Loop (every N min):**  
+  `OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py --data-model --loop`  
+  Uses `OFDD_BACNET_SCRAPE_INTERVAL_MIN` (default 5). Set `OFDD_DB_DSN` if DB is not localhost.
+
+- **Site:** Default site for new readings is `OFDD_BACNET_SITE_ID` (default `"default"`). For data-model path, each point already has a site; scraper uses that.
+
+## Confirm BACnet is scraping
+
+1. **Docker logs (when running in stack)** — Only one BACnet scraper runs: `openfdd_bacnet_scraper`. The other containers that use image `openfdd-bacnet-scraper` are **weather-scraper** and **fdd-loop** (different commands). View BACnet scraper logs: `docker logs -f openfdd_bacnet_scraper`.
+2. **Log output** — You should see e.g. `BACnet device device,3456789: read_multiple N points (polling=true)` and `BACnet scrape OK (RPC): N readings written, M points, ts=...`.
+3. **DB** — New rows in `timeseries_readings` with recent `ts`:
+   - Docker: `docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, value FROM timeseries_readings ORDER BY ts DESC LIMIT 10;"`
+   - Local: `psql "$OFDD_DB_DSN" -c "SELECT ts, point_id, value FROM timeseries_readings ORDER BY ts DESC LIMIT 10;"`
+4. **Grafana** — If dashboards are provisioned, open the BACnet/timeseries dashboard and confirm recent series.
+5. **API** — `GET /download/csv?site_id=<uuid>&start_date=...&end_date=...` (or POST) returns timeseries CSV for a site; if you get data, scrape is writing.
+
+---
+
 ## Data model API: export/import for AI-enhanced Brick tagging
 
-**GET /data-model/export** returns a JSON list of all **points in the DB** (optionally filtered by site): `point_id`, `external_id`, `site_name`, `brick_type`, `rule_input`, `unit`, and BACnet refs. Use this when points already exist and you only need to tag them.
+**GET /data-model/export** is the **single export route**: one JSON list of **BACnet discovery (graph) + all DB points** (optionally filtered by site). Each row has `point_id` (null if not yet imported), `bacnet_device_id`, `object_identifier`, `object_name`, `site_id`, `external_id`, `brick_type`, `rule_input`, `unit`, and **`polling`** (default **false** for unimported BACnet rows). Use **?bacnet_only=true** to return only rows that have `bacnet_device_id` (discovery rows). Use for LLM Brick tagging; then **PUT /data-model/import**.
 
-**GET /data-model/export-bacnet** returns BACnet objects from the **in-memory graph** (discovery from point_discovery_to_graph). One row per object; `point_id` is set when that object already has a point in the DB, else null. Add `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`) in an editor or via LLM, then **PUT /data-model/import** to create or update points. This is the path when you have discovery but no points yet.
+**PUT /data-model/import** updates existing points by `point_id`, or **creates** new points when `point_id` is omitted and `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are provided (e.g. from GET /data-model/export after LLM tagging). Optional **equipment** array updates `feeds_equipment_id` / `fed_by_equipment_id` for Brick relationships. Import never clears BACnet columns; after all updates the backend rebuilds the RDF from the DB and serializes to TTL (in-memory graph + file). **GET /data-model/ttl**, **POST /data-model/sparql**, **GET /data-model/check**, **POST /data-model/reset** as before.
 
-**PUT /data-model/import** updates existing points by `point_id`, or **creates** new points when `point_id` is omitted and `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are provided (e.g. from export-bacnet after LLM tagging). Optional **equipment** array updates `feeds_equipment_id` / `fed_by_equipment_id` for Brick relationships. Import never clears BACnet columns; after all updates the backend rebuilds the RDF from the DB and serializes to TTL (in-memory graph + file). **GET /data-model/ttl**, **POST /data-model/sparql**, **GET /data-model/check**, **POST /data-model/reset** as before.
-
-## BACnet discovery → export-bacnet → LLM → import → scraping (single source of truth)
+## BACnet discovery → export → LLM → import → scraping (single source of truth)
 
 End-to-end flow so the data model is the single source of truth for BACnet device/point addresses and timeseries references (aligned with proprietary flows like brick_tagger + run_queries + check_integrity):
 
 1. **Discover** — POST /bacnet/whois_range, then POST /bacnet/point_discovery_to_graph per device. Graph and `config/brick_model.ttl` now have BACnet RDF.
 2. **Sites/equipment** — Create site(s) and equipment via CRUD (POST /sites, POST /equipment). Note site_id and equipment_id for tagging.
-3. **Export for tagging** — GET /data-model/export-bacnet. Returns all discovered BACnet objects; rows already in DB have point_id/site_id/etc. filled.
+3. **Export for tagging** — GET /data-model/export (unified: BACnet + DB). Returns all discovered BACnet objects and DB points; unimported rows have point_id null and polling false.
 4. **Tag** — Edit JSON in a text editor or send to an LLM (see **LLM tagging workflow** below): set `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`, `unit`, and equipment `feeds_equipment_id`/`fed_by_equipment_id`). For new rows ensure `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are set.
 5. **Import** — PUT /data-model/import with the tagged JSON (body: `points` and optional `equipment`). Creates new points (no point_id), updates existing points (with point_id), and updates equipment feeds/fed_by. Backend rebuilds RDF from DB and serializes TTL.
 6. **Scraping** — BACnet scraper (data-model path) loads points where `bacnet_device_id` and `object_identifier` are set, polls diy-bacnet-server, writes to `timeseries_readings` with correct `point_id` and `external_id`. Grafana dashboards use the same data model and timeseries refs.
 7. **Integrity** — GET /data-model/check for triple/orphan counts; POST /data-model/sparql for ad-hoc checks. FDD rules use Brick types and rule_input from the same points.
 
 Once scraping is running, the data model (sites, equipment, points with BACnet refs and tags) stays the single source of truth; TTL, timeseries, and dashboards stay in sync.
+
+### Why GET /data-model/ttl might still show data after “delete all + reset”
+
+`GET /data-model/ttl` (and `?save=true`) **always** builds from the **current DB**: it syncs Brick triples from the database, then serializes the in-memory graph. So if the DB still has sites/points, the TTL will contain them. After `python tools/delete_all_sites_and_reset.py`, the DB has no sites (cascade removed points and timeseries). So the next `GET /data-model/ttl?save=true` should return only prefixes (empty triples). If you still see BensOffice or weather points: (1) **Same API** — use the same base URL for the script and for curl (e.g. `BASE_URL=http://192.168.204.16:8000` for both). (2) **No re-creation** — ensure no scraper or other process re-created a site/points between delete+reset and your TTL GET. Verify with `GET /sites` after the script; it should return `[]`.
+
+### Testing BACnet discovery → export → import (not yet tested)
+
+End-to-end test flow:
+
+1. **Start stack** — `./scripts/bootstrap.sh` (db, API, bacnet-server, bacnet-scraper). Ensure diy-bacnet-server is reachable from the API container (`OFDD_BACNET_SERVER_URL=http://host.docker.internal:8080`).
+2. **Discover devices** — `POST /bacnet/whois_range` with `start_instance` / `end_instance` (e.g. 3456788–3456790). Then for each device: `POST /bacnet/point_discovery_to_graph` with `device_instance` (and optional `device_name`). This fills the in-memory graph with BACnet triples and updates `config/brick_model.ttl`.
+3. **Create a site** — `POST /sites` with `name` (e.g. "BensOffice") so you have a `site_id` for tagging.
+4. **Export for tagging** — `GET /data-model/export`. Returns unified list (BACnet + DB); unimported rows have `point_id` null and `polling` false.
+5. **Tag** — Edit the JSON (or use the LLM prompt in this doc): set `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`, `unit`). For new rows ensure `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are set.
+6. **Import** — `PUT /data-model/import` with body `{ "points": [ ... ], "equipment": [ ... ] }`. Creates/updates points and equipment; backend rebuilds RDF and serializes TTL.
+7. **Scraping** — BACnet scraper (data-model path) will poll points that have `bacnet_device_id` and `object_identifier` and write to `timeseries_readings`. Grafana can show the same data.
+
+If anything in this flow fails, fix the API or drivers first; then re-run from step 2.
+
+**Testing BACnet discover on Open-FDD Swagger:** No rebuild is required. Ensure the full stack is up (`./scripts/bootstrap.sh` or `docker compose -f platform/docker-compose.yml up -d`) so that **db**, **api**, and **bacnet-server** (diy-bacnet-server) are running. The API container uses `OFDD_BACNET_SERVER_URL=http://host.docker.internal:8080` to reach the BACnet server on the host. Open Swagger at `http://<host>:8000/docs`, then try **POST /bacnet/whois_range** (body: `start_instance`, `end_instance`, e.g. 3456788–3456790) and **POST /bacnet/point_discovery_to_graph** (body: `device_instance` from the whois response). Those proxy to diy-bacnet-server; discovery runs and the in-memory graph is updated. No image rebuild unless you changed open-fdd API or bacnet proxy code.
+
+### Future: auto-create site/point when drivers write
+
+In time, the platform could **auto-create** a site and/or point when a driver (BACnet, Open-Meteo, or a custom API scraper) writes the **first** timeseries row for an unknown key (e.g. `site_id` + `external_id` or device/object). That would keep the data model in sync without requiring CRUD first. Today, scrapers expect sites/points to exist (e.g. weather uses a configured site or creates points under an existing site). A later enhancement is: on first write, create the minimal site/point so the reference exists and the user can later refine tags via CRUD or import.
 
 ## Data Model Sync Processes
 
@@ -153,6 +206,33 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 
 **Recommendation:** For client sites, run `./scripts/bootstrap.sh --update --maintenance --verify` to pull latest code, prune build/container cruft, restart services, and confirm BACnet + API respond. Back up the DB (e.g. `pg_dump` or volume backup) before major upgrades if the client requires a recovery guarantee.
 
+### Troubleshooting: 500 on GET /sites, GET /data-model/ttl, POST /data-model/reset
+
+**Symptom:** `GET /sites`, `GET /data-model/ttl?save=true`, or `POST /data-model/reset` return **500** and API logs show:
+
+```text
+psycopg2.OperationalError: could not translate host name "db" to address: Temporary failure in name resolution
+```
+
+**Cause:** The API container connects to the database using hostname **`db`** (the Docker Compose service name). That name only resolves when the **TimescaleDB** container (`openfdd_timescale`) is running and on the same Docker network as the API. If the DB container is not running, the API gets this error on any endpoint that uses the DB (sites, data-model, etc.).
+
+**Fix:** Bring up the **full** stack so the `db` service is running:
+
+```bash
+cd open-fdd
+./scripts/bootstrap.sh
+# or
+docker compose -f platform/docker-compose.yml up -d
+```
+
+Then confirm the DB container is up:
+
+```bash
+docker ps | grep openfdd_timescale
+```
+
+You should see `openfdd_timescale` (or the container that runs the `db` service). If it is missing, run `docker compose -f platform/docker-compose.yml up -d` from the repo root and wait for the db healthcheck to pass; then the API will resolve `db` and DB-dependent routes will work. The config-driven TTL path (`OFDD_BRICK_TTL_PATH` → `config/brick_model.ttl`) and volume mount (`../config:/app/config`) are already set so the data model is written **outside** the container (host `config/brick_model.ttl`); once the DB is reachable, GET /data-model/ttl and reset will work.
+
 ## Database design & troubleshooting
 
 **Grafana setup:** Grafana runs as a container (`platform/docker-compose.yml`). Datasource and dashboards are **provisioned** at startup from `platform/grafana/`: `provisioning/datasources/datasource.yml` (TimescaleDB, uid: openfdd_timescale) and `provisioning/dashboards/dashboards.yml` (loads JSON from `dashboards/`). Dashboards include BACnet timeseries, Fault Results, Fault Analytics, Weather, and System Resources. Default login: **admin / admin**. If datasource or dashboards are wrong after an upgrade or volume reuse, run `./scripts/bootstrap.sh --reset-grafana` to wipe the Grafana volume and re-apply provisioning; DB data is unchanged. To verify: `docker exec openfdd_grafana ls -la /etc/grafana/provisioning/datasources/` and `.../dashboards/`.
@@ -160,6 +240,8 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 ### Database schema (TimescaleDB)
 
 **Stack:** TimescaleDB (PostgreSQL + time-series hypertables). Schema in `platform/sql/` (001_init.sql through 010_equipment_feeds.sql; see docs/howto/operations.md for applying new migrations).
+
+**Cascade deletes:** Foreign keys use `ON DELETE CASCADE`. Deleting a **site** removes its equipment, points, and **all their timeseries_readings** from the DB. Deleting **equipment** removes its points and their timeseries; deleting a **point** removes its timeseries. So when a data model reference is removed via CRUD, the corresponding timeseries data is physically deleted—no manual SQL or container access needed. See [Danger zone](docs/howto/danger_zone.md).
 
 #### Core tables
 
@@ -278,16 +360,16 @@ The data model is synced to the single TTL file so the FDD loop and other reader
 
 ---
 
-## LLM tagging workflow (export-bacnet → LLM → import)
+## LLM tagging workflow (export → LLM → import)
 
-1. **Export** — GET `/data-model/export-bacnet` (e.g. `http://<backend>:8000/data-model/export-bacnet`). Returns JSON of all discovered BACnet objects; rows already in the DB include `point_id`, `site_id`, etc.
+1. **Export** — GET `/data-model/export` (e.g. `http://<backend>:8000/data-model/export`). Returns unified JSON (BACnet discovery + DB points); unimported rows have `point_id` null and `polling` false.
 2. **Clean** — Remove or omit points not needed for HVAC BACnet polling (e.g. non-HVAC objects, duplicates, or devices not used on this job). Keep only the points that should be tagged and later polled.
 3. **Tag with LLM** — Send the cleaned JSON to an external LLM using the prompt below. The mechanical engineer provides feeds/fed-by relationships and iterates with the LLM until satisfied.
 4. **Import** — Mechanical engineer copies the completed JSON into the open-fdd backend via **PUT /data-model/import**. The backend updates the data model (points and optional equipment relationships), rebuilds the RDF from the DB, and serializes to TTL. Set **`polling`** to `false` on points that should not be polled by the BACnet scraper; the scraper only polls points where `polling` is true (default).
 
 ### Prompt to the LLM
 
-Use this (or adapt it) when sending the export-bacnet JSON to an external LLM for Brick tagging:
+Use this (or adapt it) when sending the export JSON (GET /data-model/export) to an external LLM for Brick tagging:
 
 - **Task:** You are helping tag BACnet discovery data for the Open-FDD building analytics platform. The input is a JSON array of BACnet objects (device instance, object identifier, object name, and optionally existing point_id/site_id/equipment_id).
 - **Brick tagging:** For each object, set or suggest: `site_id` (UUID from the building/site), `external_id` (time-series key, e.g. from object name), `brick_type` (BRICK class, e.g. Supply_Air_Temperature_Sensor, Zone_Air_Temperature_Sensor), `rule_input` (name FDD rules use), and optionally `equipment_id`, `unit`.

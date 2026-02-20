@@ -45,7 +45,7 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
-**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](rules/expression_rule_cookbook).
+**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
 
 **Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
 

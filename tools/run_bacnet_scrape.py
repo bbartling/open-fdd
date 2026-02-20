@@ -171,8 +171,10 @@ def main() -> int:
 
     def _run_single() -> dict:
         if use_data_model:
+            # When site_id is "default", load points from all sites (data model has per-point site_id).
+            data_model_site = None if site_id == "default" else site_id
             result = run_bacnet_scrape_data_model(
-                site_id=site_id, server_url=settings.bacnet_server_url
+                site_id=data_model_site, server_url=settings.bacnet_server_url
             )
             if (
                 result["rows_inserted"] > 0

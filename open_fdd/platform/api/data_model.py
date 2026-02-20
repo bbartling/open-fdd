@@ -99,114 +99,120 @@ class BacnetExportRow(BaseModel):
     )
     unit: str | None = None
     polling: bool = Field(
-        True,
-        description="If true, BACnet scraper polls this point; set false to exclude from scrape.",
+        False,
+        description="If true, BACnet scraper polls this point; false by default for unimported objects.",
     )
 
 
-@router.get(
-    "/export-bacnet",
-    response_model=list[BacnetExportRow],
-    summary="Export BACnet discovery as JSON (for LLM tagging then import)",
-)
-def export_bacnet_from_graph(
-    site_id: str | None = Query(
+class UnifiedExportRow(BaseModel):
+    """One row in the unified data-model export: BACnet discovery and/or DB points. Use GET /data-model/export for one dump of everything; send to LLM for Brick tagging then PUT /data-model/import."""
+
+    point_id: str | None = Field(
         None,
-        description="If set, only include objects that already belong to this site (by existing point). Omit to export all discovered BACnet objects.",
-    ),
-):
-    """Export BACnet devices/objects from the in-memory graph (point_discovery_to_graph). Returns one row per object; point_id is set when that object already has a point in the DB. Add site_id, external_id, brick_type, rule_input (and optionally equipment_id) in editor or via LLM, then PUT /data-model/import to create/update points. Scraper then uses points with bacnet_device_id+object_identifier."""
-    ttl = serialize_to_ttl()
-    devices, point_discoveries = parse_bacnet_ttl_to_discovery(ttl)
-    if not point_discoveries:
-        return []
-
-    # Load existing points with BACnet refs to fill point_id, site_id, etc.
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT p.id, p.site_id, s.name AS site_name, p.equipment_id, e.name AS equipment_name,
-                       p.external_id, p.brick_type, p.fdd_input, p.unit,
-                       p.bacnet_device_id, p.object_identifier, p.object_name,
-                       COALESCE(p.polling, true) AS polling
-                FROM points p
-                LEFT JOIN sites s ON s.id = p.site_id
-                LEFT JOIN equipment e ON e.id = p.equipment_id
-                WHERE p.bacnet_device_id IS NOT NULL AND p.object_identifier IS NOT NULL
-                """)
-            existing = {
-                (str(r["bacnet_device_id"]), str(r["object_identifier"]).strip()): r
-                for r in cur.fetchall()
-            }
-
-    _site_id = _resolve_site_filter(site_id) if site_id else None
-    out: list[BacnetExportRow] = []
-    for pd in point_discoveries:
-        dev_inst = pd.get("device_instance")
-        if dev_inst is None:
-            continue
-        dev_str = str(dev_inst)
-        for obj in pd.get("objects") or []:
-            oid = (obj.get("object_identifier") or "").strip()
-            oname = (obj.get("object_name") or "").strip() or None
-            if not oid:
-                continue
-            key = (dev_str, oid)
-            row = existing.get(key)
-            if _site_id and row and str(row["site_id"]) != str(_site_id):
-                continue
-            if row:
-                out.append(
-                    BacnetExportRow(
-                        point_id=str(row["id"]),
-                        bacnet_device_id=dev_str,
-                        object_identifier=oid,
-                        object_name=oname or row.get("object_name"),
-                        site_id=str(row["site_id"]) if row.get("site_id") else None,
-                        site_name=row.get("site_name"),
-                        equipment_id=(
-                            str(row["equipment_id"])
-                            if row.get("equipment_id")
-                            else None
-                        ),
-                        equipment_name=row.get("equipment_name"),
-                        external_id=row.get("external_id"),
-                        brick_type=row.get("brick_type"),
-                        rule_input=row.get("fdd_input"),
-                        unit=row.get("unit"),
-                        polling=bool(row.get("polling", True)),
-                    ),
-                )
-            else:
-                out.append(
-                    BacnetExportRow(
-                        point_id=None,
-                        bacnet_device_id=dev_str,
-                        object_identifier=oid,
-                        object_name=oname,
-                        external_id=oname or oid.replace(",", "_"),
-                        polling=True,
-                    )
-                )
-    return out
-
-
-@router.get(
-    "/export",
-    response_model=list[PointExportRow],
-    summary="Export data model as JSON (for LLM Brick tagging)",
-    response_description="JSON list of points with point_id, external_id, site_name, brick_type, rule_input, and BACnet refs (bacnet_device_id, object_identifier, object_name). Use point_id in import body.",
-)
-def export_points(
-    site_id: str | None = Query(
+        description="Point UUID when point exists in DB; null for BACnet-only (not yet imported).",
+    )
+    bacnet_device_id: str | None = Field(
+        None, description="BACnet device instance (e.g. 3456789); null for CRUD-only points."
+    )
+    object_identifier: str | None = Field(
+        None, description="BACnet object (e.g. analog-input,1); null for CRUD-only points."
+    )
+    object_name: str | None = None
+    site_id: str | None = None
+    site_name: str | None = None
+    equipment_id: str | None = None
+    equipment_name: str | None = None
+    external_id: str | None = Field(
         None,
-        description="Filter by site: UUID, name (e.g. BensOffice), or description. Omit for all sites.",
-    ),
-):
-    """Export points as JSON for AI-enhanced data modeling. After BACnet discovery and CRUD, send this payload to an LLM (or human) to fill brick_type and rule_input; then PUT /data-model/import. BACnet and timeseries refs are preserved on import."""
-    _site_id = _resolve_site_filter(site_id)
+        description="Time-series key; required on import for new points.",
+    )
+    brick_type: str | None = None
+    rule_input: str | None = None
+    unit: str | None = None
+    polling: bool = Field(
+        False,
+        description="If true, BACnet scraper polls this point; false by default for unimported objects.",
+    )
+
+
+def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
+    """Single dump: BACnet discovery (graph) + DB points. Rows with no point_id have polling=False by default."""
+    _site_id = _resolve_site_filter(site_id) if (site_id and site_id.strip()) else None
     if site_id and site_id.strip() and _site_id is None:
         raise HTTPException(404, f"No site found for name/description: {site_id!r}")
+
+    out: list[UnifiedExportRow] = []
+    emitted_point_ids: set[str] = set()
+
+    # 1) BACnet objects from graph (with DB overlay when point exists)
+    try:
+        ttl = serialize_to_ttl()
+        _devices, point_discoveries = parse_bacnet_ttl_to_discovery(ttl)
+    except Exception:
+        point_discoveries = []
+    if point_discoveries:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT p.id, p.site_id, s.name AS site_name, p.equipment_id, e.name AS equipment_name,
+                           p.external_id, p.brick_type, p.fdd_input, p.unit,
+                           p.bacnet_device_id, p.object_identifier, p.object_name,
+                           COALESCE(p.polling, true) AS polling
+                    FROM points p
+                    LEFT JOIN sites s ON s.id = p.site_id
+                    LEFT JOIN equipment e ON e.id = p.equipment_id
+                    WHERE p.bacnet_device_id IS NOT NULL AND p.object_identifier IS NOT NULL
+                    """)
+                existing = {
+                    (str(r["bacnet_device_id"]), str(r["object_identifier"]).strip()): r
+                    for r in cur.fetchall()
+                }
+        for pd in point_discoveries:
+            dev_inst = pd.get("device_instance")
+            if dev_inst is None:
+                continue
+            dev_str = str(dev_inst)
+            for obj in pd.get("objects") or []:
+                oid = (obj.get("object_identifier") or "").strip()
+                oname = (obj.get("object_name") or "").strip() or None
+                if not oid:
+                    continue
+                key = (dev_str, oid)
+                row = existing.get(key)
+                if _site_id and row and str(row["site_id"]) != str(_site_id):
+                    continue
+                if row:
+                    emitted_point_ids.add(str(row["id"]))
+                    out.append(
+                        UnifiedExportRow(
+                            point_id=str(row["id"]),
+                            bacnet_device_id=dev_str,
+                            object_identifier=oid,
+                            object_name=oname or row.get("object_name"),
+                            site_id=str(row["site_id"]) if row.get("site_id") else None,
+                            site_name=row.get("site_name"),
+                            equipment_id=str(row["equipment_id"]) if row.get("equipment_id") else None,
+                            equipment_name=row.get("equipment_name"),
+                            external_id=row.get("external_id"),
+                            brick_type=row.get("brick_type"),
+                            rule_input=row.get("fdd_input"),
+                            unit=row.get("unit"),
+                            polling=bool(row.get("polling", True)),
+                        ),
+                    )
+                else:
+                    out.append(
+                        UnifiedExportRow(
+                            point_id=None,
+                            bacnet_device_id=dev_str,
+                            object_identifier=oid,
+                            object_name=oname,
+                            external_id=oname or oid.replace(",", "_"),
+                            polling=False,
+                        ),
+                    )
+
+    # 2) DB-only points (not already emitted from BACnet)
     with get_conn() as conn:
         with conn.cursor() as cur:
             if _site_id:
@@ -235,25 +241,51 @@ def export_points(
                     LEFT JOIN equipment e ON e.id = p.equipment_id
                     ORDER BY p.site_id, p.external_id
                     """)
-            rows = cur.fetchall()
-    return [
-        PointExportRow(
-            point_id=str(r["id"]),
-            site_id=str(r["site_id"]),
-            site_name=r.get("site_name"),
-            external_id=r["external_id"],
-            equipment_id=str(r["equipment_id"]) if r.get("equipment_id") else None,
-            equipment_name=r.get("equipment_name"),
-            brick_type=r.get("brick_type"),
-            rule_input=r.get("fdd_input"),
-            unit=r.get("unit"),
-            bacnet_device_id=r.get("bacnet_device_id"),
-            object_identifier=r.get("object_identifier"),
-            object_name=r.get("object_name"),
-            polling=bool(r.get("polling", True)),
-        )
-        for r in rows
-    ]
+            for r in cur.fetchall():
+                pid = str(r["id"])
+                if pid in emitted_point_ids:
+                    continue
+                out.append(
+                    UnifiedExportRow(
+                        point_id=pid,
+                        bacnet_device_id=r.get("bacnet_device_id"),
+                        object_identifier=r.get("object_identifier"),
+                        object_name=r.get("object_name"),
+                        site_id=str(r["site_id"]) if r.get("site_id") else None,
+                        site_name=r.get("site_name"),
+                        equipment_id=str(r["equipment_id"]) if r.get("equipment_id") else None,
+                        equipment_name=r.get("equipment_name"),
+                        external_id=r["external_id"],
+                        brick_type=r.get("brick_type"),
+                        rule_input=r.get("fdd_input"),
+                        unit=r.get("unit"),
+                        polling=bool(r.get("polling", True)),
+                    ),
+                )
+    return out
+
+
+@router.get(
+    "/export",
+    response_model=list[UnifiedExportRow],
+    summary="Export data model as JSON (BACnet + DB points for LLM tagging)",
+    response_description="One list: BACnet discovery and DB points. Use ?bacnet_only=true to restrict to rows with bacnet_device_id. Rows with point_id null are unimported (polling=false by default). Send to LLM for Brick tagging then PUT /data-model/import.",
+)
+def export_points(
+    site_id: str | None = Query(
+        None,
+        description="Filter by site: UUID, name (e.g. BensOffice), or description. Omit for all sites.",
+    ),
+    bacnet_only: bool = Query(
+        False,
+        description="If true, return only rows that have bacnet_device_id and object_identifier (discovery from graph). Omit or false for full dump (BACnet + CRUD points).",
+    ),
+):
+    """Single export route: BACnet discovery + CRUD points. Use for LLM Brick tagging (MONOREPO_PLAN.md); then PUT /data-model/import. Unimported BACnet rows have polling=false by default. Set bacnet_only=true to get only discovery rows."""
+    out = _build_unified_export(site_id)
+    if bacnet_only:
+        out = [r for r in out if r.bacnet_device_id is not None and r.object_identifier is not None]
+    return out
 
 
 # --- Import: bulk update full BRICK data model (points, site, equipment, rule_input) ---
@@ -262,7 +294,7 @@ def export_points(
 class PointImportRow(BaseModel):
     point_id: str | None = Field(
         None,
-        description="Point UUID to update (from GET /data-model/export or export-bacnet). Omit with bacnet_device_id+object_identifier+site_id+external_id to create a new point.",
+        description="Point UUID to update (from GET /data-model/export). Omit with bacnet_device_id+object_identifier+site_id+external_id to create a new point.",
     )
     site_id: str | None = Field(
         None,
@@ -277,11 +309,11 @@ class PointImportRow(BaseModel):
     )
     bacnet_device_id: str | None = Field(
         None,
-        description="BACnet device instance (e.g. 3456789). Required when creating from export-bacnet.",
+        description="BACnet device instance (e.g. 3456789). Required when creating from export (unimported row).",
     )
     object_identifier: str | None = Field(
         None,
-        description="BACnet object (e.g. analog-input,1). Required when creating from export-bacnet.",
+        description="BACnet object (e.g. analog-input,1). Required when creating from export (unimported row).",
     )
     object_name: str | None = Field(None, description="BACnet object name (optional).")
     brick_type: str | None = Field(
@@ -372,7 +404,7 @@ class DataModelImportBody(BaseModel):
     response_description='Count created/updated (e.g. { "created": 5, "updated": 25, "total": 30 }).',
 )
 def import_data_model(body: DataModelImportBody):
-    """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export-bacnet after LLM tagging). Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
+    """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export after LLM tagging). Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
     created = 0
     updated = 0
     with get_conn() as conn:
