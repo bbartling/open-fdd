@@ -30,13 +30,13 @@ Reboot: containers stop unless Docker or systemd is configured to start them on 
 
 | Change | Action |
 |--------|--------|
-| **Log limits, retention SQL, Grafana dashboards** | `docker compose up -d` (restart). Log limits and new dashboards apply after restart. |
+| **Log limits, retention SQL, Grafana datasource** | `docker compose up -d` (restart). Log limits and datasource apply after restart. |
 | **Open-Meteo driver** (new weather points: solar, cloud, wind_dir) | Rebuild weather-scraper: `docker compose build weather-scraper && docker compose up -d weather-scraper` |
 | **API code** (download, data-model, main, config UI at /app/) | `./scripts/bootstrap.sh --build api` or `docker compose build api && docker compose up -d api` |
 | **BACnet from config UI** | API container must reach diy-bacnet-server: `OFDD_BACNET_SERVER_URL` is set in docker-compose to `http://host.docker.internal:8080` (bacnet-server on host). Restart API after changing. |
 | **All containers** (full rebuild and restart) | `./scripts/bootstrap.sh --build-all` — no DB wait or migrations; exits after `docker compose build && docker compose up -d`. |
 | **FDD loop, BACnet scraper code** | `docker compose build bacnet-scraper fdd-loop` (or `--build`); fdd-loop also mounts `open_fdd` from host, so host code changes apply on restart. |
-| **Grafana dashboards missing** | `./scripts/bootstrap.sh --reset-grafana` |
+| **Grafana datasource missing or wrong** | `./scripts/bootstrap.sh --reset-grafana` |
 
 ---
 
@@ -128,9 +128,9 @@ docker compose exec db psql -U postgres -d openfdd -c "\dt"
 
 ---
 
-## Grafana dashboards
+## Grafana (datasource + cookbook)
 
-If dashboards show **No data**, too many sites in dropdowns, or only one BACnet point, see [Grafana troubleshooting](grafana_troubleshooting): cleanup demo sites, container time series time range/timezone, Fault Runner status panel, and BACnet dropdowns.
+Only the TimescaleDB datasource is provisioned. To build dashboards and SQL for BACnet, faults, weather, or system resources, see [Grafana SQL cookbook](grafana_cookbook).
 
 ---
 

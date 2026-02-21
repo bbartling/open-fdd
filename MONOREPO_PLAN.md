@@ -26,7 +26,7 @@ open-fdd/
 ├── analyst/                # Entry points: sparql, rules, run_all.sh; rules YAML
 ├── platform/               # docker-compose, Dockerfiles, SQL, grafana, caddy
 │   ├── sql/               # 001_init … 011_polling (migrations)
-│   ├── grafana/            # provisioning/datasources, provisioning/dashboards, dashboards/*.json
+│   ├── grafana/            # provisioning/datasources only; no dashboards (see docs/howto/grafana_cookbook.md)
 │   └── caddy/              # Caddyfile (optional reverse proxy)
 ├── config/                 # brick_model.ttl (Brick + BACnet discovery, one file), BACnet CSV(s) optional
 ├── scripts/                # bootstrap.sh, discover_bacnet.sh, fake_*_faults.py
@@ -86,28 +86,12 @@ Optional / legacy: `OFDD_PLATFORM_YAML`, `OFDD_ENV_FILE` (see docs/configuration
 
 ---
 
-## Grafana and operational state (why dashboards “break” or show unexpected data)
+## Grafana (high level)
 
-Grafana dashboards read from the **same DB** as the API and scrapers. They do **not** read from YAML or from the TTL file. So “Grafana keeps breaking” or “shows wrong counts” usually comes from one of these:
+**Provisioning:** Only the **TimescaleDB datasource** is provisioned (uid: `openfdd_timescale`, database: `openfdd`). No dashboards are shipped; you build your own with SQL. See **[Grafana SQL cookbook](docs/howto/grafana_cookbook.md)** for datasource setup, DB tables (BACnet/data model, faults, host/container metrics, weather), and copy-paste SQL recipes for BACnet timeseries, Fault Results, Fault Analytics, Weather, and System Resources.
 
-1. **BACnet dropdowns show only 2 points (BensOffice)**  
-   **Cause:** `tools/graph_and_crud_test.py` step **[27] deletes DemoSite** so that only one site remains (BensOffice) and `GET /data-model/check` returns `sites=1`. After [27], the DB has only BensOffice with 2 BACnet points (SA-T, ZoneTemp). Grafana site/device/point dropdowns query the DB, so they show 1 site, 2 devices, 2 points.  
-   **To see many points (e.g. 2 devices × many points):** Either do not run the test to completion (stop before [27]), or change the test to leave DemoSite in place (comment out [27]). Then both BensOffice and DemoSite remain and BACnet dropdowns show 24 polling points across 2 sites.
+**Data source of truth:** Grafana panels query the **same DB** as the API and scrapers (not YAML or TTL). Scraper interval and enable flags are **env vars** (e.g. `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in platform/.env; see table above). If panels show "No data", check that the relevant scraper/FDD has run and the dashboard time range includes recent data.
 
-2. **BACnet scrape interval is 5 minutes in Grafana even though YAML says 1**  
-   **Cause:** Platform settings are **env-driven**. The BACnet scraper container gets `OFDD_BACNET_SCRAPE_INTERVAL_MIN` from **Docker Compose**, which defaults to 5 in `platform/docker-compose.yml`. The `config/platform.example.yaml` (and any `platform.yaml`) are **not** read by the Docker containers; only env vars (and optionally a mounted config) are.  
-   **Fix:** Set `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in **platform/.env**, then restart: `cd platform && docker compose up -d`. The compose file uses `${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}` so the container will get 1.
-
-3. **BACnet scraper status “No data” / Fault Runner “No data”**  
-   **Cause:** Panels query the DB (e.g. `timeseries_readings` for “last BACnet data”, `fdd_run_log` for Fault Runner). If the scraper has not written recently (e.g. diy-bacnet unreachable, or interval 5 min and nothing in the dashboard time range), or FDD has not run yet, the query returns no rows and the panel shows “No data”.  
-   **Checks:** `docker logs openfdd_bacnet_scraper` and `docker logs openfdd_fdd_loop`; ensure time range in Grafana includes recent data; see docs/howto/grafana_troubleshooting.md.
-
-4. **Fault Runner Status / Weather (Open-Meteo)**  
-   FDD loop and weather scraper run on **env-configured intervals** (`OFDD_RULE_INTERVAL_HOURS`, `OFDD_OPEN_METEO_INTERVAL_HOURS`). Until they have run at least once and written to `fdd_run_log` / `weather_hourly_raw`, those panels show “No data”. System Resources uses host-stats and container metrics; those are written every `OFDD_HOST_STATS_INTERVAL_SEC` and are independent of BACnet/FDD.
-
-**Summary:** All intervals and enable flags are **env vars** (see table above). YAML in `config/` is for non-Docker or for docs; Docker stack uses env (and platform/.env). For 1 min BACnet scrape: `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in platform/.env and restart the stack.
-
-**Fault Results and Weather dashboards:** “Fault Runner Status: No data” or “Last ran: 2 hours ago” is normal until the FDD loop has run at least once (or you trigger via `OFDD_FDD_TRIGGER_FILE`). Weather panels need the weather scraper to have run. The runner is fine; panels just need data in the selected time range.
 
 ---
 
@@ -157,7 +141,7 @@ From repo root with venv active and DB + diy-bacnet-server reachable:
 3. **DB** — New rows in `timeseries_readings` with recent `ts`:
    - Docker: `docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, value FROM timeseries_readings ORDER BY ts DESC LIMIT 10;"`
    - Local: `psql "$OFDD_DB_DSN" -c "SELECT ts, point_id, value FROM timeseries_readings ORDER BY ts DESC LIMIT 10;"`
-4. **Grafana** — If dashboards are provisioned, open the BACnet/timeseries dashboard and confirm recent series.
+4. **Grafana** — Use the provisioned datasource in Explore or build a dashboard from the [Grafana SQL cookbook](docs/howto/grafana_cookbook.md) and confirm recent series.
 5. **API** — `GET /download/csv?site_id=<uuid>&start_date=...&end_date=...` (or POST) returns timeseries CSV for a site; if you get data, scrape is writing.
 
 ---
@@ -177,7 +161,7 @@ End-to-end flow so the data model is the single source of truth for BACnet devic
 3. **Export for tagging** — GET /data-model/export (unified: BACnet + DB). Returns all discovered BACnet objects and DB points; unimported rows have point_id null and polling false.
 4. **Tag** — Edit JSON in a text editor or send to an LLM (see **LLM tagging workflow** below): set `site_id`, `external_id`, `brick_type`, `rule_input` (and optionally `equipment_id`, `unit`, and equipment `feeds_equipment_id`/`fed_by_equipment_id`). For new rows ensure `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` are set.
 5. **Import** — PUT /data-model/import with the tagged JSON (body: `points` and optional `equipment`). Creates new points (no point_id), updates existing points (with point_id), and updates equipment feeds/fed_by. Backend rebuilds RDF from DB and serializes TTL.
-6. **Scraping** — BACnet scraper (data-model path) loads points where `bacnet_device_id` and `object_identifier` are set, polls diy-bacnet-server, writes to `timeseries_readings` with correct `point_id` and `external_id`. Grafana dashboards use the same data model and timeseries refs.
+6. **Scraping** — BACnet scraper (data-model path) loads points where `bacnet_device_id` and `object_identifier` are set, polls diy-bacnet-server, writes to `timeseries_readings`. Grafana (build from cookbook) queries the same DB.
 7. **Integrity** — GET /data-model/check for triple/orphan counts; POST /data-model/sparql for ad-hoc checks. FDD rules use Brick types and rule_input from the same points.
 
 Once scraping is running, the data model (sites, equipment, points with BACnet refs and tags) stays the single source of truth; TTL, timeseries, and dashboards stay in sync.
@@ -258,7 +242,7 @@ You should see `openfdd_timescale` (or the container that runs the `db` service)
 
 ## Database design & troubleshooting
 
-**Grafana setup:** Grafana runs as a container (`platform/docker-compose.yml`). Datasource and dashboards are **provisioned** at startup from `platform/grafana/`: `provisioning/datasources/datasource.yml` (TimescaleDB, uid: openfdd_timescale) and `provisioning/dashboards/dashboards.yml` (loads JSON from `dashboards/`). Dashboards include BACnet timeseries, Fault Results, Fault Analytics, Weather, and System Resources. Default login: **admin / admin**. To **build or add custom dashboards** (tables, variables, time macros, export from UI), see [Custom Grafana dashboards](docs/howto/grafana_custom_dashboards.md). If datasource or dashboards are wrong after an upgrade or volume reuse, run `./scripts/bootstrap.sh --reset-grafana` to wipe the Grafana volume and re-apply provisioning; DB data is unchanged. To verify: `docker exec openfdd_grafana ls -la /etc/grafana/provisioning/datasources/` and `.../dashboards/`.
+**Grafana:** Only the **datasource** is provisioned (`platform/grafana/provisioning/datasources/datasource.yml` → TimescaleDB, uid: openfdd_timescale). No dashboards; build your own with SQL from the [Grafana SQL cookbook](docs/howto/grafana_cookbook.md). Default login: **admin / admin**. To re-apply provisioning: `./scripts/bootstrap.sh --reset-grafana` (wipes Grafana volume; DB unchanged). Verify: `docker exec openfdd_grafana ls -la /etc/grafana/provisioning/datasources/`.
 
 ### Database schema (TimescaleDB)
 
