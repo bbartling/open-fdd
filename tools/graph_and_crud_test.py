@@ -19,7 +19,16 @@ API coverage (OpenAPI paths exercised):
   - /data-model: serialize, ttl, export, import (points + equipment feeds), sparql
   - /bacnet: server_hello, whois_range, point_discovery_to_graph
   - /download/csv (GET, POST), /download/faults (GET json, csv)
+All SPARQL is via the Open-FDD API: POST /data-model/sparql (see _sparql()). No direct triple-store access.
 Not in this script: GET /bacnet/gateways, /data-model/check, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
+
+This test uses pre-tagged import payloads (brick_type, rule_input, polling) that simulate the output of the
+AI-assisted tagging step. The real workflow is: GET /data-model/export → LLM or human tags → PUT /data-model/import.
+See docs/modeling/ai_assisted_tagging.md and AGENTS.md for the LLM prompt and export → tag → import flow.
+
+Full LLM payload: Step [4f2] loads tools/demo_site_llm_payload.json (sites, equipments, relationships, points with
+string IDs like site-1, ahu-1). The test maps those to API UUIDs and imports into DemoSite so many BACnet points
+(two devices 3456789, 3456790) have polling=true. Idempotent: existing points are sent with point_id for update.
 
 Usage:
 # Default device 3456789
@@ -33,12 +42,17 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
+
+# Blast away all sites and re-run test (only BensOffice remains after test)
+./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
+# Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
 """
 
 import argparse
 import json
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -61,6 +75,9 @@ BACNET_TEST_DEVICE_INSTANCES = (3456789, 3456790)
 BENSOFFICE_SITE_NAME = "BensOffice"
 BENS_FAKE_AHU_NAME = "BensFakeAhu"
 BENS_FAKE_VAV_NAME = "BensFakeVavBox"
+# DemoSite: full LLM payload (many BACnet points, two devices 3456789/3456790); see tools/demo_site_llm_payload.json
+DEMO_SITE_LLM_NAME = "DemoSite"
+DEMO_SITE_LLM_PAYLOAD_PATH = Path(__file__).resolve().parent / "demo_site_llm_payload.json"
 
 
 def _request(
@@ -446,6 +463,129 @@ def run():
     assert BENS_FAKE_VAV_NAME in ttl_body_bens, f"TTL should contain equipment {BENS_FAKE_VAV_NAME!r}"
     print(f"    OK — TTL contains {BENSOFFICE_SITE_NAME!r}, {BENS_FAKE_AHU_NAME!r}, {BENS_FAKE_VAV_NAME!r}\n")
 
+    # --- [4f1] BensOffice: 2 BACnet points (SA-T, ZoneTemp) so after [27] scraper still has points to poll ---
+    print("[4f1] PUT /data-model/import (2 BACnet points for BensOffice — SA-T, ZoneTemp; survives [27] so scraper has work)")
+    code, eq_list_bens = _request("GET", f"/equipment?site_id={bens_site_id}")
+    assert ok(code), f"GET /equipment failed: {code}"
+    bens_ahu = next((e for e in eq_list_bens if e.get("name") == BENS_FAKE_AHU_NAME), None)
+    bens_vav = next((e for e in eq_list_bens if e.get("name") == BENS_FAKE_VAV_NAME), None)
+    assert bens_ahu and bens_vav, f"BensOffice equipment not found: {eq_list_bens}"
+    code, existing_bens_points = _request("GET", f"/points?site_id={bens_site_id}")
+    assert ok(code), f"GET /points failed: {code}"
+    existing_bens_by_ext = {p["external_id"]: p for p in (existing_bens_points or []) if isinstance(p, dict) and p.get("external_id")}
+    bens_pts = []
+    for ext_id, dev, oid, eq_id, brick, rule in [
+        ("SA-T", "3456789", "analog-input,2", bens_ahu["id"], "Supply_Air_Temperature_Sensor", "Supply_Air_Temperature_Sensor"),
+        ("ZoneTemp", "3456790", "analog-input,1", bens_vav["id"], "Zone_Temperature_Sensor", "Zone_Temperature_Sensor"),
+    ]:
+        existing = existing_bens_by_ext.get(ext_id)
+        if existing:
+            bens_pts.append({"point_id": existing["id"], "equipment_id": eq_id, "brick_type": brick, "rule_input": rule, "polling": True})
+        else:
+            bens_pts.append({"site_id": bens_site_id, "external_id": ext_id, "bacnet_device_id": dev, "object_identifier": oid, "object_name": ext_id, "equipment_id": eq_id, "brick_type": brick, "rule_input": rule, "unit": "degF", "polling": True})
+    code, res = _request("PUT", "/data-model/import", json_body={"points": bens_pts})
+    assert ok(code), f"PUT /data-model/import BensOffice points failed: {code} {res}"
+    print(f"    OK — BensOffice has 2 BACnet points; after [27] only BensOffice remains and scraper will poll these.\n")
+
+    # --- [4f2] Full LLM payload import into DemoSite (many BACnet points, two devices; idempotent) ---
+    # Uses tools/demo_site_llm_payload.json: sites/equipments/relationships/points with string IDs (site-1, ahu-1, ...).
+    # Transform to API format (UUIDs), create-or-update points so re-runs do not duplicate.
+    print("[4f2] PUT /data-model/import (full LLM payload → DemoSite: many BACnet points, devices 3456789 + 3456790)")
+    assert DEMO_SITE_LLM_PAYLOAD_PATH.exists(), f"Missing {DEMO_SITE_LLM_PAYLOAD_PATH}"
+    with open(DEMO_SITE_LLM_PAYLOAD_PATH, encoding="utf-8") as f:
+        llm_payload = json.load(f)
+    sites_llm = llm_payload.get("sites") or []
+    equipments_llm = llm_payload.get("equipments") or []
+    relationships_llm = llm_payload.get("relationships") or []
+    points_llm = llm_payload.get("points") or []
+    assert sites_llm, "LLM payload must have at least one site"
+    site_name_llm = sites_llm[0].get("site_name") or DEMO_SITE_LLM_NAME
+    code, sites_list = _request("GET", "/sites")
+    assert ok(code), f"GET /sites failed: {code}"
+    demo_site = next((s for s in sites_list if s.get("name") == site_name_llm), None)
+    if demo_site is None:
+        code, demo_site = _request("POST", "/sites", json_body={"name": site_name_llm, "description": "LLM payload DemoSite"})
+        assert ok(code), f"POST /sites {site_name_llm} failed: {code} {demo_site}"
+    demo_site_id_full = demo_site["id"]
+    code, eq_list = _request("GET", f"/equipment?site_id={demo_site_id_full}")
+    assert ok(code), f"GET /equipment failed: {code}"
+    existing_eq_by_name = {e["name"]: e for e in eq_list if isinstance(e, dict) and e.get("name")}
+    eq_key_to_uuid = {}
+    for eq in equipments_llm:
+        eid_key = eq.get("equipment_id")
+        ename = eq.get("equipment_name")
+        if not eid_key or not ename:
+            continue
+        if ename not in existing_eq_by_name:
+            eq_type = eq.get("brick_type") or "Equipment"
+            code, created = _request("POST", "/equipment", json_body={"site_id": demo_site_id_full, "name": ename, "description": eq_type, "equipment_type": eq_type})
+            assert ok(code), f"POST /equipment {ename} failed: {code} {created}"
+            existing_eq_by_name[ename] = created
+        eq_key_to_uuid[eid_key] = existing_eq_by_name[ename]["id"]
+    code, existing_points = _request("GET", f"/points?site_id={demo_site_id_full}")
+    assert ok(code), f"GET /points failed: {code}"
+    existing_by_key = {}
+    for p in existing_points or []:
+        if isinstance(p, dict) and p.get("external_id") is not None:
+            key = (p["external_id"], str(p.get("bacnet_device_id") or ""), str(p.get("object_identifier") or ""))
+            existing_by_key[key] = p
+    used_external_ids = {p["external_id"] for p in (existing_points or []) if isinstance(p, dict) and p.get("external_id")}
+    api_points = []
+    for pt in points_llm:
+        if not isinstance(pt, dict):
+            continue
+        ext_id = pt.get("external_id")
+        site_id_llm = pt.get("site_id")
+        eq_id_llm = pt.get("equipment_id")
+        if site_id_llm != sites_llm[0].get("site_id"):
+            continue
+        equipment_uuid = eq_key_to_uuid.get(eq_id_llm) if eq_id_llm and eq_id_llm in eq_key_to_uuid else None
+        key = (ext_id, str(pt.get("bacnet_device_id") or ""), str(pt.get("object_identifier") or ""))
+        key_alt = (f"{ext_id}_{pt.get('bacnet_device_id')}", str(pt.get("bacnet_device_id") or ""), str(pt.get("object_identifier") or ""))
+        existing = existing_by_key.get(key) or existing_by_key.get(key_alt)
+        if existing:
+            api_points.append({
+                "point_id": existing["id"],
+                "equipment_id": equipment_uuid,
+                "brick_type": pt.get("brick_type"),
+                "rule_input": pt.get("rule_input"),
+                "polling": pt.get("polling") if pt.get("polling") is not None else True,
+            })
+        else:
+            if not pt.get("bacnet_device_id") or not pt.get("object_identifier"):
+                continue
+            external_id_final = ext_id
+            if external_id_final in used_external_ids:
+                external_id_final = f"{ext_id}_{pt['bacnet_device_id']}"
+            used_external_ids.add(external_id_final)
+            api_points.append({
+                "site_id": demo_site_id_full,
+                "external_id": external_id_final,
+                "bacnet_device_id": str(pt["bacnet_device_id"]),
+                "object_identifier": str(pt["object_identifier"]),
+                "object_name": pt.get("object_name"),
+                "equipment_id": equipment_uuid,
+                "brick_type": pt.get("brick_type"),
+                "rule_input": pt.get("rule_input"),
+                "unit": pt.get("unit"),
+                "polling": pt.get("polling") if pt.get("polling") is not None else True,
+            })
+    api_equipment = []
+    for rel in relationships_llm:
+        if rel.get("predicate") != "feeds":
+            continue
+        sub_id = eq_key_to_uuid.get(rel.get("subject_equipment_id"))
+        obj_id = eq_key_to_uuid.get(rel.get("object_equipment_id"))
+        if sub_id and obj_id:
+            api_equipment.append({"equipment_id": sub_id, "feeds_equipment_id": obj_id})
+            api_equipment.append({"equipment_id": obj_id, "fed_by_equipment_id": sub_id})
+    code, import_res = _request("PUT", "/data-model/import", json_body={"points": api_points, "equipment": api_equipment})
+    assert ok(code), f"PUT /data-model/import DemoSite failed: {code} {import_res}"
+    created = import_res.get("created", 0)
+    updated = import_res.get("updated", 0)
+    polling_count = sum(1 for pt in points_llm if isinstance(pt, dict) and pt.get("polling") is True)
+    print(f"    OK — DemoSite: {created} created, {updated} updated, {len(api_points)} points ({polling_count} with polling=true). Re-run safe (upsert).\n")
+
     # --- PUT /data-model/import (LLM-style payload: real UUIDs, points + equipment feeds) ---
     demo_site_name = f"demo-import-{uuid4().hex[:8]}"
     print(f"[4g] PUT /data-model/import (create DemoSite-style site + equipment, import tagged points + feeds)")
@@ -829,6 +969,48 @@ def run():
         assert "ts" in body or "site_id" in body or "timestamp" in body or "," in body
     print("    OK\n")
 
+    # --- Verify data model: DemoSite has many BACnet points with polling=true (scraper will poll them) ---
+    print("[25] GET /points?site_id=<DemoSite> — verify many BACnet points with polling=true (data flowing via data model)")
+    code, points_list = _request("GET", f"/points?site_id={demo_site_id_full}")
+    assert ok(code), f"GET /points failed: {code}"
+    assert isinstance(points_list, list), f"GET /points did not return a list: {type(points_list)}"
+    bacnet_polling = [p for p in points_list if isinstance(p, dict) and p.get("bacnet_device_id") and p.get("polling")]
+    min_bacnet_polling = 15
+    assert len(bacnet_polling) >= min_bacnet_polling, (
+        f"Expected at least {min_bacnet_polling} BACnet points with polling=true for DemoSite (full LLM payload); got {len(bacnet_polling)}. "
+        f"Points: {[(p.get('external_id'), p.get('object_identifier'), p.get('polling')) for p in points_list if isinstance(p, dict) and p.get('bacnet_device_id')][:20]}"
+    )
+    devices = {p.get("bacnet_device_id") for p in bacnet_polling if p.get("bacnet_device_id")}
+    for p in bacnet_polling[:5]:
+        print(f"    {p.get('external_id', '')} {p.get('object_identifier', '')} dev={p.get('bacnet_device_id')} polling={p.get('polling')}")
+    print(f"    OK — {len(bacnet_polling)} BACnet point(s) with polling=true across devices {sorted(devices)}; BACnet scraper will poll these.\n")
+
+    # --- [26] Last BACnet scrape data (timeseries via CRUD/download API) before exit ---
+    print("[26] GET /download/csv — last BACnet scrape data (timeseries sample)")
+    end_d = date.today()
+    start_d = end_d - timedelta(days=7)
+    code, csv_body = _request(
+        "GET",
+        f"/download/csv?site_id={demo_site_id_full}&start_date={start_d}&end_date={end_d}&format=wide",
+    )
+    if code == 200 and isinstance(csv_body, str) and csv_body.strip():
+        lines = csv_body.strip().splitlines()
+        sample = lines[:20] if len(lines) > 20 else lines
+        print(f"    Timeseries rows (last 7 days): {len(lines)} line(s); sample below:")
+        for line in sample:
+            print(f"      {line[:120]}{'...' if len(line) > 120 else ''}")
+        print(f"    OK — last BACnet scrape data shown above.\n")
+    else:
+        print(f"    No timeseries yet for DemoSite (status={code}); scraper may not have run. Wait for next scrape interval or check docker logs openfdd_bacnet_scraper.\n")
+
+    # --- [27] Delete DemoSite so only BensOffice remains (clean exit state) ---
+    print("[27] DELETE /sites/{id} (DemoSite) — leave only BensOffice")
+    code, _ = _request("DELETE", f"/sites/{demo_site_id_full}")
+    assert ok(code), f"DELETE DemoSite failed: {code}"
+    code, _ = _request("GET", f"/sites/{demo_site_id_full}")
+    assert code == 404, f"DemoSite should be gone: {code}"
+    print("    OK — only BensOffice remains.\n")
+
     print("=== All features passed ===\n")
     print(
         "  Health, BACnet (server_hello, whois_range, point_discovery_to_graph),"
@@ -840,7 +1022,8 @@ def run():
     print("  download (CSV, faults), lifecycle (create → delete → SPARQL; BACnet via point_discovery_to_graph).")
     print("  config/brick_model.ttl is updated on every CRUD and serialize.")
     print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (MONOREPO_PLAN.md § Prompt to the LLM) → PUT /data-model/import.")
-    print("  Note: BensOffice is left in place. The demo-import site created in [4g] is deleted in [20c] to avoid accumulation.\n")
+    print("  AI step: In production you use GET /data-model/export → LLM or human tags (brick_type, rule_input, polling) → PUT /data-model/import. See docs/modeling/ai_assisted_tagging.md and AGENTS.md.")
+    print("  Note: DemoSite is deleted in [27]; only BensOffice remains with 2 BACnet points (SA-T, ZoneTemp) from [4f1] so the scraper has work. To blast away and re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
 
 
 def main() -> None:

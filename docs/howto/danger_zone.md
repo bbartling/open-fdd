@@ -30,6 +30,8 @@ When you delete via the API (Swagger, CRUD UI, or scripts):
 
 So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/brick_model.ttl`) is regenerated and written to disk. See [Data modeling](modeling/overview).
 
+**Full reset script:** `python tools/delete_all_sites_and_reset.py` uses only the API (GET /sites, DELETE /sites/{id} for each, then POST /data-model/reset). It does not run SQL inside containers—the same flow a future UI would use.
+
 ---
 
 ## Data retention policy
@@ -84,6 +86,40 @@ docker compose down -v
 docker compose up -d --build
 # Then from repo root: ./scripts/bootstrap.sh (waits for Postgres, applies migrations)
 ```
+
+### Reset everything for testing
+
+To get a clean slate and run tests (e.g. `graph_and_crud_test.py`) or re-import BACnet:
+
+1. **Wipe sites and data model** (choose one):
+   - **Bootstrap:** `./scripts/bootstrap.sh --reset-data` — Brings up the stack (if needed), runs migrations, then deletes all sites via the API and calls POST /data-model/reset. Use `OFDD_API_URL=http://192.168.204.16:8000` if the API is on another host.
+   - **Standalone:** `python tools/delete_all_sites_and_reset.py` — Same effect (GET /sites, DELETE each, POST /data-model/reset). Use `BASE_URL=http://192.168.204.16:8000` if your API is on another host.  
+   Both use only the API (no SQL or Docker exec). The TTL and graph end up empty.
+
+2. **Faster FDD/scrapers for testing (optional):**  
+   - **FDD:** Set `rule_interval_hours: 0.1` (6 min) or `1` in your config, or env `OFDD_RULE_INTERVAL_HOURS=0.1`. Fractional hours are supported; minimum sleep is 60 s.  
+   - **BACnet:** Set `bacnet_scrape_interval_min: 1` (or env `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1`) so the scraper runs every minute.  
+   Restart the affected containers after changing (e.g. `docker restart openfdd_fdd_loop openfdd_bacnet_scraper`), or use **POST /run-fdd** / trigger file to run FDD immediately without changing the interval.
+
+**Workflow: reset → test → Grafana**
+
+To get a clean slate, create test data (BensOffice + BACnet points), then confirm in Grafana that scrapers and FDD are working:
+
+1. **Reset:** `./scripts/bootstrap.sh --reset-data`  
+   Brings up the stack, runs migrations, then wipes all sites and resets the data model. You do **not** need to run `delete_all_sites_and_reset.py` after this — it does the same thing.
+
+2. **Create test data:** `python tools/graph_and_crud_test.py`  
+   Creates the BensOffice site, equipment (BensFakeAhu, BensFakeVavBox), discovers BACnet points, and imports them. Leaves BensOffice in place so scrapers have points to scrape.
+
+3. **Check Grafana:**  
+   Wait for the next scraper runs (or use fast intervals as above). Then open:
+   - **BACnet Timeseries** — scraper status (OK/Stale), last data time, and the **point** dropdown to plot a series.
+   - **Weather (Open-Meteo)** — weather status and last data (if the test site has lat/lon or weather was configured).
+   - **Fault Results (open-fdd)** — Fault Runner Status and Last ran (after at least one FDD run).
+
+See [Verification & Data Flow](verification) for API checks and scraper validation.
+
+---
 
 ### Option 3: Empty data model via API (sites + reset)
 

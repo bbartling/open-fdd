@@ -27,6 +27,7 @@
 # If diy-bacnet-server is not present as a sibling, bootstrap clones it (override: DIY_BACNET_REPO_URL).
 #   ./scripts/bootstrap.sh --maintenance  # Safe Docker prune only (containers, images, build cache; no volumes)
 #   ./scripts/bootstrap.sh --reset-grafana  # Wipe Grafana volume (fix provisioning); restarts Grafana
+#   ./scripts/bootstrap.sh --reset-data     # After stack is up: delete all sites via API + POST /data-model/reset (testing). Use OFDD_API_URL if API is not at :8000.
 #   ./scripts/bootstrap.sh --retention-days 180   # TimescaleDB retention (default 365)
 #   ./scripts/bootstrap.sh --log-max-size 50m --log-max-files 2   # Docker log rotation (default 100m, 3)
 #
@@ -44,6 +45,7 @@ PLATFORM_DIR="$REPO_ROOT/platform"
 VERIFY_ONLY=false
 MINIMAL=false
 RESET_GRAFANA=false
+RESET_DATA=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
@@ -71,6 +73,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --verify) VERIFY_ONLY=true ;;
     --minimal) MINIMAL=true ;;
     --reset-grafana) RESET_GRAFANA=true ;;
+    --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
     --maintenance) MAINTENANCE_ONLY=true ;;
@@ -87,8 +90,9 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-size) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     -h|--help)
-      echo "Usage: $0 [--verify|--minimal|--update|--maintenance|--reset-grafana|--build SERVICE ...|--build-all] [--retention-days N] [--log-max-size SIZE] [--log-max-files N]"
+      echo "Usage: $0 [--verify|--minimal|--update|--maintenance|--reset-grafana|--reset-data|--build SERVICE ...|--build-all] [--retention-days N] [--log-max-size SIZE] [--log-max-files N]"
       echo "  --verify            Show running services and DB status."
+      echo "  --reset-data        After stack up: delete all sites via API + POST /data-model/reset (empty data model for testing). Uses API at OFDD_API_URL or http://localhost:8000."
       echo "  --update            Git pull open-fdd + diy-bacnet-server (sibling), rebuild all images, restart stack. Keeps TimescaleDB data."
       echo "  --update --maintenance  Same as --update, then run safe prune before rebuild (containers, images, build cache; volumes kept)."
       echo "  --update --maintenance --verify  Update, prune, rebuild, then run health checks (curl BACnet :8080, API :8000, DB)."
@@ -188,6 +192,49 @@ verify() {
     echo "API:    http://localhost:8000 (not reachable after 5 tries; run full stack without --minimal)"
   fi
   echo ""
+}
+
+# Delete all sites via API and POST /data-model/reset (same as tools/delete_all_sites_and_reset.py). Uses OFDD_API_URL or http://localhost:8000.
+reset_data_via_api() {
+  local api_base="${OFDD_API_URL:-http://localhost:8000}"
+  api_base="${api_base%/}"
+  echo "=== Waiting for API at $api_base (~60s) ==="
+  local try=1
+  while [[ $try -le 30 ]]; do
+    if curl -sf --connect-timeout 3 "$api_base/health" >/dev/null 2>&1; then
+      echo "API ready."
+      break
+    fi
+    sleep 2
+    try=$(( try + 1 ))
+    [[ $try -gt 30 ]] && { echo "API not reachable at $api_base; skip --reset-data."; return 1; }
+  done
+  echo "=== Resetting data model (DELETE all sites, POST /data-model/reset) ==="
+  local sites_json
+  sites_json="$(curl -sf -H "Accept: application/json" "$api_base/sites" 2>/dev/null)" || { echo "GET /sites failed."; return 1; }
+  local ids
+  ids="$(echo "$sites_json" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//')"
+  if [[ -n "$ids" ]]; then
+    local id
+    while IFS= read -r id; do
+      [[ -z "$id" ]] && continue
+      if curl -sf -X DELETE "$api_base/sites/$id" >/dev/null 2>&1; then
+        echo "  Deleted site $id"
+      else
+        echo "  Failed to delete site $id"
+      fi
+    done <<< "$ids"
+  else
+    echo "  No sites to delete."
+  fi
+  if curl -sf -X POST "$api_base/data-model/reset" -H "Content-Type: application/json" -d '{}' >/dev/null 2>&1; then
+    echo "  POST /data-model/reset OK."
+  else
+    echo "  POST /data-model/reset failed."
+    return 1
+  fi
+  echo "Data model is now empty (no sites, no Brick triples, no BACnet)."
+  return 0
 }
 
 # Verify-only mode: run health checks and exit (unless we're also doing --update, then verify runs at end of update)
@@ -368,6 +415,11 @@ echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
+
+if $RESET_DATA; then
+  echo ""
+  reset_data_via_api || true
+fi
 
 echo ""
 echo "=== Bootstrap complete ==="

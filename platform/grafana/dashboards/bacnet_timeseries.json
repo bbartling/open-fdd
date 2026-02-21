@@ -3,44 +3,166 @@
   "title": "BACnet Timeseries",
   "schemaVersion": 42,
   "editable": true,
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "refresh": "1m",
   "panels": [
     {
+      "type": "stat",
+      "title": "BACnet scraper status",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "openfdd_timescale"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COALESCE((SELECT CASE WHEN MAX(tr.ts) > NOW() - INTERVAL '15 minutes' THEN 'ok' ELSE 'stale' END FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE p.bacnet_device_id IS NOT NULL), 'stale') AS value",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "ok": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "stale": {
+                  "text": "Stale",
+                  "color": "yellow"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last BACnet data",
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "openfdd_timescale"
+      },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (SELECT MAX(tr.ts) FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE p.bacnet_device_id IS NOT NULL))::bigint * 1000 AS value",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeFromNow"
+        }
+      }
+    },
+    {
       "type": "timeseries",
       "title": "All BACnet points (any site)",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
-      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-      "targets": [{
-        "format": "time_series",
-        "rawSql": "SELECT tr.ts AS time, p.external_id || ' (dev ' || p.bacnet_device_id || ')' AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.bacnet_device_id IS NOT NULL ORDER BY tr.ts ASC",
-        "refId": "A"
-      }],
-      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 10 } } }
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "openfdd_timescale"
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT tr.ts AS time, p.external_id || ' (dev ' || p.bacnet_device_id || ')' AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.bacnet_device_id IS NOT NULL ORDER BY tr.ts ASC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10
+          }
+        }
+      }
     },
     {
       "type": "timeseries",
       "title": "By device (select site + device above)",
-      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 10 },
-      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-      "targets": [{
-        "format": "time_series",
-        "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.bacnet_device_id = '$device' ORDER BY tr.ts ASC",
-        "refId": "A"
-      }],
-      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 10 } } }
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "openfdd_timescale"
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT tr.ts AS time, p.external_id AS metric, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.bacnet_device_id = '$device' ORDER BY tr.ts ASC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10
+          }
+        }
+      }
     },
     {
       "type": "timeseries",
       "title": "Single point (select site + device + point above)",
-      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
-      "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-      "targets": [{
-        "format": "time_series",
-        "rawSql": "SELECT tr.ts AS time, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.bacnet_device_id = '$device' AND p.external_id = '$point' ORDER BY tr.ts ASC",
-        "refId": "A"
-      }],
-      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 10 } } }
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "openfdd_timescale"
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT tr.ts AS time, tr.value FROM timeseries_readings tr JOIN points p ON tr.point_id = p.id WHERE $__timeFilter(tr.ts) AND p.site_id::text = '$site' AND p.bacnet_device_id = '$device' AND p.external_id = '$point' ORDER BY tr.ts ASC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10
+          }
+        }
+      }
     }
   ],
   "templating": {
@@ -48,24 +170,33 @@
       {
         "name": "site",
         "type": "query",
-        "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-        "query": "SELECT s.name AS __text, s.id::text AS __value FROM sites s WHERE EXISTS (SELECT 1 FROM points p WHERE p.site_id = s.id AND p.bacnet_device_id IS NOT NULL) ORDER BY s.name",
+        "datasource": {
+          "type": "postgres",
+          "uid": "openfdd_timescale"
+        },
+        "query": "SELECT s.name AS __text, s.id::text AS __value FROM sites s WHERE EXISTS (SELECT 1 FROM points p WHERE p.site_id = s.id AND p.bacnet_device_id IS NOT NULL AND COALESCE(p.polling, true) = true) ORDER BY s.name",
         "refresh": 1,
         "includeAll": false
       },
       {
         "name": "device",
         "type": "query",
-        "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-        "query": "SELECT DISTINCT bacnet_device_id AS __text, bacnet_device_id AS __value FROM points WHERE site_id::text = '$site' AND bacnet_device_id IS NOT NULL ORDER BY bacnet_device_id",
+        "datasource": {
+          "type": "postgres",
+          "uid": "openfdd_timescale"
+        },
+        "query": "SELECT DISTINCT bacnet_device_id AS __text, bacnet_device_id AS __value FROM points WHERE site_id::text = '$site' AND bacnet_device_id IS NOT NULL AND COALESCE(polling, true) = true ORDER BY bacnet_device_id",
         "refresh": 1,
         "includeAll": false
       },
       {
         "name": "point",
         "type": "query",
-        "datasource": { "type": "postgres", "uid": "openfdd_timescale" },
-        "query": "SELECT external_id AS __text, external_id AS __value FROM points WHERE site_id::text = '$site' AND bacnet_device_id = '$device' ORDER BY external_id",
+        "datasource": {
+          "type": "postgres",
+          "uid": "openfdd_timescale"
+        },
+        "query": "SELECT COALESCE(object_name, external_id) AS __text, external_id AS __value FROM points WHERE site_id::text = '$site' AND bacnet_device_id = '$device' AND COALESCE(polling, true) = true ORDER BY COALESCE(object_name, external_id)",
         "refresh": 1,
         "includeAll": false
       }

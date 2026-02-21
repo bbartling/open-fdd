@@ -34,6 +34,51 @@ docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, valu
 
 ---
 
+## Validating scrapers and FDD (API + Grafana)
+
+You can confirm that the BACnet scraper, weather scraper, and FDD loop are running and writing data **without running SQL inside containers**.
+
+**FDD (fault detection):**
+
+- **API:** `curl -s http://localhost:8000/run-fdd/status` returns the last run time and status (`ok` / `error`). If the FDD loop has run at least once, you will see `run_ts` and `status`.
+- **Grafana:** Open **Fault Results (open-fdd)**. The **Fault Runner Status** and **Fault Runner — Last ran** panels show status (OK/Error/Never) and a human-readable “last ran” time (e.g. “2 hours ago”).
+
+**BACnet scraper:**
+
+- **Grafana:** Open **BACnet Timeseries**. At the top, **BACnet scraper status** shows OK (green) if any BACnet point has received data in the last 15 minutes, otherwise Stale (yellow). **Last BACnet data** shows a human-readable timestamp (e.g. “3 min ago”). The **point** dropdown lists all BACnet points by raw object name (from discovery) so you can plot by name.
+- **API:** `GET /points?site_id=<uuid>` and check which points have `bacnet_device_id` and `object_identifier`. Recent data appears in Grafana or in `timeseries_readings` (see Data flow check above if you do use DB access).
+
+**Manual verification (BACnet scraping after graph_and_crud_test.py):**
+
+1. **Grafana** — Open **BACnet Timeseries** (http://localhost:3000). Check **BACnet scraper status** (OK = data in last 15 min) and **Last BACnet data**. Pick a **point** from the dropdown and confirm the time series panel shows recent points.
+2. **API** — List BACnet points (replace `SITE_ID` with your BensOffice site UUID from `curl -s http://localhost:8000/sites`):
+   ```bash
+   curl -s "http://localhost:8000/points?site_id=SITE_ID" | python3 -c "
+   import sys, json
+   d = json.load(sys.stdin)
+   points = d if isinstance(d, list) else []
+   for p in points:
+       if isinstance(p, dict) and p.get('bacnet_device_id'):
+           print(p.get('external_id',''), p.get('object_identifier',''), p.get('polling'))
+   "
+   ```
+   If you see output like `SA-T analog-input,2 True`, those points are in the DB and the scraper will poll them. If the API returns an error (e.g. invalid `SITE_ID`), you will see no output instead of a crash.
+3. **Scraper logs** — `docker logs openfdd_bacnet_scraper --tail 40` — look for "Scraped N points" or polling/write lines without errors.
+4. **DB (optional)** — Recent BACnet readings:
+   ```bash
+   docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT ts, p.external_id, tr.value FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id WHERE p.bacnet_device_id IS NOT NULL ORDER BY tr.ts DESC LIMIT 10;"
+   ```
+   If this returns rows with recent `ts`, the scraper is writing and Grafana will show them.
+
+**Note:** `graph_and_crud_test.py` now imports 2 BACnet points (SA-T, ZoneTemp) into **BensOffice** in step [4f2], so after the test BensOffice has points the scraper can poll. The test uses pre-tagged payloads (simulating the output of the **AI-assisted tagging** step). The full workflow with an LLM is: GET /data-model/export → tag with ChatGPT or another LLM (see [AI-assisted data modeling](../modeling/ai_assisted_tagging) and **AGENTS.md**) → PUT /data-model/import. The demo-import site created in [4g] is still deleted in [20c]; only BensOffice remains with BACnet points. Wait at least one scrape interval (see `OFDD_BACNET_SCRAPE_INTERVAL_MIN`, default 5 min) or restart the scraper, then check Grafana or the commands above.
+
+**Weather (Open-Meteo):**
+
+- **Grafana:** Open **Weather (Open-Meteo)**. At the top, **Weather data status** shows OK if any weather point has data in the last 25 hours, otherwise Stale. **Last weather data** shows a human-readable timestamp. Weather is typically fetched every 24 hours.
+- **API / logs:** `GET /points` and filter for weather `external_id`s (e.g. `temp_f`, `rh_pct`). Or `docker logs openfdd_weather_scraper --tail 30` to see the last fetch.
+
+---
+
 ## Logs
 
 **Access:** All containers use log rotation (100 MB × 3 files per container). See [Configuration → Edge limits](configuration#edge--resource-limits).

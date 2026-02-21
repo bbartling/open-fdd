@@ -22,7 +22,7 @@ class PlatformSettings(BaseSettings):
     debug: bool = False
 
     # FDD loop
-    rule_interval_hours: int = 3
+    rule_interval_hours: float = 3.0  # fractional OK for testing (e.g. 0.1 = 6 min)
     lookback_days: int = 3
     fdd_trigger_file: Optional[str] = (
         "config/.run_fdd_now"  # touch to run now + reset timer

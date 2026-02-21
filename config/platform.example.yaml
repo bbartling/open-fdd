@@ -2,7 +2,8 @@
 # See Online Docs: https://bbartling.github.io/open-fdd/
 
 # AFDD RULE RUNNING CONFIGURATION
-rule_interval_hours: 3   # run every 3 hours
+# Env: OFDD_RULE_INTERVAL_HOURS.
+rule_interval_hours: 0.1   # run every 3 hours; use 0.1 for testing (6 min)
 lookback_days: 3         # pull 3 days of data each run
 
 # FDD RULE YAML FILE LOCATION
@@ -12,20 +13,15 @@ rules_dir: "analyst/rules"
 brick_ttl_dir: "config"   
 
 # BACnet DRIVER CONFIGURATION
-# bacnet_enabled: enable/disable periodic scrape. Env: OFDD_BACNET_SCRAPE_ENABLED (true/false).
-# When enabled, points with polling=true in the data model are read via diy-bacnet client_read_multiple (one request per device).
+#Env: OFDD_BACNET_SCRAPE_ENABLED (true/false).
 bacnet_enabled: true
-bacnet_scrape_interval_min: 5
+bacnet_scrape_interval_min: 1
 
 # diy-bacnet-server URL (API + Swagger use this when request body omits url, or use ?gateway=default).
 # Env: OFDD_BACNET_SERVER_URL.
-# Docker same host: use sibling service name (e.g. http://bacnet:8080) or host (e.g. http://host.docker.internal:8080).
-# LAN/remote: use the device URL (e.g. http://192.168.1.50:8080).
 bacnet_server_url: "http://localhost:8080"
 
 # Optional: multiple gateways (central aggregator only). JSON array; each item: url, site_id, config_csv.
-# When set, bacnet_server_url and bacnet_config_csv are ignored for the scraper; API still uses bacnet_server_url
-# as "default" and adds these as gateway ids "0", "1", ... (use GET /bacnet/gateways; ?gateway= on BACnet endpoints).
 # Env: OFDD_BACNET_GATEWAYS.
 # bacnet_gateways: '[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"},{"url":"http://10.1.2.1:8080","site_id":"building-b","config_csv":"config/bacnet_b.csv"}]'
 

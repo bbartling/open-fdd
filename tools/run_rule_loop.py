@@ -56,7 +56,7 @@ def main() -> int:
     log = logging.getLogger("open_fdd.fdd_loop")
 
     settings = get_platform_settings()
-    interval_hours = settings.rule_interval_hours
+    interval_hours = float(settings.rule_interval_hours)
     lookback_days = settings.lookback_days
 
     def _run() -> int:
@@ -83,14 +83,15 @@ def main() -> int:
             return 1
 
     if args.loop:
+        sleep_sec = max(60, int(interval_hours * 3600))  # min 60s to avoid tight loop
         log.info(
-            "FDD loop started: every %d hours, lookback %d days (touch %s to run now)",
+            "FDD loop started: every %.2f h (%d s), lookback %d days (touch %s to run now)",
             interval_hours,
+            sleep_sec,
             lookback_days,
             getattr(settings, "fdd_trigger_file", "config/.run_fdd_now")
             or "config/.run_fdd_now",
         )
-        sleep_sec = interval_hours * 3600
         trigger_path = getattr(settings, "fdd_trigger_file", None)
 
         while True:
@@ -118,7 +119,7 @@ def main() -> int:
                         log.info("Trigger file detected → running now, timer reset")
                         _run()
                         elapsed = 0  # reset timer
-            log.info("Next run in %d h", interval_hours)
+            log.info("Next run in %.2f h", interval_hours)
     else:
         return _run()
 

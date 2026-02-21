@@ -128,6 +128,12 @@ docker compose exec db psql -U postgres -d openfdd -c "\dt"
 
 ---
 
+## Grafana dashboards
+
+If dashboards show **No data**, too many sites in dropdowns, or only one BACnet point, see [Grafana troubleshooting](grafana_troubleshooting): cleanup demo sites, container time series time range/timezone, Fault Runner status panel, and BACnet dropdowns.
+
+---
+
 ## Unit tests and formatter
 
 ```bash

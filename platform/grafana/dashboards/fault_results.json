@@ -12,7 +12,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT COALESCE((SELECT status FROM fdd_run_log ORDER BY run_ts DESC LIMIT 1), 'never') AS value",
+          "rawSql": "SELECT COALESCE((SELECT run_ts FROM fdd_run_log ORDER BY run_ts DESC LIMIT 1), NOW()) AS time, COALESCE((SELECT status FROM fdd_run_log ORDER BY run_ts DESC LIMIT 1), 'never') AS value",
           "refId": "A"
         }
       ],

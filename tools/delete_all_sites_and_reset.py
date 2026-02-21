@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """
-Delete all sites via the Open-FDD API (cascade removes equipment, points, timeseries, etc.),
-then POST /data-model/reset so the in-memory graph and brick_model.ttl reflect the empty DB.
+Delete all sites via the Open-FDD API, then reset the data-model graph/TTL.
+
+- Uses only the API (GET /sites, DELETE /sites/{id}, POST /data-model/reset). No SQL or
+  Docker exec required — app users do not need to run anything inside containers.
+- Each DELETE /sites/{id} cascades in the DB: equipment, points, timeseries_readings,
+  fault_results, fault_events for that site are removed. So the DB is fully cleared of
+  site-related data. The data model (Brick TTL and in-memory graph) is then synced to
+  the empty DB via POST /data-model/reset.
+
+If you already ran ./scripts/bootstrap.sh --reset-data, you do not need this script
+in the same workflow; use this when the stack is already up and you want to wipe
+sites without re-running bootstrap.
 
 Usage:
   python tools/delete_all_sites_and_reset.py
