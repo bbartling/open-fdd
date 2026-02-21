@@ -65,7 +65,7 @@ All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and 
 | `OFDD_BACNET_SITE_ID` | default | Site name or UUID to tag when scraping (single gateway). |
 | `OFDD_BACNET_GATEWAYS` | — | JSON array of `{url, site_id, config_csv}` for central aggregator. |
 | `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
-| `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). |
+| `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). In Docker set in **platform/.env** (e.g. `=1`) then `docker compose up -d`; compose default is 5. |
 | `OFDD_BACNET_USE_DATA_MODEL` | true | Prefer data-model scrape over CSV when points have BACnet addressing. |
 | **Open-Meteo** | | |
 | `OFDD_OPEN_METEO_ENABLED` | true | Enable weather scraper. |
@@ -84,7 +84,30 @@ All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and 
 
 Optional / legacy: `OFDD_PLATFORM_YAML`, `OFDD_ENV_FILE` (see docs/configuration.md). DB components can be overridden via `OFDD_DB_HOST`, `OFDD_DB_PORT`, `OFDD_DB_NAME`, `OFDD_DB_USER`, `OFDD_DB_PASSWORD` if not using a single DSN.
 
+---
 
+## Grafana and operational state (why dashboards “break” or show unexpected data)
+
+Grafana dashboards read from the **same DB** as the API and scrapers. They do **not** read from YAML or from the TTL file. So “Grafana keeps breaking” or “shows wrong counts” usually comes from one of these:
+
+1. **BACnet dropdowns show only 2 points (BensOffice)**  
+   **Cause:** `tools/graph_and_crud_test.py` step **[27] deletes DemoSite** so that only one site remains (BensOffice) and `GET /data-model/check` returns `sites=1`. After [27], the DB has only BensOffice with 2 BACnet points (SA-T, ZoneTemp). Grafana site/device/point dropdowns query the DB, so they show 1 site, 2 devices, 2 points.  
+   **To see many points (e.g. 2 devices × many points):** Either do not run the test to completion (stop before [27]), or change the test to leave DemoSite in place (comment out [27]). Then both BensOffice and DemoSite remain and BACnet dropdowns show 24 polling points across 2 sites.
+
+2. **BACnet scrape interval is 5 minutes in Grafana even though YAML says 1**  
+   **Cause:** Platform settings are **env-driven**. The BACnet scraper container gets `OFDD_BACNET_SCRAPE_INTERVAL_MIN` from **Docker Compose**, which defaults to 5 in `platform/docker-compose.yml`. The `config/platform.example.yaml` (and any `platform.yaml`) are **not** read by the Docker containers; only env vars (and optionally a mounted config) are.  
+   **Fix:** Set `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in **platform/.env**, then restart: `cd platform && docker compose up -d`. The compose file uses `${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}` so the container will get 1.
+
+3. **BACnet scraper status “No data” / Fault Runner “No data”**  
+   **Cause:** Panels query the DB (e.g. `timeseries_readings` for “last BACnet data”, `fdd_run_log` for Fault Runner). If the scraper has not written recently (e.g. diy-bacnet unreachable, or interval 5 min and nothing in the dashboard time range), or FDD has not run yet, the query returns no rows and the panel shows “No data”.  
+   **Checks:** `docker logs openfdd_bacnet_scraper` and `docker logs openfdd_fdd_loop`; ensure time range in Grafana includes recent data; see docs/howto/grafana_troubleshooting.md.
+
+4. **Fault Runner Status / Weather (Open-Meteo)**  
+   FDD loop and weather scraper run on **env-configured intervals** (`OFDD_RULE_INTERVAL_HOURS`, `OFDD_OPEN_METEO_INTERVAL_HOURS`). Until they have run at least once and written to `fdd_run_log` / `weather_hourly_raw`, those panels show “No data”. System Resources uses host-stats and container metrics; those are written every `OFDD_HOST_STATS_INTERVAL_SEC` and are independent of BACnet/FDD.
+
+**Summary:** All intervals and enable flags are **env vars** (see table above). YAML in `config/` is for non-Docker or for docs; Docker stack uses env (and platform/.env). For 1 min BACnet scrape: `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in platform/.env and restart the stack.
+
+**Fault Results and Weather dashboards:** “Fault Runner Status: No data” or “Last ran: 2 hours ago” is normal until the FDD loop has run at least once (or you trigger via `OFDD_FDD_TRIGGER_FILE`). Weather panels need the weather scraper to have run. The runner is fine; panels just need data in the selected time range.
 
 ---
 

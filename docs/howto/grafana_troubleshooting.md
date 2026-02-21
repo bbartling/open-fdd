@@ -73,6 +73,12 @@ After cleanup, re-open the dashboard or refresh variables; the dropdown will sho
 
 ---
 
+## BACnet dashboard: all data and last scrape
+
+The BACnet Timeseries dashboard is **graph-aligned**: it shows the same points as the SPARQL data model (`ofdd:polling true`). The DB is synced from the graph via the API (import/export, TTL). **All BACnet data** appears in the panels “All BACnet points (any site)”, “By device”, and “Single point”; the dropdowns list every point the scraper polls. **Last scrape** is represented by “BACnet scraper status” (OK if data in last 15 min) and “Last BACnet data” (timestamp of most recent reading). The “BACnet points (polling)” count should match the SPARQL count (e.g. from test step [25b]). If you see fewer points or stale status, see the sections below.
+
+---
+
 ## BACnet Timeseries: only one point when TTL has many (TTL vs DB vs Grafana)
 
 **Symptom:** `GET /data-model/ttl?save=true` shows many BACnet devices and objects (e.g. device 3456789, 3456790 with DAP-P, SA-T, ZoneTemp, VAVFlow, …), but the Grafana BACnet Timeseries dashboard only shows one site/device/point (e.g. demo-import-6bb347c8, 3456790, ZoneTemp).
@@ -105,6 +111,23 @@ After cleanup, re-open the dashboard or refresh variables; the dropdown will sho
 
 ---
 
+## BACnet: scraper “ran” but no data in panels
+
+**Symptom:** Grafana shows “BACnet scraper ran a few minutes ago” (or status OK) but time series panels show “No data”.
+
+**Causes and checks:**
+
+1. **Scraper sees 0 points** — Log line “No BACnet points in data model” means the DB has no points with `bacnet_device_id`, `object_identifier`, and `polling = true`. Import points (e.g. run `python tools/graph_and_crud_test.py` which loads `tools/demo_site_llm_payload.json` into DemoSite and leaves it in place so dropdowns and scraper have many points).
+2. **Scraper sees points but reads fail** — Logs show “Scrape cycle: 0 rows, N points, M errors”. Then the BACnet RPC to diy-bacnet-server is failing for some or all objects. Check:
+   - `docker logs openfdd_bacnet_scraper --tail 80` for the actual error lines (e.g. “Line 1 analog-input,2: Error: …”).
+   - `OFDD_BACNET_SERVER_URL` from the scraper container: it must reach diy-bacnet-server (e.g. `http://host.docker.internal:8080`; on Linux, `platform/docker-compose.yml` uses `extra_hosts: host.docker.internal:host-gateway`).
+   - diy-bacnet-server has devices 3456789 and 3456790 (or whatever device IDs your points use) and exposes the object types in the payload (e.g. `analog-input`, `analog-output`). Objects like `network-port` may not have a readable present-value and can be skipped or show errors.
+3. **Time range** — In Grafana, set the time range to “Last 15 minutes” or “Last 1 hour” so recent scrape data is included.
+4. **Scraper shows only 2 points (2 devices)** — The DB may only have one site (e.g. BensOffice) with 2 BACnet points. Run `python tools/graph_and_crud_test.py` so DemoSite and all points from `tools/demo_site_llm_payload.json` are in the DB; step [25b] asserts SPARQL count = API/scraper count; Grafana dropdowns should match that count.
+5. **“diy-bacnet-server unreachable: All connection attempts failed”** — The scraper cannot reach `OFDD_BACNET_SERVER_URL` (e.g. `http://host.docker.internal:8080`). Ensure the bacnet-server container is running (`docker ps`). On Linux, `platform/docker-compose.yml` sets `extra_hosts: host.docker.internal:host-gateway` for the scraper; if diy-bacnet runs on the host, ensure it listens on `0.0.0.0:8080` and that port 8080 is reachable.
+
+---
+
 ## Quick reference
 
 | Issue | What to check |
@@ -113,6 +136,8 @@ After cleanup, re-open the dashboard or refresh variables; the dropdown will sho
 | Container time series “No data” | Data in `container_metrics`? Widen time range; check timezone. |
 | Fault Runner “No data” | Rows in `fdd_run_log`? `GET /run-fdd/status`; re-import dashboard if needed. |
 | BACnet dropdown / one point | TTL has many but Grafana one? Import via GET /data-model/export → tag → PUT /data-model/import (see above). Confirm DB points and scraper. |
+| Scraper only 2 points | Run `python tools/graph_and_crud_test.py` so DemoSite + many points exist; [25b] asserts SPARQL = API = scraper count. |
+| diy-bacnet unreachable | Ensure bacnet-server container runs; check OFDD_BACNET_SERVER_URL and host.docker.internal (Linux: extra_hosts in docker-compose). |
 
 All dashboards use the **Open-FDD TimescaleDB** PostgreSQL datasource (`openfdd_timescale`). Ensure it points at the same database as the API and scrapers (e.g. `openfdd_timescale` container).
 

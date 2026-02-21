@@ -51,7 +51,8 @@ services:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_BACNET_SCRAPE_ENABLED: "true"
-      OFDD_BACNET_SCRAPE_INTERVAL_MIN: "5"
+      # 1 = every minute (for tests); override via platform/.env OFDD_BACNET_SCRAPE_INTERVAL_MIN
+      OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
     volumes:
       - ../config:/app/config:ro

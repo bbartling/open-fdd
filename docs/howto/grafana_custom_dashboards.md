@@ -18,6 +18,16 @@ Open-FDD provisions Grafana from config under `platform/grafana/`. You can add o
 
 The Grafana container **mounts** these dirs from the host, so editing or adding a JSON file on disk is enough; restart Grafana to reload: `docker restart openfdd_grafana` (or run `./scripts/bootstrap.sh`).
 
+## BACnet dashboard: graph-based and SPARQL-aligned
+
+The **BACnet Timeseries** dashboard (`bacnet_timeseries.json`) shows all BACnet data and last-scrape state. It is **graph-based** in the sense that the same points that appear in the Brick/SPARQL data model (TTL, `ofdd:polling true`) are the ones in the database that the scraper polls and that Grafana queries. The API keeps the DB in sync with the graph (import/export, TTL serialize). Grafana does not run SPARQL directly; it queries the **PostgreSQL/TimescaleDB** tables (`points`, `timeseries_readings`, `sites`) that are the materialized view of the data model.
+
+- **All BACnet data:** The panels “All BACnet points (any site)”, “By device”, and “Single point” show every BACnet series that has data in the time range. The dropdowns (site, device, point) list exactly the points with `bacnet_device_id`, `object_identifier`, and `polling = true` — the same set as SPARQL `ofdd:polling true` and the scraper load.
+- **Last scrape messages:** “BACnet scraper status” (OK/Stale) and “Last BACnet data” (timestamp) represent the last successful scrape: OK if any BACnet reading exists in the last 15 minutes, and the time of the most recent reading. Scraper log text (e.g. “Scrape cycle: N rows”) is not stored in the DB; the dashboard reflects scrape health via presence and recency of data.
+- **BACnet points (polling):** The count stat matches the number of points the scraper loads and the count from `POST /data-model/sparql` with `SELECT (COUNT(?pt) AS ?n) WHERE { ?pt ofdd:polling true . }` (see `tools/graph_and_crud_test.py` step [25b]).
+
+So the dashboard is fully aligned with the graph/SPARQL data model; all BACnet data and last-scrape information that the system stores appear there.
+
 ## Datasource
 
 All panels use the **PostgreSQL/TimescaleDB** datasource:

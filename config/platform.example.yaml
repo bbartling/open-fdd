@@ -13,7 +13,8 @@ rules_dir: "analyst/rules"
 brick_ttl_dir: "config"   
 
 # BACnet DRIVER CONFIGURATION
-#Env: OFDD_BACNET_SCRAPE_ENABLED (true/false).
+# Env: OFDD_BACNET_SCRAPE_ENABLED (true/false).
+# Env: OFDD_BACNET_SCRAPE_INTERVAL_MIN (minutes). In Docker set in platform/.env (e.g. =1); then 'cd platform && docker compose up -d' (no rebuild). Default 5. See MONOREPO_PLAN.md § Grafana.
 bacnet_enabled: true
 bacnet_scrape_interval_min: 1
 

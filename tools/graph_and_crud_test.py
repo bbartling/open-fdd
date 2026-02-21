@@ -13,14 +13,15 @@ Flow: test → Open-FDD API → (API proxies to) diy-bacnet.
 
 API coverage (OpenAPI paths exercised):
   - /health
-  - /sites: list, create, get, patch, delete (demo-import site deleted at [20c])
+  - /sites: list, create, get, patch, delete (demo-import deleted at [20c]; DemoSite deleted at [27] so only BensOffice remains)
   - /equipment: list, create, get, patch, delete
   - /points: list (by site, by equipment), create, get, patch, delete
   - /data-model: serialize, ttl, export, import (points + equipment feeds), sparql
   - /bacnet: server_hello, whois_range, point_discovery_to_graph
   - /download/csv (GET, POST), /download/faults (GET json, csv)
-All SPARQL is via the Open-FDD API: POST /data-model/sparql (see _sparql()). No direct triple-store access.
-Not in this script: GET /bacnet/gateways, /data-model/check, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
+All SPARQL is via the Open-FDD CRUD API only: POST /data-model/sparql (see _sparql()). No direct triple-store access.
+Default API base is http://localhost:8000; use --base-url or BASE_URL for a remote host (e.g. http://192.168.204.16:8000).
+Uses GET /data-model/check at [27] to assert sites=1 after deleting BensOffice. Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
 
 This test uses pre-tagged import payloads (brick_type, rule_input, polling) that simulate the output of the
 AI-assisted tagging step. The real workflow is: GET /data-model/export → LLM or human tags → PUT /data-model/import.
@@ -43,15 +44,26 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 
-# Blast away all sites and re-run test (only BensOffice remains after test)
+# Blast away all sites and re-run test (after test only BensOffice remains; GET /data-model/check → sites=1)
 ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
 # Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
+#
+# Wait for 2 BACnet scrapes before exiting (requires scraper running and diy-bacnet reachable):
+#   python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1
+# Use --scrape-interval-min to match the scraper (Docker default 5; for 1 min set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1
+# in platform/.env and restart: cd platform && docker compose up -d).
+#
+# Reset and retry (full wipe + run test, then wait for scrapes):
+#   ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1
 """
 
 import argparse
+import csv
+import io
 import json
 import os
 import sys
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -68,6 +80,8 @@ except ImportError:
 BASE_URL = "http://localhost:8000"
 BACNET_URL = ""
 BACNET_DEVICE_INSTANCE = 3456789  # default; override with --bacnet-device-instance
+WAIT_SCRAPES = 0  # 0 = do not wait; 2+ = wait until this many BACnet scrapes seen before exit
+SCRAPE_INTERVAL_MIN = 5  # used for wait timeout; Docker default is 5 (override in platform/docker-compose or .env)
 
 # Testbench devices to discover and validate in graph/TTL (when BACnet enabled)
 BACNET_TEST_DEVICE_INSTANCES = (3456789, 3456790)
@@ -78,6 +92,40 @@ BENS_FAKE_VAV_NAME = "BensFakeVavBox"
 # DemoSite: full LLM payload (many BACnet points, two devices 3456789/3456790); see tools/demo_site_llm_payload.json
 DEMO_SITE_LLM_NAME = "DemoSite"
 DEMO_SITE_LLM_PAYLOAD_PATH = Path(__file__).resolve().parent / "demo_site_llm_payload.json"
+
+
+def _wait_for_api_ready(max_wait_sec: float = 45.0, interval_sec: float = 2.0) -> None:
+    """Wait for the API to accept requests (e.g. after bootstrap). Retries on connection errors."""
+    url = f"{BASE_URL.rstrip('/')}/health"
+    deadline = time.time() + max_wait_sec
+    last_err = None
+    first = True
+    while time.time() < deadline:
+        try:
+            if httpx:
+                with httpx.Client(timeout=5.0) as client:
+                    r = client.get(url)
+                if r.status_code == 200:
+                    if not first:
+                        print(f"    API ready at {BASE_URL}\n")
+                    return
+            else:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=5.0) as res:
+                    if res.status == 200:
+                        if not first:
+                            print(f"    API ready at {BASE_URL}\n")
+                        return
+        except Exception as e:
+            last_err = e
+            if first:
+                print(f"Waiting for API at {BASE_URL} (retrying every {interval_sec}s, max {max_wait_sec}s)...")
+                first = False
+        time.sleep(interval_sec)
+    raise RuntimeError(
+        f"API at {BASE_URL} not ready after {max_wait_sec}s (last error: {last_err}). "
+        "If you just ran bootstrap, the API may still be starting; try again in a few seconds."
+    ) from last_err
 
 
 def _request(
@@ -213,10 +261,31 @@ def _sparql_equipment_feeds_for_site(site_label: str) -> list[tuple[str, str]]:
 
 def run():
     print(
-        f"\n=== Open-FDD CRUD API Test (CRUD + RDF + SPARQL) ===\nBase URL: {BASE_URL}\n"
+        f"\n=== Open-FDD CRUD API Test (CRUD + RDF + SPARQL) ===\n"
+        f"Base URL: {BASE_URL}\n"
+        f"SPARQL: all queries via POST {BASE_URL}/data-model/sparql (CRUD API only; no direct triple store).\n"
     )
     if BACNET_URL:
         print(f"BACNET_URL: {BACNET_URL} (point_discovery_to_graph, device_instances={list(BACNET_TEST_DEVICE_INSTANCES)})\n")
+
+    # Wait for API to be ready (avoids "Connection reset by peer" when test runs right after bootstrap)
+    try:
+        _wait_for_api_ready()
+    except RuntimeError as e:
+        print(f"  {e}\n")
+        raise
+
+    # --- [0] Verify all SPARQL is via CRUD endpoint only (POST /data-model/sparql; script uses BASE_URL = localhost by default) ---
+    print("[0] SPARQL via CRUD only: POST /data-model/sparql (sites query)")
+    sites_query = """
+    PREFIX brick: <https://brickschema.org/schema/Brick#>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?site ?site_label WHERE { ?site a brick:Site . ?site rdfs:label ?site_label }
+    """
+    code, data = _request("POST", "/data-model/sparql", json_body={"query": sites_query})
+    assert ok(code), f"SPARQL via CRUD failed: {code} {data}"
+    assert isinstance(data, dict) and "bindings" in data, "SPARQL response must have bindings"
+    print(f"    OK — SPARQL from {BASE_URL}/data-model/sparql only; bindings count={len(data['bindings'])}\n")
 
     # --- Health (graph_serialization when API supports it) ---
     print("[1] GET /health")
@@ -985,6 +1054,36 @@ def run():
         print(f"    {p.get('external_id', '')} {p.get('object_identifier', '')} dev={p.get('bacnet_device_id')} polling={p.get('polling')}")
     print(f"    OK — {len(bacnet_polling)} BACnet point(s) with polling=true across devices {sorted(devices)}; BACnet scraper will poll these.\n")
 
+    # --- [25b] SPARQL count ofdd:polling true (TTL) and match to API/scraper count ---
+    print("[25b] SPARQL (CRUD): count points with ofdd:polling true; must match scraper load and Grafana dropdowns")
+    code, _ = _request("GET", "/data-model/ttl?save=true")
+    assert ok(code), "GET /data-model/ttl?save=true failed"
+    q_polling_count = """
+    PREFIX ofdd: <http://openfdd.local/ontology#>
+    SELECT (COUNT(?pt) AS ?n) WHERE { ?pt ofdd:polling true . }
+    """
+    bindings = _sparql(q_polling_count)
+    assert bindings, "SPARQL polling count returned no bindings"
+    n_val = bindings[0].get("n")
+    sparql_n = int(str(n_val or "0").split("^")[0].strip())
+    code, all_points = _request("GET", "/points")
+    assert ok(code), f"GET /points failed: {code}"
+    api_bacnet_polling = [p for p in (all_points or []) if isinstance(p, dict) and p.get("bacnet_device_id") and p.get("object_identifier") and p.get("polling")]
+    api_n = len(api_bacnet_polling)
+    min_expected = 17
+    assert sparql_n >= min_expected, (
+        f"SPARQL ofdd:polling true count {sparql_n} < {min_expected}; TTL should have many points from demo_site_llm_payload.json"
+    )
+    assert api_n >= min_expected, (
+        f"API BACnet+polling count {api_n} < {min_expected}; scraper and Grafana need points in DB (DemoSite + BensOffice)"
+    )
+    # SPARQL counts all points with ofdd:polling true (Brick); API count is only BACnet points. So SPARQL >= api_n
+    # when there are non-BACnet points with polling true (e.g. from other sites or previous runs).
+    assert sparql_n >= api_n, (
+        f"SPARQL ofdd:polling true ({sparql_n}) < API bacnet+polling ({api_n}); TTL should have at least the BACnet set"
+    )
+    print(f"    SPARQL ofdd:polling true = {sparql_n}; API bacnet+polling = {api_n}. Scraper load and Grafana dropdowns = {api_n} points.\n")
+
     # --- [26] Last BACnet scrape data (timeseries via CRUD/download API) before exit ---
     print("[26] GET /download/csv — last BACnet scrape data (timeseries sample)")
     end_d = date.today()
@@ -1001,15 +1100,64 @@ def run():
             print(f"      {line[:120]}{'...' if len(line) > 120 else ''}")
         print(f"    OK — last BACnet scrape data shown above.\n")
     else:
-        print(f"    No timeseries yet for DemoSite (status={code}); scraper may not have run. Wait for next scrape interval or check docker logs openfdd_bacnet_scraper.\n")
+        print(f"    No timeseries yet for DemoSite (status={code}); scraper may not have run or diy-bacnet unreachable. See note below.\n")
 
-    # --- [27] Delete DemoSite so only BensOffice remains (clean exit state) ---
-    print("[27] DELETE /sites/{id} (DemoSite) — leave only BensOffice")
+    # --- [26b] Optional: wait until N BACnet scrapes have run (poll GET /download/csv until distinct timestamps >= N) ---
+    if WAIT_SCRAPES >= 2:
+        # Timeout must allow N scrapes at interval_min (e.g. 10 scrapes at 1 min = 10+ min)
+        timeout_sec = max(
+            2 * SCRAPE_INTERVAL_MIN * 60 + 120,
+            WAIT_SCRAPES * SCRAPE_INTERVAL_MIN * 60 + 120,
+        )
+        print(f"[26b] Wait until {WAIT_SCRAPES} BACnet scrape(s) have run (scrape_interval_min={SCRAPE_INTERVAL_MIN}, timeout ~{timeout_sec // 60} min)")
+        end_d = date.today()
+        start_d = end_d - timedelta(days=1)
+        poll_interval_sec = 20
+        deadline = time.monotonic() + timeout_sec
+        distinct_ts = 0
+        while time.monotonic() < deadline:
+            code, csv_body = _request(
+                "GET",
+                f"/download/csv?site_id={demo_site_id_full}&start_date={start_d}&end_date={end_d}&format=wide",
+            )
+            if code == 200 and isinstance(csv_body, str) and csv_body.strip():
+                lines = csv_body.strip().splitlines()
+                if len(lines) >= 2:
+                    reader = csv.reader(io.StringIO(csv_body))
+                    header = next(reader)
+                    ts_col = 0
+                    for i, h in enumerate(header):
+                        if "timestamp" in (h or "").lower().replace("\ufeff", ""):
+                            ts_col = i
+                            break
+                    seen = set()
+                    for row in reader:
+                        if len(row) > ts_col and row[ts_col]:
+                            seen.add(row[ts_col].strip())
+                    distinct_ts = len(seen)
+                    if distinct_ts >= WAIT_SCRAPES:
+                        print(f"    OK — {distinct_ts} distinct scrape timestamp(s) seen; {WAIT_SCRAPES}+ scrapes done.\n")
+                        break
+            elapsed = int(time.monotonic() - (deadline - timeout_sec))
+            print(f"    ... waiting for scrapes ({distinct_ts} distinct ts so far, {elapsed}s elapsed)")
+            time.sleep(poll_interval_sec)
+        else:
+            print(f"    WARNING — timeout after {timeout_sec}s; scrapes may not have run (check OFDD_BACNET_SCRAPE_INTERVAL_MIN and diy-bacnet reachability).\n")
+
+    # --- [27] Leave only one site: delete DemoSite so GET /data-model/check returns sites=1 (BensOffice only) ---
+    print("[27] DELETE /sites/{id} (DemoSite) — leave only BensOffice so data-model/check reports sites=1")
     code, _ = _request("DELETE", f"/sites/{demo_site_id_full}")
     assert ok(code), f"DELETE DemoSite failed: {code}"
     code, _ = _request("GET", f"/sites/{demo_site_id_full}")
     assert code == 404, f"DemoSite should be gone: {code}"
-    print("    OK — only BensOffice remains.\n")
+    # Refresh graph from DB (check reads in-memory graph; DELETE does not update it)
+    code, _ = _request("GET", "/data-model/ttl?save=true")
+    assert ok(code), "GET /data-model/ttl?save=true failed after delete"
+    code, check = _request("GET", "/data-model/check")
+    assert ok(code), f"GET /data-model/check failed: {code}"
+    sites_count = (check or {}).get("sites", 0)
+    assert sites_count == 1, f"Expected 1 site after [27]; GET /data-model/check returned sites={sites_count}"
+    print(f"    OK — DemoSite deleted; GET /data-model/check: sites={sites_count} (BensOffice only).\n")
 
     print("=== All features passed ===\n")
     print(
@@ -1023,7 +1171,7 @@ def run():
     print("  config/brick_model.ttl is updated on every CRUD and serialize.")
     print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (MONOREPO_PLAN.md § Prompt to the LLM) → PUT /data-model/import.")
     print("  AI step: In production you use GET /data-model/export → LLM or human tags (brick_type, rule_input, polling) → PUT /data-model/import. See docs/modeling/ai_assisted_tagging.md and AGENTS.md.")
-    print("  Note: DemoSite is deleted in [27]; only BensOffice remains with 2 BACnet points (SA-T, ZoneTemp) from [4f1] so the scraper has work. To blast away and re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
+    print("  Note: Only BensOffice remains after [27] (DemoSite deleted); GET /data-model/check returns sites=1. Grafana BACnet dropdowns then show only 2 points (BensOffice: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (MONOREPO_PLAN.md § Grafana). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
 
 
 def main() -> None:
@@ -1052,9 +1200,23 @@ def main() -> None:
         metavar="ID",
         help="BACnet device instance for point_discovery_to_graph (0-4194303). Default: 3456789.",
     )
+    parser.add_argument(
+        "--wait-scrapes",
+        type=int,
+        default=2,
+        metavar="N",
+        help="Wait until N BACnet scrapes have run before exiting (0 = do not wait). Default: 2.",
+    )
+    parser.add_argument(
+        "--scrape-interval-min",
+        type=int,
+        default=5,
+        metavar="M",
+        help="Assumed scraper interval in minutes (for wait timeout). Must match OFDD_BACNET_SCRAPE_INTERVAL_MIN. Default: 5.",
+    )
     args = parser.parse_args()
 
-    global BASE_URL, BACNET_URL, BACNET_DEVICE_INSTANCE
+    global BASE_URL, BACNET_URL, BACNET_DEVICE_INSTANCE, WAIT_SCRAPES, SCRAPE_INTERVAL_MIN
     BASE_URL = (os.environ.get("BASE_URL") or args.base_url).strip().rstrip("/")
     if args.skip_bacnet:
         BACNET_URL = ""
@@ -1064,6 +1226,10 @@ def main() -> None:
         )
     BACNET_DEVICE_INSTANCE = int(
         os.environ.get("BACNET_DEVICE_INSTANCE", str(args.bacnet_device_instance))
+    )
+    WAIT_SCRAPES = int(os.environ.get("OFDD_WAIT_SCRAPES", str(args.wait_scrapes)))
+    SCRAPE_INTERVAL_MIN = int(
+        os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN", str(args.scrape_interval_min))
     )
 
     run()
