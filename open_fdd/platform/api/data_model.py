@@ -281,7 +281,7 @@ def export_points(
         description="If true, return only rows that have bacnet_device_id and object_identifier (discovery from graph). Omit or false for full dump (BACnet + CRUD points).",
     ),
 ):
-    """Single export route: BACnet discovery + CRUD points. Use for LLM Brick tagging (MONOREPO_PLAN.md); then PUT /data-model/import. Unimported BACnet rows have polling=false by default. Set bacnet_only=true to get only discovery rows."""
+    """Single export route: BACnet discovery + CRUD points. Use for LLM Brick tagging (docs/appendix/technical_reference, docs/modeling/ai_assisted_tagging); then PUT /data-model/import. Unimported BACnet rows have polling=false by default. Set bacnet_only=true to get only discovery rows."""
     out = _build_unified_export(site_id)
     if bacnet_only:
         out = [r for r in out if r.bacnet_device_id is not None and r.object_identifier is not None]
@@ -538,7 +538,7 @@ def get_ttl(
     ),
     save: bool = Query(
         True,
-        description="Write TTL to config/brick_model.ttl (default: true). Also auto-synced on every CRUD/import.",
+        description="Write TTL to config/data_model.ttl (default: true). Also auto-synced on every CRUD/import.",
     ),
 ):
     """Return full data model TTL (Brick from DB + BACnet from in-memory graph). Omit for all sites."""
@@ -565,7 +565,7 @@ def get_ttl(
     return PlainTextResponse(ttl, media_type="text/turtle")
 
 
-# --- Serialize: write in-memory graph to config/brick_model.ttl (same as interval job) ---
+# --- Serialize: write in-memory graph to config/data_model.ttl (same as interval job) ---
 
 
 @router.post(
@@ -574,7 +574,7 @@ def get_ttl(
     response_description="Status and path; same function runs on the background interval.",
 )
 def serialize_graph_to_file():
-    """Serialize the in-memory graph (Brick + BACnet) to config/brick_model.ttl. Same as the 5‑minute background sync."""
+    """Serialize the in-memory graph (Brick + BACnet + config) to config/data_model.ttl. Same as the 5‑minute background sync."""
     ok, err = write_ttl_to_file()
     status = get_serialization_status()
     resolved_path = get_ttl_path_resolved()
@@ -615,7 +615,7 @@ def data_model_check():
     response_description="Status; graph is Brick-only after reset, file rewritten.",
 )
 def data_model_reset():
-    """Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet triples and orphaned blank nodes, then writes config/brick_model.ttl. Brick triples come from the database—so if the DB still has sites/equipment/points, the TTL will still contain them. To get an empty data model: delete all sites via CRUD (DELETE /sites/{id} for each; cascade removes equipment and points), then POST /data-model/reset."""
+    """Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet triples and orphaned blank nodes, then writes config/data_model.ttl. Brick triples come from the database—so if the DB still has sites/equipment/points, the TTL will still contain them. To get an empty data model: delete all sites via CRUD (DELETE /sites/{id} for each; cascade removes equipment and points), then POST /data-model/reset."""
     reset_graph_to_db_only()
     ok, err = write_ttl_to_file()
     status = get_serialization_status()

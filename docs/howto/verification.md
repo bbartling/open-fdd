@@ -70,7 +70,7 @@ You can confirm that the BACnet scraper, weather scraper, and FDD loop are runni
    ```
    If this returns rows with recent `ts`, the scraper is writing; any dashboard you build from the cookbook will show them.
 
-**Note:** `graph_and_crud_test.py` now imports 2 BACnet points (SA-T, ZoneTemp) into **BensOffice** in step [4f2], so after the test BensOffice has points the scraper can poll. The test uses pre-tagged payloads (simulating the output of the **AI-assisted tagging** step). The full workflow with an LLM is: GET /data-model/export → tag with ChatGPT or another LLM (see [AI-assisted data modeling](../modeling/ai_assisted_tagging) and **AGENTS.md**) → PUT /data-model/import. The demo-import site created in [4g] is still deleted in [20c]; only BensOffice remains with BACnet points. Wait at least one scrape interval (see `OFDD_BACNET_SCRAPE_INTERVAL_MIN`, default 5 min) or restart the scraper, then check Grafana or the commands above.
+**Note:** `graph_and_crud_test.py` imports 2 BACnet points (SA-T, ZoneTemp) into **TestBenchSite** in step [4f1], so after the test TestBenchSite has points the scraper can poll. The test uses pre-tagged payloads (simulating the output of the **AI-assisted tagging** step). The full workflow with an LLM is: GET /data-model/export → tag with ChatGPT or another LLM (see [AI-assisted data modeling](../modeling/ai_assisted_tagging) and **AGENTS.md**) → PUT /data-model/import. The demo-import site created in [4g] is still deleted in [20c]; only TestBenchSite remains with BACnet points. Wait at least one scrape interval (see `OFDD_BACNET_SCRAPE_INTERVAL_MIN`, default 5 min) or restart the scraper, then check Grafana or the commands above.
 
 **Weather (Open-Meteo):**
 

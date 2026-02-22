@@ -161,7 +161,7 @@ class PointDiscoveryToGraphBody(BaseModel):
     )
     write_file: bool = Field(
         default=True,
-        description="Write config/brick_model.ttl; BACnet also at GET /data-model/ttl",
+        description="Write config/data_model.ttl; BACnet also at GET /data-model/ttl",
     )
 
 
@@ -176,7 +176,7 @@ POINT_DISCOVERY_TO_GRAPH_EXAMPLES = {
         },
     },
     "device_1234": {
-        "summary": "Device 1234, graph + config/brick_model.ttl",
+        "summary": "Device 1234, graph + config/data_model.ttl",
         "value": {
             "url": None,
             "instance": {"device_instance": 1234},
@@ -333,7 +333,7 @@ def bacnet_point_discovery_to_graph(
     ),
 ):
     """
-    Call point_discovery, then merge BACnet RDF into the in-memory graph (and optionally brick_model.ttl).
+    Call point_discovery, then merge BACnet RDF into the in-memory graph (and optionally data_model.ttl).
     BACnet RDF is visible at GET /data-model/ttl. Use **gateway** dropdown or omit to use config default.
     """
     params = _body_to_dict(body)

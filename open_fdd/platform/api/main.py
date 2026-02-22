@@ -12,6 +12,7 @@ from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.api import (
     analytics,
     bacnet,
+    config as config_router,
     data_model,
     download,
     sites,
@@ -25,14 +26,17 @@ settings = get_platform_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load in-memory graph from brick_model.ttl and start background sync thread."""
+    """Load in-memory graph from data_model.ttl and start background sync thread."""
+    from open_fdd.platform.config import set_config_overlay
     from open_fdd.platform.graph_model import (
+        get_config_from_graph,
         load_from_file,
         start_sync_thread,
         write_ttl_to_file,
     )
 
     load_from_file()
+    set_config_overlay(get_config_from_graph())  # so get_platform_settings() sees RDF config
     write_ttl_to_file()  # ensure file exists and health state is set
     start_sync_thread()
     yield
@@ -79,6 +83,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(config_router.router)
 app.include_router(sites.router)
 app.include_router(points.router)
 app.include_router(equipment.router)

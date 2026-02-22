@@ -49,7 +49,7 @@ Skip the `device` object when creating points; use analog-input, binary-value, e
 
 ## 3. Push device into the graph (Brick + BACnet in TTL)
 
-So the in-memory graph and `config/brick_model.ttl` contain this device’s BACnet RDF:
+So the in-memory graph and `config/data_model.ttl` contain this device’s BACnet RDF:
 
 ```bash
 curl -X POST "${BASE}/bacnet/point_discovery_to_graph" \

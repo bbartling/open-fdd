@@ -62,8 +62,8 @@
 
 **Scripts:**
 ```bash
-python examples/test_sparql.py --ttl brick_model.ttl
-python examples/validate_data_model.py --ttl brick_model.ttl --rules my_rules
+python examples/test_sparql.py --ttl data_model.ttl
+python examples/validate_data_model.py --ttl data_model.ttl --rules my_rules
 python examples/run_all_rules_brick.py --validate-first
 ```
 

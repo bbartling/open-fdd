@@ -51,7 +51,7 @@ Use this (or adapt it) when sending the export JSON to an external LLM:
 4. **docs/expression_rule_cookbook.md** — Expression rule recipes (Brick inputs).
 5. **analyst/rules/** — Project rule YAML (sensor_bounds, sensor_flatline, etc.); FDD loop loads from here.
 6. **open_fdd/rules/** — Built-in rule examples.
-7. **MONOREPO_PLAN.md** — Data model API, export/import workflow, LLM tagging, testing.
+7. **docs/appendix/technical_reference.md** — Data model API, export/import workflow, LLM tagging, unit tests, BACnet scrape, bootstrap.
 8. **open_fdd/** — Source; docstrings are ground truth.
 
 ---

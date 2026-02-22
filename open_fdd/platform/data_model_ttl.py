@@ -4,7 +4,7 @@ Generate Brick TTL from current DB state (sites, equipment, points).
 Single source of truth = DB. TTL is derived for FDD column_map and SPARQL validation.
 Points use rdfs:label = external_id (time-series reference) and optional ofdd:mapsToRuleInput = fdd_input.
 
-One unified TTL file (config/brick_model.ttl): Brick section first, then BACnet discovery
+One unified TTL file (config/data_model.ttl): Brick section first, then BACnet discovery
 section after BACNET_SECTION_MARKER. CRUD and point_discovery_to_graph update the in-memory graph; sync writes this file.
 """
 
@@ -157,7 +157,7 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
 def _get_unified_ttl_path() -> Path:
     """Path for the single TTL file (Brick + BACnet sections)."""
     path_str = getattr(
-        get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl"
+        get_platform_settings(), "brick_ttl_path", "config/data_model.ttl"
     )
     p = Path(path_str)
     return (Path.cwd() / p) if not p.is_absolute() else p
@@ -227,7 +227,7 @@ def sync_ttl_to_file(
     """
     Write current DB state as Brick TTL to the unified config file. Preserves any
     BACnet discovery section (from in-memory cache when possible). Path from
-    OFDD_BRICK_TTL_PATH. Falls back to /tmp/brick_model.ttl if not writable.
+    OFDD_BRICK_TTL_PATH. Falls back to /tmp/data_model.ttl if not writable.
 
     When immediate=False (default), sync is debounced by ~250ms so rapid CRUD
     triggers one write. When immediate=True (e.g. GET /data-model/ttl?save=true),

@@ -149,7 +149,7 @@ services:
       OFDD_RULE_INTERVAL_HOURS: "3"
       OFDD_LOOKBACK_DAYS: "3"
       OFDD_RULES_DIR: "analyst/rules"
-      OFDD_BRICK_TTL_PATH: "config/brick_model.ttl"
+      OFDD_BRICK_TTL_PATH: "config/data_model.ttl"
     volumes:
       - ../open_fdd:/app/open_fdd:ro
       - ../analyst/rules:/app/analyst/rules:ro
@@ -185,7 +185,7 @@ services:
       options: *log-opts
 
   # CRUD API — sites, points, equipment, timeseries (data model)
-  # config volume must be rw so brick_model.ttl is written to the host (same path as mount).
+  # config volume must be rw so data_model.ttl is written to the host (same path as mount).
   api:
     build:
       context: ..
@@ -202,7 +202,7 @@ services:
       # From inside the API container, bacnet-server (network_mode: host) is on the host:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       # Absolute path so writes always go to the mounted volume (../config → /app/config)
-      OFDD_BRICK_TTL_PATH: /app/config/brick_model.ttl
+      OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config

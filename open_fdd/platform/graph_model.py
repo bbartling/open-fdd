@@ -1,10 +1,10 @@
 """
 In-memory RDF graph model for Open-FDD: Brick (from DB) + BACnet (from point_discovery).
 
-- Loads config/brick_model.ttl on boot into an rdflib Graph.
+- Loads config/data_model.ttl on boot into an rdflib Graph.
 - Brick triples are refreshed from DB on sync; BACnet triples are updated from
   point_discovery JSON (clean TTL, no bacpypes repr).
-- Single serialize path: graph → TTL string → config/brick_model.ttl.
+- Single serialize path: graph → TTL string → config/data_model.ttl.
 - Background thread serializes to file at OFDD_GRAPH_SYNC_INTERVAL_MIN (default 5).
 - Health exposes last serialization result and timestamps.
 """
@@ -29,6 +29,30 @@ OFDD_NS = "http://openfdd.local/ontology#"
 SITE_NS = "http://openfdd.local/site#"
 XSD_NS = "http://www.w3.org/2001/XMLSchema#"
 
+# Platform config in RDF (same graph as Brick + BACnet). Subject is ofdd: so sync_brick_from_db does not remove it.
+CONFIG_SUBJECT_URI = OFDD_NS + "platform_config"
+# Keys that can be stored in graph (snake_case) -> ofdd predicate local name (camelCase)
+CONFIG_KEY_TO_PREDICATE = {
+    "rule_interval_hours": "ruleIntervalHours",
+    "lookback_days": "lookbackDays",
+    "rules_dir": "rulesDir",
+    "brick_ttl_dir": "brickTtlDir",
+    "bacnet_enabled": "bacnetEnabled",
+    "bacnet_scrape_interval_min": "bacnetScrapeIntervalMin",
+    "bacnet_server_url": "bacnetServerUrl",
+    "bacnet_site_id": "bacnetSiteId",
+    "bacnet_gateways": "bacnetGateways",
+    "open_meteo_enabled": "openMeteoEnabled",
+    "open_meteo_interval_hours": "openMeteoIntervalHours",
+    "open_meteo_latitude": "openMeteoLatitude",
+    "open_meteo_longitude": "openMeteoLongitude",
+    "open_meteo_timezone": "openMeteoTimezone",
+    "open_meteo_days_back": "openMeteoDaysBack",
+    "open_meteo_site_id": "openMeteoSiteId",
+    "graph_sync_interval_min": "graphSyncIntervalMin",
+}
+CONFIG_PREDICATE_TO_KEY = {v: k for k, v in CONFIG_KEY_TO_PREDICATE.items()}
+
 # In-memory graph (rdflib). Populated on startup from file or DB.
 _graph: Any = None
 _graph_lock = threading.RLock()
@@ -45,14 +69,14 @@ _sync_stop = threading.Event()
 
 def _get_ttl_path() -> Path:
     path_str = getattr(
-        get_platform_settings(), "brick_ttl_path", "config/brick_model.ttl"
+        get_platform_settings(), "brick_ttl_path", "config/data_model.ttl"
     )
     p = Path(path_str)
     return (Path.cwd() / p) if not p.is_absolute() else p
 
 
 def get_ttl_path_resolved() -> str:
-    """Resolved absolute path for config/brick_model.ttl (for API responses so caller can verify where file was written)."""
+    """Resolved absolute path for config/data_model.ttl (for API responses so caller can verify where file was written)."""
     return str(_get_ttl_path().resolve())
 
 
@@ -149,8 +173,61 @@ def _ensure_graph() -> Any:
         return _graph
 
 
+def get_config_from_graph() -> dict:
+    """Read platform config from in-memory graph (ofdd:platform_config triples). Returns dict of snake_case keys."""
+    from rdflib import Literal, Namespace, URIRef
+
+    g = _ensure_graph()
+    ofdd = Namespace(OFDD_NS)
+    subj = URIRef(CONFIG_SUBJECT_URI)
+    out: dict[str, Any] = {}
+    with _graph_lock:
+        for pred_local, key in CONFIG_PREDICATE_TO_KEY.items():
+            pred = URIRef(ofdd[pred_local])
+            for o in g.objects(subj, pred):
+                if isinstance(o, Literal):
+                    val = o.value
+                    if isinstance(val, bool):
+                        out[key] = val
+                    elif isinstance(val, (int, float)):
+                        out[key] = val
+                    else:
+                        out[key] = str(val) if val is not None else None
+                break
+    return out
+
+
+def set_config_in_graph(config: dict) -> None:
+    """Write platform config into in-memory graph (ofdd:platform_config). Removes existing config triples first."""
+    from rdflib import Literal, Namespace, URIRef
+
+    g = _ensure_graph()
+    ofdd = Namespace(OFDD_NS)
+    subj = URIRef(CONFIG_SUBJECT_URI)
+    with _graph_lock:
+        # Remove existing config triples for this subject
+        to_remove = [(s, p, o) for s, p, o in g.triples((subj, None, None))]
+        for t in to_remove:
+            g.remove(t)
+        # Add type
+        g.add((subj, URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef(OFDD_NS + "PlatformConfig")))
+        for key, val in config.items():
+            if key not in CONFIG_KEY_TO_PREDICATE or val is None:
+                continue
+            pred_local = CONFIG_KEY_TO_PREDICATE[key]
+            pred = URIRef(ofdd[pred_local])
+            if isinstance(val, bool):
+                g.add((subj, pred, Literal(val, datatype=URIRef(XSD_NS + "boolean"))))
+            elif isinstance(val, int):
+                g.add((subj, pred, Literal(val, datatype=URIRef(XSD_NS + "integer"))))
+            elif isinstance(val, float):
+                g.add((subj, pred, Literal(val, datatype=URIRef(XSD_NS + "decimal"))))
+            else:
+                g.add((subj, pred, Literal(str(val))))
+
+
 def load_from_file() -> None:
-    """Load unified brick_model.ttl into in-memory graph on boot (Brick + BACnet sections)."""
+    """Load unified data_model.ttl into in-memory graph on boot (Brick + BACnet + config)."""
     path = _get_ttl_path()
     g = _ensure_graph()
     with _graph_lock:
@@ -288,7 +365,7 @@ def serialize_to_ttl() -> str:
 
 def write_ttl_to_file() -> tuple[bool, str | None]:
     """
-    Serialize graph to TTL and write to config/brick_model.ttl.
+    Serialize graph to TTL and write to config/data_model.ttl.
     Returns (success, error_message). Updates health state.
     """
     global _last_serialization_ok, _last_serialization_error, _last_serialization_at
@@ -338,9 +415,11 @@ def graph_integrity_check() -> dict:
     """
     Run integrity checks on the in-memory graph. Flags orphan blank nodes (e.g. leftover
     device-address bnodes) and returns counts. For use by GET /data-model/check.
+    Syncs Brick from DB first so site/equipment/point counts match the database.
     """
     from rdflib import BNode, RDF, URIRef
 
+    sync_brick_from_db()
     g = _ensure_graph()
     with _graph_lock:
         triple_count = len(g)
@@ -370,12 +449,16 @@ def graph_integrity_check() -> dict:
 def reset_graph_to_db_only() -> None:
     """
     Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet
-    triples and any orphaned blank nodes. Call write_ttl_to_file() after to persist.
+    triples and any orphaned blank nodes. Preserves platform config (ofdd:platform_config).
+    Call write_ttl_to_file() after to persist.
     """
+    config_snapshot = get_config_from_graph()
     g = _ensure_graph()
     with _graph_lock:
         g.remove((None, None, None))
     sync_brick_from_db()
+    if config_snapshot:
+        set_config_in_graph(config_snapshot)
 
 
 def _sync_loop() -> None:

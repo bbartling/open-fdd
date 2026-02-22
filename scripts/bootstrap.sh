@@ -194,31 +194,87 @@ verify() {
   echo ""
 }
 
-# Delete all sites via API and POST /data-model/reset (same as tools/delete_all_sites_and_reset.py). Uses OFDD_API_URL or http://localhost:8000.
-reset_data_via_api() {
-  local api_base="${OFDD_API_URL:-http://localhost:8000}"
-  api_base="${api_base%/}"
-  echo "=== Waiting for API at $api_base (~60s) ==="
+# Wait for API to be ready (shared by seed_config_via_api and reset_data_via_api). Sets API_BASE.
+wait_for_api() {
+  API_BASE="${OFDD_API_URL:-http://localhost:8000}"
+  API_BASE="${API_BASE%/}"
+  echo "=== Waiting for API at $API_BASE (~60s) ==="
   local try=1
   while [[ $try -le 30 ]]; do
-    if curl -sf --connect-timeout 3 "$api_base/health" >/dev/null 2>&1; then
+    if curl -sf --connect-timeout 3 "$API_BASE/health" >/dev/null 2>&1; then
       echo "API ready."
-      break
+      return 0
     fi
     sleep 2
     try=$(( try + 1 ))
-    [[ $try -gt 30 ]] && { echo "API not reachable at $api_base; skip --reset-data."; return 1; }
+    [[ $try -gt 30 ]] && { echo "API not reachable at $API_BASE."; return 1; }
   done
-  echo "=== Resetting data model (DELETE all sites, POST /data-model/reset) ==="
+  return 1
+}
+
+# Seed platform config via PUT /config (RDF in same graph as Brick; no YAML). Uses OFDD_* from .env when set.
+# Defaults here should match open_fdd/platform/default_config.py (used by GET /config when graph empty and by graph_and_crud_test.py).
+seed_config_via_api() {
+  if ! wait_for_api; then
+    echo "Skipping config seed (API not reachable)."
+    return 1
+  fi
+  echo "=== Seeding platform config (PUT /config) ==="
+  local body
+  body=$(python3 -c "
+import json, os
+def env(key, default):
+    v = os.environ.get(key, default)
+    if v in ('true','True','TRUE'): return True
+    if v in ('false','False','FALSE'): return False
+    try: return int(v)
+    except ValueError: pass
+    try: return float(v)
+    except ValueError: pass
+    return v
+print(json.dumps({
+    'rule_interval_hours': env('OFDD_RULE_INTERVAL_HOURS', 0.1),
+    'lookback_days': env('OFDD_LOOKBACK_DAYS', 3),
+    'rules_dir': os.environ.get('OFDD_RULES_DIR', 'analyst/rules'),
+    'brick_ttl_dir': os.environ.get('OFDD_BRICK_TTL_DIR', 'config'),
+    'bacnet_enabled': env('OFDD_BACNET_SCRAPE_ENABLED', True),
+    'bacnet_scrape_interval_min': env('OFDD_BACNET_SCRAPE_INTERVAL_MIN', 1),
+    'bacnet_server_url': os.environ.get('OFDD_BACNET_SERVER_URL', 'http://localhost:8080'),
+    'bacnet_site_id': os.environ.get('OFDD_BACNET_SITE_ID', 'default'),
+    'open_meteo_enabled': env('OFDD_OPEN_METEO_ENABLED', True),
+    'open_meteo_interval_hours': env('OFDD_OPEN_METEO_INTERVAL_HOURS', 24),
+    'open_meteo_latitude': env('OFDD_OPEN_METEO_LATITUDE', 41.88),
+    'open_meteo_longitude': env('OFDD_OPEN_METEO_LONGITUDE', -87.63),
+    'open_meteo_timezone': os.environ.get('OFDD_OPEN_METEO_TIMEZONE', 'America/Chicago'),
+    'open_meteo_days_back': env('OFDD_OPEN_METEO_DAYS_BACK', 3),
+    'open_meteo_site_id': os.environ.get('OFDD_OPEN_METEO_SITE_ID', 'default'),
+    'graph_sync_interval_min': env('OFDD_GRAPH_SYNC_INTERVAL_MIN', 5),
+}))
+" 2>/dev/null) || body="{\"rule_interval_hours\":0.1,\"lookback_days\":3,\"rules_dir\":\"analyst/rules\",\"brick_ttl_dir\":\"config\",\"bacnet_enabled\":true,\"bacnet_scrape_interval_min\":1,\"bacnet_server_url\":\"http://localhost:8080\",\"bacnet_site_id\":\"default\",\"open_meteo_enabled\":true,\"open_meteo_interval_hours\":24,\"open_meteo_latitude\":41.88,\"open_meteo_longitude\":-87.63,\"open_meteo_timezone\":\"America/Chicago\",\"open_meteo_days_back\":3,\"open_meteo_site_id\":\"default\",\"graph_sync_interval_min\":5}"
+  if curl -sf -X PUT "$API_BASE/config" -H "Content-Type: application/json" -d "$body" >/dev/null 2>&1; then
+    echo "  PUT /config OK (config in RDF, data_model.ttl)."
+  else
+    echo "  PUT /config failed (non-fatal; set config via API or /app/ later)."
+    return 1
+  fi
+  return 0
+}
+
+# Delete all sites via API and POST /data-model/reset (same as tools/delete_all_sites_and_reset.py). Uses OFDD_API_URL or http://localhost:8000.
+reset_data_via_api() {
+  if ! wait_for_api; then
+    echo "Skip --reset-data (API not reachable)."
+    return 1
+  fi
   local sites_json
-  sites_json="$(curl -sf -H "Accept: application/json" "$api_base/sites" 2>/dev/null)" || { echo "GET /sites failed."; return 1; }
+  sites_json="$(curl -sf -H "Accept: application/json" "$API_BASE/sites" 2>/dev/null)" || { echo "GET /sites failed."; return 1; }
   local ids
   ids="$(echo "$sites_json" | grep -o '"id":"[^"]*"' | sed 's/"id":"//;s/"$//')"
   if [[ -n "$ids" ]]; then
     local id
     while IFS= read -r id; do
       [[ -z "$id" ]] && continue
-      if curl -sf -X DELETE "$api_base/sites/$id" >/dev/null 2>&1; then
+      if curl -sf -X DELETE "$API_BASE/sites/$id" >/dev/null 2>&1; then
         echo "  Deleted site $id"
       else
         echo "  Failed to delete site $id"
@@ -227,7 +283,7 @@ reset_data_via_api() {
   else
     echo "  No sites to delete."
   fi
-  if curl -sf -X POST "$api_base/data-model/reset" -H "Content-Type: application/json" -d '{}' >/dev/null 2>&1; then
+  if curl -sf -X POST "$API_BASE/data-model/reset" -H "Content-Type: application/json" -d '{}' >/dev/null 2>&1; then
     echo "  POST /data-model/reset OK."
   else
     echo "  POST /data-model/reset failed."
@@ -416,6 +472,11 @@ echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql) 2>/dev/null || true
 (cd "$PLATFORM_DIR" && docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql) 2>/dev/null || true
 
+if ! $MINIMAL; then
+  echo ""
+  seed_config_via_api || true
+fi
+
 if $RESET_DATA; then
   echo ""
   reset_data_via_api || true
@@ -434,7 +495,7 @@ else
 fi
 echo ""
 echo "Verify all services: ./scripts/bootstrap.sh --verify"
-echo "Test CRUD + SPARQL:  python tools/test_crud_api.py  (optional: BACNET_URL=http://localhost:8080)"
-echo "Test graph + CRUD:  python tools/graph_and_crud_test.py  (in-memory graph, serialize, SPARQL; optional: BACNET_URL=...)"
+echo "Simple BACnet + CRUD:  python tools/bacnet_crud_smoke_test.py  (optional: --start-instance 1 --end-instance 3456999)"
+echo "Full graph + CRUD:  python tools/graph_and_crud_test.py  (in-memory graph, serialize, SPARQL; optional: BACNET_URL=...)"
 echo "View logs: docker compose -f platform/docker-compose.yml logs -f"
 echo ""

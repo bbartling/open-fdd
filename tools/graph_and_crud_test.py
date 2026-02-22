@@ -8,20 +8,21 @@ exec python3 "$0" "$@"
 End-to-end CRUD API test: hits Open-FDD API only (no direct calls to diy-bacnet-server).
 
 All requests go to the Open-FDD API (--base-url). For BACnet, the test uses the API’s
-default gateway URL (omit url in body when API runs in Docker) or --bacnet-url.
+gateway URL in request body (--bacnet-url; when base-url is localhost, default is host.docker.internal:8080 for container-to-host).
 Flow: test → Open-FDD API → (API proxies to) diy-bacnet.
 
 API coverage (OpenAPI paths exercised):
   - /health
-  - /sites: list, create, get, patch, delete (demo-import deleted at [20c]; DemoSite deleted at [27] so only BensOffice remains)
+  - /config: GET, PUT (platform config in RDF; same graph as Brick + BACnet)
+  - /sites: list, create, get, patch, delete (demo-import deleted at [20c]; DemoSite deleted at [27] so only TestBenchSite remains)
   - /equipment: list, create, get, patch, delete
   - /points: list (by site, by equipment), create, get, patch, delete
   - /data-model: serialize, ttl, export, import (points + equipment feeds), sparql
   - /bacnet: server_hello, whois_range, point_discovery_to_graph
   - /download/csv (GET, POST), /download/faults (GET json, csv)
-All SPARQL is via the Open-FDD CRUD API only: POST /data-model/sparql (see _sparql()). No direct triple-store access.
+All SPARQL is via the Open-FDD CRUD API only: POST /data-model/sparql (see _sparql()). No direct triple-store or TTL file access.
 Default API base is http://localhost:8000; use --base-url or BASE_URL for a remote host (e.g. http://192.168.204.16:8000).
-Uses GET /data-model/check at [27] to assert sites=1 after deleting BensOffice. Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
+Uses GET /data-model/check at [27] to assert sites=1 after deleting DemoSite (TestBenchSite remains). Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
 
 This test uses pre-tagged import payloads (brick_type, rule_input, polling) that simulate the output of the
 AI-assisted tagging step. The real workflow is: GET /data-model/export → LLM or human tags → PUT /data-model/import.
@@ -44,7 +45,7 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 
-# Blast away all sites and re-run test (after test only BensOffice remains; GET /data-model/check → sites=1)
+# Blast away all sites and re-run test (after test only TestBenchSite remains; GET /data-model/check → sites=1)
 ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
 # Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
 #
@@ -79,16 +80,18 @@ except ImportError:
 # Set by main() from args (env overrides args)
 BASE_URL = "http://localhost:8000"
 BACNET_URL = ""
+# When test hits API at localhost, API is often in Docker → from inside container use host to reach BACnet on host
+BACNET_URL_FOR_API_DEFAULT = "http://host.docker.internal:8080"
 BACNET_DEVICE_INSTANCE = 3456789  # default; override with --bacnet-device-instance
 WAIT_SCRAPES = 0  # 0 = do not wait; 2+ = wait until this many BACnet scrapes seen before exit
 SCRAPE_INTERVAL_MIN = 5  # used for wait timeout; Docker default is 5 (override in platform/docker-compose or .env)
 
 # Testbench devices to discover and validate in graph/TTL (when BACnet enabled)
 BACNET_TEST_DEVICE_INSTANCES = (3456789, 3456790)
-# Testbench site + equipment (BensOffice, BensFakeAhu, BensFakeVavBox) — created/validated, not deleted
-BENSOFFICE_SITE_NAME = "BensOffice"
-BENS_FAKE_AHU_NAME = "BensFakeAhu"
-BENS_FAKE_VAV_NAME = "BensFakeVavBox"
+# Testbench site + equipment — created/validated, not deleted; override with env TESTBENCH_SITE_NAME etc.
+TESTBENCH_SITE_NAME = os.environ.get("TESTBENCH_SITE_NAME", "TestBenchSite")
+TESTBENCH_AHU_NAME = os.environ.get("TESTBENCH_AHU_NAME", "TestBenchAhu")
+TESTBENCH_VAV_NAME = os.environ.get("TESTBENCH_VAV_NAME", "TestBenchVav")
 # DemoSite: full LLM payload (many BACnet points, two devices 3456789/3456790); see tools/demo_site_llm_payload.json
 DEMO_SITE_LLM_NAME = "DemoSite"
 DEMO_SITE_LLM_PAYLOAD_PATH = Path(__file__).resolve().parent / "demo_site_llm_payload.json"
@@ -312,21 +315,68 @@ def run():
     else:
         assert False, f"Serialize failed: {code} {ser}"
 
+    # --- Config (RDF in same graph; mock setup with canonical defaults) ---
+    from open_fdd.platform.default_config import DEFAULT_PLATFORM_CONFIG
+
+    print("[1c] PUT /config (platform config into RDF graph — default config)")
+    code, put_res = _request("PUT", "/config", json_body=DEFAULT_PLATFORM_CONFIG)
+    assert ok(code), f"PUT /config failed: {code} {put_res}"
+    print("    OK — config written to graph\n")
+
+    print("[1d] GET /config")
+    code, get_cfg = _request("GET", "/config")
+    assert ok(code), f"GET /config failed: {code} {get_cfg}"
+    assert isinstance(get_cfg, dict), "GET /config must return JSON object"
+    assert get_cfg.get("rule_interval_hours") == DEFAULT_PLATFORM_CONFIG["rule_interval_hours"]
+    assert get_cfg.get("bacnet_server_url") == DEFAULT_PLATFORM_CONFIG["bacnet_server_url"]
+    print(f"    OK — rule_interval_hours={get_cfg.get('rule_interval_hours')}, bacnet_server_url={get_cfg.get('bacnet_server_url')}\n")
+
+    print("[1e] SPARQL: ofdd:PlatformConfig (via POST /data-model/sparql only)")
+    config_sparql = """
+    PREFIX ofdd: <http://openfdd.local/ontology#>
+    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+    SELECT ?p ?v WHERE {
+      ?c a ofdd:PlatformConfig .
+      ?c ?p ?v .
+    }
+    """
+    code, sparql_res = _request("POST", "/data-model/sparql", json_body={"query": config_sparql})
+    assert ok(code), f"SPARQL config query failed: {code} {sparql_res}"
+    assert isinstance(sparql_res, dict) and "bindings" in sparql_res
+    bindings = sparql_res["bindings"]
+    assert len(bindings) >= 5, f"Expected at least 5 config triples via SPARQL, got {len(bindings)}"
+    preds = [str(b.get("p") or "") for b in bindings if b.get("p")]
+    assert any("ruleIntervalHours" in p or "rule_interval" in p.lower() for p in preds), (
+        f"SPARQL: expected ofdd:ruleIntervalHours in config triples; predicates: {preds[:15]}"
+    )
+    assert any("bacnetServerUrl" in p or "bacnet_server" in p.lower() for p in preds), (
+        f"SPARQL: expected ofdd:bacnetServerUrl in config triples; predicates: {preds[:15]}"
+    )
+    print(f"    OK — {len(bindings)} config triples in graph (SPARQL via CRUD only)\n")
+
     # --- BACnet proxy (when gateway URL set) ---
+    # Pass url in body so API (often in Docker) uses a URL reachable from the container (e.g. host.docker.internal:8080)
+    def _bacnet_body(**kwargs):
+        body = dict(kwargs)
+        if BACNET_URL:
+            body["url"] = BACNET_URL
+        return body
+
     if BACNET_URL:
         print("[1a] POST /bacnet/server_hello (gateway reachable)")
-        code, sh = _request("POST", "/bacnet/server_hello", json_body={})
+        code, sh = _request("POST", "/bacnet/server_hello", json_body=_bacnet_body())
         assert ok(code), f"server_hello failed: {code} {sh}"
-        body = sh.get("body") if isinstance(sh, dict) else sh
-        res = body.get("result") if isinstance(body, dict) else body
-        assert res and (res.get("message") or "message" in str(res).lower())
-        print("    OK\n")
+        # API returns {ok, body} or {ok, error}; gateway response shape varies (result/message/etc.)
+        assert isinstance(sh, dict) and sh.get("ok"), (
+            f"server_hello proxy failed: {sh.get('error', sh)}"
+        )
+        print("    OK — gateway reachable via CRUD API\n")
 
         print("[1a2] POST /bacnet/whois_range (discover devices)")
         code, wr = _request(
             "POST",
             "/bacnet/whois_range",
-            json_body={"request": {"start_instance": 1, "end_instance": 3456800}},
+            json_body=_bacnet_body(request={"start_instance": 1, "end_instance": 3456800}),
             timeout=15.0,
         )
         assert ok(code), f"whois_range failed: {code} {wr}"
@@ -343,11 +393,11 @@ def run():
             code, pdg = _request(
                 "POST",
                 "/bacnet/point_discovery_to_graph",
-                json_body={
-                    "instance": {"device_instance": dev_inst},
-                    "update_graph": True,
-                    "write_file": True,
-                },
+                json_body=_bacnet_body(
+                    instance={"device_instance": dev_inst},
+                    update_graph=True,
+                    write_file=True,
+                ),
                 timeout=30.0,
             )
             assert ok(code), f"point_discovery_to_graph({dev_inst}) failed: {code} {pdg}"
@@ -470,75 +520,75 @@ def run():
     assert len(ttl_body) > 0, "TTL non-empty"
     print(f"    OK — TTL length {len(ttl_body)} (site/points validated via SPARQL in [4b])\n")
 
-    # --- BensOffice testbench: ensure site + BensFakeAhu / BensFakeVavBox, validate in graph and TTL ---
-    print(f"[4d] BensOffice testbench: ensure site {BENSOFFICE_SITE_NAME!r} and equipment {BENS_FAKE_AHU_NAME!r}, {BENS_FAKE_VAV_NAME!r}")
+    # --- TestBenchSite testbench: ensure site + TestBenchAhu / TestBenchVav, validate in graph and TTL ---
+    print(f"[4d] TestBenchSite testbench: ensure site {TESTBENCH_SITE_NAME!r} and equipment {TESTBENCH_AHU_NAME!r}, {TESTBENCH_VAV_NAME!r}")
     code, sites_list = _request("GET", "/sites")
     assert ok(code), f"GET /sites failed: {code}"
-    bens_site = next((s for s in sites_list if s.get("name") == BENSOFFICE_SITE_NAME), None)
+    bens_site = next((s for s in sites_list if s.get("name") == TESTBENCH_SITE_NAME), None)
     if bens_site is None:
         code, bens_site = _request(
             "POST",
             "/sites",
-            json_body={"name": BENSOFFICE_SITE_NAME, "description": "BensTestBench"},
+            json_body={"name": TESTBENCH_SITE_NAME, "description": "TestBench"},
         )
-        assert ok(code), f"POST /sites BensOffice failed: {code} {bens_site}"
+        assert ok(code), f"POST /sites TestBenchSite failed: {code} {bens_site}"
     bens_site_id = bens_site["id"]
     # Create equipment if not already present (by name under this site)
     code, eq_list = _request("GET", f"/equipment?site_id={bens_site_id}")
     assert ok(code)
     existing_names = {e.get("name") for e in eq_list if e.get("name")}
-    if BENS_FAKE_AHU_NAME not in existing_names:
+    if TESTBENCH_AHU_NAME not in existing_names:
         code, _ = _request(
             "POST",
             "/equipment",
             json_body={
                 "site_id": bens_site_id,
-                "name": BENS_FAKE_AHU_NAME,
+                "name": TESTBENCH_AHU_NAME,
                 "description": "Testbench AHU",
                 "equipment_type": "Air_Handling_Unit",
             },
         )
-        assert ok(code), f"POST /equipment {BENS_FAKE_AHU_NAME} failed: {code}"
-    if BENS_FAKE_VAV_NAME not in existing_names:
+        assert ok(code), f"POST /equipment {TESTBENCH_AHU_NAME} failed: {code}"
+    if TESTBENCH_VAV_NAME not in existing_names:
         code, _ = _request(
             "POST",
             "/equipment",
             json_body={
                 "site_id": bens_site_id,
-                "name": BENS_FAKE_VAV_NAME,
+                "name": TESTBENCH_VAV_NAME,
                 "description": "Testbench VAV",
                 "equipment_type": "VAV",
             },
         )
-        assert ok(code), f"POST /equipment {BENS_FAKE_VAV_NAME} failed: {code}"
+        assert ok(code), f"POST /equipment {TESTBENCH_VAV_NAME} failed: {code}"
     print(f"    OK — site_id={bens_site_id}\n")
 
-    print("[4e] SPARQL: BensOffice site and testbench equipment in graph")
+    print("[4e] SPARQL: TestBenchSite site and testbench equipment in graph")
     site_labels = _sparql_site_labels()
-    assert BENSOFFICE_SITE_NAME in site_labels, f"Expected {BENSOFFICE_SITE_NAME!r} in site labels: {site_labels}"
-    eq_labels = _sparql_equipment_labels_for_site(BENSOFFICE_SITE_NAME)
-    for name in (BENS_FAKE_AHU_NAME, BENS_FAKE_VAV_NAME):
-        assert name in eq_labels, f"Expected {name!r} in equipment labels for BensOffice: {eq_labels}"
+    assert TESTBENCH_SITE_NAME in site_labels, f"Expected {TESTBENCH_SITE_NAME!r} in site labels: {site_labels}"
+    eq_labels = _sparql_equipment_labels_for_site(TESTBENCH_SITE_NAME)
+    for name in (TESTBENCH_AHU_NAME, TESTBENCH_VAV_NAME):
+        assert name in eq_labels, f"Expected {name!r} in equipment labels for TestBenchSite: {eq_labels}"
     print(f"    SPARQL result (site labels): {site_labels}")
-    print(f"    SPARQL result (equipment for BensOffice): {eq_labels}")
-    print(f"    OK — site {BENSOFFICE_SITE_NAME!r}, equipment {eq_labels}\n")
+    print(f"    SPARQL result (equipment for TestBenchSite): {eq_labels}")
+    print(f"    OK — site {TESTBENCH_SITE_NAME!r}, equipment {eq_labels}\n")
 
-    print("[4f] GET /data-model/ttl?save=true (validate BensOffice + testbench equipment in TTL)")
+    print("[4f] GET /data-model/ttl?save=true (validate TestBenchSite + testbench equipment in TTL)")
     code, ttl_body_bens = _request("GET", "/data-model/ttl?save=true")
     assert code == 200, f"GET /data-model/ttl failed: {code}"
     assert isinstance(ttl_body_bens, str), "TTL response should be string"
-    assert BENSOFFICE_SITE_NAME in ttl_body_bens, f"TTL should contain site label {BENSOFFICE_SITE_NAME!r}"
-    assert BENS_FAKE_AHU_NAME in ttl_body_bens, f"TTL should contain equipment {BENS_FAKE_AHU_NAME!r}"
-    assert BENS_FAKE_VAV_NAME in ttl_body_bens, f"TTL should contain equipment {BENS_FAKE_VAV_NAME!r}"
-    print(f"    OK — TTL contains {BENSOFFICE_SITE_NAME!r}, {BENS_FAKE_AHU_NAME!r}, {BENS_FAKE_VAV_NAME!r}\n")
+    assert TESTBENCH_SITE_NAME in ttl_body_bens, f"TTL should contain site label {TESTBENCH_SITE_NAME!r}"
+    assert TESTBENCH_AHU_NAME in ttl_body_bens, f"TTL should contain equipment {TESTBENCH_AHU_NAME!r}"
+    assert TESTBENCH_VAV_NAME in ttl_body_bens, f"TTL should contain equipment {TESTBENCH_VAV_NAME!r}"
+    print(f"    OK — TTL contains {TESTBENCH_SITE_NAME!r}, {TESTBENCH_AHU_NAME!r}, {TESTBENCH_VAV_NAME!r}\n")
 
-    # --- [4f1] BensOffice: 2 BACnet points (SA-T, ZoneTemp) so after [27] scraper still has points to poll ---
-    print("[4f1] PUT /data-model/import (2 BACnet points for BensOffice — SA-T, ZoneTemp; survives [27] so scraper has work)")
+    # --- [4f1] TestBenchSite: 2 BACnet points (SA-T, ZoneTemp) so after [27] scraper still has points to poll ---
+    print("[4f1] PUT /data-model/import (2 BACnet points for TestBenchSite — SA-T, ZoneTemp; survives [27] so scraper has work)")
     code, eq_list_bens = _request("GET", f"/equipment?site_id={bens_site_id}")
     assert ok(code), f"GET /equipment failed: {code}"
-    bens_ahu = next((e for e in eq_list_bens if e.get("name") == BENS_FAKE_AHU_NAME), None)
-    bens_vav = next((e for e in eq_list_bens if e.get("name") == BENS_FAKE_VAV_NAME), None)
-    assert bens_ahu and bens_vav, f"BensOffice equipment not found: {eq_list_bens}"
+    bens_ahu = next((e for e in eq_list_bens if e.get("name") == TESTBENCH_AHU_NAME), None)
+    bens_vav = next((e for e in eq_list_bens if e.get("name") == TESTBENCH_VAV_NAME), None)
+    assert bens_ahu and bens_vav, f"TestBenchSite equipment not found: {eq_list_bens}"
     code, existing_bens_points = _request("GET", f"/points?site_id={bens_site_id}")
     assert ok(code), f"GET /points failed: {code}"
     existing_bens_by_ext = {p["external_id"]: p for p in (existing_bens_points or []) if isinstance(p, dict) and p.get("external_id")}
@@ -553,8 +603,8 @@ def run():
         else:
             bens_pts.append({"site_id": bens_site_id, "external_id": ext_id, "bacnet_device_id": dev, "object_identifier": oid, "object_name": ext_id, "equipment_id": eq_id, "brick_type": brick, "rule_input": rule, "unit": "degF", "polling": True})
     code, res = _request("PUT", "/data-model/import", json_body={"points": bens_pts})
-    assert ok(code), f"PUT /data-model/import BensOffice points failed: {code} {res}"
-    print(f"    OK — BensOffice has 2 BACnet points; after [27] only BensOffice remains and scraper will poll these.\n")
+    assert ok(code), f"PUT /data-model/import TestBenchSite points failed: {code} {res}"
+    print(f"    OK — TestBenchSite has 2 BACnet points; after [27] only TestBenchSite remains and scraper will poll these.\n")
 
     # --- [4f2] Full LLM payload import into DemoSite (many BACnet points, two devices; idempotent) ---
     # Uses tools/demo_site_llm_payload.json: sites/equipments/relationships/points with string IDs (site-1, ahu-1, ...).
@@ -891,7 +941,7 @@ def run():
     assert isinstance(sample, dict) and ("point_id" in sample or "external_id" in sample), (
         "Export rows should have point_id and/or external_id"
     )
-    print(f"    OK ({len(export)} rows; CRUD points SA-T, OAT present with point_id/site). Ready for LLM tagging → PUT /data-model/import (see MONOREPO_PLAN.md).\n")
+    print(f"    OK ({len(export)} rows; CRUD points SA-T, OAT present with point_id/site). Ready for LLM tagging → PUT /data-model/import (see docs/modeling/ai_assisted_tagging and docs/appendix/technical_reference).\n")
 
     # --- Delete point 1 ---
     print("[17] DELETE /points/{id} (SA-T)")
@@ -948,11 +998,11 @@ def run():
             code, pdg2 = _request(
                 "POST",
                 "/bacnet/point_discovery_to_graph",
-                json_body={
-                    "instance": {"device_instance": dev_inst},
-                    "update_graph": True,
-                    "write_file": True,
-                },
+                json_body=_bacnet_body(
+                    instance={"device_instance": dev_inst},
+                    update_graph=True,
+                    write_file=True,
+                ),
                 timeout=30.0,
             )
             assert ok(code), f"point_discovery_to_graph re-add ({dev_inst}) failed: {code} {pdg2}"
@@ -1075,7 +1125,7 @@ def run():
         f"SPARQL ofdd:polling true count {sparql_n} < {min_expected}; TTL should have many points from demo_site_llm_payload.json"
     )
     assert api_n >= min_expected, (
-        f"API BACnet+polling count {api_n} < {min_expected}; scraper and Grafana need points in DB (DemoSite + BensOffice)"
+        f"API BACnet+polling count {api_n} < {min_expected}; scraper and Grafana need points in DB (DemoSite + TestBenchSite)"
     )
     # SPARQL counts all points with ofdd:polling true (Brick); API count is only BACnet points. So SPARQL >= api_n
     # when there are non-BACnet points with polling true (e.g. from other sites or previous runs).
@@ -1103,7 +1153,7 @@ def run():
         print(f"    No timeseries yet for DemoSite (status={code}); scraper may not have run or diy-bacnet unreachable. See note below.\n")
 
     # --- [26b] Optional: wait until N BACnet scrapes have run (poll GET /download/csv until distinct timestamps >= N) ---
-    if WAIT_SCRAPES >= 2:
+    if WAIT_SCRAPES >= 1:
         # Timeout must allow N scrapes at interval_min (e.g. 10 scrapes at 1 min = 10+ min)
         timeout_sec = max(
             2 * SCRAPE_INTERVAL_MIN * 60 + 120,
@@ -1143,21 +1193,27 @@ def run():
             time.sleep(poll_interval_sec)
         else:
             print(f"    WARNING — timeout after {timeout_sec}s; scrapes may not have run (check OFDD_BACNET_SCRAPE_INTERVAL_MIN and diy-bacnet reachability).\n")
+    else:
+        print("[26b] Skip (--wait-scrapes 0, default). Use --wait-scrapes 2 to wait for BACnet scrapes.\n")
 
-    # --- [27] Leave only one site: delete DemoSite so GET /data-model/check returns sites=1 (BensOffice only) ---
-    print("[27] DELETE /sites/{id} (DemoSite) — leave only BensOffice so data-model/check reports sites=1")
+    # --- [27] Leave only one site: delete DemoSite so GET /data-model/check returns sites=1 (TestBenchSite only) ---
+    print("[27] DELETE /sites/{id} (DemoSite) — leave only TestBenchSite so data-model/check reports sites=1")
     code, _ = _request("DELETE", f"/sites/{demo_site_id_full}")
     assert ok(code), f"DELETE DemoSite failed: {code}"
     code, _ = _request("GET", f"/sites/{demo_site_id_full}")
     assert code == 404, f"DemoSite should be gone: {code}"
-    # Refresh graph from DB (check reads in-memory graph; DELETE does not update it)
-    code, _ = _request("GET", "/data-model/ttl?save=true")
-    assert ok(code), "GET /data-model/ttl?save=true failed after delete"
+    # GET /data-model/check syncs Brick from DB then counts; so it reflects current DB (1 site = TestBenchSite)
     code, check = _request("GET", "/data-model/check")
     assert ok(code), f"GET /data-model/check failed: {code}"
     sites_count = (check or {}).get("sites", 0)
-    assert sites_count == 1, f"Expected 1 site after [27]; GET /data-model/check returned sites={sites_count}"
-    print(f"    OK — DemoSite deleted; GET /data-model/check: sites={sites_count} (BensOffice only).\n")
+    if sites_count != 1:
+        code, sites_list = _request("GET", "/sites")
+        names = [s.get("name") for s in (sites_list or []) if isinstance(s, dict)]
+        assert False, (
+            f"Expected 1 site (TestBenchSite) after [27]; GET /data-model/check returned sites={sites_count}. "
+            f"Remaining site names: {names}"
+        )
+    print(f"    OK — DemoSite deleted; GET /data-model/check: sites={sites_count} (TestBenchSite only).\n")
 
     print("=== All features passed ===\n")
     print(
@@ -1168,10 +1224,10 @@ def run():
     )
     print("  PUT /data-model/import (points + equipment feeds/fed_by), SPARQL feeds, polling=true (diy-bacnet ready),")
     print("  download (CSV, faults), lifecycle (create → delete → SPARQL; BACnet via point_discovery_to_graph).")
-    print("  config/brick_model.ttl is updated on every CRUD and serialize.")
-    print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (MONOREPO_PLAN.md § Prompt to the LLM) → PUT /data-model/import.")
+    print("  config/data_model.ttl is updated on every CRUD and serialize.")
+    print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (docs/modeling/ai_assisted_tagging, docs/appendix/technical_reference) → PUT /data-model/import.")
     print("  AI step: In production you use GET /data-model/export → LLM or human tags (brick_type, rule_input, polling) → PUT /data-model/import. See docs/modeling/ai_assisted_tagging.md and AGENTS.md.")
-    print("  Note: Only BensOffice remains after [27] (DemoSite deleted); GET /data-model/check returns sites=1. Grafana BACnet dropdowns then show only 2 points (BensOffice: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (MONOREPO_PLAN.md § Grafana). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
+    print("  Note: Only TestBenchSite remains after [27] (DemoSite deleted); GET /data-model/check returns sites=1. Grafana BACnet dropdowns then show only 2 points (TestBenchSite: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (docs/howto/grafana_cookbook). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
 
 
 def main() -> None:
@@ -1186,7 +1242,7 @@ def main() -> None:
     parser.add_argument(
         "--bacnet-url",
         default="http://localhost:8080",
-        help="URL sent to Open-FDD so it can proxy to diy-bacnet-server (default: localhost:8080 for Docker)",
+        help="Gateway URL sent in request body so API (e.g. in Docker) can reach BACnet. When base-url is localhost, default becomes host.docker.internal:8080 for container-to-host.",
     )
     parser.add_argument(
         "--skip-bacnet",
@@ -1203,9 +1259,9 @@ def main() -> None:
     parser.add_argument(
         "--wait-scrapes",
         type=int,
-        default=2,
+        default=0,
         metavar="N",
-        help="Wait until N BACnet scrapes have run before exiting (0 = do not wait). Default: 2.",
+        help="Wait until N BACnet scrapes have run before exiting (0 = skip). Default: 0.",
     )
     parser.add_argument(
         "--scrape-interval-min",
@@ -1221,9 +1277,12 @@ def main() -> None:
     if args.skip_bacnet:
         BACNET_URL = ""
     else:
-        BACNET_URL = (
-            (os.environ.get("BACNET_URL") or args.bacnet_url).strip().rstrip("/")
-        )
+        raw = (os.environ.get("BACNET_URL") or args.bacnet_url).strip().rstrip("/")
+        # When testing API at localhost, API is usually in Docker; from container, use host to reach BACnet
+        if raw == "http://localhost:8080" and ("localhost" in BASE_URL or "127.0.0.1" in BASE_URL):
+            BACNET_URL = BACNET_URL_FOR_API_DEFAULT
+        else:
+            BACNET_URL = raw
     BACNET_DEVICE_INSTANCE = int(
         os.environ.get("BACNET_DEVICE_INSTANCE", str(args.bacnet_device_instance))
     )

@@ -116,7 +116,7 @@ The API proxies to diy-bacnet-server for discovery and can import results into t
 | POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
 | POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
 | POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
-| POST   | /bacnet/point_discovery_to_graph | **Point discovery → in-memory graph**. Calls the gateway for point discovery (device instance), builds BACnet TTL from JSON, updates the graph and optionally writes `config/brick_model.ttl`. Body: `instance` (device_instance), optional `update_graph`, `write_file`, `url`. |
+| POST   | /bacnet/point_discovery_to_graph | **Point discovery → in-memory graph**. Calls the gateway for point discovery (device instance), builds BACnet TTL from JSON, updates the graph and optionally writes `config/data_model.ttl`. Body: `instance` (device_instance), optional `update_graph`, `write_file`, `url`. |
 
 Config UI at `/app/` provides a BACnet panel. Use **POST /bacnet/point_discovery_to_graph** to put BACnet devices/points into the graph; create points in the DB via CRUD or [data-model export/import](../modeling/ai_assisted_tagging).
 
@@ -164,7 +164,7 @@ Generate Brick TTL from current DB state. Returns Turtle (text/turtle).
 | Query param | Type   | Default | Description |
 |-------------|--------|---------|-------------|
 | site_id     | string | —       | Filter by site UUID or name; omit for all sites |
-| save        | bool   | true    | If true, write TTL to config/brick_model.ttl (best-effort; may fail if read-only) |
+| save        | bool   | true    | If true, write TTL to config/data_model.ttl (best-effort; may fail if read-only) |
 
 **Response:** `200 OK` — Turtle document. On save failure, body still returns TTL; headers `X-TTL-Save: failed` and `X-TTL-Save-Error` indicate the error.
 

@@ -33,7 +33,7 @@ class AnalystConfig:
         base = self.data_root
         self.equipment_catalog = self.equipment_catalog or base / "equipment.csv"
         self.heat_pumps_csv = self.heat_pumps_csv or base / "heat_pumps.csv"
-        self.brick_ttl = self.brick_ttl or base / "brick_model.ttl"
+        self.brick_ttl = self.brick_ttl or base / "data_model.ttl"
         self.report_docx = (
             self.report_docx or self.reports_root / "heat_pump_report.docx"
         )

@@ -15,14 +15,14 @@ Open-FDD treats the **building as a knowledge graph**: sites, equipment, and poi
 | Layer | Responsibility |
 |-------|----------------|
 | **diy-bacnet-server** | BACnet RPCs: Who-Is, point discovery (returns JSON objects per device). Open-FDD calls these. |
-| **Open-FDD** | Calls point discovery, builds clean BACnet TTL from the JSON, merges into the in-memory graph (Brick from DB + BACnet). CRUD owns sites, equipment, points. SPARQL runs over the combined model; sync writes `config/brick_model.ttl`. |
+| **Open-FDD** | Calls point discovery, builds clean BACnet TTL from the JSON, merges into the in-memory graph (Brick from DB + BACnet). CRUD owns sites, equipment, points. SPARQL runs over the combined model; sync writes `config/data_model.ttl`. |
 
 ---
 
 ## Flow
 
 1. **Point discovery** — Open-FDD calls **POST /bacnet/point_discovery** (gateway RPC) for a device instance; gateway returns a list of objects (object_identifier, object_name, etc.).
-2. **Point discovery to graph** — **POST /bacnet/point_discovery_to_graph** (same instance, `update_graph: true`) turns that JSON into clean BACnet TTL and updates the in-memory graph; optionally writes `config/brick_model.ttl`. SPARQL and **GET /data-model/ttl** see Brick + BACnet.
+2. **Point discovery to graph** — **POST /bacnet/point_discovery_to_graph** (same instance, `update_graph: true`) turns that JSON into clean BACnet TTL and updates the in-memory graph; optionally writes `config/data_model.ttl`. SPARQL and **GET /data-model/ttl** see Brick + BACnet.
 3. **Points in DB** — Create or edit points via CRUD (set `bacnet_device_id`, `object_identifier`, `object_name`). Optionally **GET /data-model/export** then LLM or human adds Brick types then **PUT /data-model/import**.
 4. **Scrape** — Data-model driven (points with `bacnet_device_id` / `object_identifier`).
 

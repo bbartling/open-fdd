@@ -33,9 +33,18 @@ def list_equipment(site_id: UUID | None = None):
 
 @router.post("", response_model=EquipmentRead)
 def create_equipment(body: EquipmentCreate):
-    """Create equipment under a site."""
+    """Create equipment under a site. Returns 409 if this site already has equipment with this name."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM equipment WHERE site_id = %s AND name = %s",
+                (str(body.site_id), body.name.strip()),
+            )
+            if cur.fetchone():
+                raise HTTPException(
+                    409,
+                    "Equipment with this name already exists for this site",
+                )
             cur.execute(
                 """INSERT INTO equipment (site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id)
                    VALUES (%s, %s, %s, %s, %s::jsonb, %s::uuid, %s::uuid)
@@ -98,6 +107,24 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
         params.append(str(body.fed_by_equipment_id))
     if not updates:
         return get_equipment(equipment_id)
+    if body.name is not None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, site_id FROM equipment WHERE id = %s",
+                    (str(equipment_id),),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    cur.execute(
+                        "SELECT id FROM equipment WHERE site_id = %s AND name = %s AND id != %s",
+                        (str(existing["site_id"]), body.name.strip(), str(equipment_id)),
+                    )
+                    if cur.fetchone():
+                        raise HTTPException(
+                            409,
+                            "Another equipment with this name already exists for this site",
+                        )
     params.append(str(equipment_id))
     with get_conn() as conn:
         with conn.cursor() as cur:

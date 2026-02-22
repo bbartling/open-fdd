@@ -14,7 +14,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## Workflow (export → tag → import)
 
-1. **Discover** — Use the API: **POST /bacnet/whois_range**, then **POST /bacnet/point_discovery_to_graph** per device. The in-memory graph and `config/brick_model.ttl` now contain BACnet devices and objects.
+1. **Discover** — Use the API: **POST /bacnet/whois_range**, then **POST /bacnet/point_discovery_to_graph** per device. The in-memory graph and `config/data_model.ttl` now contain BACnet devices and objects.
 
 2. **Sites and equipment** — Create the building/site and equipment (AHUs, VAVs, zones) via **POST /sites** and **POST /equipment**. Note the returned `site_id` and `equipment_id` UUIDs; the import body requires real UUIDs from the API.
 
@@ -45,7 +45,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-For a **full prompt to the LLM**, rules context, and exact schema details, see **[AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md)** in the repo. It defines the primary task (Brick tagging for the job), the export → tag → import flow, polling semantics, equipment feeds, and the exact import body (points + equipment only). High-level dev notes and the same workflow are also in **MONOREPO_PLAN.md**.
+For a **full prompt to the LLM**, rules context, and exact schema details, see **[AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md)** in the repo. It defines the primary task (Brick tagging for the job), the export → tag → import flow, polling semantics, equipment feeds, and the exact import body (points + equipment only). The same workflow and data model API details are in the [Technical reference](../appendix/technical_reference).
 
 ---
 

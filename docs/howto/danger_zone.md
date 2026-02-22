@@ -28,7 +28,7 @@ When you delete via the API (Swagger, CRUD UI, or scripts):
 | **Equipment** | Points (with that equipment_id), **timeseries_readings** for those points |
 | **Point** | **timeseries_readings** for that point |
 
-So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/brick_model.ttl`) is regenerated and written to disk. See [Data modeling](modeling/overview).
+So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/data_model.ttl`) is regenerated and written to disk. See [Data modeling](modeling/overview).
 
 **Full reset script:** `python tools/delete_all_sites_and_reset.py` uses only the API (GET /sites, DELETE /sites/{id} for each, then POST /data-model/reset). It does not run SQL inside containers—the same flow a future UI would use.
 
@@ -128,7 +128,7 @@ See [Verification & Data Flow](verification) for API checks and scraper validati
 To clear the **data model** (Brick TTL and in-memory graph) but keep the stack and DB schema:
 
 1. **Delete every site** via the API (e.g. `python tools/delete_all_sites_and_reset.py`, or `GET /sites` then `DELETE /sites/{id}` for each). Cascade removes equipment, points, and timeseries.
-2. **POST /data-model/reset** — Clears the in-memory graph and repopulates from the DB only (Brick). BACnet triples and orphans are removed; the graph now has only what’s in the DB. Since the DB has no sites, the TTL is effectively empty and is written to `config/brick_model.ttl`.
+2. **POST /data-model/reset** — Clears the in-memory graph and repopulates from the DB only (Brick). BACnet triples and orphans are removed; the graph now has only what’s in the DB. Since the DB has no sites, the TTL is effectively empty and is written to `config/data_model.ttl`.
 
 **Important:** `GET /data-model/ttl` (and `?save=true`) always reflects the **current DB**: it syncs Brick from the DB, then serializes the graph. So if you still see sites/points in the TTL after “delete all sites + reset”, you are either (1) calling a **different** API host (e.g. script used `localhost:8000` but you curl `192.168.204.16:8000`), or (2) another process (e.g. weather scraper) re-created a site/points before you fetched the TTL. Use the same `BASE_URL` for the script and for curl, and run `GET /sites` after the script to confirm the list is empty.
 
@@ -140,5 +140,6 @@ Use CRUD deletes to remove specific sites, equipment, or points. Data cascades a
 
 ## Unit tests
 
-- **`tools/test_crud_api.py`** — End-to-end: creates then deletes site, equipment, points. Deletes cascade (timeseries, fault_results for site). Run against live API.
+- **`tools/bacnet_crud_smoke_test.py`** — Simple BACnet + CRUD: whois range, point discovery, create site/equipment/points from discovered devices. Pass `--start-instance` / `--end-instance` (e.g. 1–3456999). Run against live API.
+- **`tools/graph_and_crud_test.py`** — Full e2e: CRUD, SPARQL, data model, import, download; creates then deletes sites; only TestBenchSite remains at end.
 - **`open_fdd/tests/platform/test_crud_api.py`** — Unit tests with mocked DB; verify API contract and status codes.

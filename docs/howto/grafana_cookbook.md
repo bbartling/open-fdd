@@ -6,7 +6,7 @@ nav_order: 40
 
 # Grafana SQL cookbook
 
-Open-FDD provisions **only a PostgreSQL/TimescaleDB datasource** for Grafana. No dashboards are prebuilt. This cookbook shows how to set up the datasource (if needed) and how to build dashboards yourself using SQL against the Open-FDD database.
+Open-FDD provisions **only a PostgreSQL/TimescaleDB datasource** for Grafana. No dashboards are prebuilt. This cookbook shows how to set up the datasource (if needed) and how to build dashboards yourself using SQL against the Open-FDD database. For RDF/SPARQL validation of the data model (sites, equipment, points, BACnet, config), see the [SPARQL cookbook](../modeling/sparql_cookbook).
 
 ## Datasource
 

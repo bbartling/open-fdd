@@ -5,7 +5,7 @@ nav_order: 2
 
 # System Overview
 
-Open-FDD is an edge analytics platform for smart buildings. This section describes the architecture, services, and data flow.
+Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in fault detection and diagnostics (FDD) for HVAC. It runs on-premises so facilities keep control of their data and avoid vendor lock-in. This section describes the architecture, services, and data flow.
 
 ---
 
@@ -45,7 +45,7 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 ## Data flow
 
 1. **Ingestion:** BACnet scraper and weather scraper write to `timeseries_readings` (point_id, ts, value).
-2. **Data model (knowledge graph):** The building is represented as a single semantic model: sites, equipment, points in the DB, with Brick TTL derived and merged with BACnet (from point discovery via diy-bacnet-server). CRUD and **POST /bacnet/point_discovery_to_graph** update this model; SPARQL queries it. One TTL file `config/brick_model.ttl` holds the Brick section (synced from DB) plus the BACnet section (in-memory graph). A background thread serializes the graph to disk every 5 minutes (configurable via `OFDD_GRAPH_SYNC_INTERVAL_MIN`); **POST /data-model/serialize** runs the same write on demand.
+2. **Data model (unified graph):** The building is represented as a **unified graph**—one semantic model combining Brick (sites, equipment, points from the DB), BACnet RDF (from point discovery via diy-bacnet-server), platform config, and room for future ontologies (e.g. ASHRAE 223P). CRUD and **POST /bacnet/point_discovery_to_graph** update this model; SPARQL queries it. One TTL file `config/data_model.ttl` holds the graph; a background thread serializes it to disk every 5 minutes (configurable via `OFDD_GRAPH_SYNC_INTERVAL_MIN`); **POST /data-model/serialize** runs the same write on demand.
 3. **FDD (Python/pandas):** The FDD loop pulls data into a pandas DataFrame, runs YAML rules, writes `fault_results` to the database. Fault logic lives in the rule runner; the database is read/write storage.
 4. **Visualization:** Grafana queries TimescaleDB for timeseries and fault results.
 
@@ -65,4 +65,4 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 - **Equipment** — Devices (AHUs, VAVs, heat pumps). Belong to a site.
 - **Points** — Time-series references. Have `external_id` (raw name), `rule_input` (FDD column ref), optional `brick_type` (Brick class).
 - **Fault rules** — YAML files (bounds, flatline, hunting, expression). Run against DataFrame; produce boolean fault flags. See [Fault rules for HVAC](rules/overview).
-- **Brick TTL** — Semantic model (knowledge graph). Maps Brick classes → `external_id` for rule resolution. Merged with BACnet RDF from diy-bacnet-server (bacpypes3); queryable via SPARQL.
+- **Unified graph** — One semantic model (Brick + BACnet + platform config; future 223P or other ontologies). Stored in `config/data_model.ttl`; maps Brick classes → `external_id` for rule resolution; queryable via SPARQL.

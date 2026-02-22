@@ -62,7 +62,7 @@ def tmp_analyst_dir(tmp_path):
 :hp_1_zt a brick:Zone_Temperature_Sensor ; rdfs:label "zt" ; brick:isPointOf :hp_1 ; ofdd:mapsToRuleInput "zt" .
 :hp_1_fan a brick:Supply_Fan_Status ; rdfs:label "fan_status" ; brick:isPointOf :hp_1 ; ofdd:mapsToRuleInput "fan_status" .
 """
-    (data / "brick_model.ttl").write_text(ttl)
+    (data / "data_model.ttl").write_text(ttl)
 
     # Copy heat pump rules
     rules_src = Path(__file__).resolve().parent.parent.parent / "rules"

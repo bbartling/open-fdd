@@ -4,7 +4,7 @@ Run SPARQL queries against the Brick TTL to test and inspect the data model.
 
 Usage:
     python -m open_fdd.analyst.run_sparql
-    python -m open_fdd.analyst.run_sparql --ttl data/brick_model.ttl sparql/
+    python -m open_fdd.analyst.run_sparql --ttl data/data_model.ttl sparql/
 """
 
 from __future__ import annotations

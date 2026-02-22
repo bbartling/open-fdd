@@ -63,7 +63,7 @@
       .then((sites) => {
         console.log("[tree] sites loaded", sites.length, sites);
         if (sites.length === 0) {
-          treeEl.innerHTML = "<li class=\"tree-empty\">No sites yet. Click <strong>+ Site</strong> to add one (or use the API). The data model here is the source for <code>brick_model.ttl</code>.</li>";
+          treeEl.innerHTML = "<li class=\"tree-empty\">No sites yet. Click <strong>+ Site</strong> to add one (or use the API). The data model here is the source for <code>data_model.ttl</code>.</li>";
           return;
         }
         treeEl.innerHTML = "";
