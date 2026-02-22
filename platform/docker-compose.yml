@@ -2,6 +2,9 @@
 # Run: docker compose -f platform/docker-compose.yml up -d
 # Or: ./scripts/bootstrap.sh
 #
+# Only one service runs BACnet scrape: bacnet-scraper (openfdd_bacnet_scraper).
+# weather-scraper and fdd-loop use the same image but different commands; logs: docker logs -f openfdd_bacnet_scraper
+#
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
 # Rules YAML and config are mounted from repo — edit on host, containers see changes.
 #
@@ -48,7 +51,8 @@ services:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_BACNET_SCRAPE_ENABLED: "true"
-      OFDD_BACNET_SCRAPE_INTERVAL_MIN: "5"
+      # 1 = every minute (for tests); override via platform/.env OFDD_BACNET_SCRAPE_INTERVAL_MIN
+      OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
     volumes:
       - ../config:/app/config:ro
@@ -117,6 +121,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      GF_SERVER_HTTP_ADDR: "0.0.0.0"
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -144,7 +149,7 @@ services:
       OFDD_RULE_INTERVAL_HOURS: "3"
       OFDD_LOOKBACK_DAYS: "3"
       OFDD_RULES_DIR: "analyst/rules"
-      OFDD_BRICK_TTL_PATH: "config/brick_model.ttl"
+      OFDD_BRICK_TTL_PATH: "config/data_model.ttl"
     volumes:
       - ../open_fdd:/app/open_fdd:ro
       - ../analyst/rules:/app/analyst/rules:ro
@@ -180,12 +185,14 @@ services:
       options: *log-opts
 
   # CRUD API — sites, points, equipment, timeseries (data model)
+  # config volume must be rw so data_model.ttl is written to the host (same path as mount).
   api:
     build:
       context: ..
       dockerfile: platform/Dockerfile.api
     image: openfdd-api:latest
     container_name: openfdd_api
+    working_dir: /app
     ports:
       - "8000:8000"
     extra_hosts:
@@ -194,6 +201,8 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       # From inside the API container, bacnet-server (network_mode: host) is on the host:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
+      # Absolute path so writes always go to the mounted volume (../config → /app/config)
+      OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config

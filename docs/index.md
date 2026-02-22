@@ -5,7 +5,9 @@ nav_order: 1
 
 # Open-FDD
 
-Open-FDD is an open-source Automated Fault Detection and Diagnostics (AFDD) platform specifically designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational system data into actionable cost-saving insights while providing a secure integration layer that any cloud platform can leverage without vendor lock-in. Independent U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs, representing meaningful annual cost reductions depending on facility size and energy spend.
+Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in **fault detection and diagnostics (FDD) for HVAC**. It helps facilities optimize energy use and cut costs; because it runs **on-premises**, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an Automated Fault Detection and Diagnostics (AFDD) stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
+
+At its core is a **unified graph**: one semantic model that combines Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P. That single graph is queried via SPARQL and serialized to `config/data_model.ttl`; CRUD and discovery both update it.
 
 ---
 
@@ -14,7 +16,7 @@ Open-FDD is an open-source Automated Fault Detection and Diagnostics (AFDD) plat
 Open-FDD is an **edge analytics and rules engine** for building automation. It:
 
 - **Ingests** BACnet points via diy-bacnet-server (JSON-RPC) and weather via Open-Meteo
-- **Stores** telemetry in TimescaleDB with a Brick-semantic data model
+- **Stores** telemetry in TimescaleDB and models the building in a **unified RDF graph** (Brick + BACnet + config)
 - **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) on a configurable schedule
 - **Exposes** REST APIs for sites, points, equipment, data-model export/import, bulk timeseries and fault download (Excel-friendly CSV, JSON for cloud), TTL generation, SPARQL validation
 - **Visualizes** timeseries and fault results in Grafana
@@ -44,16 +46,19 @@ cd open-fdd
 |---------|--------------|
 | [System Overview](overview) | Architecture, services, data flow |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
-| [BACnet](bacnet/overview) | Discovery, scraping, RPC |
-| [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, data-model API |
+| [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |
+| [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
+| [Appendix](appendix) | [Technical reference](appendix/technical_reference) — directory structure, env vars, unit tests, BACnet scrape, DB schema, LLM workflow |
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
+
+**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in **AGENTS.md**.
 
 ---
 

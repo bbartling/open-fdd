@@ -6,7 +6,7 @@ If this works, the Brick model is valid for open-fdd.
 
 Usage:
     python examples/test_sparql.py
-    python examples/test_sparql.py --ttl brick_model.ttl
+    python examples/test_sparql.py --ttl data_model.ttl
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ _script_dir = Path(__file__).resolve().parent
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Test SPARQL against Brick TTL")
-    parser.add_argument("--ttl", default="brick_model.ttl", help="Path to Brick TTL")
+    parser.add_argument("--ttl", default="data_model.ttl", help="Path to data model TTL")
     args = parser.parse_args()
 
     ttl_path = _script_dir / args.ttl

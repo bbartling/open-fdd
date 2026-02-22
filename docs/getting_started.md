@@ -9,6 +9,28 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ---
 
+## Do this to bootstrap
+
+1. **Prerequisites:** Docker, Docker Compose, and Git installed (see below).
+2. **Clone and run bootstrap** (from any directory):
+
+   ```bash
+   git clone https://github.com/bbartling/open-fdd.git
+   cd open-fdd
+   ./scripts/bootstrap.sh
+   ```
+
+   That’s it. The script builds and starts the full stack (DB, Grafana, API, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
+
+   - **API:** http://localhost:8000/docs  
+   - **Grafana:** http://localhost:3000 (admin/admin)  
+   - **BACnet Swagger:** http://localhost:8080/docs  
+   - **DB:** localhost:5432/openfdd (postgres/postgres)
+
+3. **Optional:** Set `OFDD_*` in `platform/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
+
+---
+
 ## Prerequisites
 
 - **OS:** Linux (Ubuntu Server latest, or Linux Mint), x86. Keep the system updated:
@@ -27,9 +49,18 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ## What the bootstrap script does
 
-`scripts/bootstrap.sh` builds and starts the platform, waits for Postgres to be ready (~15s), applies database migrations (idempotent), and prints service URLs. It does **not** purge or wipe the database; only `--reset-grafana` touches a volume (Grafana only). See [Danger zone](howto/danger_zone) for when data is purged.
+`scripts/bootstrap.sh` (run from the **repo root**):
 
-**Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. Bootstrap builds and starts the BACnet stack automatically; ensure you have run [BACnet discovery](bacnet/overview#discovery-first-then-curate-the-csv) and curated the CSV **before** relying on the scraper. Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `platform/` if needed.
+1. Ensures **diy-bacnet-server** exists as a sibling repo (clones it if missing).
+2. Runs **docker compose up -d --build** from `platform/` (builds all images, starts all services).
+3. Waits for **Postgres** to be ready (~15s).
+4. Applies **database migrations** (idempotent; safe on existing DBs).
+5. **Seeds platform config** via PUT /config (waits for API, then sends default or `platform/.env` values into the RDF graph).
+6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
+
+It does **not** purge or wipe the database on a normal run; only `--reset-grafana` wipes the Grafana volume. See [Danger zone](howto/danger_zone) for when data is purged.
+
+**Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. For BACnet data you can use the **data model** (discover via API → import points) or a CSV; see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `platform/` if needed.
 
 **Bootstrap options:**
 
@@ -84,4 +115,4 @@ For step-by-step procedures and reference, use the howto guides:
 - **[Danger zone](howto/danger_zone)** — When data is purged, CRUD cascade, how to wipe and start over.
 - **[Security & Caddy](security)** — Basic auth, throttling, TLS.
 
-For **BACnet driver setup** (discovery → curate CSV → scrape): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview).
+For **BACnet driver setup** (discovery → curate CSV → scrape): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). To run a simple BACnet + CRUD smoke test with your instance range: `python tools/bacnet_crud_smoke_test.py --start-instance 1 --end-instance 3456999`. For the full CRUD + SPARQL e2e test: `python tools/graph_and_crud_test.py` (see [SPARQL cookbook](modeling/sparql_cookbook)).

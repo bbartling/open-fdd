@@ -2,7 +2,7 @@
 Run all rules from my_rules against CSV data using Brick model mapping.
 
 Workflow:
-1. Load Brick TTL (brick_model.ttl) and resolve column_map
+1. Load data model TTL (data_model.ttl) and resolve column_map
 2. Load equipment types from Brick (e.g. VAV_AHU)
 3. Load all rules from my_rules
 4. Filter rules by equipment_type (run only rules that apply to model equipment)
@@ -13,7 +13,7 @@ Prerequisite: Run validate_data_model.py first to ensure mapping is valid.
 
 Usage:
     python run_all_rules_brick.py
-    python run_all_rules_brick.py --ttl brick_model.ttl --rules my_rules --csv data_ahu7.csv
+    python run_all_rules_brick.py --ttl data_model.ttl --rules my_rules --csv data_ahu7.csv
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def _add_synthetic_columns(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run all Brick-mapped rules on CSV")
-    parser.add_argument("--ttl", default="brick_model.ttl", help="Path to Brick TTL")
+    parser.add_argument("--ttl", default="data_model.ttl", help="Path to data model TTL")
     parser.add_argument("--rules", default="my_rules", help="Path to rules directory")
     parser.add_argument("--csv", default="data_ahu7.csv", help="Path to CSV data")
     parser.add_argument(

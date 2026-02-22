@@ -4,7 +4,7 @@ This folder holds **your** YAML fault rules. Copy it to your desktop (or anywher
 
 ## Brick-driven workflow
 
-When using `brick_model.ttl` and `run_all_rules_brick.py`:
+When using `data_model.ttl` and `run_all_rules_brick.py`:
 
 1. **Validate first**: `python examples/validate_data_model.py`
 2. **Run faults**: `python examples/run_all_rules_brick.py`

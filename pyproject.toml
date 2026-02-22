@@ -35,13 +35,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Development: use this for clone + run tests + black. pip install -e ".[dev]"
 dev = [
     "pytest",
     "black[jupyter]",
     "pre-commit",
     "httpx",
+    "psycopg2-binary",
+    "requests",
+    "pydantic-settings",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "rdflib",
 ]
-# One-shot install for clone + run tests + black: pip install -e ".[test]"
+# Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
 test = [
     "pytest",
     "black[jupyter]",
@@ -96,6 +104,8 @@ open_fdd = ["rules/*.yaml", "platform/static/*"]
 [tool.black]
 line-length = 88
 target-version = ["py314"]
+# Exclude files that trigger Black bugs or are intentionally unformatted (e2e script).
+extend-exclude = "open_fdd/platform/data_model_ttl\\.py|tools/graph_and_crud_test\\.py"
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]

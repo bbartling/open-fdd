@@ -45,6 +45,7 @@ def get_bacnet_points_from_data_model(
                     JOIN sites s ON s.id = p.site_id
                     WHERE p.bacnet_device_id IS NOT NULL AND p.object_identifier IS NOT NULL
                       AND (s.id::text = %s OR s.name = %s)
+                      AND COALESCE(p.polling, true) = true
                     ORDER BY p.bacnet_device_id, p.object_identifier
                     """,
                     (site_id, site_id),
@@ -55,6 +56,7 @@ def get_bacnet_points_from_data_model(
                     SELECT id, site_id, external_id, bacnet_device_id, object_identifier, object_name
                     FROM points
                     WHERE bacnet_device_id IS NOT NULL AND object_identifier IS NOT NULL
+                      AND COALESCE(polling, true) = true
                     ORDER BY site_id, bacnet_device_id, object_identifier
                     """,
                 )
@@ -66,6 +68,7 @@ def get_bacnet_points_from_data_model(
             did = f"device,{did}" if did else ""
         out.append(
             {
+                "id": r["id"],
                 "site_id": str(r["site_id"]),
                 "external_id": (r["external_id"] or "").strip(),
                 "bacnet_device_id": (r["bacnet_device_id"] or "").strip(),
@@ -130,8 +133,8 @@ async def _scrape_via_rpc(
 
     rpc_base = url.rstrip("/")
     errors: list[str] = []
-    # (ts, site_uuid, external_id, value, bacnet_device_id, object_identifier)
-    readings: list[tuple[datetime, str, str, float, str, str]] = []
+    # (ts, site_uuid, external_id, value, bacnet_device_id, object_identifier, point_id or None)
+    readings: list[tuple[datetime, str, str, float, str, str, Optional[int]]] = []
     ts = datetime.utcnow()
     site_uuid_cache = _site_uuid_cache()
 
@@ -187,10 +190,14 @@ async def _scrape_via_rpc(
                 continue
 
             logger.info(
-                "BACnet device %s: reading %d points (RPC)", device_id_str, len(points)
+                "BACnet device %s: read_multiple %d points (polling=true)",
+                device_id_str,
+                len(points),
             )
-            # (oid_str, line_num, obj_name, row_site_id, row_external_id) when from data model
-            point_specs: list[tuple[str, int, str, Optional[str], Optional[str]]] = []
+            # (oid_str, line_num, obj_name, row_site_id, row_external_id, point_id or None)
+            point_specs: list[
+                tuple[str, int, str, Optional[str], Optional[str], Optional[int]]
+            ] = []
             for line_num, r in points:
                 oid_str = r.get("object_identifier", "").strip().strip('"')
                 obj_name = (r.get("object_name") or "").strip() or oid_str.replace(
@@ -198,16 +205,18 @@ async def _scrape_via_rpc(
                 )
                 row_site_id = (r.get("site_id") or "").strip() or None
                 row_ext_id = (r.get("external_id") or "").strip() or None
+                point_id = r.get("id")  # data-model path: use for timeseries only
                 point_specs.append(
-                    (oid_str, line_num, obj_name, row_site_id, row_ext_id)
+                    (oid_str, line_num, obj_name, row_site_id, row_ext_id, point_id)
                 )
 
-            # (row_site_id, row_ext_id, obj_name, val, oid_str) for points upsert
+            # (row_site_id, row_ext_id, obj_name, val, oid_str, point_id or None)
             device_readings: list[
-                tuple[Optional[str], Optional[str], str, float, str]
+                tuple[Optional[str], Optional[str], str, float, str, Optional[int]]
             ] = []
 
-            if len(point_specs) > 1:
+            # Always use client_read_multiple per device (diy-bacnet; 1 or more points)
+            if point_specs:
                 req = {
                     "jsonrpc": "2.0",
                     "id": "1",
@@ -217,10 +226,10 @@ async def _scrape_via_rpc(
                             "device_instance": device_instance,
                             "requests": [
                                 {
-                                    "object_identifier": oid,
+                                    "object_identifier": s[0],
                                     "property_identifier": "present-value",
                                 }
-                                for oid, _, _ in point_specs
+                                for s in point_specs
                             ],
                         }
                     },
@@ -248,6 +257,7 @@ async def _scrape_via_rpc(
                                 s[2],
                                 s[3] if len(s) > 3 else None,
                                 s[4] if len(s) > 4 else None,
+                                s[5] if len(s) > 5 else None,
                             )
                             for s in point_specs
                         }
@@ -258,29 +268,20 @@ async def _scrape_via_rpc(
                                 if idx < len(point_specs)
                                 else oid_str
                             )
-                            t = oid_to_spec.get(
-                                oid_str,
-                                (
-                                    (
-                                        point_specs[idx][1],
-                                        point_specs[idx][2],
-                                        (
-                                            point_specs[idx][3]
-                                            if len(point_specs[idx]) > 3
-                                            else None
-                                        ),
-                                        (
-                                            point_specs[idx][4]
-                                            if len(point_specs[idx]) > 4
-                                            else None
-                                        ),
-                                    )
-                                    if idx < len(point_specs)
-                                    else (0, oid_str, None, None)
-                                ),
-                            )
-                            line_num, obj_name = t[0], t[1]
-                            row_sid, row_ext = t[2], t[3]
+                            spec = oid_to_spec.get(oid_str)
+                            if spec is None and idx < len(point_specs):
+                                s = point_specs[idx]
+                                spec = (
+                                    s[1],
+                                    s[2],
+                                    s[3] if len(s) > 3 else None,
+                                    s[4] if len(s) > 4 else None,
+                                    s[5] if len(s) > 5 else None,
+                                )
+                            if spec is None:
+                                spec = (0, oid_str, None, None, None)
+                            line_num, obj_name = spec[0], spec[1]
+                            row_sid, row_ext, point_id_spec = spec[2], spec[3], spec[4]
                             val_raw = item.get("value")
                             if isinstance(val_raw, str) and val_raw.startswith(
                                 "Error:"
@@ -290,7 +291,14 @@ async def _scrape_via_rpc(
                                 val = _pv_to_float(val_raw)
                                 if val is not None:
                                     device_readings.append(
-                                        (row_sid, row_ext, obj_name, val, oid_from_spec)
+                                        (
+                                            row_sid,
+                                            row_ext,
+                                            obj_name,
+                                            val,
+                                            oid_from_spec,
+                                            point_id_spec,
+                                        )
                                     )
                         logger.info(
                             "BACnet RPC client_read_multiple OK for %s: %d values",
@@ -305,7 +313,13 @@ async def _scrape_via_rpc(
                     )
 
             if not device_readings and point_specs:
-                for oid_str, line_num, obj_name, row_sid, row_ext in point_specs:
+                for spec in point_specs:
+                    oid_str = spec[0]
+                    line_num = spec[1]
+                    obj_name = spec[2]
+                    row_sid = spec[3] if len(spec) > 3 else None
+                    row_ext = spec[4] if len(spec) > 4 else None
+                    point_id_fb = spec[5] if len(spec) > 5 else None
                     req = {
                         "jsonrpc": "2.0",
                         "id": str(line_num),
@@ -333,20 +347,42 @@ async def _scrape_via_rpc(
                             val = _pv_to_float(result["present-value"])
                             if val is not None:
                                 device_readings.append(
-                                    (row_sid, row_ext, obj_name, val, oid_str)
+                                    (
+                                        row_sid,
+                                        row_ext,
+                                        obj_name,
+                                        val,
+                                        oid_str,
+                                        point_id_fb,
+                                    )
                                 )
                     except Exception as e:
                         errors.append(f"Line {line_num} {oid_str}: {e}")
 
             bacnet_device_id = str(device_instance)
-            for row_sid, row_ext, obj_name, val, oid_str in device_readings:
+            for (
+                row_sid,
+                row_ext,
+                obj_name,
+                val,
+                oid_str,
+                point_id_reading,
+            ) in device_readings:
                 site_uuid_use = resolve_cached(row_sid) if row_sid else site_uuid
                 if not site_uuid_use:
                     errors.append(f"No site for point {obj_name} (site_id={row_sid})")
                     continue
                 ext_id_use = row_ext or obj_name
                 readings.append(
-                    (ts, str(site_uuid_use), ext_id_use, val, bacnet_device_id, oid_str)
+                    (
+                        ts,
+                        str(site_uuid_use),
+                        ext_id_use,
+                        val,
+                        bacnet_device_id,
+                        oid_str,
+                        point_id_reading,
+                    )
                 )
 
     rows_inserted = 0
@@ -361,26 +397,30 @@ async def _scrape_via_rpc(
                     val,
                     bacnet_device_id,
                     object_identifier,
+                    point_id_from_row,
                 ) in readings:
-                    cur.execute(
-                        """
-                        INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (site_id, external_id) DO UPDATE SET
-                          bacnet_device_id = EXCLUDED.bacnet_device_id,
-                          object_identifier = EXCLUDED.object_identifier,
-                          object_name = EXCLUDED.object_name
-                        RETURNING id
-                        """,
-                        (
-                            sid,
-                            ext_id,
-                            bacnet_device_id,
-                            object_identifier,
-                            ext_id,
-                        ),
-                    )
-                    pid = cur.fetchone()["id"]
+                    if point_id_from_row is not None:
+                        pid = point_id_from_row
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name)
+                            VALUES (%s, %s, %s, %s, %s)
+                            ON CONFLICT (site_id, external_id) DO UPDATE SET
+                              bacnet_device_id = EXCLUDED.bacnet_device_id,
+                              object_identifier = EXCLUDED.object_identifier,
+                              object_name = EXCLUDED.object_name
+                            RETURNING id
+                            """,
+                            (
+                                sid,
+                                ext_id,
+                                bacnet_device_id,
+                                object_identifier,
+                                ext_id,
+                            ),
+                        )
+                        pid = cur.fetchone()["id"]
                     cur.execute(
                         """
                         INSERT INTO timeseries_readings (ts, site_id, point_id, value)

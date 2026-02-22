@@ -106,3 +106,40 @@ def test_build_ttl_site_with_equipment_and_points():
     assert "Supply_Air_Static_Pressure_Sensor" in ttl
     assert "brick:isPointOf" in ttl
     assert "brick:isPartOf" in ttl
+
+
+def test_build_ttl_one_subject_per_entity_no_duplicate_uris():
+    """Serialized TTL has exactly one subject URI per site, per equipment, per point (no duplicates)."""
+    site_id1 = uuid4()
+    site_id2 = uuid4()
+    eq_id = uuid4()
+    pt_id = uuid4()
+    sites = [
+        {"id": site_id1, "name": "SiteA"},
+        {"id": site_id2, "name": "SiteB"},
+    ]
+    equipment = [{"id": eq_id, "site_id": site_id1, "name": "AHU-1", "equipment_type": "AHU"}]
+    points = [
+        {
+            "id": pt_id,
+            "site_id": site_id1,
+            "external_id": "SA-T",
+            "brick_type": "Point",
+            "fdd_input": None,
+            "unit": "degF",
+            "equipment_id": eq_id,
+        }
+    ]
+    cursor = _mock_cursor(sites, equipment, points)
+    conn = _mock_conn(cursor)
+    with patch("open_fdd.platform.data_model_ttl.get_conn", return_value=conn):
+        ttl = build_ttl_from_db()
+    # Each entity has a unique subject (:site_<uuid>, :eq_<uuid>, :pt_<uuid>); count type declarations
+    assert ttl.count("a brick:Site") == 2
+    assert ttl.count("a brick:AHU") == 1
+    assert ttl.count("a brick:Point") == 1
+    # Site URIs must be distinct (no duplicate site subjects)
+    s1_ref = f":site_{str(site_id1).replace('-', '_')}"
+    s2_ref = f":site_{str(site_id2).replace('-', '_')}"
+    assert ttl.count(s1_ref) >= 1
+    assert ttl.count(s2_ref) >= 1

@@ -10,7 +10,7 @@ Scripts and sample data for **open-fdd** tutorials.
 | `check_faults_ahu7_bounds.py` | Bounds (out-of-range) sensor check |
 | `my_rules/sensor_flatline.yaml` | Flatline rule config (your rules) |
 | `my_rules/sensor_bounds.yaml` | Bounds rule config (your rules) |
-| `brick_model.ttl` | Brick TTL model (optional) |
+| `data_model.ttl` | Data model TTL (Brick + optional BACnet) (optional) |
 | `brick_resolver.py` | Resolve column map from TTL |
 
 ## Data

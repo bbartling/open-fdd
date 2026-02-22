@@ -26,9 +26,12 @@ def list_sites():
 
 @router.post("", response_model=SiteRead)
 def create_site(body: SiteCreate):
-    """Create a site."""
+    """Create a site. Returns 409 if a site with this name already exists."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT id FROM sites WHERE name = %s", (body.name.strip(),))
+            if cur.fetchone():
+                raise HTTPException(409, "Site with this name already exists")
             cur.execute(
                 "INSERT INTO sites (name, description, metadata) VALUES (%s, %s, %s::jsonb) RETURNING id, name, description, metadata, created_at",
                 (body.name, body.description, json.dumps(body.metadata_ or {})),
@@ -72,6 +75,15 @@ def update_site(site_id: UUID, body: SiteUpdate):
         params.append(json.dumps(body.metadata_))
     if not updates:
         return get_site(site_id)
+    if body.name is not None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM sites WHERE name = %s AND id != %s",
+                    (body.name.strip(), str(site_id)),
+                )
+                if cur.fetchone():
+                    raise HTTPException(409, "Another site with this name already exists")
     params.append(str(site_id))
     with get_conn() as conn:
         with conn.cursor() as cur:

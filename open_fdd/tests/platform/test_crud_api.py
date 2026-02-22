@@ -7,6 +7,11 @@ from uuid import uuid4
 
 import pytest
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
@@ -97,7 +102,9 @@ def test_sites_create():
         "metadata": {},
         "created_at": now,
     }
+    # First fetchone: duplicate check (no existing site); second: INSERT RETURNING
     conn = _mock_conn(fetchone=row)
+    conn.cursor.return_value.__enter__.return_value.fetchone.side_effect = [None, row]
     with _patch_db(conn), patch("open_fdd.platform.api.sites.sync_ttl_to_file"):
         r = client.post("/sites", json={"name": "TestSite", "description": "A site"})
     assert r.status_code == 200
@@ -161,6 +168,24 @@ def test_sites_delete_404():
     assert r.status_code == 404
 
 
+def test_sites_create_409_duplicate_name():
+    """POST /sites with an existing name returns 409 so serialized graph has no duplicate site names."""
+    conn = _mock_conn(fetchone={"id": str(uuid4())})  # duplicate check finds existing site
+    with _patch_db(conn):
+        r = client.post("/sites", json={"name": "ExistingSite", "description": "x"})
+    assert r.status_code == 409
+    assert "name" in r.json().get("detail", "").lower() or "already" in r.json().get("detail", "").lower()
+
+
+def test_sites_patch_409_duplicate_name():
+    """PATCH /sites to a name that another site has returns 409."""
+    site_id = uuid4()
+    conn = _mock_conn(fetchone={"id": str(uuid4())})  # other site with that name exists
+    with _patch_db(conn):
+        r = client.patch(f"/sites/{site_id}", json={"name": "OtherSiteName"})
+    assert r.status_code == 409
+
+
 # --- Equipment ---
 
 
@@ -170,6 +195,19 @@ def test_equipment_list_empty():
         r = client.get("/equipment")
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_equipment_create_409_duplicate_name_same_site():
+    """POST /equipment with same (site_id, name) returns 409 so serialized graph has no duplicate equipment per site."""
+    site_id = uuid4()
+    conn = _mock_conn(fetchone={"id": str(uuid4())})  # duplicate check finds existing equipment
+    with _patch_db(conn):
+        r = client.post(
+            "/equipment",
+            json={"site_id": str(site_id), "name": "AHU-1", "equipment_type": "AHU"},
+        )
+    assert r.status_code == 409
+    assert "equipment" in r.json().get("detail", "").lower() or "name" in r.json().get("detail", "").lower()
 
 
 def test_equipment_create():
@@ -183,7 +221,9 @@ def test_equipment_create():
         "equipment_type": "Air_Handling_Unit",
         "created_at": "2024-01-01T00:00:00",
     }
+    # First fetchone: duplicate check (no existing equipment); second: INSERT RETURNING
     conn = _mock_conn(fetchone=row)
+    conn.cursor.return_value.__enter__.return_value.fetchone.side_effect = [None, row]
     with _patch_db(conn), patch("open_fdd.platform.api.equipment.sync_ttl_to_file"):
         r = client.post(
             "/equipment",
@@ -204,6 +244,28 @@ def test_equipment_get_404():
     assert r.status_code == 404
 
 
+def test_equipment_patch_409_duplicate_name_same_site():
+    """PATCH /equipment to a name that another equipment on the same site has returns 409."""
+    eq_id = uuid4()
+    site_id = uuid4()
+    # First fetchone: existing equipment (for site_id); second: other eq with same name exists
+    cursor = MagicMock()
+    cursor.execute.return_value = None
+    cursor.fetchone.side_effect = [
+        {"id": str(eq_id), "site_id": str(site_id)},
+        {"id": str(uuid4())},
+    ]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    conn.commit = MagicMock()
+    with _patch_db(conn):
+        r = client.patch(f"/equipment/{eq_id}", json={"name": "OtherAHU"})
+    assert r.status_code == 409
+
+
 def test_equipment_delete():
     conn = _mock_conn(fetchone={"id": uuid4()})
     with _patch_db(conn), patch("open_fdd.platform.api.equipment.sync_ttl_to_file"):
@@ -220,6 +282,29 @@ def test_points_list_empty():
         r = client.get("/points")
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_points_create_409_duplicate_external_id_same_site():
+    """POST /points with same (site_id, external_id) returns 409 so serialized graph has no duplicate points per site."""
+    if psycopg2 is None:
+        pytest.skip("psycopg2 required for IntegrityError test")
+    site_id = uuid4()
+    cursor = MagicMock()
+    cursor.execute.side_effect = psycopg2.IntegrityError("duplicate key value violates unique constraint")
+    cursor.fetchone.return_value = None
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    conn.commit = MagicMock()
+    with _patch_db(conn):
+        r = client.post(
+            "/points",
+            json={"site_id": str(site_id), "external_id": "SA-T", "unit": "degF"},
+        )
+    assert r.status_code == 409
+    assert "external_id" in r.json().get("detail", "").lower() or "already" in r.json().get("detail", "").lower()
 
 
 def test_points_create():

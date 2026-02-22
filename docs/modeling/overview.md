@@ -6,7 +6,7 @@ nav_order: 1
 
 # Data model flow
 
-Open-FDD uses a Brick-semantic data model for equipment and points. Rules resolve inputs via `ofdd:mapsToRuleInput` in TTL.
+Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), BACnet discovery RDF (from bacpypes3 in diy-bacnet-server), platform config, and—as the project evolves—other ontologies such as ASHRAE 223P. CRUD and discovery both update this graph; **all backend queries are SPARQL-driven** (rdflib Graph parse + SPARQL; no grep or text search on the TTL). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL.
 
 ---
 
@@ -19,7 +19,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   Data-model export / CRUD
          │
          ▼
-  Brick TTL (config/brick_model.ttl)  ← reserialized on every create/update/delete
+  Brick TTL (config/data_model.ttl)  ← Brick section reserialized on every create/update/delete; same file can include a BACnet discovery section (one file for SPARQL)
          │
          ▼
   FDD column_map (external_id → rule_input)
@@ -28,7 +28,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   RuleRunner
 ```
 
-**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/brick_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](howto/danger_zone#crud-deletes--cascade-behavior).
+**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/data_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](howto/danger_zone#crud-deletes--cascade-behavior).
 
 ---
 
@@ -51,10 +51,10 @@ Sites + Equipment + Points (DB)  ← single source of truth
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /data-model/export` | Export sites, equipment, points as JSON |
-| `POST /data-model/import` | Import JSON (creates/updates) |
-| `GET /data-model/ttl` | Generate Brick TTL from DB |
-| `POST /data-model/sparql` | Run SPARQL query against TTL |
+| `GET /data-model/export` | Single export route: BACnet discovery + DB points (optional `?bacnet_only=true`, `?site_id=...`). Use for [AI-assisted tagging](ai_assisted_tagging). |
+| `PUT /data-model/import` | Import JSON: **points** (required) and optional **equipment** (feeds/fed_by). Creates/updates points; does not accept sites or equipments. |
+| `GET /data-model/ttl` | Generate Brick TTL from DB (and in-memory BACnet graph). Optional `?save=true` to write to file. |
+| `POST /data-model/sparql` | Run SPARQL query against the current data model. |
 
 ---
 

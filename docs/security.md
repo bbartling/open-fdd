@@ -93,11 +93,11 @@ The application **does** throttle its own outbound traffic to the building and O
 | Component | Config | Effect |
 |-----------|--------|--------|
 | **BACnet scraper** | `bacnet_scrape_interval_min` (e.g. 5) | Polls points on a fixed interval (e.g. every 5 minutes), not in a burst. |
-| **BACnet scraper** | **Data model or CSV** | The scraper polls only the points it is configured with: **by default, points in the data model** that have `bacnet_device_id` and `object_identifier` (e.g. added via `POST /bacnet/import-discovery` or CRUD). If none exist, it can fall back to a **curated CSV**. Throttling depends on **how many points** are defined (in the DB or in the CSV). Best practice: scrape only the points needed for FDD and HVAC health. See [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model). |
+| **BACnet scraper** | **Data model or CSV** | The scraper polls only the points it is configured with: **by default, points in the data model** that have `bacnet_device_id` and `object_identifier` (e.g. added via CRUD or after **POST /bacnet/point_discovery_to_graph** and data-model export/import). If none exist, it can fall back to a **curated CSV**. Throttling depends on **how many points** are defined (in the DB or in the CSV). Best practice: scrape only the points needed for FDD and HVAC health. See [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model). |
 | **FDD rule loop** | `rule_interval_hours` (e.g. 3) | Runs fault detection on a schedule (e.g. every 3 hours); each run pulls data from the DB, not from BACnet. |
 | **Weather scraper** | `open_meteo_interval_hours` (e.g. 24) | Fetches weather once per interval (e.g. daily). |
 
-So outbound load on the OT network is predictable and tunable. **Define only the points you need** (in the data model via import-discovery or CRUD, or in a curated CSV), then adjust intervals via `OFDD_*` environment variables. See [Configuration](configuration) and [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model).
+So outbound load on the OT network is predictable and tunable. **Define only the points you need** (in the data model via CRUD or point_discovery_to_graph + export/import, or in a curated CSV), then adjust intervals via `OFDD_*` environment variables. See [Configuration](configuration) and [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model).
 
 ### 3. Inbound: rate limiting at the reverse proxy (e.g. Caddy)
 

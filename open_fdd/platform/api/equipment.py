@@ -17,14 +17,15 @@ def list_equipment(site_id: UUID | None = None):
     """List equipment, optionally filtered by site."""
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cols = "id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at"
             if site_id:
                 cur.execute(
-                    "SELECT id, site_id, name, description, equipment_type, created_at FROM equipment WHERE site_id = %s ORDER BY name",
+                    f"SELECT {cols} FROM equipment WHERE site_id = %s ORDER BY name",
                     (str(site_id),),
                 )
             else:
                 cur.execute(
-                    "SELECT id, site_id, name, description, equipment_type, created_at FROM equipment ORDER BY site_id, name"
+                    f"SELECT {cols} FROM equipment ORDER BY site_id, name"
                 )
             rows = cur.fetchall()
     return [EquipmentRead.model_validate(dict(r)) for r in rows]
@@ -32,17 +33,30 @@ def list_equipment(site_id: UUID | None = None):
 
 @router.post("", response_model=EquipmentRead)
 def create_equipment(body: EquipmentCreate):
-    """Create equipment under a site."""
+    """Create equipment under a site. Returns 409 if this site already has equipment with this name."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO equipment (site_id, name, description, equipment_type, metadata) VALUES (%s, %s, %s, %s, %s::jsonb) RETURNING id, site_id, name, description, equipment_type, created_at",
+                "SELECT id FROM equipment WHERE site_id = %s AND name = %s",
+                (str(body.site_id), body.name.strip()),
+            )
+            if cur.fetchone():
+                raise HTTPException(
+                    409,
+                    "Equipment with this name already exists for this site",
+                )
+            cur.execute(
+                """INSERT INTO equipment (site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id)
+                   VALUES (%s, %s, %s, %s, %s::jsonb, %s::uuid, %s::uuid)
+                   RETURNING id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at""",
                 (
                     str(body.site_id),
                     body.name,
                     body.description,
                     body.equipment_type,
                     json.dumps(body.metadata_ or {}),
+                    str(body.feeds_equipment_id) if body.feeds_equipment_id else None,
+                    str(body.fed_by_equipment_id) if body.fed_by_equipment_id else None,
                 ),
             )
             row = cur.fetchone()
@@ -60,7 +74,7 @@ def get_equipment(equipment_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, site_id, name, description, equipment_type, created_at FROM equipment WHERE id = %s",
+                "SELECT id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at FROM equipment WHERE id = %s",
                 (str(equipment_id),),
             )
             row = cur.fetchone()
@@ -85,13 +99,37 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
     if body.metadata_ is not None:
         updates.append("metadata = %s::jsonb")
         params.append(json.dumps(body.metadata_))
+    if body.feeds_equipment_id is not None:
+        updates.append("feeds_equipment_id = %s::uuid")
+        params.append(str(body.feeds_equipment_id))
+    if body.fed_by_equipment_id is not None:
+        updates.append("fed_by_equipment_id = %s::uuid")
+        params.append(str(body.fed_by_equipment_id))
     if not updates:
         return get_equipment(equipment_id)
+    if body.name is not None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, site_id FROM equipment WHERE id = %s",
+                    (str(equipment_id),),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    cur.execute(
+                        "SELECT id FROM equipment WHERE site_id = %s AND name = %s AND id != %s",
+                        (str(existing["site_id"]), body.name.strip(), str(equipment_id)),
+                    )
+                    if cur.fetchone():
+                        raise HTTPException(
+                            409,
+                            "Another equipment with this name already exists for this site",
+                        )
     params.append(str(equipment_id))
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"UPDATE equipment SET {', '.join(updates)} WHERE id = %s RETURNING id, site_id, name, description, equipment_type, created_at",
+                f"UPDATE equipment SET {', '.join(updates)} WHERE id = %s RETURNING id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at",
                 params,
             )
             row = cur.fetchone()

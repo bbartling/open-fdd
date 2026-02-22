@@ -1,3 +1,6 @@
+# No dashboards are provisioned by default. Only the TimescaleDB datasource is prebuilt.
+# To add your own: place dashboard JSON here (or in the mounted dashboards dir) and restart Grafana.
+# To build dashboards from scratch using SQL, see docs/howto/grafana_cookbook.md.
 apiVersion: 1
 providers:
   - name: "Open-FDD"

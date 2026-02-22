@@ -10,8 +10,10 @@ The Open-FDD data model is built around **sites**, **equipment**, and **points**
 
 **Concepts (entities):**
 
-- **[Sites](modeling/sites)** — Buildings or facilities. All equipment and points are scoped to a site.
-- **[Equipment](modeling/equipment)** — Physical devices (AHUs, VAVs, heat pumps). Belong to a site; have points.
-- **[Points](modeling/points)** — Time-series references (sensors, setpoints). Link to equipment and site; store `external_id`, optional `brick_type` and `rule_input` for FDD.
+- **[Sites](sites)** — Buildings or facilities. All equipment and points are scoped to a site.
+- **[Equipment](equipment)** — Physical devices (AHUs, VAVs, heat pumps). Belong to a site; have points.
+- **[Points](points)** — Time-series references (sensors, setpoints). Link to equipment and site; store `external_id`, optional `brick_type` and `rule_input` for FDD.
+- **[SPARQL cookbook](sparql_cookbook)** — Run SPARQL via POST /data-model/sparql only: config, data model, BACnet, FDD rule mapping, time-series references. Copy-paste queries for validation and UIs.
+- **[AI-assisted data modeling](ai_assisted_tagging)** — Export → LLM or human tagging → import (Brick types, rule_input, polling, equipment feeds). See also **AGENTS.md** in the repo for the full LLM prompt.
 
-**Framework:** CRUD is provided by the FastAPI REST API. The data-model API adds bulk export/import and Brick TTL generation; see [Overview](modeling/overview) for the flow (DB → TTL → FDD column_map) and [API Reference — Platform REST API](api/platform) for all endpoints.
+**Framework:** CRUD is provided by the FastAPI REST API. The data-model API adds bulk export/import and Brick TTL generation; see [Overview](overview) for the flow (DB → TTL → FDD column_map) and [API Reference — Platform REST API](../api/platform) for all endpoints.

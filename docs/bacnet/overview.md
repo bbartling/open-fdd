@@ -6,7 +6,7 @@ nav_order: 1
 
 # BACnet Integration
 
-Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as a BACnet/IP-to-JSON-RPC bridge for discovery and data acquisition.
+Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as a BACnet/IP-to-JSON-RPC bridge. Discovery and scrape feed the same **data model** (building as a knowledge graph). The gateway uses **bacpypes3**’s built-in RDF (BACnetGraph) for discovery-to-RDF; Open-FDD merges that TTL and queries via SPARQL.
 
 ---
 
@@ -39,7 +39,7 @@ The scraper can run in two ways: **data-model first** (recommended) or **CSV fal
 ### Option A: Data model (recommended)
 
 1. **Run Who-Is and point discovery** — Use the Open-FDD Config UI (`/app/`) or the API. From the BACnet panel you can call **Test connection**, **Who-Is range**, and **Point discovery** (these proxy to diy-bacnet-server). diy-bacnet-server must be running (e.g. `./scripts/bootstrap.sh` starts it).
-2. **Import discovery into the data model** — Send the point-discovery result to `POST /bacnet/import-discovery`. The API creates site/equipment/points with `bacnet_device_id`, `object_identifier`, `object_name`, and a default Brick type. You can also create or edit points via CRUD (`POST /points`, `PATCH /points/{id}`) and set these fields.
+2. **Graph and data model** — Call **POST /bacnet/point_discovery_to_graph** (device instance) to put BACnet devices and points into the in-memory graph and sync `config/data_model.ttl`. Create points in the DB via CRUD (set `bacnet_device_id`, `object_identifier`, `object_name`) or use **GET /data-model/export** then LLM/human tagging then **PUT /data-model/import**.
 3. **Run the scraper** — The BACnet scraper (e.g. bacnet-scraper container or `tools/run_bacnet_scrape.py`) loads points that have `bacnet_device_id` and `object_identifier` from the database and polls only those via diy-bacnet-server. No CSV is required.
 
 See [Points](modeling/points#bacnet-addressing) for the BACnet fields and [Platform API → BACnet](api/platform#bacnet-proxy-and-import) for the endpoints.

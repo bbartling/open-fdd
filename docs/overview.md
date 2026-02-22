@@ -5,7 +5,7 @@ nav_order: 2
 
 # System Overview
 
-Open-FDD is an edge analytics platform for smart buildings. This section describes the architecture, services, and data flow.
+Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in fault detection and diagnostics (FDD) for HVAC. It runs on-premises so facilities keep control of their data and avoid vendor lock-in. This section describes the architecture, services, and data flow.
 
 ---
 
@@ -23,7 +23,7 @@ This project is an open-source stack; a cloud or MSI vendor can develop their ow
 | Service | Description |
 |---------|-------------|
 | **API** | FastAPI CRUD for sites, equipment, points. Data-model export/import, TTL generation, SPARQL validation. Swagger at `/docs`. Config UI (HA-style data model tree, BACnet test) at `/app/`. |
-| **Grafana** | Pre-provisioned TimescaleDB datasource + dashboards (BACnet timeseries, Fault Results, System Resources, Weather). Edit config in `platform/grafana/`; use `--reset-grafana` if provisioning doesn't apply. |
+| **Grafana** | Pre-provisioned TimescaleDB datasource only (uid: openfdd_timescale). No dashboards; build your own with SQL from the [Grafana SQL cookbook](howto/grafana_cookbook). Use `--reset-grafana` to re-apply datasource provisioning. |
 | **TimescaleDB** | PostgreSQL with TimescaleDB extension. Single source of truth for metadata and time-series. |
 | **BACnet scraper** | Polls diy-bacnet-server via JSON-RPC. Writes readings to `timeseries_readings`. |
 | **Weather scraper** | Fetches from Open-Meteo ERA5 (temp, RH, dewpoint, wind, solar/radiation, cloud cover). |
@@ -45,9 +45,9 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 ## Data flow
 
 1. **Ingestion:** BACnet scraper and weather scraper write to `timeseries_readings` (point_id, ts, value).
-2. **Data modeling:** Points have `external_id` (e.g. BACnet object name), optional `brick_type`, `rule_input`. Data-model API exports/imports mappings; TTL auto-syncs to `config/brick_model.ttl`.
-3. **FDD (Python/pandas):** The database does **not** compute faults. The FDD loop **pulls** data out of the database into a pandas DataFrame, runs the rule engine (YAML rules) in Python/pandas, flags faults, and **writes** results back to the database (`fault_results`). All fault logic runs in the rule runner; the database is read and write storage. This design keeps analytics in Python, so the same pipeline can be extended beyond rule-based FDD (e.g. ML or other data science) if desired.
-4. **Visualization:** Humans view timeseries and fault results in Grafana, which queries TimescaleDB.
+2. **Data model (unified graph):** The building is represented as a **unified graph**—one semantic model combining Brick (sites, equipment, points from the DB), BACnet RDF (from point discovery via diy-bacnet-server), platform config, and room for future ontologies (e.g. ASHRAE 223P). CRUD and **POST /bacnet/point_discovery_to_graph** update this model; SPARQL queries it. One TTL file `config/data_model.ttl` holds the graph; a background thread serializes it to disk every 5 minutes (configurable via `OFDD_GRAPH_SYNC_INTERVAL_MIN`); **POST /data-model/serialize** runs the same write on demand.
+3. **FDD (Python/pandas):** The FDD loop pulls data into a pandas DataFrame, runs YAML rules, writes `fault_results` to the database. Fault logic lives in the rule runner; the database is read/write storage.
+4. **Visualization:** Grafana queries TimescaleDB for timeseries and fault results.
 
 ---
 
@@ -65,4 +65,4 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 - **Equipment** — Devices (AHUs, VAVs, heat pumps). Belong to a site.
 - **Points** — Time-series references. Have `external_id` (raw name), `rule_input` (FDD column ref), optional `brick_type` (Brick class).
 - **Fault rules** — YAML files (bounds, flatline, hunting, expression). Run against DataFrame; produce boolean fault flags. See [Fault rules for HVAC](rules/overview).
-- **Brick TTL** — Semantic model. Maps Brick classes → `external_id` for rule resolution.
+- **Unified graph** — One semantic model (Brick + BACnet + platform config; future 223P or other ontologies). Stored in `config/data_model.ttl`; maps Brick classes → `external_id` for rule resolution; queryable via SPARQL.

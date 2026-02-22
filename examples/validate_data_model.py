@@ -8,7 +8,7 @@ Prerequisites before running fault equations:
 
 Usage:
     python validate_data_model.py
-    python validate_data_model.py --ttl brick_model.ttl --rules my_rules
+    python validate_data_model.py --ttl data_model.ttl --rules my_rules
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate Brick data model and YAML rules"
     )
-    parser.add_argument("--ttl", default="brick_model.ttl", help="Path to Brick TTL")
+    parser.add_argument("--ttl", default="data_model.ttl", help="Path to data model TTL (Brick + optional BACnet)")
     parser.add_argument("--rules", default="my_rules", help="Path to rules directory")
     args = parser.parse_args()
 

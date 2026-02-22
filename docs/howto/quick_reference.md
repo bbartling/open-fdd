@@ -55,7 +55,7 @@ From repo root, run compose from `platform/` or use `-f platform/docker-compose.
 ## Unit tests and formatter
 
 ```bash
-# From repo root
+# From repo root (install once: pip install -e ".[dev]")
 cd /path/to/open-fdd
 .venv/bin/python -m pytest open_fdd/tests/ -v
 .venv/bin/python -m black .

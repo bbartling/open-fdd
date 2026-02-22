@@ -7,22 +7,22 @@ nav_order: 12
 
 ---
 
-## Platform config file
+## Platform config (RDF + CRUD)
 
-**Where:** Copy `config/platform.example.yaml` to your config file. The platform looks for:
+Platform config lives in the **same RDF graph** as Brick and BACnet (`config/data_model.ttl`). No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph.
 
-- **Environment:** `OFDD_*` vars (e.g. `OFDD_RULE_INTERVAL_HOURS=6`) override any file.
-- **File:** By default the app does not read a YAML path from env; pydantic-settings loads from `.env` and env vars. To use a **named file** (e.g. `platform.yaml`, `my_site.yaml`), set `OFDD_ENV_FILE` or place `.env` in the working directory and point it there, or pass env vars when starting containers.
-
-**Docker:** Set env in `platform/docker-compose.yml` under each service’s `environment:` (e.g. `OFDD_RULE_INTERVAL_HOURS: "6"`). To use a custom config file, mount it and set `OFDD_ENV_FILE` to its path, or set individual `OFDD_*` vars.
+- **Bootstrap:** `./scripts/bootstrap.sh` seeds config via PUT /config (defaults or `OFDD_*` from `platform/.env`).
+- **API:** GET /config, PUT /config; query via POST /data-model/sparql.
+- **Env at seed:** Set `OFDD_*` in `platform/.env` before first bootstrap to customize the seed.
+**Docker:** Set env in `platform/docker-compose.yml` or `platform/.env`; bootstrap uses these when calling PUT /config.
 
 **Rename / multiple configs:** Use different env files (e.g. `platform-prod.env`, `platform-building-a.env`) and start with `docker compose --env-file platform-building-a.env up -d`, or set `OFDD_*` in that file. No built-in “config name” selector; use env files or env vars per deployment.
 
 ---
 
-## Platform (YAML)
+## Platform keys (RDF / GET-PUT /config)
 
-Example keys (see `config/platform.example.yaml`). Copy to your file or set via `OFDD_*` env.
+Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -31,6 +31,7 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
 | `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
+| `graph_sync_interval_min` | 5 | Minutes between serializing the in-memory graph to `data_model.ttl` (API background thread). Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_use_data_model` | true | Prefer scraping points from the data model (points with `bacnet_device_id`/`object_identifier`); fall back to CSV if none. Env: `OFDD_BACNET_USE_DATA_MODEL`. |
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
@@ -44,7 +45,7 @@ Example keys (see `config/platform.example.yaml`). Copy to your file or set via 
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
-**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](rules/expression_rule_cookbook).
+**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
 
 **Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
 
@@ -107,5 +108,4 @@ For edge deployments with limited disk, set these at bootstrap (or in `platform/
 | `OFDD_BACNET_SITE_ID` | Site to tag when scraping (default: default; use on remote gateways) |
 | `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id, config_csv} for central aggregator |
 | `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |
-| `OFDD_PLATFORM_YAML` | Path to platform.yaml |
 

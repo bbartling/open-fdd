@@ -7,13 +7,14 @@
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-![Black](https://img.shields.io/badge/code%20style-black-000000.svg)
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
 ![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 
-Open-FDD is an open-source Automated Fault Detection and Diagnostics (AFDD) platform specifically designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational system data into actionable cost-saving insights while providing a secure integration layer that any cloud platform can leverage without vendor lock-in. Independent U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs, representing meaningful annual cost reductions depending on facility size and energy spend.
+Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in **fault detection and diagnostics (FDD) for HVAC**. It helps facilities optimize energy use and cut costs; because it runs **on-premises**, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
+
+The building is modeled in a **unified graph**: Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `config/data_model.ttl`.
 
 ---
 
@@ -30,132 +31,24 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-This will start the full AFDD edge stack locally.
+This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
 
-### Development: run tests and Black (after clone)
+![Open-FDD system pyramid](OpenFDD_system_pyramid.png)
+
+### Development: run unit tests
 
 To run the test suite and formatter locally (no Docker required for tests):
 
 ```bash
 cd open-fdd
 python3 -m venv .venv
-.venv/bin/pip install -e ".[test]"
-.venv/bin/python -m pytest open_fdd/tests/ -v
-.venv/bin/black .
+source .venv/bin/activate   # or: .venv/bin/activate on Windows
+pip install -e ".[dev]"
+pytest open_fdd/tests/ -v
 ```
 
-The `test` extra includes pytest, black, httpx, FastAPI, rdflib, and platform deps so all tests pass. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
+Use the **`dev`** extra so all dependencies (pytest, black, psycopg2, pydantic-settings, FastAPI, rdflib, etc.) are installed and every test passes. If you see `ModuleNotFoundError` for `psycopg2` or `pydantic`, run pytest with the venv’s Python (e.g. `python -m pytest`) after `pip install -e ".[dev]"`. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
 
----
-
-## 🔌 Service Endpoints
-
-| Service                             | URL                                                      | Default Credentials |
-| ----------------------------------- | -------------------------------------------------------- | ------------------- |
-| **Database (TimescaleDB/Postgres)** | `localhost:5432/openfdd`                                 | postgres / postgres |
-| **Grafana**                         | [http://localhost:3000](http://localhost:3000)           | admin / admin       |
-| **API (Swagger UI)**                | [http://localhost:8000/docs](http://localhost:8000/docs) | —                   |
-| **BACnet Server (Swagger UI)**      | [http://localhost:8080/docs](http://localhost:8080/docs) | —                   |
-
----
-
-## 🔐 Reverse Proxy & Endpoint Protection (Caddy)
-
-In production deployments, Open-FDD is intended to sit behind a Caddy reverse proxy for:
-
-* TLS termination (HTTPS)
-* Basic authentication or JWT protection
-* Endpoint access control
-* Secure remote access
-
-Example Production Architecture on the Building’s Operational Technology (OT) LAN
-
-The bundled Caddyfile routes **API paths** (e.g. `/docs`, `/api/*`, `/sites*`, `/analytics/*`, `/health`) to the Open-FDD API and all other paths to **Grafana at root** (`/`). Path-prefix routing (e.g. `/api` and `/grafana`) can be configured via a custom Caddyfile and Grafana subpath; see [Security & Caddy](docs/security.md).
-
-**Option 1 — Caddy on the Open-FDD host, vendor edge device on a separate host**
-
-Building Network (OT LAN)
-
-```
-   │
-   ├── Open-FDD Host (Docker)
-   │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
-   │      │      ├── API paths (/docs, /api/*, /sites, /analytics, …) → Open-FDD API
-   │      │      └── / → Grafana
-   │      ├── TimescaleDB (internal)
-   │      └── BACnet Server (internal)
-   │
-   └── Vendor Edge Gateway (X / Y / Z)
-          ├── Pulls data from Open-FDD via Caddy URL (LAN)
-          └── Secure Export to Cloud Platform (Vendor-managed)
-```
-
-Caddy provides secure access to internal services without exposing raw ports externally. The Vendor Edge Gateway represents any third-party or cloud-connected service on the OT network. Secure export of data to external cloud platforms is the responsibility of the vendor or integration partner—not Open-FDD.
-
-Open-FDD operates strictly as a behind-the-firewall AFDD engine and API layer. It does not initiate outbound cloud connections or manage external data transmission.
-
-
-**Option 2 — Vendor runs Open-FDD inside their own Docker stack**
-
-Building Network (OT LAN)
-
-```
-   │
-   ├── Open-FDD Host (Docker)
-   │      ├── Caddy Reverse Proxy (HTTPS + Authentication)
-   │      │      ├── API paths → Open-FDD API
-   │      │      └── / → Grafana
-   │      ├── TimescaleDB (internal)
-   │      ├── BACnet Server (internal)
-   │      └── Vendor Edge Gateway (X / Y / Z)
-   │             ├── Pulls data from Open-FDD via Caddy (internal)
-   │             └── Secure Export to Cloud Platform (Vendor-managed)
-```
-
----
-
-## 🏢 What This Stack Represents
-
-This deployment runs a complete behind-the-firewall AFDD platform that:
-
-* Ingests building telemetry (e.g., BACnet, weather)
-* Stores structured time-series data
-* Executes automated fault detection logic
-* Exposes insights via API
-* Enables vendor-neutral cloud integration
-
-The building maintains full control of operational data while enabling secure interoperability with external analytics platforms.
-
-
----
-
-## Platform config example
-
-Copy to `platform.yaml` and edit.
-Environment variables (`OFDD_*`) override these values.
-
-```yaml
-
-rule_interval_hours: 3    # run every 3 hours
-lookback_days: 3          # historical window loaded per run
-
-# Rules: put your project rules here (hot reload)
-rules_dir: "analyst/rules"
-
-# BACnet driver (edge scraping via diy-bacnet-server)
-bacnet_enabled: true
-bacnet_scrape_interval_min: 5
-bacnet_config_csv: "config/bacnet_device.csv"
-
-# Open-Meteo weather driver
-open_meteo_enabled: true
-open_meteo_interval_hours: 24
-open_meteo_latitude: 41.88
-open_meteo_longitude: -87.63
-open_meteo_timezone: America/Chicago
-open_meteo_days_back: 3
-open_meteo_site_id: default
-```
 
 ---
 

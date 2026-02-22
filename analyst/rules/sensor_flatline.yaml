@@ -5,10 +5,27 @@ type: flatline
 flag: flatline_flag
 
 inputs:
+  # AHU sensors
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+  Supply_Air_Flow_Sensor:
+    brick: Supply_Air_Flow_Sensor
+  Power_Sensor:
+    brick: Power_Sensor
+
+  # Zone/VAV sensors
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
+  Zone_Air_Flow_Sensor:
+    brick: Zone_Air_Flow_Sensor
 
 params:
   tolerance: 0.000001
