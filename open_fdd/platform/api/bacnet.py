@@ -1,6 +1,7 @@
 """BACnet proxy routes — Open-FDD backend calls diy-bacnet-server (local or OT LAN)."""
 
 import json
+import os
 from typing import Annotated
 
 import httpx
@@ -19,10 +20,19 @@ router = APIRouter(prefix="/bacnet", tags=["BACnet"])
 _BASE_PAYLOAD = {"jsonrpc": "2.0", "id": "0"}
 
 
+def _effective_bacnet_server_url() -> str:
+    """URL for the default BACnet gateway. Prefer env OFDD_BACNET_SERVER_URL over graph overlay so Docker (host.docker.internal) works when Swagger omits url."""
+    env_url = (os.environ.get("OFDD_BACNET_SERVER_URL") or "").strip().rstrip("/")
+    if env_url:
+        return env_url
+    s = get_platform_settings()
+    return (s.bacnet_server_url or "http://localhost:8080").strip().rstrip("/")
+
+
 def _get_gateways_list() -> list[dict]:
     """Return list of {id, url, site_id?} from config (default + bacnet_gateways). Used for GET /bacnet/gateways and gateway resolution."""
     s = get_platform_settings()
-    default_url = (s.bacnet_server_url or "http://localhost:8080").strip().rstrip("/")
+    default_url = _effective_bacnet_server_url()
     out = [{"id": "default", "url": default_url, "description": "Config default (OFDD_BACNET_SERVER_URL)"}]
     if s.bacnet_gateways:
         try:
@@ -204,16 +214,16 @@ def _body_to_dict(body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBo
 
 
 def _bacnet_url(body: dict, override_url: str | None = None) -> str:
-    """Resolve BACnet gateway URL. override_url (from ?gateway=) wins; else body.url; else config default.
-    When Open-FDD runs in Docker, use OFDD_BACNET_SERVER_URL (e.g. http://bacnet:8080 or host.docker.internal:8080)."""
+    """Resolve BACnet gateway URL. override_url (from ?gateway=) wins; else body.url; else effective default.
+    Effective default prefers env OFDD_BACNET_SERVER_URL so Docker (host.docker.internal) works from Swagger when url is omitted."""
     if override_url:
         return override_url.strip().rstrip("/")
     url = (body.get("url") or "").strip().rstrip("/")
-    server_url = (get_platform_settings().bacnet_server_url or "").strip().rstrip("/")
+    server_url = _effective_bacnet_server_url()
     if url and ("localhost" in url or "127.0.0.1" in url) and server_url:
         url = server_url
     elif not url:
-        url = server_url or "http://localhost:8080"
+        url = server_url
     return url
 
 

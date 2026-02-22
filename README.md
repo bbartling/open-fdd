@@ -53,25 +53,23 @@ Use the **`dev`** extra so all dependencies (pytest, black, psycopg2, pydantic-s
 ---
 
 
-## Standalone (Python + Pandas)
+## AI Assisted Data Modeling
 
+Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow details (export → tag → import, equipment by name, polling), see [AGENTS.md](AGENTS.md).
 
-Open-FDD v2 will be published to PyPI as a standalone package for CSV-based analysis or for companies that want to embed DataFrame-driven FDD into existing analytics workflows. The AFDD engine is built on Pandas, Python’s high-performance data analysis library. This enables rule execution directly on DataFrames without requiring the full Docker-based platform deployment.
+```text
+I use Open-FDD. I will paste the JSON from GET /data-model/export (and optionally my site identifier).
 
-```python
-import pandas as pd
-from pathlib import Path
-from open_fdd.engine.runner import RuleRunner, load_rule
+Your job:
+1. **Keep every field** from each point (bacnet_device_id, object_identifier, object_name, external_id, point_id if present); add or fill in: brick_type (Brick class, e.g. Supply_Air_Temperature_Sensor — with or without "brick:" prefix), rule_input (short slug for FDD rules, e.g. ahu_sat, zone_temp), polling (true for points that must be logged for FDD, false otherwise), and unit when known (e.g. degF, cfm).
+2. Assign points to equipment by name only: use "equipment_name": "AHU-1" or "VAV-1" (do NOT use equipment_id or any UUIDs for equipment).
+3. For site_id: use exactly the value from the export. **Important:** Call GET /data-model/export**?site_id=BensOffice** (or your site name) so the export pre-fills site_id on every row; if you omit that, the export has site_id null and the import will only succeed when there is exactly one site in the database (it will use it automatically). Accepted formats: "site_262dcf0e_b1ec_42ad_b1eb_14881a1516ab" (TTL) or UUID "262dcf0e-b1ec-42ad-b1eb-14881a1516ab".
+4. In the "equipment" array (separate from points), use equipment by name and set feeds/fed_by:
+   - Each item: "equipment_name": "AHU-1" or "VAV-1", "site_id": "<same site_id as in points>".
+   - AHU feeds VAV: use "feeds": ["VAV-1"] or "feeds_equipment_id": "VAV-1".
+   - VAV fed by AHU: use "fed_by": ["AHU-1"] or "fed_by_equipment_id": "AHU-1".
 
-df = pd.DataFrame({
-    "timestamp": ["2023-01-01 00:00", "2023-01-01 00:15", "2023-01-01 00:30"],
-    "OAT (°F)": [45, 46, 47],
-    "SAT (°F)": [55, 56, 90],
-})
-
-runner = RuleRunner(rules_path="open_fdd/rules")
-result = runner.run(df, timestamp_col="timestamp", rolling_window=3, skip_missing_columns=True)
-# result has fault flag columns (e.g. bad_sensor_flag)
+Return ONLY valid JSON with exactly two top-level keys: "points" (array) and "equipment" (array). No "sites", "equipments", or "relationships". No placeholder UUIDs — use the site_id from the export and equipment names (AHU-1, VAV-1) everywhere. Return the full list of points (recommended) or only those you need for FDD/polling; the import creates or updates only the points you send. If the same external_id appears twice (e.g. two devices with object_name "NetworkPort-1"), the import updates the existing point for that site+external_id; the last row wins.
 ```
 
 

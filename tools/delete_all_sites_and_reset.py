@@ -89,6 +89,9 @@ def main():
     if code != 200:
         print(f"Reset failed: {code} {data}")
         sys.exit(1)
+    if isinstance(data, dict) and data.get("status") == "error":
+        print(f"Reset error (graph cleared in memory but TTL write failed): {data.get('error', data)}")
+        sys.exit(1)
     if isinstance(data, dict):
         print("OK:", data.get("message", data.get("path", "")))
     else:

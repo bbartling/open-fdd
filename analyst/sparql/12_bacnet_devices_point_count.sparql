@@ -1,0 +1,14 @@
+# BACnet devices and how many points each contains (from discovery)
+# Uses bacnet:contains; run against TTL that includes BACnet scan
+
+PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?device ?addr (COUNT(?obj) AS ?pointCount)
+WHERE {
+  ?device a bacnet:Device ;
+          bacnet:contains ?obj ;
+          bacnet:device-address ?addr .
+}
+GROUP BY ?device ?addr
+ORDER BY ?device

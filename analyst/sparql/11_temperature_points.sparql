@@ -1,0 +1,17 @@
+# All points whose Brick type contains "temperature" (sensors/setpoints)
+# Useful to audit SAT, OAT, MAT, RAT, zone temp, etc.
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?label ?brickType ?ruleInput ?equipLabel
+WHERE {
+  ?pt a ?brickType ;
+      rdfs:label ?label ;
+      ofdd:mapsToRuleInput ?ruleInput ;
+      brick:isPointOf ?equip .
+  ?equip rdfs:label ?equipLabel .
+  FILTER(CONTAINS(LCASE(STR(?brickType)), "temperature"))
+}
+ORDER BY ?equipLabel ?label

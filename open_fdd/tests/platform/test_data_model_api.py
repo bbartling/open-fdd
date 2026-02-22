@@ -282,6 +282,29 @@ def test_data_model_import_accepts_fdd_input_deprecated():
     assert r.status_code == 200
 
 
+def test_data_model_import_rejects_placeholder_site_id():
+    """Import returns 400 when site_id is a placeholder (e.g. SITE_UUID) instead of a real UUID."""
+    body = {
+        "points": [
+            {
+                "point_id": None,
+                "site_id": "SITE_UUID",
+                "external_id": "DAP-P",
+                "bacnet_device_id": "3456789",
+                "object_identifier": "analog-input,1",
+                "object_name": "DAP-P",
+            }
+        ]
+    }
+    r = client.put("/data-model/import", json=body)
+    assert r.status_code == 400
+    detail = r.json().get("detail", "")
+    if isinstance(detail, list):
+        detail = " ".join(str(d) for d in detail)
+    assert "site_id" in detail
+    assert "SITE_UUID" in detail
+
+
 def _sample_object_names_from_point_discovery_response(
     pdg_response: dict, max_names: int = 5
 ) -> list[str]:

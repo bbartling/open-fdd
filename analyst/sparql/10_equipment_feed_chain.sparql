@@ -1,0 +1,13 @@
+# Equipment feed chain: who feeds whom (e.g. AHU-1 feeds VAV-1)
+# brick:feeds / brick:isFedBy topology
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?upstreamLabel ?downstreamLabel
+WHERE {
+  ?upstream brick:feeds ?downstream .
+  ?upstream rdfs:label ?upstreamLabel .
+  ?downstream rdfs:label ?downstreamLabel .
+}
+ORDER BY ?upstreamLabel ?downstreamLabel

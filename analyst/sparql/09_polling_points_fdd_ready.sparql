@@ -1,0 +1,17 @@
+# Points with polling=true — FDD-ready (rule input + equipment)
+# Use after GET /data-model/ttl?save=true to see what the scraper and rules will use
+
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?point ?label ?ruleInput ?equipmentLabel
+WHERE {
+  ?point a brick:Point ;
+         rdfs:label ?label ;
+         ofdd:mapsToRuleInput ?ruleInput ;
+         ofdd:polling true ;
+         brick:isPointOf ?equip .
+  ?equip rdfs:label ?equipmentLabel .
+}
+ORDER BY ?equipmentLabel ?label

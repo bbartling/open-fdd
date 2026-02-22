@@ -22,7 +22,7 @@ API coverage (OpenAPI paths exercised):
   - /download/csv (GET, POST), /download/faults (GET json, csv)
 All SPARQL is via the Open-FDD CRUD API only: POST /data-model/sparql (see _sparql()). No direct triple-store or TTL file access.
 Default API base is http://localhost:8000; use --base-url or BASE_URL for a remote host (e.g. http://192.168.204.16:8000).
-Uses GET /data-model/check at [27] to assert sites=1 after deleting DemoSite (TestBenchSite remains). Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
+Uses GET /data-model/check at [27] to assert TestBenchSite remains after deleting DemoSite (other sites e.g. BensOffice allowed). Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
 
 This test uses pre-tagged import payloads (brick_type, rule_input, polling) that simulate the output of the
 AI-assisted tagging step. The real workflow is: GET /data-model/export → LLM or human tags → PUT /data-model/import.
@@ -45,7 +45,7 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 
-# Blast away all sites and re-run test (after test only TestBenchSite remains; GET /data-model/check → sites=1)
+# Blast away all sites and re-run test (after test TestBenchSite remains; DemoSite deleted at [27])
 ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
 # Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
 #
@@ -605,6 +605,64 @@ def run():
     code, res = _request("PUT", "/data-model/import", json_body={"points": bens_pts})
     assert ok(code), f"PUT /data-model/import TestBenchSite points failed: {code} {res}"
     print(f"    OK — TestBenchSite has 2 BACnet points; after [27] only TestBenchSite remains and scraper will poll these.\n")
+
+    # --- [4f1b] AI-style import: equipment by name (no equipment_id), site_id from “export?site_id=…” so no UUID paste; feeds/fed_by by name ---
+    # Simulates: GET /data-model/export?site_id=BensTestBench → LLM tags → PUT /data-model/import (equipment_name only; site_id pre-filled from export).
+    print("[4f1b] PUT /data-model/import (AI-style payload: equipment_name only, site_id from export; feeds/fed_by by name)")
+    ai_site_id = bens_site_id  # as if export?site_id=TestBenchSite pre-filled this
+    ai_points = [
+        {
+            "point_id": None,
+            "bacnet_device_id": "3456789",
+            "object_identifier": "analog-input,1",
+            "object_name": "DAP-P",
+            "site_id": ai_site_id,
+            "equipment_name": "AHU-1",
+            "external_id": "DAP-P",
+            "brick_type": "Supply_Air_Static_Pressure_Sensor",
+            "rule_input": "ahu_dsp",
+            "polling": True,
+        },
+        {
+            "point_id": None,
+            "bacnet_device_id": "3456790",
+            "object_identifier": "analog-input,2",
+            "object_name": "VAVFlow",
+            "site_id": ai_site_id,
+            "equipment_name": "VAV-1",
+            "external_id": "VAVFlow",
+            "brick_type": "Zone_Air_Flow_Sensor",
+            "rule_input": "vav_flow",
+            "polling": True,
+        },
+    ]
+    ai_equipment = [
+        {"equipment_name": "AHU-1", "site_id": ai_site_id, "feeds": ["VAV-1"], "fed_by": []},
+        {"equipment_name": "VAV-1", "site_id": ai_site_id, "feeds": [], "fed_by": ["AHU-1"]},
+    ]
+    code, ai_res = _request("PUT", "/data-model/import", json_body={"points": ai_points, "equipment": ai_equipment})
+    assert ok(code), f"PUT /data-model/import AI-style payload failed: {code} {ai_res}"
+    ai_created = ai_res.get("created", 0)
+    ai_total = ai_res.get("total", 0)
+    assert ai_created >= 2 or ai_total >= 2, f"AI import should create at least 2 points: {ai_res}"
+    print(f"    OK — {ai_res.get('created', 0)} created, {ai_res.get('updated', 0)} updated, total={ai_total}\n")
+
+    print("[4f1c] SPARQL + TTL: verify AI payload (AHU-1, VAV-1, feeds) in model")
+    eq_labels_bens = _sparql_equipment_labels_for_site(TESTBENCH_SITE_NAME)
+    for ai_eq in ("AHU-1", "VAV-1"):
+        assert ai_eq in eq_labels_bens, f"Expected {ai_eq!r} in equipment for {TESTBENCH_SITE_NAME!r}: {eq_labels_bens}"
+    feeds_bens = _sparql_equipment_feeds_for_site(TESTBENCH_SITE_NAME)
+    feeds_map_bens = {e: f for e, f in feeds_bens}
+    assert "AHU-1" in feeds_map_bens and feeds_map_bens["AHU-1"] == "VAV-1", f"Expected AHU-1 feeds VAV-1: {feeds_bens}"
+    code, ttl_after_ai = _request("GET", "/data-model/ttl?save=true")
+    assert code == 200, f"GET /data-model/ttl failed: {code}"
+    assert "AHU-1" in ttl_after_ai, f"TTL should contain equipment AHU-1 after AI import"
+    assert "VAV-1" in ttl_after_ai, f"TTL should contain equipment VAV-1 after AI import"
+    pt_labels_bens = _sparql_point_labels_for_site(TESTBENCH_SITE_NAME)
+    assert "DAP-P" in pt_labels_bens or "VAVFlow" in pt_labels_bens, f"Expected DAP-P or VAVFlow in point labels: {pt_labels_bens}"
+    print(f"    SPARQL equipment (TestBenchSite): {eq_labels_bens}")
+    print(f"    SPARQL feeds: {feeds_bens}")
+    print(f"    OK — AI payload in model (AHU-1, VAV-1, feeds); TTL and points verified.\n")
 
     # --- [4f2] Full LLM payload import into DemoSite (many BACnet points, two devices; idempotent) ---
     # Uses tools/demo_site_llm_payload.json: sites/equipments/relationships/points with string IDs (site-1, ahu-1, ...).
@@ -1197,23 +1255,22 @@ def run():
         print("[26b] Skip (--wait-scrapes 0, default). Use --wait-scrapes 2 to wait for BACnet scrapes.\n")
 
     # --- [27] Leave only one site: delete DemoSite so GET /data-model/check returns sites=1 (TestBenchSite only) ---
-    print("[27] DELETE /sites/{id} (DemoSite) — leave only TestBenchSite so data-model/check reports sites=1")
+    print("[27] DELETE /sites/{id} (DemoSite) — TestBenchSite must remain (data-model/check); other sites allowed")
     code, _ = _request("DELETE", f"/sites/{demo_site_id_full}")
     assert ok(code), f"DELETE DemoSite failed: {code}"
     code, _ = _request("GET", f"/sites/{demo_site_id_full}")
     assert code == 404, f"DemoSite should be gone: {code}"
-    # GET /data-model/check syncs Brick from DB then counts; so it reflects current DB (1 site = TestBenchSite)
+    # GET /data-model/check syncs Brick from DB then counts. Require TestBenchSite present; allow other sites (e.g. BensOffice).
     code, check = _request("GET", "/data-model/check")
     assert ok(code), f"GET /data-model/check failed: {code}"
     sites_count = (check or {}).get("sites", 0)
-    if sites_count != 1:
-        code, sites_list = _request("GET", "/sites")
-        names = [s.get("name") for s in (sites_list or []) if isinstance(s, dict)]
+    code, sites_list = _request("GET", "/sites")
+    names = [s.get("name") for s in (sites_list or []) if isinstance(s, dict)]
+    if sites_count < 1 or TESTBENCH_SITE_NAME not in names:
         assert False, (
-            f"Expected 1 site (TestBenchSite) after [27]; GET /data-model/check returned sites={sites_count}. "
-            f"Remaining site names: {names}"
+            f"After [27] expected TestBenchSite present; GET /data-model/check sites={sites_count}, site names: {names}"
         )
-    print(f"    OK — DemoSite deleted; GET /data-model/check: sites={sites_count} (TestBenchSite only).\n")
+    print(f"    OK — DemoSite deleted; TestBenchSite present (sites={sites_count}: {names}).\n")
 
     print("=== All features passed ===\n")
     print(
@@ -1227,7 +1284,7 @@ def run():
     print("  config/data_model.ttl is updated on every CRUD and serialize.")
     print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (docs/modeling/ai_assisted_tagging, docs/appendix/technical_reference) → PUT /data-model/import.")
     print("  AI step: In production you use GET /data-model/export → LLM or human tags (brick_type, rule_input, polling) → PUT /data-model/import. See docs/modeling/ai_assisted_tagging.md and AGENTS.md.")
-    print("  Note: Only TestBenchSite remains after [27] (DemoSite deleted); GET /data-model/check returns sites=1. Grafana BACnet dropdowns then show only 2 points (TestBenchSite: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (docs/howto/grafana_cookbook). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
+    print("  Note: After [27] TestBenchSite remains (DemoSite deleted); GET /data-model/check may show sites>=1 if e.g. BensOffice exists. Grafana BACnet dropdowns then show only 2 points (TestBenchSite: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (docs/howto/grafana_cookbook). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
 
 
 def main() -> None:

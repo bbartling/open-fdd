@@ -10,8 +10,10 @@ and BACnet bindings stay valid. Single source of truth = DB; TTL = DB + in-memor
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
+import psycopg2
 from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -136,10 +138,20 @@ class UnifiedExportRow(BaseModel):
 
 
 def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
-    """Single dump: BACnet discovery (graph) + DB points. Rows with no point_id have polling=False by default."""
+    """Single dump: BACnet discovery (graph) + DB points. Rows with no point_id have polling=False by default.
+    When site_id query is provided, unimported rows are pre-filled with that site_id and site_name so the JSON
+    is closer to ready-to-import (LLM or human only needs to add brick_type, rule_input, equipment_id, polling)."""
     _site_id = _resolve_site_filter(site_id) if (site_id and site_id.strip()) else None
     if site_id and site_id.strip() and _site_id is None:
         raise HTTPException(404, f"No site found for name/description: {site_id!r}")
+
+    default_site_name: str | None = None
+    if _site_id:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name FROM sites WHERE id = %s", (str(_site_id),))
+                row = cur.fetchone()
+                default_site_name = row["name"] if row else None
 
     out: list[UnifiedExportRow] = []
     emitted_point_ids: set[str] = set()
@@ -207,7 +219,14 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                             bacnet_device_id=dev_str,
                             object_identifier=oid,
                             object_name=oname,
+                            site_id=str(_site_id) if _site_id else None,
+                            site_name=default_site_name,
+                            equipment_id=None,
+                            equipment_name=None,
                             external_id=oname or oid.replace(",", "_"),
+                            brick_type=None,
+                            rule_input=None,
+                            unit=None,
                             polling=False,
                         ),
                     )
@@ -274,7 +293,7 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
 def export_points(
     site_id: str | None = Query(
         None,
-        description="Filter by site: UUID, name (e.g. BensOffice), or description. Omit for all sites.",
+        description="Filter by site (UUID, name, or description). When set, unimported rows are pre-filled with this site_id and site_name so the JSON is closer to ready-to-import.",
     ),
     bacnet_only: bool = Query(
         False,
@@ -301,7 +320,13 @@ class PointImportRow(BaseModel):
         description="Site UUID (GET /sites). Required when creating a point; optional when updating.",
     )
     equipment_id: str | None = Field(
-        None, description="Assign point to this equipment (UUID from GET /equipment)"
+        None, description="Assign point to this equipment (UUID from GET /equipment). Omit and set equipment_name to have import create equipment by name."
+    )
+    equipment_name: str | None = Field(
+        None, description="Equipment name (e.g. AHU-1, VAV-1). When site_id is set and equipment_id is omitted, import creates this equipment under the site and assigns the point to it."
+    )
+    equipment_type: str | None = Field(
+        None, description="Used when creating equipment from equipment_name (e.g. AHU, VAV). Defaults to Equipment."
     )
     external_id: str | None = Field(
         None,
@@ -356,14 +381,28 @@ class PointImportRow(BaseModel):
 
 
 class EquipmentImportRow(BaseModel):
-    """Optional equipment relationship updates on import. Only listed fields are updated."""
+    """Optional equipment relationship updates on import. Use equipment_id (UUID) or equipment_name + site_id (name is created if missing). feeds/fed_by accept UUID or equipment name (resolved under site_id)."""
 
-    equipment_id: str = Field(..., description="Equipment UUID to update (from GET /equipment)")
+    equipment_id: str | None = Field(
+        None, description="Equipment UUID to update. Omit when using equipment_name + site_id."
+    )
+    equipment_name: str | None = Field(
+        None, description="Equipment name (e.g. AHU-1, VAV-1). With site_id, import finds or creates this equipment then sets feeds/fed_by."
+    )
+    site_id: str | None = Field(
+        None, description="Site UUID. Required when using equipment_name or when feeds_equipment_id/fed_by_equipment_id are equipment names."
+    )
     feeds_equipment_id: str | None = Field(
-        None, description="Brick: this equipment feeds that one (equipment UUID)."
+        None, description="Brick: this equipment feeds that one (UUID or equipment name)."
     )
     fed_by_equipment_id: str | None = Field(
-        None, description="Brick: this equipment is fed by that one (equipment UUID)."
+        None, description="Brick: this equipment is fed by that one (UUID or equipment name)."
+    )
+    feeds: list[str] | None = Field(
+        None, description="Alias: list of equipment this one feeds (first element used). Use feeds_equipment_id or feeds."
+    )
+    fed_by: list[str] | None = Field(
+        None, description="Alias: list of equipment that feed this one (first element used). Use fed_by_equipment_id or fed_by."
     )
 
 
@@ -398,33 +437,134 @@ class DataModelImportBody(BaseModel):
     }
 
 
+def _normalize_ttl_id_to_uuid(s: str) -> str | None:
+    """If s looks like a TTL local name (site_xxx or eq_xxx with underscores), convert to UUID string (hyphens). Returns None if not in that form."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    for prefix in ("site_", "eq_"):
+        if s.startswith(prefix) and len(s) > len(prefix):
+            tail = s[len(prefix) :].replace("_", "-")
+            if len(tail) == 36 and tail.count("-") == 4:  # UUID shape
+                try:
+                    UUID(tail)
+                    return tail
+                except (ValueError, TypeError):
+                    pass
+    return None
+
+
+def _parse_uuid_or_400(value: str | None, name: str, hint: str = "from GET /sites or GET /equipment") -> UUID | None:
+    """Return UUID or raise 400 with a clear message. Accepts UUID or TTL-style ids (e.g. site_262dcf0e_b1ec_42ad_b1eb_14881a1516ab)."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    s = value.strip()
+    try:
+        return UUID(s)
+    except (ValueError, TypeError):
+        pass
+    normalized = _normalize_ttl_id_to_uuid(s)
+    if normalized:
+        try:
+            return UUID(normalized)
+        except (ValueError, TypeError):
+            pass
+    raise HTTPException(
+        400,
+        f"{name} must be a valid UUID {hint}. Got: {s!r}. (TTL-style ids like site_262dcf0e_b1ec_42ad_... are accepted and converted to UUID.)",
+    )
+
+
+def _normalize_brick_type(s: str | None) -> str | None:
+    """Strip brick: prefix if present so brick:Supply_Air_Temperature_Sensor becomes Supply_Air_Temperature_Sensor."""
+    if not s or not isinstance(s, str):
+        return s
+    s = s.strip()
+    if s.startswith("brick:"):
+        s = s[6:].strip()
+    return s or None
+
+
+def _is_uuid(s: str | None) -> bool:
+    if not s or not isinstance(s, str) or not s.strip():
+        return False
+    try:
+        UUID(s.strip())
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _ensure_equipment(
+    cur: Any,
+    site_id: UUID,
+    name: str,
+    equipment_type: str = "Equipment",
+) -> str:
+    """Find equipment by (site_id, name) or create it. Returns equipment id as string. Same conn/cur so same transaction."""
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(400, "equipment_name must be non-empty when provided")
+    cur.execute(
+        "SELECT id FROM equipment WHERE site_id = %s AND name = %s",
+        (str(site_id), name),
+    )
+    row = cur.fetchone()
+    if row:
+        return str(row["id"])
+    cur.execute(
+        """INSERT INTO equipment (site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id)
+           VALUES (%s, %s, NULL, %s, '{}'::jsonb, NULL, NULL)
+           RETURNING id""",
+        (str(site_id), name, (equipment_type or "Equipment").strip() or "Equipment"),
+    )
+    row = cur.fetchone()
+    return str(row["id"])
+
+
+def _get_equipment_id_by_name(cur: Any, site_id: UUID, name: str) -> str | None:
+    """Look up equipment id by (site_id, name). Returns None if not found."""
+    name = (name or "").strip()
+    if not name:
+        return None
+    cur.execute(
+        "SELECT id FROM equipment WHERE site_id = %s AND name = %s",
+        (str(site_id), name),
+    )
+    row = cur.fetchone()
+    return str(row["id"]) if row else None
+
+
 @router.put(
     "/import",
     summary="Import Brick mapping (create or update points; preserves BACnet refs)",
     response_description='Count created/updated (e.g. { "created": 5, "updated": 25, "total": 30 }).',
 )
 def import_data_model(body: DataModelImportBody):
-    """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export after LLM tagging). Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
+    """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export after LLM tagging). If site_id is null and there is exactly one site in the DB, that site is used. Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
     created = 0
     updated = 0
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT id FROM sites")
+            sites = cur.fetchall()
+            default_site_id_str: str | None = str(sites[0]["id"]) if len(sites) == 1 else None
             for row in body.points:
                 if row.point_id:
                     # Update existing point
                     updates, params = [], []
                     if row.site_id is not None:
                         updates.append("site_id = %s")
-                        params.append(row.site_id)
+                        params.append(str(_parse_uuid_or_400(row.site_id, "site_id", "from GET /sites")))
                     if row.equipment_id is not None:
                         updates.append("equipment_id = %s")
-                        params.append(row.equipment_id)
+                        params.append(str(_parse_uuid_or_400(row.equipment_id, "equipment_id", "from GET /equipment")))
                     if row.external_id is not None:
                         updates.append("external_id = %s")
                         params.append(row.external_id)
                     if row.brick_type is not None:
                         updates.append("brick_type = %s")
-                        params.append(row.brick_type)
+                        params.append(_normalize_brick_type(row.brick_type))
                     ri = row.rule_input if row.rule_input is not None else row.fdd_input
                     if ri is not None:
                         updates.append("fdd_input = %s")
@@ -447,50 +587,114 @@ def import_data_model(body: DataModelImportBody):
                         if cur.rowcount:
                             updated += 1
                 else:
-                    # Create new point: require site_id, external_id, bacnet_device_id, object_identifier
+                    # Create new point: require site_id (or default when exactly one site), external_id, bacnet_device_id, object_identifier
+                    effective_site_id = row.site_id if (row.site_id and str(row.site_id).strip()) else default_site_id_str
                     if not all(
                         [
-                            row.site_id,
+                            effective_site_id,
                             row.external_id,
                             row.bacnet_device_id,
                             row.object_identifier,
                         ]
                     ):
                         continue
+                    site_uuid = _parse_uuid_or_400(effective_site_id, "site_id", "from GET /sites or use GET /data-model/export?site_id=YourSite to pre-fill")
+                    if row.equipment_id:
+                        equip_uuid_str = str(_parse_uuid_or_400(row.equipment_id, "equipment_id", "from GET /equipment"))
+                    elif row.equipment_name:
+                        equip_uuid_str = _ensure_equipment(cur, site_uuid, row.equipment_name, row.equipment_type or "Equipment")
+                    else:
+                        equip_uuid_str = None
                     _polling = row.polling if row.polling is not None else True
-                    cur.execute(
-                        """INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name, equipment_id, brick_type, fdd_input, unit, description, polling)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (
-                            row.site_id,
-                            row.external_id,
-                            row.bacnet_device_id,
-                            row.object_identifier,
-                            row.object_name,
-                            row.equipment_id,
-                            row.brick_type,
-                            (
-                                row.rule_input
-                                if row.rule_input is not None
-                                else row.fdd_input
-                            ),
-                            row.unit,
-                            row.description,
-                            _polling,
-                        ),
+                    _brick = _normalize_brick_type(row.brick_type)
+                    _fdd = (
+                        row.rule_input
+                        if row.rule_input is not None
+                        else row.fdd_input
                     )
-                    if cur.rowcount:
-                        created += 1
+                    insert_params = (
+                        str(site_uuid),
+                        row.external_id,
+                        row.bacnet_device_id,
+                        row.object_identifier,
+                        row.object_name,
+                        equip_uuid_str,
+                        _brick,
+                        _fdd,
+                        row.unit,
+                        row.description,
+                        _polling,
+                    )
+                    try:
+                        cur.execute("SAVEPOINT point_import_insert")
+                        cur.execute(
+                            """INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name, equipment_id, brick_type, fdd_input, unit, description, polling)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                            insert_params,
+                        )
+                        if cur.rowcount:
+                            created += 1
+                    except psycopg2.IntegrityError as e:
+                        if e.pgcode != "23505":
+                            raise
+                        # UniqueViolation (site_id, external_id): roll back failed INSERT then update existing row (same transaction stays valid)
+                        cur.execute("ROLLBACK TO SAVEPOINT point_import_insert")
+                        cur.execute(
+                            """UPDATE points SET bacnet_device_id = %s, object_identifier = %s, object_name = %s, equipment_id = %s, brick_type = %s, fdd_input = %s, unit = %s, description = %s, polling = %s
+                               WHERE site_id = %s AND external_id = %s""",
+                            (
+                                row.bacnet_device_id,
+                                row.object_identifier,
+                                row.object_name,
+                                equip_uuid_str,
+                                _brick,
+                                _fdd,
+                                row.unit,
+                                row.description,
+                                _polling,
+                                str(site_uuid),
+                                row.external_id,
+                            ),
+                        )
+                        if cur.rowcount:
+                            updated += 1
             for eq in body.equipment:
+                effective_eq_site_id = eq.site_id if (eq.site_id and str(eq.site_id).strip()) else default_site_id_str
+                if eq.equipment_id:
+                    eq_id = str(_parse_uuid_or_400(eq.equipment_id, "equipment_id", "from GET /equipment (equipment array)"))
+                elif eq.equipment_name and effective_eq_site_id:
+                    site_uuid_eq = _parse_uuid_or_400(effective_eq_site_id, "site_id", "from GET /sites (equipment array)")
+                    eq_id = _ensure_equipment(cur, site_uuid_eq, eq.equipment_name, "Equipment")
+                else:
+                    continue  # skip row without equipment_id or (equipment_name + site_id)
+                site_uuid_for_names = _parse_uuid_or_400(effective_eq_site_id, "site_id", "from GET /sites") if effective_eq_site_id else None
+                feeds_val = eq.feeds_equipment_id or (eq.feeds[0] if getattr(eq, "feeds", None) else None)
+                fed_by_val = eq.fed_by_equipment_id or (eq.fed_by[0] if getattr(eq, "fed_by", None) else None)
                 updates, params = [], []
-                if eq.feeds_equipment_id is not None:
+                if feeds_val is not None:
                     updates.append("feeds_equipment_id = %s::uuid")
-                    params.append(eq.feeds_equipment_id)
-                if eq.fed_by_equipment_id is not None:
+                    if _is_uuid(feeds_val):
+                        params.append(str(_parse_uuid_or_400(feeds_val, "feeds_equipment_id", "from GET /equipment")))
+                    elif site_uuid_for_names:
+                        fid = _get_equipment_id_by_name(cur, site_uuid_for_names, feeds_val)
+                        if not fid:
+                            raise HTTPException(400, f"Equipment name {feeds_val!r} not found for site (create equipment first or use UUID).")
+                        params.append(fid)
+                    else:
+                        raise HTTPException(400, "site_id required in equipment array when feeds_equipment_id is an equipment name.")
+                if fed_by_val is not None:
                     updates.append("fed_by_equipment_id = %s::uuid")
-                    params.append(eq.fed_by_equipment_id)
+                    if _is_uuid(fed_by_val):
+                        params.append(str(_parse_uuid_or_400(fed_by_val, "fed_by_equipment_id", "from GET /equipment")))
+                    elif site_uuid_for_names:
+                        fid = _get_equipment_id_by_name(cur, site_uuid_for_names, fed_by_val)
+                        if not fid:
+                            raise HTTPException(400, f"Equipment name {fed_by_val!r} not found for site (create equipment first or use UUID).")
+                        params.append(fid)
+                    else:
+                        raise HTTPException(400, "site_id required in equipment array when fed_by_equipment_id is an equipment name.")
                 if updates:
-                    params.append(eq.equipment_id)
+                    params.append(eq_id)
                     cur.execute(
                         f"""UPDATE equipment SET {", ".join(updates)} WHERE id = %s""",
                         params,

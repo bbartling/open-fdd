@@ -367,18 +367,39 @@ def write_ttl_to_file() -> tuple[bool, str | None]:
     """
     Serialize graph to TTL and write to config/data_model.ttl.
     Returns (success, error_message). Updates health state.
+    If the configured path is not writable (e.g. missing mount in container),
+    tries /tmp/open_fdd_data_model.ttl so the in-memory graph is at least persisted.
     """
     global _last_serialization_ok, _last_serialization_error, _last_serialization_at
+    ttl = serialize_to_ttl()
+    path = _get_ttl_path()
+
+    def do_write(p: Path) -> None:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(ttl, encoding="utf-8")
+
     try:
-        ttl = serialize_to_ttl()
-        path = _get_ttl_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(ttl, encoding="utf-8")
+        do_write(path)
         with _serialization_lock:
             _last_serialization_ok = True
             _last_serialization_error = None
             _last_serialization_at = datetime.now(timezone.utc)
         return True, None
+    except FileNotFoundError as e:
+        try:
+            fallback = Path("/tmp/open_fdd_data_model.ttl")
+            do_write(fallback)
+            err = (
+                f"Configured path not writable ({e}). Wrote to fallback: {fallback}. "
+                "Fix volume mount so config/data_model.ttl exists (e.g. -v ./config:/app/config)."
+            )
+        except Exception as e2:
+            err = f"{e}. Fallback write also failed: {e2}"
+        with _serialization_lock:
+            _last_serialization_ok = False
+            _last_serialization_error = err
+            _last_serialization_at = datetime.now(timezone.utc)
+        return False, err
     except Exception as e:
         err = str(e)
         with _serialization_lock:
