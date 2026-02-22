@@ -31,7 +31,9 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-This will start the full AFDD edge stack locally.
+This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
+
+![Open-FDD system pyramid](OpenFDD_system_pyramid.png)
 
 ### Development: run unit tests
 
