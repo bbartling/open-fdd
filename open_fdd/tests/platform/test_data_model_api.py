@@ -296,7 +296,11 @@ def test_data_model_import_rejects_placeholder_site_id():
             }
         ]
     }
-    r = client.put("/data-model/import", json=body)
+    with patch(
+        "open_fdd.platform.api.data_model.get_conn",
+        side_effect=lambda: _mock_conn_with_cursor([]),
+    ):
+        r = client.put("/data-model/import", json=body)
     assert r.status_code == 400
     detail = r.json().get("detail", "")
     if isinstance(detail, list):
