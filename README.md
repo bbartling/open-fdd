@@ -33,7 +33,6 @@ cd open-fdd
 
 This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
 
-![Open-FDD system pyramid](OpenFDD_system_pyramid.png)
 
 ### Development: run unit tests
 
@@ -55,7 +54,9 @@ Use the **`dev`** extra so all dependencies (pytest, black, psycopg2, pydantic-s
 
 ## AI Assisted Data Modeling
 
-Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow details (export → tag → import, equipment by name, polling), see [AGENTS.md](AGENTS.md).
+Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [AGENTS.md](AGENTS.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml).
+
+**Canonical prompt** (as defined in [AGENTS.md](AGENTS.md)) — copy-paste this into ChatGPT or your LLM:
 
 ```text
 I use Open-FDD. I will paste the JSON from GET /data-model/export (and optionally my site identifier).
@@ -72,6 +73,10 @@ Your job:
 Return ONLY valid JSON with exactly two top-level keys: "points" (array) and "equipment" (array). No "sites", "equipments", or "relationships". No placeholder UUIDs — use the site_id from the export and equipment names (AHU-1, VAV-1) everywhere. Return the full list of points (recommended) or only those you need for FDD/polling; the import creates or updates only the points you send. If the same external_id appears twice (e.g. two devices with object_name "NetworkPort-1"), the import updates the existing point for that site+external_id; the last row wins.
 ```
 
+
+If OpenFDD nails the ontology, the project will be a huge success: an open-source knowledge graph for buildings. Everything else is just a nice add-on.
+
+![Open-FDD system pyramid](https://raw.githubusercontent.com/bbartling/open-fdd/master/OpenFDD_system_pyramid.png)
 
 ---
 

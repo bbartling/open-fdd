@@ -1,0 +1,79 @@
+# Deterministic mapping template for LLM tagging (Open-FDD)
+# Use with export JSON: match top-to-bottom; first match wins. Copy site_id from export only; never invent.
+# See AGENTS.md § Deterministic mapping and README § AI Assisted Data Modeling.
+
+version: 1
+
+policies:
+  site_id: COPY_FROM_EXPORT_ONLY
+  external_id_duplicates: LAST_WINS_IN_PAYLOAD
+  first_match_wins: true
+  never_change_identity_fields:
+    - point_id
+    - bacnet_device_id
+    - object_identifier
+    - object_name
+    - external_id
+    - site_id
+
+normalize_for_matching_only:
+  trim: true
+  uppercase: true
+  collapse_separators_to_dash: true
+  separators: [" ", "_", "-"]
+
+defaults:
+  brick_prefix: false
+  polling: false
+  unit: null
+  brick_type: null
+  rule_input: null
+  equipment_name: null
+
+equipment_rules:
+  - id: eq_ahu_1
+    equipment_name: AHU-1
+    match_any:
+      bacnet_device_id: ["<AHU_DEVICE_ID>"]
+      external_id_regex: []
+      object_name_regex: []
+
+  - id: eq_vav_1
+    equipment_name: VAV-1
+    match_any:
+      bacnet_device_id: ["<VAV_DEVICE_ID>"]
+      external_id_regex: []
+      object_name_regex: []
+
+point_rules:
+  - id: pt_001_ahu_sat
+    match:
+      bacnet_device_id: ["<AHU_DEVICE_ID>"]
+      object_identifier_regex: ["^analog-input,\\d+$"]
+      external_id_regex: ["^SA-T$"]
+      object_name_regex: []
+    set:
+      brick_type: Supply_Air_Temperature_Sensor
+      rule_input: ahu_sat
+      unit: degF
+      polling: true
+      equipment_name: AHU-1
+
+  - id: pt_999_default
+    match:
+      bacnet_device_id: []
+      object_identifier_regex: []
+      external_id_regex: []
+      object_name_regex: []
+    set:
+      brick_type: null
+      rule_input: null
+      unit: null
+      polling: false
+      equipment_name: null
+
+equipment_relationships:
+  - equipment_name: AHU-1
+    feeds: ["VAV-1"]
+  - equipment_name: VAV-1
+    fed_by: ["AHU-1"]

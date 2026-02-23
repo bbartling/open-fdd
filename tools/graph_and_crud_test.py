@@ -14,7 +14,7 @@ Flow: test → Open-FDD API → (API proxies to) diy-bacnet.
 API coverage (OpenAPI paths exercised):
   - /health
   - /config: GET, PUT (platform config in RDF; same graph as Brick + BACnet)
-  - /sites: list, create, get, patch, delete (demo-import deleted at [20c]; DemoSite deleted at [27] so only TestBenchSite remains)
+  - /sites: list, create, get, patch, delete (demo-import deleted at [20c]; only TestBenchSite used for LLM payload import)
   - /equipment: list, create, get, patch, delete
   - /points: list (by site, by equipment), create, get, patch, delete
   - /data-model: serialize, ttl, export, import (points + equipment feeds), sparql
@@ -22,15 +22,15 @@ API coverage (OpenAPI paths exercised):
   - /download/csv (GET, POST), /download/faults (GET json, csv)
 All SPARQL is via the Open-FDD CRUD API only: POST /data-model/sparql (see _sparql()). No direct triple-store or TTL file access.
 Default API base is http://localhost:8000; use --base-url or BASE_URL for a remote host (e.g. http://192.168.204.16:8000).
-Uses GET /data-model/check at [27] to assert TestBenchSite remains after deleting DemoSite (other sites e.g. BensOffice allowed). Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
+Uses GET /data-model/check at [27] to assert TestBenchSite present (LLM payload imported into TestBenchSite only). Not in this script: GET /bacnet/gateways, /data-model/reset, /data-model/sparql/upload, /analytics/*, /run-fdd/*.
 
 This test uses pre-tagged import payloads (brick_type, rule_input, polling) that simulate the output of the
 AI-assisted tagging step. The real workflow is: GET /data-model/export → LLM or human tags → PUT /data-model/import.
 See docs/modeling/ai_assisted_tagging.md and AGENTS.md for the LLM prompt and export → tag → import flow.
 
 Full LLM payload: Step [4f2] loads tools/demo_site_llm_payload.json (sites, equipments, relationships, points with
-string IDs like site-1, ahu-1). The test maps those to API UUIDs and imports into DemoSite so many BACnet points
-(two devices 3456789, 3456790) have polling=true. Idempotent: existing points are sent with point_id for update.
+string IDs like site-1, ahu-1). The test maps those to API UUIDs and imports into TestBenchSite only so many BACnet
+points (two devices 3456789, 3456790) have polling=true. Idempotent: existing points are sent with point_id for update.
 
 Usage:
 # Default device 3456789
@@ -45,22 +45,14 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 
-# Blast away all sites and re-run test (after test TestBenchSite remains; DemoSite deleted at [27])
+# Blast away all sites and re-run test (after test TestBenchSite has all LLM payload points)
 ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
 # Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
 #
-# Wait for 2 BACnet scrapes before exiting (requires scraper running and diy-bacnet reachable):
-#   python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1
-# Use --scrape-interval-min to match the scraper (Docker default 5; for 1 min set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1
-# in platform/.env and restart: cd platform && docker compose up -d).
-#
-# Reset and retry (full wipe + run test, then wait for scrapes):
-#   ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1
+# BACnet scrape timing / long-run test: use tools/run_bacnet_scrape_interval_test.py (1 min / 5 min / 10 min intervals).
 """
 
 import argparse
-import csv
-import io
 import json
 import os
 import sys
@@ -83,15 +75,14 @@ BACNET_URL = ""
 # When test hits API at localhost, API is often in Docker → from inside container use host to reach BACnet on host
 BACNET_URL_FOR_API_DEFAULT = "http://host.docker.internal:8080"
 BACNET_DEVICE_INSTANCE = 3456789  # default; override with --bacnet-device-instance
-WAIT_SCRAPES = 0  # 0 = do not wait; 2+ = wait until this many BACnet scrapes seen before exit
-SCRAPE_INTERVAL_MIN = 5  # used for wait timeout; Docker default is 5 (override in platform/docker-compose or .env)
 
 # Testbench devices to discover and validate in graph/TTL (when BACnet enabled)
 BACNET_TEST_DEVICE_INSTANCES = (3456789, 3456790)
 # Testbench site + equipment — created/validated, not deleted; override with env TESTBENCH_SITE_NAME etc.
+# Use AHU-1 / VAV-1 so [4d] and demo_site_llm_payload.json share the same equipment (one AHU, one VAV; AHU feeds VAV).
 TESTBENCH_SITE_NAME = os.environ.get("TESTBENCH_SITE_NAME", "TestBenchSite")
-TESTBENCH_AHU_NAME = os.environ.get("TESTBENCH_AHU_NAME", "TestBenchAhu")
-TESTBENCH_VAV_NAME = os.environ.get("TESTBENCH_VAV_NAME", "TestBenchVav")
+TESTBENCH_AHU_NAME = os.environ.get("TESTBENCH_AHU_NAME", "AHU-1")
+TESTBENCH_VAV_NAME = os.environ.get("TESTBENCH_VAV_NAME", "VAV-1")
 # DemoSite: full LLM payload (many BACnet points, two devices 3456789/3456790); see tools/demo_site_llm_payload.json
 DEMO_SITE_LLM_NAME = "DemoSite"
 DEMO_SITE_LLM_PAYLOAD_PATH = Path(__file__).resolve().parent / "demo_site_llm_payload.json"
@@ -582,8 +573,8 @@ def run():
     assert TESTBENCH_VAV_NAME in ttl_body_bens, f"TTL should contain equipment {TESTBENCH_VAV_NAME!r}"
     print(f"    OK — TTL contains {TESTBENCH_SITE_NAME!r}, {TESTBENCH_AHU_NAME!r}, {TESTBENCH_VAV_NAME!r}\n")
 
-    # --- [4f1] TestBenchSite: 2 BACnet points (SA-T, ZoneTemp) so after [27] scraper still has points to poll ---
-    print("[4f1] PUT /data-model/import (2 BACnet points for TestBenchSite — SA-T, ZoneTemp; survives [27] so scraper has work)")
+    # --- [4f1] TestBenchSite: 2 BACnet points (SA-T, ZoneTemp) before full LLM payload ---
+    print("[4f1] PUT /data-model/import (2 BACnet points for TestBenchSite — SA-T, ZoneTemp)")
     code, eq_list_bens = _request("GET", f"/equipment?site_id={bens_site_id}")
     assert ok(code), f"GET /equipment failed: {code}"
     bens_ahu = next((e for e in eq_list_bens if e.get("name") == TESTBENCH_AHU_NAME), None)
@@ -604,7 +595,7 @@ def run():
             bens_pts.append({"site_id": bens_site_id, "external_id": ext_id, "bacnet_device_id": dev, "object_identifier": oid, "object_name": ext_id, "equipment_id": eq_id, "brick_type": brick, "rule_input": rule, "unit": "degF", "polling": True})
     code, res = _request("PUT", "/data-model/import", json_body={"points": bens_pts})
     assert ok(code), f"PUT /data-model/import TestBenchSite points failed: {code} {res}"
-    print(f"    OK — TestBenchSite has 2 BACnet points; after [27] only TestBenchSite remains and scraper will poll these.\n")
+    print(f"    OK — TestBenchSite has 2 BACnet points; full LLM payload imported in [4f2].\n")
 
     # --- [4f1b] AI-style import: equipment by name (no equipment_id), site_id from “export?site_id=…” so no UUID paste; feeds/fed_by by name ---
     # Simulates: GET /data-model/export?site_id=BensTestBench → LLM tags → PUT /data-model/import (equipment_name only; site_id pre-filled from export).
@@ -664,10 +655,10 @@ def run():
     print(f"    SPARQL feeds: {feeds_bens}")
     print(f"    OK — AI payload in model (AHU-1, VAV-1, feeds); TTL and points verified.\n")
 
-    # --- [4f2] Full LLM payload import into DemoSite (many BACnet points, two devices; idempotent) ---
+    # --- [4f2] Full LLM payload import into TestBenchSite only (one site, no DemoSite create/delete) ---
     # Uses tools/demo_site_llm_payload.json: sites/equipments/relationships/points with string IDs (site-1, ahu-1, ...).
-    # Transform to API format (UUIDs), create-or-update points so re-runs do not duplicate.
-    print("[4f2] PUT /data-model/import (full LLM payload → DemoSite: many BACnet points, devices 3456789 + 3456790)")
+    # Transform to API format (UUIDs), create-or-update points under TestBenchSite so re-runs do not duplicate.
+    print("[4f2] PUT /data-model/import (full LLM payload → TestBenchSite: many BACnet points, devices 3456789 + 3456790)")
     assert DEMO_SITE_LLM_PAYLOAD_PATH.exists(), f"Missing {DEMO_SITE_LLM_PAYLOAD_PATH}"
     with open(DEMO_SITE_LLM_PAYLOAD_PATH, encoding="utf-8") as f:
         llm_payload = json.load(f)
@@ -675,16 +666,9 @@ def run():
     equipments_llm = llm_payload.get("equipments") or []
     relationships_llm = llm_payload.get("relationships") or []
     points_llm = llm_payload.get("points") or []
-    assert sites_llm, "LLM payload must have at least one site"
-    site_name_llm = sites_llm[0].get("site_name") or DEMO_SITE_LLM_NAME
-    code, sites_list = _request("GET", "/sites")
-    assert ok(code), f"GET /sites failed: {code}"
-    demo_site = next((s for s in sites_list if s.get("name") == site_name_llm), None)
-    if demo_site is None:
-        code, demo_site = _request("POST", "/sites", json_body={"name": site_name_llm, "description": "LLM payload DemoSite"})
-        assert ok(code), f"POST /sites {site_name_llm} failed: {code} {demo_site}"
-    demo_site_id_full = demo_site["id"]
-    code, eq_list = _request("GET", f"/equipment?site_id={demo_site_id_full}")
+    # Single site: TestBenchSite only (same as data_model.ttl rdfs:label "TestBenchSite")
+    llm_site_id = bens_site_id
+    code, eq_list = _request("GET", f"/equipment?site_id={llm_site_id}")
     assert ok(code), f"GET /equipment failed: {code}"
     existing_eq_by_name = {e["name"]: e for e in eq_list if isinstance(e, dict) and e.get("name")}
     eq_key_to_uuid = {}
@@ -695,11 +679,11 @@ def run():
             continue
         if ename not in existing_eq_by_name:
             eq_type = eq.get("brick_type") or "Equipment"
-            code, created = _request("POST", "/equipment", json_body={"site_id": demo_site_id_full, "name": ename, "description": eq_type, "equipment_type": eq_type})
+            code, created = _request("POST", "/equipment", json_body={"site_id": llm_site_id, "name": ename, "description": eq_type, "equipment_type": eq_type})
             assert ok(code), f"POST /equipment {ename} failed: {code} {created}"
             existing_eq_by_name[ename] = created
         eq_key_to_uuid[eid_key] = existing_eq_by_name[ename]["id"]
-    code, existing_points = _request("GET", f"/points?site_id={demo_site_id_full}")
+    code, existing_points = _request("GET", f"/points?site_id={llm_site_id}")
     assert ok(code), f"GET /points failed: {code}"
     existing_by_key = {}
     for p in existing_points or []:
@@ -714,7 +698,7 @@ def run():
         ext_id = pt.get("external_id")
         site_id_llm = pt.get("site_id")
         eq_id_llm = pt.get("equipment_id")
-        if site_id_llm != sites_llm[0].get("site_id"):
+        if sites_llm and site_id_llm != sites_llm[0].get("site_id"):
             continue
         equipment_uuid = eq_key_to_uuid.get(eq_id_llm) if eq_id_llm and eq_id_llm in eq_key_to_uuid else None
         key = (ext_id, str(pt.get("bacnet_device_id") or ""), str(pt.get("object_identifier") or ""))
@@ -736,7 +720,7 @@ def run():
                 external_id_final = f"{ext_id}_{pt['bacnet_device_id']}"
             used_external_ids.add(external_id_final)
             api_points.append({
-                "site_id": demo_site_id_full,
+                "site_id": llm_site_id,
                 "external_id": external_id_final,
                 "bacnet_device_id": str(pt["bacnet_device_id"]),
                 "object_identifier": str(pt["object_identifier"]),
@@ -757,11 +741,11 @@ def run():
             api_equipment.append({"equipment_id": sub_id, "feeds_equipment_id": obj_id})
             api_equipment.append({"equipment_id": obj_id, "fed_by_equipment_id": sub_id})
     code, import_res = _request("PUT", "/data-model/import", json_body={"points": api_points, "equipment": api_equipment})
-    assert ok(code), f"PUT /data-model/import DemoSite failed: {code} {import_res}"
+    assert ok(code), f"PUT /data-model/import TestBenchSite failed: {code} {import_res}"
     created = import_res.get("created", 0)
     updated = import_res.get("updated", 0)
     polling_count = sum(1 for pt in points_llm if isinstance(pt, dict) and pt.get("polling") is True)
-    print(f"    OK — DemoSite: {created} created, {updated} updated, {len(api_points)} points ({polling_count} with polling=true). Re-run safe (upsert).\n")
+    print(f"    OK — TestBenchSite: {created} created, {updated} updated, {len(api_points)} points ({polling_count} with polling=true). Re-run safe (upsert).\n")
 
     # --- PUT /data-model/import (LLM-style payload: real UUIDs, points + equipment feeds) ---
     demo_site_name = f"demo-import-{uuid4().hex[:8]}"
@@ -1146,24 +1130,30 @@ def run():
         assert "ts" in body or "site_id" in body or "timestamp" in body or "," in body
     print("    OK\n")
 
-    # --- Verify data model: DemoSite has many BACnet points with polling=true (scraper will poll them) ---
-    print("[25] GET /points?site_id=<DemoSite> — verify many BACnet points with polling=true (data flowing via data model)")
-    code, points_list = _request("GET", f"/points?site_id={demo_site_id_full}")
+    # --- Verify data model: TestBenchSite polling=true count matches demo_site_llm_payload.json (CRUD + SPARQL) ---
+    # Expected count = points in JSON with polling=true; data model (CRUD + TTL) must match so BACnet scraper has the same set.
+    assert DEMO_SITE_LLM_PAYLOAD_PATH.exists(), f"Missing {DEMO_SITE_LLM_PAYLOAD_PATH}"
+    with open(DEMO_SITE_LLM_PAYLOAD_PATH, encoding="utf-8") as f:
+        _llm_payload = json.load(f)
+    _points_llm = _llm_payload.get("points") or []
+    expected_polling_count = sum(1 for p in _points_llm if isinstance(p, dict) and p.get("polling") is True)
+
+    print("[25] GET /points?site_id=<TestBenchSite> — CRUD polling=true count must match demo_site_llm_payload.json (scraper will poll these)")
+    code, points_list = _request("GET", f"/points?site_id={bens_site_id}")
     assert ok(code), f"GET /points failed: {code}"
     assert isinstance(points_list, list), f"GET /points did not return a list: {type(points_list)}"
     bacnet_polling = [p for p in points_list if isinstance(p, dict) and p.get("bacnet_device_id") and p.get("polling")]
-    min_bacnet_polling = 15
-    assert len(bacnet_polling) >= min_bacnet_polling, (
-        f"Expected at least {min_bacnet_polling} BACnet points with polling=true for DemoSite (full LLM payload); got {len(bacnet_polling)}. "
-        f"Points: {[(p.get('external_id'), p.get('object_identifier'), p.get('polling')) for p in points_list if isinstance(p, dict) and p.get('bacnet_device_id')][:20]}"
+    assert len(bacnet_polling) == expected_polling_count, (
+        f"Data model polling=true count must match JSON: demo_site_llm_payload.json has {expected_polling_count} points with polling=true; "
+        f"GET /points?site_id=TestBenchSite returned {len(bacnet_polling)}. Points: {[(p.get('external_id'), p.get('polling')) for p in (points_list or []) if isinstance(p, dict) and p.get('bacnet_device_id')][:25]}"
     )
     devices = {p.get("bacnet_device_id") for p in bacnet_polling if p.get("bacnet_device_id")}
     for p in bacnet_polling[:5]:
         print(f"    {p.get('external_id', '')} {p.get('object_identifier', '')} dev={p.get('bacnet_device_id')} polling={p.get('polling')}")
-    print(f"    OK — {len(bacnet_polling)} BACnet point(s) with polling=true across devices {sorted(devices)}; BACnet scraper will poll these.\n")
+    print(f"    OK — {len(bacnet_polling)} BACnet point(s) with polling=true (matches JSON); scraper will poll these. Devices: {sorted(devices)}\n")
 
-    # --- [25b] SPARQL count ofdd:polling true (TTL) and match to API/scraper count ---
-    print("[25b] SPARQL (CRUD): count points with ofdd:polling true; must match scraper load and Grafana dropdowns")
+    # --- [25b] SPARQL ofdd:polling true count must match JSON; TTL = source of truth for scraper ---
+    print("[25b] SPARQL (CRUD): ofdd:polling true count must match demo_site_llm_payload.json (TTL → scraper load)")
     code, _ = _request("GET", "/data-model/ttl?save=true")
     assert ok(code), "GET /data-model/ttl?save=true failed"
     q_polling_count = """
@@ -1174,93 +1164,14 @@ def run():
     assert bindings, "SPARQL polling count returned no bindings"
     n_val = bindings[0].get("n")
     sparql_n = int(str(n_val or "0").split("^")[0].strip())
-    code, all_points = _request("GET", "/points")
-    assert ok(code), f"GET /points failed: {code}"
-    api_bacnet_polling = [p for p in (all_points or []) if isinstance(p, dict) and p.get("bacnet_device_id") and p.get("object_identifier") and p.get("polling")]
-    api_n = len(api_bacnet_polling)
-    min_expected = 17
-    assert sparql_n >= min_expected, (
-        f"SPARQL ofdd:polling true count {sparql_n} < {min_expected}; TTL should have many points from demo_site_llm_payload.json"
+    # SPARQL counts all sites; must be at least the JSON count (TestBenchSite has the LLM payload points).
+    assert sparql_n >= expected_polling_count, (
+        f"SPARQL ofdd:polling true ({sparql_n}) < JSON polling count ({expected_polling_count}); TTL must have at least the demo_site_llm_payload.json points"
     )
-    assert api_n >= min_expected, (
-        f"API BACnet+polling count {api_n} < {min_expected}; scraper and Grafana need points in DB (DemoSite + TestBenchSite)"
-    )
-    # SPARQL counts all points with ofdd:polling true (Brick); API count is only BACnet points. So SPARQL >= api_n
-    # when there are non-BACnet points with polling true (e.g. from other sites or previous runs).
-    assert sparql_n >= api_n, (
-        f"SPARQL ofdd:polling true ({sparql_n}) < API bacnet+polling ({api_n}); TTL should have at least the BACnet set"
-    )
-    print(f"    SPARQL ofdd:polling true = {sparql_n}; API bacnet+polling = {api_n}. Scraper load and Grafana dropdowns = {api_n} points.\n")
+    print(f"    SPARQL ofdd:polling true = {sparql_n} (>= {expected_polling_count} from JSON). Scraper will poll these.\n")
 
-    # --- [26] Last BACnet scrape data (timeseries via CRUD/download API) before exit ---
-    print("[26] GET /download/csv — last BACnet scrape data (timeseries sample)")
-    end_d = date.today()
-    start_d = end_d - timedelta(days=7)
-    code, csv_body = _request(
-        "GET",
-        f"/download/csv?site_id={demo_site_id_full}&start_date={start_d}&end_date={end_d}&format=wide",
-    )
-    if code == 200 and isinstance(csv_body, str) and csv_body.strip():
-        lines = csv_body.strip().splitlines()
-        sample = lines[:20] if len(lines) > 20 else lines
-        print(f"    Timeseries rows (last 7 days): {len(lines)} line(s); sample below:")
-        for line in sample:
-            print(f"      {line[:120]}{'...' if len(line) > 120 else ''}")
-        print(f"    OK — last BACnet scrape data shown above.\n")
-    else:
-        print(f"    No timeseries yet for DemoSite (status={code}); scraper may not have run or diy-bacnet unreachable. See note below.\n")
-
-    # --- [26b] Optional: wait until N BACnet scrapes have run (poll GET /download/csv until distinct timestamps >= N) ---
-    if WAIT_SCRAPES >= 1:
-        # Timeout must allow N scrapes at interval_min (e.g. 10 scrapes at 1 min = 10+ min)
-        timeout_sec = max(
-            2 * SCRAPE_INTERVAL_MIN * 60 + 120,
-            WAIT_SCRAPES * SCRAPE_INTERVAL_MIN * 60 + 120,
-        )
-        print(f"[26b] Wait until {WAIT_SCRAPES} BACnet scrape(s) have run (scrape_interval_min={SCRAPE_INTERVAL_MIN}, timeout ~{timeout_sec // 60} min)")
-        end_d = date.today()
-        start_d = end_d - timedelta(days=1)
-        poll_interval_sec = 20
-        deadline = time.monotonic() + timeout_sec
-        distinct_ts = 0
-        while time.monotonic() < deadline:
-            code, csv_body = _request(
-                "GET",
-                f"/download/csv?site_id={demo_site_id_full}&start_date={start_d}&end_date={end_d}&format=wide",
-            )
-            if code == 200 and isinstance(csv_body, str) and csv_body.strip():
-                lines = csv_body.strip().splitlines()
-                if len(lines) >= 2:
-                    reader = csv.reader(io.StringIO(csv_body))
-                    header = next(reader)
-                    ts_col = 0
-                    for i, h in enumerate(header):
-                        if "timestamp" in (h or "").lower().replace("\ufeff", ""):
-                            ts_col = i
-                            break
-                    seen = set()
-                    for row in reader:
-                        if len(row) > ts_col and row[ts_col]:
-                            seen.add(row[ts_col].strip())
-                    distinct_ts = len(seen)
-                    if distinct_ts >= WAIT_SCRAPES:
-                        print(f"    OK — {distinct_ts} distinct scrape timestamp(s) seen; {WAIT_SCRAPES}+ scrapes done.\n")
-                        break
-            elapsed = int(time.monotonic() - (deadline - timeout_sec))
-            print(f"    ... waiting for scrapes ({distinct_ts} distinct ts so far, {elapsed}s elapsed)")
-            time.sleep(poll_interval_sec)
-        else:
-            print(f"    WARNING — timeout after {timeout_sec}s; scrapes may not have run (check OFDD_BACNET_SCRAPE_INTERVAL_MIN and diy-bacnet reachability).\n")
-    else:
-        print("[26b] Skip (--wait-scrapes 0, default). Use --wait-scrapes 2 to wait for BACnet scrapes.\n")
-
-    # --- [27] Leave only one site: delete DemoSite so GET /data-model/check returns sites=1 (TestBenchSite only) ---
-    print("[27] DELETE /sites/{id} (DemoSite) — TestBenchSite must remain (data-model/check); other sites allowed")
-    code, _ = _request("DELETE", f"/sites/{demo_site_id_full}")
-    assert ok(code), f"DELETE DemoSite failed: {code}"
-    code, _ = _request("GET", f"/sites/{demo_site_id_full}")
-    assert code == 404, f"DemoSite should be gone: {code}"
-    # GET /data-model/check syncs Brick from DB then counts. Require TestBenchSite present; allow other sites (e.g. BensOffice).
+    # --- [27] Assert TestBenchSite present (no DemoSite; LLM payload was imported into TestBenchSite only) ---
+    print("[27] GET /data-model/check — TestBenchSite present (single site for LLM payload)")
     code, check = _request("GET", "/data-model/check")
     assert ok(code), f"GET /data-model/check failed: {code}"
     sites_count = (check or {}).get("sites", 0)
@@ -1268,9 +1179,9 @@ def run():
     names = [s.get("name") for s in (sites_list or []) if isinstance(s, dict)]
     if sites_count < 1 or TESTBENCH_SITE_NAME not in names:
         assert False, (
-            f"After [27] expected TestBenchSite present; GET /data-model/check sites={sites_count}, site names: {names}"
+            f"Expected TestBenchSite present; GET /data-model/check sites={sites_count}, site names: {names}"
         )
-    print(f"    OK — DemoSite deleted; TestBenchSite present (sites={sites_count}: {names}).\n")
+    print(f"    OK — TestBenchSite present (sites={sites_count}: {names}).\n")
 
     print("=== All features passed ===\n")
     print(
@@ -1284,7 +1195,7 @@ def run():
     print("  config/data_model.ttl is updated on every CRUD and serialize.")
     print("  GET /data-model/export = unified dump (BACnet + DB points); ready to try LLM Brick tagging (docs/modeling/ai_assisted_tagging, docs/appendix/technical_reference) → PUT /data-model/import.")
     print("  AI step: In production you use GET /data-model/export → LLM or human tags (brick_type, rule_input, polling) → PUT /data-model/import. See docs/modeling/ai_assisted_tagging.md and AGENTS.md.")
-    print("  Note: After [27] TestBenchSite remains (DemoSite deleted); GET /data-model/check may show sites>=1 if e.g. BensOffice exists. Grafana BACnet dropdowns then show only 2 points (TestBenchSite: SA-T, ZoneTemp). To see 24 points in Grafana, stop before [27] or skip the DemoSite delete (docs/howto/grafana_cookbook). Scrape interval: set OFDD_BACNET_SCRAPE_INTERVAL_MIN=1 in platform/.env and 'cd platform && docker compose up -d' (no rebuild). If 'diy-bacnet-server unreachable': ensure bacnet-server is running and OFDD_BACNET_SERVER_URL. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
+    print("  Note: LLM payload is imported into TestBenchSite only (one site). For BACnet scrape interval testing (1 / 5 / 10 min), use tools/run_bacnet_scrape_interval_test.py. Re-run: ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py\n")
 
 
 def main() -> None:
@@ -1313,23 +1224,9 @@ def main() -> None:
         metavar="ID",
         help="BACnet device instance for point_discovery_to_graph (0-4194303). Default: 3456789.",
     )
-    parser.add_argument(
-        "--wait-scrapes",
-        type=int,
-        default=0,
-        metavar="N",
-        help="Wait until N BACnet scrapes have run before exiting (0 = skip). Default: 0.",
-    )
-    parser.add_argument(
-        "--scrape-interval-min",
-        type=int,
-        default=5,
-        metavar="M",
-        help="Assumed scraper interval in minutes (for wait timeout). Must match OFDD_BACNET_SCRAPE_INTERVAL_MIN. Default: 5.",
-    )
     args = parser.parse_args()
 
-    global BASE_URL, BACNET_URL, BACNET_DEVICE_INSTANCE, WAIT_SCRAPES, SCRAPE_INTERVAL_MIN
+    global BASE_URL, BACNET_URL, BACNET_DEVICE_INSTANCE
     BASE_URL = (os.environ.get("BASE_URL") or args.base_url).strip().rstrip("/")
     if args.skip_bacnet:
         BACNET_URL = ""
@@ -1342,10 +1239,6 @@ def main() -> None:
             BACNET_URL = raw
     BACNET_DEVICE_INSTANCE = int(
         os.environ.get("BACNET_DEVICE_INSTANCE", str(args.bacnet_device_instance))
-    )
-    WAIT_SCRAPES = int(os.environ.get("OFDD_WAIT_SCRAPES", str(args.wait_scrapes)))
-    SCRAPE_INTERVAL_MIN = int(
-        os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN", str(args.scrape_interval_min))
     )
 
     run()

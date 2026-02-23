@@ -19,6 +19,7 @@ Optional: OFDD_BACNET_SITE_ID, OFDD_BACNET_SCRAPE_ENABLED, OFDD_BACNET_SCRAPE_IN
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -106,8 +107,27 @@ def main() -> int:
         if not settings.bacnet_scrape_enabled:
             log.warning("BACnet scrape disabled.")
             return 0
-        interval_sec = settings.bacnet_scrape_interval_min * 60
+
+        def _gw_interval_min() -> int:
+            try:
+                v = os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN")
+                if v is not None and str(v).strip():
+                    return int(v.strip())
+            except (ValueError, TypeError):
+                pass
+            return get_platform_settings().bacnet_scrape_interval_min
+
+        prev_interval_min: int | None = None
         while True:
+            interval_min = _gw_interval_min()
+            interval_sec = interval_min * 60
+            if prev_interval_min is not None and interval_min != prev_interval_min:
+                log.info(
+                    "BACnet scrape interval changed: %d min -> %d min (OFDD_BACNET_SCRAPE_INTERVAL_MIN)",
+                    prev_interval_min,
+                    interval_min,
+                )
+            prev_interval_min = interval_min
             total_rows, total_points, total_errors = 0, 0, 0
             for gw in gateways:
                 url = gw.get("url") or gw.get("server_url")
@@ -140,10 +160,11 @@ def main() -> int:
             if not args.loop:
                 return 0
             log.info(
-                "Multi-gateway cycle done: %d rows, %d points; sleeping %d s",
+                "Multi-gateway cycle done: %d rows, %d points; sleeping %d s (interval=%d min)",
                 total_rows,
                 total_points,
                 interval_sec,
+                interval_min,
             )
             time.sleep(interval_sec)
 
@@ -195,22 +216,44 @@ def main() -> int:
         )
 
     if args.loop:
-        interval_sec = settings.bacnet_scrape_interval_min * 60
+        def _current_interval_min() -> int:
+            """Re-read interval from env/settings each call so container can respond to changes."""
+            try:
+                v = os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN")
+                if v is not None and str(v).strip():
+                    return int(v.strip())
+            except (ValueError, TypeError):
+                pass
+            return get_platform_settings().bacnet_scrape_interval_min
+
+        interval_min = _current_interval_min()
+        interval_sec = interval_min * 60
         log.info(
-            "BACnet scrape loop: data_model=%s csv=%s site=%s interval=%d min",
+            "BACnet scrape loop: data_model=%s csv=%s site=%s interval=%d min (OFDD_BACNET_SCRAPE_INTERVAL_MIN)",
             use_data_model,
             csv_path,
             site_id,
-            settings.bacnet_scrape_interval_min,
+            interval_min,
         )
+        prev_interval_min: int | None = None
         while True:
+            interval_min = _current_interval_min()
+            interval_sec = interval_min * 60
+            if prev_interval_min is not None and interval_min != prev_interval_min:
+                log.info(
+                    "BACnet scrape interval changed: %d min -> %d min (OFDD_BACNET_SCRAPE_INTERVAL_MIN)",
+                    prev_interval_min,
+                    interval_min,
+                )
+            prev_interval_min = interval_min
             try:
                 result = _run_single()
                 log.info(
-                    "Scrape cycle: %d rows, %d points, %d errors",
+                    "Scrape cycle: %d rows, %d points, %d errors (interval=%d min)",
                     result["rows_inserted"],
                     result["points_created"],
                     len(result["errors"]),
+                    interval_min,
                 )
             except Exception as e:
                 log.exception("Scrape failed: %s", e)

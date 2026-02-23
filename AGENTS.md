@@ -44,21 +44,32 @@ Use this (or adapt it) when sending the export JSON to an external LLM:
 
 ### When using an external LLM (e.g. ChatGPT) — easy workflow (equipment by name)
 
+**Ready-to-paste prompt:** See [README.md](README.md#ai-assisted-data-modeling) for the canonical copy-paste block to send to ChatGPT or any LLM.
+
 **You only need to provide the site.** The import API can **create equipment by name** (e.g. AHU-1, VAV-1); the LLM does not need to know any equipment UUIDs.
 
 1. **Create a site** (POST /sites) if you don’t have one.
 2. **Export with site filter** — Call `GET /data-model/export?site_id=YourSiteName` (e.g. `?site_id=TestBench-Site`). Unimported rows will already have **`site_id` and `site_name`** set. Send this JSON to the LLM.
 3. **Tell the LLM:** “Tag the points with brick_type, rule_input, and polling. Create two equipment: AHU-1 (type AHU) and VAV-1 (type VAV). Assign points from BACnet device 3456789 to AHU-1 and from 3456790 to VAV-1. Use **equipment_name** (e.g. `equipment_name: \"AHU-1\"`) and **do not** use equipment_id or any UUID placeholders for equipment.”
-4. **Equipment relationships** — In the **equipment** array the LLM can use names: `{ "equipment_name": "AHU-1", "site_id": "<site-uuid>", "feeds_equipment_id": "VAV-1" }` and `{ "equipment_name": "VAV-1", "site_id": "<site-uuid>", "fed_by_equipment_id": "AHU-1" }`. Import resolves names to equipment (and creates AHU-1/VAV-1 if missing).
+4. **Equipment relationships** — In the **equipment** array the LLM must use the **same site_id as in points** (copy from export; never use a placeholder). Example: `{ "equipment_name": "AHU-1", "site_id": "<same-as-in-points>", "feeds_equipment_id": "VAV-1" }`. Import resolves names to equipment (and creates AHU-1/VAV-1 if missing).
 5. **Only site_id must be real** — Use export with `?site_id=...` so `site_id` is already filled, or paste your site UUID once. Then **PUT /data-model/import** with the LLM’s JSON. No equipment UUIDs needed.
 
 **Summary:** Use **GET /data-model/export?site_id=YourSite**. The LLM outputs **equipment_name** (e.g. "AHU-1", "VAV-1") and optional **equipment_type** (e.g. "AHU", "VAV"). Import **creates** that equipment under your site and assigns points. For the **equipment** array use **equipment_name** + **site_id**; **feeds_equipment_id** and **fed_by_equipment_id** can be equipment names (e.g. "VAV-1") instead of UUIDs.
+
+### Deterministic mapping (optional, repeatable tagging)
+
+To make LLM tagging **repeatable** and avoid bad data (e.g. invented site_id placeholders), use a **mapping table** so the model behaves like a rules engine, not a creative writer.
+
+- **Template:** [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml) — blank YAML with `equipment_rules`, `point_rules` (match top-to-bottom; first match wins), `defaults`, and `equipment_relationships`. Fill in device IDs and regexes for your AHU/VAV point names.
+- **Policies:** `site_id`: copy from export only, never invent. `external_id_duplicates`: last row in payload wins (import upserts). Identity fields (`point_id`, `bacnet_device_id`, `object_identifier`, `object_name`, `external_id`, `site_id`) are never changed.
+- **Instructions to paste above the export JSON:** (1) Copy `site_id` from each export row; if all are null, keep null. (2) Normalize for matching only (trim, uppercase, collapse separators). (3) Assign `equipment_name` from `equipment_rules` (match `bacnet_device_id` or regex). (4) Assign Brick tags from `point_rules`; first match wins; else apply defaults (polling false, brick_type/rule_input/unit null). (5) Output only `{ "points": [...], "equipment": [...] }` with equipment relationships by name and same site_id as in points.
+- **Placeholder guard:** If any row has a `site_id` that is not null and does not look like a UUID or TTL-style `site_...`, tell the user to re-export with `GET /data-model/export?site_id=YourSiteName` so site_id is pre-filled.
 
 ---
 
 ## Where to Look (ordered)
 
-1. **docs/** — Overview, BACnet (discovery → point_discovery_to_graph → export), data modeling (sites, equipment, points), **AI-assisted tagging** ([docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md)), rules, API reference.
+1. **docs/** — Overview, BACnet (discovery → point_discovery_to_graph → export), data modeling (sites, equipment, points), **AI-assisted tagging** ([docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md)), **deterministic mapping template** ([docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml)), rules, API reference.
 2. **docs/api/platform.md** — REST API (sites, points, equipment, data-model export/import, TTL, SPARQL).
 3. **docs/rules/overview.md** — Rule types, Brick-only inputs, `analyst/rules/`, hot reload.
 4. **docs/expression_rule_cookbook.md** — Expression rule recipes (Brick inputs).
@@ -98,7 +109,8 @@ Use this (or adapt it) when sending the export JSON to an external LLM:
 
 The API accepts **only** two top-level keys. **Do not** send `sites`, `equipments`, or `relationships`.
 
-- **`points`** (array, required): Each row is a point to create or update. To **create**, omit `point_id` and set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` (and optionally `object_name`, **`equipment_name`** (e.g. "AHU-1") or `equipment_id`, `equipment_type`, `brick_type`, `rule_input`, `unit`, `polling`). **If you set `equipment_name` and `site_id` and omit `equipment_id`, import creates that equipment under the site and assigns the point.** To **update**, set `point_id` and any fields to change. **`site_id`** must be a real UUID (use GET /data-model/export?site_id=... to pre-fill).
+- **`points`** (array, required): Each row is a point to create or update. To **create**, omit `point_id` and set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier` (and optionally `object_name`, **`equipment_name`** (e.g. "AHU-1") or `equipment_id`, `equipment_type`, `brick_type`, `rule_input`, `unit`, `polling`, **`site_name`**). If `site_id` is null, import may resolve site from **`site_name`** (same as export `?site_id=SiteName`); prefer pre-filling `site_id` via export. **If you set `equipment_name` and `site_id` and omit `equipment_id`, import creates that equipment under the site and assigns the point.** To **update**, set `point_id` and any fields to change. **`site_id`** must be a real UUID when provided (use GET /data-model/export?site_id=... to pre-fill).
+- Import response may include **`warnings`**: when the same (site_id, external_id) appears more than once in the payload, the last row wins and a warning is returned (e.g. `{"external_id": "NetworkPort-1", "reason": "duplicate in payload; existing point updated (last wins)"}`).
 - **`equipment`** (array, optional): Set Brick feeds/isFedBy. Each item can use **`equipment_id`** (UUID) or **`equipment_name` + `site_id`** (import finds or creates that equipment). **`feeds_equipment_id`** and **`fed_by_equipment_id`** can be UUIDs or **equipment names** (e.g. "VAV-1"); when using names, include **`site_id`** in that row. Example by name: `{ "equipment_name": "AHU-1", "site_id": "<site-uuid>", "feeds_equipment_id": "VAV-1" }`.
 
 **Workflow for LLM output (easy):** (1) Create site (POST /sites). (2) GET /data-model/export?site_id=YourSite so `site_id` is pre-filled. (3) LLM tags points and uses **equipment_name** (e.g. "AHU-1", "VAV-1"); no equipment UUIDs needed. (4) PUT /data-model/import — backend creates equipment by name. **Alternative:** use equipment_id (UUIDs from GET /equipment) if you create equipment yourself. Send only `points` and `equipment` (no `sites`, `equipments`, or `relationships`).
