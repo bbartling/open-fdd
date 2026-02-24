@@ -7,7 +7,6 @@ WORKDIR /app
 
 COPY pyproject.toml README.md MANIFEST.in ./
 COPY open_fdd ./open_fdd
-COPY tools ./tools
 RUN pip install --no-cache-dir -e ".[platform,monitoring]"
 
-CMD ["python", "-u", "tools/run_host_stats.py", "--loop"]
+CMD ["python", "-u", "-m", "open_fdd.platform.drivers.run_host_stats", "--loop"]

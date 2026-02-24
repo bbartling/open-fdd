@@ -26,7 +26,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PLATFORM_DIR="$REPO_ROOT/platform"
+STACK_DIR="$REPO_ROOT/stack"
 
 # -----------------------------
 # Flags / defaults
@@ -46,10 +46,10 @@ RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
 LOG_MAX_FILES=3
 
-# Allow env overrides from platform/.env (if present)
-if [[ -f "$PLATFORM_DIR/.env" ]]; then
+# Allow env overrides from stack/.env (if present)
+if [[ -f "$STACK_DIR/.env" ]]; then
   # shellcheck source=/dev/null
-  set -a && source "$PLATFORM_DIR/.env" 2>/dev/null; set +a
+  set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
   [[ -n "${OFDD_RETENTION_DAYS:-}" ]] && RETENTION_DAYS="${OFDD_RETENTION_DAYS}"
   [[ -n "${OFDD_LOG_MAX_SIZE:-}" ]] && LOG_MAX_SIZE="${OFDD_LOG_MAX_SIZE}"
   [[ -n "${OFDD_LOG_MAX_FILES:-}" ]] && LOG_MAX_FILES="${OFDD_LOG_MAX_FILES}"
@@ -243,7 +243,7 @@ check_prereqs() {
 }
 
 write_edge_env() {
-  local env_file="$PLATFORM_DIR/.env"
+  local env_file="$STACK_DIR/.env"
   [[ -f "$env_file" ]] || touch "$env_file"
 
   # Use sed -i portability: GNU sed vs BSD sed
@@ -320,7 +320,7 @@ verify() {
     echo "DB: localhost:5432/openfdd (OK)"
   else
     echo "DB: not reachable"
-    echo "  → Start stack: ./scripts/bootstrap.sh  (or: cd platform && $(docker_compose_cmd) up -d db grafana)"
+    echo "  → Start stack: ./scripts/bootstrap.sh  (or: cd STACK && $(docker_compose_cmd) up -d db grafana)"
   fi
 
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_grafana; then
@@ -372,7 +372,7 @@ seed_config_via_api() {
     return 1
   fi
 
-  echo "=== Seeding platform config (PUT /config) ==="
+  echo "=== Seeding STACK config (PUT /config) ==="
   local body
   body=$(python3 -c "
 import json, os
@@ -470,7 +470,7 @@ apply_migrations_best_effort() {
   local dc
   dc="$(docker_compose_cmd)"
   (
-    cd "$PLATFORM_DIR"
+    cd "$STACK_DIR"
     $dc exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql 2>/dev/null || true
     $dc exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql 2>/dev/null || true
     $dc exec -T db psql -U postgres -d openfdd -f - < sql/006_host_metrics.sql 2>/dev/null || true
@@ -563,7 +563,7 @@ if $UPDATE_PULL_REBUILD; then
     safe_docker_prune
   fi
 
-  cd "$PLATFORM_DIR"
+  cd "$STACK_DIR"
   if $SKIP_BUILD; then
     echo "No new commits detected; restarting containers only."
     $dc up -d
@@ -597,7 +597,7 @@ fi
 # --build-all
 # -----------------------------
 if $BUILD_ALL; then
-  cd "$PLATFORM_DIR"
+  cd "$STACK_DIR"
   echo "=== Rebuilding and restarting all containers ==="
   $dc build
   $dc up -d
@@ -609,7 +609,7 @@ fi
 # --reset-grafana
 # -----------------------------
 if $RESET_GRAFANA; then
-  cd "$PLATFORM_DIR"
+  cd "$STACK_DIR"
   echo "=== Resetting Grafana (wipe volume, re-apply provisioning) ==="
   $dc stop grafana 2>/dev/null || true
   $dc rm -f grafana 2>/dev/null || true
@@ -625,7 +625,7 @@ fi
 # --build SERVICE ...
 # -----------------------------
 if [[ -n "$BUILD_SERVICES_STR" ]]; then
-  cd "$PLATFORM_DIR"
+  cd "$STACK_DIR"
   echo "=== Rebuilding and restarting: $BUILD_SERVICES_STR ==="
   $dc build $BUILD_SERVICES_STR
   $dc up -d $BUILD_SERVICES_STR
@@ -636,7 +636,7 @@ fi
 # -----------------------------
 # Default run (NO ARGS): FULL STACK
 # -----------------------------
-cd "$PLATFORM_DIR"
+cd "$STACK_DIR"
 
 if $MINIMAL; then
   echo "=== Starting minimal stack (raw BACnet: DB + Grafana + BACnet server + scraper) ==="
@@ -674,5 +674,5 @@ else
 fi
 echo ""
 echo "Verify all services: ./scripts/bootstrap.sh --verify"
-echo "View logs: $(docker_compose_cmd) -f platform/docker-compose.yml logs -f"
+echo "View logs: $(docker_compose_cmd) -f stack/docker-compose.yml logs -f"
 echo ""

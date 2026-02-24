@@ -4,9 +4,8 @@ Long-run BACnet scrape interval test: 1h @ 1 min, 1h @ 5 min, 1h @ 10 min, confi
 
 Production-style: only the CRUD API. At each phase we PUT /config to set
 bacnet_scrape_interval_min (1, 5, 10); the data model (config/data_model.ttl) is updated.
-After each 1h wait we validate via GET /config and GET /download/csv (distinct scrape
-timestamps). The running bacnet-scraper (Docker openfdd_bacnet_scraper) must pick up
-the new interval (e.g. from TTL or by restarting so env is applied).
+After each 1h wait we validate by comparing the total distinct timestamps BEFORE 
+and AFTER the wait to see exactly how many scrapes occurred in that specific window.
 
 Usage:
   BASE_URL=http://192.168.204.16:8000 python tools/run_bacnet_scrape_interval_test.py
@@ -28,11 +27,12 @@ except ImportError:
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 SITE_ID = os.environ.get("OFDD_BACNET_SITE_ID", "default")
 
-# Phases: (interval_min, duration_sec, min_distinct_timestamps_for_pass)
+# Phases: (interval_min, duration_sec, min_expected_scrapes, max_expected_scrapes)
+# Added max_expected so we catch if the scraper is running TOO fast (e.g. stuck at 1min)
 PHASES = [
-    (1, 60 * 60, 55),
-    (5, 60 * 60, 11),
-    (10, 60 * 60, 5),
+    (1, 60 * 60, 55, 65),   # Expect ~60 scrapes
+    (5, 60 * 60, 10, 15),   # Expect ~12 scrapes
+    (10, 60 * 60, 4, 8),    # Expect ~6 scrapes
 ]
 
 
@@ -107,37 +107,64 @@ def main() -> int:
     cycle = 0
     while True:
         cycle += 1
-        print(f"\n=== Cycle {cycle} ===\n")
-        for interval_min, duration_sec, min_ts in PHASES:
+        print(f"\n=======================")
+        print(f"=== Cycle {cycle} ===")
+        print(f"=======================\n")
+        
+        for interval_min, duration_sec, min_ts, max_ts in PHASES:
             print(f"--- Phase: {interval_min} min interval ---")
-            print(f"  PUT /config: bacnet_scrape_interval_min={interval_min} (API/data model)")
+            
+            # 1. Update Config
+            print(f"  PUT /config: bacnet_scrape_interval_min={interval_min}")
             if not put_config_interval(interval_min):
                 print(f"  PUT /config failed.", file=sys.stderr)
                 continue
+                
             cfg = get_config()
             if cfg is not None:
                 current = cfg.get("bacnet_scrape_interval_min")
-                print(f"  GET /config: bacnet_scrape_interval_min={current} (match scraper log 'interval=N min' or OFDD_BACNET_SCRAPE_INTERVAL_MIN)")
+                print(f"  GET /config confirmed value: {current}")
+
+            # 2. Get baseline timestamp count
+            # Use a wide date range to ensure we don't miss anything if crossing midnight
+            start_d = date.today() - timedelta(days=2)
+            end_d = date.today() + timedelta(days=1)
+            
+            count_before, _ = get_download_csv_distinct_timestamps(start_d, end_d)
+            print(f"  Baseline total timestamps before wait: {count_before}")
+
+            # 3. Wait
             print(f"  Waiting {duration_sec // 60} min...")
             time.sleep(duration_sec)
 
-            end_d = date.today()
-            start_d = end_d - timedelta(days=1)
-            count, preview = get_download_csv_distinct_timestamps(start_d, end_d)
-            ok = count >= min_ts
+            # 4. Get post-wait timestamp count
+            count_after, preview = get_download_csv_distinct_timestamps(start_d, end_d)
+            
+            # 5. Calculate exactly how many scrapes happened
+            actual_scrapes = count_after - count_before
+            
+            # 6. Validate
+            ok = min_ts <= actual_scrapes <= max_ts
             status = "OK" if ok else "FAIL"
-            print(f"  GET /download/csv distinct timestamps (last 24h): {count} (min {min_ts} for pass) — {status}")
+            
+            print(f"  Total timestamps after wait: {count_after}")
+            print(f"  -> NEW scrapes this hour: {actual_scrapes}")
+            print(f"  -> Expected between {min_ts} and {max_ts} scrapes")
+            print(f"  -> Result: {status}\n")
+            
             if not ok and preview:
                 print(f"  Response preview: {preview[:150]}...")
 
-        print("\n--- Confirm: cycle complete ---")
+        print("--- Confirm: cycle complete ---")
         cfg = get_config()
         if cfg:
             current = cfg.get("bacnet_scrape_interval_min")
-            print(f"  GET /config: bacnet_scrape_interval_min={current} (same value scraper logs each cycle)")
+            print(f"  GET /config ending value: {current}")
+            
         if once:
             print("One cycle done (--once). Exiting.")
             return 0
+            
         print("Starting next cycle...\n")
 
 
