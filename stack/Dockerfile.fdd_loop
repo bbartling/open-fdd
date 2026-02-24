@@ -1,0 +1,10 @@
+FROM python:3.14-slim
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+
+COPY pyproject.toml README.md MANIFEST.in ./
+COPY open_fdd ./open_fdd
+RUN pip install --no-cache-dir -e ".[platform,brick]"
+
+CMD ["python", "-u", "-m", "open_fdd.platform.drivers.run_rule_loop", "--loop"]

@@ -1,5 +1,5 @@
 # Open-FDD platform stack: TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper, API.
-# Run: docker compose -f platform/docker-compose.yml up -d
+# Run: docker compose -f stack/docker-compose.yml up -d
 # Or: ./scripts/bootstrap.sh
 #
 # Only one service runs BACnet scrape: bacnet-scraper (openfdd_bacnet_scraper).
@@ -8,7 +8,7 @@
 # Prerequisite: diy-bacnet-server as sibling of open-fdd (or override build context).
 # Rules YAML and config are mounted from repo — edit on host, containers see changes.
 #
-# Edge limits: log rotation and data retention set at bootstrap or via platform/.env
+# Edge limits: log rotation and data retention set at bootstrap or via stack/.env
 # (OFDD_LOG_MAX_SIZE, OFDD_LOG_MAX_FILES, OFDD_RETENTION_DAYS).
 
 x-log-opts: &log-opts
@@ -42,8 +42,7 @@ services:
   bacnet-scraper:
     build:
       context: ..
-      dockerfile: platform/Dockerfile.scraper
-    image: openfdd-bacnet-scraper:latest
+      dockerfile: stack/Dockerfile.bacnet_scraper
     container_name: openfdd_bacnet_scraper
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -51,9 +50,10 @@ services:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_BACNET_SCRAPE_ENABLED: "true"
-      # 1 = every minute (for tests); override via platform/.env OFDD_BACNET_SCRAPE_INTERVAL_MIN
+      # 1 = every minute (for tests); override via stack/.env OFDD_BACNET_SCRAPE_INTERVAL_MIN
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
+      OFDD_API_URL: http://openfdd_api:8000
     volumes:
       - ../config:/app/config:ro
     depends_on:
@@ -70,10 +70,9 @@ services:
   weather-scraper:
     build:
       context: ..
-      dockerfile: platform/Dockerfile.scraper
-    image: openfdd-bacnet-scraper:latest
+      dockerfile: stack/Dockerfile.weather_scraper
     container_name: openfdd_weather_scraper
-    command: ["python", "-u", "tools/run_weather_fetch.py", "--loop"]
+    command: ["python", "-u", "-m", "open_fdd.platform.drivers.run_weather_fetch", "--loop"]
     environment:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_OPEN_METEO_ENABLED: "true"
@@ -140,10 +139,9 @@ services:
   fdd-loop:
     build:
       context: ..
-      dockerfile: platform/Dockerfile.scraper
-    image: openfdd-bacnet-scraper:latest
+      dockerfile: stack/Dockerfile.fdd_loop
     container_name: openfdd_fdd_loop
-    command: ["python", "-u", "tools/run_rule_loop.py", "--loop"]
+    command: ["python", "-u", "-m", "open_fdd.platform.drivers.run_rule_loop", "--loop"]
     environment:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_RULE_INTERVAL_HOURS: "3"
@@ -167,8 +165,7 @@ services:
   host-stats:
     build:
       context: ..
-      dockerfile: platform/Dockerfile.hoststats
-    image: openfdd-hoststats:latest
+      dockerfile: stack/Dockerfile.hoststats
     container_name: openfdd_host_stats
     environment:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
@@ -189,8 +186,7 @@ services:
   api:
     build:
       context: ..
-      dockerfile: platform/Dockerfile.api
-    image: openfdd-api:latest
+      dockerfile: stack/Dockerfile.api
     container_name: openfdd_api
     working_dir: /app
     ports:
@@ -214,7 +210,7 @@ services:
       driver: json-file
       options: *log-opts
 
-  # Optional: Caddy reverse proxy with basic auth (see platform/caddy/ and docs/security.md)
+  # Optional: Caddy reverse proxy with basic auth (see stack/caddy/ and docs/security.md)
   caddy:
     image: caddy:2
     container_name: openfdd_caddy

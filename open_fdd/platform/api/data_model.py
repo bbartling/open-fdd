@@ -319,6 +319,10 @@ class PointImportRow(BaseModel):
         None,
         description="Site UUID (GET /sites). Required when creating a point; optional when updating.",
     )
+    site_name: str | None = Field(
+        None,
+        description="Optional. When site_id is null, import can resolve site by name (same as GET /data-model/export?site_id=SiteName). Prefer pre-filling site_id via export.",
+    )
     equipment_id: str | None = Field(
         None, description="Assign point to this equipment (UUID from GET /equipment). Omit and set equipment_name to have import create equipment by name."
     )
@@ -538,12 +542,13 @@ def _get_equipment_id_by_name(cur: Any, site_id: UUID, name: str) -> str | None:
 @router.put(
     "/import",
     summary="Import Brick mapping (create or update points; preserves BACnet refs)",
-    response_description='Count created/updated (e.g. { "created": 5, "updated": 25, "total": 30 }).',
+    response_description='Count created/updated (e.g. { "created": 5, "updated": 25, "total": 30, "warnings": [...] }). warnings when duplicate (site_id, external_id) in payload (last wins).',
 )
 def import_data_model(body: DataModelImportBody):
     """Update existing points by point_id, or create new points when point_id is omitted and bacnet_device_id, object_identifier, site_id, external_id are provided (e.g. from GET /data-model/export after LLM tagging). If site_id is null and there is exactly one site in the DB, that site is used. Optional equipment[] updates feeds_equipment_id/fed_by_equipment_id. After all DB updates, RDF is rebuilt from DB and serialized to TTL (in-memory graph + file)."""
     created = 0
     updated = 0
+    warnings: list[dict] = []
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM sites")
@@ -589,6 +594,8 @@ def import_data_model(body: DataModelImportBody):
                 else:
                     # Create new point: require site_id (or default when exactly one site), external_id, bacnet_device_id, object_identifier
                     effective_site_id = row.site_id if (row.site_id and str(row.site_id).strip()) else default_site_id_str
+                    if effective_site_id is None and getattr(row, "site_name", None) and str(row.site_name).strip():
+                        effective_site_id = _resolve_site_id_by_name(cur, row.site_name)
                     if not all(
                         [
                             effective_site_id,
@@ -658,6 +665,9 @@ def import_data_model(body: DataModelImportBody):
                         )
                         if cur.rowcount:
                             updated += 1
+                            warnings.append(
+                                {"external_id": row.external_id, "reason": "duplicate in payload; existing point updated (last wins)"}
+                            )
             for eq in body.equipment:
                 effective_eq_site_id = eq.site_id if (eq.site_id and str(eq.site_id).strip()) else default_site_id_str
                 if eq.equipment_id:
@@ -704,10 +714,31 @@ def import_data_model(body: DataModelImportBody):
         sync_ttl_to_file()
     except Exception:
         pass
-    return {"created": created, "updated": updated, "total": len(body.points)}
+    out: dict = {"created": created, "updated": updated, "total": len(body.points)}
+    if warnings:
+        out["warnings"] = warnings
+    return out
 
 
 # --- TTL: generate from DB (always in sync with CRUD) ---
+
+
+def _resolve_site_id_by_name(cur: Any, name: str | None) -> str | None:
+    """Resolve site id string by site name or description using existing cursor. Returns None if not found or empty."""
+    if not name or not str(name).strip():
+        return None
+    s = str(name).strip()
+    try:
+        UUID(s)
+        return s
+    except (ValueError, TypeError):
+        pass
+    cur.execute(
+        """SELECT id FROM sites WHERE name ILIKE %s OR description ILIKE %s LIMIT 1""",
+        (s, s),
+    )
+    row = cur.fetchone()
+    return str(row["id"]) if row else None
 
 
 def _resolve_site_filter(site_filter: str | None) -> UUID | None:

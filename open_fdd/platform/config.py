@@ -36,7 +36,7 @@ class PlatformSettings(BaseSettings):
         "config/data_model.ttl"  # unified graph: Brick + BACnet + config; auto-synced on CRUD
     )
     app_title: str = "Open-FDD API"
-    app_version: str = "2.0.1"
+    app_version: str = "2.0.2"
     debug: bool = False
 
     # FDD loop
