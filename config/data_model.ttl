@@ -43,7 +43,7 @@
 ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:bacnetEnabled true ;
     ofdd:bacnetGateways "string" ;
-    ofdd:bacnetScrapeIntervalMin 5 ;
+    ofdd:bacnetScrapeIntervalMin 1 ;
     ofdd:bacnetServerUrl "http://localhost:8080" ;
     ofdd:bacnetSiteId "default" ;
     ofdd:brickTtlDir "config" ;
@@ -52,11 +52,11 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:openMeteoDaysBack 3 ;
     ofdd:openMeteoEnabled true ;
     ofdd:openMeteoIntervalHours 24 ;
-    ofdd:openMeteoLatitude 41.88 ;
-    ofdd:openMeteoLongitude -87.63 ;
+    ofdd:openMeteoLatitude 41.0 ;
+    ofdd:openMeteoLongitude -87.0 ;
     ofdd:openMeteoSiteId "default" ;
     ofdd:openMeteoTimezone "America/Chicago" ;
-    ofdd:ruleIntervalHours 0.1 ;
+    ofdd:ruleIntervalHours 0.0 ;
     ofdd:rulesDir "analyst/rules" .
 
 :pt_0ade8ce5_2d25_4ebe_b828_da634523b6bd a brick:Supply_Air_Temperature_Sensor ;
@@ -118,6 +118,11 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:polling true ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
+:pt_5619c030_fc12_4731_bb3f_7eed7c720169 a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
 :pt_5c8ab994_cf61_4eb1_8d60_5f13d0907dc9 a brick:Supply_Fan_Command ;
     rdfs:label "SF-C" ;
     ofdd:mapsToRuleInput "ahu_sf_cmd" ;
@@ -148,15 +153,30 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:polling false ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
+:pt_701390f9_3c76_4f1a_bcdb_c006bd4a0023 a brick:Point ;
+    rdfs:label "direct_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
 :pt_76bc01e0_44d4_41e6_8760_fa969097d9ba a brick:Occupancy_Schedule ;
     rdfs:label "Occ-Schedule" ;
     ofdd:mapsToRuleInput "occ_schedule" ;
     ofdd:polling false ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
+:pt_78034d7e_b994_4b88_b746_6475626c61f5 a brick:Point ;
+    rdfs:label "wind_mph" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
 :pt_80fc2fc3_0f2e_49b1_b3b6_820730818a55 a brick:Point ;
     rdfs:label "NetworkPort-1_3456790" ;
     ofdd:polling false ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
+:pt_87f0c835_cdee_4c16_bd09_84d74f36f4b4 a brick:Point ;
+    rdfs:label "gti_wm2" ;
+    ofdd:polling true ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
 :pt_8fd27f8e_9787_49b1_900a_0c17e91cf0e9 a brick:Supply_Air_Flow_Sensor ;
@@ -183,15 +203,40 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:polling true ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
+:pt_bb0d84ca_9a80_4fd7_b6ad_6ab27f7ac0c1 a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
+:pt_bff676ba_498b_4c6e_815c_db6d1cf7bde9 a brick:Point ;
+    rdfs:label "wind_dir_deg" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
 :pt_c7afc3be_6b6e_4585_9b7b_2f6a03a4ec9b a brick:Supply_Fan_Speed_Command ;
     rdfs:label "SF-O" ;
     ofdd:mapsToRuleInput "ahu_sf_speed_cmd" ;
     ofdd:polling true ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
+:pt_cd0b346e_7063_49fe_81be_4dd5d6f35254 a brick:Point ;
+    rdfs:label "gust_mph" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
+:pt_cd411936_b726_47a0_b3c1_9277d9f5e98e a brick:Point ;
+    rdfs:label "rh_pct" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
 :pt_d1b243df_459b_4107_9e3b_37173def0e5f a brick:Electric_Power_Sensor ;
     rdfs:label "ELEC-PWR" ;
     ofdd:mapsToRuleInput "ahu_power" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
+:pt_dede96a3_ec9f_4ebc_a0f6_3394a148fb30 a brick:Point ;
+    rdfs:label "shortwave_wm2" ;
     ofdd:polling true ;
     brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
@@ -206,6 +251,16 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:mapsToRuleInput "vav_flow" ;
     ofdd:polling true ;
     brick:isPointOf :eq_1a7070b6_2f10_4166_a4e1_763e0f919903 .
+
+:pt_ee5bcd27_34b0_4762_b9ab_5ff417880cc6 a brick:Point ;
+    rdfs:label "dewpoint_f" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
+
+:pt_f6edbec0_6780_4bd1_a5c9_259bb30ebdfb a brick:Point ;
+    rdfs:label "temp_f" ;
+    ofdd:polling true ;
+    brick:isPointOf :site_526c690d_9982_46e7_9e23_7c0a9cdb9f2f_points .
 
 <bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
     bacnet:object-name "DAP-P" .
