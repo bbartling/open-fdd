@@ -469,16 +469,20 @@ apply_migrations_best_effort() {
   echo "=== Applying migrations (idempotent; safe for existing DBs) ==="
   local dc
   dc="$(docker_compose_cmd)"
+
   (
     cd "$STACK_DIR"
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/004_fdd_input.sql 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/005_bacnet_points.sql 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/006_host_metrics.sql 2>/dev/null || true
-    sed "s/365 days/${RETENTION_DAYS} days/g" sql/007_retention.sql | $dc exec -T db psql -U postgres -d openfdd -f - 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql 2>/dev/null || true
-    $dc exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql 2>/dev/null || true
+
+    for f in $(ls -1 sql/*.sql | sort); do
+      echo " - Applying: $f"
+
+      if [[ "$(basename "$f")" == "007_retention.sql" ]]; then
+        sed "s/365 days/${RETENTION_DAYS} days/g" "$f" | \
+          $dc exec -T db psql -U postgres -d openfdd -v ON_ERROR_STOP=1 -f - || true
+      else
+        $dc exec -T db psql -U postgres -d openfdd -v ON_ERROR_STOP=1 -f - < "$f" || true
+      fi
+    done
   )
 }
 

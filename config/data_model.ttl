@@ -43,7 +43,7 @@
 ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:bacnetEnabled true ;
     ofdd:bacnetGateways "string" ;
-    ofdd:bacnetScrapeIntervalMin 5 ;
+    ofdd:bacnetScrapeIntervalMin 1 ;
     ofdd:bacnetServerUrl "http://localhost:8080" ;
     ofdd:bacnetSiteId "default" ;
     ofdd:brickTtlDir "config" ;
