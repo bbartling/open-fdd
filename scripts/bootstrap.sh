@@ -15,6 +15,11 @@
 #
 # Full stack + HA addon: run full stack first, then build the addon image:
 #   ./scripts/bootstrap.sh && ./scripts/bootstrap.sh --ha-addon
+# Install integration into existing HA (copy custom_components + restart HA container):
+#   ./scripts/bootstrap.sh --ha-install-integration /path/to/ha/config
+#   Or set OFDD_HA_CONFIG and: ./scripts/bootstrap.sh --ha-install-integration
+# Addon + install integration in one run:
+#   ./scripts/bootstrap.sh --ha-addon --ha-install-integration /path/to/ha/config
 #
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
@@ -47,6 +52,8 @@ BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
 HA_ADDON_BUILD=false
+HA_INSTALL_INTEGRATION=false
+HA_CONFIG_PATH=""
 
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
@@ -101,6 +108,18 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     --ha-addon) HA_ADDON_BUILD=true ;;
+    --ha-install-integration)
+      HA_INSTALL_INTEGRATION=true
+      i=$(( i + 1 ))
+      if [[ $i -lt ${#args[@]} ]] && [[ "${args[$i]}" != --* ]]; then
+        HA_CONFIG_PATH="${args[$i]}"
+        i=$(( i + 1 ))
+      fi
+      ;;
+    --ha-install-integration=*)
+      HA_INSTALL_INTEGRATION=true
+      HA_CONFIG_PATH="${arg#--ha-install-integration=}"
+      ;;
     --no-auth) NO_AUTH=true ;;
     -h|--help)
       cat <<EOF
@@ -135,6 +154,8 @@ Docker install:
 
 Home Assistant:
   --ha-addon                Build HA addon image only (no stack start); then exit. Use after full bootstrap if needed.
+  --ha-install-integration [PATH]
+                            Copy custom_components/openfdd into HA config and restart HA container. PATH = HA config dir (e.g. /home/ben/homeassistant/config). If omitted, uses OFDD_HA_CONFIG. Container name: OFDD_HA_CONTAINER (default homeassistant). Can be combined with --ha-addon.
   (HA integration: stack/ha_integration; version from API /capabilities at runtime.)
 
 Security:
@@ -555,6 +576,47 @@ if $INSTALL_DOCKER && ! $SKIP_DOCKER_INSTALL; then
 fi
 
 # -----------------------------
+# HA integration install: copy custom_components/openfdd into HA config and restart HA container
+# -----------------------------
+install_ha_integration_and_restart() {
+  local ha_config="${HA_CONFIG_PATH:-${OFDD_HA_CONFIG:-}}"
+  if [[ -z "$ha_config" ]]; then
+    echo "HA config path not set. Use: --ha-install-integration /path/to/ha/config or set OFDD_HA_CONFIG"
+    return 1
+  fi
+  if [[ ! -d "$ha_config" ]]; then
+    echo "HA config path is not a directory: $ha_config"
+    return 1
+  fi
+  local src="$STACK_DIR/ha_integration/custom_components/openfdd"
+  if [[ ! -d "$src" ]]; then
+    echo "Integration not found at $src"
+    return 1
+  fi
+  local dest_dir="$ha_config/custom_components"
+  mkdir -p "$dest_dir"
+  echo "Copying Open-FDD integration to $dest_dir/openfdd"
+  cp -r "$src" "$dest_dir/" || { echo "Copy failed (permission denied?). Try: sudo cp -r $src $dest_dir/"; return 1; }
+  local manifest_json="$dest_dir/openfdd/manifest.json"
+  if [[ -f "$manifest_json" ]] && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
+    local ver
+    ver=$(grep -E '^version\s*=' "$REPO_ROOT/pyproject.toml" | sed -n 's/.*=\s*"\(.*\)".*/\1/p')
+    if [[ -n "$ver" ]]; then
+      sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$ver\"/" "$manifest_json"
+      echo "Set integration version to $ver (from pyproject.toml)"
+    fi
+  fi
+  local container="${OFDD_HA_CONTAINER:-homeassistant}"
+  if docker ps -q -f "name=^${container}$" 2>/dev/null | grep -q .; then
+    echo "Restarting HA container: $container"
+    docker restart "$container"
+  else
+    echo "Container '$container' not running; skipping restart. Start HA to load the integration."
+  fi
+  return 0
+}
+
+# -----------------------------
 # --ha-addon: build HA addon image from stack/ha_addon (version from pyproject.toml, same as FastAPI)
 # -----------------------------
 if $HA_ADDON_BUILD; then
@@ -575,6 +637,16 @@ if $HA_ADDON_BUILD; then
       echo "$addon_key"
     fi
   fi
+  if $HA_INSTALL_INTEGRATION; then
+    install_ha_integration_and_restart || exit 1
+  fi
+  exit 0
+fi
+
+# --ha-install-integration only (no addon, no stack): copy integration and restart HA, then exit
+if $HA_INSTALL_INTEGRATION; then
+  check_prereqs
+  install_ha_integration_and_restart || exit 1
   exit 0
 fi
 

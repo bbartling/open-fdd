@@ -33,7 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Main gateway device (summary sensors + global buttons)
+    # Main gateway device (summary sensors + global buttons). Model is fixed; never store API/OpenAPI JSON.
     device_registry = dr.async_get(hass)
     main_device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -42,6 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model="Open-FDD Platform",
         name="Open-FDD",
     )
+    # Ensure model stays a fixed string; set sw_version from API version (from coordinator data)
+    caps = (coordinator.data or {}).get("capabilities") or {}
+    api_version = caps.get("version") if isinstance(caps, dict) else None
+    if api_version and isinstance(api_version, str) and len(api_version) < 32:
+        device_registry.async_update_device(main_device.id, sw_version=api_version)
 
     # Site → Area, Equipment → Device (from coordinator data)
     def _sync_areas_and_devices() -> None:

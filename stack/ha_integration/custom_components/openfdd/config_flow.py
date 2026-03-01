@@ -5,6 +5,9 @@ import aiohttp
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
+
+# OptionsFlow renamed from OptionsFlowHandler in newer HA (2025+)
+_options_flow_base = getattr(config_entries, "OptionsFlow", None) or getattr(config_entries, "OptionsFlowHandler", None)
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
@@ -95,10 +98,13 @@ class OpenFDDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry):
-        return OpenFDDOptionsFlowHandler(config_entry)
+        # Old HA (OptionsFlowHandler) required config_entry in __init__; new HA (OptionsFlow) does not
+        if _options_flow_base.__name__ == "OptionsFlowHandler":
+            return OpenFDDOptionsFlowHandler(config_entry)
+        return OpenFDDOptionsFlowHandler()
 
 
-class OpenFDDOptionsFlowHandler(config_entries.OptionsFlowHandler):
+class OpenFDDOptionsFlowHandler(_options_flow_base):
     """Options flow: BACnet device_instance per equipment (JSON map)."""
 
     async def async_step_init(self, user_input=None):

@@ -55,11 +55,11 @@ cd open-fdd
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
-| [Appendix](appendix) | [Technical reference](appendix/technical_reference) — directory structure, env vars, unit tests, BACnet scrape, DB schema, LLM workflow |
+| [Appendix](appendix) | [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) — directory structure, env vars, tests, BACnet scrape, DB schema, **front-end dev**, LLM workflow |
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
 
-**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
+**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). [Developer guide](appendix/developer_guide) covers Config UI (front-end) development and the full database schema. Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
 
 ---
 

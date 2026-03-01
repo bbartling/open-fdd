@@ -27,13 +27,15 @@ open-fdd/
 │   │   ├── bacnet_brick.py # BACnet object_type → BRICK class mapping
 │   │   ├── config.py, database.py, data_model_ttl.py, graph_model.py, site_resolver.py
 │   │   ├── loop.py, rules_loader.py
-│   │   └── static/        # Config UI (index.html, app.js, styles.css)
+│   │   └── static/        # Config UI — index.html, app.js, styles.css (served at /app; see Developer guide)
 │   └── tests/             # analyst/, engine/, platform/, test_schema.py
 ├── analyst/               # Entry points: sparql, rules, run_all.sh; rules YAML; sparql/*.sparql
-├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy
-│   ├── sql/               # 001_init … 014_drop_legacy_weather_tables (migrations)
-│   ├── grafana/           # provisioning/datasources only (see Grafana SQL cookbook)
-│   └── caddy/             # Caddyfile (optional reverse proxy)
+├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy, HA
+│   ├── sql/               # 001_init … 015_fault_state_and_audit (migrations; see Developer guide — Database schema)
+│   ├── grafana/           # provisioning/datasources, optional dashboards
+│   ├── caddy/             # Caddyfile (optional reverse proxy)
+│   ├── ha_integration/    # Home Assistant custom component (custom_components/openfdd, tests)
+│   └── ha_addon/          # HA addon image (openfdd/Dockerfile, config.yaml); build: bootstrap.sh --ha-addon
 ├── config/                # data_model.ttl (Brick + BACnet + platform config), BACnet CSV(s) optional
 ├── scripts/               # bootstrap.sh, discover_bacnet.sh, fake_*_faults.py
 ├── tools/
@@ -45,6 +47,8 @@ open-fdd/
 │   └── ...
 └── examples/              # cloud_export, brick_resolver, run_all_rules_brick, etc.
 ```
+
+**Front-end and database:** See [Developer guide](developer_guide) for Config UI development (no build step; edit `platform/static/` and refresh) and the full database schema (migrations 001–015, tables, cascade deletes).
 
 ---
 
@@ -146,23 +150,25 @@ Live store: **in-memory RDF graph** (`platform/graph_model.py`). Brick triples f
 
 ## Database schema (TimescaleDB)
 
-Schema in `stack/sql/` (migrations 001–014). **Cascade deletes:** Site → equipment, points, timeseries; equipment → points; point → timeseries. See [Danger zone](../howto/danger_zone).
+Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bootstrap runs them in order. **Cascade deletes:** Site → equipment, points, timeseries; equipment → points; point → timeseries. Full migration list and table details: [Developer guide — Database schema](developer_guide#database-schema-timescaledb). See [Danger zone](../howto/danger_zone).
 
 | Table | Purpose |
 |-------|---------|
 | **sites** | id, name, description, metadata, created_at |
 | **equipment** | id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id |
-| **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, bacnet_device_id, object_identifier, object_name, polling |
+| **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, bacnet_*, object_name, polling |
 | **timeseries_readings** | ts, site_id, point_id, value, job_id (hypertable; BACnet + weather + CSV ingest) |
 | **ingest_jobs** | id, site_id, name, format, point_columns, row_count (CSV ingest metadata) |
 | **fault_results** | ts, site_id, equipment_id, fault_id, flag_value (hypertable) |
 | **fault_events** | id, site_id, equipment_id, fault_id, start_ts, end_ts, duration_seconds, evidence |
+| **fault_state** | current active fault per (site_id, equipment_id, fault_id) for HA binary_sensors |
 | **fault_definitions** | fault_id, name, description, severity, category, equipment_types, inputs, params, expression, source |
 | **fdd_run_log** | run_ts, status, sites_processed, faults_written (last FDD run for UI) |
 | **analytics_motor_runtime** | site_id, period_start, period_end, runtime_hours (data-model driven) |
 | **host_metrics** | ts, hostname, mem_*, swap_*, load_1/5/15 (hypertable) |
 | **container_metrics** | ts, container_name, cpu_pct, mem_*, pids, net_*, block_* (hypertable) |
 | **disk_metrics** | ts, hostname, mount_path, total_bytes, used_bytes, free_bytes (hypertable) |
+| **bacnet_write_audit** | point_id, value, source, ts, success, reason (HA/Node-RED write audit) |
 
 ---
 

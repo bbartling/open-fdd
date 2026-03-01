@@ -109,21 +109,24 @@ Wait a minute or two, then open **http://localhost:8123**. Complete the HA onboa
 
 ### Step 4: Install the Open-FDD custom integration
 
-The integration lives in the Open-FDD repo. Copy it into HA’s `custom_components`:
+**Option A — Bootstrap (recommended if you already have HA running):** From the open-fdd repo root, run:
+
+```bash
+./scripts/bootstrap.sh --ha-install-integration /home/ben/homeassistant/config
+```
+
+This copies the integration into `config/custom_components/openfdd` and restarts the `homeassistant` container. You can set `OFDD_HA_CONFIG` instead of passing the path: `export OFDD_HA_CONFIG=/home/ben/homeassistant/config` then `./scripts/bootstrap.sh --ha-install-integration`. To also build the addon image in the same run: `./scripts/bootstrap.sh --ha-addon --ha-install-integration /home/ben/homeassistant/config`.
+
+**Option B — Manual copy:** The integration lives in the Open-FDD repo. Copy it into HA’s `custom_components` and restart:
 
 ```bash
 sudo mkdir -p /home/ben/homeassistant/config/custom_components
 sudo cp -r /home/ben/open-fdd/stack/ha_integration/custom_components/openfdd /home/ben/homeassistant/config/custom_components/
 sudo chown -R $(whoami):$(whoami) /home/ben/homeassistant/config/custom_components
+docker restart homeassistant
 ```
 
 If you get **Permission denied** creating files under `config/`, the `config` directory may be owned by root (e.g. after the first `docker run`). The `sudo` and `chown` above fix that so HA can read the integration.
-
-Restart Home Assistant so it loads the custom component:
-
-```bash
-docker restart homeassistant
-```
 
 ---
 
@@ -268,6 +271,33 @@ Dockerfile-related and HA packaging live under **stack/** with the rest of the s
 - **Integration:** `stack/ha_integration/custom_components/openfdd/` — config flow (URL + API key), coordinator (sites, equipment, faults, definitions, suggested entities), **device-per-equipment** (Site→Area, Equipment→Device, fault binary_sensors, per-equipment buttons/sensors), and **full API as services**. You can do everything from HA that `scripts/graph_and_crud_test.py` tests: `openfdd.get_health`, `openfdd.get_config` / `openfdd.put_config`, `openfdd.list_sites`, `openfdd.create_site`, `openfdd.get_site`, `openfdd.update_site`, `openfdd.delete_site`, and the same for equipment and points; `openfdd.data_model_serialize`, `openfdd.get_data_model_ttl`, `openfdd.get_data_model_export`, `openfdd.put_data_model_import`, `openfdd.run_sparql`, `openfdd.get_data_model_check`; `openfdd.bacnet_server_hello`, `openfdd.bacnet_whois_range`, `openfdd.bacnet_point_discovery_to_graph`; `openfdd.get_download_csv`, `openfdd.post_download_csv`, `openfdd.get_download_faults`; `openfdd.run_fdd`. Results are fired as events (`openfdd.<service>_result`) so automations can react. If `/capabilities` reports `websocket: true`, the integration can optionally subscribe to `/ws/events` and refresh on `fault.*` and `fdd.run.*` events.
 
 **Version:** Same source as the FastAPI app — **pyproject.toml**. The addon gets it at build time (`./scripts/bootstrap.sh --ha-addon` writes it into config.yaml). The integration gets the Open-FDD version from the API at runtime via GET `/capabilities` (no separate version to sync).
+
+### Integration icon (developers)
+
+Home Assistant shows the integration’s icon in **Settings → Devices & services** (on the Open-FDD card and in **Add integration**). The icon is **`icon.png`** inside the integration folder (`stack/ha_integration/custom_components/openfdd/icon.png`). HA also supports **`icon@2x.png`** (512×512) for high-DPI; both are optional but recommended.
+
+**1. Set the icon in the repo (e.g. use the shared logo):**
+
+```bash
+cp /home/ben/open-fdd/open-fdd_ha_icon_512.png /home/ben/open-fdd/stack/ha_integration/custom_components/openfdd/icon.png
+# Optional: same file as high-DPI
+cp /home/ben/open-fdd/open-fdd_ha_icon_512.png /home/ben/open-fdd/stack/ha_integration/custom_components/openfdd/icon@2x.png
+```
+
+**2. Rebuild on the HA side** — copy the integration into your Home Assistant config and restart so HA loads the new files:
+
+```bash
+cp -r /home/ben/open-fdd/stack/ha_integration/custom_components/openfdd /home/ben/homeassistant/config/custom_components/
+docker restart homeassistant
+```
+
+(Adjust paths if your HA config lives elsewhere, e.g. Supervisor addons or a different host.)
+
+**3. Test that the icon is served:**
+
+- Open **Settings → Devices & services**. The **Open-FDD** integration card should show the new icon.
+- Or click **Add integration**, search for **Open-FDD** — the integration tile in the list should show the icon.
+- If you still see the old or a generic icon, **hard-refresh the browser** (Ctrl+Shift+R or Cmd+Shift+R) or clear the browser cache; HA and the frontend cache brand images.
 
 ### Home Assistant services
 

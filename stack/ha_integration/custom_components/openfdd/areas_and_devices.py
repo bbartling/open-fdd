@@ -2,7 +2,7 @@
 Site → Area and Equipment → Device mapping for the Open-FDD HA integration.
 
 - Each site from GET /sites gets an HA Area (by name); site_id → area_id stored.
-- Each equipment from GET /equipment gets an HA Device with suggested_area_id.
+- Each equipment from GET /equipment gets an HA Device with suggested_area (or suggested_area_id on older HA).
 """
 
 import logging
@@ -56,22 +56,34 @@ def ensure_areas_and_equipment_devices(
         if not eq_id:
             continue
         area_id = site_area_ids.get(site_id) if site_id else None
-        suggested_area = area_id
-        dev = device_registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, eq_id)},
-            manufacturer="Open-FDD",
-            model="Equipment",
-            name=name,
-            suggested_area_id=suggested_area,
-            via_device=main_device_id,
-        )
+        # HA 2025+ uses suggested_area; older versions used suggested_area_id
+        # Only pass via_device if the parent device exists (HA 2025.12+ requires it)
+        create_kw: dict[str, Any] = {
+            "config_entry_id": entry.entry_id,
+            "identifiers": {(DOMAIN, eq_id)},
+            "manufacturer": "Open-FDD",
+            "model": "Equipment",
+            "name": name,
+        }
+        if main_device_id and device_registry.async_get(main_device_id):
+            create_kw["via_device"] = main_device_id
+        if area_id:
+            try:
+                import inspect
+                params = inspect.signature(device_registry.async_get_or_create).parameters
+                if "suggested_area" in params:
+                    create_kw["suggested_area"] = area_id
+                else:
+                    create_kw["suggested_area_id"] = area_id
+            except Exception:
+                create_kw["suggested_area"] = area_id
+        dev = device_registry.async_get_or_create(**create_kw)
         # Update name/area if equipment was renamed or moved
-        if dev.name != name or (suggested_area and dev.area_id != suggested_area):
+        if dev.name != name or (area_id and dev.area_id != area_id):
             device_registry.async_update_device(
                 dev.id,
                 name=name,
-                area_id=suggested_area or dev.area_id,
+                area_id=area_id or dev.area_id,
             )
 
     # Persist mapping for platforms
