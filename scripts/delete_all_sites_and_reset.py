@@ -13,15 +13,20 @@ If you already ran ./scripts/bootstrap.sh --reset-data, you do not need this scr
 in the same workflow; use this when the stack is already up and you want to wipe
 sites without re-running bootstrap.
 
+Auth: when the API requires Bearer auth, set OFDD_API_KEY in the environment or in
+stack/.env (same key bootstrap writes). The script auto-loads stack/.env when run from
+the repo so it picks up the key after bootstrap.
+
 Usage:
-  python tools/delete_all_sites_and_reset.py
-  BASE_URL=http://192.168.204.16:8000 python tools/delete_all_sites_and_reset.py
+  python scripts/delete_all_sites_and_reset.py
+  BASE_URL=http://192.168.204.16:8000 python scripts/delete_all_sites_and_reset.py
 
 Requires: requests or httpx (pip install httpx).
 """
 
 import os
 import sys
+from pathlib import Path
 
 try:
     import httpx
@@ -37,15 +42,39 @@ except ImportError:
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 
 
+def _load_api_key() -> str:
+    """OFDD_API_KEY from environment or from stack/.env (same as bootstrap)."""
+    key = (os.environ.get("OFDD_API_KEY") or "").strip()
+    if key:
+        return key
+    env_file = Path(__file__).resolve().parent / ".." / "stack" / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("OFDD_API_KEY=") and len(line) > 13:
+                return line[13:].strip().strip('"').strip("'")
+    return ""
+
+
+def _headers() -> dict:
+    h = {"Accept": "application/json"}
+    key = _load_api_key()
+    if key:
+        h["Authorization"] = f"Bearer {key}"
+    return h
+
+
 def _request(method: str, path: str, **kwargs):
     url = f"{BASE_URL}{path}"
+    headers = _headers()
     if httpx:
         with httpx.Client(timeout=30.0) as client:
-            r = client.request(method, url, **kwargs)
+            r = client.request(method, url, headers=headers, **kwargs)
             try:
                 return r.status_code, r.json() if r.content else None
             except Exception:
                 return r.status_code, r.text
+    kwargs.setdefault("headers", {}).update(headers)
     r = _r.request(method, url, **kwargs)
     try:
         return r.status_code, r.json() if r.content else None

@@ -58,8 +58,36 @@ class OpenFDDClient:
             params["equipment_id"] = equipment_id
         return await self._request("GET", "/faults/active", params=params or None)
 
+    async def get_faults_state(self, site_id=None, equipment_id=None):
+        """GET /faults/state — all fault state rows (active and cleared) for history/log."""
+        params = {}
+        if site_id is not None:
+            params["site_id"] = site_id
+        if equipment_id is not None:
+            params["equipment_id"] = equipment_id
+        return await self._request("GET", "/faults/state", params=params or None)
+
+    async def get_faults_definitions(self):
+        """GET /faults/definitions — fault_id, name, severity, category for labels."""
+        return await self._request("GET", "/faults/definitions")
+
+    async def get_entities_suggested(self):
+        """GET /entities/suggested — Brick-tagged points -> suggested HA entity mappings."""
+        return await self._request("GET", "/entities/suggested")
+
     async def post_job_fdd_run(self):
         return await self._request("POST", "/jobs/fdd/run", json_body={})
+
+    async def post_job_bacnet_discovery(self, device_instance: int = 3456789, gateway_id: str | None = None):
+        """POST /jobs/bacnet/discovery — async BACnet point discovery; returns job_id."""
+        body = {"device_instance": device_instance}
+        if gateway_id is not None:
+            body["gateway_id"] = gateway_id
+        return await self._request("POST", "/jobs/bacnet/discovery", json_body=body)
+
+    async def get_run_fdd_status(self):
+        """GET /run-fdd/status — last FDD run for summary sensor."""
+        return await self._request("GET", "/run-fdd/status")
 
     def ws_url(self):
         """WebSocket URL; when api_key is set, token is in query param (server accepts this or Authorization)."""

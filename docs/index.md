@@ -50,7 +50,7 @@ cd open-fdd
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
-| [Integrations](integrations/home_assistant) | [Home Assistant & Node-RED](integrations/home_assistant) — add-on, custom component, WebSocket, fault state, BACnet write via Open-FDD only |
+| [Integrations](integrations/home_assistant) | [Home Assistant & Node-RED](integrations/home_assistant) — add-on, custom component, WebSocket, fault state, BACnet write via Open-FDD only. **New?** See [Quick setup: Open-FDD + HA on one Linux machine](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine) for a copy-paste guide. |
 | [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
@@ -59,7 +59,7 @@ cd open-fdd
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
 
-**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in **AGENTS.md**.
+**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
 
 ---
 

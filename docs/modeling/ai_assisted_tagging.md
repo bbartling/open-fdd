@@ -45,7 +45,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-For a **full prompt to the LLM**, rules context, and exact schema details, see **[AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md)** in the repo. It defines the primary task (Brick tagging for the job), the export → tag → import flow, polling semantics, equipment feeds, and the exact import body (points + equipment only). The same workflow and data model API details are in the [Technical reference](../appendix/technical_reference).
+For a **full prompt to the LLM**, rules context, and exact schema details, see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the exact import body (points + equipment only).
 
 ---
 

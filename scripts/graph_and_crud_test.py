@@ -45,6 +45,10 @@ python tools/graph_and_crud_test.py --bacnet-url http://192.168.204.16:8080 --ba
 # Env override
 BACNET_DEVICE_INSTANCE=999999 python tools/graph_and_crud_test.py
 
+# Auth: when the API requires Bearer auth, set OFDD_API_KEY in the environment or in
+# stack/.env (same key bootstrap writes). The script auto-loads stack/.env when run from
+# the repo so it picks up the key after bootstrap.
+
 # Blast away all sites and re-run test (after test TestBenchSite has all LLM payload points)
 ./scripts/bootstrap.sh --reset-data && python tools/graph_and_crud_test.py
 # Or API-only wipe (stack already up): python tools/delete_all_sites_and_reset.py && python tools/graph_and_crud_test.py
@@ -88,9 +92,33 @@ DEMO_SITE_LLM_NAME = "DemoSite"
 DEMO_SITE_LLM_PAYLOAD_PATH = Path(__file__).resolve().parent / "demo_site_llm_payload.json"
 
 
+def _load_api_key() -> str:
+    """OFDD_API_KEY from environment or from stack/.env (same as bootstrap)."""
+    key = (os.environ.get("OFDD_API_KEY") or "").strip()
+    if key:
+        return key
+    env_file = Path(__file__).resolve().parent / ".." / "stack" / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("OFDD_API_KEY=") and len(line) > 13:
+                return line[13:].strip().strip('"').strip("'")
+    return ""
+
+
+def _request_headers() -> dict:
+    """Headers for API requests: Accept and optional Bearer auth."""
+    h = {"Accept": "application/json"}
+    key = _load_api_key()
+    if key:
+        h["Authorization"] = f"Bearer {key}"
+    return h
+
+
 def _wait_for_api_ready(max_wait_sec: float = 45.0, interval_sec: float = 2.0) -> None:
     """Wait for the API to accept requests (e.g. after bootstrap). Retries on connection errors."""
     url = f"{BASE_URL.rstrip('/')}/health"
+    headers = _request_headers()
     deadline = time.time() + max_wait_sec
     last_err = None
     first = True
@@ -98,13 +126,15 @@ def _wait_for_api_ready(max_wait_sec: float = 45.0, interval_sec: float = 2.0) -
         try:
             if httpx:
                 with httpx.Client(timeout=5.0) as client:
-                    r = client.get(url)
+                    r = client.get(url, headers=headers)
                 if r.status_code == 200:
                     if not first:
                         print(f"    API ready at {BASE_URL}\n")
                     return
             else:
                 req = urllib.request.Request(url, method="GET")
+                for k, v in headers.items():
+                    req.add_header(k, v)
                 with urllib.request.urlopen(req, timeout=5.0) as res:
                     if res.status == 200:
                         if not first:
@@ -127,15 +157,18 @@ def _request(
 ) -> tuple[int, dict | list | str | None]:
     """Send HTTP request, return (status_code, parsed_json or raw text for CSV)."""
     url = f"{BASE_URL.rstrip('/')}{path}"
+    headers = _request_headers()
     if httpx:
         with httpx.Client(timeout=timeout) as client:
-            r = client.request(method, url, json=json_body)
+            r = client.request(method, url, headers=headers, json=json_body)
             try:
                 return r.status_code, r.json() if r.content else None
             except Exception:
                 return r.status_code, r.text
     # Fallback: urllib
     req = urllib.request.Request(url, method=method)
+    for k, v in headers.items():
+        req.add_header(k, v)
     if json_body:
         req.add_header("Content-Type", "application/json")
         req.data = json.dumps(json_body).encode()

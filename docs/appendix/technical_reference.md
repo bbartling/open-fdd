@@ -180,7 +180,7 @@ Schema in `stack/sql/` (migrations 001–014). **Cascade deletes:** Site → equ
 
 1. **Export** — GET `/data-model/export`.
 2. **Clean** — Keep only points to tag and poll.
-3. **Tag with LLM** — Use prompt in [AI-assisted tagging](../modeling/ai_assisted_tagging) (and **AGENTS.md** in repo).
+3. **Tag with LLM** — Use prompt in [AI-assisted tagging](../modeling/ai_assisted_tagging).
 4. **Import** — PUT /data-model/import with `points` and optional `equipment`. Set `polling` false on points that should not be scraped.
 
 Prompt summary: Set `site_id`, `external_id`, `brick_type`, `rule_input`; optionally `equipment_id`, `unit`, and equipment `feeds_equipment_id`/`fed_by_equipment_id`. Output is the completed JSON for PUT /data-model/import.

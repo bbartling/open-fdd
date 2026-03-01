@@ -1,5 +1,6 @@
 """Config flow for Open-FDD integration."""
 
+import json
 import aiohttp
 
 from homeassistant import config_entries
@@ -8,7 +9,7 @@ import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
 from .api_client import OpenFDDClient
-from .const import CONF_API_KEY, CONF_BASE_URL, DEFAULT_PORT, DOMAIN
+from .const import CONF_API_KEY, CONF_BASE_URL, CONF_EQUIPMENT_BACNET, DEFAULT_PORT, DOMAIN
 
 DATA_SCHEMA = vol.Schema({
     vol.Required(CONF_BASE_URL, default="http://homeassistant.local:8000"): str,
@@ -91,3 +92,37 @@ class OpenFDDConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=schema_with,
                 errors={"base": "cannot_connect"},
             )
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return OpenFDDOptionsFlowHandler(config_entry)
+
+
+class OpenFDDOptionsFlowHandler(config_entries.OptionsFlowHandler):
+    """Options flow: BACnet device_instance per equipment (JSON map)."""
+
+    async def async_step_init(self, user_input=None):
+        current = self.config_entry.options.get(CONF_EQUIPMENT_BACNET) or {}
+        default_json = json.dumps(current, indent=2) if current else "{}"
+        schema = vol.Schema({
+            vol.Optional(CONF_EQUIPMENT_BACNET, default=default_json): str,
+        })
+        if user_input is None:
+            return self.async_show_form(step_id="init", data_schema=schema)
+        raw = (user_input.get(CONF_EQUIPMENT_BACNET) or "").strip()
+        if not raw:
+            return self.async_create_entry(data={})
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                return self.async_show_form(step_id="init", data_schema=schema, errors={"base": "invalid_json_object"})
+            # Normalize keys to str, values to int
+            out = {}
+            for k, v in parsed.items():
+                try:
+                    out[str(k)] = int(v)
+                except (TypeError, ValueError):
+                    pass
+            return self.async_create_entry(data={CONF_EQUIPMENT_BACNET: out})
+        except json.JSONDecodeError as e:
+            return self.async_show_form(step_id="init", data_schema=schema, errors={"base": f"invalid_json:{e!s}"})

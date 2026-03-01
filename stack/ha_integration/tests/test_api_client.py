@@ -190,3 +190,90 @@ def test_get_data_model_ttl_returns_text():
         session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
         result = _run(client.get_data_model_ttl(site_id=None, save=True))
     assert result == ttl_content
+
+
+def test_get_faults_state_with_params():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="secret")
+    req_kw = {}
+
+    def capture_request(*args, **kwargs):
+        req_kw.update(kwargs)
+        return _mock_session_request()
+
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(side_effect=capture_request)
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        _run(client.get_faults_state(site_id="site-1", equipment_id="eq-1"))
+    assert req_kw.get("params") == {"site_id": "site-1", "equipment_id": "eq-1"}
+
+
+def _ctx_for_json(json_data):
+    class Ctx:
+        async def __aenter__(self):
+            return _mock_response(200, json_data=json_data)
+        async def __aexit__(self, *a):
+            pass
+    return Ctx()
+
+
+def test_get_faults_definitions():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="k")
+    defs = [{"fault_id": "f1", "name": "Fault 1", "severity": "warning"}]
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(return_value=_ctx_for_json(defs))
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        result = _run(client.get_faults_definitions())
+    assert result == defs
+
+
+def test_get_entities_suggested():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="k")
+    suggested = [{"point_id": "p1", "equipment_id": "eq-1", "suggested_ha_domain": "sensor", "suggested_ha_id": "oa_temp"}]
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(return_value=_ctx_for_json(suggested))
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        result = _run(client.get_entities_suggested())
+    assert result == suggested
+    assert result[0]["suggested_ha_domain"] == "sensor"
+
+
+def test_post_job_bacnet_discovery():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="k")
+    req_kw = {}
+
+    def capture_request(*args, **kwargs):
+        req_kw.update(kwargs)
+        return _ctx_for_json({"job_id": "bacnet-1", "status": "queued"})
+
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(side_effect=capture_request)
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        result = _run(client.post_job_bacnet_discovery(device_instance=3456789, gateway_id="default"))
+    assert result.get("job_id") == "bacnet-1"
+    assert req_kw.get("json", {}).get("device_instance") == 3456789
+    assert req_kw.get("json", {}).get("gateway_id") == "default"
+
+
+def test_list_equipment_with_site_id():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="k")
+    req_kw = {}
+
+    def capture_request(*args, **kwargs):
+        req_kw.update(kwargs)
+        return _mock_session_request()
+
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(side_effect=capture_request)
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        _run(client.list_equipment(site_id="site-uuid"))
+    assert req_kw.get("params") == {"site_id": "site-uuid"}

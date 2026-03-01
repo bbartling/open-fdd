@@ -29,6 +29,8 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 3. **Optional:** Set `OFDD_*` in `platform/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
 
+**New to Open-FDD and want to run Home Assistant on the same Linux machine?** See [Quick setup: Open-FDD + Home Assistant](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine) for a complete, copy-paste-ready guide (Open-FDD stack, HA in Docker, custom integration, API key, and troubleshooting).
+
 ---
 
 ## Prerequisites
@@ -66,7 +68,8 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 
 | Option | Effect |
 |--------|--------|
-| *(none)* | Build and start full stack. |
+| *(none)* | Build and start full stack. Prints API key if one was generated (see [Integrations — Home Assistant](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine)). |
+| `--ha-addon` | Build HA addon image only (`openfdd-addon:local` from `stack/ha_addon`); then exit. **Run after full bootstrap** if you use the addon: `./scripts/bootstrap.sh && ./scripts/bootstrap.sh --ha-addon`. Prints the API key for the addon/integration. |
 | `--verify` | List containers and test DB reachability; exit. Does not start or stop anything. |
 | `--minimal` | Raw BACnet only: DB + Grafana + BACnet server + scraper. No FDD, weather, or API. See [Overview — Ways to deploy](overview#ways-to-deploy). |
 | `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. **Database and all other data are retained.** Use when dashboards or datasource are wrong. |

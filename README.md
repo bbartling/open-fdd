@@ -10,7 +10,7 @@
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
-![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
+![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd_ha_icon_512.png)
 
 Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in **fault detection and diagnostics (FDD) for HVAC**. It helps facilities optimize energy use and cut costs; because it runs **on-premises**, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
@@ -47,7 +47,7 @@ pytest -v
 
 - **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
 - Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
-- Style and workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Style and workflow: [docs/contributing.md](docs/contributing.md).
 
 
 ---
@@ -55,9 +55,9 @@ pytest -v
 
 ## AI Assisted Data Modeling
 
-Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [AGENTS.md](AGENTS.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml).
+Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml).
 
-**Canonical prompt** (as defined in [AGENTS.md](AGENTS.md)) — copy-paste this into ChatGPT or your LLM:
+**Canonical prompt** (as defined in [docs/modeling/ai_assisted_tagging](docs/modeling/ai_assisted_tagging.md)) — copy-paste this into ChatGPT or your LLM:
 
 ```text
 I use Open-FDD. I will paste the JSON from GET /data-model/export (and optionally my site identifier).
@@ -83,7 +83,7 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 
 ## Online Documentation
 
-[📖 Docs](https://bbartling.github.io/open-fdd/)
+[📖 Docs](https://bbartling.github.io/open-fdd/) — For a copy-paste guide to run Open-FDD and Home Assistant on one Linux machine, see [Quick setup: Open-FDD + HA](https://bbartling.github.io/open-fdd/integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine).
 
 ---
 
@@ -98,7 +98,7 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 ## Contributing
 
-Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [docs/contributing.md](docs/contributing.md) for how to get started.
 
 > Pull requests on the `master` branch will be rejected please use the current `dev` branch only.
 

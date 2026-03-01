@@ -61,7 +61,7 @@ cd /path/to/open-fdd
 .venv/bin/python -m black .
 ```
 
-See [CONTRIBUTING.md](https://github.com/bbartling/open-fdd/blob/master/CONTRIBUTING.md) for styleguides.
+See [Contributing](../contributing) for styleguides.
 
 ---
 
