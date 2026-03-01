@@ -1,0 +1,24 @@
+# Open-FDD integration services. Full list is registered in code (services.py).
+# This file satisfies HA's loader; see Developer Tools → Services for openfdd.*
+get_health:
+  description: Get Open-FDD API health status.
+get_config:
+  description: Get current platform config from the RDF graph.
+put_config:
+  description: Update platform config (partial).
+list_sites:
+  description: List all sites.
+create_site:
+  description: Create a site.
+list_equipment:
+  description: List equipment, optionally by site.
+list_points:
+  description: List points, optionally by site or equipment.
+run_sparql:
+  description: Run a SPARQL query against the data model.
+get_data_model_export:
+  description: Export points for LLM tagging.
+put_data_model_import:
+  description: Import Brick mapping (points, optional equipment).
+run_fdd:
+  description: Trigger an FDD rule run now.

@@ -50,6 +50,7 @@ HA_ADDON_BUILD=false
 
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
+NO_AUTH=false
 
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -100,6 +101,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     --ha-addon) HA_ADDON_BUILD=true ;;
+    --no-auth) NO_AUTH=true ;;
     -h|--help)
       cat <<EOF
 Usage: $0 [options]
@@ -134,6 +136,9 @@ Docker install:
 Home Assistant:
   --ha-addon                Build HA addon image only (no stack start); then exit. Use after full bootstrap if needed.
   (HA integration: stack/ha_integration; version from API /capabilities at runtime.)
+
+Security:
+  --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
 
 EOF
       exit 0
@@ -283,6 +288,32 @@ write_edge_env() {
       echo "${key}=${val}" >> "$env_file"
     fi
   done
+
+  # Secure-by-default: generate OFDD_API_KEY if not set (unless --no-auth)
+  if ! $NO_AUTH; then
+    if ! grep -qE '^OFDD_API_KEY=.+' "$env_file" 2>/dev/null; then
+      local new_key=""
+      if have_cmd openssl; then
+        new_key=$(openssl rand -hex 32 2>/dev/null)
+      fi
+      if [[ -z "$new_key" ]] && have_cmd python3; then
+        new_key=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)
+      fi
+      if [[ -z "$new_key" ]]; then
+        echo "Warning: could not generate OFDD_API_KEY (install openssl or use Python 3). API will run without auth."
+      else
+        if grep -q "^OFDD_API_KEY=" "$env_file" 2>/dev/null; then
+          sed "${sed_i[@]}" "s|^OFDD_API_KEY=.*|OFDD_API_KEY=${new_key}|" "$env_file"
+        else
+          echo "OFDD_API_KEY=${new_key}" >> "$env_file"
+        fi
+        echo ""
+        echo "Generated OFDD_API_KEY=${new_key}"
+        echo "Paste this into Home Assistant Open-FDD integration (Settings → Devices & services → Open-FDD)."
+        echo ""
+      fi
+    fi
+  fi
 }
 
 ensure_diy_bacnet_sibling() {
@@ -420,7 +451,9 @@ print(json.dumps({
 }))
 " 2>/dev/null) || body="{\"rule_interval_hours\":0.1,\"lookback_days\":3,\"rules_dir\":\"analyst/rules\",\"brick_ttl_dir\":\"config\",\"bacnet_enabled\":true,\"bacnet_scrape_interval_min\":1,\"bacnet_server_url\":\"http://localhost:8080\",\"bacnet_site_id\":\"default\",\"open_meteo_enabled\":true,\"open_meteo_interval_hours\":24,\"open_meteo_latitude\":41.88,\"open_meteo_longitude\":-87.63,\"open_meteo_timezone\":\"America/Chicago\",\"open_meteo_days_back\":3,\"open_meteo_site_id\":\"default\",\"graph_sync_interval_min\":5}"
 
-  if curl -sf -X PUT "$API_BASE/config" -H "Content-Type: application/json" -d "$body" >/dev/null 2>&1; then
+  local curl_auth=()
+  [[ -n "${OFDD_API_KEY:-}" ]] && curl_auth=(-H "Authorization: Bearer $OFDD_API_KEY")
+  if curl -sf -X PUT "$API_BASE/config" -H "Content-Type: application/json" "${curl_auth[@]}" -d "$body" >/dev/null 2>&1; then
     echo "  PUT /config OK (config stored in RDF)."
   else
     echo "  PUT /config failed (non-fatal; set config via API or /app/ later)."
@@ -435,8 +468,10 @@ reset_data_via_api() {
     return 1
   fi
 
+  local curl_auth=()
+  [[ -n "${OFDD_API_KEY:-}" ]] && curl_auth=(-H "Authorization: Bearer $OFDD_API_KEY")
   local sites_json ids
-  sites_json="$(curl -sf -H "Accept: application/json" "$API_BASE/sites" 2>/dev/null)" || {
+  sites_json="$(curl -sf -H "Accept: application/json" "${curl_auth[@]}" "$API_BASE/sites" 2>/dev/null)" || {
     echo "GET /sites failed."
     return 1
   }
@@ -446,7 +481,7 @@ reset_data_via_api() {
   if [[ -n "$ids" ]]; then
     while IFS= read -r id; do
       [[ -z "$id" ]] && continue
-      if curl -sf -X DELETE "$API_BASE/sites/$id" >/dev/null 2>&1; then
+      if curl -sf -X DELETE "$API_BASE/sites/$id" "${curl_auth[@]}" >/dev/null 2>&1; then
         echo "  Deleted site $id"
       else
         echo "  Failed to delete site $id"
@@ -456,7 +491,7 @@ reset_data_via_api() {
     echo "  No sites to delete."
   fi
 
-  if curl -sf -X POST "$API_BASE/data-model/reset" -H "Content-Type: application/json" -d '{}' >/dev/null 2>&1; then
+  if curl -sf -X POST "$API_BASE/data-model/reset" -H "Content-Type: application/json" "${curl_auth[@]}" -d '{}' >/dev/null 2>&1; then
     echo "  POST /data-model/reset OK."
   else
     echo "  POST /data-model/reset failed."
@@ -533,6 +568,13 @@ if $HA_ADDON_BUILD; then
   echo "=== Building Home Assistant addon image (stack/ha_addon) — open-fdd from repo, not PyPI ==="
   (cd "$REPO_ROOT" && docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 -f stack/ha_addon/openfdd/Dockerfile -t openfdd-addon:local .) || true
   echo "Addon image: openfdd-addon:local. To install in HA: copy stack/ha_addon to your HA addons folder and set image in config."
+  if [[ -f "$STACK_DIR/.env" ]]; then
+    addon_key="$(grep -E '^OFDD_API_KEY=.' "$STACK_DIR/.env" 2>/dev/null | sed 's/^OFDD_API_KEY=//')"
+    if [[ -n "$addon_key" ]]; then
+      echo "Paste this into the addon's api_key option (and into the HA integration if needed):"
+      echo "$addon_key"
+    fi
+  fi
   exit 0
 fi
 
@@ -553,6 +595,8 @@ fi
 
 # From here on, we run stack operations (default/no args = FULL stack)
 write_edge_env
+# Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
+[[ -f "$STACK_DIR/.env" ]] && set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
 check_prereqs
 ensure_diy_bacnet_sibling
 

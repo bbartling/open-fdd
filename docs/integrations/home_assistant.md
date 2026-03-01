@@ -31,6 +31,15 @@ DDC / BMS → BACnet → Open-FDD (API + graph + FDD) → HA integration / Node-
 
 Auth: when `OFDD_API_KEY` is set, send `Authorization: Bearer <key>` on all requests except `/health` and `/app`. WebSocket: same key as query param `token` on `/ws/events`.
 
+### Get your Open-FDD API key
+
+**Secure-by-default:** When you run `./scripts/bootstrap.sh` (without `--no-auth`), the script generates a random API key and writes it to **`stack/.env`** as `OFDD_API_KEY=...`. It prints the key and tells you to paste it into the Home Assistant Open-FDD integration. Use that value when adding the integration (Settings → Devices & services → Add integration → Open-FDD). The integration’s API key field is **optional**: leave it blank if the server does not require auth; if the server returns 401/403, the form will ask for the key (paste from `stack/.env`).
+
+- **Where to find the key (Docker stack):** In the repo, open **`stack/.env`** and look for the line `OFDD_API_KEY=...`. Copy the value after the `=`. If the file doesn’t exist or has no `OFDD_API_KEY`, run `./scripts/bootstrap.sh` once (it will generate and append it), or generate one yourself (see below) and add `OFDD_API_KEY=<key>` to `stack/.env`.
+- **Generate a key yourself:** From a terminal: `openssl rand -hex 32`. Add that value to `stack/.env` as `OFDD_API_KEY=<paste-here>` and restart the API container so it picks up the env.
+- **HA addon:** In the addon’s configuration (Settings → Add-ons → Open-FDD → Configuration), set **api_key** to the same secret (e.g. the value from `stack/.env` or a new `openssl rand -hex 32`). The addon exports it as `OFDD_API_KEY` internally.
+- **Recommendation:** If the Open-FDD API is reachable on your LAN (e.g. `http://192.168.x.x:8000`), enable auth by ensuring `OFDD_API_KEY` is set (bootstrap does this by default). Use `--no-auth` only for local-only or test setups where you explicitly do not want Bearer auth.
+
 ## Brick Occupancy and HA schedule logic
 
 Points with Brick type indicating occupancy (e.g. `brick:Occupancy_Status`) can be mapped to HA **binary_sensors** for schedule logic:

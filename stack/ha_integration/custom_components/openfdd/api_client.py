@@ -11,8 +11,14 @@ class OpenFDDClient:
 
     def __init__(self, base_url: str, api_key: str):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
-        self._headers = {"Authorization": f"Bearer {api_key}"}
+        self.api_key = (api_key or "").strip()
+
+    def _request_headers(self):
+        """Headers for every request: Accept, and Authorization when api_key is set."""
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     async def _request(
         self,
@@ -25,9 +31,10 @@ class OpenFDDClient:
         timeout: aiohttp.ClientTimeout = DEFAULT_TIMEOUT,
     ):
         url = f"{self.base_url}{path}"
+        headers = self._request_headers()
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.request(
-                method, url, headers=self._headers, json=json_body, params=params
+                method, url, headers=headers, json=json_body, params=params
             ) as resp:
                 resp.raise_for_status()
                 if return_text:
@@ -55,7 +62,15 @@ class OpenFDDClient:
         return await self._request("POST", "/jobs/fdd/run", json_body={})
 
     def ws_url(self):
-        return f"{self.base_url.replace('http', 'ws')}/ws/events?token={self.api_key}"
+        """WebSocket URL; when api_key is set, token is in query param (server accepts this or Authorization)."""
+        url = f"{self.base_url.replace('http', 'ws')}/ws/events"
+        if self.api_key:
+            url += f"?token={self.api_key}"
+        return url
+
+    def ws_headers(self):
+        """Headers for WebSocket handshake (use with aiohttp session.ws_connect(url, headers=client.ws_headers()))."""
+        return self._request_headers()
 
     # --- Config ---
     async def get_config(self):

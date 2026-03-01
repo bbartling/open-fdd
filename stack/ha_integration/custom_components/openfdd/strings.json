@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Open-FDD",
+        "description": "Enter the API URL and optional API key (required only if the server has auth enabled).",
+        "data": {
+          "base_url": "Base URL",
+          "api_key": "API key (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Open-FDD API.",
+      "invalid_auth": "Invalid API key.",
+      "auth_required": "This server requires an API key. Enter the key from stack/.env (OFDD_API_KEY) or from the addon configuration."
+    }
+  }
+}

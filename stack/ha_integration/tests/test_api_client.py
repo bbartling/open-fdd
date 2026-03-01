@@ -59,7 +59,21 @@ def _make_mock_session(request_return=None):
 def test_client_init_strips_trailing_slash():
     client = OpenFDDClient(base_url="http://host:8000/", api_key="key")
     assert client.base_url == "http://host:8000"
-    assert client._headers["Authorization"] == "Bearer key"
+    assert client._request_headers().get("Authorization") == "Bearer key"
+
+
+def test_request_headers_includes_authorization_when_api_key_set():
+    client = OpenFDDClient(base_url="http://host:8000", api_key="secret")
+    h = client._request_headers()
+    assert h["Accept"] == "application/json"
+    assert h["Authorization"] == "Bearer secret"
+
+
+def test_request_headers_omits_authorization_when_api_key_empty():
+    client = OpenFDDClient(base_url="http://host:8000", api_key="")
+    h = client._request_headers()
+    assert h["Accept"] == "application/json"
+    assert "Authorization" not in h
 
 
 def test_get_health():
@@ -97,9 +111,33 @@ def test_get_faults_active_with_params():
     assert req_kw.get("params") == {"site_id": "site-1", "equipment_id": "eq-1"}
 
 
-def test_ws_url():
+def test_every_request_sends_bearer_when_api_key_set():
+    """Ensure capabilities (and all) requests use Authorization: Bearer when api_key is set."""
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="my-key-123")
+    req_kw = {}
+
+    def capture_request(*args, **kwargs):
+        req_kw.update(kwargs)
+        return _mock_session_request()
+
+    mock_sess = MagicMock()
+    mock_sess.request = MagicMock(side_effect=capture_request)
+    with patch("aiohttp.ClientSession") as session_klass:
+        session_klass.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+        session_klass.return_value.__aexit__ = AsyncMock(return_value=None)
+        _run(client.get_capabilities())
+    assert req_kw.get("headers", {}).get("Authorization") == "Bearer my-key-123"
+    assert req_kw.get("headers", {}).get("Accept") == "application/json"
+
+
+def test_ws_url_with_api_key():
     client = OpenFDDClient(base_url="http://localhost:8000", api_key="token")
     assert client.ws_url() == "ws://localhost:8000/ws/events?token=token"
+
+
+def test_ws_url_without_api_key():
+    client = OpenFDDClient(base_url="http://localhost:8000", api_key="")
+    assert client.ws_url() == "ws://localhost:8000/ws/events"
 
 
 def test_list_sites():

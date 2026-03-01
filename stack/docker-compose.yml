@@ -199,6 +199,8 @@ services:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       # Absolute path so writes always go to the mounted volume (../config → /app/config)
       OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
+      # Optional Bearer auth; bootstrap generates and writes to stack/.env unless --no-auth
+      OFDD_API_KEY: ${OFDD_API_KEY:-}
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config

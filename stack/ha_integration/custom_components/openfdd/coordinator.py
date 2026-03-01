@@ -1,5 +1,7 @@
 """DataUpdateCoordinator for Open-FDD fault state and entities."""
 
+from datetime import timedelta
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -20,22 +22,15 @@ class OpenFDDCoordinator(DataUpdateCoordinator):
             hass,
             logger=__import__("logging").getLogger(__name__),
             name=DOMAIN,
-            update_interval=update_interval_seconds,
+            update_interval=timedelta(seconds=update_interval_seconds),
         )
         self.client = client
-        self._data = {"faults_active": [], "capabilities": {}}
-
-    @property
-    def data(self):
-        return self._data
 
     async def _async_update_data(self):
         try:
             caps = await self.client.get_capabilities()
-            self._data["capabilities"] = caps
             faults = await self.client.get_faults_active()
-            self._data["faults_active"] = faults
-            return self._data
+            return {"faults_active": faults, "capabilities": caps}
         except Exception as e:
             self.logger.exception("Open-FDD update failed: %s", e)
             raise
