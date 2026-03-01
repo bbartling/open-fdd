@@ -161,6 +161,33 @@ def _get_container_metrics() -> list[dict]:
         return []
 
 
+def _get_disk_metrics(proc_root: str = "/host/proc") -> list[dict]:
+    """Get disk usage for one or more mount points. Uses / or env OFDD_DISK_MOUNT_PATHS (comma-separated)."""
+    import os
+    paths_str = os.environ.get("OFDD_DISK_MOUNT_PATHS", "/")
+    paths = [p.strip() for p in paths_str.split(",") if p.strip()]
+    out = []
+    for path in paths:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            stat = os.statvfs(path)
+            total = stat.f_blocks * stat.f_frsize
+            free = stat.f_bavail * stat.f_frsize
+            used = total - free
+            out.append(
+                {
+                    "mount_path": path,
+                    "total_bytes": total,
+                    "used_bytes": used,
+                    "free_bytes": free,
+                }
+            )
+        except OSError:
+            pass
+    return out
+
+
 def _get_hostname() -> str:
     """Prefer host's hostname from /host/proc/sys/kernel/hostname."""
     for p in ["/host/proc/sys/kernel/hostname", "/proc/sys/kernel/hostname"]:
@@ -169,8 +196,13 @@ def _get_hostname() -> str:
     return os.environ.get("HOSTNAME", "unknown")
 
 
-def _write_metrics(host: dict | None, containers: list[dict]) -> None:
-    """Bulk insert into host_metrics and container_metrics."""
+def _write_metrics(
+    host: dict | None,
+    containers: list[dict],
+    disks: list[dict],
+    hostname: str,
+) -> None:
+    """Bulk insert into host_metrics, container_metrics, and disk_metrics."""
     from datetime import datetime
 
     from psycopg2.extras import execute_values
@@ -178,7 +210,6 @@ def _write_metrics(host: dict | None, containers: list[dict]) -> None:
     from open_fdd.platform.database import get_conn
 
     now = datetime.utcnow()
-    hostname = _get_hostname()
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -202,6 +233,22 @@ def _write_metrics(host: dict | None, containers: list[dict]) -> None:
                         host["load_15"],
                     ),
                 )
+            if disks:
+                for d in disks:
+                    cur.execute(
+                        """
+                        INSERT INTO disk_metrics (ts, hostname, mount_path, total_bytes, used_bytes, free_bytes)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            now,
+                            hostname,
+                            d["mount_path"],
+                            d["total_bytes"],
+                            d["used_bytes"],
+                            d["free_bytes"],
+                        ),
+                    )
             if containers:
                 rows = [
                     (
@@ -250,11 +297,16 @@ def main() -> int:
 
     def _run() -> int:
         try:
+            hostname = _get_hostname()
             host = _get_host_metrics()
             containers = _get_container_metrics()
-            _write_metrics(host, containers)
+            disks = _get_disk_metrics()
+            _write_metrics(host, containers, disks, hostname)
             log.info(
-                "Wrote host=%s containers=%d", "ok" if host else "skip", len(containers)
+                "Wrote host=%s containers=%d disks=%d",
+                "ok" if host else "skip",
+                len(containers),
+                len(disks),
             )
             return 0
         except Exception as e:

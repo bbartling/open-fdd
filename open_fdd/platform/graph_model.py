@@ -251,6 +251,11 @@ def load_from_file() -> None:
             brick_ttl = build_brick_ttl_from_db(site_id=None)
             if brick_ttl.strip():
                 g.parse(data=brick_ttl, format="turtle")
+    # Ensure platform config is always in the graph (e.g. empty file or first boot)
+    if not get_config_from_graph():
+        from open_fdd.platform.default_config import DEFAULT_PLATFORM_CONFIG
+
+        set_config_in_graph(dict(DEFAULT_PLATFORM_CONFIG))
 
 
 def sync_brick_from_db() -> None:
@@ -470,16 +475,18 @@ def graph_integrity_check() -> dict:
 def reset_graph_to_db_only() -> None:
     """
     Clear the in-memory graph and repopulate from DB only (Brick). Removes all BACnet
-    triples and any orphaned blank nodes. Preserves platform config (ofdd:platform_config).
+    triples and any orphaned blank nodes. Preserves platform config (ofdd:platform_config);
+    if the graph had no config, seeds DEFAULT_PLATFORM_CONFIG so the graph always has config.
     Call write_ttl_to_file() after to persist.
     """
+    from open_fdd.platform.default_config import DEFAULT_PLATFORM_CONFIG
+
     config_snapshot = get_config_from_graph()
     g = _ensure_graph()
     with _graph_lock:
         g.remove((None, None, None))
     sync_brick_from_db()
-    if config_snapshot:
-        set_config_in_graph(config_snapshot)
+    set_config_in_graph(config_snapshot if config_snapshot else dict(DEFAULT_PLATFORM_CONFIG))
 
 
 def _sync_loop() -> None:

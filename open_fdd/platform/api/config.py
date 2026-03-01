@@ -94,4 +94,10 @@ def put_config(body: ConfigBody):
     if not ok:
         raise HTTPException(500, f"Failed to write TTL: {err}")
     set_config_overlay(merged)
+    try:
+        from open_fdd.platform.realtime import emit, TOPIC_CONFIG_UPDATED, TOPIC_GRAPH_UPDATED
+        emit(TOPIC_CONFIG_UPDATED, {"keys": list(updates.keys())})
+        emit(TOPIC_GRAPH_UPDATED, {})
+    except Exception:
+        pass
     return merged

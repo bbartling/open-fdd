@@ -1,8 +1,15 @@
-"""Unit tests for in-memory RDF graph (graph_model): BACnet TTL from point_discovery."""
+"""Unit tests for in-memory RDF graph (graph_model): BACnet TTL from point_discovery, reset/config preservation."""
+
+from unittest.mock import patch
 
 import pytest
 
-from open_fdd.platform.graph_model import bacnet_ttl_from_point_discovery
+from open_fdd.platform.graph_model import (
+    bacnet_ttl_from_point_discovery,
+    get_config_from_graph,
+    reset_graph_to_db_only,
+    set_config_in_graph,
+)
 
 
 def test_bacnet_ttl_from_point_discovery_empty_objects():
@@ -59,3 +66,35 @@ def test_bacnet_ttl_from_point_discovery_escapes_quotes():
     ]
     ttl = bacnet_ttl_from_point_discovery(1, "x", objects)
     assert '\\"' in ttl or "Sensor" in ttl
+
+
+def test_reset_graph_to_db_only_seeds_default_config_when_graph_empty():
+    """When graph has no config, reset seeds DEFAULT_PLATFORM_CONFIG so config always remains in graph."""
+    from open_fdd.platform.default_config import DEFAULT_PLATFORM_CONFIG
+
+    with (
+        patch("open_fdd.platform.graph_model.get_config_from_graph", return_value={}),
+        patch("open_fdd.platform.graph_model.sync_brick_from_db"),
+    ):
+        reset_graph_to_db_only()
+        # Reset should have called set_config_in_graph with default; verify graph has config
+        # (sync_brick is no-op, so graph was cleared then config was set)
+    cfg = get_config_from_graph()
+    assert cfg, "Graph should have config after reset (seeded with default)"
+    assert cfg.get("rule_interval_hours") is not None
+    assert cfg.get("bacnet_server_url") is not None
+    # Defaults from default_config
+    assert cfg.get("rules_dir") == DEFAULT_PLATFORM_CONFIG["rules_dir"]
+    assert cfg.get("open_meteo_timezone") == DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"]
+
+
+def test_reset_graph_to_db_only_preserves_existing_config():
+    """When graph has config, reset preserves it (snapshot and restore)."""
+    custom = {"rule_interval_hours": 2.5, "lookback_days": 7, "bacnet_site_id": "building-a"}
+    set_config_in_graph(custom)
+    with patch("open_fdd.platform.graph_model.sync_brick_from_db"):
+        reset_graph_to_db_only()
+    cfg = get_config_from_graph()
+    assert cfg.get("rule_interval_hours") == 2.5
+    assert cfg.get("lookback_days") == 7
+    assert cfg.get("bacnet_site_id") == "building-a"

@@ -313,6 +313,303 @@ Insert Snip here
 
 ```
 
+## Host stats (stack-host-stats)
+
+The **stack-host-stats** container scrapes host memory, load, swap, disk usage, and Docker container stats into `host_metrics`, `disk_metrics`, and `container_metrics`. Use the same TimescaleDB datasource (`openfdd_timescale`).
+
+### Dashboard variable (Host)
+
+* **Name:** `hostname`
+* **Type:** Query
+* **Datasource:** openfdd_timescale
+* **Query:**
+
+```sql
+SELECT DISTINCT hostname AS __text, hostname AS __value
+FROM host_metrics
+WHERE $__timeFilter(ts)
+ORDER BY 1;
+```
+
+### Host — Memory (used / available / total)
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Host — Memory (used / available / total)",
+  "gridPos": { "x": 0, "y": 0, "h": 10, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": {
+        "drawStyle": "line",
+        "lineInterpolation": "linear",
+        "lineWidth": 2,
+        "fillOpacity": 12,
+        "axisPlacement": "left",
+        "scaleDistribution": { "type": "linear" }
+      },
+      "unit": "bytes",
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    },
+    "overrides": [
+      {
+        "matcher": { "id": "byName", "options": "mem_used_bytes" },
+        "properties": [{ "id": "displayName", "value": "Used" }]
+      },
+      {
+        "matcher": { "id": "byName", "options": "mem_available_bytes" },
+        "properties": [{ "id": "displayName", "value": "Available" }]
+      },
+      {
+        "matcher": { "id": "byName", "options": "mem_total_bytes" },
+        "properties": [{ "id": "displayName", "value": "Total" }]
+      }
+    ]
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", mem_used_bytes AS \"mem_used_bytes\", mem_available_bytes AS \"mem_available_bytes\", mem_total_bytes AS \"mem_total_bytes\" FROM host_metrics WHERE $__timeFilter(ts) AND hostname IN (${hostname:sqlstring}) ORDER BY ts;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Host — Load (1 / 5 / 15 min)
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Host — Load (1 / 5 / 15 min)",
+  "gridPos": { "x": 0, "y": 10, "h": 8, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "axisPlacement": "left" },
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    },
+    "overrides": [
+      { "matcher": { "id": "byName", "options": "load_1" }, "properties": [{ "id": "displayName", "value": "Load 1m" }] },
+      { "matcher": { "id": "byName", "options": "load_5" }, "properties": [{ "id": "displayName", "value": "Load 5m" }] },
+      { "matcher": { "id": "byName", "options": "load_15" }, "properties": [{ "id": "displayName", "value": "Load 15m" }] }
+    ]
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", load_1 AS \"load_1\", load_5 AS \"load_5\", load_15 AS \"load_15\" FROM host_metrics WHERE $__timeFilter(ts) AND hostname IN (${hostname:sqlstring}) ORDER BY ts;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Host — Swap (used / total)
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Host — Swap (used / total)",
+  "gridPos": { "x": 0, "y": 18, "h": 6, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "axisPlacement": "left" },
+      "unit": "bytes",
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    },
+    "overrides": [
+      { "matcher": { "id": "byName", "options": "swap_used_bytes" }, "properties": [{ "id": "displayName", "value": "Swap used" }] },
+      { "matcher": { "id": "byName", "options": "swap_total_bytes" }, "properties": [{ "id": "displayName", "value": "Swap total" }] }
+    ]
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", swap_used_bytes AS \"swap_used_bytes\", swap_total_bytes AS \"swap_total_bytes\" FROM host_metrics WHERE $__timeFilter(ts) AND hostname IN (${hostname:sqlstring}) ORDER BY ts;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Host — Disk space (free / used / total)
+
+Disk metrics come from `disk_metrics` (mount path from env `OFDD_DISK_MOUNT_PATHS`, default `/`). The table is created by the same migration as `host_metrics` (`stack/sql/006_host_metrics.sql`); re-run migrations if you added host-stats after an older deploy.
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Host — Disk space (free / used / total)",
+  "gridPos": { "x": 0, "y": 24, "h": 10, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 12, "axisPlacement": "left" },
+      "unit": "bytes",
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    },
+    "overrides": [
+      { "matcher": { "id": "byName", "options": "free_bytes" }, "properties": [{ "id": "displayName", "value": "Free" }] },
+      { "matcher": { "id": "byName", "options": "used_bytes" }, "properties": [{ "id": "displayName", "value": "Used" }] },
+      { "matcher": { "id": "byName", "options": "total_bytes" }, "properties": [{ "id": "displayName", "value": "Total" }] }
+    ]
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", free_bytes AS \"free_bytes\", used_bytes AS \"used_bytes\", total_bytes AS \"total_bytes\" FROM disk_metrics WHERE $__timeFilter(ts) AND hostname IN (${hostname:sqlstring}) AND mount_path = '/' ORDER BY ts;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Host — Disk available (gauge, latest)
+
+```json
+{
+  "id": null,
+  "type": "gauge",
+  "title": "Host — Disk space available (latest)",
+  "gridPos": { "x": 0, "y": 34, "h": 6, "w": 8 },
+  "fieldConfig": {
+    "defaults": {
+      "unit": "bytes",
+      "min": 0,
+      "color": { "mode": "thresholds" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 5368709120}, {"color": "green", "value": 10737418240}] }
+    }
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", free_bytes AS \"value\" FROM disk_metrics WHERE hostname IN (${hostname:sqlstring}) AND mount_path = '/' ORDER BY ts DESC LIMIT 1;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "showThresholdLabels": false }
+}
+```
+
+### Containers — CPU %
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Containers — CPU %",
+  "gridPos": { "x": 0, "y": 40, "h": 8, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "axisPlacement": "left" },
+      "unit": "percent",
+      "min": 0,
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    }
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", cpu_pct AS \"value\", container_name AS \"metric\" FROM container_metrics WHERE $__timeFilter(ts) ORDER BY ts, container_name;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Containers — Memory %
+
+```json
+{
+  "id": null,
+  "type": "timeseries",
+  "title": "Containers — Memory %",
+  "gridPos": { "x": 0, "y": 48, "h": 8, "w": 24 },
+  "fieldConfig": {
+    "defaults": {
+      "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "axisPlacement": "left" },
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "color": { "mode": "palette-classic" },
+      "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] }
+    }
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "time_series",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT ts AS \"time\", COALESCE(mem_pct, 0) AS \"value\", container_name AS \"metric\" FROM container_metrics WHERE $__timeFilter(ts) ORDER BY ts, container_name;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "legend": { "showLegend": true, "placement": "bottom" } }
+}
+```
+
+### Containers — Table (latest)
+
+```json
+{
+  "id": null,
+  "type": "table",
+  "title": "Containers — Latest stats",
+  "gridPos": { "x": 0, "y": 56, "h": 12, "w": 24 },
+  "fieldConfig": {
+    "defaults": { "custom": { "align": "auto", "displayMode": "auto" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] } },
+    "overrides": [
+      { "matcher": { "id": "byName", "options": "cpu_pct" }, "properties": [{ "id": "unit", "value": "percent" }] },
+      { "matcher": { "id": "byName", "options": "mem_pct" }, "properties": [{ "id": "unit", "value": "percent" }] },
+      { "matcher": { "id": "byName", "options": "mem_usage_bytes" }, "properties": [{ "id": "unit", "value": "bytes" }] }
+    ]
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "format": "table",
+      "rawQuery": true,
+      "editorMode": "code",
+      "rawSql": "SELECT container_name, ts, cpu_pct, mem_pct, mem_usage_bytes, pids FROM (SELECT *, row_number() OVER (PARTITION BY container_name ORDER BY ts DESC) AS rn FROM container_metrics WHERE $__timeFilter(ts)) sub WHERE rn = 1 ORDER BY container_name;"
+    }
+  ],
+  "datasource": { "uid": "openfdd_timescale" },
+  "options": { "showHeader": true }
+}
+```
+
 ## Weather
 
 

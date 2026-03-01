@@ -2,6 +2,7 @@
 
 import json
 import os
+from uuid import UUID
 from typing import Annotated
 
 import httpx
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.config import get_platform_settings
+from open_fdd.platform.database import get_conn
 from open_fdd.platform.graph_model import (
     get_ttl_path_resolved,
     update_bacnet_from_point_discovery,
@@ -389,3 +391,115 @@ def bacnet_point_discovery_to_graph(
     except Exception as e:
         result["graph_error"] = str(e)
     return result
+
+
+# --- Write point (HA/Node-RED write via Open-FDD; audit + events) ---
+
+
+class WritePointBody(BaseModel):
+    """Body for POST /bacnet/write_point. HA/Node-RED must use this; never write to BACnet directly."""
+
+    point_id: UUID = Field(..., description="Point UUID from GET /points")
+    value: float = Field(..., description="Value to write")
+    ttl_seconds: int | None = Field(None, ge=1, le=86400, description="Optional lease/timeout in seconds")
+    source: str | None = Field(None, max_length=64, description="Audit: e.g. home_assistant, node_red")
+
+
+@router.post(
+    "/write_point",
+    summary="Write BACnet point (audited; HA/Node-RED use this only)",
+)
+def bacnet_write_point(
+    body: WritePointBody,
+    gateway: str | None = Query(None, description="Gateway id from GET /bacnet/gateways"),
+):
+    """
+    Write a value to a BACnet point. Open-FDD validates the point, records audit log,
+    and calls the BACnet gateway. HA and Node-RED must use this endpoint; never write to BACnet directly.
+    """
+    from open_fdd.platform.realtime import emit, TOPIC_BACNET_WRITE
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, external_id, bacnet_device_id, object_identifier, object_name
+                FROM points
+                WHERE id = %s
+                """,
+                (str(body.point_id),),
+            )
+            row = cur.fetchone()
+    if not row:
+        return {
+            "ok": False,
+            "error": "Point not found",
+            "audit": {"success": False, "reason": "point_not_found"},
+        }
+    bacnet_device_id = row.get("bacnet_device_id")
+    object_identifier = row.get("object_identifier")
+    if not bacnet_device_id or not object_identifier:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
+                    VALUES (%s, %s, %s, now(), false, %s)
+                    """,
+                    (str(body.point_id), body.value, body.source or "", "point_not_bacnet_addressed"),
+                )
+                conn.commit()
+        emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": "point_not_bacnet_addressed"})
+        return {
+            "ok": False,
+            "error": "Point has no BACnet address (bacnet_device_id / object_identifier)",
+            "audit": {"success": False, "reason": "point_not_bacnet_addressed"},
+        }
+
+    url = _effective_bacnet_server_url()
+    if gateway:
+        u = _resolve_gateway_url(gateway)
+        if u:
+            url = u
+    if not url.startswith("http"):
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
+                    VALUES (%s, %s, %s, now(), false, %s)
+                    """,
+                    (str(body.point_id), body.value, body.source or "", "no_gateway_url"),
+                )
+                conn.commit()
+        emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": "no_gateway_url"})
+        return {"ok": False, "error": "No BACnet gateway URL", "audit": {"success": False, "reason": "no_gateway_url"}}
+
+    # Optional: min/max from point metadata could go here
+    params = {
+        "object_identifier": object_identifier,
+        "value": body.value,
+        "device_instance": int(bacnet_device_id) if str(bacnet_device_id).isdigit() else bacnet_device_id,
+    }
+    result = _post_rpc(url, "client_write_property", params)
+    success = result.get("ok", False)
+    reason = None
+    if not success:
+        reason = result.get("error") or result.get("body") or "gateway_error"
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
+                VALUES (%s, %s, %s, now(), %s, %s)
+                """,
+                (str(body.point_id), body.value, body.source or "", success, reason),
+            )
+        conn.commit()
+
+    if success:
+        emit(TOPIC_BACNET_WRITE + ".succeeded", {"point_id": str(body.point_id), "value": body.value})
+        return {"ok": True, "audit": {"success": True}}
+    emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": reason})
+    return {"ok": False, "error": reason, "audit": {"success": False, "reason": reason}}

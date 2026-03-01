@@ -2,7 +2,7 @@
 
 This document describes how to protect Open-FDD endpoints with **Caddy** (basic auth), which services are **unencrypted by default**, and **hardening** best practices. The project defaults to **non-TLS**; TLS (including self-signed certificates) is optional.
 
-**What is Caddy?** If you’re from the controls/OT side and new to IT security: **Caddy** is a small web server that sits in front of the Open-FDD web interfaces (the API docs and Grafana dashboards). Think of it as a single front door: instead of opening the API and Grafana directly, you open Caddy at one address (e.g. port 8088). Caddy can require a **username and password** (basic auth) so only people who have that login can reach those pages. It can also add **HTTPS** (encrypted traffic) if you need it. By default, Open-FDD does **not** run Caddy—the API and Grafana are reachable without a password on the same network. This doc explains how to turn Caddy on so you have one protected entry point.
+**What is Caddy?** A small web server in front of the API and Grafana—one entry point (e.g. port 8088) with optional **basic auth** and **HTTPS**. By default Open-FDD does not run Caddy; this doc explains how to enable it for a protected entry point.
 
 ---
 

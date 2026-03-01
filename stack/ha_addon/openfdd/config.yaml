@@ -1,0 +1,18 @@
+name: Open-FDD
+description: Open-source FDD for HVAC. REST and WebSocket API for HA and Node-RED.
+version: "2.0.2"
+slug: openfdd
+arch:
+  - amd64
+  - aarch64
+init: false
+options:
+  api_key: ""
+  port: 8000
+schema:
+  api_key: str?
+  port: int(8000)?
+ingress: true
+ingress_port: 8000
+ports:
+  8000/tcp: 8000

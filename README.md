@@ -99,6 +99,8 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
+> Pull requests on the `master` branch will be rejected please use the current `dev` branch only.
+
 ---
 
 ## License

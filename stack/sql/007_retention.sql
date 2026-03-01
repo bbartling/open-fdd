@@ -16,4 +16,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = 'container_metrics') THEN
     PERFORM add_retention_policy('container_metrics', drop_after => INTERVAL '365 days', if_not_exists => true);
   END IF;
+  IF EXISTS (SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = 'disk_metrics') THEN
+    PERFORM add_retention_policy('disk_metrics', drop_after => INTERVAL '365 days', if_not_exists => true);
+  END IF;
 END $$;

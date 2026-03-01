@@ -11,9 +11,11 @@
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + Grafana + bacnet-server + bacnet-scraper only
 #   ./scripts/bootstrap.sh --verify             # health checks only
+#   ./scripts/bootstrap.sh --ha-addon          # build Home Assistant addon image (stack/ha_addon)
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
+#   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, grafana, host-stats, weather-scraper)
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -38,6 +40,7 @@ RESET_DATA=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
+HA_ADDON_BUILD=false
 
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
@@ -90,6 +93,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --retention-days) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && RETENTION_DAYS="${args[$i]}" ;;
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
+    --ha-addon) HA_ADDON_BUILD=true ;;
     -h|--help)
       cat <<EOF
 Usage: $0 [options]
@@ -105,6 +109,7 @@ Core:
 
 Build controls:
   --build SERVICE ...       Rebuild + restart only these services, then exit
+                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, grafana, host-stats, weather-scraper
   --build-all               Rebuild + restart all services, then exit
 
 Data / ops:
@@ -119,6 +124,10 @@ Edge settings:
 Docker install:
   --install-docker          Attempt to install Docker (Linux only) then continue
   --skip-docker-install     Explicitly skip Docker install (no-op)
+
+Home Assistant:
+  --ha-addon                Build HA addon image from stack/ha_addon (for use in HA Supervisor)
+  (HA integration: stack/ha_integration; version from API /capabilities at runtime.)
 
 EOF
       exit 0
@@ -502,6 +511,23 @@ safe_docker_prune() {
 # -----------------------------
 if $INSTALL_DOCKER && ! $SKIP_DOCKER_INSTALL; then
   install_docker_linux || true
+fi
+
+# -----------------------------
+# --ha-addon: build HA addon image from stack/ha_addon (version from pyproject.toml, same as FastAPI)
+# -----------------------------
+if $HA_ADDON_BUILD; then
+  ADDON_DIR="$STACK_DIR/ha_addon/openfdd"
+  if [[ ! -f "$ADDON_DIR/Dockerfile" ]]; then
+    echo "HA addon not found at $ADDON_DIR (no Dockerfile)."
+    exit 1
+  fi
+  ADDON_VERSION=$(grep -E '^version\s*=' "$REPO_ROOT/pyproject.toml" | sed -n 's/.*=\s*"\(.*\)".*/\1/p')
+  [[ -n "$ADDON_VERSION" ]] && sed -i "s/^version:.*/version: \"$ADDON_VERSION\"/" "$ADDON_DIR/config.yaml" && echo "Addon config.yaml version set to $ADDON_VERSION (from pyproject.toml)"
+  echo "=== Building Home Assistant addon image (stack/ha_addon) ==="
+  (cd "$ADDON_DIR" && docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 -t openfdd-addon:local .) || true
+  echo "Addon image: openfdd-addon:local. To install in HA: copy stack/ha_addon to your HA addons folder and set image in config."
+  exit 0
 fi
 
 # -----------------------------

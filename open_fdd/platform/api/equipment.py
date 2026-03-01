@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.data_model_ttl import sync_ttl_to_file
 from open_fdd.platform.api.models import EquipmentCreate, EquipmentRead, EquipmentUpdate
+from open_fdd.platform.realtime import emit, TOPIC_CRUD_EQUIPMENT
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
@@ -65,6 +66,7 @@ def create_equipment(body: EquipmentCreate):
         sync_ttl_to_file()
     except Exception:
         pass
+    emit(TOPIC_CRUD_EQUIPMENT + ".created", {"id": str(row["id"]), "site_id": str(row["site_id"]), "name": row["name"]})
     return EquipmentRead.model_validate(dict(row))
 
 
@@ -140,6 +142,7 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
         sync_ttl_to_file()
     except Exception:
         pass
+    emit(TOPIC_CRUD_EQUIPMENT + ".updated", {"id": str(equipment_id)})
     return EquipmentRead.model_validate(dict(row))
 
 
@@ -158,4 +161,5 @@ def delete_equipment(equipment_id: UUID):
         sync_ttl_to_file()
     except Exception:
         pass
+    emit(TOPIC_CRUD_EQUIPMENT + ".deleted", {"id": str(equipment_id)})
     return {"status": "deleted"}

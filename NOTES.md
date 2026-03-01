@@ -69,22 +69,16 @@ assert outputs
 This is how you ensure “no rock left unturned” as your catalog grows.
 
 
-## Verify weather scrape from open metio
+## Verify weather scrape (Open-Meteo → timeseries_readings)
+
+Weather is stored in `timeseries_readings` with points `temp_f`, `rh_pct`, `dewpoint_f`, etc. (see Grafana cookbook).
 
 ```bash
 docker exec -it openfdd_timescale psql -U postgres -d openfdd -c \
-"SELECT *
- FROM weather_hourly_raw
- ORDER BY ts DESC
- LIMIT 50;"
-```
-
-
-```bash
- docker exec -it openfdd_timescale psql -U postgres -d openfdd -c \
 "SELECT tr.ts, p.external_id, tr.value
  FROM timeseries_readings tr
  JOIN points p ON p.id = tr.point_id
+ WHERE p.external_id IN ('temp_f','rh_pct','dewpoint_f','wind_mph','cloud_pct')
  ORDER BY tr.ts DESC
  LIMIT 50;"
 ```

@@ -2,7 +2,8 @@
 """
 Run FDD rule loop on a schedule (default: every 3 hours, 3-day lookback).
 
-Each run: loads rules from YAML (analyst/rules or open_fdd/rules), pulls last N days
+Each run: if Open-Meteo is enabled (graph/config), fetches weather for the same
+lookback window so rules have fresh data; then loads rules from YAML, pulls last N days
 of site data into pandas, runs all rules (sensor + weather), writes fault_results.
 Analyst edits to YAML take effect on the next run; no restart required.
 
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.loop import run_fdd_loop
+from open_fdd.platform.site_resolver import resolve_site_uuid
 
 TRIGGER_POLL_SEC = 60  # check for trigger file every N seconds
 
@@ -60,6 +62,29 @@ def main() -> int:
     lookback_days = settings.lookback_days
 
     def _run() -> int:
+        settings = get_platform_settings()
+        # Run Open-Meteo fetch when FDD runs so weather is fresh for rules (same interval, graph-driven).
+        if getattr(settings, "open_meteo_enabled", True):
+            try:
+                from open_fdd.platform.drivers.open_meteo import run_open_meteo_fetch
+
+                site_uuid = resolve_site_uuid(
+                    getattr(settings, "open_meteo_site_id", "default") or "default"
+                )
+                if site_uuid:
+                    run_open_meteo_fetch(
+                        site_uuid,
+                        getattr(settings, "open_meteo_latitude", 41.88),
+                        getattr(settings, "open_meteo_longitude", -87.63),
+                        days_back=lookback_days,
+                        timezone=getattr(
+                            settings, "open_meteo_timezone", "America/Chicago"
+                        ),
+                    )
+                    log.info("Open-Meteo fetch OK before FDD run")
+            except Exception as we:
+                log.warning("Open-Meteo fetch before FDD run failed (continuing): %s", we)
+
         log.info(
             "FDD run: lookback=%d days, rules reload from YAML",
             lookback_days,

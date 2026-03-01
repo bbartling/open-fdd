@@ -30,8 +30,8 @@ open-fdd/
 │   │   └── static/        # Config UI (index.html, app.js, styles.css)
 │   └── tests/             # analyst/, engine/, platform/, test_schema.py
 ├── analyst/               # Entry points: sparql, rules, run_all.sh; rules YAML; sparql/*.sparql
-├── platform/              # docker-compose, Dockerfiles, SQL, grafana, caddy
-│   ├── sql/               # 001_init … 011_polling (migrations)
+├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy
+│   ├── sql/               # 001_init … 014_drop_legacy_weather_tables (migrations)
 │   ├── grafana/           # provisioning/datasources only (see Grafana SQL cookbook)
 │   └── caddy/             # Caddyfile (optional reverse proxy)
 ├── config/                # data_model.ttl (Brick + BACnet + platform config), BACnet CSV(s) optional
@@ -50,40 +50,48 @@ open-fdd/
 
 ## Environmental variables
 
-All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and env override). Set on the **host** (e.g. `platform/.env` or in `docker-compose.yml`); Docker passes them into each container. Without Docker they are the current shell/process env. The platform uses **polling loops** (no OS cron); the env vars set **intervals** (e.g. BACnet every 5 min, FDD every 3 h). The only extra trigger is **OFDD_FDD_TRIGGER_FILE** (touch to run FDD now). See [Configuration](../configuration) for full table and [SPARQL cookbook](../modeling/sparql_cookbook) for config in RDF.
+All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and env override). Set on the **host** (e.g. `stack/.env` or in `docker-compose.yml`); Docker passes them into each container.
+
+**After first bootstrap, platform config lives in the RDF graph** (GET/PUT /config; `config/data_model.ttl`). The **Required / infra** vars below are always read from env. The **Platform config (graph)** vars are used to **seed the graph at bootstrap** (PUT /config) and as fallback for processes that don't call GET /config (e.g. FDD loop container). Scrapers (BACnet, weather) that call GET /config get live config from the graph. See [Configuration](../configuration) and [SPARQL cookbook](../modeling/sparql_cookbook).
+
+### Required / infra (always from env)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| **Database** | | |
-| `OFDD_DB_DSN` | `postgresql://postgres:postgres@localhost:5432/openfdd` | TimescaleDB connection string. In Docker use `postgresql://postgres:postgres@db:5432/openfdd`. |
-| **App** | | |
+| `OFDD_DB_DSN` | `postgresql://postgres:postgres@localhost:5432/openfdd` | TimescaleDB connection. In Docker: `postgresql://postgres:postgres@db:5432/openfdd`. |
+| `OFDD_API_URL` | http://localhost:8000 | Used by bootstrap and by scrapers to call GET /config. |
+| `OFDD_BRICK_TTL_PATH` | config/data_model.ttl | Unified TTL (Brick + BACnet + config); API load/save. |
 | `OFDD_APP_TITLE` | Open-FDD API | API title. |
-| `OFDD_APP_VERSION` | 2.0.1 | Fallback when package metadata missing. |
+| `OFDD_APP_VERSION` | 2.0.2 | Fallback when package metadata missing. |
 | `OFDD_DEBUG` | false | Debug mode. |
-| `OFDD_BRICK_TTL_PATH` | config/data_model.ttl | Unified TTL (Brick + BACnet + config). |
-| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Minutes between graph serialize to TTL. |
-| **FDD loop** | | |
+| `OFDD_FDD_TRIGGER_FILE` | config/.run_fdd_now | Touch to trigger FDD run and reset timer. |
+| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Minutes between graph serialize to TTL (API). |
+| `OFDD_HOST_STATS_INTERVAL_SEC` | 60 | host-stats container interval (seconds). |
+| `OFDD_DISK_MOUNT_PATHS` | / | Comma-separated paths for disk usage → `disk_metrics`. |
+| `OFDD_RETENTION_DAYS` | 365 | TimescaleDB retention (bootstrap / 007_retention). |
+| `OFDD_LOG_MAX_SIZE` | 100m | Docker log max size per file. |
+| `OFDD_LOG_MAX_FILES` | 3 | Docker log file count. |
+
+### Platform config (RDF graph; env seeds bootstrap)
+
+Used to build the PUT /config body at bootstrap; thereafter config is in the graph. Containers that don't fetch GET /config (e.g. FDD loop) still read these from env.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `OFDD_RULE_INTERVAL_HOURS` | 3 | FDD run interval (hours). |
 | `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
-| `OFDD_FDD_TRIGGER_FILE` | config/.run_fdd_now | Touch to trigger run and reset timer. |
 | `OFDD_RULES_DIR` | analyst/rules | YAML rules directory (hot reload). |
-| **BACnet** | | |
+| `OFDD_BRICK_TTL_DIR` | config | Brick TTL directory. |
 | `OFDD_BACNET_SERVER_URL` | — | diy-bacnet-server URL (e.g. http://localhost:8080). |
 | `OFDD_BACNET_SITE_ID` | default | Site to tag when scraping. |
 | `OFDD_BACNET_GATEWAYS` | — | JSON array for central aggregator. |
 | `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
 | `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). |
 | `OFDD_BACNET_USE_DATA_MODEL` | true | Prefer data-model scrape over CSV. |
-| **Open-Meteo** | | |
-| `OFDD_OPEN_METEO_*` | (see Configuration) | Enabled, interval, lat/lon, timezone, days_back, site_id. |
-| **Host stats** | | |
-| `OFDD_HOST_STATS_INTERVAL_SEC` | 60 | host-stats container interval (seconds). |
-| **Edge / bootstrap** | | |
-| `OFDD_RETENTION_DAYS` | 365 | TimescaleDB retention (days). |
-| `OFDD_LOG_MAX_SIZE` | 100m | Docker log max size per file. |
-| `OFDD_LOG_MAX_FILES` | 3 | Docker log file count. |
+| `OFDD_OPEN_METEO_*` | (see Configuration) | enabled, interval_hours, latitude, longitude, timezone, days_back, site_id. |
+| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Graph sync interval (also in graph). |
 
-**Optional:** `OFDD_ENV_FILE` ([Configuration](../configuration)). Platform config is RDF (GET/PUT /config). `OFDD_API_URL` — used by **bootstrap.sh** when API is not at localhost:8000.
+**Optional:** `OFDD_ENV_FILE` ([Configuration](../configuration)).
 
 ---
 
@@ -129,25 +137,31 @@ Live store: **in-memory RDF graph** (`platform/graph_model.py`). Brick triples f
 
 ## Bootstrap and client updates
 
-**Safe for clients:** `./scripts/bootstrap.sh --update --maintenance --verify` does not wipe TimescaleDB or Grafana data (no volume prune). Migrations in `platform/sql/` are idempotent. See [Getting started](../getting_started).
+**Safe for clients:** `./scripts/bootstrap.sh --update --maintenance --verify` does not wipe TimescaleDB or Grafana data (no volume prune). Migrations in `stack/sql/` are idempotent. See [Getting started](../getting_started).
 
-**Troubleshooting 500 (db host unresolved):** Ensure full stack is up so API can resolve hostname `db`. Run `./scripts/bootstrap.sh` or `docker compose -f platform/docker-compose.yml up -d`.
+**Troubleshooting 500 (db host unresolved):** Ensure full stack is up so API can resolve hostname `db`. Run `./scripts/bootstrap.sh` or `docker compose -f stack/docker-compose.yml up -d`.
 
 ---
 
 ## Database schema (TimescaleDB)
 
-Schema in `platform/sql/`. **Cascade deletes:** Site → equipment, points, timeseries; equipment → points, timeseries; point → timeseries. See [Danger zone](../howto/danger_zone).
+Schema in `stack/sql/` (migrations 001–014). **Cascade deletes:** Site → equipment, points, timeseries; equipment → points; point → timeseries. See [Danger zone](../howto/danger_zone).
 
 | Table | Purpose |
 |-------|---------|
 | **sites** | id, name, description, metadata, created_at |
 | **equipment** | id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id |
 | **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, bacnet_device_id, object_identifier, object_name, polling |
-| **timeseries_readings** | ts, point_id, value (hypertable) |
+| **timeseries_readings** | ts, site_id, point_id, value, job_id (hypertable; BACnet + weather + CSV ingest) |
+| **ingest_jobs** | id, site_id, name, format, point_columns, row_count (CSV ingest metadata) |
 | **fault_results** | ts, site_id, equipment_id, fault_id, flag_value (hypertable) |
-| **fault_events** | start_ts, end_ts, fault_id, equipment_id |
-| **weather_hourly_raw** | ts, site_id, point_key, value (hypertable) |
+| **fault_events** | id, site_id, equipment_id, fault_id, start_ts, end_ts, duration_seconds, evidence |
+| **fault_definitions** | fault_id, name, description, severity, category, equipment_types, inputs, params, expression, source |
+| **fdd_run_log** | run_ts, status, sites_processed, faults_written (last FDD run for UI) |
+| **analytics_motor_runtime** | site_id, period_start, period_end, runtime_hours (data-model driven) |
+| **host_metrics** | ts, hostname, mem_*, swap_*, load_1/5/15 (hypertable) |
+| **container_metrics** | ts, container_name, cpu_pct, mem_*, pids, net_*, block_* (hypertable) |
+| **disk_metrics** | ts, hostname, mount_path, total_bytes, used_bytes, free_bytes (hypertable) |
 
 ---
 

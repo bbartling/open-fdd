@@ -242,6 +242,11 @@ def run_fdd_loop(
 
         if all_results:
             _write_fault_results(all_results)
+            try:
+                from open_fdd.platform.fault_state_sync import sync_fault_state_from_results
+                sync_fault_state_from_results(all_results)
+            except Exception:
+                pass  # do not fail FDD run if fault_state sync fails
 
         _write_fdd_run_log(
             run_ts=datetime.utcnow(),

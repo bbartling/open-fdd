@@ -45,7 +45,8 @@ def test_download_csv_404_site_not_found():
             },
         )
     assert r.status_code == 404
-    assert "No site found" in r.json()["detail"]
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "No site found" in msg
 
 
 def test_download_csv_404_no_data():
@@ -65,7 +66,8 @@ def test_download_csv_404_no_data():
             },
         )
     assert r.status_code == 404
-    assert "No data" in r.json()["detail"]
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "No data" in msg
 
 
 def test_download_csv_200_wide():
@@ -135,7 +137,8 @@ def test_download_faults_404_site_not_found():
             "/download/faults?site_id=nosuch&start_date=2024-01-01&end_date=2024-01-31&format=csv"
         )
     assert r.status_code == 404
-    assert "No site found" in r.json()["detail"]
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "No site found" in msg
 
 
 def test_download_faults_200_csv():

@@ -1,0 +1,6 @@
+# Build config for HA add-on (e.g. with hassio-addon-builder or similar)
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base:3.19"
+  amd64: "ghcr.io/home-assistant/amd64-base:3.19"
+  armv7: "ghcr.io/home-assistant/armv7-base:3.19"
+  i386: "ghcr.io/home-assistant/i386-base:3.19"

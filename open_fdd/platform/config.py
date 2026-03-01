@@ -76,6 +76,9 @@ class PlatformSettings(BaseSettings):
     # Prefer data-model scrape over CSV when points have BACnet addressing (fall back to CSV if no points)
     bacnet_use_data_model: bool = True
 
+    # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /docs, /redoc, /openapi.json, /app
+    api_key: Optional[str] = None
+
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 
 

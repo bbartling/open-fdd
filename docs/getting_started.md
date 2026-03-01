@@ -74,27 +74,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--log-max-size SIZE` | Docker log max size per file (e.g. `100m`, `50m`). Default `100m`. Env: `OFDD_LOG_MAX_SIZE`. |
 | `--log-max-files N` | Docker log max number of files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 
----
-
-## Clone and run bootstrap
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git
-cd open-fdd
-./scripts/bootstrap.sh
-# Optional: set edge limits at first run (saved to platform/.env)
-# ./scripts/bootstrap.sh --retention-days 180 --log-max-size 50m --log-max-files 2
-```
-
-After a successful run you get DB (localhost:5432/openfdd), Grafana (http://localhost:3000, admin/admin), API (http://localhost:8000/docs), and BACnet Swagger (http://localhost:8080/docs). To update an existing clone and restart:
-
-```bash
-cd open-fdd
-git pull
-./scripts/bootstrap.sh
-```
-
-(Or `docker compose -f platform/docker-compose.yml up -d --build` from repo root if you only need to rebuild and restart.)
+To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`. From repo root you can also run `docker compose -f stack/docker-compose.yml up -d --build` to rebuild and restart only.
 
 ---
 

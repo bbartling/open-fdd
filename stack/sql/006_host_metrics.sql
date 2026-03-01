@@ -33,3 +33,16 @@ CREATE TABLE IF NOT EXISTS container_metrics (
 
 SELECT create_hypertable('container_metrics', 'ts', if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS idx_container_metrics_name ON container_metrics (container_name, ts DESC);
+
+-- Disk usage per host/mount (run_host_stats.py)
+CREATE TABLE IF NOT EXISTS disk_metrics (
+    ts timestamptz NOT NULL,
+    hostname text NOT NULL,
+    mount_path text NOT NULL,
+    total_bytes bigint NOT NULL,
+    used_bytes bigint NOT NULL,
+    free_bytes bigint NOT NULL
+);
+
+SELECT create_hypertable('disk_metrics', 'ts', if_not_exists => TRUE);
+CREATE INDEX IF NOT EXISTS idx_disk_metrics_host ON disk_metrics (hostname, ts DESC);

@@ -302,7 +302,7 @@ def test_data_model_import_rejects_placeholder_site_id():
     ):
         r = client.put("/data-model/import", json=body)
     assert r.status_code == 400
-    detail = r.json().get("detail", "")
+    detail = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
     if isinstance(detail, list):
         detail = " ".join(str(d) for d in detail)
     assert "site_id" in detail

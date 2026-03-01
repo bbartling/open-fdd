@@ -37,8 +37,8 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
 | `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id, config_csv}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
 | `bacnet_config_csv` | config/bacnet_discovered.csv | CSV path when using CSV path (fallback or `--csv-only`). Single gateway. |
-| `open_meteo_enabled` | true | Enable weather scraper |
-| `open_meteo_interval_hours` | 24 | Weather poll interval |
+| `open_meteo_enabled` | true | Enable weather; when true, **FDD loop runs a weather fetch at the start of each run** so rules see fresh data on the same interval. |
+| `open_meteo_interval_hours` | 24 | Standalone weather-scraper poll interval (hours). Set equal to `rule_interval_hours` in the graph to align scraper with FDD; when weather runs with FDD, this only affects the optional scraper container. |
 | `open_meteo_latitude` | 41.88 | Site latitude |
 | `open_meteo_longitude` | -87.63 | Site longitude |
 | `open_meteo_timezone` | America/Chicago | Timezone |

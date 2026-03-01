@@ -174,7 +174,8 @@ def test_sites_create_409_duplicate_name():
     with _patch_db(conn):
         r = client.post("/sites", json={"name": "ExistingSite", "description": "x"})
     assert r.status_code == 409
-    assert "name" in r.json().get("detail", "").lower() or "already" in r.json().get("detail", "").lower()
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "name" in msg.lower() or "already" in msg.lower()
 
 
 def test_sites_patch_409_duplicate_name():
@@ -207,7 +208,8 @@ def test_equipment_create_409_duplicate_name_same_site():
             json={"site_id": str(site_id), "name": "AHU-1", "equipment_type": "AHU"},
         )
     assert r.status_code == 409
-    assert "equipment" in r.json().get("detail", "").lower() or "name" in r.json().get("detail", "").lower()
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "equipment" in msg.lower() or "name" in msg.lower()
 
 
 def test_equipment_create():
@@ -285,26 +287,28 @@ def test_points_list_empty():
 
 
 def test_points_create_409_duplicate_external_id_same_site():
-    """POST /points with same (site_id, external_id) returns 409 so serialized graph has no duplicate points per site."""
+    """POST /points with same (site_id, external_id) returns 409 when INSERT hits unique constraint (e.g. race)."""
     if psycopg2 is None:
         pytest.skip("psycopg2 required for IntegrityError test")
     site_id = uuid4()
     cursor = MagicMock()
-    cursor.execute.side_effect = psycopg2.IntegrityError("duplicate key value violates unique constraint")
-    cursor.fetchone.return_value = None
+    cursor.execute.side_effect = [None, psycopg2.IntegrityError("duplicate key value violates unique constraint")]
+    cursor.fetchone.return_value = None  # SELECT finds no existing
     conn = MagicMock()
     conn.__enter__ = MagicMock(return_value=conn)
     conn.__exit__ = MagicMock(return_value=None)
     conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
     conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
     conn.commit = MagicMock()
+    conn.rollback = MagicMock()
     with _patch_db(conn):
         r = client.post(
             "/points",
             json={"site_id": str(site_id), "external_id": "SA-T", "unit": "degF"},
         )
     assert r.status_code == 409
-    assert "external_id" in r.json().get("detail", "").lower() or "already" in r.json().get("detail", "").lower()
+    msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
+    assert "external_id" in msg.lower() or "already" in msg.lower()
 
 
 def test_points_create():
