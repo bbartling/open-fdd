@@ -11,7 +11,11 @@
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + Grafana + bacnet-server + bacnet-scraper only
 #   ./scripts/bootstrap.sh --verify             # health checks only
-#   ./scripts/bootstrap.sh --ha-addon          # build Home Assistant addon image (stack/ha_addon)
+#   ./scripts/bootstrap.sh --ha-addon          # build HA addon image only (no stack); then exit
+#
+# Full stack + HA addon: run full stack first, then build the addon image:
+#   ./scripts/bootstrap.sh && ./scripts/bootstrap.sh --ha-addon
+#
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
@@ -21,6 +25,8 @@
 #   ./scripts/bootstrap.sh --maintenance --update --verify
 #
 # Notes:
+# - Linux only. No Windows support (bash, Docker, and stack are intended for Linux).
+# - Tested on x86; should work on ARM but is untested.
 # - Requires docker + docker compose plugin (or docker-compose fallback)
 # - If diy-bacnet-server sibling is missing, this script clones it.
 #
@@ -126,7 +132,7 @@ Docker install:
   --skip-docker-install     Explicitly skip Docker install (no-op)
 
 Home Assistant:
-  --ha-addon                Build HA addon image from stack/ha_addon (for use in HA Supervisor)
+  --ha-addon                Build HA addon image only (no stack start); then exit. Use after full bootstrap if needed.
   (HA integration: stack/ha_integration; version from API /capabilities at runtime.)
 
 EOF
@@ -524,8 +530,8 @@ if $HA_ADDON_BUILD; then
   fi
   ADDON_VERSION=$(grep -E '^version\s*=' "$REPO_ROOT/pyproject.toml" | sed -n 's/.*=\s*"\(.*\)".*/\1/p')
   [[ -n "$ADDON_VERSION" ]] && sed -i "s/^version:.*/version: \"$ADDON_VERSION\"/" "$ADDON_DIR/config.yaml" && echo "Addon config.yaml version set to $ADDON_VERSION (from pyproject.toml)"
-  echo "=== Building Home Assistant addon image (stack/ha_addon) ==="
-  (cd "$ADDON_DIR" && docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 -t openfdd-addon:local .) || true
+  echo "=== Building Home Assistant addon image (stack/ha_addon) — open-fdd from repo, not PyPI ==="
+  (cd "$REPO_ROOT" && docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 -f stack/ha_addon/openfdd/Dockerfile -t openfdd-addon:local .) || true
   echo "Addon image: openfdd-addon:local. To install in HA: copy stack/ha_addon to your HA addons folder and set image in config."
   exit 0
 fi

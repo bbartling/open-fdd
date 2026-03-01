@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+pytest.importorskip("aiohttp", reason="HA integration tests require aiohttp; install with pip install -e \".[dev]\"")
+
 # Load api_client without importing the rest of the integration (which needs homeassistant)
 _api_client_path = Path(__file__).resolve().parent.parent / "custom_components" / "openfdd" / "api_client.py"
 _spec = importlib.util.spec_from_file_location("api_client", _api_client_path)

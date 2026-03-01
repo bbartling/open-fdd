@@ -203,13 +203,13 @@ def _write_metrics(
     hostname: str,
 ) -> None:
     """Bulk insert into host_metrics, container_metrics, and disk_metrics."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from psycopg2.extras import execute_values
 
     from open_fdd.platform.database import get_conn
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     with get_conn() as conn:
         with conn.cursor() as cur:

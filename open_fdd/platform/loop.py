@@ -8,7 +8,7 @@ Analysts tune rules in YAML, spot-check in Grafana, no restart needed.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -199,7 +199,7 @@ def run_fdd_loop(
     ]
     runner = RuleRunner(rules=rules)
 
-    end_ts = datetime.utcnow()
+    end_ts = datetime.now(timezone.utc)
     start_ts = end_ts - timedelta(days=lookback)
 
     # Sites to run: one site or all
@@ -249,14 +249,14 @@ def run_fdd_loop(
                 pass  # do not fail FDD run if fault_state sync fails
 
         _write_fdd_run_log(
-            run_ts=datetime.utcnow(),
+            run_ts=datetime.now(timezone.utc),
             status="ok",
             sites_processed=sites_processed,
             faults_written=len(all_results),
         )
     except Exception as e:
         _write_fdd_run_log(
-            run_ts=datetime.utcnow(),
+            run_ts=datetime.now(timezone.utc),
             status="error",
             sites_processed=sites_processed,
             faults_written=0,

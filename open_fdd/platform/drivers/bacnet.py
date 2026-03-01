@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -135,7 +135,7 @@ async def _scrape_via_rpc(
     errors: list[str] = []
     # (ts, site_uuid, external_id, value, bacnet_device_id, object_identifier, point_id or None)
     readings: list[tuple[datetime, str, str, float, str, str, Optional[int]]] = []
-    ts = datetime.utcnow()
+    ts = datetime.now(timezone.utc)
     site_uuid_cache = _site_uuid_cache()
 
     def resolve_cached(sid: str) -> Optional[str]:

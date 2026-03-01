@@ -165,6 +165,16 @@ Schema in `stack/sql/` (migrations 001–014). **Cascade deletes:** Site → equ
 
 ---
 
+## PyPI and this repo
+
+**Legacy PyPI:** An older package named `open-fdd` on PyPI (v1-era) was a small pandas-based library for HVAC fault equations. That work evolved into the [Expression Rule Cookbook](../expression_rule_cookbook) and the full FastAPI AFDD platform in this repo. The version on PyPI is outdated and should not be used.
+
+**Current platform:** Open-FDD is developed and run **from this repo** (or from Docker images built from it). The stack and the HA addon install open-fdd **locally** at build time (`pip install -e ".[platform,brick]"` from the copied repo); nothing in the project depends on the PyPI `open-fdd` package.
+
+**If you publish to PyPI again:** Options are (a) publish the **full current package** (FastAPI API, rules engine, data model) as a new major version so `pip install open-fdd` gives the platform and HA/addon builds could optionally use it, or (b) publish a small **integration-helpers** library for third-party HA/Node-RED or cloud integrations. Until then, install from source: `pip install -e ".[dev]"` or use the Docker stack.
+
+---
+
 ## LLM tagging workflow
 
 1. **Export** — GET `/data-model/export`.

@@ -97,6 +97,45 @@ The integration exposes the full Open-FDD API as **services** under the `openfdd
 
 All services use the first Open-FDD config entry (base URL + API key). Results for get/list/export-style services are published as events so automations can subscribe (e.g. `openfdd.list_sites_result`, `openfdd.get_data_model_export_result`).
 
+### Replicating the CRUD/graph test from Home Assistant
+
+The script **`scripts/graph_and_crud_test.py`** is an end-to-end test that hits the Open-FDD API: health, config (GET/PUT), sites/equipment/points CRUD, data-model (serialize, TTL, export, import, SPARQL), BACnet proxy (server_hello, whois_range, point_discovery_to_graph), and download endpoints. You can run the same flows from HA without fat-fingering the GUI by using **Developer Tools → Services**.
+
+1. **Configure the integration**  
+   Add the Open-FDD integration (Settings → Devices & services → Add integration → Open-FDD). Set the base URL (e.g. `http://localhost:8000` if Open-FDD runs on the same host, or the addon URL) and API key if you set one.
+
+2. **Call services**  
+   Go to **Developer Tools → Services**. Choose a service, e.g. `openfdd.get_health`, leave parameters empty, and call it. Check the result in the notification or in **Developer Tools → Events** (listen for `openfdd.get_health_result`). Minimal “smoke” sequence that mirrors the script:
+   - `openfdd.get_health`
+   - `openfdd.get_config` then optionally `openfdd.put_config` with a small change
+   - `openfdd.list_sites`
+   - `openfdd.data_model_serialize`
+   - `openfdd.run_sparql` with e.g. `query`: `PREFIX brick: <https://brickschema.org/schema/Brick#> SELECT ?s ?l WHERE { ?s a brick:Site . ?s <http://www.w3.org/2000/01/rdf-schema#label> ?l }`
+   - `openfdd.get_data_model_export` (use `site_id` if you have one)
+   - For BACnet: `openfdd.bacnet_server_hello`, `openfdd.bacnet_whois_range`, `openfdd.bacnet_point_discovery_to_graph` (with `device_instance` and optional `url`).
+
+3. **Results**  
+   Each call that returns data fires an event `openfdd.<service_name>_result` with `data` in the payload; you can use that in automations or just read the service call response in Developer Tools.
+
+### Addon image and local install (e.g. same Linux host)
+
+The addon is built as a **Docker image** `openfdd-addon:local` (no PyPI; open-fdd is installed from the repo at build time).
+
+- **Build the addon image** (from the open-fdd repo root):
+  ```bash
+  ./scripts/bootstrap.sh --ha-addon
+  ```
+  This builds the image `openfdd-addon:local` and exits (it does not start the full Docker stack).
+
+- **Install in Home Assistant**
+  - Copy the addon folder into your HA addons directory: copy **`stack/ha_addon`** (the folder that contains the `openfdd` addon) to wherever your Home Assistant expects addons (e.g. for **Home Assistant Supervised** on Linux: often `~/homeassistant/addons` or a path you configured for local addons).
+  - Ensure the addon uses the image **`openfdd-addon:local`**. How you set that depends on your HA setup: with Supervisor, if the addon is loaded from a local path, you may need to set the addon’s image to `openfdd-addon:local` in the addon configuration (or in the addon’s `config.yaml` if your setup supports an `image` key so Supervisor uses the pre-built image instead of building from the Dockerfile).
+  - In HA: **Settings → Add-ons → Add-on store** (or **Local add-ons**), add the Open-FDD addon if it isn’t listed, then start it. Set `api_key` and optional `bacnet_server_url` in the addon options.
+
+- **Run Home Assistant on the same Linux Mint machine**
+  - **With addons (recommended if you want the addon):** Use **Home Assistant Supervised** on your Linux Mint host. Install Docker and the Supervisor stack; then add the Open-FDD addon as above and use the image `openfdd-addon:local`.
+  - **Without addons:** Run **Home Assistant Container** (Docker) and run the full Open-FDD stack separately (e.g. `./scripts/bootstrap.sh` in the open-fdd repo). Point the Open-FDD integration in HA to the Open-FDD API URL (e.g. `http://<host>:8000`). No addon needed; the integration talks to the API over the network.
+
 ### Node-RED
 
 The same API works with **Node-RED**: use a config node for base URL and API key, subscribe to `ws://host:8000/ws/events?token=API_KEY` for events (`fault.*`, `crud.point.*`, `fdd.run.*`), and call REST with `Authorization: Bearer <key>` (e.g. run FDD, write point). Planned contrib nodes: **openfdd-server** (config), **openfdd-events** (WebSocket), **openfdd-api** (REST).

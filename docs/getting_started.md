@@ -33,7 +33,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ## Prerequisites
 
-- **OS:** Linux (Ubuntu Server latest, or Linux Mint), x86. Keep the system updated:
+- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). **Tested on x86;** should work on ARM but is untested. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```

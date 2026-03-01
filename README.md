@@ -21,7 +21,7 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 ## Quick Start — Open-FDD AFDD Platform
 
-Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. It has been tested on Ubuntu Server and Linux Mint running on x86-based systems.
+Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (tested on Ubuntu Server and Linux Mint, x86; should work on ARM but is untested). Windows is not supported.
 
 ### 🚀 Platform Deployment (Docker)
 
@@ -36,17 +36,18 @@ This will start the full AFDD edge stack locally. The stack includes Grafana, Ti
 
 ### Development: run unit tests
 
-To run the test suite and formatter locally (no Docker required for tests):
+No Docker needed for the test suite. From the repo root:
 
 ```bash
-cd open-fdd
 python3 -m venv .venv
-source .venv/bin/activate   # or: .venv/bin/activate on Windows
+source .venv/bin/activate
 pip install -e ".[dev]"
-pytest open_fdd/tests/ -v
+pytest -v
 ```
 
-Use the **`dev`** extra so all dependencies (pytest, black, psycopg2, pydantic-settings, FastAPI, rdflib, etc.) are installed and every test passes. If you see `ModuleNotFoundError` for `psycopg2` or `pydantic`, run pytest with the venv’s Python (e.g. `python -m pytest`) after `pip install -e ".[dev]"`. See [CONTRIBUTING.md](CONTRIBUTING.md) for styleguides.
+- **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
+- Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
+- Style and workflow: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 
 ---
