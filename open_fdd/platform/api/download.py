@@ -85,6 +85,7 @@ def _fetch_timeseries(
                     FROM timeseries_readings tr
                     JOIN points p ON tr.point_id = p.id
                     WHERE p.site_id = %s
+                      AND tr.point_id::text = ANY(%s)
                       AND tr.ts::date >= %s AND tr.ts::date <= %s
                     ORDER BY tr.ts, p.external_id
                     """,
