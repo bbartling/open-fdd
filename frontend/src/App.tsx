@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SiteProvider } from "@/contexts/site-context";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -19,12 +19,6 @@ const queryClient = new QueryClient({
   },
 });
 
-/** Redirect legacy /sites/:siteId URLs to /?site=<id> */
-function LegacySiteRedirect() {
-  const { siteId } = useParams<{ siteId: string }>();
-  return <Navigate to={`/?site=${siteId}`} replace />;
-}
-
 function AppRoutes() {
   useWebSocket();
 
@@ -38,7 +32,6 @@ function AppRoutes() {
           <Route path="faults" element={<FaultsPage />} />
           <Route path="trending" element={<TrendingPage />} />
         </Route>
-        <Route path="sites/:siteId" element={<LegacySiteRedirect />} />
       </Routes>
     </SiteProvider>
   );

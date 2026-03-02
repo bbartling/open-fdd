@@ -1,4 +1,3 @@
-import { Separator } from "@/components/ui/separator";
 import { FaultRow } from "./FaultRow";
 import type { FaultState, FaultDefinition, Equipment } from "@/types/api";
 
@@ -20,7 +19,7 @@ export function FaultList({ faults, definitions, equipment }: FaultListProps) {
 
   return (
     <div>
-      <Separator className="my-3" />
+      <div className="my-3 h-px w-full bg-border/60" />
       <div className="space-y-2">
         {visible.map((f) => (
           <FaultRow

@@ -1,5 +1,5 @@
+import { useMemo } from "react";
 import { useSiteContext } from "@/contexts/site-context";
-import { FaultsTab } from "@/components/site/FaultsTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,39 +11,39 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { timeAgo, severityVariant } from "@/lib/utils";
-import { useAllEquipment, useEquipment } from "@/hooks/use-sites";
+import { useAllEquipment, useEquipment, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
-import { useSites } from "@/hooks/use-sites";
+import type { FaultState, FaultDefinition, Equipment, Site } from "@/types/api";
 
-function AllFaultsView() {
-  const { data: faults, isLoading } = useActiveFaults();
-  const { data: definitions = [] } = useFaultDefinitions();
-  const { data: equipment = [] } = useAllEquipment();
-  const { data: sites = [] } = useSites();
+function FaultsTable({
+  faults,
+  definitions,
+  equipment,
+  siteMap,
+}: {
+  faults: FaultState[];
+  definitions: FaultDefinition[];
+  equipment: Equipment[];
+  siteMap?: Map<string, Site>;
+}) {
+  const defMap = useMemo(() => new Map(definitions.map((d) => [d.fault_id, d])), [definitions]);
+  const equipMap = useMemo(() => new Map(equipment.map((e) => [e.id, e])), [equipment]);
 
-  if (isLoading) {
-    return <Skeleton className="h-72 w-full rounded-2xl" />;
-  }
-
-  if (!faults || faults.length === 0) {
+  if (faults.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <p className="text-sm text-muted-foreground">
-          No active faults across any site.
+          No active faults{siteMap ? " across any site" : " for this site"}.
         </p>
       </div>
     );
   }
 
-  const defMap = new Map(definitions.map((d) => [d.fault_id, d]));
-  const equipMap = new Map(equipment.map((e) => [e.id, e]));
-  const siteMap = new Map(sites.map((s) => [s.id, s]));
-
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Site</TableHead>
+          {siteMap && <TableHead>Site</TableHead>}
           <TableHead>Equipment</TableHead>
           <TableHead>Fault</TableHead>
           <TableHead>Severity</TableHead>
@@ -55,11 +55,14 @@ function AllFaultsView() {
           const def = defMap.get(fault.fault_id);
           const equip = equipMap.get(fault.equipment_id);
           const severity = def?.severity ?? "warning";
-          const siteName = siteMap.get(fault.site_id)?.name ?? fault.site_id.slice(0, 8);
 
           return (
             <TableRow key={fault.id}>
-              <TableCell className="text-muted-foreground">{siteName}</TableCell>
+              {siteMap && (
+                <TableCell className="text-muted-foreground">
+                  {siteMap.get(fault.site_id)?.name ?? fault.site_id.slice(0, 8)}
+                </TableCell>
+              )}
               <TableCell className="font-medium">
                 {equip?.name ?? fault.equipment_id.slice(0, 8)}
               </TableCell>
@@ -78,16 +81,28 @@ function AllFaultsView() {
   );
 }
 
+function AllFaultsView() {
+  const { data: faults, isLoading } = useActiveFaults();
+  const { data: definitions = [] } = useFaultDefinitions();
+  const { data: equipment = [] } = useAllEquipment();
+  const { data: sites = [] } = useSites();
+  const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
+
+  if (isLoading) return <Skeleton className="h-72 w-full rounded-2xl" />;
+
+  return (
+    <FaultsTable faults={faults ?? []} definitions={definitions} equipment={equipment} siteMap={siteMap} />
+  );
+}
+
 function SiteFaultsView({ siteId }: { siteId: string }) {
   const { data: faults = [], isLoading } = useSiteFaults(siteId);
   const { data: definitions = [] } = useFaultDefinitions();
   const { data: equipment = [] } = useEquipment(siteId);
 
-  if (isLoading) {
-    return <Skeleton className="h-72 w-full rounded-2xl" />;
-  }
+  if (isLoading) return <Skeleton className="h-72 w-full rounded-2xl" />;
 
-  return <FaultsTab faults={faults} definitions={definitions} equipment={equipment} />;
+  return <FaultsTable faults={faults} definitions={definitions} equipment={equipment} />;
 }
 
 export function FaultsPage() {
@@ -96,11 +111,7 @@ export function FaultsPage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Faults</h1>
-      {selectedSiteId ? (
-        <SiteFaultsView siteId={selectedSiteId} />
-      ) : (
-        <AllFaultsView />
-      )}
+      {selectedSiteId ? <SiteFaultsView siteId={selectedSiteId} /> : <AllFaultsView />}
     </div>
   );
 }
