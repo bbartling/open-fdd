@@ -20,10 +20,11 @@ from open_fdd.platform.api import (
     entities,
     faults,
     jobs as jobs_router,
-    sites,
     points,
     equipment,
     run_fdd,
+    sites,
+    timeseries as timeseries_router,
 )
 from open_fdd.platform.api.auth import APIKeyMiddleware
 from open_fdd.platform.api.schemas import CapabilityResponse, ErrorResponse, ErrorDetail
@@ -61,9 +62,16 @@ def _app_version() -> str:
         return getattr(settings, "app_version", "0.1.0")
 
 
+_SWAGGER_DESCRIPTION = (
+    "When the server has API key auth enabled (OFDD_API_KEY set), **Try it out** will return 401 until you authorize: "
+    "click **Authorize** at the top, paste your API key (e.g. from `stack/.env` → `OFDD_API_KEY`), then click Authorize and Close. "
+    "After that, all requests from Swagger include the Bearer token."
+)
+
 app = FastAPI(
     title=settings.app_title,
     version=_app_version(),
+    description=_SWAGGER_DESCRIPTION,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -82,6 +90,37 @@ app = FastAPI(
         },
     ],
 )
+
+
+def _custom_openapi():
+    """Inject Bearer auth into OpenAPI so Swagger UI shows Authorize and sends the token with requests."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        openapi_version=app.openapi_version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+        servers=app.servers,
+    )
+    schema["components"] = schema.get("components") or {}
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "API Key",
+            "description": "When OFDD_API_KEY is set, use the value from stack/.env. In Swagger: click Authorize, paste the key, then Try it out.",
+        }
+    }
+    schema["security"] = [{"BearerAuth": []}]
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
 
 app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
@@ -146,6 +185,7 @@ app.include_router(points.router)
 app.include_router(equipment.router)
 app.include_router(data_model.router)
 app.include_router(download.router)
+app.include_router(timeseries_router.router)
 app.include_router(entities.router)
 app.include_router(analytics.router)
 app.include_router(faults.router)

@@ -37,6 +37,8 @@ def ensure_areas_and_equipment_devices(
     existing_areas = {a.name: a for a in area_registry.async_list_areas()}
     for site in sites:
         site_id = site.get("id")
+        if site_id is not None:
+            site_id = str(site_id)
         name = (site.get("name") or "").strip() or f"Site {site_id}"
         if not site_id:
             continue
@@ -51,7 +53,11 @@ def ensure_areas_and_equipment_devices(
 
     for eq in equipment_list:
         eq_id = eq.get("id")
+        if eq_id is not None:
+            eq_id = str(eq_id)
         site_id = eq.get("site_id")
+        if site_id is not None:
+            site_id = str(site_id)
         name = (eq.get("name") or "").strip() or f"Equipment {eq_id}"
         if not eq_id:
             continue
@@ -65,8 +71,8 @@ def ensure_areas_and_equipment_devices(
             "model": "Equipment",
             "name": name,
         }
-        if main_device_id and device_registry.async_get(main_device_id):
-            create_kw["via_device"] = main_device_id
+        # Omit via_device to avoid HA 2025.12+ "non existing via_device" errors when registry
+        # is not yet committed. Equipment still appears under the integration via config_entry_id.
         if area_id:
             try:
                 import inspect

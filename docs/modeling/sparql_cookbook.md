@@ -166,6 +166,28 @@ SELECT ?name WHERE {
 
 Use these to confirm discovery results are in the graph and to cross-check with GET /data-model/export.
 
+**BACnet device and object addresses for points with polling = true** (join Brick points to BACnet via matching label and object-name):
+
+```sparql
+PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?device_instance ?device_address ?object_identifier ?point_label
+WHERE {
+  ?point ofdd:polling true ;
+         rdfs:label ?point_label .
+  ?bacnet_obj bacnet:object-name ?point_label ;
+              bacnet:object-identifier ?object_identifier .
+  ?device bacnet:contains ?bacnet_obj ;
+          bacnet:device-instance ?device_instance ;
+          bacnet:device-address ?device_address .
+}
+ORDER BY ?device_instance ?object_identifier
+```
+
+Returns one row per polling point that has a matching BACnet object: `device_instance`, `device_address`, `object_identifier` (e.g. `analog-input,1`), and `point_label`. Use this for scraper config or to list “which BACnet addresses are in the data model and polled.”
+
 ---
 
 ## Recipe 5: FDD — points and rule mapping

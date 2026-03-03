@@ -1,4 +1,4 @@
-"""Open-FDD integration: config flow, coordinator, devices, entities, and services."""
+"""Open-FDD integration: config flow, coordinator, sites→areas, equipment→devices only."""
 
 import logging
 from homeassistant.config_entries import ConfigEntry
@@ -9,8 +9,6 @@ from .api_client import OpenFDDClient
 from .const import CONF_API_KEY, CONF_BASE_URL, DOMAIN
 from .coordinator import OpenFDDCoordinator
 from .areas_and_devices import ensure_areas_and_equipment_devices
-from .services import async_setup_services
-from .ws_listener import start_ws_listener
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Open-FDD from a config entry."""
+    """Set up Open-FDD from a config entry. Sites→areas, equipment→devices only (no sensors/buttons)."""
     base_url = entry.data[CONF_BASE_URL]
     api_key = entry.data[CONF_API_KEY]
     client = OpenFDDClient(base_url=base_url, api_key=api_key)
@@ -33,7 +31,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Main gateway device (summary sensors + global buttons). Model is fixed; never store API/OpenAPI JSON.
     device_registry = dr.async_get(hass)
     main_device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -42,13 +39,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model="Open-FDD Platform",
         name="Open-FDD",
     )
-    # Ensure model stays a fixed string; set sw_version from API version (from coordinator data)
     caps = (coordinator.data or {}).get("capabilities") or {}
     api_version = caps.get("version") if isinstance(caps, dict) else None
     if api_version and isinstance(api_version, str) and len(api_version) < 32:
         device_registry.async_update_device(main_device.id, sw_version=api_version)
 
-    # Site → Area, Equipment → Device (from coordinator data)
     def _sync_areas_and_devices() -> None:
         d = coordinator.data or {}
         ensure_areas_and_equipment_devices(hass, entry, d, main_device.id)
@@ -61,28 +56,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "device_id": main_device.id,
     }
 
-    # Optional WebSocket listener for fault.* (refresh coordinator on fault.raised/cleared)
-    caps = (coordinator.data or {}).get("capabilities") or {}
-    features = caps.get("features") if isinstance(caps.get("features"), dict) else caps
-    ws_task = start_ws_listener(hass, client, coordinator, features)
-    if ws_task is not None:
-        entry.async_on_unload(ws_task.cancel)
-
-    # Register services once (use first entry's client in handlers)
-    if len(hass.data[DOMAIN]) == 1:
-        await async_setup_services(hass)
-
-    await hass.config_entries.async_forward_entry_setups(
-        entry, ["binary_sensor", "sensor", "button"]
-    )
-
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    await hass.config_entries.async_unload_platforms(
-        entry, ["binary_sensor", "sensor", "button"]
-    )
+    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
     hass.data[DOMAIN].pop(entry.entry_id, None)
     return True

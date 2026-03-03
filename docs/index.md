@@ -50,7 +50,7 @@ cd open-fdd
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
-| [Integrations](integrations/home_assistant) | [Home Assistant & Node-RED](integrations/home_assistant) — add-on, custom component, WebSocket, fault state, BACnet write via Open-FDD only. **New?** See [Quick setup: Open-FDD + HA on one Linux machine](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine) for a copy-paste guide. |
+| [Integrations](integrations/home_assistant) | [Home Assistant & Node-RED](integrations/home_assistant) — add-on, custom component, WebSocket, fault state, BACnet write via Open-FDD only. **New?** See [Quick setup: Open-FDD + HA on one Linux machine](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine). Developers: [HA integration development reference](integrations/home_assistant_development) (manifest, config flow, coordinator, devices, official doc links). |
 | [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |

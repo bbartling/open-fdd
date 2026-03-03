@@ -5,6 +5,8 @@ slug: openfdd
 arch:
   - amd64
   - aarch64
+# Sidebar/panel icon (mdi). Also place icon.png and logo.png in this folder for addon card.
+panel_icon: mdi:air-filter
 init: false
 options:
   api_key: ""

@@ -417,3 +417,19 @@ class OpenFDDClient:
                 "GET", "/download/faults", params=params, return_text=True
             )
         return await self._request("GET", "/download/faults", params=params)
+
+    # --- Timeseries (latest value per point for HA / dashboards) ---
+    async def get_timeseries_latest(
+        self,
+        site_id: str | None = None,
+        equipment_id: str | None = None,
+    ):
+        """GET /timeseries/latest — latest reading per point from DB (BACnet scraper data)."""
+        params = {}
+        if site_id is not None:
+            params["site_id"] = site_id
+        if equipment_id is not None:
+            params["equipment_id"] = equipment_id
+        return await self._request(
+            "GET", "/timeseries/latest", params=params or None
+        )
