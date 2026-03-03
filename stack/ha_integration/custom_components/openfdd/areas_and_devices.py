@@ -92,6 +92,28 @@ def ensure_areas_and_equipment_devices(
                 area_id=area_id or dev.area_id,
             )
 
+    # Prune equipment devices that no longer exist in the API (e.g. after reset / delete_all_sites).
+    # Device identifiers are (DOMAIN, equipment_id). When the API is reset, equipment get new UUIDs
+    # so we create new devices; old ones must be removed or they accumulate.
+    current_equipment_ids = {str(eq.get("id")) for eq in equipment_list if eq.get("id") is not None}
+    for device in list(device_registry.devices.values()):
+        if entry.entry_id not in device.config_entries:
+            continue
+        for did in device.identifiers:
+            if did[0] != DOMAIN or len(device.identifiers) != 1:
+                continue
+            eq_id_from_device = did[1]
+            if eq_id_from_device == entry.entry_id:
+                continue  # main gateway, keep
+            if eq_id_from_device not in current_equipment_ids:
+                _LOGGER.info(
+                    "Removing orphaned equipment device %s (id %s)",
+                    device.name,
+                    eq_id_from_device,
+                )
+                device_registry.async_remove_device(device.id)
+            break
+
     # Persist mapping for platforms
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}

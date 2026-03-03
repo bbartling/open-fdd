@@ -10,10 +10,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "DAP-P",
-      "brick_type": "Duct_Static_Pressure_Sensor",
-      "rule_input": "ahu_dsp",
+      "brick_type": null,
+      "rule_input": null,
       "unit": null,
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -70,10 +70,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "SA-FLOW",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "rule_input": "ahu_sa_flow",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "cfm",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -85,10 +85,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "OA-T",
-      "brick_type": "Outside_Air_Temperature_Sensor",
-      "rule_input": "ahu_oat",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "degF",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -100,10 +100,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "ELEC-PWR",
-      "brick_type": "Electric_Power_Sensor",
-      "rule_input": "ahu_power",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "kW",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -115,10 +115,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "SF-O",
-      "brick_type": "Supply_Fan_Speed_Command",
-      "rule_input": "ahu_sf_speed_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -130,10 +130,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "HTG-O",
-      "brick_type": "Heating_Command",
-      "rule_input": "ahu_htg_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -145,10 +145,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "CLG-O",
-      "brick_type": "Cooling_Command",
-      "rule_input": "ahu_clg_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -160,10 +160,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "DPR-O",
-      "brick_type": "Damper_Position_Command",
-      "rule_input": "ahu_oa_damper_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -175,10 +175,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "DAP-SP",
-      "brick_type": "Duct_Static_Pressure_Setpoint",
-      "rule_input": "ahu_dsp_sp",
+      "brick_type": null,
+      "rule_input": null,
       "unit": null,
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -190,10 +190,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "SAT-SP",
-      "brick_type": "Supply_Air_Temperature_Setpoint",
-      "rule_input": "ahu_sat_sp",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "degF",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -205,8 +205,8 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "OAT-NETWORK",
-      "brick_type": "Outside_Air_Temperature_Sensor",
-      "rule_input": "oat_network",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "degF",
       "polling": false
     },
@@ -220,10 +220,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "SF-S",
-      "brick_type": "Supply_Fan_Status",
-      "rule_input": "ahu_sf_status",
+      "brick_type": null,
+      "rule_input": null,
       "unit": null,
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -235,10 +235,10 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "SF-C",
-      "brick_type": "Supply_Fan_Command",
-      "rule_input": "ahu_sf_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": null,
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -250,8 +250,8 @@
       "equipment_id": null,
       "equipment_name": "AHU-1",
       "external_id": "Occ-Schedule",
-      "brick_type": "Occupancy_Schedule",
-      "rule_input": "occ_schedule",
+      "brick_type": null,
+      "rule_input": null,
       "unit": null,
       "polling": false
     },
@@ -295,10 +295,10 @@
       "equipment_id": null,
       "equipment_name": "VAV-1",
       "external_id": "VAVFlow",
-      "brick_type": "Supply_Air_Flow_Sensor",
-      "rule_input": "vav_flow",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "cfm",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -310,10 +310,10 @@
       "equipment_id": null,
       "equipment_name": "VAV-1",
       "external_id": "VAVDamperCmd",
-      "brick_type": "Damper_Position_Command",
-      "rule_input": "vav_damper_cmd",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -325,10 +325,10 @@
       "equipment_id": null,
       "equipment_name": "VAV-1",
       "external_id": "ZoneCoolingSpt",
-      "brick_type": "Zone_Air_Temperature_Setpoint",
-      "rule_input": "zone_clg_sp",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "degF",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -340,10 +340,10 @@
       "equipment_id": null,
       "equipment_name": "VAV-1",
       "external_id": "ZoneDemand",
-      "brick_type": "Demand_Sensor",
-      "rule_input": "zone_demand",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "percent",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
@@ -355,10 +355,10 @@
       "equipment_id": null,
       "equipment_name": "VAV-1",
       "external_id": "VAVFlowSpt",
-      "brick_type": "Supply_Air_Flow_Setpoint",
-      "rule_input": "vav_flow_sp",
+      "brick_type": null,
+      "rule_input": null,
       "unit": "cfm",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,

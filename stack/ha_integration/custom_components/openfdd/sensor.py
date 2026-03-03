@@ -85,6 +85,9 @@ async def async_setup_entry(
                 point_id = str(point_id)
             if not point_id or point_id in added_point_ids:
                 continue
+            # Only create sensors for points that are Brick-tagged (show telemetry under device only when tagged)
+            if not (pt.get("brick_type") or "").strip():
+                continue
             added_point_ids.add(point_id)
             new_entities.append(
                 OpenFDDPointSensor(
