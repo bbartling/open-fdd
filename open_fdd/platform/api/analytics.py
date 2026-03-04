@@ -180,3 +180,239 @@ def get_fault_summary(
         "by_fault_id": by_fault,
         "total_faults": sum(r["flag_sum"] for r in rows),
     }
+
+
+@router.get("/fault-timeseries", summary="Fault flags over time (for charts)")
+def get_fault_timeseries(
+    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
+    start_date: date = Query(..., description="Start of range"),
+    end_date: date = Query(..., description="End of range"),
+    bucket: str = Query("hour", description="Time bucket: hour or day"),
+):
+    """
+    Time-series of fault flag values (for React/Grafana-style charts).
+    Returns one row per (time_bucket, fault_id) with SUM(flag_value).
+    Join to fault_definitions for display names; here we return fault_id as metric.
+    """
+    if bucket not in ("hour", "day"):
+        bucket = "hour"
+    conditions = ["ts::date >= %s", "ts::date <= %s"]
+    params: list = [start_date, end_date]
+    if site_id:
+        if resolve_site_uuid(site_id, create_if_empty=False) is None:
+            raise HTTPException(404, f"No site found for: {site_id!r}")
+        conditions.append("(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))")
+        params.extend([site_id, site_id])
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT date_trunc(%s, fr.ts) AS time, fr.fault_id AS metric, SUM(fr.flag_value)::float AS value
+                FROM fault_results fr
+                WHERE {" AND ".join(conditions)}
+                GROUP BY 1, fr.fault_id
+                ORDER BY 1, fr.fault_id
+                """,
+                [bucket, *params],
+            )
+            rows = cur.fetchall()
+
+    return {
+        "site_id": site_id,
+        "period": {"start": str(start_date), "end": str(end_date)},
+        "bucket": bucket,
+        "series": [
+            {"time": r["time"].isoformat() if hasattr(r["time"], "isoformat") else str(r["time"]), "metric": r["metric"], "value": float(r["value"])}
+            for r in rows
+        ],
+    }
+
+
+# --- System resources (host_metrics, container_metrics, disk_metrics from stack-host-stats) ---
+
+
+def _table_exists(table: str) -> bool:
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = %s",
+                    (table,),
+                )
+                return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+@router.get("/system/host", summary="Latest host metrics (memory, load, swap)")
+def get_system_host():
+    """Latest row per host from host_metrics. Empty if table missing or host-stats not running."""
+    if not _table_exists("host_metrics"):
+        return {"hosts": []}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (hostname) hostname, ts,
+                  mem_total_bytes, mem_used_bytes, mem_available_bytes,
+                  swap_total_bytes, swap_used_bytes, load_1, load_5, load_15
+                FROM host_metrics ORDER BY hostname, ts DESC
+                """
+            )
+            rows = cur.fetchall()
+    return {
+        "hosts": [
+            {
+                "hostname": r["hostname"],
+                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "mem_used_gb": round(r["mem_used_bytes"] / (1024**3), 2),
+                "mem_available_gb": round(r["mem_available_bytes"] / (1024**3), 2),
+                "mem_total_gb": round(r["mem_total_bytes"] / (1024**3), 2),
+                "swap_used_gb": round(r["swap_used_bytes"] / (1024**3), 2),
+                "load_1": round(r["load_1"], 2),
+                "load_5": round(r["load_5"], 2),
+                "load_15": round(r["load_15"], 2),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/system/host/series", summary="Host metrics time series for charts")
+def get_system_host_series(
+    from_ts: str = Query(..., description="ISO datetime"),
+    to_ts: str = Query(..., description="ISO datetime"),
+):
+    """Time series of host memory (used/available) and load. For React system resources charts."""
+    if not _table_exists("host_metrics"):
+        return {"series": []}
+    try:
+        from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
+        to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Invalid from_ts or to_ts")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ts, hostname,
+                  (mem_used_bytes / 1024.0 / 1024 / 1024) AS mem_used_gb,
+                  (mem_available_bytes / 1024.0 / 1024 / 1024) AS mem_available_gb,
+                  load_1, load_5, load_15,
+                  (swap_used_bytes / 1024.0 / 1024 / 1024) AS swap_used_gb
+                FROM host_metrics
+                WHERE ts >= %s AND ts <= %s
+                ORDER BY ts
+                """,
+                (from_dt, to_dt),
+            )
+            rows = cur.fetchall()
+    # Pivot to series format: [{ time, metric, value }, ...]
+    series = []
+    for r in rows:
+        t = r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"])
+        host = r["hostname"] or "host"
+        series.append({"time": t, "metric": "mem_used_gb", "value": float(r["mem_used_gb"]), "hostname": host})
+        series.append({"time": t, "metric": "mem_available_gb", "value": float(r["mem_available_gb"]), "hostname": host})
+        series.append({"time": t, "metric": "load_1", "value": float(r["load_1"]), "hostname": host})
+        series.append({"time": t, "metric": "load_5", "value": float(r["load_5"]), "hostname": host})
+        series.append({"time": t, "metric": "load_15", "value": float(r["load_15"]), "hostname": host})
+        series.append({"time": t, "metric": "swap_used_gb", "value": float(r["swap_used_gb"]), "hostname": host})
+    return {"series": series}
+
+
+@router.get("/system/containers", summary="Latest container metrics (table)")
+def get_system_containers():
+    """Latest row per container from container_metrics. For React system resources table."""
+    if not _table_exists("container_metrics"):
+        return {"containers": []}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (container_name) container_name, ts,
+                  cpu_pct, mem_usage_bytes, mem_limit_bytes, mem_pct, pids
+                FROM container_metrics ORDER BY container_name, ts DESC
+                """
+            )
+            rows = cur.fetchall()
+    return {
+        "containers": [
+            {
+                "container_name": r["container_name"],
+                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "cpu_pct": round(r["cpu_pct"], 1),
+                "mem_mb": round(r["mem_usage_bytes"] / (1024 * 1024), 1),
+                "mem_pct": round(r["mem_pct"], 1) if r.get("mem_pct") is not None else None,
+                "pids": r["pids"],
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/system/containers/series", summary="Container metrics time series for charts")
+def get_system_containers_series(
+    from_ts: str = Query(..., description="ISO datetime"),
+    to_ts: str = Query(..., description="ISO datetime"),
+):
+    """Time series of container memory (MB) and CPU %. For React charts."""
+    if not _table_exists("container_metrics"):
+        return {"series": []}
+    try:
+        from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
+        to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Invalid from_ts or to_ts")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT ts, container_name,
+                  (mem_usage_bytes / 1024.0 / 1024) AS mem_mb,
+                  cpu_pct
+                FROM container_metrics
+                WHERE ts >= %s AND ts <= %s
+                ORDER BY ts, container_name
+                """,
+                (from_dt, to_dt),
+            )
+            rows = cur.fetchall()
+    series = []
+    for r in rows:
+        t = r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"])
+        series.append({"time": t, "metric": r["container_name"], "value": float(r["mem_mb"]), "type": "mem_mb"})
+        series.append({"time": t, "metric": r["container_name"], "value": float(r["cpu_pct"]), "type": "cpu_pct"})
+    return {"series": series}
+
+
+@router.get("/system/disk", summary="Latest disk usage per mount")
+def get_system_disk():
+    """Latest disk_metrics per host/mount. For React system resources (hard drive space)."""
+    if not _table_exists("disk_metrics"):
+        return {"disks": []}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (hostname, mount_path) hostname, mount_path, ts,
+                  total_bytes, used_bytes, free_bytes
+                FROM disk_metrics ORDER BY hostname, mount_path, ts DESC
+                """
+            )
+            rows = cur.fetchall()
+    return {
+        "disks": [
+            {
+                "hostname": r["hostname"],
+                "mount_path": r["mount_path"],
+                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "used_gb": round(r["used_bytes"] / (1024**3), 2),
+                "free_gb": round(r["free_bytes"] / (1024**3), 2),
+                "total_gb": round(r["total_bytes"] / (1024**3), 2),
+                "used_pct": round(100.0 * r["used_bytes"] / r["total_bytes"], 1) if r["total_bytes"] else 0,
+            }
+            for r in rows
+        ]
+    }

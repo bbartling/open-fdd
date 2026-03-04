@@ -5,6 +5,8 @@ import {
   CircleDot,
   AlertTriangle,
   TrendingUp,
+  Cpu,
+  Database,
   Sun,
   Moon,
   Monitor,
@@ -20,6 +22,8 @@ const NAV_ITEMS = [
   { to: "/points", label: "Points", icon: CircleDot, end: false },
   { to: "/faults", label: "Faults", icon: AlertTriangle, end: false },
   { to: "/trending", label: "Trending", icon: TrendingUp, end: false },
+  { to: "/system", label: "System resources", icon: Cpu, end: false },
+  { to: "/data-model", label: "Data model", icon: Database, end: false },
 ] as const;
 
 const THEME_OPTIONS = [

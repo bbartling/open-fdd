@@ -11,10 +11,10 @@ nav_order: 12
 
 Platform config lives in the **same RDF graph** as Brick and BACnet (`config/data_model.ttl`). No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph.
 
-- **Bootstrap:** `./scripts/bootstrap.sh` seeds config via PUT /config (defaults or `OFDD_*` from `platform/.env`).
+- **Bootstrap:** `./scripts/bootstrap.sh` seeds config via PUT /config (defaults or `OFDD_*` from `stack/.env`).
 - **API:** GET /config, PUT /config; query via POST /data-model/sparql.
-- **Env at seed:** Set `OFDD_*` in `platform/.env` before first bootstrap to customize the seed.
-**Docker:** Set env in `platform/docker-compose.yml` or `platform/.env`; bootstrap uses these when calling PUT /config.
+- **Env at seed:** Set `OFDD_*` in `stack/.env` before first bootstrap to customize the seed.
+**Docker:** Set env in `stack/docker-compose.yml` or `stack/.env`; bootstrap uses these when calling PUT /config.
 
 **Rename / multiple configs:** Use different env files (e.g. `platform-prod.env`, `platform-building-a.env`) and start with `docker compose --env-file platform-building-a.env up -d`, or set `OFDD_*` in that file. No built-in “config name” selector; use env files or env vars per deployment.
 
@@ -76,15 +76,15 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 ## Edge / resource limits
 
-For edge deployments with limited disk, set these at bootstrap (or in `platform/.env`). See [Getting Started — Bootstrap options](getting_started#bootstrap-options).
+For edge deployments with limited disk, set these at bootstrap (or in `stack/.env`). See [Getting Started — Bootstrap options](getting_started#bootstrap-options).
 
-| Setting | Default | Bootstrap arg | Env (platform/.env) |
+| Setting | Default | Bootstrap arg | Env (stack/.env) |
 |---------|---------|---------------|---------------------|
 | **Data retention** | 365 days | `--retention-days N` | `OFDD_RETENTION_DAYS` |
 | **Docker log size** | 100m per file | `--log-max-size SIZE` | `OFDD_LOG_MAX_SIZE` |
 | **Docker log files** | 3 | `--log-max-files N` | `OFDD_LOG_MAX_FILES` |
 
-**Data retention:** TimescaleDB drops chunks older than the configured interval from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. Set at first run, e.g. `./scripts/bootstrap.sh --retention-days 180`, or set `OFDD_RETENTION_DAYS` in `platform/.env` before running bootstrap.
+**Data retention:** TimescaleDB drops chunks older than the configured interval from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. Set at first run, e.g. `./scripts/bootstrap.sh --retention-days 180`, or set `OFDD_RETENTION_DAYS` in `stack/.env` before running bootstrap.
 
 **Log rotation:** Containers use `json-file` driver; size and file count come from the table above. Restart the stack after changing so new values apply.
 

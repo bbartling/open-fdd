@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSiteContext } from "@/contexts/site-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,13 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { timeAgo, severityVariant } from "@/lib/utils";
 import { useAllEquipment, useEquipment, useSites } from "@/hooks/use-sites";
-import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
+import {
+  useActiveFaults,
+  useFaultDefinitions,
+  useFaultSummary,
+  useSiteFaults,
+} from "@/hooks/use-faults";
+import { FaultOverTimeChart } from "@/components/dashboard/FaultOverTimeChart";
 import type { FaultState, FaultDefinition, Equipment, Site } from "@/types/api";
 
 function FaultsTable({
@@ -40,13 +46,24 @@ function FaultsTable({
     );
   }
 
+  function sensorFromContext(context: Record<string, unknown> | null | undefined): string {
+    if (!context || typeof context !== "object") return "—";
+    const c = context as Record<string, unknown>;
+    if (typeof c.point_external_id === "string") return c.point_external_id;
+    if (typeof c.external_id === "string") return c.external_id;
+    if (typeof c.sensor === "string") return c.sensor;
+    if (typeof c.column === "string") return c.column;
+    return "—";
+  }
+
   return (
     <Table>
       <TableHeader>
         <TableRow>
           {siteMap && <TableHead>Site</TableHead>}
-          <TableHead>Equipment</TableHead>
+          <TableHead>Device</TableHead>
           <TableHead>Fault</TableHead>
+          <TableHead className="text-muted-foreground">Sensor / point</TableHead>
           <TableHead>Severity</TableHead>
           <TableHead className="text-right">Since</TableHead>
         </TableRow>
@@ -56,6 +73,7 @@ function FaultsTable({
           const def = defMap.get(fault.fault_id);
           const equip = equipMap.get(fault.equipment_id);
           const severity = def?.severity ?? "warning";
+          const sensor = sensorFromContext(fault.context);
 
           return (
             <TableRow key={fault.id}>
@@ -68,6 +86,9 @@ function FaultsTable({
                 {equip?.name ?? fault.equipment_id.slice(0, 8)}
               </TableCell>
               <TableCell>{def?.name ?? fault.fault_id}</TableCell>
+              <TableCell className="text-muted-foreground font-mono text-xs">
+                {sensor}
+              </TableCell>
               <TableCell>
                 <Badge variant={severityVariant(severity)}>{severity}</Badge>
               </TableCell>
@@ -151,13 +172,49 @@ function FaultDefinitionsSection() {
   );
 }
 
+function faultPeriodRange(): { start: string; end: string } {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 7);
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
 export function FaultsPage() {
   const { selectedSiteId } = useSiteContext();
+  const [period] = useState(() => faultPeriodRange());
+  const { data: definitions = [] } = useFaultDefinitions();
+  const { data: summary } = useFaultSummary(
+    selectedSiteId ?? undefined,
+    period.start,
+    period.end,
+  );
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Faults</h1>
       <FaultDefinitionsSection />
+      {summary != null && (
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground">Fault count (last 7 d)</p>
+              <p
+                className={`mt-1 text-3xl font-semibold tabular-nums ${
+                  (summary.total_faults ?? 0) > 0 ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {summary.total_faults ?? 0}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      <div className="mb-8">
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+          Fault flags over time
+        </h2>
+        <FaultOverTimeChart siteId={selectedSiteId ?? undefined} definitions={definitions} />
+      </div>
       {selectedSiteId ? <SiteFaultsView siteId={selectedSiteId} /> : <AllFaultsView />}
     </div>
   );

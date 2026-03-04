@@ -24,8 +24,8 @@ curl -s http://localhost:8000/health && echo ""
 curl -s http://localhost:8000/points | head -c 500
 curl -s http://localhost:8000/data-model/export | head -c 600
 
-# DB checks (from platform dir)
-cd platform
+# DB checks (from stack dir)
+cd stack
 docker compose exec db psql -U postgres -d openfdd -c "SELECT id, name FROM sites ORDER BY name;"
 docker compose exec db psql -U postgres -d openfdd -c "SELECT id, site_id, name FROM equipment ORDER BY name LIMIT 20;"
 docker compose exec db psql -U postgres -d openfdd -c "SELECT id, site_id, equipment_id, external_id FROM points ORDER BY external_id LIMIT 20;"
@@ -86,7 +86,7 @@ You can confirm that the BACnet scraper, weather scraper, and FDD loop are runni
 All containers (last 50 lines):
 
 ```bash
-docker compose -f platform/docker-compose.yml logs --tail 50
+docker compose -f stack/docker-compose.yml logs --tail 50
 ```
 
 Per container:
@@ -102,7 +102,7 @@ docker logs openfdd_host_stats --tail 30
 Follow logs live:
 
 ```bash
-docker compose -f platform/docker-compose.yml logs -f --tail 20
+docker compose -f stack/docker-compose.yml logs -f --tail 20
 ```
 
 ---
@@ -119,7 +119,7 @@ docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT COUNT(*)
 
 ## Grafana (datasource only)
 
-Only the **TimescaleDB datasource** is provisioned (`platform/grafana/provisioning/datasources/datasource.yml`, uid: `openfdd_timescale`, database: `openfdd`). No dashboards are provisioned. Build your own using the [Grafana SQL cookbook](grafana_cookbook).
+Only the **TimescaleDB datasource** is provisioned (`stack/grafana/provisioning/datasources/datasource.yml`, uid: `openfdd_timescale`, database: `openfdd`). No dashboards are provisioned. Build your own using the [Grafana SQL cookbook](grafana_cookbook).
 
 Verify the datasource is mounted:
 
@@ -141,4 +141,4 @@ docker logs openfdd_fdd_loop --tail 50
 
 ## Database retention
 
-Data retention is set at bootstrap (default 365 days). TimescaleDB drops chunks older than the configured interval. To change: use `--retention-days N` when running bootstrap or set `OFDD_RETENTION_DAYS` in `platform/.env`. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
+Data retention is set at bootstrap (default 365 days). TimescaleDB drops chunks older than the configured interval. To change: use `--retention-days N` when running bootstrap or set `OFDD_RETENTION_DAYS` in `stack/.env`. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).

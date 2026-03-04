@@ -44,11 +44,11 @@ BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
 
 | Action | Command |
 |--------|--------|
-| **Stop** | `docker compose -f platform/docker-compose.yml down` |
-| **Start / restart** | `docker compose -f platform/docker-compose.yml up -d` |
+| **Stop** | `docker compose -f stack/docker-compose.yml down` |
+| **Start / restart** | `docker compose -f stack/docker-compose.yml up -d` |
 | **Reboot note** | Containers do not start automatically on host reboot unless Docker or systemd is configured to start them. |
 
-From repo root, run compose from `platform/` or use `-f platform/docker-compose.yml`.
+From repo root, run compose from `stack/` or use `-f stack/docker-compose.yml`.
 
 ---
 
@@ -76,7 +76,7 @@ free -h && uptime && echo "---" && docker stats --no-stream 2>/dev/null
 ## Database (list tables)
 
 ```bash
-cd platform
+cd stack
 docker compose exec db psql -U postgres -d openfdd -c "\dt"
 ```
 
@@ -85,7 +85,7 @@ docker compose exec db psql -U postgres -d openfdd -c "\dt"
 ## Data flow check
 
 ```bash
-cd platform
+cd stack
 curl -s http://localhost:8000/points | head -c 500
 curl -s http://localhost:8000/data-model/export | head -c 600
 
@@ -102,7 +102,7 @@ docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, valu
 All containers (last 50 lines):
 
 ```bash
-docker compose -f platform/docker-compose.yml logs --tail 50
+docker compose -f stack/docker-compose.yml logs --tail 50
 ```
 
 Per container (last 30 lines):
@@ -120,7 +120,7 @@ docker logs openfdd_timescale --tail 30
 Follow live:
 
 ```bash
-docker compose -f platform/docker-compose.yml logs -f --tail 20
+docker compose -f stack/docker-compose.yml logs -f --tail 20
 ```
 
 ---

@@ -8,9 +8,15 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (basic 
 
 ## Architecture: frontend, API, and Caddy
 
-- **React frontend** runs in its own container (port 5173 in dev; built and served via Caddy in production-style setups). It uses **Bearer token** auth against the Open-FDD API when `OFDD_API_KEY` is set: all requests (and the WebSocket at `/ws/events`) send `Authorization: Bearer <key>`.
+- **React frontend** runs in its own container (port 5173 in dev; built and served via Caddy in production-style setups). It uses **Bearer token** auth against the Open-FDD API when `OFDD_API_KEY` is set: all requests (and the WebSocket at `/ws/events`) send `Authorization: Bearer <key>`. See [Frontend API key (Bearer)](#frontend-api-key-bearer) below for where the key is sent.
 - **API** (FastAPI) serves REST and WebSocket; when `OFDD_API_KEY` is set, it requires Bearer auth on all endpoints except `/health`, `/`, `/docs`, `/redoc`, `/openapi.json`, and `/app` (legacy static config UI).
 - **Caddy** sits in front of both: it enforces **basic auth** (one login for the browser), then proxies to the API and frontend. When proxying to the API, Caddy adds the **X-Caddy-Auth** header (`header_up` in the Caddyfile) so the API accepts those requests without a Bearer token. So you sign in once with openfdd/xyz and the dashboard and API calls work without a second login. The web app can still send Bearer tokens when built with `VITE_OFDD_API_KEY`; when behind Caddy, the API trusts either Bearer or X-Caddy-Auth. **Best practice:** keep the frontend in its own container; do not serve the compiled React app from FastAPI as static files. Caddy (or another reverse proxy) serves the frontend and proxies API/WebSocket.
+
+---
+
+## Frontend API key (Bearer)
+
+When `VITE_OFDD_API_KEY` is set (at frontend build time), the frontend sends it everywhere it talks to the backend: `apiFetch()` in `frontend/src/lib/api.ts` adds `Authorization: Bearer <key>` to all REST calls (sites, equipment, points, faults, config, FDD status, data model, etc.), `fetchCsv()` in `frontend/src/lib/csv.ts` adds the same header for CSV downloads, and the WebSocket in `frontend/src/hooks/use-websocket.ts` connects to `/ws/events?token=<key>`, which the backend accepts for WebSocket auth when an API key is configured.
 
 ---
 
@@ -47,8 +53,8 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (basic 
      ```bash
      docker run --rm caddy:2 caddy hash-password --plaintext 'your_secure_password'
      ```
-  2. Open `platform/caddy/Caddyfile` and replace the hash on the `openfdd` line with the new output.
-  3. Restart Caddy: `docker compose -f platform/docker-compose.yml restart caddy`.
+  2. Open `stack/caddy/Caddyfile` and replace the hash on the `openfdd` line with the new output.
+  3. Restart Caddy: `docker compose -f stack/docker-compose.yml restart caddy` (from repo root).
 
 - **Advanced / multiple users:** Edit the `basic_auth` block in the Caddyfile and add more lines (one per `username hash`). Use `caddy hash-password` for each password. For SSO or advanced auth, consider Caddy’s JWT or forward-auth and an IdP instead of basic auth.
 

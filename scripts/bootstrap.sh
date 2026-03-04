@@ -19,7 +19,7 @@
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + bacnet-server + bacnet-scraper only (add --with-grafana for Grafana)
 #   ./scripts/bootstrap.sh --verify             # health checks only
-#   ./scripts/bootstrap.sh --verify-code       # frontend (lint + typecheck), backend (pytest), Caddy (validate Caddyfile); then exit
+#   ./scripts/bootstrap.sh --test             # run tests: frontend lint+typecheck, backend pytest, Caddy validate; then exit
 #   ./scripts/bootstrap.sh --ha-addon          # build HA addon image only (no stack); then exit
 #   ./scripts/bootstrap.sh --ha-install-integration [PATH]   # copy integration + restart HA only
 #   ./scripts/bootstrap.sh --ha-addon --ha-install-integration /path  # addon image + integration copy only (no stack)
@@ -37,7 +37,7 @@
 # - Tested on x86; should work on ARM but is untested.
 # - Requires docker + docker compose plugin (or docker-compose fallback)
 # - If diy-bacnet-server sibling is missing, this script clones it.
-# - --verify-code: frontend needs npm (cd frontend && npm install first). Backend needs .venv and pip install -e ".[dev]".
+# - --test/--verify-code: frontend needs npm (or run openfdd_frontend). Backend needs .venv and pip install -e ".[dev]".
 #   Caddy validate uses docker run caddy:2 (Docker required). Backend pytest may fail with 401 if OFDD_API_KEY is set in env.
 #
 set -euo pipefail
@@ -96,7 +96,7 @@ while [[ $i -lt ${#args[@]} ]]; do
   arg="${args[$i]}"
   case "$arg" in
     --verify) VERIFY_ONLY=true ;;
-    --verify-code) VERIFY_CODE=true ;;
+    --verify-code|--test) VERIFY_CODE=true ;;
     --minimal) MINIMAL=true ;;
     --reset-grafana) RESET_GRAFANA=true ;;
     --with-grafana) WITH_GRAFANA=true ;;
@@ -153,7 +153,7 @@ Core:
   --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; use --with-grafana to add Grafana)
   --with-grafana            Include Grafana in the stack (default: not installed)
   --verify                  Show running services + health checks
-  --verify-code             Run frontend (lint + typecheck), backend (pytest), and Caddyfile validate; then exit
+  --test, --verify-code     Run tests: frontend (lint + typecheck), backend (pytest), Caddyfile validate; then exit
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
   --maintenance             Safe Docker prune only (NO volumes)
 
@@ -443,7 +443,7 @@ verify() {
 # Frontend: lint + typecheck. Backend: pytest. Caddy: validate Caddyfile.
 verify_code() {
   local failed=0
-  echo "=== --verify-code: frontend, backend, Caddy ==="
+  echo "=== Tests: frontend (lint + typecheck), backend (pytest), Caddy ==="
   echo ""
 
   # Frontend: lint + tsc (no build). Prefer frontend container so host does not need npm.

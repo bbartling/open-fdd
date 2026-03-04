@@ -38,7 +38,7 @@ So deleting a site removes all its points and **all their timeseries data from t
 
 Bootstrap applies TimescaleDB retention (default **365 days**): chunks older than the configured interval are dropped from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. This is automatic; no manual action.
 
-To set retention: run bootstrap with `--retention-days N` or set `OFDD_RETENTION_DAYS` in `platform/.env` before bootstrap. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
+To set retention: run bootstrap with `--retention-days N` or set `OFDD_RETENTION_DAYS` in `stack/.env` before bootstrap. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
 
 ---
 
@@ -99,7 +99,7 @@ To get a clean slate and run tests (e.g. `graph_and_crud_test.py`) or re-import 
 2. **Faster FDD/scrapers for testing (optional):**  
    - **FDD:** Set `rule_interval_hours: 0.1` (6 min) or `1` in your config, or env `OFDD_RULE_INTERVAL_HOURS=0.1`. Fractional hours are supported; minimum sleep is 60 s.  
    - **BACnet:** Set `bacnet_scrape_interval_min: 1` (or env `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1`) so the scraper runs every minute.  
-   **Docker:** The compose file defaults to 5 min. To use 1 min, set `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in **platform/.env**, then from the repo root run `cd platform && docker compose up -d` (or `./scripts/bootstrap.sh`) so the bacnet-scraper container gets the new env.  
+   **Docker:** The compose file defaults to 5 min. To use 1 min, set `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in **stack/.env**, then from the repo root run `cd stack && docker compose up -d` (or `./scripts/bootstrap.sh`) so the bacnet-scraper container gets the new env.  
    Restart the affected containers after changing (e.g. `docker restart openfdd_fdd_loop openfdd_bacnet_scraper`), or use **POST /run-fdd** / trigger file to run FDD immediately without changing the interval.
 
 **Workflow: reset → test → Grafana**
@@ -111,7 +111,7 @@ To get a clean slate, create test data (BensOffice + BACnet points), then confir
 
 2. **Create test data:** `python tools/graph_and_crud_test.py`  
    Creates the BensOffice site, equipment (BensFakeAhu, BensFakeVavBox), discovers BACnet points, and imports them. Leaves BensOffice in place so scrapers have points to scrape.  
-   **Wait for scrapes before exit:** `python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1` (use `--scrape-interval-min` to match your scraper; Docker default is 5 unless you set `OFDD_BACNET_SCRAPE_INTERVAL_MIN` in platform/.env).
+   **Wait for scrapes before exit:** `python tools/graph_and_crud_test.py --wait-scrapes 2 --scrape-interval-min 1` (use `--scrape-interval-min` to match your scraper; Docker default is 5 unless you set `OFDD_BACNET_SCRAPE_INTERVAL_MIN` in stack/.env).
 
 3. **Check Grafana:**  
    Wait for the next scraper runs (or use fast intervals as above). Then open:

@@ -27,7 +27,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    - **BACnet Swagger:** http://localhost:8080/docs  
    - **DB:** localhost:5432/openfdd (postgres/postgres)
 
-3. **Optional:** Set `OFDD_*` in `platform/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
+3. **Optional:** Set `OFDD_*` in `stack/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
 
 **New to Open-FDD and want to run Home Assistant on the same Linux machine?** See [Quick setup: Open-FDD + Home Assistant](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine) for a complete, copy-paste-ready guide (Open-FDD stack, HA in Docker, custom integration, API key, and troubleshooting).
 
@@ -45,7 +45,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
   git clone https://github.com/bbartling/open-fdd.git
   cd open-fdd
   ```
-- **BACnet (default data driver):** The default data driver is BACnet. Bootstrap **automatically** builds and starts [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as its own Docker container (plus the BACnet scraper). You must run **BACnet discovery first** and curate the resulting CSV before the platform can scrape data—the scraper uses that CSV as its config. See [BACnet → Setup](bacnet/index#setup) and [BACnet overview](bacnet/overview). To run without BACnet (e.g. central-only with remote gateways), start only the services you need (e.g. `docker compose up -d db grafana api fdd-loop weather-scraper` from `platform/`).
+- **BACnet (default data driver):** The default data driver is BACnet. Bootstrap **automatically** builds and starts [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as its own Docker container (plus the BACnet scraper). You must run **BACnet discovery first** and curate the resulting CSV before the platform can scrape data—the scraper uses that CSV as its config. See [BACnet → Setup](bacnet/index#setup) and [BACnet overview](bacnet/overview). To run without BACnet (e.g. central-only with remote gateways), start only the services you need (e.g. `docker compose up -d db grafana api fdd-loop weather-scraper` from `stack/`).
 
 ---
 
@@ -54,15 +54,15 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 `scripts/bootstrap.sh` (run from the **repo root**):
 
 1. Ensures **diy-bacnet-server** exists as a sibling repo (clones it if missing).
-2. Runs **docker compose up -d --build** from `platform/` (builds all images, starts all services).
+2. Runs **docker compose up -d --build** from `stack/` (builds all images, starts all services).
 3. Waits for **Postgres** to be ready (~15s).
 4. Applies **database migrations** (idempotent; safe on existing DBs).
-5. **Seeds platform config** via PUT /config (waits for API, then sends default or `platform/.env` values into the RDF graph).
+5. **Seeds platform config** via PUT /config (waits for API, then sends default or `stack/.env` values into the RDF graph).
 6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
 
 It does **not** purge or wipe the database on a normal run; only `--reset-grafana` wipes the Grafana volume. See [Danger zone](howto/danger_zone) for when data is purged.
 
-**Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. For BACnet data you can use the **data model** (discover via API → import points) or a CSV; see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `platform/` if needed.
+**Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. For BACnet data you can use the **data model** (discover via API → import points) or a CSV; see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `stack/` if needed.
 
 **Bootstrap options:**
 
@@ -73,7 +73,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--verify` | List containers and test DB reachability; exit. Does not start or stop anything. |
 | `--minimal` | Raw BACnet only: DB + Grafana + BACnet server + scraper. No FDD, weather, or API. See [Overview — Ways to deploy](overview#ways-to-deploy). |
 | `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. **Database and all other data are retained.** Use when dashboards or datasource are wrong. |
-| `--retention-days N` | TimescaleDB retention: drop chunks older than N days (default 365). Written to `platform/.env` as `OFDD_RETENTION_DAYS`. |
+| `--retention-days N` | TimescaleDB retention: drop chunks older than N days (default 365). Written to `stack/.env` as `OFDD_RETENTION_DAYS`. |
 | `--log-max-size SIZE` | Docker log max size per file (e.g. `100m`, `50m`). Default `100m`. Env: `OFDD_LOG_MAX_SIZE`. |
 | `--log-max-files N` | Docker log max number of files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 

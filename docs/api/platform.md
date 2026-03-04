@@ -11,6 +11,8 @@ REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, 
 **Base URL:** `http://localhost:8000`  
 **Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
 
+**Authentication:** When `OFDD_API_KEY` is set, the API requires `Authorization: Bearer <key>` on all endpoints except `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, and `/app`. The React frontend sends the key when built with `VITE_OFDD_API_KEY`: REST via `apiFetch`, CSV downloads via `fetchCsv`, and WebSocket via `?token=<key>` on `/ws/events`. See [Security and Caddy — Frontend API key (Bearer)](../security#frontend-api-key-bearer) for the full sentence.
+
 ---
 
 ## Health
@@ -278,6 +280,20 @@ Fault counts by fault_id. For dashboards and cloud integration.
 | site_id     | string | no       | Site name or UUID; omit for all sites |
 
 **Response:** `200 OK` — `{"site_id": "...", "period": {"start": "...", "end": "..."}, "by_fault_id": [{"fault_id": "...", "count": N, "flag_sum": M}, ...], "total_faults": N}`.
+
+---
+
+### GET /analytics/system/* (host, containers, disk)
+
+System resource metrics for the React **System resources** page (and optional Grafana/JSON consumers). Data comes from `host_metrics`, `container_metrics`, and `disk_metrics`; these tables are populated by the **host-stats** service. If the tables do not exist (e.g. host-stats not deployed), endpoints return empty lists.
+
+| Endpoint | Description |
+|----------|--------------|
+| `GET /analytics/system/host` | Latest host metrics per hostname (mem_used_gb, mem_available_gb, load_1/5/15, swap_used_gb). |
+| `GET /analytics/system/host/series?from_ts=&to_ts=` | Time series of host memory and load for charts (ISO datetimes). |
+| `GET /analytics/system/containers` | Latest row per container (cpu_pct, mem_mb, mem_pct, pids). |
+| `GET /analytics/system/containers/series?from_ts=&to_ts=` | Time series of container memory (MB) and CPU % for charts. |
+| `GET /analytics/system/disk` | Latest disk usage per host/mount (used_gb, free_gb, total_gb, used_pct). |
 
 ---
 

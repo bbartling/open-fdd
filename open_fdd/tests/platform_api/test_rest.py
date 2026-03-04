@@ -60,6 +60,15 @@ def test_error_schema_on_404():
     assert "message" in data["error"]
 
 
+def test_config_returns_platform_config():
+    with patch("open_fdd.platform.api.config.get_config_overlay", return_value=None):
+        with patch("open_fdd.platform.api.config.get_config_from_graph", return_value={"open_meteo_enabled": False, "open_meteo_interval_hours": 6}):
+            r = client.get("/config")
+    assert r.status_code == 200
+    data = r.json()
+    assert "open_meteo_enabled" in data or "open_meteo_interval_hours" in data
+
+
 def test_points_list_accepts_limit_offset():
     from unittest.mock import MagicMock
     from contextlib import contextmanager
