@@ -194,9 +194,10 @@ app.include_router(bacnet.router)
 app.include_router(run_fdd.router)
 app.include_router(ws_router)
 
-# Config UI (HA-style): HTML/CSS/JS in separate files, served at /app/
+# Legacy config UI at /app/ (optional; removed when using React frontend only)
 _static_dir = Path(__file__).resolve().parent.parent / "static"
-if _static_dir.is_dir():
+_has_static_ui = _static_dir.is_dir() and (_static_dir / "index.html").is_file()
+if _has_static_ui:
     app.mount(
         "/app",
         StaticFiles(directory=str(_static_dir), html=True),
@@ -206,14 +207,16 @@ if _static_dir.is_dir():
 
 @app.get("/")
 def root():
-    """Root info for config UI: version, docs link, and BACnet URL from backend config."""
-    return {
+    """Root info: version, docs link, and BACnet URL from backend config."""
+    out = {
         "message": "Open-FDD API",
         "version": _app_version(),
         "docs": "/docs",
-        "config_ui": "/app/",
         "bacnet_server_url": getattr(settings, "bacnet_server_url", None) or None,
     }
+    if _has_static_ui:
+        out["config_ui"] = "/app/"
+    return out
 
 
 @app.get("/health")

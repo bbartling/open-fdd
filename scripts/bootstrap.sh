@@ -5,7 +5,9 @@
 #
 # Default behavior (no args):
 #   ./scripts/bootstrap.sh
-#     -> builds and starts the FULL stack
+#     -> builds and starts the FULL stack (Grafana is NOT started by default)
+#
+# Optional: --with-grafana   Include Grafana (and /grafana route via Caddy) in the stack.
 #
 # One-command "everything" (stack + HA addon image + integration copy + optional addon folder copy):
 #   ./scripts/bootstrap.sh --with-ha /home/ben/homeassistant/config
@@ -15,8 +17,9 @@
 #
 # Optional (single-purpose):
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
-#   ./scripts/bootstrap.sh --minimal            # DB + Grafana + bacnet-server + bacnet-scraper only
+#   ./scripts/bootstrap.sh --minimal            # DB + bacnet-server + bacnet-scraper only (add --with-grafana for Grafana)
 #   ./scripts/bootstrap.sh --verify             # health checks only
+#   ./scripts/bootstrap.sh --verify-code       # frontend (lint + typecheck), backend (pytest), Caddy (validate Caddyfile); then exit
 #   ./scripts/bootstrap.sh --ha-addon          # build HA addon image only (no stack); then exit
 #   ./scripts/bootstrap.sh --ha-install-integration [PATH]   # copy integration + restart HA only
 #   ./scripts/bootstrap.sh --ha-addon --ha-install-integration /path  # addon image + integration copy only (no stack)
@@ -24,7 +27,7 @@
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
-#   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, grafana, host-stats, weather-scraper)
+#   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, weather-scraper)
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -34,6 +37,8 @@
 # - Tested on x86; should work on ARM but is untested.
 # - Requires docker + docker compose plugin (or docker-compose fallback)
 # - If diy-bacnet-server sibling is missing, this script clones it.
+# - --verify-code: frontend needs npm (cd frontend && npm install first). Backend needs .venv and pip install -e ".[dev]".
+#   Caddy validate uses docker run caddy:2 (Docker required). Backend pytest may fail with 401 if OFDD_API_KEY is set in env.
 #
 set -euo pipefail
 
@@ -45,9 +50,11 @@ STACK_DIR="$REPO_ROOT/stack"
 # Flags / defaults
 # -----------------------------
 VERIFY_ONLY=false
+VERIFY_CODE=false
 MINIMAL=false
 RESET_GRAFANA=false
 RESET_DATA=false
+WITH_GRAFANA=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
@@ -89,8 +96,10 @@ while [[ $i -lt ${#args[@]} ]]; do
   arg="${args[$i]}"
   case "$arg" in
     --verify) VERIFY_ONLY=true ;;
+    --verify-code) VERIFY_CODE=true ;;
     --minimal) MINIMAL=true ;;
     --reset-grafana) RESET_GRAFANA=true ;;
+    --with-grafana) WITH_GRAFANA=true ;;
     --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
@@ -141,8 +150,10 @@ Usage: $0 [options]
 
 Core:
   (no args)                 Build + start full stack (ALL services)
-  --minimal                 Start minimal stack (db, grafana, bacnet-server, bacnet-scraper)
+  --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; use --with-grafana to add Grafana)
+  --with-grafana            Include Grafana in the stack (default: not installed)
   --verify                  Show running services + health checks
+  --verify-code             Run frontend (lint + typecheck), backend (pytest), and Caddyfile validate; then exit
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
   --maintenance             Safe Docker prune only (NO volumes)
 
@@ -402,13 +413,13 @@ verify() {
     echo "DB: localhost:5432/openfdd (OK)"
   else
     echo "DB: not reachable"
-    echo "  → Start stack: ./scripts/bootstrap.sh  (or: cd STACK && $(docker_compose_cmd) up -d db grafana)"
+    echo "  → Start stack: ./scripts/bootstrap.sh  (or: cd STACK && $(docker_compose_cmd) up -d db)"
   fi
 
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_grafana; then
-    echo "Grafana: running — http://localhost:3000"
+    echo "Grafana: running — http://localhost:3000 (or via Caddy /grafana when started with --with-grafana)"
   else
-    echo "Grafana: not running — start stack: ./scripts/bootstrap.sh"
+    echo "Grafana: not running — start with: ./scripts/bootstrap.sh --with-grafana"
   fi
 
   echo ""
@@ -427,6 +438,68 @@ verify() {
   fi
 
   echo ""
+}
+
+# Frontend: lint + typecheck. Backend: pytest. Caddy: validate Caddyfile.
+verify_code() {
+  local failed=0
+  echo "=== --verify-code: frontend, backend, Caddy ==="
+  echo ""
+
+  # Frontend: lint + tsc (no build). Prefer frontend container so host does not need npm.
+  if [[ -d "$REPO_ROOT/frontend" ]]; then
+    echo "--- Frontend (lint + typecheck) ---"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_frontend; then
+      if docker exec openfdd_frontend sh -c "cd /app && npm run lint && npx tsc -b --noEmit"; then
+        echo "Frontend: OK (via container)"
+      else
+        echo "Frontend: FAIL (container run: docker exec openfdd_frontend sh -c 'cd /app && npm run lint && npx tsc -b --noEmit')"
+        failed=1
+      fi
+    elif (cd "$REPO_ROOT/frontend" && npm run lint 2>/dev/null && npx tsc -b --noEmit 2>/dev/null); then
+      echo "Frontend: OK (via host npm)"
+    else
+      echo "Frontend: FAIL (start stack so openfdd_frontend runs, or install Node/npm and run: cd frontend && npm install && npm run lint && npx tsc -b --noEmit)"
+      failed=1
+    fi
+    echo ""
+  else
+    echo "--- Frontend: skip (no frontend dir) ---"
+    echo ""
+  fi
+
+  # Backend: pytest (use .venv if present). Unset OFDD_API_KEY so test client gets no-auth app.
+  echo "--- Backend (pytest) ---"
+  local py=
+  if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+    py="$REPO_ROOT/.venv/bin/python"
+  else
+    py="python3"
+  fi
+  if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest open_fdd/tests/ -v --tb=short); then
+    echo "Backend: OK"
+  else
+    echo "Backend: FAIL or skipped (install: pip install -e \".[dev]\" then run: unset OFDD_API_KEY && pytest open_fdd/tests/ -v)"
+    failed=1
+  fi
+  echo ""
+
+  # Caddy: validate Caddyfile
+  echo "--- Caddy (validate Caddyfile) ---"
+  if docker run --rm -v "$STACK_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile; then
+    echo "Caddy: OK"
+  else
+    echo "Caddy: FAIL (Caddyfile invalid or docker unavailable)"
+    failed=1
+  fi
+  echo ""
+
+  if [[ $failed -eq 0 ]]; then
+    echo "All checks passed."
+  else
+    echo "Some checks failed."
+    return 1
+  fi
 }
 
 wait_for_api() {
@@ -695,6 +768,12 @@ if $VERIFY_ONLY && ! $UPDATE_PULL_REBUILD; then
   exit 0
 fi
 
+if $VERIFY_CODE; then
+  check_prereqs
+  verify_code || exit 1
+  exit 0
+fi
+
 if $MAINTENANCE_ONLY && ! $UPDATE_PULL_REBUILD; then
   check_prereqs
   safe_docker_prune
@@ -799,13 +878,13 @@ fi
 if $RESET_GRAFANA; then
   cd "$STACK_DIR"
   echo "=== Resetting Grafana (wipe volume, re-apply provisioning) ==="
-  $dc stop grafana 2>/dev/null || true
-  $dc rm -f grafana 2>/dev/null || true
+  $dc --profile grafana stop grafana 2>/dev/null || true
+  $dc --profile grafana rm -f grafana 2>/dev/null || true
   vol="$(docker volume ls -q | grep grafana_data | head -1 || true)"
   [[ -n "${vol:-}" ]] && docker volume rm "$vol" || true
   echo "Starting Grafana with fresh provisioning..."
-  $dc up -d grafana
-  echo "Done. Open http://localhost:3000 (admin/admin)"
+  $dc --profile grafana up -d grafana
+  echo "Done. Open http://localhost:3000 (admin/admin). Use --with-grafana on next full bootstrap to include Grafana."
   exit 0
 fi
 
@@ -817,6 +896,11 @@ if [[ -n "$BUILD_SERVICES_STR" ]]; then
   echo "=== Rebuilding and restarting: $BUILD_SERVICES_STR ==="
   $dc build $BUILD_SERVICES_STR
   $dc up -d $BUILD_SERVICES_STR
+  # Caddy has no image build (uses image: caddy:2); restart so it reloads Caddyfile when included.
+  if echo " $BUILD_SERVICES_STR " | grep -q " caddy "; then
+    $dc restart caddy
+    echo "Caddy restarted (reloads Caddyfile)."
+  fi
   echo "Done. Services restarted: $BUILD_SERVICES_STR"
   exit 0
 fi
@@ -827,11 +911,19 @@ fi
 cd "$STACK_DIR"
 
 if $MINIMAL; then
-  echo "=== Starting minimal stack (raw BACnet: DB + Grafana + BACnet server + scraper) ==="
-  $dc up -d --build db grafana bacnet-server bacnet-scraper
+  echo "=== Starting minimal stack (DB + BACnet server + scraper) ==="
+  if $WITH_GRAFANA; then
+    $dc --profile grafana up -d --build db bacnet-server bacnet-scraper grafana
+  else
+    $dc up -d --build db bacnet-server bacnet-scraper
+  fi
 else
   echo "=== Building and starting full stack ==="
-  $dc up -d --build
+  if $WITH_GRAFANA; then
+    $dc --profile grafana up -d --build
+  else
+    $dc up -d --build
+  fi
 fi
 
 cd "$REPO_ROOT"
@@ -852,13 +944,17 @@ fi
 echo ""
 echo "=== Bootstrap complete ==="
 echo '  DB:       localhost:5432/openfdd  (postgres/postgres)'
-echo '  Grafana:  http://localhost:3000   (admin/admin)'
+if $WITH_GRAFANA; then
+  echo '  Grafana:  http://localhost:3000   (admin/admin) or via Caddy /grafana'
+fi
 if $MINIMAL; then
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
-  echo "  (Minimal: raw BACnet data only. No FDD, no weather, no API.)"
+  echo "  (Minimal: raw BACnet data only. No FDD, no weather, no API. Add Grafana with --with-grafana.)"
 else
   echo "  API:      http://localhost:8000   (docs: /docs)"
+  echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost:8088)"
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
+  echo "  (Grafana not started by default. Use --with-grafana to include it.)"
 fi
 echo ""
 echo "Verify all services: ./scripts/bootstrap.sh --verify"

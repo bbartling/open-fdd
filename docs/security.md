@@ -2,30 +2,40 @@
 
 This document describes how to protect Open-FDD endpoints with **Caddy** (basic auth), which services are **unencrypted by default**, and **hardening** best practices. The project defaults to **non-TLS**; TLS (including self-signed certificates) is optional.
 
-**What is Caddy?** A small web server in front of the API and Grafana—one entry point (e.g. port 8088) with optional **basic auth** and **HTTPS**. By default Open-FDD does not run Caddy; this doc explains how to enable it for a protected entry point.
+**What is Caddy?** A small web server in front of the API and the **React frontend**—one entry point (e.g. port 8088) with optional **basic auth** and **HTTPS**. Optional **Grafana** (when started with `--with-grafana`) is available at `/grafana`. By default Open-FDD does not run Caddy; this doc explains how to enable it for a protected entry point.
+
+---
+
+## Architecture: frontend, API, and Caddy
+
+- **React frontend** runs in its own container (port 5173 in dev; built and served via Caddy in production-style setups). It uses **Bearer token** auth against the Open-FDD API when `OFDD_API_KEY` is set: all requests (and the WebSocket at `/ws/events`) send `Authorization: Bearer <key>`.
+- **API** (FastAPI) serves REST and WebSocket; when `OFDD_API_KEY` is set, it requires Bearer auth on all endpoints except `/health`, `/`, `/docs`, `/redoc`, `/openapi.json`, and `/app` (legacy static config UI).
+- **Caddy** sits in front of both: it enforces **basic auth** (one login for the browser), then proxies to the API and frontend. When proxying to the API, Caddy adds the **X-Caddy-Auth** header (`header_up` in the Caddyfile) so the API accepts those requests without a Bearer token. So you sign in once with openfdd/xyz and the dashboard and API calls work without a second login. The web app can still send Bearer tokens when built with `VITE_OFDD_API_KEY`; when behind Caddy, the API trusts either Bearer or X-Caddy-Auth. **Best practice:** keep the frontend in its own container; do not serve the compiled React app from FastAPI as static files. Caddy (or another reverse proxy) serves the frontend and proxies API/WebSocket.
 
 ---
 
 ## Quick bootstrap with Caddy and basic auth
 
-1. **Start the stack** (including optional Caddy):
+1. **Start the stack** (from repo root):
    ```bash
-   cd open-fdd
-   docker compose -f platform/docker-compose.yml up -d
+   ./scripts/bootstrap.sh
    ```
-   This starts API (8000), Grafana (3000), TimescaleDB (5432), BACnet server (8080 on host), and **Caddy on port 8088**.
+   This starts DB, API (8000), frontend (5173), BACnet server (8080), scrapers, FDD loop, and **Caddy on port 8088**. **Grafana is not started by default**; use `./scripts/bootstrap.sh --with-grafana` to include it (then access at `http://localhost:8088/grafana` or http://localhost:3000).
 
 2. **Access through Caddy** (single entry point with basic auth):
    - **URL:** `http://localhost:8088`
    - **Default username:** `openfdd`
    - **Default password:** `xyz` (for local/testing only; change before any production or exposed use)
 
-   The bundled Caddyfile routes API paths (e.g. `/docs`, `/api/*`, `/sites*`, `/analytics/*`, `/health`) to the Open-FDD API and all other paths to Grafana at `/`. All routes require this one basic-auth credential.
+   The bundled Caddyfile routes API paths to the Open-FDD API, **WebSocket** `/ws/*` to the API, and `/*` to the **React frontend**. If Grafana was started with `--with-grafana`, it is available at `http://localhost:8088/grafana`. All routes require this one basic-auth credential. The React app then uses the **API key** (from `VITE_OFDD_API_KEY` at build time) for Bearer auth to the API.
 
-3. **Without Caddy:** You can still use the services directly (no auth):
+3. **Without Caddy:** You can still use the services directly (no auth if `OFDD_API_KEY` is unset):
+   - Frontend: http://localhost:5173  
    - API: http://localhost:8000/docs  
-   - Grafana: http://localhost:3000  
+   - Grafana (if started): http://localhost:3000  
    Do not expose these ports to untrusted networks without a reverse proxy and auth.
+
+4. **Browser "Not secure" or "Your connection is not private":** Over plain HTTP (e.g. http://192.168.204.16:8088/), browsers show a "Not secure" or "connection not private" warning. That is expected without TLS. Use **http://** (not https://) so you are not blocked by a bad certificate. For production, add HTTPS (e.g. Caddy with TLS).
 
 ---
 
@@ -48,12 +58,13 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (basic 
 
 | Service            | Port  | Encrypted by default? | Notes |
 |--------------------|-------|------------------------|--------|
-| **API**            | 8000  | No (HTTP)              | Put behind Caddy; do not expose directly. |
-| **Grafana**        | 3000  | No (HTTP)              | Same; use Caddy (or Grafana’s own auth). |
+| **API**            | 8000  | No (HTTP)              | Put behind Caddy; do not expose directly. Bearer auth when `OFDD_API_KEY` is set. |
+| **Frontend**       | 5173  | No (HTTP)              | React app; use Caddy to serve and protect. Sends Bearer token to API. |
+| **Grafana**        | 3000  | No (HTTP)              | Optional (--with-grafana); use Caddy at /grafana or Grafana's own auth. |
 | **TimescaleDB**   | 5432  | No (plain PostgreSQL)  | Not TLS by default. Keep on internal network only. |
 | **BACnet server** | 8080  | No (HTTP API)          | Host network; protect with firewall or Caddy on host. |
 
-- **Recommendation:** Expose only Caddy (e.g. 8088 or 443) to the building/remote network. Do not expose 5432, 8000, 3000, or 8080 to the internet. Use Caddy basic auth (and optionally TLS) for API and Grafana; keep the database and BACnet server behind the firewall.
+- **Recommendation:** Expose only Caddy (e.g. 8088 or 443) to the building/remote network. Do not expose 5432, 8000, 5173, 3000, or 8080 to the internet. Use Caddy basic auth (and optionally TLS) for the frontend and API; keep the database and BACnet server behind the firewall. The React frontend runs in its own container and is served by Caddy (or another reverse proxy), not as static files from the FastAPI process.
 
 ---
 
@@ -160,9 +171,27 @@ Mount `cert.pem` and `key.pem` into the Caddy container and reference them in `t
 
 ---
 
+## Troubleshooting
+
+**API returns 401 (Unauthorized) after you pass Basic auth in the browser**
+
+The API trusts requests that carry the internal header `X-Caddy-Auth` (set by Caddy after Basic auth). The API only checks this when the env var `OFDD_CADDY_INTERNAL_SECRET` is set in the API container and matches the value Caddy sends. If you added or changed this after the stack was already running, the API container may not have the variable. Recreate the API so it picks up the env:
+
+```bash
+cd stack && docker compose up -d --force-recreate api
+```
+
+Or from the repo root: `./scripts/bootstrap.sh --build api`. Then hard-refresh or use an incognito window and sign in again with Basic auth.
+
+**WebSocket to `/ws/events` fails or closes immediately**
+
+When access is through Caddy with Basic auth, the browser may not send credentials on the WebSocket upgrade. The API also accepts the same `X-Caddy-Auth` header on the WebSocket endpoint, so if Caddy is forwarding the request (after Basic auth), the WebSocket should work. Ensure the API has been recreated with `OFDD_CADDY_INTERNAL_SECRET` as above. If the WebSocket still fails (e.g. due to browser or proxy behavior), the UI will keep working; live updates will resume when the connection succeeds.
+
+---
+
 ## Summary
 
-- **Bootstrap:** Start the stack; use `http://localhost:8088` with user `openfdd` and default password `xyz` (change before production).
+- **Bootstrap:** Start the stack; use `http://localhost:8088` (or your Caddy port, e.g. 80) with user `openfdd` and default password `xyz` (change before production).
 - **Passwords:** Change default by running `caddy hash-password` and updating the Caddyfile; use strong passwords for Grafana and Postgres.
 - **Unencrypted by default:** API, Grafana, TimescaleDB, and BACnet API are plain HTTP/TCP; protect them with network isolation and Caddy (and optional TLS).
 - **Hardening:** Strong passwords, expose only Caddy, keep DB and internal services off the public internet, keep software updated.

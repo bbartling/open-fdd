@@ -44,6 +44,7 @@ export function SiteProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook consumed by app
 export function useSiteContext() {
   const ctx = useContext(SiteContext);
   if (!ctx) throw new Error("useSiteContext must be used within SiteProvider");

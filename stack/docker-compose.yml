@@ -112,6 +112,8 @@ services:
       options: *log-opts
 
   grafana:
+    profiles:
+      - grafana
     image: grafana/grafana:latest
     container_name: openfdd_grafana
     ports:
@@ -201,6 +203,8 @@ services:
       OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
       # Optional Bearer auth; bootstrap generates and writes to stack/.env unless --no-auth
       OFDD_API_KEY: ${OFDD_API_KEY:-}
+      # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
+      OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
       - ../config:/app/config
@@ -238,12 +242,12 @@ services:
     image: caddy:2
     container_name: openfdd_caddy
     ports:
-      - "8088:8088"
+      - "80:80"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - api
-      - grafana
+      - frontend
     restart: unless-stopped
     logging:
       driver: json-file

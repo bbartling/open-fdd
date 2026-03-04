@@ -7,14 +7,25 @@ import type { IncomingMessage } from "http";
 const apiTarget = process.env.VITE_API_TARGET ?? "http://localhost:8000";
 
 const apiRoutes = [
+  "/api",
   "/sites",
   "/equipment",
   "/points",
+  "/timeseries",
   "/faults",
   "/run-fdd",
-  "/health",
-  "/capabilities",
   "/download",
+  "/capabilities",
+  "/config",
+  "/data-model",
+  "/entities",
+  "/jobs",
+  "/bacnet",
+  "/analytics",
+  "/health",
+  "/docs",
+  "/redoc",
+  "/openapi.json",
 ];
 
 /** Serve the SPA for browser navigation; proxy only fetch/XHR to the API. */

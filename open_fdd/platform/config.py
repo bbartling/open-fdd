@@ -78,6 +78,8 @@ class PlatformSettings(BaseSettings):
 
     # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /docs, /redoc, /openapi.json, /app
     api_key: Optional[str] = None
+    # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.
+    caddy_internal_secret: Optional[str] = None
 
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 

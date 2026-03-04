@@ -17,9 +17,12 @@ router = APIRouter(tags=["realtime"])
 _HEARTBEAT_INTERVAL = 30.0  # seconds
 
 
-def _ws_auth_ok(token: str | None) -> bool:
-    """Validate WebSocket auth (query param token = OFDD_API_KEY when set)."""
+def _ws_auth_ok(token: str | None, headers: Any = None) -> bool:
+    """Validate WebSocket auth: token query param, or X-Caddy-Auth when behind Caddy."""
     settings = get_platform_settings()
+    if headers and getattr(settings, "caddy_internal_secret", None):
+        if headers.get("x-caddy-auth") == settings.caddy_internal_secret:
+            return True
     api_key = getattr(settings, "api_key", None)
     if not api_key:
         return True
@@ -38,7 +41,9 @@ async def websocket_events(
     - {"type":"ping"}
     Server sends: {"type":"event",...}, {"type":"pong"}.
     """
-    if not _ws_auth_ok(token):
+    headers = list(websocket.scope.get("headers") or [])
+    header_dict = {k.decode().lower(): v.decode() for k, v in headers}
+    if not _ws_auth_ok(token, header_dict):
         await websocket.close(code=4401, reason="Unauthorized")
         return
 

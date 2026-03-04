@@ -10,6 +10,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { timeAgo, severityVariant } from "@/lib/utils";
 import { useAllEquipment, useEquipment, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
@@ -105,12 +106,58 @@ function SiteFaultsView({ siteId }: { siteId: string }) {
   return <FaultsTable faults={faults} definitions={definitions} equipment={equipment} />;
 }
 
+function FaultDefinitionsSection() {
+  const { data: definitions = [], isLoading } = useFaultDefinitions();
+
+  if (isLoading) return <Skeleton className="h-32 w-full rounded-xl" />;
+  if (definitions.length === 0) return null;
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        Fault definitions ({definitions.length})
+      </h2>
+      <Card>
+        <CardContent className="pt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Fault ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead className="text-right">Target equipment</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {definitions.map((d) => (
+                <TableRow key={d.fault_id}>
+                  <TableCell className="font-mono text-xs">{d.fault_id}</TableCell>
+                  <TableCell className="font-medium">{d.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{d.category ?? "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={severityVariant(d.severity)}>{d.severity}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground text-xs">
+                    {d.equipment_types?.length ? d.equipment_types.join(", ") : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function FaultsPage() {
   const { selectedSiteId } = useSiteContext();
 
   return (
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Faults</h1>
+      <FaultDefinitionsSection />
       {selectedSiteId ? <SiteFaultsView siteId={selectedSiteId} /> : <AllFaultsView />}
     </div>
   );

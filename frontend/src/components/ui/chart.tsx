@@ -16,6 +16,7 @@ interface ChartContextValue {
 
 const ChartContext = React.createContext<ChartContextValue>({ config: {} });
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook consumed by chart components
 export function useChartContext() {
   return React.useContext(ChartContext);
 }

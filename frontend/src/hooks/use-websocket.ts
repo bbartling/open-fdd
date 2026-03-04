@@ -3,11 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { WsEvent } from "@/types/api";
 
 const RECONNECT_DELAY = 3000;
+const RECONNECT_DELAY_AFTER_FAILURES = 60000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 export function useWebSocket() {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const failedAttempts = useRef(0);
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -21,6 +25,7 @@ export function useWebSocket() {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      failedAttempts.current = 0;
       ws.send(
         JSON.stringify({
           type: "subscribe",
@@ -52,13 +57,25 @@ export function useWebSocket() {
     };
 
     ws.onclose = () => {
-      reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
+      failedAttempts.current += 1;
+      const delay =
+        failedAttempts.current >= MAX_RECONNECT_ATTEMPTS
+          ? RECONNECT_DELAY_AFTER_FAILURES
+          : RECONNECT_DELAY;
+      if (failedAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+        failedAttempts.current = 0;
+      }
+      reconnectTimer.current = setTimeout(() => connectRef.current(), delay);
     };
 
     ws.onerror = () => {
       ws.close();
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     connect();
