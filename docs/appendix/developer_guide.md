@@ -4,6 +4,8 @@ parent: Appendix
 nav_order: 2
 ---
 
+> **TODO:** This document references Home Assistant (HA) integration and stack/ha_integration. HA integration has been removed from the project; content may be outdated.
+
 # Developer guide
 
 This page is for **developers and contributors** who work on the Open-FDD codebase: front-end (Config UI), database schema, and where to find the rest of the technical reference. For day-to-day operations and usage, see [Getting started](../getting_started) and the [Documentation](../) index.
@@ -117,6 +119,6 @@ So deleting a site removes all its equipment, points, and their timeseries. See 
 ## Where to go next
 
 - **Environment variables, unit tests, BACnet scrape, data model API, bootstrap, LLM tagging:** [Technical reference](technical_reference).
-- **Running tests:** `pytest open_fdd/tests/ -v` (and `stack/ha_integration/tests` for the HA integration). See [Technical reference — Unit tests](technical_reference#unit-tests).
+- **Running tests:** `pytest open_fdd/tests/ -v`. See [Technical reference — Unit tests](technical_reference#unit-tests).
 - **New SQL migrations and operations:** [Operations — New SQL migrations](../howto/operations#new-sql-migrations).
 - **Grafana and SQL recipes:** [Grafana SQL cookbook](../howto/grafana_cookbook).

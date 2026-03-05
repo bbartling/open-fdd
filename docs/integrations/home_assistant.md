@@ -1,5 +1,7 @@
 # Home Assistant and Node-RED integration
 
+> **TODO:** Home Assistant integration has been removed from this project. The content below is kept for reference only and may be outdated (e.g. stack/ha_integration and stack/ha_addon no longer exist).
+
 Open-FDD exposes an **HA/Node-RED–grade integration layer**: REST API, WebSocket event stream, fault state, jobs, and a guarded BACnet write path. Home Assistant and Node-RED talk only to Open-FDD; they never write directly to BACnet.
 
 ---

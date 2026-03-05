@@ -9,21 +9,11 @@
 #
 # Optional: --with-grafana   Include Grafana (and /grafana route via Caddy) in the stack.
 #
-# One-command "everything" (stack + HA addon image + integration copy + optional addon folder copy):
-#   ./scripts/bootstrap.sh --with-ha /home/ben/homeassistant/config
-#   PATH = HA config dir; uses OFDD_HA_CONFIG if omitted. Does NOT clone or start HA: you must already
-#   have HA running (e.g. Docker with -v /path/to/config:/config) and a container named
-#   OFDD_HA_CONTAINER (default: homeassistant). Bootstrap only copies the integration and restarts that container.
-#
 # Optional (single-purpose):
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + bacnet-server + bacnet-scraper only (add --with-grafana for Grafana)
 #   ./scripts/bootstrap.sh --verify             # health checks only
 #   ./scripts/bootstrap.sh --test             # run tests: frontend lint+typecheck, backend pytest, Caddy validate; then exit
-#   ./scripts/bootstrap.sh --ha-addon          # build HA addon image only (no stack); then exit
-#   ./scripts/bootstrap.sh --ha-install-integration [PATH]   # copy integration + restart HA only
-#   ./scripts/bootstrap.sh --ha-addon --ha-install-integration /path  # addon image + integration copy only (no stack)
-#
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
@@ -59,12 +49,6 @@ WITH_GRAFANA=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
-HA_ADDON_BUILD=false
-HA_INSTALL_INTEGRATION=false
-HA_CONFIG_PATH=""
-WITH_HA=false
-WITH_HA_PATH=""
-
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
@@ -120,31 +104,6 @@ while [[ $i -lt ${#args[@]} ]]; do
     --retention-days) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && RETENTION_DAYS="${args[$i]}" ;;
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
-    --ha-addon) HA_ADDON_BUILD=true ;;
-    --with-ha)
-      WITH_HA=true
-      i=$(( i + 1 ))
-      if [[ $i -lt ${#args[@]} ]] && [[ "${args[$i]}" != --* ]] && [[ -n "${args[$i]:-}" ]]; then
-        WITH_HA_PATH="${args[$i]}"
-        i=$(( i + 1 ))
-      fi
-      ;;
-    --with-ha=*)
-      WITH_HA=true
-      WITH_HA_PATH="${arg#--with-ha=}"
-      ;;
-    --ha-install-integration)
-      HA_INSTALL_INTEGRATION=true
-      i=$(( i + 1 ))
-      if [[ $i -lt ${#args[@]} ]] && [[ "${args[$i]}" != --* ]]; then
-        HA_CONFIG_PATH="${args[$i]}"
-        i=$(( i + 1 ))
-      fi
-      ;;
-    --ha-install-integration=*)
-      HA_INSTALL_INTEGRATION=true
-      HA_CONFIG_PATH="${arg#--ha-install-integration=}"
-      ;;
     --no-auth) NO_AUTH=true ;;
     --frontend) FRONTEND_RESET=true ;;
     -h|--help)
@@ -180,13 +139,6 @@ Edge settings:
 Docker install:
   --install-docker          Attempt to install Docker (Linux only) then continue
   --skip-docker-install     Explicitly skip Docker install (no-op)
-
-Home Assistant:
-  --with-ha [PATH]          Do everything: full stack + addon image + copy integration (and optionally addon folder). PATH = HA config dir; if omitted, uses OFDD_HA_CONFIG. Set OFDD_HA_ADDONS to copy stack/ha_addon into your HA addons dir.
-  --ha-addon                Build HA addon image only (no stack); then exit. Can add --ha-install-integration PATH.
-  --ha-install-integration [PATH]
-                            Copy custom_components/openfdd into HA config and restart HA container. PATH = HA config dir. If omitted, uses OFDD_HA_CONFIG. Container: OFDD_HA_CONTAINER (default homeassistant). Can be combined with --ha-addon.
-  (HA integration: stack/ha_integration; addon: stack/ha_addon.)
 
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
@@ -360,7 +312,7 @@ write_edge_env() {
         fi
         echo ""
         echo "Generated OFDD_API_KEY=${new_key}"
-        echo "Paste this into Home Assistant Open-FDD integration (Settings → Devices & services → Open-FDD)."
+        echo "Use this key for API auth (e.g. Authorization: Bearer <key>)."
         echo ""
       fi
     fi
@@ -668,102 +620,6 @@ if $INSTALL_DOCKER && ! $SKIP_DOCKER_INSTALL; then
 fi
 
 # -----------------------------
-# HA integration install: copy custom_components/openfdd into HA config and restart HA container
-# -----------------------------
-install_ha_integration_and_restart() {
-  local ha_config="${HA_CONFIG_PATH:-${OFDD_HA_CONFIG:-}}"
-  if [[ -z "$ha_config" ]]; then
-    echo "HA config path not set. Use: --ha-install-integration /path/to/ha/config or set OFDD_HA_CONFIG"
-    return 1
-  fi
-  if [[ ! -d "$ha_config" ]]; then
-    echo "HA config path is not a directory: $ha_config"
-    return 1
-  fi
-  local src="$STACK_DIR/ha_integration/custom_components/openfdd"
-  if [[ ! -d "$src" ]]; then
-    echo "Integration not found at $src"
-    return 1
-  fi
-  local dest_dir="$ha_config/custom_components"
-  mkdir -p "$dest_dir"
-  echo "Copying Open-FDD integration to $dest_dir/openfdd"
-  cp -r "$src" "$dest_dir/" || { echo "Copy failed (permission denied?). Try: sudo cp -r $src $dest_dir/"; return 1; }
-  local manifest_json="$dest_dir/openfdd/manifest.json"
-  if [[ -f "$manifest_json" ]] && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
-    local ver
-    ver=$(grep -E '^version\s*=' "$REPO_ROOT/pyproject.toml" | sed -n 's/.*=\s*"\(.*\)".*/\1/p')
-    if [[ -n "$ver" ]]; then
-      sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$ver\"/" "$manifest_json"
-      echo "Set integration version to $ver (from pyproject.toml)"
-    fi
-  fi
-  local container="${OFDD_HA_CONTAINER:-homeassistant}"
-  if docker ps -q -f "name=^${container}$" 2>/dev/null | grep -q .; then
-    echo "Restarting HA container: $container"
-    docker restart "$container"
-  else
-    echo "Container '$container' not running; skipping restart."
-    echo "  (Bootstrap does not clone or start HA. Run HA yourself, e.g. docker run ... -v $ha_config:/config ... then re-run bootstrap to copy integration and restart.)"
-  fi
-  return 0
-}
-
-build_ha_addon_image() {
-  local ADDON_DIR="$STACK_DIR/ha_addon/openfdd"
-  if [[ ! -f "$ADDON_DIR/Dockerfile" ]]; then
-    echo "HA addon not found at $ADDON_DIR (no Dockerfile)."
-    return 1
-  fi
-  local ADDON_VERSION
-  ADDON_VERSION=$(grep -E '^version\s*=' "$REPO_ROOT/pyproject.toml" | sed -n 's/.*=\s*"\(.*\)".*/\1/p')
-  [[ -n "$ADDON_VERSION" ]] && sed -i "s/^version:.*/version: \"$ADDON_VERSION\"/" "$ADDON_DIR/config.yaml" && echo "Addon config.yaml version set to $ADDON_VERSION (from pyproject.toml)"
-  echo "=== Building Home Assistant addon image (stack/ha_addon) ==="
-  (cd "$REPO_ROOT" && docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19 -f stack/ha_addon/openfdd/Dockerfile -t openfdd-addon:local .) || true
-  echo "Addon image: openfdd-addon:local"
-}
-
-copy_addon_folder_if_requested() {
-  local addons_dir="${OFDD_HA_ADDONS:-}"
-  [[ -z "$addons_dir" ]] && return 0
-  if [[ ! -d "$addons_dir" ]]; then
-    echo "OFDD_HA_ADDONS is set but not a directory: $addons_dir (skipping addon folder copy)"
-    return 0
-  fi
-  echo "=== Copying stack/ha_addon to $addons_dir ==="
-  mkdir -p "$addons_dir"
-  cp -r "$STACK_DIR/ha_addon/"* "$addons_dir/" || { echo "Copy failed (permission?). Try: sudo cp -r $STACK_DIR/ha_addon/* $addons_dir/"; return 1; }
-  echo "Addon folder copied. Add the Open-FDD addon in HA Supervisor if needed."
-  return 0
-}
-
-# -----------------------------
-# --ha-addon only (no --with-ha): build HA addon image, optionally install integration, then exit
-# -----------------------------
-if $HA_ADDON_BUILD && ! $WITH_HA; then
-  check_prereqs
-  build_ha_addon_image || exit 1
-  if [[ -f "$STACK_DIR/.env" ]]; then
-    addon_key="$(grep -E '^OFDD_API_KEY=.' "$STACK_DIR/.env" 2>/dev/null | sed 's/^OFDD_API_KEY=//')"
-    if [[ -n "$addon_key" ]]; then
-      echo "Paste this into the addon's api_key option (and into the HA integration if needed):"
-      echo "$addon_key"
-    fi
-  fi
-  if $HA_INSTALL_INTEGRATION; then
-    install_ha_integration_and_restart || exit 1
-  fi
-  exit 0
-fi
-
-# --ha-install-integration only (no addon, no stack, no --with-ha): copy integration and restart HA, then exit
-if $HA_INSTALL_INTEGRATION && ! $WITH_HA; then
-  check_prereqs
-  install_ha_integration_and_restart || exit 1
-  exit 0
-fi
-
-# -----------------------------
 # Early exit modes
 # -----------------------------
 if $VERIFY_ONLY && ! $UPDATE_PULL_REBUILD; then
@@ -979,29 +835,3 @@ echo ""
 echo "Verify all services: ./scripts/bootstrap.sh --verify"
 echo "View logs: $(docker_compose_cmd) -f stack/docker-compose.yml logs -f"
 echo ""
-
-# -----------------------------
-# --with-ha: also build addon image, optionally copy addon folder, copy integration and restart HA
-# -----------------------------
-if $WITH_HA; then
-  echo "=== --with-ha: addon + integration ==="
-  build_ha_addon_image || true
-  copy_addon_folder_if_requested || true
-  if [[ -n "$WITH_HA_PATH" ]]; then
-    HA_CONFIG_PATH="$WITH_HA_PATH"
-  fi
-  if [[ -n "${HA_CONFIG_PATH:-${OFDD_HA_CONFIG:-}}" ]]; then
-    install_ha_integration_and_restart || { echo "Integration install failed (check path and container name)."; exit 1; }
-    echo "HA integration copied and container restarted."
-  else
-    echo "Set OFDD_HA_CONFIG or pass path: ./scripts/bootstrap.sh --with-ha /path/to/ha/config"
-  fi
-  if [[ -f "$STACK_DIR/.env" ]]; then
-    addon_key="$(grep -E '^OFDD_API_KEY=.' "$STACK_DIR/.env" 2>/dev/null | sed 's/^OFDD_API_KEY=//')"
-    if [[ -n "$addon_key" ]]; then
-      echo "API key for addon/integration: $addon_key"
-    fi
-  fi
-  echo "=== --with-ha done ==="
-  exit 0
-fi

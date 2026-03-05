@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { Point, Equipment } from "@/types/api";
+import { pointGroupKey, uniquePointsForDropdown } from "./point-picker-utils";
 
 const MAX_POINTS = 20;
 
@@ -34,9 +35,10 @@ export function PointPicker({
 
   const equipMap = new Map(equipment.map((e) => [e.id, e]));
 
+  const uniquePoints = uniquePointsForDropdown(points);
   const grouped = new Map<string, Point[]>();
-  for (const p of points) {
-    const key = p.equipment_id ?? "__unassigned__";
+  for (const p of uniquePoints) {
+    const key = pointGroupKey(p);
     const arr = grouped.get(key) ?? [];
     arr.push(p);
     grouped.set(key, arr);

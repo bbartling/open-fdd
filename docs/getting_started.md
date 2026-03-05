@@ -3,6 +3,8 @@ title: Getting Started
 nav_order: 3
 ---
 
+> **TODO:** This document previously referenced Home Assistant (HA) setup. HA integration has been removed from the project; any remaining HA mentions are for reference only and may be outdated.
+
 # Getting Started
 
 This page covers **prerequisites** and the **bootstrap script**: how to get the Open-FDD platform running. For deeper directions on verification, operations, data modeling, and rules, see the [How-to Guides](howto/verification).
@@ -29,8 +31,6 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    - **Grafana:** not started by default; use `./scripts/bootstrap.sh --with-grafana` then http://localhost:3000 (admin/admin)
 
 3. **Optional:** Set `OFDD_*` in `stack/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
-
-**New to Open-FDD and want to run Home Assistant on the same Linux machine?** See [Quick setup: Open-FDD + Home Assistant](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine) for a complete, copy-paste-ready guide (Open-FDD stack, HA in Docker, custom integration, API key, and troubleshooting).
 
 ---
 
@@ -86,9 +86,6 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
-| `--ha-addon` | Build HA addon image only (`openfdd-addon:local`); then exit. Run after full bootstrap if you use the addon. |
-| `--ha-install-integration [PATH]` | Copy custom_components/openfdd into HA config and restart HA container. PATH = HA config dir; uses `OFDD_HA_CONFIG` if omitted. |
-| `--with-ha [PATH]` | Full stack + HA addon image + copy integration (optional addon folder). PATH = HA config dir. |
 
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 

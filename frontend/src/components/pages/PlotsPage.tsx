@@ -97,6 +97,8 @@ interface TrendChartProps {
   start: string;
   end: string;
   selectedFaultIds: string[];
+  /** When the user zooms (brush), report the displayed time range for CSV download. */
+  onDisplayRangeChange?: (displayStart: string, displayEnd: string) => void;
 }
 
 function TrendChart({
@@ -106,6 +108,7 @@ function TrendChart({
   start,
   end,
   selectedFaultIds,
+  onDisplayRangeChange,
 }: TrendChartProps) {
   const [brushRange, setBrushRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
 
@@ -146,9 +149,9 @@ function TrendChart({
   const faultSegments = useMemo(() => {
     if (!faultData?.series?.length || selectedFaultIds.length === 0) return [];
     const bucketMs = faultBucketMs(start, end);
-    const set = new Set(selectedFaultIds);
+    const set = new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean));
     return faultData.series
-      .filter((s) => s.value > 0 && set.has(s.metric))
+      .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
       .map((s) => {
         const t = new Date(s.time).getTime();
         return { fault_id: s.metric, x1: t, x2: t + bucketMs };
@@ -158,7 +161,25 @@ function TrendChart({
   const faultColor = (faultId: string) => COLORS[selectedFaultIds.indexOf(faultId) % COLORS.length];
 
   const fullData = useMemo(() => {
-    if (data?.length) return data;
+    if (data?.length) {
+      const timeSet = new Set<number>(data.map((d) => d.timestamp));
+      if (faultData?.series?.length && selectedFaultIds.length > 0) {
+        const set = new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean));
+        const bucketMs = faultBucketMs(start, end);
+        faultData.series
+          .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
+          .forEach((s) => {
+            const t = new Date(s.time).getTime();
+            timeSet.add(t);
+            timeSet.add(t + bucketMs);
+          });
+      }
+      const sorted = Array.from(timeSet).sort((a, b) => a - b);
+      return sorted.map((timestamp) => {
+        const existing = data.find((d) => d.timestamp === timestamp);
+        return existing ?? { timestamp };
+      });
+    }
     if (faultData?.series?.length) {
       const times = new Set<number>();
       faultData.series.forEach((s) => times.add(new Date(s.time).getTime()));
@@ -167,7 +188,7 @@ function TrendChart({
         .map((timestamp) => ({ timestamp }));
     }
     return [];
-  }, [data, faultData]);
+  }, [data, faultData, selectedFaultIds, start, end]);
 
   const displayedData = useMemo(() => {
     if (!fullData.length) return [];
@@ -177,6 +198,24 @@ function TrendChart({
     const hi = Math.max(0, Math.min(endIndex, fullData.length - 1));
     return fullData.slice(Math.min(lo, hi), Math.max(lo, hi) + 1);
   }, [fullData, brushRange]);
+
+  // Report effective display range for CSV download (zoomed range when brush active, else full range).
+  useEffect(() => {
+    if (!onDisplayRangeChange) return;
+    if (fullData.length === 0) {
+      onDisplayRangeChange(start, end);
+      return;
+    }
+    if (brushRange != null) {
+      const lo = Math.max(0, Math.min(brushRange.startIndex, fullData.length - 1));
+      const hi = Math.max(0, Math.min(brushRange.endIndex, fullData.length - 1));
+      const displayStart = fullData[Math.min(lo, hi)].timestamp;
+      const displayEnd = fullData[Math.max(lo, hi)].timestamp;
+      onDisplayRangeChange(new Date(displayStart).toISOString(), new Date(displayEnd).toISOString());
+    } else {
+      onDisplayRangeChange(start, end);
+    }
+  }, [onDisplayRangeChange, fullData, brushRange, start, end]);
 
   const handleBrushChange = useCallback((range: { startIndex?: number; endIndex?: number } | null) => {
     if (range == null || range.startIndex == null || range.endIndex == null) {
@@ -327,6 +366,8 @@ export function PlotsPage() {
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
   const [selectedFaultIds, setSelectedFaultIds] = useState<string[]>([]);
   const [downloadLoading, setDownloadLoading] = useState(false);
+  /** Time range currently shown on the chart (zoomed when brush active). Used for CSV download. */
+  const [displayRange, setDisplayRange] = useState<{ start: string; end: string } | null>(null);
 
   const [preset, setPreset] = useState<DatePreset>("7d");
   const now = new Date();
@@ -348,8 +389,9 @@ export function PlotsPage() {
     if (!selectedSiteId) return;
     setDownloadLoading(true);
     try {
-      const startDate = start.slice(0, 10);
-      const endDate = end.slice(0, 10);
+      const range = displayRange ?? { start, end };
+      const startDate = range.start.slice(0, 10);
+      const endDate = range.end.slice(0, 10);
       const pointIds =
         selectedPointIds.length > 0 ? selectedPointIds : pollingPoints.map((p) => p.id);
       await downloadTimeseriesCsv(
@@ -446,6 +488,7 @@ export function PlotsPage() {
           start={start}
           end={end}
           selectedFaultIds={selectedFaultIds}
+          onDisplayRangeChange={(s, e) => setDisplayRange({ start: s, end: e })}
         />
       </div>
     </div>

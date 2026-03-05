@@ -1,5 +1,7 @@
 # React frontend evaluation
 
+> **TODO:** This document mentions Home Assistant (HA) integration in places. HA integration has been removed from the project; those references are for reference only and may be outdated.
+
 This document summarizes the quality and feature coverage of the Open-FDD React frontend (CRUD UI), its alignment with the API and the Grafana cookbook, and recommendations for WebSockets and the legacy static UI.
 
 ---

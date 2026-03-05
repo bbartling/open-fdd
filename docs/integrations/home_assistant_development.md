@@ -1,5 +1,7 @@
 # Home Assistant integration development reference
 
+> **TODO:** Home Assistant integration has been removed from this project. This doc is kept for reference only; stack/ha_integration and stack/ha_addon no longer exist.
+
 This page summarizes **Home Assistant developer docs** for building and aligning custom integrations. The official site is [developers.home-assistant.io](https://developers.home-assistant.io/); links below point to the canonical paths (structure may change).
 
 Open-FDD’s integration is a **custom integration** living in `stack/ha_integration/custom_components/openfdd/`. It is **not** part of Home Assistant Core; you do **not** fork [home-assistant/core](https://github.com/home-assistant/core) to develop it. Core is for contributions that will be merged upstream; custom integrations are installed via `custom_components/` or HACS.
