@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSiteContext } from "@/contexts/site-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { apiFetchText } from "@/lib/api";
+import { useRulesList } from "@/hooks/use-rules";
 import {
   Table,
   TableHeader,
@@ -179,6 +181,90 @@ function faultPeriodRange(): { start: string; end: string } {
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
+function RuleFilesSection() {
+  const { data, isLoading } = useRulesList();
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  const openFile = useCallback((filename: string) => {
+    setSelectedFile(filename);
+    setFileContent(null);
+    setFileError(null);
+    setFileLoading(true);
+    apiFetchText(`/rules/${encodeURIComponent(filename)}`)
+      .then(setFileContent)
+      .catch((e: Error) => setFileError(e.message))
+      .finally(() => setFileLoading(false));
+  }, []);
+
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
+  const files = data?.files ?? [];
+  const rulesDir = data?.rules_dir ?? "";
+
+  return (
+    <div className="mb-8">
+      <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+        FDD rule files (YAML)
+      </h2>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Rule files on disk (config rules_dir). Fault definitions above come from the database.
+      </p>
+      <Card>
+        <CardContent className="pt-4">
+          {data?.error && (
+            <p className="mb-3 text-sm text-destructive">{data.error}</p>
+          )}
+          {rulesDir && (
+            <p className="mb-3 font-mono text-xs text-muted-foreground">
+              {rulesDir}
+            </p>
+          )}
+          {files.length === 0 && !data?.error ? (
+            <p className="text-sm text-muted-foreground">No .yaml files in rules_dir.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {files.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => openFile(name)}
+                  className={`rounded-md border px-3 py-1.5 font-mono text-sm transition-colors ${
+                    selectedFile === name
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:bg-muted"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedFile && (
+            <div className="mt-4 border-t pt-4">
+              <p className="mb-2 font-mono text-xs text-muted-foreground">
+                {selectedFile}
+              </p>
+              {fileLoading && (
+                <Skeleton className="h-48 w-full rounded-md" />
+              )}
+              {fileError && (
+                <p className="text-sm text-destructive">{fileError}</p>
+              )}
+              {fileContent != null && !fileLoading && (
+                <pre className="max-h-96 overflow-auto rounded-md border bg-muted/50 p-3 text-xs">
+                  {fileContent}
+                </pre>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function FaultsPage() {
   const { selectedSiteId } = useSiteContext();
   const [period] = useState(() => faultPeriodRange());
@@ -193,17 +279,21 @@ export function FaultsPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Faults</h1>
       <FaultDefinitionsSection />
+      <RuleFilesSection />
       {summary != null && (
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardContent className="pt-6">
-              <p className="text-sm text-muted-foreground">Fault count (last 7 d)</p>
+              <p className="text-sm text-muted-foreground">Flagged in period (last 7 d)</p>
               <p
                 className={`mt-1 text-3xl font-semibold tabular-nums ${
                   (summary.total_faults ?? 0) > 0 ? "text-destructive" : "text-muted-foreground"
                 }`}
               >
                 {summary.total_faults ?? 0}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sum of fault flags in range (matches chart below)
               </p>
             </CardContent>
           </Card>

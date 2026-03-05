@@ -33,10 +33,36 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-- **Grafana:** http://localhost:3000 (admin/admin)
-- **API:** http://localhost:8000/docs
-- **BACnet Swagger:** http://localhost:8080/docs ([diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server))
+**Endpoints (direct access):**
 
+| What | URL | Notes |
+|------|-----|--------|
+| **API (REST + Swagger)** | http://localhost:8000/docs | CRUD, config, data-model, download, analytics. |
+| **Frontend (React)** | http://localhost:5173 | Dashboard, sites, points, faults, plots. |
+| **Caddy (reverse proxy)** | http://localhost:80 | Default `stack/caddy/Caddyfile` proxies to frontend only. See [Protecting the entire API with Caddy](#protecting-the-entire-api-with-caddy) below. |
+| **TimescaleDB** | localhost:5432 | Database `openfdd` (user `postgres`); keep internal. |
+| **BACnet (diy-bacnet-server)** | http://localhost:8080/docs | JSON-RPC API; UDP 47808 for BACnet/IP. |
+| **Grafana** | http://localhost:3000 | Optional: `./scripts/bootstrap.sh --with-grafana` (admin/admin). |
+
+**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React frontend connects with `?token=<API_KEY>` when `VITE_OFDD_API_KEY` is set; Bearer auth is used for REST. See [Security & Caddy](security) and [API Reference](api/platform).
+
+---
+
+### Protecting the entire API with Caddy
+
+The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no auth, API not behind Caddy). To protect the **entire** stack behind one entry point (basic auth, API + WebSocket + frontend, optional Grafana):
+
+1. **Use a Caddyfile that:**
+   - Listens on one port (e.g. `:80` or `:8088`).
+   - Enables **basic_auth** for all routes (one login for the browser).
+   - Proxies **`/api/*`**, **`/ws/*`**, **`/docs`**, **`/redoc`**, **`/openapi.json`**, **`/health`**, and other API paths to **`api:8000`**.
+   - Proxies **`/grafana`** to **`grafana:3000`** if you use `--with-grafana`.
+   - Proxies **`/*`** to the **frontend** (e.g. `frontend:5173`).
+   - When proxying to the API, adds **`header_up X-Caddy-Auth <secret>`** so the API accepts requests that passed basic auth (set `OFDD_CADDY_INTERNAL_SECRET` in the API container to the same value).
+
+2. **Full steps:** See [Security and Caddy](security) — Quick bootstrap with Caddy and basic auth, default password change, and troubleshooting (401s, WebSocket behind Caddy).
+
+3. **Caddyfile location:** `stack/caddy/Caddyfile`. A full example (basic auth, API, WebSocket, frontend) is in [Security — Caddyfile for protecting the entire API](security#caddyfile-for-protecting-the-entire-api).
 
 ---
 
@@ -67,11 +93,13 @@ cd open-fdd
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| API | 8000 | CRUD API, Swagger docs |
-| Grafana | 3000 | Dashboards |
-| TimescaleDB | 5432 | PostgreSQL |
-| diy-bacnet-server | 8080 | JSON-RPC API (HTTP) |
-| diy-bacnet-server | 47808 | BACnet/IP (UDP) |
+| **Caddy** | 80 | Reverse proxy (default: frontend only; see [Security](security) to protect API + WebSocket + frontend) |
+| **API** | 8000 | REST API, Swagger `/docs`, WebSocket `/ws/events` |
+| **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
+| **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
+| **Grafana** | 3000 | Dashboards (optional: `--with-grafana`) |
+| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP) |
+| **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
 
 ---
 

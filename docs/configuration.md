@@ -45,7 +45,9 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
-**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). Hot reload: edit YAML → trigger FDD run (or wait for schedule) → view in Grafana. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
+**Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
+
+**Hot reload (AFDD tuning):** The project supports **hot reloading of YAML rule files** so the AFDD maintainer can make tweaks and adjustments for fault tuning without restarting the platform. The FDD loop loads rules from `rules_dir` on every run; edit YAML → trigger a run (or wait for the schedule) → results reflect the new params. The `rules_dir` path itself is **RDF-driven**: it comes from platform config (GET `/config` or the same graph that backs PUT `/config`). Unit tests that cover this behaviour: `open_fdd/tests/platform/test_rules_loader.py` (hot-reload hash and reload-on-change) and `open_fdd/tests/platform_api/test_rules.py` (list/read rule files from configured `rules_dir`). A future CRUD-driven rule editor in the frontend (with the same hot-reload semantics) would be a possible evolution; today, YAML in `analyst/rules` is the supported path.
 
 **Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
 

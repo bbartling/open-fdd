@@ -20,12 +20,13 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./scripts/bootstrap.sh
    ```
 
-   That’s it. The script builds and starts the full stack (DB, Grafana, API, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
+   That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
 
    - **API:** http://localhost:8000/docs  
-   - **Grafana:** http://localhost:3000 (admin/admin)  
+   - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80)  
    - **BACnet Swagger:** http://localhost:8080/docs  
-   - **DB:** localhost:5432/openfdd (postgres/postgres)
+   - **DB:** localhost:5432/openfdd (postgres/postgres)  
+   - **Grafana:** not started by default; use `./scripts/bootstrap.sh --with-grafana` then http://localhost:3000 (admin/admin)
 
 3. **Optional:** Set `OFDD_*` in `stack/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
 
@@ -64,20 +65,32 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 
 **Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. For BACnet data you can use the **data model** (discover via API → import points) or a CSV; see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `stack/` if needed.
 
-**Bootstrap options:**
+**Bootstrap options:** Run `./scripts/bootstrap.sh --help` for the full list. Summary:
 
 | Option | Effect |
 |--------|--------|
-| *(none)* | Build and start full stack. Prints API key if one was generated (see [Integrations — Home Assistant](integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine)). |
-| `--ha-addon` | Build HA addon image only (`openfdd-addon:local` from `stack/ha_addon`); then exit. **Run after full bootstrap** if you use the addon: `./scripts/bootstrap.sh && ./scripts/bootstrap.sh --ha-addon`. Prints the API key for the addon/integration. |
-| `--verify` | List containers and test DB reachability; exit. Does not start or stop anything. |
-| `--minimal` | Raw BACnet only: DB + Grafana + BACnet server + scraper. No FDD, weather, or API. See [Overview — Ways to deploy](overview#ways-to-deploy). |
-| `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. **Database and all other data are retained.** Use when dashboards or datasource are wrong. |
-| `--retention-days N` | TimescaleDB retention: drop chunks older than N days (default 365). Written to `stack/.env` as `OFDD_RETENTION_DAYS`. |
-| `--log-max-size SIZE` | Docker log max size per file (e.g. `100m`, `50m`). Default `100m`. Env: `OFDD_LOG_MAX_SIZE`. |
-| `--log-max-files N` | Docker log max number of files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
+| *(none)* | Build and start full stack (DB, API, frontend, Caddy, BACnet server, scrapers, FDD loop). Prints API key if generated. Grafana **not** started by default. |
+| `--with-grafana` | Include Grafana; then accessible at http://localhost:3000 or via Caddy at `/grafana` if using a full Caddyfile. |
+| `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
+| `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
+| `--test`, `--verify-code` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
+| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `weather-scraper`. |
+| `--build-all` | Rebuild and restart all services; then exit. |
+| `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |
+| `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |
+| `--maintenance` | Safe Docker prune only (no volume prune). |
+| `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. DB and other data retained. |
+| `--reset-data` | Delete all sites via API and POST /data-model/reset (testing). |
+| `--retention-days N` | TimescaleDB retention in days (default 365). Env: `OFDD_RETENTION_DAYS`. |
+| `--log-max-size SIZE` | Docker log max size per file (default `100m`). Env: `OFDD_LOG_MAX_SIZE`. |
+| `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
+| `--install-docker` | Attempt Docker install (Linux) then continue. |
+| `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
+| `--ha-addon` | Build HA addon image only (`openfdd-addon:local`); then exit. Run after full bootstrap if you use the addon. |
+| `--ha-install-integration [PATH]` | Copy custom_components/openfdd into HA config and restart HA container. PATH = HA config dir; uses `OFDD_HA_CONFIG` if omitted. |
+| `--with-ha [PATH]` | Full stack + HA addon image + copy integration (optional addon folder). PATH = HA config dir. |
 
-To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`. From repo root you can also run `docker compose -f stack/docker-compose.yml up -d --build` to rebuild and restart only.
+To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
 ---
 

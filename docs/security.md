@@ -45,6 +45,100 @@ When `VITE_OFDD_API_KEY` is set (at frontend build time), the frontend sends it 
 
 ---
 
+## Caddyfile for protecting the entire API
+
+The default **`stack/caddy/Caddyfile`** in the repo only proxies **port 80 → frontend** (no basic auth, API not behind Caddy). To protect the **entire** API (REST, WebSocket, docs) and frontend behind one entry point with basic auth, replace the Caddyfile with a block like the following. Use the same **secret** in `header_up X-Caddy-Auth` and in the API container env **`OFDD_CADDY_INTERNAL_SECRET`** so the API trusts requests that passed Caddy’s basic auth.
+
+```caddyfile
+# Listen on port 80 (or use :8088 and map 8088:8088 in docker-compose).
+:80 {
+	# Optional: basic auth (generate hash: docker run --rm caddy:2 caddy hash-password --plaintext 'your_password')
+	# basic_auth /* {
+	#   openfdd <bcrypt_hash>
+	# }
+
+	# API: REST, Swagger, WebSocket. Set OFDD_CADDY_INTERNAL_SECRET in the API container to match the value below.
+	handle /ws/* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /docs {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /redoc {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /openapi.json {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /health {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /config* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /sites* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /equipment* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /points* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /faults* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /data-model* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /download* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /analytics* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /bacnet* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /jobs* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+	handle /capabilities* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
+
+	# Optional: Grafana when started with --with-grafana
+	# handle /grafana/* {
+	#   reverse_proxy grafana:3000
+	# }
+
+	# Frontend (React)
+	handle /* {
+		reverse_proxy frontend:5173
+	}
+}
+```
+
+Then restart Caddy and recreate the API so it has `OFDD_CADDY_INTERNAL_SECRET` set: `./scripts/bootstrap.sh --build caddy api` (from repo root). See [Troubleshooting](#troubleshooting) if the API returns 401 or the WebSocket fails.
+
+---
+
 ## Default password and how to change it
 
 - The Caddyfile uses a **bcrypt hash** for the password. The default hash in the repo corresponds to password **`xyz`**.

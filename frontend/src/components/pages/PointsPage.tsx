@@ -191,16 +191,7 @@ export function PointsPage() {
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">Points</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Polling (data model) indicates whether the BACnet scraper polls this point; last value and time come from
-        timeseries. See{" "}
-        <a
-          href="https://github.com/open-fdd/open-fdd/blob/main/docs/modeling/sparql_cookbook.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          SPARQL cookbook
-        </a>{" "}
-        (Recipe 4 & 6) for polling in the graph.
+        timeseries.
       </p>
       {selectedSiteId ? <SitePointsView siteId={selectedSiteId} /> : <AllPointsView />}
     </div>

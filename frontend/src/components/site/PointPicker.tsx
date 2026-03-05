@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import type { Point, Equipment } from "@/types/api";
 
-const MAX_POINTS = 8;
+const MAX_POINTS = 20;
 
 interface PointPickerProps {
   points: Point[];
   equipment: Equipment[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  label?: string;
 }
 
 export function PointPicker({
@@ -15,6 +16,7 @@ export function PointPicker({
   equipment,
   selectedIds,
   onChange,
+  label = "Select points",
 }: PointPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -65,12 +67,14 @@ export function PointPicker({
         type="button"
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="inline-flex h-10 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 text-sm font-medium transition-all duration-200 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex h-9 min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen(!open)}
       >
-        {selectedIds.length === 0
-          ? "Select points\u2026"
-          : `${selectedIds.length} point${selectedIds.length > 1 ? "s" : ""} selected`}
+        <span className="truncate">
+          {selectedIds.length === 0
+            ? `${label}\u2026`
+            : `${selectedIds.length} series`}
+        </span>
         <svg
           className="h-4 w-4 text-muted-foreground"
           fill="none"
@@ -88,19 +92,19 @@ export function PointPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-50 mt-2 w-80 rounded-2xl border border-border/60 bg-card/95 shadow-xl shadow-black/[0.08] backdrop-blur-lg">
-          <div className="border-b border-border/60 p-2.5">
+        <div className="absolute left-0 z-50 mt-1.5 w-96 rounded-xl border border-border bg-card shadow-xl">
+          <div className="border-b border-border p-2">
             <input
               type="text"
-              placeholder="Search points\u2026"
+              placeholder="Search by name or external_id\u2026"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm transition-colors duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               autoFocus
             />
           </div>
 
-          <div className="max-h-64 overflow-y-auto p-1.5">
+          <div className="max-h-80 overflow-y-auto p-1.5">
             {Array.from(grouped.entries()).map(([eqId, eqPoints]) => {
               const filtered = eqPoints.filter(matchesSearch);
               if (filtered.length === 0) return null;
@@ -112,7 +116,7 @@ export function PointPicker({
 
               return (
                 <div key={eqId}>
-                  <div className="px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="sticky top-0 z-10 bg-muted/80 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-sm">
                     {eqName}
                   </div>
                   {filtered.map((p) => {
@@ -122,18 +126,23 @@ export function PointPicker({
                     return (
                       <label
                         key={p.id}
-                        className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors duration-150 hover:bg-muted/50 ${disabled ? "pointer-events-none opacity-40" : ""}`}
+                        className={`flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-muted/60 ${disabled ? "pointer-events-none opacity-50" : ""}`}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
                           disabled={disabled}
                           onChange={() => toggle(p.id)}
-                          className="accent-primary"
+                          className="h-4 w-4 shrink-0 rounded border-border accent-primary"
                         />
-                        <span className="truncate">
+                        <span className="min-w-0 truncate font-medium">
                           {p.object_name ?? p.external_id}
                         </span>
+                        {p.external_id && p.object_name !== p.external_id && (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {p.external_id}
+                          </span>
+                        )}
                         {p.unit && (
                           <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
                             {p.unit}
@@ -148,13 +157,13 @@ export function PointPicker({
           </div>
 
           {selectedIds.length > 0 && (
-            <div className="border-t border-border/60 px-2.5 py-2">
+            <div className="border-t border-border px-2.5 py-2">
               <button
                 type="button"
-                className="text-xs font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => onChange([])}
               >
-                Clear selection
+                Clear all
               </button>
             </div>
           )}

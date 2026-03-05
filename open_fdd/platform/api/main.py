@@ -22,6 +22,7 @@ from open_fdd.platform.api import (
     jobs as jobs_router,
     points,
     equipment,
+    rules as rules_router,
     run_fdd,
     sites,
     timeseries as timeseries_router,
@@ -189,6 +190,7 @@ app.include_router(timeseries_router.router)
 app.include_router(entities.router)
 app.include_router(analytics.router)
 app.include_router(faults.router)
+app.include_router(rules_router.router)
 app.include_router(jobs_router.router)
 app.include_router(bacnet.router)
 app.include_router(run_fdd.router)

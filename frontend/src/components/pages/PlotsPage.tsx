@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -6,9 +6,9 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  Brush,
+  ReferenceArea,
 } from "recharts";
-import { GridLayout, type Layout, type LayoutItem } from "react-grid-layout";
-import "react-grid-layout/css/styles.css";
 import {
   ChartContainer,
   ChartTooltip,
@@ -21,23 +21,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
 import { usePoints, useEquipment } from "@/hooks/use-sites";
 import { useTrendingData } from "@/hooks/use-trending";
-import {
-  useFaultTimeseries,
-  useFaultDefinitions,
-} from "@/hooks/use-faults";
+import { useFaultDefinitions, useFaultTimeseries } from "@/hooks/use-faults";
 import { DateRangeSelect } from "@/components/site/DateRangeSelect";
 import type { DatePreset } from "@/components/site/DateRangeSelect";
 import { PointPicker } from "@/components/site/PointPicker";
-import type { Point, Equipment } from "@/types/api";
+import { FaultPicker } from "@/components/site/FaultPicker";
+import type { Point } from "@/types/api";
 import { downloadTimeseriesCsv } from "@/lib/csv";
-import {
-  GripVertical,
-  Plus,
-  Copy,
-  Trash2,
-  Download,
-  AlertTriangle,
-} from "lucide-react";
+import { Download } from "lucide-react";
 
 const COLORS = [
   "hsl(215, 60%, 42%)",
@@ -49,15 +40,6 @@ const COLORS = [
   "hsl(330, 55%, 45%)",
   "hsl(60, 65%, 38%)",
 ];
-
-type PanelType = "timeseries" | "faults";
-
-interface DashboardPanel {
-  id: string;
-  type: PanelType;
-  title: string;
-  pointIds: string[];
-}
 
 function presetRange(preset: DatePreset): { start: string; end: string } {
   const end = new Date();
@@ -83,27 +65,6 @@ function formatLocalDT(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function pivotFaultSeries(series: { time: string; metric: string; value: number }[]) {
-  const byTs = new Map<number, Record<string, number>>();
-  for (const r of series) {
-    const t = new Date(r.time).getTime();
-    if (!byTs.has(t)) byTs.set(t, {});
-    byTs.get(t)![r.metric] = r.value;
-  }
-  return Array.from(byTs.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([timestamp, rest]) => ({ timestamp, ...rest }));
-}
-
-function nextId(panels: DashboardPanel[]): string {
-  const nums = panels
-    .map((p) => /^panel-(\d+)$/.exec(p.id)?.[1])
-    .filter(Boolean)
-    .map(Number);
-  const max = nums.length ? Math.max(...nums) : 0;
-  return `panel-${max + 1}`;
-}
-
 function timeFormat(ts: number) {
   return new Date(ts).toLocaleDateString([], {
     month: "short",
@@ -120,25 +81,51 @@ function tooltipFormat(ts: number) {
   });
 }
 
-// --- Timeseries panel (BACnet + weather points) ---
-interface TimeseriesPanelContentProps {
+const CHART_MIN_HEIGHT = 360;
+const OVERVIEW_HEIGHT = 56;
+
+/** Bucket width in ms for fault swim lanes (hour or day from API). */
+function faultBucketMs(start: string, end: string): number {
+  const span = new Date(end).getTime() - new Date(start).getTime();
+  return span <= 2 * 24 * 60 * 60 * 1000 ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+}
+
+interface TrendChartProps {
   siteId: string;
   pointIds: string[];
   points: Point[];
   start: string;
   end: string;
-  height: number;
+  selectedFaultIds: string[];
 }
 
-function TimeseriesPanelContent({
+function TrendChart({
   siteId,
   pointIds,
   points,
   start,
   end,
-  height,
-}: TimeseriesPanelContentProps) {
+  selectedFaultIds,
+}: TrendChartProps) {
+  const [brushRange, setBrushRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
+
   const { data, isLoading, error } = useTrendingData(siteId, pointIds, start, end);
+  const bucket = start && end && new Date(end).getTime() - new Date(start).getTime() < 2 * 24 * 60 * 60 * 1000 ? "hour" : "day";
+  const { data: faultData, isLoading: faultLoading } = useFaultTimeseries(
+    selectedFaultIds.length > 0 ? siteId : undefined,
+    start,
+    end,
+    bucket,
+  );
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setBrushRange(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const pointMap = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
   const config: ChartConfig = useMemo(() => {
     const c: ChartConfig = {};
@@ -156,279 +143,175 @@ function TimeseriesPanelContent({
 
   const keys = pointIds.map((id) => pointMap.get(id)?.external_id ?? id).filter(Boolean);
 
-  if (pointIds.length === 0) {
+  const faultSegments = useMemo(() => {
+    if (!faultData?.series?.length || selectedFaultIds.length === 0) return [];
+    const bucketMs = faultBucketMs(start, end);
+    const set = new Set(selectedFaultIds);
+    return faultData.series
+      .filter((s) => s.value > 0 && set.has(s.metric))
+      .map((s) => {
+        const t = new Date(s.time).getTime();
+        return { fault_id: s.metric, x1: t, x2: t + bucketMs };
+      });
+  }, [faultData, selectedFaultIds, start, end]);
+
+  const faultColor = (faultId: string) => COLORS[selectedFaultIds.indexOf(faultId) % COLORS.length];
+
+  const fullData = useMemo(() => {
+    if (data?.length) return data;
+    if (faultData?.series?.length) {
+      const times = new Set<number>();
+      faultData.series.forEach((s) => times.add(new Date(s.time).getTime()));
+      return Array.from(times)
+        .sort((a, b) => a - b)
+        .map((timestamp) => ({ timestamp }));
+    }
+    return [];
+  }, [data, faultData]);
+
+  const displayedData = useMemo(() => {
+    if (!fullData.length) return [];
+    if (!brushRange) return fullData;
+    const { startIndex, endIndex } = brushRange;
+    const lo = Math.max(0, Math.min(startIndex, fullData.length - 1));
+    const hi = Math.max(0, Math.min(endIndex, fullData.length - 1));
+    return fullData.slice(Math.min(lo, hi), Math.max(lo, hi) + 1);
+  }, [fullData, brushRange]);
+
+  const handleBrushChange = useCallback((range: { startIndex?: number; endIndex?: number } | null) => {
+    if (range == null || range.startIndex == null || range.endIndex == null) {
+      setBrushRange(null);
+      return;
+    }
+    setBrushRange({ startIndex: range.startIndex, endIndex: range.endIndex });
+  }, []);
+
+  const loadingPoints = pointIds.length > 0 && isLoading;
+  const loadingFaultsOnly = pointIds.length === 0 && selectedFaultIds.length > 0 && faultLoading;
+  const hasAnyData = fullData.length > 0;
+
+  if (pointIds.length === 0 && selectedFaultIds.length === 0) {
     return (
       <div
-        className="flex items-center justify-center text-sm text-muted-foreground"
-        style={{ height: Math.max(120, height - 80) }}
+        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
+        style={{ minHeight: CHART_MIN_HEIGHT }}
       >
-        Add series using the dropdown above.
+        Select points and/or faults from the dropdowns. Drag the brush below to zoom, Escape to reset.
       </div>
     );
   }
-  if (error) {
+  if (pointIds.length > 0 && error) {
     return (
       <div
-        className="flex items-center justify-center text-sm text-destructive"
-        style={{ height: Math.max(120, height - 80) }}
+        className="flex flex-col items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 p-6 dark:border-amber-800 dark:bg-amber-950/30"
+        style={{ minHeight: CHART_MIN_HEIGHT }}
       >
-        Failed to load data.
+        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Could not load data</p>
+        <p className="text-xs text-amber-700 dark:text-amber-300">Check range and selected points, or try again.</p>
       </div>
     );
   }
-  if (isLoading) {
-    return <Skeleton className="w-full" style={{ height: Math.max(120, height - 80) }} />;
+  if (loadingPoints || loadingFaultsOnly) {
+    return <Skeleton className="w-full rounded-lg" style={{ minHeight: CHART_MIN_HEIGHT }} />;
   }
-  if (!data?.length) {
+  if (pointIds.length > 0 && !hasAnyData && !selectedFaultIds.length) {
     return (
       <div
-        className="flex items-center justify-center text-sm text-muted-foreground"
-        style={{ height: Math.max(120, height - 80) }}
+        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
+        style={{ minHeight: CHART_MIN_HEIGHT }}
       >
-        No data in this range.
+        No point data in this range. Select points or widen the date range. Add faults to see when they fire.
       </div>
     );
   }
+  if (pointIds.length === 0 && selectedFaultIds.length > 0 && !faultData?.series?.length) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
+        style={{ minHeight: CHART_MIN_HEIGHT }}
+      >
+        No fault activity in this range. Widen the date range or run FDD.
+      </div>
+    );
+  }
+
+  const chartData = displayedData.length > 0 ? displayedData : fullData;
+  const hasPointLines = pointIds.length > 0 && keys.length > 0;
 
   return (
-    <ChartContainer config={config} className="h-full w-full">
-      <ResponsiveContainer width="100%" height={Math.max(120, height - 80)}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            domain={["dataMin", "dataMax"]}
-            scale="time"
-            tickFormatter={timeFormat}
-            tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <ChartTooltip content={<ChartTooltipContent config={config} formatTime={tooltipFormat} />} />
-          <ChartLegend content={<ChartLegendContent config={config} />} />
-          {keys.map((key) => (
-            <Line
-              key={key}
-              type="monotone"
-              dataKey={key}
-              stroke={config[key]?.color}
-              strokeWidth={1.5}
-              dot={false}
-              connectNulls
-              activeDot={{ r: 3, strokeWidth: 0 }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </ChartContainer>
-  );
-}
-
-// --- Faults panel ---
-interface FaultsPanelContentProps {
-  siteId: string;
-  start: string;
-  end: string;
-  height: number;
-}
-
-function FaultsPanelContent({ siteId, start, end, height }: FaultsPanelContentProps) {
-  const bucket =
-    start &&
-    end &&
-    new Date(end).getTime() - new Date(start).getTime() < 2 * 24 * 60 * 60 * 1000
-      ? "hour"
-      : "day";
-  const { data, isLoading, error } = useFaultTimeseries(siteId, start, end, bucket);
-  const { data: definitions = [] } = useFaultDefinitions();
-
-  const chartData = useMemo(() => (data?.series ? pivotFaultSeries(data.series) : []), [data]);
-  const metrics = useMemo(() => {
-    const set = new Set<string>();
-    data?.series?.forEach((r) => set.add(r.metric));
-    return Array.from(set);
-  }, [data]);
-
-  const defMap = useMemo(() => new Map(definitions.map((d) => [d.fault_id, d])), [definitions]);
-  const config: ChartConfig = useMemo(() => {
-    const c: ChartConfig = {};
-    metrics.forEach((faultId, i) => {
-      c[faultId] = {
-        label: defMap.get(faultId)?.name ?? faultId,
-        color: COLORS[i % COLORS.length],
-      };
-    });
-    return c;
-  }, [metrics, defMap]);
-
-  if (error) {
-    return (
-      <div
-        className="flex items-center justify-center text-sm text-destructive"
-        style={{ height: Math.max(120, height - 80) }}
-      >
-        Failed to load fault history.
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex-1 min-h-0">
+        <ChartContainer config={config} className="h-full w-full">
+          <ResponsiveContainer width="100%" height="100%" minHeight={CHART_MIN_HEIGHT}>
+            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                scale="time"
+                tickFormatter={timeFormat}
+                tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ChartTooltip content={<ChartTooltipContent config={config} formatTime={tooltipFormat} />} />
+              <ChartLegend content={<ChartLegendContent config={config} />} />
+              {faultSegments.map((seg, i) => (
+                <ReferenceArea
+                  key={`${seg.fault_id}-${seg.x1}-${i}`}
+                  x1={seg.x1}
+                  x2={seg.x2}
+                  fill={faultColor(seg.fault_id)}
+                  fillOpacity={0.35}
+                  strokeOpacity={0}
+                />
+              ))}
+              {hasPointLines && keys.map((key) => (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  stroke={config[key]?.color}
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                  activeDot={{ r: 3, strokeWidth: 0 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartContainer>
       </div>
-    );
-  }
-  if (isLoading) {
-    return <Skeleton className="w-full" style={{ height: Math.max(120, height - 80) }} />;
-  }
-  if (chartData.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center text-sm text-muted-foreground"
-        style={{ height: Math.max(120, height - 80) }}
-      >
-        No fault data in this period.
-      </div>
-    );
-  }
 
-  return (
-    <ChartContainer config={config} className="h-full w-full">
-      <ResponsiveContainer width="100%" height={Math.max(120, height - 80)}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            domain={["dataMin", "dataMax"]}
-            scale="time"
-            tickFormatter={timeFormat}
-            tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-          />
-          <ChartTooltip content={<ChartTooltipContent config={config} formatTime={tooltipFormat} />} />
-          <ChartLegend content={<ChartLegendContent config={config} />} />
-          {metrics.map((key) => (
-            <Line
-              key={key}
-              type="monotone"
-              dataKey={key}
-              stroke={config[key]?.color}
-              strokeWidth={1.5}
-              dot={false}
-              connectNulls
-              activeDot={{ r: 3, strokeWidth: 0 }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </ChartContainer>
-  );
-}
-
-// --- Single dashboard panel (card with header + body) ---
-const ROW_HEIGHT = 80;
-const DEFAULT_PANEL_W = 12;
-const DEFAULT_PANEL_H = 5;
-
-interface DashboardPanelCardProps {
-  panel: DashboardPanel;
-  layoutH: number;
-  siteId: string;
-  points: Point[];
-  pollingPoints: Point[];
-  equipment: Equipment[];
-  start: string;
-  end: string;
-  onTitleChange: (id: string, title: string) => void;
-  onPointIdsChange: (id: string, pointIds: string[]) => void;
-  onDuplicate: (id: string) => void;
-  onRemove: (id: string) => void;
-}
-
-function DashboardPanelCard({
-  panel,
-  layoutH,
-  siteId,
-  points,
-  pollingPoints,
-  equipment,
-  start,
-  end,
-  onTitleChange,
-  onPointIdsChange,
-  onDuplicate,
-  onRemove,
-}: DashboardPanelCardProps) {
-  const contentHeight = layoutH * ROW_HEIGHT - 52;
-
-  return (
-    <div className="flex h-full flex-col rounded-lg border border-border bg-card shadow-sm">
-      <div className="panel-drag-handle flex flex-shrink-0 items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
-        <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" aria-hidden />
-        <input
-          type="text"
-          value={panel.title}
-          onChange={(e) => onTitleChange(panel.id, e.target.value)}
-          className="min-w-0 flex-1 rounded border-0 bg-transparent px-1 py-0.5 text-sm font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          placeholder="Panel title"
-        />
-        {panel.type === "timeseries" && (
-          <div className="flex-shrink-0">
-            <PointPicker
-              points={pollingPoints}
-              equipment={equipment}
-              selectedIds={panel.pointIds}
-              onChange={(ids) => onPointIdsChange(panel.id, ids)}
-            />
-          </div>
-        )}
-        {panel.type === "faults" && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Faults
-          </span>
-        )}
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => onDuplicate(panel.id)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="Duplicate panel"
-          >
-            <Copy className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onRemove(panel.id)}
-            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            title="Remove panel"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+      {hasAnyData && fullData.length > 0 && (
+        <div className="shrink-0 rounded border border-border/60 bg-muted/20 p-1.5">
+          <p className="mb-1 text-xs text-muted-foreground">Zoom: drag the handles or the shaded area. Press Escape to reset.</p>
+          <ResponsiveContainer width="100%" height={OVERVIEW_HEIGHT}>
+            <LineChart data={fullData} syncId="plotsZoom" margin={{ top: 0, right: 4, left: 4, bottom: 0 }}>
+              <XAxis dataKey="timestamp" type="number" scale="time" hide />
+              <YAxis hide domain={["dataMin", "dataMax"]} />
+              <Brush
+                dataKey="timestamp"
+                height={OVERVIEW_HEIGHT - 8}
+                stroke="hsl(220 13% 46%)"
+                fill="hsl(220 13% 96%)"
+                startIndex={brushRange?.startIndex ?? 0}
+                endIndex={brushRange?.endIndex ?? fullData.length - 1}
+                onChange={handleBrushChange}
+              />
+              {hasPointLines && keys.map((key) => (
+                <Line key={key} type="monotone" dataKey={key} stroke={config[key]?.color} strokeWidth={1} dot={false} isAnimationActive={false} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {panel.type === "timeseries" && (
-          <TimeseriesPanelContent
-            siteId={siteId}
-            pointIds={panel.pointIds}
-            points={points}
-            start={start}
-            end={end}
-            height={contentHeight}
-          />
-        )}
-        {panel.type === "faults" && (
-          <FaultsPanelContent siteId={siteId} start={start} end={end} height={contentHeight} />
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -437,36 +320,19 @@ export function PlotsPage() {
   const { selectedSiteId } = useSiteContext();
   const { data: points = [], isLoading: ptsLoading } = usePoints(selectedSiteId ?? undefined);
   const { data: equipment = [], isLoading: eqLoading } = useEquipment(selectedSiteId ?? undefined);
+  const { data: definitions = [] } = useFaultDefinitions();
 
-  const [panels, setPanels] = useState<DashboardPanel[]>(() => [
-    { id: "panel-1", type: "timeseries", title: "Time series", pointIds: [] },
-    { id: "panel-2", type: "faults", title: "Faults", pointIds: [] },
-  ]);
-  const [layout, setLayout] = useState<Layout>(() => [
-    { i: "panel-1", x: 0, y: 0, w: DEFAULT_PANEL_W, h: DEFAULT_PANEL_H },
-    { i: "panel-2", x: 12, y: 0, w: DEFAULT_PANEL_W, h: DEFAULT_PANEL_H },
-  ]);
+  const pollingPoints = useMemo(() => points.filter((p) => p.polling), [points]);
+
+  const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
+  const [selectedFaultIds, setSelectedFaultIds] = useState<string[]>([]);
   const [downloadLoading, setDownloadLoading] = useState(false);
-  const gridContainerRef = useRef<HTMLDivElement>(null);
-  const [gridWidth, setGridWidth] = useState(1200);
-
-  useEffect(() => {
-    const el = gridContainerRef.current;
-    if (!el) return;
-    const update = () => setGridWidth(el.getBoundingClientRect().width);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const [preset, setPreset] = useState<DatePreset>("7d");
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const [customStart, setCustomStart] = useState(formatLocalDT(weekAgo));
   const [customEnd, setCustomEnd] = useState(formatLocalDT(now));
-
-  const pollingPoints = useMemo(() => points.filter((p) => p.polling), [points]);
 
   const { start, end } = useMemo(() => {
     if (preset === "custom") {
@@ -478,84 +344,14 @@ export function PlotsPage() {
     return presetRange(preset);
   }, [preset, customStart, customEnd]);
 
-  const layoutMap = useMemo(
-    () => new Map<string, LayoutItem>(layout.map((l: LayoutItem) => [l.i, l])),
-    [layout],
-  );
-
-  const addPanel = useCallback(
-    (type: PanelType) => {
-      const newId = nextId(panels);
-      const maxY = layout.length
-        ? Math.max(...layout.map((l: LayoutItem) => l.y + l.h))
-        : 0;
-      setPanels((prev: DashboardPanel[]) => [
-        ...prev,
-        {
-          id: newId,
-          type,
-          title: type === "faults" ? "Faults" : "New panel",
-          pointIds: [],
-        },
-      ]);
-      setLayout((prev: Layout) => [
-        ...prev,
-        { i: newId, x: 0, y: maxY, w: DEFAULT_PANEL_W, h: DEFAULT_PANEL_H },
-      ]);
-    },
-    [panels, layout],
-  );
-
-  const duplicatePanel = useCallback(
-    (id: string) => {
-      const panel = panels.find((p) => p.id === id);
-      if (!panel) return;
-      const newId = nextId(panels);
-      const layoutItem = layout.find((l: LayoutItem) => l.i === id);
-      const maxY = layout.length ? Math.max(...layout.map((l: LayoutItem) => l.y + l.h)) : 0;
-      setPanels((prev: DashboardPanel[]) => [...prev, { ...panel, id: newId, title: `${panel.title} (copy)` }]);
-      setLayout((prev: Layout) => [
-        ...prev,
-        {
-          i: newId,
-          x: layoutItem?.x ?? 0,
-          y: maxY,
-          w: layoutItem?.w ?? DEFAULT_PANEL_W,
-          h: layoutItem?.h ?? DEFAULT_PANEL_H,
-        },
-      ]);
-    },
-    [panels, layout],
-  );
-
-  const removePanel = useCallback((id: string) => {
-    setPanels((prev: DashboardPanel[]) => prev.filter((p) => p.id !== id));
-    setLayout((prev: Layout) => prev.filter((l: LayoutItem) => l.i !== id));
-  }, []);
-
-  const onTitleChange = useCallback((id: string, title: string) => {
-    setPanels((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
-  }, []);
-
-  const onPointIdsChange = useCallback((id: string, pointIds: string[]) => {
-    setPanels((prev) => prev.map((p) => (p.id === id ? { ...p, pointIds } : p)));
-  }, []);
-
-  const onLayoutChange = useCallback((newLayout: Layout) => {
-    setLayout(newLayout);
-  }, []);
-
   async function handleDownloadCsv() {
     if (!selectedSiteId) return;
     setDownloadLoading(true);
     try {
       const startDate = start.slice(0, 10);
       const endDate = end.slice(0, 10);
-      const pointIdsFromPanels = panels
-        .filter((p) => p.type === "timeseries")
-        .flatMap((p) => p.pointIds);
       const pointIds =
-        pointIdsFromPanels.length > 0 ? pointIdsFromPanels : pollingPoints.map((p) => p.id);
+        selectedPointIds.length > 0 ? selectedPointIds : pollingPoints.map((p) => p.id);
       await downloadTimeseriesCsv(
         {
           site_id: selectedSiteId,
@@ -590,40 +386,34 @@ export function PlotsPage() {
     return (
       <div>
         <h1 className="mb-6 text-2xl font-semibold tracking-tight">Plots</h1>
-        <Skeleton className="h-72 w-full rounded-2xl" />
+        <Skeleton className="h-[400px] w-full rounded-2xl" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Plots</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Dashboard: add panels, drag to rearrange, resize, and add series from the dropdown.
+            One trend chart. Select points and/or faults; faults show as vertical bands when they fire. Drag the brush to zoom, Escape to reset.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-2 py-1">
-            <span className="text-xs font-medium text-muted-foreground">Add panel</span>
-            <button
-              type="button"
-              onClick={() => addPanel("timeseries")}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <Plus className="h-4 w-4" />
-              Time series
-            </button>
-            <button
-              type="button"
-              onClick={() => addPanel("faults")}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <Plus className="h-4 w-4" />
-              Faults
-            </button>
-          </div>
+          <PointPicker
+            points={pollingPoints}
+            equipment={equipment}
+            selectedIds={selectedPointIds}
+            onChange={setSelectedPointIds}
+            label="Select points"
+          />
+          <FaultPicker
+            definitions={definitions}
+            selectedIds={selectedFaultIds}
+            onChange={setSelectedFaultIds}
+            label="Add faults"
+          />
           <button
             type="button"
             onClick={handleDownloadCsv}
@@ -648,43 +438,15 @@ export function PlotsPage() {
         />
       </div>
 
-      <div ref={gridContainerRef} className="min-h-[400px] flex-1 overflow-auto">
-        <GridLayout
-          className="layout"
-          layout={layout}
-          onLayoutChange={onLayoutChange}
-          cols={24}
-          rowHeight={ROW_HEIGHT}
-          width={gridWidth}
-          draggableHandle=".panel-drag-handle"
-          isDraggable
-          isResizable
-          compactType="vertical"
-          preventCollision={false}
-        >
-          {panels.map((panel) => {
-            const item: LayoutItem | undefined = layoutMap.get(panel.id);
-            const h = item?.h ?? DEFAULT_PANEL_H;
-            return (
-              <div key={panel.id}>
-                <DashboardPanelCard
-                  panel={panel}
-                  layoutH={h}
-                  siteId={selectedSiteId}
-                  points={points}
-                  pollingPoints={pollingPoints}
-                  equipment={equipment}
-                  start={start}
-                  end={end}
-                  onTitleChange={onTitleChange}
-                  onPointIdsChange={onPointIdsChange}
-                  onDuplicate={duplicatePanel}
-                  onRemove={removePanel}
-                />
-              </div>
-            );
-          })}
-        </GridLayout>
+      <div className="h-[55vh] min-h-[360px] w-full max-h-[800px]">
+        <TrendChart
+          siteId={selectedSiteId}
+          pointIds={selectedPointIds}
+          points={points}
+          start={start}
+          end={end}
+          selectedFaultIds={selectedFaultIds}
+        />
       </div>
     </div>
   );

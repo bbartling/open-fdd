@@ -26,6 +26,7 @@ const apiRoutes = [
   "/docs",
   "/redoc",
   "/openapi.json",
+  "/rules",
 ];
 
 /** Serve the SPA for browser navigation; proxy only fetch/XHR to the API. */

@@ -207,6 +207,7 @@ services:
       OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
     volumes:
       - ../open_fdd/rules:/app/open_fdd/rules:ro
+      - ../analyst/rules:/app/analyst/rules:ro
       - ../config:/app/config
     depends_on:
       db:
