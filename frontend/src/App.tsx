@@ -7,9 +7,9 @@ import { OverviewPage } from "@/components/pages/OverviewPage";
 import { EquipmentPage } from "@/components/pages/EquipmentPage";
 import { PointsPage } from "@/components/pages/PointsPage";
 import { FaultsPage } from "@/components/pages/FaultsPage";
-import { TrendingPage } from "@/components/pages/TrendingPage";
 import { SystemResourcesPage } from "@/components/pages/SystemResourcesPage";
 import { DataModelPage } from "@/components/pages/DataModelPage";
+import { PlotsPage } from "@/components/pages/PlotsPage";
 import { useWebSocket } from "@/hooks/use-websocket";
 
 const queryClient = new QueryClient({
@@ -32,8 +32,8 @@ function AppRoutes() {
           <Route path="equipment" element={<EquipmentPage />} />
           <Route path="points" element={<PointsPage />} />
           <Route path="faults" element={<FaultsPage />} />
-          <Route path="trending" element={<TrendingPage />} />
           <Route path="system" element={<SystemResourcesPage />} />
+          <Route path="plots" element={<PlotsPage />} />
           <Route path="data-model" element={<DataModelPage />} />
         </Route>
       </Routes>

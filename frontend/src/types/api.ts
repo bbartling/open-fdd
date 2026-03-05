@@ -29,8 +29,18 @@ export interface Point {
   bacnet_device_id: string | null;
   object_identifier: string | null;
   object_name: string | null;
+  /** From data model (ofdd:polling in TTL). If true, BACnet scraper polls this point. */
   polling: boolean;
   created_at: string;
+}
+
+/** GET /timeseries/latest — latest reading per point (BACnet scraper / weather). */
+export interface TimeseriesLatestItem {
+  point_id: string;
+  external_id: string;
+  equipment_id: string | null;
+  value: number;
+  ts: string | null;
 }
 
 export interface FaultState {
@@ -68,11 +78,12 @@ export interface HealthStatus {
   graph_loaded?: boolean | null;
 }
 
-/** GET /config — platform config (includes open_meteo_*) */
+/** GET /config — platform config (includes open_meteo_*, rule_interval_hours) */
 export interface PlatformConfig {
   open_meteo_enabled?: boolean;
   open_meteo_interval_hours?: number;
   open_meteo_site_id?: string | null;
+  rule_interval_hours?: number;
   [key: string]: unknown;
 }
 

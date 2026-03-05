@@ -28,6 +28,7 @@
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
 #   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, weather-scraper)
+#   ./scripts/bootstrap.sh --frontend          # before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up)
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -67,6 +68,7 @@ WITH_HA_PATH=""
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
+FRONTEND_RESET=false
 
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -144,6 +146,7 @@ while [[ $i -lt ${#args[@]} ]]; do
       HA_CONFIG_PATH="${arg#--ha-install-integration=}"
       ;;
     --no-auth) NO_AUTH=true ;;
+    --frontend) FRONTEND_RESET=true ;;
     -h|--help)
       cat <<EOF
 Usage: $0 [options]
@@ -161,8 +164,9 @@ Core:
 
 Build controls:
   --build SERVICE ...       Rebuild + restart only these services, then exit
-                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, grafana, host-stats, weather-scraper
+                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana, host-stats, weather-scraper
   --build-all               Rebuild + restart all services, then exit
+  --frontend                Before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up; use after package.json changes)
 
 Data / ops:
   --reset-grafana           Wipe Grafana volume and restart Grafana
@@ -788,6 +792,21 @@ check_prereqs
 ensure_diy_bacnet_sibling
 
 dc="$(docker_compose_cmd)"
+
+# -----------------------------
+# --frontend: stop frontend, remove node_modules volume (fresh npm install on next up)
+# -----------------------------
+if $FRONTEND_RESET; then
+  echo "=== Frontend reset: stop frontend, remove node_modules volume ==="
+  (cd "$STACK_DIR" && $dc stop frontend 2>/dev/null) || true
+  vol="$(docker volume ls -q | grep frontend_node_modules | head -1)"
+  if [[ -n "$vol" ]]; then
+    docker volume rm "$vol" || true
+    echo "Removed volume: $vol (next up will run fresh npm install)."
+  else
+    echo "No frontend_node_modules volume found (nothing to remove)."
+  fi
+fi
 
 # -----------------------------
 # --update flow

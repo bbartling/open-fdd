@@ -4,7 +4,7 @@ import {
   Server,
   CircleDot,
   AlertTriangle,
-  TrendingUp,
+  LineChart,
   Cpu,
   Database,
   Sun,
@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { to: "/equipment", label: "Equipment", icon: Server, end: false },
   { to: "/points", label: "Points", icon: CircleDot, end: false },
   { to: "/faults", label: "Faults", icon: AlertTriangle, end: false },
-  { to: "/trending", label: "Trending", icon: TrendingUp, end: false },
+  { to: "/plots", label: "Plots", icon: LineChart, end: false },
   { to: "/system", label: "System resources", icon: Cpu, end: false },
   { to: "/data-model", label: "Data model", icon: Database, end: false },
 ] as const;
