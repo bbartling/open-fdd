@@ -59,16 +59,26 @@ class ConfigBody(BaseModel):
     graph_sync_interval_min: int | None = Field(None, description="Graph sync to TTL (minutes)")
 
 
+def _normalize_config_for_display(raw: dict) -> dict:
+    """Apply display defaults: rule_interval_hours 0/None → 3.0; bacnet_gateways 'string' → ''."""
+    out = dict(raw)
+    if out.get("rule_interval_hours") in (0, None):
+        out["rule_interval_hours"] = 3.0
+    if out.get("bacnet_gateways") == "string":
+        out["bacnet_gateways"] = ""
+    return out
+
+
 @router.get("", summary="Get platform config")
 def get_config():
-    """Return current platform config from the knowledge graph (same as used by SPARQL). When graph has no config, returns DEFAULT_PLATFORM_CONFIG."""
+    """Return current platform config from the knowledge graph (same as used by SPARQL). When graph has no config, returns DEFAULT_PLATFORM_CONFIG. Normalizes rule_interval_hours 0→3 and bacnet_gateways 'string'→'' for display."""
     overlay = get_config_overlay()
     if overlay:
-        return overlay
+        return _normalize_config_for_display(overlay)
     from_graph = get_config_from_graph()
     if from_graph:
-        return from_graph
-    return dict(DEFAULT_PLATFORM_CONFIG)
+        return _normalize_config_for_display(from_graph)
+    return _normalize_config_for_display(dict(DEFAULT_PLATFORM_CONFIG))
 
 
 @router.put("", summary="Set platform config (RDF + TTL)")
@@ -85,7 +95,11 @@ def put_config(body: ConfigBody):
                 raise HTTPException(500, f"Failed to write TTL: {err}")
         return get_config()
 
-    merged = dict(overlay)
+    if overlay:
+        merged = dict(overlay)
+    else:
+        from_graph = get_config_from_graph()
+        merged = dict(from_graph) if from_graph else dict(DEFAULT_PLATFORM_CONFIG)
     for k, v in updates.items():
         if k in CONFIG_KEYS:
             merged[k] = v
@@ -100,4 +114,4 @@ def put_config(body: ConfigBody):
         emit(TOPIC_GRAPH_UPDATED, {})
     except Exception:
         pass
-    return merged
+    return _normalize_config_for_display(merged)

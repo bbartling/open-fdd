@@ -36,7 +36,7 @@ def test_default_platform_config_values():
     )
 
     assert DEFAULT_PLATFORM_CONFIG["brick_ttl_dir"] == DEFAULT_BRICK_TTL_DIR == "config"
-    assert DEFAULT_PLATFORM_CONFIG["rule_interval_hours"] == DEFAULT_RULE_INTERVAL_HOURS == 0.1
+    assert DEFAULT_PLATFORM_CONFIG["rule_interval_hours"] == DEFAULT_RULE_INTERVAL_HOURS == 3.0
     assert DEFAULT_PLATFORM_CONFIG["bacnet_server_url"] == DEFAULT_BACNET_SERVER_URL == "http://localhost:8080"
     assert DEFAULT_PLATFORM_CONFIG["graph_sync_interval_min"] == DEFAULT_GRAPH_SYNC_INTERVAL_MIN == 5
     assert DEFAULT_PLATFORM_CONFIG["rules_dir"] == "analyst/rules"

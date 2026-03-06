@@ -254,7 +254,7 @@ Telemetry comes from **GET /timeseries/latest**: the most recent reading per poi
 - **Adding point sensors to the overview:** Go to **Overview**, edit the dashboard, add a card (e.g. **Entities** or **Glance**), then add the Open-FDD point sensors (e.g. **SA-T**, **DAP-P**) for the equipment you care about.
 - **Stale data color:** Each point sensor exposes `is_stale` (true when the last reading is older than 5 minutes) and `data_age_seconds`. In a card or conditional card you can change color or icon when `is_stale` is true (e.g. red when stale, green when fresh), similar to a BAS front-end.
 - **Threshold:** The 5‑minute cutoff is defined in the integration as `STALE_DATA_SECONDS` (300). To change it, edit `custom_components/openfdd/const.py` and re-copy the integration.
-- **Full history and dashboards:** For time-series charts and long-term analysis, use **Grafana** with the Open-FDD TimescaleDB (see [Grafana dashboards](howto/grafana_dashboards.md) and [Grafana cookbook](howto/grafana_cookbook.md)). HA point sensors are for live overview and control; Grafana is for historical dashboards.
+- **Full history and dashboards:** For time-series charts and long-term analysis, use **Grafana** with the Open-FDD TimescaleDB (see [Grafana dashboards](howto/grafana_dashboards) and [Grafana cookbook](howto/grafana_cookbook)). HA point sensors are for live overview and control; Grafana is for historical dashboards.
 
 ---
 
@@ -331,11 +331,11 @@ The Home Assistant integration uses the API (which is backed by the graph):
 
 ## Custom integration vs official / where data comes from
 
-This is a **custom integration** (not an official Home Assistant Core integration). For a concise **development reference** (manifest, config flow, coordinator, devices/entities, and links to the official HA docs), see [Home Assistant integration development](home_assistant_development.md). Custom integrations live in the user’s `config/custom_components/` or in a separate repo like this one; **you do not fork Home Assistant Core** to develop or ship a custom integration. Core integrations are merged into [home-assistant/core](https://github.com/home-assistant/core); third-party integrations (like Open-FDD) are installed by copying the component or via HACS.
+This is a **custom integration** (not an official Home Assistant Core integration). For a concise **development reference** (manifest, config flow, coordinator, devices/entities, and links to the official HA docs), see [Home Assistant integration development](home_assistant_development). Custom integrations live in the user’s `config/custom_components/` or in a separate repo like this one; **you do not fork Home Assistant Core** to develop or ship a custom integration. Core integrations are merged into [home-assistant/core](https://github.com/home-assistant/core); third-party integrations (like Open-FDD) are installed by copying the component or via HACS.
 
 **HA is a reflection of Open-FDD:** Set up sites, equipment, points, and faults in Open-FDD (via the API, Config UI at `/app/`, or scripts like `graph_and_crud_test.py`). The integration’s coordinator fetches that data from the API every 30s; everything you see in HA (devices, areas, entities) comes from the Open-FDD API. No separate device list or config in HA—discovery and data model live in Open-FDD.
 
-**Developing the integration?** You do **not** need to fork Home Assistant Core or run `script/setup` / `script.scaffold integration`. Open-FDD is a custom integration developed in this repo; see [HA integration development](home_assistant_development.md#open-fdd-what-we-do-and-what-we-dont) for what to do (and optional separate-repo layout for HACS).
+**Developing the integration?** You do **not** need to fork Home Assistant Core or run `script/setup` / `script.scaffold integration`. Open-FDD is a custom integration developed in this repo; see [HA integration development](home_assistant_development#open-fdd-what-we-do-and-what-we-dont) for what to do (and optional separate-repo layout for HACS).
 
 ## Home Assistant Add-on and Integration
 

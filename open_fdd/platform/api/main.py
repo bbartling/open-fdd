@@ -223,10 +223,30 @@ def root():
 
 @app.get("/health")
 def health():
+    """One-stop status: ok, graph serialization (RDF/TTL), and last FDD run (includes weather when enabled)."""
     from open_fdd.platform.graph_model import get_serialization_status
 
     out = {"status": "ok"}
     out.update(get_serialization_status())
+    try:
+        from open_fdd.platform.database import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT run_ts, status, sites_processed, faults_written FROM fdd_run_log ORDER BY run_ts DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+        if row:
+            out["last_fdd_run"] = {
+                "run_ts": row["run_ts"].isoformat() if hasattr(row["run_ts"], "isoformat") else str(row["run_ts"]),
+                "status": row["status"],
+                "sites_processed": row["sites_processed"],
+                "faults_written": row["faults_written"],
+            }
+        else:
+            out["last_fdd_run"] = None
+    except Exception:
+        out["last_fdd_run"] = None
     return out
 
 

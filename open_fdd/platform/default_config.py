@@ -6,7 +6,7 @@ the same graph; this dict is the default state so the app and tests stay in sync
 """
 
 # AFDD rule running
-DEFAULT_RULE_INTERVAL_HOURS = 0.1  # 6 min for testing; use 3.0 in production
+DEFAULT_RULE_INTERVAL_HOURS = 3.0  # Production default; FDD loop runs every N hours
 DEFAULT_LOOKBACK_DAYS = 3
 DEFAULT_RULES_DIR = "analyst/rules"
 
@@ -18,6 +18,7 @@ DEFAULT_BACNET_ENABLED = True
 DEFAULT_BACNET_SCRAPE_INTERVAL_MIN = 1  # 5 in production
 DEFAULT_BACNET_SERVER_URL = "http://localhost:8080"
 DEFAULT_BACNET_SITE_ID = "default"
+DEFAULT_BACNET_GATEWAYS = ""  # JSON array of gateways; future multi-gateway feature
 
 # Open-Meteo weather
 DEFAULT_OPEN_METEO_ENABLED = True
@@ -41,6 +42,7 @@ DEFAULT_PLATFORM_CONFIG: dict = {
     "bacnet_scrape_interval_min": DEFAULT_BACNET_SCRAPE_INTERVAL_MIN,
     "bacnet_server_url": DEFAULT_BACNET_SERVER_URL,
     "bacnet_site_id": DEFAULT_BACNET_SITE_ID,
+    "bacnet_gateways": DEFAULT_BACNET_GATEWAYS,
     "open_meteo_enabled": DEFAULT_OPEN_METEO_ENABLED,
     "open_meteo_interval_hours": DEFAULT_OPEN_METEO_INTERVAL_HOURS,
     "open_meteo_latitude": DEFAULT_OPEN_METEO_LATITUDE,

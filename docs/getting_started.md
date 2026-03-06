@@ -25,7 +25,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
 
    - **API:** http://localhost:8000/docs  
-   - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80)  
+   - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
    - **BACnet Swagger:** http://localhost:8080/docs  
    - **DB:** localhost:5432/openfdd (postgres/postgres)  
    - **Grafana:** not started by default; use `./scripts/bootstrap.sh --with-grafana` then http://localhost:3000 (admin/admin)
@@ -85,6 +85,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--log-max-size SIZE` | Docker log max size per file (default `100m`). Env: `OFDD_LOG_MAX_SIZE`. |
 | `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
+| `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
 | `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
 
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.

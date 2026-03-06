@@ -48,7 +48,7 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 ## Layers and mapping
 
 - **BACnet layer:** Points that have `bacnet_device_id` and `object_identifier` are scraped by the BACnet driver (data-model path). Add them via CRUD or after **POST /bacnet/point_discovery_to_graph** and data-model export/import. `external_id` is typically the BACnet object name.
-- **Weather layer:** `external_id` = `temp_f`, `rh_pct`, `dewpoint_f`, etc.
+- **Weather layer:** Points with `external_id` = `temp_f`, `rh_pct`, `dewpoint_f`, etc. come from the Open-Meteo weather fetch. They are linked to a synthetic equipment **Open-Meteo** (type **Weather_Service**) per site so they appear under “Open-Meteo” (web weather) in the **Data model** and **Points** tree. In the RDF graph that equipment is tagged with `ofdd:dataSource "open_meteo"` so you can query it via SPARQL.
 - **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules.
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.

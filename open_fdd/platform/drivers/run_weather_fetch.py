@@ -2,6 +2,9 @@
 """
 Run Open-Meteo weather fetch: once or on an interval → TimescaleDB.
 
+Use only when the FDD loop (run_rule_loop.py) is not running. When the FDD loop
+runs, it fetches weather at the same time; running both is redundant.
+
 Fetches hourly weather from Open-Meteo ERA5 archive API, stores in timeseries_readings.
 Points: temp_f, rh_pct, dewpoint_f, wind_mph, gust_mph, wind_dir_deg,
 shortwave_wm2, direct_wm2, diffuse_wm2, gti_wm2, cloud_pct.

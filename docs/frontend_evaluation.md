@@ -33,7 +33,7 @@ So the frontend covers the main “operator” workflows: sites, equipment, poin
 
 ## Grafana cookbook parity
 
-The [Grafana SQL cookbook](howto/grafana_cookbook.md) describes:
+The [Grafana SQL cookbook](howto/grafana_cookbook) describes:
 
 - **BACnet:** Variables (site, device, point), timeseries panel, BACnet + fault overlays.  
   **Frontend:** Site selector + point picker + trending chart (same data via `/download/csv`). No separate “device” (bacnet_device_id) filter in the UI; points are chosen by site/equipment. Fault overlays on the chart could be a future enhancement.
@@ -67,7 +67,7 @@ So the frontend is capable of the main cookbook workflows that are data-model/CR
 
 ## Caddy and security
 
-- With the React frontend in its own container, **Caddy** is the single entry point (e.g. :8088): basic auth, then proxy to API (and `/ws/*`) and to the frontend (`/*`). Optional Grafana at `/grafana` when started with `--with-grafana`. See [Security and Caddy Bootstrap](security.md).
+- With the React frontend in its own container, **Caddy** is the single entry point (e.g. :8088): basic auth, then proxy to API (and `/ws/*`) and to the frontend (`/*`). Optional Grafana at `/grafana` when started with `--with-grafana`. See [Security and Caddy](security).
 
 ---
 

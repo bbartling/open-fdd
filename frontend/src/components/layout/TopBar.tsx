@@ -16,15 +16,19 @@ export function TopBar() {
     (theme === "system" && typeof document !== "undefined" && document.documentElement.classList.contains("dark"));
   const weatherEnabled = config?.open_meteo_enabled === true;
   const ruleIntervalHours = config?.rule_interval_hours as number | undefined;
-  const weatherInterval = config?.open_meteo_interval_hours as number | undefined;
-  const weatherLabel =
-    ruleIntervalHours != null && ruleIntervalHours > 0
-      ? ruleIntervalHours < 1
-        ? `every ${Math.round(ruleIntervalHours * 60)}m`
-        : `every ${ruleIntervalHours}h`
-      : weatherInterval != null
-        ? `every ${weatherInterval}h`
-        : "on";
+  const withFdd = ruleIntervalHours != null && ruleIntervalHours > 0;
+  const weatherTimeAgo = withFdd && lastRun?.run_ts ? timeAgo(lastRun.run_ts) : null;
+  const standaloneIntervalHours = config?.open_meteo_interval_hours ?? 24;
+  const weatherLabel = weatherTimeAgo
+    ? weatherTimeAgo
+    : withFdd
+      ? ruleIntervalHours! < 1
+        ? `with FDD (every ${Math.round(ruleIntervalHours! * 60)}m)`
+        : `with FDD (every ${ruleIntervalHours}h)`
+      : `every ${standaloneIntervalHours}h`;
+  const weatherMeaning = withFdd
+    ? "Weather is fetched with each FDD run."
+    : "Weather is fetched by the standalone scraper every N hours.";
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-card/80 px-6 backdrop-blur-lg">
@@ -54,13 +58,19 @@ export function TopBar() {
         {weatherEnabled && (
           <TutorialPopover
             title="Weather"
-            meaning="Open-Meteo data is fetched at each FDD run (same interval as fault rules) and stored as points (temp_f, rh_pct, etc.). Standalone weather scraper uses open_meteo_interval_hours."
-            status={ruleIntervalHours != null ? "Fetched with each FDD run." : "Enabled."}
+            meaning={weatherMeaning}
+            status={
+              withFdd && lastRun?.run_ts
+                ? "Fetched with last FDD run."
+                : withFdd
+                  ? "Fetched with each FDD run."
+                  : `Standalone scraper every ${standaloneIntervalHours}h.`
+            }
             side="bottom"
           >
             <span className="flex cursor-help items-center gap-1.5">
               <Cloud className="h-4 w-4" />
-              Weather {weatherLabel}
+              Weather <span className="font-medium text-foreground">{weatherLabel}</span>
             </span>
           </TutorialPopover>
         )}

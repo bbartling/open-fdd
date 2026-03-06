@@ -1,45 +1,67 @@
+import { useState, useRef, useEffect } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
-  Server,
+  Settings,
   CircleDot,
   AlertTriangle,
   LineChart,
+  Cloud,
   Cpu,
   Database,
   Sun,
   Moon,
-  Monitor,
+  ChevronUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCapabilities, useHealth } from "@/hooks/use-fdd-status";
 import { useActiveFaults } from "@/hooks/use-faults";
 import { useTheme } from "@/contexts/theme-context";
+import { useConfig } from "@/hooks/use-config";
+import { timeAgo } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/equipment", label: "Equipment", icon: Server, end: false },
+  { to: "/config", label: "OpenFDD Config", icon: Settings, end: false },
   { to: "/points", label: "Points", icon: CircleDot, end: false },
+  { to: "/data-model", label: "Data model", icon: Database, end: false },
   { to: "/faults", label: "Faults", icon: AlertTriangle, end: false },
   { to: "/plots", label: "Plots", icon: LineChart, end: false },
+  { to: "/web-weather", label: "Web weather", icon: Cloud, end: false },
   { to: "/system", label: "System resources", icon: Cpu, end: false },
-  { to: "/data-model", label: "Data model", icon: Database, end: false },
 ] as const;
 
 const THEME_OPTIONS = [
-  { value: "system" as const, icon: Monitor, label: "System" },
   { value: "light" as const, icon: Sun, label: "Light" },
   { value: "dark" as const, icon: Moon, label: "Dark" },
 ];
 
 export function Sidebar() {
   const [searchParams] = useSearchParams();
+  const [healthOpen, setHealthOpen] = useState(false);
+  const healthRef = useRef<HTMLDivElement>(null);
   const { data: capabilities } = useCapabilities();
   const { data: health } = useHealth();
+  const { data: config } = useConfig();
   const { data: faults } = useActiveFaults();
   const { theme, setTheme } = useTheme();
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (healthRef.current && !healthRef.current.contains(e.target as Node)) {
+        setHealthOpen(false);
+      }
+    }
+    if (healthOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [healthOpen]);
+
   const isHealthy = health?.status === "ok";
+  const gs = health?.graph_serialization;
+  const lastFdd = health?.last_fdd_run;
+  const weatherWithFdd = config?.open_meteo_enabled === true && (config?.rule_interval_hours as number) > 0;
   const siteParam = searchParams.get("site");
   const search = siteParam ? `?site=${siteParam}` : "";
 
@@ -89,30 +111,39 @@ export function Sidebar() {
       {/* Theme selector */}
       <div className="border-t border-border/60 px-5 py-3">
         <div className="flex items-center rounded-lg bg-muted/60 p-1">
-          {THEME_OPTIONS.map(({ value, icon: Icon, label }) => (
-            <button
-              key={value}
-              type="button"
-              aria-label={label}
-              title={label}
-              onClick={() => setTheme(value)}
-              className={`flex flex-1 items-center justify-center rounded-md p-1.5 transition-colors duration-150 ${
-                theme === value
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </button>
-          ))}
+          {THEME_OPTIONS.map(({ value, icon: Icon, label }) => {
+            const isActive = theme === value || (theme === "system" && value === "light");
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-label={label}
+                title={label}
+                onClick={() => setTheme(value)}
+                className={`flex flex-1 items-center justify-center rounded-md p-1.5 transition-colors duration-150 ${
+                  isActive
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Health indicator */}
-      <div className="border-t border-border/60 px-5 py-3">
-        <div className="flex items-center gap-2 text-xs">
+      {/* Health indicator — click to open status details */}
+      <div className="border-t border-border/60 px-5 py-3" ref={healthRef}>
+        <button
+          type="button"
+          onClick={() => setHealthOpen(!healthOpen)}
+          className="flex w-full items-center gap-2 text-xs text-left text-muted-foreground hover:text-foreground transition-colors"
+          aria-expanded={healthOpen}
+          aria-label="System status (click for details)"
+        >
           <span
-            className={`inline-block h-2 w-2 rounded-full ${
+            className={`inline-block h-2 w-2 shrink-0 rounded-full ${
               isHealthy
                 ? "bg-success"
                 : health
@@ -121,14 +152,58 @@ export function Sidebar() {
             }`}
             aria-hidden="true"
           />
-          <span className="text-muted-foreground">
+          <span className="flex-1">
             {isHealthy
               ? "System healthy"
               : health
                 ? "Unhealthy"
                 : "Loading\u2026"}
           </span>
-        </div>
+          <ChevronUp
+            className={`h-3.5 w-3.5 shrink-0 transition-transform ${healthOpen ? "" : "rotate-180"}`}
+            aria-hidden="true"
+          />
+        </button>
+        {healthOpen && health && (
+          <div
+            className="mt-2 rounded-lg border border-border/60 bg-card p-3 text-xs shadow-lg"
+            role="dialog"
+            aria-label="System status details"
+          >
+            <p className="font-medium text-foreground mb-2">Status</p>
+            <ul className="space-y-2 text-muted-foreground">
+              <li>
+                <span className="font-medium text-foreground">API:</span>{" "}
+                {health.status === "ok" ? "OK" : health.status}
+              </li>
+              {lastFdd?.run_ts && (
+                <li>
+                  <span className="font-medium text-foreground">Last FDD run:</span>{" "}
+                  {timeAgo(lastFdd.run_ts)}
+                  {weatherWithFdd && " (includes weather)"}
+                  {lastFdd.sites_processed != null && ` · ${lastFdd.sites_processed} sites, ${lastFdd.faults_written ?? 0} faults`}
+                </li>
+              )}
+              {gs && (
+                <li>
+                  <span className="font-medium text-foreground">RDF serialization:</span>{" "}
+                  {gs.last_ok ? "OK" : "Error"}
+                  {gs.last_serialization_at && ` · ${timeAgo(gs.last_serialization_at)}`}
+                  {gs.last_error && (
+                    <span className="block mt-0.5 text-destructive truncate" title={gs.last_error}>
+                      {gs.last_error}
+                    </span>
+                  )}
+                  {gs.path_resolved && (
+                    <span className="block mt-0.5 text-muted-foreground/80 truncate" title={gs.path_resolved}>
+                      {gs.path_resolved}
+                    </span>
+                  )}
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
       </div>
     </aside>
   );

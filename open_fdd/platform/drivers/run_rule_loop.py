@@ -7,6 +7,10 @@ lookback window so rules have fresh data; then loads rules from YAML, pulls last
 of site data into pandas, runs all rules (sensor + weather), writes fault_results.
 Analyst edits to YAML take effect on the next run; no restart required.
 
+Weather: Fetched at each FDD run (same interval as rule_interval_hours). To avoid
+redundant fetches, do not run the standalone weather scraper (run_weather_fetch.py --loop)
+when using this loop; use one or the other.
+
 Usage:
   python tools/run_rule_loop.py           # one-shot (run now, exit)
   python tools/run_rule_loop.py --loop   # scheduled loop (checks trigger file every 60s)

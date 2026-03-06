@@ -72,6 +72,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 |---------|--------------|
 | [System Overview](overview) | Architecture, services, data flow |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
+| [Using the React dashboard](frontend) | Overview, Config, Points, Data model, Faults, Plots, Web weather, System resources |
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
@@ -85,7 +86,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
 
-**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). [Developer guide](appendix/developer_guide) covers Config UI (front-end) development and the full database schema. Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
+**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). [Developer guide](appendix/developer_guide) covers Config UI (front-end) development and the full database schema. User-facing UI: [Using the React dashboard](frontend). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
 
 ---
 

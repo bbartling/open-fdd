@@ -10,19 +10,21 @@ nav_order: 2
 
 ## Bootstrap does not purge data
 
-`./scripts/bootstrap.sh` does **not** wipe the database. It starts containers and runs migrations (idempotent). Only `--reset-grafana` wipes Grafana's volume. See [Danger zone](howto/danger_zone) for when data is purged.
+`./scripts/bootstrap.sh` does **not** wipe the database. It starts containers and runs migrations (idempotent). Only `--reset-grafana` wipes Grafana's volume. See [Danger zone](danger_zone) for when data is purged.
 
 ---
 
 ## Start / stop / restart
 
+From repo root:
+
 ```bash
-cd platform
+cd stack
 docker compose down
 docker compose up -d
 ```
 
-Reboot: containers stop unless Docker or systemd is configured to start them on boot.
+Or: `docker compose -f stack/docker-compose.yml up -d` from repo root. Reboot: containers stop unless Docker or systemd is configured to start them on boot.
 
 ---
 
@@ -45,7 +47,7 @@ Reboot: containers stop unless Docker or systemd is configured to start them on 
 When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql` … `011_polling.sql`):
 
 ```bash
-cd platform
+cd stack
 docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql
 docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql
 docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql
@@ -95,9 +97,10 @@ python tools/run_rule_loop.py
 
 **Inside Docker:**
 ```bash
-cd platform
-docker compose exec fdd-loop python tools/run_rule_loop.py
+cd stack
+docker compose exec fdd-loop python -m open_fdd.platform.loop run_fdd_loop
 ```
+(or equivalent: exec into the container and run the loop script from there).
 
 **Summary:** For “update faults now” with the normal Docker loop, use **touch** (or the script or `POST /run-fdd`). For a single run without the loop, use the **Py script** (or the exec command above).
 
@@ -107,7 +110,7 @@ docker compose exec fdd-loop python tools/run_rule_loop.py
 
 1. **No API rate limiting by default** — The API does not throttle incoming requests. Clients can call as often as they like unless you add rate limiting elsewhere.
 2. **OT/building network is paced** — Outbound traffic to the building is throttled by configuration: BACnet scraper polls on an interval (e.g. every 5 minutes), the FDD loop runs on a schedule (e.g. every 3 hours), and the weather scraper runs on an interval (e.g. daily). We do not continuously hammer the BACnet or OT network; you can tune these intervals in platform config.
-3. **Adding incoming rate limiting** — To limit how often external clients can call the API (e.g. for a busy integration or to protect the OT network), add rate limiting at the reverse proxy (e.g. Caddy with a rate-limit module) or with middleware. See [Security — Throttling and rate limiting](security#throttling-and-rate-limiting).
+3. **Adding incoming rate limiting** — To limit how often external clients can call the API (e.g. for a busy integration or to protect the OT network), add rate limiting at the reverse proxy (e.g. Caddy with a rate-limit module) or with middleware. See [Security — Throttling and rate limiting](../security#throttling-and-rate-limiting).
 
 ---
 
@@ -122,7 +125,7 @@ free -h && uptime && echo "---" && docker stats --no-stream 2>/dev/null
 ## Database
 
 ```bash
-cd platform
+cd stack
 docker compose exec db psql -U postgres -d openfdd -c "\dt"
 ```
 
@@ -142,4 +145,4 @@ Only the TimescaleDB datasource is provisioned. To build dashboards and SQL for 
 .venv/bin/python -m black .
 ```
 
-See [Quick reference](howto/quick_reference) for a one-page cheat sheet.
+See [Quick reference](quick_reference) for a one-page cheat sheet.

@@ -133,7 +133,12 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
                 extra.append(f"brick:isFedBy :eq_{str(fed_by_id).replace('-', '_')}")
             if extra:
                 lines.append("    " + " ;\n    ".join(extra) + " ;")
-            lines.append(f'    ofdd:equipmentType "{etype}" .')
+            lines.append(f'    ofdd:equipmentType "{etype}"')
+            if etype == "Weather_Service" or ename == "Open-Meteo":
+                lines.append(' ;')
+                lines.append('    ofdd:dataSource "open_meteo" .')
+            else:
+                lines.append(" .")
             lines.append("")
             for p in pts_by_eq.get(eid, []):
                 _append_point(lines, p, eref)

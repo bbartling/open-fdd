@@ -23,7 +23,7 @@ Liveness check. Use for load balancers and monitoring.
 
 | Response | Body |
 |----------|------|
-| 200 OK   | `{"status": "ok"}` |
+| 200 OK   | `{"status": "ok"}` (may include `graph_serialization`, `last_fdd_run`; see Swagger or `/openapi.json` for full schema) |
 
 ---
 

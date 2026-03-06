@@ -1,6 +1,7 @@
 """
 Open-Meteo driver: fetch historical weather, write to timeseries_readings.
 
+Called by run_rule_loop (with FDD) or run_weather_fetch (standalone).
 Configurable interval (e.g. once per day). Used for FDD rules that need OAT.
 Includes solar/radiation, cloud cover, wind direction for load modeling and analysis.
 """
@@ -19,6 +20,10 @@ from psycopg2.extras import execute_values
 
 from open_fdd.platform.database import get_conn
 
+# Display name and type for the synthetic equipment that groups weather points in the data model / UI.
+WEATHER_EQUIPMENT_NAME = "Open-Meteo"
+WEATHER_EQUIPMENT_TYPE = "Weather_Service"
+
 WEATHER_POINTS = [
     "temp_f",
     "rh_pct",
@@ -32,6 +37,20 @@ WEATHER_POINTS = [
     "gti_wm2",
     "cloud_pct",
 ]
+# Units for Plots/UI: °F, %, mph, °, W/m² (consistent across weather data)
+WEATHER_UNITS: dict[str, str] = {
+    "temp_f": "°F",
+    "rh_pct": "%",
+    "dewpoint_f": "°F",
+    "wind_mph": "mph",
+    "gust_mph": "mph",
+    "wind_dir_deg": "°",
+    "shortwave_wm2": "W/m²",
+    "direct_wm2": "W/m²",
+    "diffuse_wm2": "W/m²",
+    "gti_wm2": "W/m²",
+    "cloud_pct": "%",
+}
 OPEN_METEO_FIELDS = [
     "temperature_2m",
     "relative_humidity_2m",
@@ -156,12 +175,41 @@ def fetch_open_meteo(
     return df
 
 
+def ensure_weather_equipment(site_id: uuid.UUID, cur) -> uuid.UUID:
+    """
+    Ensure an equipment record exists for Open-Meteo weather points on this site.
+    Returns the equipment id so points can be linked. Used by store_weather_for_site.
+    """
+    cur.execute(
+        """
+        SELECT id FROM equipment
+        WHERE site_id = %s AND name = %s
+        LIMIT 1
+        """,
+        (site_id, WEATHER_EQUIPMENT_NAME),
+    )
+    row = cur.fetchone()
+    if row:
+        return row["id"]
+    cur.execute(
+        """
+        INSERT INTO equipment (site_id, name, equipment_type)
+        VALUES (%s, %s, %s)
+        RETURNING id
+        """,
+        (site_id, WEATHER_EQUIPMENT_NAME, WEATHER_EQUIPMENT_TYPE),
+    )
+    return cur.fetchone()["id"]
+
+
 def store_weather_for_site(
     site_id: uuid.UUID,
     df: pd.DataFrame,
 ) -> dict:
     """
     Store weather DataFrame in timeseries_readings.
+    Ensures an "Open-Meteo" equipment exists for the site and links all weather points to it
+    so they appear under "Open-Meteo" (Web weather) in the data model and UI.
     Returns {rows_inserted, points_created}.
     """
     site_id_str = str(site_id)
@@ -171,15 +219,20 @@ def store_weather_for_site(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
+            equipment_id = ensure_weather_equipment(site_id, cur)
+
             point_ids = {}
             for ext_id in point_columns:
+                unit = WEATHER_UNITS.get(ext_id, "")
                 cur.execute(
                     """
-                    INSERT INTO points (site_id, external_id) VALUES (%s, %s)
-                    ON CONFLICT (site_id, external_id) DO UPDATE SET external_id = EXCLUDED.external_id
+                    INSERT INTO points (site_id, external_id, equipment_id, unit) VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (site_id, external_id) DO UPDATE SET
+                        equipment_id = EXCLUDED.equipment_id,
+                        unit = EXCLUDED.unit
                     RETURNING id
                     """,
-                    (site_id, ext_id),
+                    (site_id, ext_id, equipment_id, unit),
                 )
                 point_ids[ext_id] = cur.fetchone()["id"]
 

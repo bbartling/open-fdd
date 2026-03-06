@@ -1,3 +1,25 @@
+/** GET /config and PUT /config — platform config (RDF-backed). */
+export interface PlatformConfig {
+  rule_interval_hours?: number;
+  lookback_days?: number;
+  rules_dir?: string | null;
+  brick_ttl_dir?: string | null;
+  bacnet_enabled?: boolean;
+  bacnet_scrape_interval_min?: number;
+  bacnet_server_url?: string | null;
+  bacnet_site_id?: string | null;
+  bacnet_gateways?: string | null;
+  open_meteo_enabled?: boolean;
+  open_meteo_interval_hours?: number;
+  open_meteo_latitude?: number;
+  open_meteo_longitude?: number;
+  open_meteo_timezone?: string | null;
+  open_meteo_days_back?: number;
+  open_meteo_site_id?: string | null;
+  graph_sync_interval_min?: number;
+  [key: string]: unknown;
+}
+
 export interface Site {
   id: string;
   name: string;
@@ -76,15 +98,19 @@ export interface HealthStatus {
   status: string;
   serialization_status?: string | null;
   graph_loaded?: boolean | null;
-}
-
-/** GET /config — platform config (includes open_meteo_*, rule_interval_hours) */
-export interface PlatformConfig {
-  open_meteo_enabled?: boolean;
-  open_meteo_interval_hours?: number;
-  open_meteo_site_id?: string | null;
-  rule_interval_hours?: number;
-  [key: string]: unknown;
+  graph_serialization?: {
+    last_ok?: boolean | null;
+    last_error?: string | null;
+    last_serialization_at?: string | null;
+    current_time?: string | null;
+    path_resolved?: string | null;
+  } | null;
+  last_fdd_run?: {
+    run_ts: string;
+    status: string;
+    sites_processed: number;
+    faults_written: number;
+  } | null;
 }
 
 /** GET /data-model/export row (simplified for UI) */

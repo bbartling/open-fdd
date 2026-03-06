@@ -45,13 +45,15 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `open_meteo_days_back` | 3 | Days of archive to fetch |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
+**Weather fetch:** Weather is normally fetched **with each FDD run** (same interval as fault rules), so rules see fresh Open-Meteo data. A standalone weather scraper is only for setups that do not run the FDD loop; do not run both to avoid redundant fetches.
+
 **Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
 
 **Hot reload (AFDD tuning):** The project supports **hot reloading of YAML rule files** so the AFDD maintainer can make tweaks and adjustments for fault tuning without restarting the platform. The FDD loop loads rules from `rules_dir` on every run; edit YAML → trigger a run (or wait for the schedule) → results reflect the new params. The `rules_dir` path itself is **RDF-driven**: it comes from platform config (GET `/config` or the same graph that backs PUT `/config`). Unit tests that cover this behaviour: `open_fdd/tests/platform/test_rules_loader.py` (hot-reload hash and reload-on-change) and `open_fdd/tests/platform_api/test_rules.py` (list/read rule files from configured `rules_dir`). A future CRUD-driven rule editor in the frontend (with the same hot-reload semantics) would be a possible evolution; today, YAML in `analyst/rules` is the supported path.
 
 **Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
 
-**BACnet: single gateway, remote gateways, central aggregator**
+## BACnet: single gateway, remote gateways, central aggregator
 
 - **Single building (or one remote gateway):** Set `OFDD_BACNET_SERVER_URL` and optionally `OFDD_BACNET_SITE_ID` (e.g. `building-a`). The scraper tags all readings with that site. On a **remote** gateway (diy-bacnet-server + scraper on another subnet), point `OFDD_DB_DSN` at the central Open-FDD DB and set `OFDD_BACNET_SITE_ID` to the site name/UUID used on the central API so data is attributed to that building.
 - **Central aggregator (multiple remote gateways):** On the central host, do **not** run local bacnet-server/bacnet-scraper; run only DB, API, Grafana, FDD loop, and (optional) weather. Set `OFDD_BACNET_GATEWAYS` to a JSON array, e.g.  
@@ -73,6 +75,8 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `diffuse_wm2` | Diffuse radiation (W/m²) |
 | `gti_wm2` | Global tilted irradiance (W/m²) |
 | `cloud_pct` | Cloud cover (%) |
+
+In the **data model** and **Points** UI these appear under equipment **Open-Meteo** (type **Weather_Service**); the RDF graph marks that equipment with `ofdd:dataSource "open_meteo"`.
 
 ---
 

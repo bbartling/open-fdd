@@ -22,10 +22,11 @@ Open-FDD is an open-source **edge analytics platform for smart buildings** that 
 |---------|-----|---------------------|
 | **DB (TimescaleDB)** | `localhost:5432/openfdd` | postgres / postgres |
 | **Grafana** | http://localhost:3000 | admin / admin |
-| **API (Swagger)** | http://localhost:8000/docs | — |
-| **BACnet Swagger** | http://localhost:8080/docs | diy-bacnet-server |
+| **Frontend (React)** | http://localhost:5173 | Dashboard, Config, Points, Data model, Faults, Plots. Via Caddy: http://localhost:80. |
+| **API (Swagger)** | http://localhost:8000/docs | REST API; Bearer auth when `OFDD_API_KEY` set. |
+| **BACnet Swagger** | http://localhost:8080/docs | diy-bacnet-server JSON-RPC. |
 
-On another host, replace `localhost` with the server IP (e.g. `http://192.168.204.16:8000`).
+On another host, replace `localhost` with the server IP (e.g. `http://192.168.204.16:8000`). For bootstrap options run `./scripts/bootstrap.sh --help`.
 
 ---
 
@@ -33,8 +34,9 @@ On another host, replace `localhost` with the server IP (e.g. `http://192.168.20
 
 ```
 DB:       localhost:5432/openfdd  (postgres/postgres)
-Grafana:  http://localhost:3000   (admin/admin)
+Frontend: http://localhost:5173   (or :80 via Caddy)
 API:      http://localhost:8000   (docs: /docs)
+Grafana:  http://localhost:3000   (admin/admin; use --with-grafana)
 BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
 ```
 
@@ -44,8 +46,8 @@ BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
 
 | Action | Command |
 |--------|--------|
-| **Stop** | `docker compose -f stack/docker-compose.yml down` |
-| **Start / restart** | `docker compose -f stack/docker-compose.yml up -d` |
+| **Stop** | `cd stack && docker compose down` (or `docker compose -f stack/docker-compose.yml down` from repo root) |
+| **Start / restart** | `cd stack && docker compose up -d` |
 | **Reboot note** | Containers do not start automatically on host reboot unless Docker or systemd is configured to start them. |
 
 From repo root, run compose from `stack/` or use `-f stack/docker-compose.yml`.
