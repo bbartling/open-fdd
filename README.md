@@ -12,7 +12,7 @@
 
 <div align="center">
 
-![open-fdd logo](open-fdd_ha_icon_512.png)
+![open-fdd logo](image.png)
 
 </div>
 
