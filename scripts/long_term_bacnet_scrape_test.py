@@ -3,13 +3,19 @@
 Long-run BACnet scrape interval test: 1h @ 1 min, 1h @ 5 min, 1h @ 10 min, confirm, repeat.
 
 Production-style: only the CRUD API. At each phase we PUT /config to set
-bacnet_scrape_interval_min (1, 5, 10); the data model (config/data_model.ttl) is updated.
-After each 1h wait we validate by comparing the total distinct timestamps BEFORE 
-and AFTER the wait to see exactly how many scrapes occurred in that specific window.
+bacnet_scrape_interval_min (1, 5, 10); the scraper picks up the new interval from config.
+After each 1h wait we validate by comparing the total distinct timestamps BEFORE
+and AFTER the wait to see exactly how many scrapes occurred in that window.
+
+Uses stack/.env for OFDD_API_KEY, BASE_URL, OFDD_BACNET_SITE_ID when run from repo root.
 
 Usage:
-  BASE_URL=http://192.168.204.16:8000 python tools/run_bacnet_scrape_interval_test.py
-  BASE_URL=http://192.168.204.16:8000 python tools/run_bacnet_scrape_interval_test.py --once
+  cd open-fdd && python scripts/long_term_bacnet_scrape_test.py
+  cd open-fdd && python scripts/long_term_bacnet_scrape_test.py --once
+
+  With explicit env (e.g. after sourcing stack/.env):
+  export OFDD_API_KEY=... BASE_URL=http://localhost:8000
+  python scripts/long_term_bacnet_scrape_test.py --once
 """
 
 import csv
@@ -24,7 +30,35 @@ try:
 except ImportError:
     httpx = None
 
+
+def _load_stack_env() -> None:
+    """Load stack/.env into os.environ so OFDD_API_KEY, BASE_URL, etc. are set."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    env_path = os.path.join(repo_root, "stack", ".env")
+    if not os.path.isfile(env_path):
+        return
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if not key:
+                continue
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1].replace('\\"', '"')
+            elif value.startswith("'") and value.endswith("'"):
+                value = value[1:-1].replace("\\'", "'")
+            if key and os.environ.get(key) is None:
+                os.environ[key] = value
+
+
+_load_stack_env()
+
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
+API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 SITE_ID = os.environ.get("OFDD_BACNET_SITE_ID", "default")
 
 # Phases: (interval_min, duration_sec, min_expected_scrapes, max_expected_scrapes)
@@ -36,11 +70,23 @@ PHASES = [
 ]
 
 
+def _headers() -> dict:
+    """Headers for CRUD API; include Bearer token when OFDD_API_KEY is set."""
+    h = {}
+    if API_KEY:
+        h["Authorization"] = f"Bearer {API_KEY}"
+    return h
+
+
 def _request(method: str, path: str, json_body: dict | None = None):
     url = f"{BASE_URL}{path}"
+    headers = _headers()
+    if json_body and "Content-Type" not in headers:
+        headers["Content-Type"] = "application/json"
+
     if httpx:
-        with httpx.Client(timeout=30.0) as client:
-            r = client.request(method, url, json=json_body)
+        with httpx.Client(timeout=60.0) as client:
+            r = client.request(method, url, json=json_body, headers=headers)
             try:
                 return r.status_code, r.json() if r.headers.get("content-type", "").startswith("application/json") else r.text
             except Exception:
@@ -49,11 +95,11 @@ def _request(method: str, path: str, json_body: dict | None = None):
     import urllib.error
     import json as _json
     data = _json.dumps(json_body).encode() if json_body else None
-    req = urllib.request.Request(url, data=data, method=method)
-    if data:
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    if data and "Content-Type" not in headers:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=30.0) as res:
+        with urllib.request.urlopen(req, timeout=60.0) as res:
             body = res.read().decode()
             return res.status, _json.loads(body) if "application/json" in res.headers.get("Content-Type", "") else body
     except urllib.error.HTTPError as e:
@@ -103,6 +149,20 @@ def main() -> int:
     if not httpx:
         print("Install httpx for API checks: pip install httpx", file=sys.stderr)
         return 1
+
+    # Startup: require API reachable and auth if key is set
+    code, body = _request("GET", "/config")
+    if code == 401:
+        print("API returned 401. Set OFDD_API_KEY (e.g. from stack/.env).", file=sys.stderr)
+        return 1
+    if code != 200:
+        print(f"API not reachable at {BASE_URL} (GET /config -> {code}). Check BASE_URL.", file=sys.stderr)
+        return 1
+    print(f"API OK: {BASE_URL}  site_id={SITE_ID}  (interval test)")
+    if API_KEY:
+        print("  Using OFDD_API_KEY from env / stack/.env")
+    else:
+        print("  No OFDD_API_KEY set (auth disabled on server or local)")
 
     cycle = 0
     while True:

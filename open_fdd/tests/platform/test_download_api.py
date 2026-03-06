@@ -106,7 +106,7 @@ def test_download_csv_200_wide():
 
 
 def test_download_csv_200_long():
-    """Long format returns ts, point_key, value columns."""
+    """Long format returns ts, point_key, value columns (no point_ids => external_id as point_key)."""
     site_id = uuid4()
     rows = [
         {"ts": "2024-01-01 12:00:00", "external_id": "SA-T", "value": 72.5},
@@ -128,6 +128,49 @@ def test_download_csv_200_long():
     assert r.status_code == 200
     assert "point_key" in r.text
     assert "SA-T" in r.text
+
+
+def test_download_csv_200_long_weather_point_ids():
+    """POST /download/csv with point_ids (e.g. Web weather page): long format uses point_id as point_key."""
+    site_id = uuid4()
+    pt_id_1 = uuid4()
+    pt_id_2 = uuid4()
+    valid_ids = [{"id": pt_id_1}, {"id": pt_id_2}]
+    rows = [
+        {"ts": "2024-01-01 12:00:00", "point_id": pt_id_1, "external_id": "temp_f", "value": 72.5},
+        {"ts": "2024-01-01 12:00:00", "point_id": pt_id_2, "external_id": "rh_pct", "value": 55.0},
+    ]
+    cursor = MagicMock()
+    cursor.execute.return_value = None
+    cursor.fetchall.side_effect = [valid_ids, rows]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    conn.commit = MagicMock()
+
+    with (
+        patch("open_fdd.platform.api.download.resolve_site_uuid", return_value=site_id),
+        patch("open_fdd.platform.api.download.get_conn", side_effect=lambda: conn),
+    ):
+        r = client.post(
+            "/download/csv",
+            json={
+                "site_id": str(site_id),
+                "start_date": "2024-01-01",
+                "end_date": "2024-01-31",
+                "format": "long",
+                "point_ids": [str(pt_id_1), str(pt_id_2)],
+            },
+        )
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    body = r.text
+    assert "point_key" in body
+    assert "timestamp" in body or "value" in body
+    # point_key column should contain point UUIDs (same way frontend receives for Web weather charts)
+    assert str(pt_id_1) in body or str(pt_id_2) in body
 
 
 def test_download_faults_404_site_not_found():

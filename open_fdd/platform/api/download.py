@@ -81,16 +81,17 @@ def _fetch_timeseries(
                     )
                 cur.execute(
                     """
-                    SELECT tr.ts, p.external_id, tr.value
+                    SELECT tr.ts, p.id AS point_id, p.external_id, tr.value
                     FROM timeseries_readings tr
                     JOIN points p ON tr.point_id = p.id
                     WHERE p.site_id = %s
                       AND tr.point_id::text = ANY(%s)
                       AND tr.ts::date >= %s AND tr.ts::date <= %s
-                    ORDER BY tr.ts, p.external_id
+                    ORDER BY tr.ts, p.id
                     """,
                     (str(site_uuid), valid_ids, start_date, end_date),
                 )
+                return cur.fetchall(), True
             else:
                 cur.execute(
                     """
@@ -103,14 +104,18 @@ def _fetch_timeseries(
                     """,
                     (str(site_uuid), start_date, end_date),
                 )
-            return cur.fetchall()
+                return cur.fetchall(), False
 
 
 def _timeseries_to_csv(
     rows: list,
     fmt: str,
+    use_point_id_key: bool = False,
 ) -> str:
-    """Convert timeseries rows to CSV string."""
+    """Convert timeseries rows to CSV string.
+    When use_point_id_key is True (point_ids filter was used), long format uses point_id as point_key
+    so each series is unique and Plots chart does not break on duplicate external_id.
+    """
     df = pd.DataFrame(rows)
     df["ts"] = pd.to_datetime(df["ts"])
     if fmt == "wide":
@@ -119,7 +124,16 @@ def _timeseries_to_csv(
         ).reset_index()
         out = out.rename(columns={"ts": "timestamp"})
     else:
-        out = df.rename(columns={"ts": "timestamp", "external_id": "point_key"})
+        if use_point_id_key and "point_id" in df.columns:
+            df["point_key"] = df["point_id"].astype(str)
+            out = df[["ts", "point_key", "value"]].rename(
+                columns={"ts": "timestamp"}
+            )
+        else:
+            out = df.rename(
+                columns={"ts": "timestamp", "external_id": "point_key"}
+            )
+            out = out[["timestamp", "point_key", "value"]]
     return _to_excel_csv(out)
 
 
@@ -144,10 +158,10 @@ def get_download_csv(
     site_uuid = resolve_site_uuid(site_id, create_if_empty=False)
     if site_uuid is None:
         raise HTTPException(404, f"No site found for: {site_id!r}")
-    rows = _fetch_timeseries(site_uuid, start_date, end_date)
+    rows, use_point_id_key = _fetch_timeseries(site_uuid, start_date, end_date)
     if not rows:
         raise HTTPException(404, "No data for the given criteria")
-    csv_body = _timeseries_to_csv(rows, format)
+    csv_body = _timeseries_to_csv(rows, format, use_point_id_key=use_point_id_key)
     return StreamingResponse(
         iter([csv_body]),
         media_type="text/csv; charset=utf-8",
@@ -169,10 +183,14 @@ def post_download_csv(body: DownloadRequest):
     site_uuid = resolve_site_uuid(body.site_id, create_if_empty=False)
     if site_uuid is None:
         raise HTTPException(404, f"No site found for: {body.site_id!r}")
-    rows = _fetch_timeseries(site_uuid, body.start_date, body.end_date, body.point_ids)
+    rows, use_point_id_key = _fetch_timeseries(
+        site_uuid, body.start_date, body.end_date, body.point_ids
+    )
     if not rows:
         raise HTTPException(404, "No data for the given criteria")
-    csv_body = _timeseries_to_csv(rows, body.format)
+    csv_body = _timeseries_to_csv(
+        rows, body.format, use_point_id_key=use_point_id_key
+    )
     return StreamingResponse(
         iter([csv_body]),
         media_type="text/csv; charset=utf-8",

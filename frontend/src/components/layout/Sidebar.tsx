@@ -6,7 +6,6 @@ import {
   CircleDot,
   AlertTriangle,
   LineChart,
-  Cloud,
   Cpu,
   Database,
   Sun,
@@ -27,7 +26,6 @@ const NAV_ITEMS = [
   { to: "/data-model", label: "Data model", icon: Database, end: false },
   { to: "/faults", label: "Faults", icon: AlertTriangle, end: false },
   { to: "/plots", label: "Plots", icon: LineChart, end: false },
-  { to: "/web-weather", label: "Web weather", icon: Cloud, end: false },
   { to: "/system", label: "System resources", icon: Cpu, end: false },
 ] as const;
 

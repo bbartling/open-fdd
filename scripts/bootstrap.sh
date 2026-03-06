@@ -429,6 +429,17 @@ verify() {
   fi
 
   echo ""
+  echo "=== Weather data check (GET /sites, /points, POST /download/csv) ==="
+  if [[ -x "$REPO_ROOT/scripts/curl_weather_data.sh" ]]; then
+    if (cd "$REPO_ROOT" && ./scripts/curl_weather_data.sh http://localhost:8000 >/dev/null 2>&1); then
+      echo "Weather: OK (Open-Meteo points present for site; Web weather page will show charts)."
+    else
+      echo "Weather: no Open-Meteo points yet (run FDD or weather scraper; Config → open_meteo_site_id = your site name)."
+    fi
+  else
+    echo "Weather: skip (scripts/curl_weather_data.sh not executable)."
+  fi
+  echo ""
 }
 
 # Frontend: lint + typecheck. Backend: pytest. Caddy: validate Caddyfile.
@@ -519,8 +530,30 @@ seed_config_via_api() {
   fi
 
   echo "=== Seeding STACK config (PUT /config) ==="
+  local curl_auth=()
+  [[ -n "${OFDD_API_KEY:-}" ]] && curl_auth=(-H "Authorization: Bearer $OFDD_API_KEY")
+  API_BASE="${OFDD_API_URL:-http://localhost:8000}"
+  API_BASE="${API_BASE%/}"
+
+  # If we already have sites, set open_meteo_site_id to the first site's name so weather goes there (Web weather page).
+  local open_meteo_site_id_override=""
+  local sites_json
+  sites_json="$(curl -sf -H "Accept: application/json" "${curl_auth[@]}" "$API_BASE/sites" 2>/dev/null)" || true
+  if [[ -n "$sites_json" ]]; then
+    open_meteo_site_id_override=$(echo "$sites_json" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    sites = d if isinstance(d, list) else []
+    if sites and sites[0].get('name'):
+        print(sites[0]['name'])
+except Exception:
+    pass
+" 2>/dev/null)
+  fi
+
   local body
-  body=$(python3 -c "
+  body=$(OPEN_METEO_SITE_ID_OVERRIDE="$open_meteo_site_id_override" python3 -c "
 import json, os
 def env(key, default):
     v = os.environ.get(key, default)
@@ -531,6 +564,7 @@ def env(key, default):
     try: return float(v)
     except ValueError: pass
     return v
+om_site = os.environ.get('OPEN_METEO_SITE_ID_OVERRIDE') or os.environ.get('OFDD_OPEN_METEO_SITE_ID', 'default')
 print(json.dumps({
     'rule_interval_hours': env('OFDD_RULE_INTERVAL_HOURS', 0.1),
     'lookback_days': env('OFDD_LOOKBACK_DAYS', 3),
@@ -546,18 +580,24 @@ print(json.dumps({
     'open_meteo_longitude': env('OFDD_OPEN_METEO_LONGITUDE', -87.63),
     'open_meteo_timezone': os.environ.get('OFDD_OPEN_METEO_TIMEZONE', 'America/Chicago'),
     'open_meteo_days_back': env('OFDD_OPEN_METEO_DAYS_BACK', 3),
-    'open_meteo_site_id': os.environ.get('OFDD_OPEN_METEO_SITE_ID', 'default'),
+    'open_meteo_site_id': om_site,
     'graph_sync_interval_min': env('OFDD_GRAPH_SYNC_INTERVAL_MIN', 5),
 }))
 " 2>/dev/null) || body="{\"rule_interval_hours\":0.1,\"lookback_days\":3,\"rules_dir\":\"analyst/rules\",\"brick_ttl_dir\":\"config\",\"bacnet_enabled\":true,\"bacnet_scrape_interval_min\":1,\"bacnet_server_url\":\"http://localhost:8080\",\"bacnet_site_id\":\"default\",\"open_meteo_enabled\":true,\"open_meteo_interval_hours\":24,\"open_meteo_latitude\":41.88,\"open_meteo_longitude\":-87.63,\"open_meteo_timezone\":\"America/Chicago\",\"open_meteo_days_back\":3,\"open_meteo_site_id\":\"default\",\"graph_sync_interval_min\":5}"
 
-  local curl_auth=()
-  [[ -n "${OFDD_API_KEY:-}" ]] && curl_auth=(-H "Authorization: Bearer $OFDD_API_KEY")
   if curl -sf -X PUT "$API_BASE/config" -H "Content-Type: application/json" "${curl_auth[@]}" -d "$body" >/dev/null 2>&1; then
     echo "  PUT /config OK (config stored in RDF)."
+    [[ -n "$open_meteo_site_id_override" ]] && echo "  open_meteo_site_id set to first site: $open_meteo_site_id_override"
   else
     echo "  PUT /config failed (non-fatal; set config via API or /app/ later)."
     return 1
+  fi
+
+  # Trigger one FDD run so weather is fetched and points created (Web weather page will have data).
+  if curl -sf -X POST "$API_BASE/run-fdd" -H "Content-Type: application/json" "${curl_auth[@]}" -d '{}' >/dev/null 2>&1; then
+    echo "  POST /run-fdd OK (FDD loop will run soon; weather points created for open_meteo_site_id)."
+  else
+    echo "  POST /run-fdd skipped or failed (weather will appear after next FDD run or weather scraper)."
   fi
   return 0
 }

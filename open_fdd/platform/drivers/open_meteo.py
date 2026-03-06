@@ -179,6 +179,7 @@ def ensure_weather_equipment(site_id: uuid.UUID, cur) -> uuid.UUID:
     """
     Ensure an equipment record exists for Open-Meteo weather points on this site.
     Returns the equipment id so points can be linked. Used by store_weather_for_site.
+    After migration 016 (UNIQUE(site_id, name)), only one Open-Meteo per site exists.
     """
     cur.execute(
         """

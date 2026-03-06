@@ -12,6 +12,7 @@ export function useWebSocket() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const failedAttempts = useRef(0);
   const connectRef = useRef<() => void>(() => {});
+  const mountedRef = useRef(true);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -57,6 +58,7 @@ export function useWebSocket() {
     };
 
     ws.onclose = () => {
+      if (!mountedRef.current) return;
       failedAttempts.current += 1;
       const delay =
         failedAttempts.current >= MAX_RECONNECT_ATTEMPTS
@@ -78,10 +80,19 @@ export function useWebSocket() {
   }, [connect]);
 
   useEffect(() => {
+    mountedRef.current = true;
     connect();
     return () => {
+      mountedRef.current = false;
       clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      if (ws) {
+        wsRef.current = null;
+        // Avoid "closed before the connection is established" console noise when unmounting during connect
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
+          ws.close();
+        }
+      }
     };
   }, [connect]);
 }

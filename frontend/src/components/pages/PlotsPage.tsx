@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -29,6 +29,7 @@ import { FaultPicker } from "@/components/site/FaultPicker";
 import type { Point } from "@/types/api";
 import { downloadTimeseriesCsv } from "@/lib/csv";
 import { Download } from "lucide-react";
+import { displayRangeUpdater } from "./plots-display-range";
 
 const COLORS = [
   "hsl(215, 60%, 42%)",
@@ -130,13 +131,13 @@ function TrendChart({
   }, []);
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
+  // Use point id as chart key so each series is unique (avoids crash when duplicate equipment/external_id exist).
   const config: ChartConfig = useMemo(() => {
     const c: ChartConfig = {};
     pointIds.forEach((id, i) => {
       const p = pointMap.get(id);
-      const key = p?.external_id ?? id;
-      c[key] = {
-        label: p?.object_name ?? key,
+      c[id] = {
+        label: p?.object_name ?? p?.external_id ?? id,
         color: COLORS[i % COLORS.length],
         unit: p?.unit ?? undefined,
       };
@@ -144,7 +145,7 @@ function TrendChart({
     return c;
   }, [pointIds, pointMap]);
 
-  const keys = pointIds.map((id) => pointMap.get(id)?.external_id ?? id).filter(Boolean);
+  const keys = pointIds.filter(Boolean);
 
   const faultSegments = useMemo(() => {
     if (!faultData?.series?.length || selectedFaultIds.length === 0) return [];
@@ -200,21 +201,28 @@ function TrendChart({
   }, [fullData, brushRange]);
 
   // Report effective display range for CSV download (zoomed range when brush active, else full range).
+  // Only call when the reported range actually changes to avoid setState loops in parent.
+  const lastReportedRange = useRef<{ start: string; end: string } | null>(null);
   useEffect(() => {
     if (!onDisplayRangeChange) return;
+    let newStart: string;
+    let newEnd: string;
     if (fullData.length === 0) {
-      onDisplayRangeChange(start, end);
-      return;
-    }
-    if (brushRange != null) {
+      newStart = start;
+      newEnd = end;
+    } else if (brushRange != null) {
       const lo = Math.max(0, Math.min(brushRange.startIndex, fullData.length - 1));
       const hi = Math.max(0, Math.min(brushRange.endIndex, fullData.length - 1));
-      const displayStart = fullData[Math.min(lo, hi)].timestamp;
-      const displayEnd = fullData[Math.max(lo, hi)].timestamp;
-      onDisplayRangeChange(new Date(displayStart).toISOString(), new Date(displayEnd).toISOString());
+      newStart = new Date(fullData[Math.min(lo, hi)].timestamp).toISOString();
+      newEnd = new Date(fullData[Math.max(lo, hi)].timestamp).toISOString();
     } else {
-      onDisplayRangeChange(start, end);
+      newStart = start;
+      newEnd = end;
     }
+    const last = lastReportedRange.current;
+    if (last && last.start === newStart && last.end === newEnd) return;
+    lastReportedRange.current = { start: newStart, end: newEnd };
+    onDisplayRangeChange(newStart, newEnd);
   }, [onDisplayRangeChange, fullData, brushRange, start, end]);
 
   const handleBrushChange = useCallback((range: { startIndex?: number; endIndex?: number } | null) => {
@@ -279,9 +287,9 @@ function TrendChart({
 
   return (
     <div className="flex h-full flex-col gap-2">
-      <div className="flex-1 min-h-0">
+      <div className="w-full" style={{ height: CHART_MIN_HEIGHT }}>
         <ChartContainer config={config} className="h-full w-full">
-          <ResponsiveContainer width="100%" height="100%" minHeight={CHART_MIN_HEIGHT}>
+          <ResponsiveContainer width="100%" height={CHART_MIN_HEIGHT}>
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
               <XAxis
@@ -374,6 +382,10 @@ export function PlotsPage() {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const [customStart, setCustomStart] = useState(formatLocalDT(weekAgo));
   const [customEnd, setCustomEnd] = useState(formatLocalDT(now));
+
+  const onDisplayRangeChange = useCallback((s: string, e: string) => {
+    setDisplayRange((prev) => displayRangeUpdater(prev, s, e));
+  }, []);
 
   const { start, end } = useMemo(() => {
     if (preset === "custom") {
@@ -488,7 +500,7 @@ export function PlotsPage() {
           start={start}
           end={end}
           selectedFaultIds={selectedFaultIds}
-          onDisplayRangeChange={(s, e) => setDisplayRange({ start: s, end: e })}
+          onDisplayRangeChange={onDisplayRangeChange}
         />
       </div>
     </div>
