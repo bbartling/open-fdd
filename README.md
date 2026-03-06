@@ -10,7 +10,7 @@
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
-![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd_ha_icon_512.png)
+![open-fdd logo](open-fdd_ha_icon_512.png)
 
 Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in **fault detection and diagnostics (FDD) for HVAC**. It helps facilities optimize energy use and cut costs; because it runs **on-premises**, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
