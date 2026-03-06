@@ -73,7 +73,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--with-grafana` | Include Grafana; then accessible at http://localhost:3000 or via Caddy at `/grafana` if using a full Caddyfile. |
 | `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
 | `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
-| `--test`, `--verify-code` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
+| `--test` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
 | `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `weather-scraper`. |
 | `--build-all` | Rebuild and restart all services; then exit. |
 | `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |

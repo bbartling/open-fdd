@@ -160,6 +160,24 @@ export interface Capabilities {
   };
 }
 
+/** POST /bacnet/server_hello response (API returns { ok, body? } where body is JSON-RPC). */
+export interface MqttBridgeStatus {
+  enabled: boolean;
+  connected: boolean;
+  broker_url: string | null;
+  last_error: string | null;
+}
+
+export interface BacnetServerHelloResponse {
+  ok: boolean;
+  status_code?: number;
+  body?: {
+    result?: { message?: string; mqtt_bridge?: MqttBridgeStatus };
+    error?: unknown;
+  };
+  error?: string;
+}
+
 export interface WsEvent {
   type: "event" | "pong" | "error";
   topic?: string;

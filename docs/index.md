@@ -99,8 +99,9 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
 | **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
 | **Grafana** | 3000 | Dashboards (optional: `--with-grafana`) |
-| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP) |
+| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); POST server_hello returns `mqtt_bridge` when BACnet2MQTT enabled |
 | **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
+| **Mosquitto (MQTT)** | 1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for BACnet2MQTT and Home Assistant |
 
 ---
 

@@ -25,8 +25,16 @@ Open-FDD is an open-source **edge analytics platform for smart buildings** that 
 | **Frontend (React)** | http://localhost:5173 | Dashboard, Config, Points, Data model, Faults, Plots. Via Caddy: http://localhost:80. |
 | **API (Swagger)** | http://localhost:8000/docs | REST API; Bearer auth when `OFDD_API_KEY` set. |
 | **BACnet Swagger** | http://localhost:8080/docs | diy-bacnet-server JSON-RPC. |
+| **MQTT broker** | localhost:1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge`. For BACnet2MQTT and HA. |
 
 On another host, replace `localhost` with the server IP (e.g. `http://192.168.204.16:8000`). For bootstrap options run `./scripts/bootstrap.sh --help`.
+
+**Check BACnet and MQTT bridge status** (when bridge enabled, `result.mqtt_bridge` is present):
+
+```bash
+curl -s -X POST http://localhost:8000/bacnet/server_hello -H "Content-Type: application/json" -d '{}'
+# Or direct to gateway: curl -s -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}'
+```
 
 ---
 
@@ -38,6 +46,7 @@ Frontend: http://localhost:5173   (or :80 via Caddy)
 API:      http://localhost:8000   (docs: /docs)
 Grafana:  http://localhost:3000   (admin/admin; use --with-grafana)
 BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
+MQTT:     localhost:1883          (optional; use --with-mqtt-bridge)
 ```
 
 ---

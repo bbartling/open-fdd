@@ -20,7 +20,8 @@ The Open-FDD **React frontend** (http://localhost:5173 or via Caddy) is the main
 | **Faults** | Active fault states and definitions. Filter by site/equipment. |
 | **Plots** | Timeseries charts. Select site, date range, and points; view sensor and weather data. Download CSV for the selected range and points. |
 | **Web weather** | Open-Meteo weather charts (temp, RH, wind, radiation, etc.) when weather is enabled. |
-| **System resources** | Host and container metrics (when host-stats is running): memory, load, disk, per-container CPU/memory. |
+| **System resources** | Host and container metrics (when host-stats is running): memory, load, disk, **per-container CPU/memory** (table + time-series charts). Status badges (green/yellow/red) indicate resource pressure. |
+| **Stack status** | Overview shows API, BACnet gateway, and MQTT bridge status with **green / yellow / red** indicators (e.g. MQTT bridge connected = green, enabled but disconnected = yellow). |
 
 ---
 

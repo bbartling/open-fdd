@@ -88,6 +88,15 @@ export function SystemResourcesPage() {
   const disks = diskData?.disks ?? [];
   const disk = disks.length ? primaryDisk(disks) : null;
 
+  /** Container resource status: green / yellow / red from CPU and mem. */
+  function containerStatus(c: { cpu_pct?: number; mem_pct?: number | null }): "green" | "yellow" | "red" {
+    const cpu = c.cpu_pct ?? 0;
+    const mem = c.mem_pct ?? 0;
+    if (cpu >= 90 || mem >= 95) return "red";
+    if (cpu >= 70 || mem >= 80) return "yellow";
+    return "green";
+  }
+
   const hostChartData = useMemo(() => {
     if (!hostSeriesData?.series?.length) return [];
     const filtered =
@@ -192,11 +201,19 @@ export function SystemResourcesPage() {
       {containers.length > 0 && (
         <div className="mb-8">
           <h2 className="mb-3 text-sm font-medium text-muted-foreground">Containers (latest)</h2>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Status: <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 align-middle" /> OK
+            {" · "}
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" /> Moderate (CPU ≥70% or Mem ≥80%)
+            {" · "}
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500 align-middle" /> High (CPU ≥90% or Mem ≥95%)
+          </p>
           <Card>
             <CardContent className="pt-4">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-20">Status</TableHead>
                     <TableHead>Container</TableHead>
                     <TableHead className="text-right">CPU %</TableHead>
                     <TableHead className="text-right">Mem (MB)</TableHead>
@@ -205,17 +222,39 @@ export function SystemResourcesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {containers.map((c) => (
-                    <TableRow key={c.container_name}>
-                      <TableCell className="font-medium">{c.container_name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{c.cpu_pct}</TableCell>
-                      <TableCell className="text-right tabular-nums">{c.mem_mb}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {c.mem_pct != null ? `${c.mem_pct}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{c.pids}</TableCell>
-                    </TableRow>
-                  ))}
+                  {containers.map((c) => {
+                    const status = containerStatus(c);
+                    return (
+                      <TableRow key={c.container_name}>
+                        <TableCell className="w-20">
+                          <span
+                            className={`inline-block h-2.5 w-2.5 rounded-full ${
+                              status === "green"
+                                ? "bg-emerald-500"
+                                : status === "yellow"
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                            }`}
+                            title={
+                              status === "green"
+                                ? "OK"
+                                : status === "yellow"
+                                  ? "Moderate load"
+                                  : "High CPU or memory"
+                            }
+                            aria-label={status}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{c.container_name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{c.cpu_pct}</TableCell>
+                        <TableCell className="text-right tabular-nums">{c.mem_mb}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {c.mem_pct != null ? `${c.mem_pct}%` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{c.pids}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

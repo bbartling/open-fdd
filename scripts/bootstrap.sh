@@ -8,6 +8,8 @@
 #     -> builds and starts the FULL stack (Grafana is NOT started by default)
 #
 # Optional: --with-grafana   Include Grafana (and /grafana route via Caddy) in the stack.
+# Optional: --with-mqtt-bridge   Enable BACnet2MQTT bridge + MQTT broker (localhost:1883) for Home Assistant on same box.
+#   BACnet gateway: http://localhost:8080/docs (Swagger). POST server_hello returns mqtt_bridge status when bridge enabled.
 #
 # Optional (single-purpose):
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
@@ -17,19 +19,23 @@
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
-#   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, weather-scraper)
+#   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, mosquitto [--with-mqtt-bridge], weather-scraper)
 #   ./scripts/bootstrap.sh --frontend          # before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up)
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
 #
 # Notes:
-# - Linux only. No Windows support (bash, Docker, and stack are intended for Linux).
-# - Tested on x86; should work on ARM but is untested.
-# - Requires docker + docker compose plugin (or docker-compose fallback)
-# - If diy-bacnet-server sibling is missing, this script clones it.
-# - --test/--verify-code: frontend needs npm (or run openfdd_frontend). Backend needs .venv and pip install -e ".[dev]".
-#   Caddy validate uses docker run caddy:2 (Docker required). Backend pytest may fail with 401 if OFDD_API_KEY is set in env.
+# First run (--with-mqtt-bridge): starts the stack with the MQTT broker and bridge (writes env, compose up with mqtt profile, migrations, bootstrap complete).
+# ./scripts/bootstrap.sh --with-mqtt-bridge && ./scripts/bootstrap.sh --verify --test
+#
+# Second run (--verify --test): only verifies services and then runs the test suite (frontend lint, backend pytest, Caddy). It does not start the stack again.
+# ./scripts/bootstrap.sh --with-mqtt-bridge && ./scripts/bootstrap.sh --test
+#
+# Verify + tests	./scripts/bootstrap.sh --verify --test
+# Verify only	./scripts/bootstrap.sh --verify
+# Tests only	./scripts/bootstrap.sh --test
+#
 #
 set -euo pipefail
 
@@ -53,6 +59,7 @@ INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
 FRONTEND_RESET=false
+WITH_MQTT_BRIDGE=false
 
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -82,10 +89,11 @@ while [[ $i -lt ${#args[@]} ]]; do
   arg="${args[$i]}"
   case "$arg" in
     --verify) VERIFY_ONLY=true ;;
-    --verify-code|--test) VERIFY_CODE=true ;;
+    --test) VERIFY_CODE=true ;;
     --minimal) MINIMAL=true ;;
     --reset-grafana) RESET_GRAFANA=true ;;
     --with-grafana) WITH_GRAFANA=true ;;
+    --with-mqtt-bridge) WITH_MQTT_BRIDGE=true ;;
     --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
@@ -114,8 +122,10 @@ Core:
   (no args)                 Build + start full stack (ALL services)
   --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; use --with-grafana to add Grafana)
   --with-grafana            Include Grafana in the stack (default: not installed)
-  --verify                  Show running services + health checks
-  --test, --verify-code     Run tests: frontend (lint + typecheck), backend (pytest), Caddyfile validate; then exit
+  --with-mqtt-bridge        Enable BACnet2MQTT bridge + start MQTT broker (localhost:1883) for Home Assistant on same box
+  --verify                  Show running services + health checks (exits before starting stack; run --with-mqtt-bridge without --verify first to enable bridge)
+  --verify --test           Verify services then run tests; then exit
+  --test                    Run tests only: frontend (lint + typecheck), backend (pytest), Caddyfile validate; then exit
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
   --maintenance             Safe Docker prune only (NO volumes)
 
@@ -123,7 +133,7 @@ Core:
 
 Build controls:
   --build SERVICE ...       Rebuild + restart only these services, then exit
-                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana, host-stats, weather-scraper
+                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana, host-stats, mosquitto (--with-mqtt-bridge), weather-scraper
   --build-all               Rebuild + restart all services, then exit
   --frontend                Before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up; use after package.json changes)
 
@@ -317,6 +327,16 @@ write_edge_env() {
       fi
     fi
   fi
+
+  # BACnet2MQTT bridge: set defaults only when --with-mqtt-bridge and not already set
+  if $WITH_MQTT_BRIDGE; then
+    for entry in "BACNET2MQTT_ENABLED=true" "MQTT_BROKER_URL=mqtt://127.0.0.1:1883" "HA_DISCOVERY_ENABLED=true"; do
+      key="${entry%%=*}"
+      if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
+        echo "$entry" >> "$env_file"
+      fi
+    done
+  fi
 }
 
 ensure_diy_bacnet_sibling() {
@@ -378,11 +398,26 @@ verify() {
     echo "Grafana: not running — start with: ./scripts/bootstrap.sh --with-grafana"
   fi
 
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_mosquitto; then
+    echo "MQTT:     localhost:1883 (broker running; BACnet2MQTT bridge if enabled in bacnet-server env)"
+  elif grep -qE '^BACNET2MQTT_ENABLED=true' "$STACK_DIR/.env" 2>/dev/null; then
+    echo "MQTT:     broker not running — start stack with: ./scripts/bootstrap.sh --with-mqtt-bridge (without --verify)"
+  fi
+
   echo ""
   echo "=== Feature checks (BACnet + API, up to 5 tries / 10s apart) ==="
   if curl_retry 5 10 -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" \
       -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}'; then
     echo "BACnet: http://localhost:8080 (OK — server_hello responded)"
+    hello="$(curl -sf -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}' 2>/dev/null)" || true
+    if echo "$hello" | grep -q '"mqtt_bridge"'; then
+      if echo "$hello" | grep -q '"connected":true'; then
+        echo "MQTT bridge: connected to broker"
+      else
+        echo "MQTT bridge: enabled but disconnected (check broker and bacnet-server logs)"
+      fi
+    fi
   else
     echo "BACnet: http://localhost:8080 (not reachable or no response after 5 tries)"
   fi
@@ -625,6 +660,9 @@ fi
 if $VERIFY_ONLY && ! $UPDATE_PULL_REBUILD; then
   check_prereqs
   verify
+  if $VERIFY_CODE; then
+    verify_code || exit 1
+  fi
   exit 0
 fi
 
@@ -648,6 +686,9 @@ check_prereqs
 ensure_diy_bacnet_sibling
 
 dc="$(docker_compose_cmd)"
+DC_PROFILE=()
+$WITH_GRAFANA && DC_PROFILE+=(--profile grafana)
+$WITH_MQTT_BRIDGE && DC_PROFILE+=(--profile mqtt)
 
 # -----------------------------
 # --frontend: stop frontend, remove node_modules volume (fresh npm install on next up)
@@ -777,28 +818,43 @@ if [[ -n "$BUILD_SERVICES_STR" ]]; then
     echo "Caddy restarted (reloads Caddyfile)."
   fi
   echo "Done. Services restarted: $BUILD_SERVICES_STR"
+  if $WITH_MQTT_BRIDGE; then
+    echo "  MQTT:     localhost:1883 (BACnet2MQTT bridge enabled; use HA MQTT integration to discover entities)"
+  fi
   exit 0
 fi
 
 # -----------------------------
 # Default run (NO ARGS): FULL STACK
 # -----------------------------
+# Ensure bridge env vars are in stack/.env so bacnet-server gets them (server_hello will show mqtt_bridge)
+if $WITH_MQTT_BRIDGE; then
+  env_file="$STACK_DIR/.env"
+  for entry in "BACNET2MQTT_ENABLED=true" "MQTT_BROKER_URL=mqtt://127.0.0.1:1883" "HA_DISCOVERY_ENABLED=true"; do
+    key="${entry%%=*}"
+    if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
+      echo "$entry" >> "$env_file"
+    fi
+  done
+fi
+
 cd "$STACK_DIR"
 
 if $MINIMAL; then
   echo "=== Starting minimal stack (DB + BACnet server + scraper) ==="
   if $WITH_GRAFANA; then
-    $dc --profile grafana up -d --build db bacnet-server bacnet-scraper grafana
+    $dc "${DC_PROFILE[@]}" up -d --build db bacnet-server bacnet-scraper grafana
   else
-    $dc up -d --build db bacnet-server bacnet-scraper
+    $dc "${DC_PROFILE[@]}" up -d --build db bacnet-server bacnet-scraper
   fi
 else
   echo "=== Building and starting full stack ==="
-  if $WITH_GRAFANA; then
-    $dc --profile grafana up -d --build
-  else
-    $dc up -d --build
-  fi
+  $dc "${DC_PROFILE[@]}" up -d --build
+fi
+
+# So bacnet-server picks up bridge env (server_hello returns mqtt_bridge)
+if $WITH_MQTT_BRIDGE; then
+  $dc "${DC_PROFILE[@]}" up -d --force-recreate bacnet-server
 fi
 
 cd "$REPO_ROOT"
@@ -821,6 +877,9 @@ echo "=== Bootstrap complete ==="
 echo '  DB:       localhost:5432/openfdd  (postgres/postgres)'
 if $WITH_GRAFANA; then
   echo '  Grafana:  http://localhost:3000   (admin/admin) or via Caddy /grafana'
+fi
+if $WITH_MQTT_BRIDGE || grep -qE '^BACNET2MQTT_ENABLED=true' "$STACK_DIR/.env" 2>/dev/null; then
+  echo "  MQTT:     localhost:1883 (BACnet2MQTT bridge enabled; use HA MQTT integration to discover entities)"
 fi
 if $MINIMAL; then
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"

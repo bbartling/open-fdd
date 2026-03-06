@@ -16,7 +16,8 @@ x-log-opts: &log-opts
   max-file: "${OFDD_LOG_MAX_FILES:-3}"
 
 services:
-  # BACnet/IP gateway — always-on server, JSON-RPC on 8080
+  # BACnet/IP gateway — always-on server, JSON-RPC on 8080.
+  # BACnet2MQTT bridge: set BACNET2MQTT_ENABLED, MQTT_BROKER_URL, HA_DISCOVERY_ENABLED in stack/.env (or use bootstrap --with-mqtt-bridge).
   bacnet-server:
     build:
       context: ../../diy-bacnet-server
@@ -24,6 +25,15 @@ services:
     image: diy-bacnet-server:latest
     container_name: openfdd_bacnet_server
     network_mode: host
+    environment:
+      BACNET2MQTT_ENABLED: "${BACNET2MQTT_ENABLED:-}"
+      MQTT_BROKER_URL: "${MQTT_BROKER_URL:-}"
+      HA_DISCOVERY_ENABLED: "${HA_DISCOVERY_ENABLED:-}"
+      HA_DISCOVERY_TOPIC: "${HA_DISCOVERY_TOPIC:-homeassistant}"
+      MQTT_BASE_TOPIC: "${MQTT_BASE_TOPIC:-bacnet2mqtt}"
+      MQTT_POLL_INTERVAL_SEC: "${MQTT_POLL_INTERVAL_SEC:-30}"
+      MQTT_USER: "${MQTT_USER:-}"
+      MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
     logging:
       driver: json-file
       options: *log-opts
@@ -249,6 +259,20 @@ services:
     depends_on:
       - api
       - frontend
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
+
+  # MQTT broker for BACnet2MQTT bridge (profile mqtt). Start with: docker compose --profile mqtt up -d
+  # BACnet server (host network) connects to mqtt://127.0.0.1:1883; HA on same box uses MQTT integration → localhost:1883.
+  mosquitto:
+    profiles:
+      - mqtt
+    image: eclipse-mosquitto:2
+    container_name: openfdd_mosquitto
+    ports:
+      - "1883:1883"
     restart: unless-stopped
     logging:
       driver: json-file
