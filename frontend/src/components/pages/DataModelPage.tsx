@@ -86,8 +86,8 @@ export function DataModelPage() {
     staleTime: 60 * 1000,
   });
 
-  const sparqlMutation = useMutation({
-    mutationFn: (query: string) =>
+  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
+    mutationFn: (query) =>
       apiFetch<SparqlResponse>("/data-model/sparql", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
