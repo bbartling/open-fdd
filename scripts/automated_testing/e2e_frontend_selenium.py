@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
 E2E tests for the Open-FDD frontend using Selenium. Browser-level counterpart to
-graph_and_crud_test.py: all actions via the UI (no direct API calls). Covers:
-delete-all-sites + reset, create site (TestBenchSite), import demo_site_llm_payload.json,
-verify equipment/points in UI, verify site selection persists, Plots/Weather/Overview,
-and chart presence (or acceptable empty state).
+delete_all_sites_and_reset.py + graph_and_crud_test.py: same flow via the UI (no direct
+API calls). Covers: delete-all-sites + reset, create site (TestBenchSite), import
+demo_site_llm_payload.json, verify equipment/points, site selection, Plots/Weather/Overview.
 
-Requires: pip install -e ".[e2e]"  (selenium, webdriver-manager)
-Stack: frontend + API + DB. Default frontend URL: http://localhost:5173 (or FRONTEND_URL).
+Requirement: The frontend must be able to fetch sites (GET /sites). When the API
+requires auth, the frontend must be built/served with VITE_OFDD_API_KEY set (same
+value as OFDD_API_KEY in stack/.env). Otherwise the UI shows 0 sites and the
+delete-all section is never rendered — E2E will report "No sites to delete".
 
-Usage (Windows against test bench):
-  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
-  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16:5173
-
-Copy this file and demo_site_llm_payload.json to your Windows machine; pip install -e ".[e2e]"
-(or pip install selenium webdriver-manager). Port 5173 if Vite dev server; omit or use :80 if behind Caddy.
+python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
 """
 
 from __future__ import annotations
@@ -26,33 +22,18 @@ import sys
 import time
 from pathlib import Path
 
-try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options as ChromeOptions
-    from selenium.webdriver.chrome.service import Service as ChromeService
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-    from webdriver_manager.chrome import ChromeDriverManager
-except ImportError as e:
-    print('Install e2e deps: pip install -e ".[e2e]"  (selenium, webdriver-manager)', file=sys.stderr)
-    raise SystemExit(1) from e
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 
 # Paths: script in scripts/automated_testing/ or copied; payload next to script or in scripts/
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent if SCRIPT_DIR.name == "automated_testing" else SCRIPT_DIR.parent
-
-def _find_demo_payload() -> Path:
-    for p in (
-        SCRIPT_DIR / "demo_site_llm_payload.json",
-        SCRIPT_DIR.parent / "demo_site_llm_payload.json",
-        REPO_ROOT / "scripts" / "demo_site_llm_payload.json",
-    ):
-        if p.is_file():
-            return p
-    return SCRIPT_DIR / "demo_site_llm_payload.json"  # fail later with clear error
-
-DEMO_PAYLOAD_PATH = _find_demo_payload()
+DEMO_PAYLOAD_PATH = SCRIPT_DIR / "demo_site_llm_payload.json"
 
 # Defaults
 DEFAULT_FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
@@ -179,14 +160,42 @@ def save_screenshot_and_context(driver: webdriver.Chrome, prefix: str = "e2e_fai
 
 # --- Flow steps ---
 
+def _sites_loaded(driver: webdriver.Chrome) -> bool:
+    """True when Data Model page has settled: delete-all section (sites exist), or No sites, or site rows."""
+    if driver.find_elements(By.CSS_SELECTOR, "[data-testid=delete-all-confirm-input]"):
+        return True
+    if "No sites" in (driver.page_source or ""):
+        return True
+    if driver.find_elements(By.CSS_SELECTOR, "tr[data-site-id]"):
+        return True
+    return False
+
+
 def delete_all_sites_and_reset_via_ui(driver: webdriver.Chrome, base_url: str) -> None:
-    """Navigate to Data Model, remove all sites and reset graph via UI."""
+    """Navigate to Data Model, remove all sites and reset graph via UI.
+    Replicates delete_all_sites_and_reset.py in the browser. Sites load asynchronously;
+    the delete-all block is only rendered when the frontend has sites (GET /sites succeeded)."""
     driver.get(f"{base_url}/data-model")
     wait = WebDriverWait(driver, ELEMENT_WAIT)
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid=new-site-name-input]")))
+    # Wait for sites to load (or empty state). Graph actions card may be above or below fold.
+    wait_sites = WebDriverWait(driver, 18)
+    wait_sites.until(_sites_loaded)
+    # Scroll "Graph actions" / "Remove all sites" into view so delete-all is visible
+    try:
+        for text in ("Remove all sites from data model", "Graph actions"):
+            el = driver.find_elements(By.XPATH, f"//*[contains(text(), '{text}')]")
+            if el:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el[0])
+                time.sleep(0.4)
+                break
+    except Exception:
+        pass
     confirm_input = driver.find_elements(By.CSS_SELECTOR, "[data-testid=delete-all-confirm-input]")
     if not confirm_input:
         print("  No sites to delete.")
+        print("  Hint: If you expect sites, ensure the frontend is built/served with VITE_OFDD_API_KEY", file=sys.stderr)
+        print("  (same as OFDD_API_KEY in stack/.env) so GET /sites succeeds. See script docstring.", file=sys.stderr)
         return
     confirm_input = confirm_input[0]
     placeholder = confirm_input.get_attribute("placeholder") or ""
@@ -266,18 +275,30 @@ def verify_data_model_after_import(
     expected_point_count: int | None,
     expected_equipment_count: int | None,
 ) -> None:
-    """After import, assert equipment and point names appear on Data Model page; optional count checks."""
+    """After import, assert equipment names appear on Data Model page.
+    The Data Model page shows equipment names and point counts only; it does not list
+    point names (SA-T, ZoneTemp, etc.). Point names are validated on the Plots page
+    when we select a known point."""
     driver.get(f"{base_url}/data-model")
     wait_for_text(driver, "Equipment", timeout=TEXT_WAIT)
-    page_src = driver.page_source or ""
+    if expected_equipment:
+        wait_for_text(driver, expected_equipment[0], timeout=TEXT_WAIT)
+    try:
+        el = driver.find_elements(By.XPATH, "//*[contains(text(), 'Equipment in the data model')]")
+        if not el:
+            el = driver.find_elements(By.XPATH, "//*[contains(text(), 'Equipment')]")
+        if el:
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el[0])
+            time.sleep(0.3)
+    except Exception:
+        pass
     for name in expected_equipment:
         assert_text_present(driver, name, f"Expected equipment {name!r} after import.")
     print(f"  Data model: equipment {expected_equipment} visible.")
-    for name in expected_points:
-        assert_text_present(driver, name, f"Expected point {name!r} after import.")
-    print(f"  Data model: points {expected_points} visible.")
+    # Point names are not shown on Data Model (only equipment + point count). Validated on Plots.
+    if expected_points:
+        print(f"  Data model: point names (e.g. {expected_points[:2]}) will be validated on Plots page.")
     if expected_equipment_count is not None:
-        # Optional: assert table row count or badge; if we have a clear count element we can assert
         pass
     if expected_point_count is not None:
         pass

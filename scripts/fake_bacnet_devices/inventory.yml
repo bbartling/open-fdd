@@ -1,0 +1,31 @@
+# Ansible inventory for fake BACnet devices (Open FDD test bench).
+# User ben / password ben on both Pis. For password auth, install: apt install sshpass
+---
+all:
+  children:
+    ahu_fake:
+      hosts:
+        fake_ahu:
+          ansible_host: 192.168.204.13
+      vars:
+        device_script: fake_ahu_faults.py
+        device_name: BensFakeAhu
+        device_instance: "3456789"
+
+    vav_fake:
+      hosts:
+        fake_vav:
+          ansible_host: 192.168.204.14
+      vars:
+        device_script: fake_vav_faults.py
+        device_name: Zone1VAV
+        device_instance: "3456790"
+
+  vars:
+    ansible_user: ben
+    ansible_password: "ben"   # test bench only
+    ansible_become_password: "ben"   # for sudo (create /opt, systemd)
+    # Uncomment if using SSH key instead of password:
+    # ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+    ansible_python_interpreter: /usr/bin/python3
+    deploy_path: /opt/openfdd-fake-bacnet

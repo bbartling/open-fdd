@@ -80,6 +80,16 @@ The Data model page uses a few `data-testid` and `data-site-id` attributes so th
 
 ---
 
+## API auth: why E2E might see “No sites to delete”
+
+The E2E script replicates **delete_all_sites_and_reset.py** and **graph_and_crud_test.py** in the browser. The frontend **does** have the “Remove all sites and reset graph” feature (Data Model → Graph actions card). That block is only rendered when the frontend has at least one site — i.e. when **GET /sites** succeeds.
+
+If your API requires Bearer auth (`OFDD_API_KEY` in `stack/.env`), the frontend must send that key. The frontend reads **VITE_OFDD_API_KEY** at build/serve time (same value as `OFDD_API_KEY`). When you run the stack with `docker compose`, the frontend container gets `VITE_OFDD_API_KEY: ${OFDD_API_KEY:-}` from `.env`, so the UI can fetch sites. If you serve the frontend some other way (e.g. a static build or another host) **without** setting `VITE_OFDD_API_KEY`, then GET /sites returns 401, the UI has 0 sites, and the delete-all section never appears — the E2E will report “No sites to delete” and print a hint.
+
+**Fix:** Ensure the frontend is built or served with `VITE_OFDD_API_KEY` set to the same value as `OFDD_API_KEY` in `stack/.env`. When using the repo stack, `./scripts/bootstrap.sh` writes `OFDD_API_KEY` to `stack/.env` and the frontend container receives it; no extra step needed.
+
+---
+
 ## Relation to API scripts
 
 - **`scripts/delete_all_sites_and_reset.py`** — Same outcome (delete all sites, reset graph) but via **API** (GET /sites, DELETE /sites/{id}, POST /data-model/reset). Use it when you want a quick reset from the command line without opening the UI.

@@ -3,17 +3,27 @@
 Fake VAV Box BACnet Device for GL36 VAV Request Testing
 =======================================================
 
-Fault Injection Added:
-- ZoneTemp occasional flatline (stuck long enough to trip window-based flatline rules)
-- ZoneTemp occasional spike (out-of-bounds to trip bounds rules)
+Fault behavior (aligned with data_model.ttl and analyst rules):
+- ZoneTemp (Zone_Air_Temperature_Sensor, polled): time-based schedule so faults occur at
+  known times. See fault_schedule.py: minute 10-49 = flatline, 50-54 = out-of-bounds.
+- Other points: unchanged (commandable or derived) so the device works for e2e.
 
-Usage:
-    python fake_vav.py --name Zone1VAV --instance 3456790 [--debug]
+Deploy on RPi: copy this file and fault_schedule.py to the same directory; run with
+  python fake_vav_faults.py --name Zone1VAV --instance 3456790
 """
 
 import asyncio
 import logging
+import os
 import random
+import sys
+
+# So fault_schedule.py is found when run from any cwd (e.g. on RPi: copy this file + fault_schedule.py to same dir)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
+from fault_schedule import OUT_OF_BOUNDS_VALUE, scheduled_mode
 
 from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.app import Application
@@ -87,48 +97,25 @@ class FakeVAVApplication:
         for obj in self.points.values():
             self.app.add_object(obj)
 
-        # -------------------------------
-        # Fault injection state + knobs
-        # -------------------------------
-        self._fault = {
-            "zt_flatline_remaining": 0,
-            "zt_flatline_value": None,
-            "zt_spike_remaining": 0,
-        }
-
-        # With UPDATE_INTERVAL_SECONDS=20 and flatline window=40,
-        # you want >= 40 updates stuck => >= 800 seconds (~13.3 min).
-        self.ZT_FLATLINE_CHANCE_PER_UPDATE = 0.03  # 3% chance each update
-        self.ZT_FLATLINE_UPDATES = 42  # >= 40, reliably trips
-
-        self.ZT_SPIKE_CHANCE_PER_UPDATE = 0.01  # occasional spikes
-        self.ZT_SPIKE_UPDATES = 2  # brief spikes
+        # Scheduled fault: hold last value for flatline (ZoneTemp only, polled)
+        self._zt_flatline_value: float | None = None
 
         asyncio.create_task(self.update_values())
 
-    def _maybe_start_zt_faults(self, zt_obj: AnalogInputObject):
-        # Start flatline?
-        if self._fault["zt_flatline_remaining"] <= 0:
-            if random.random() < self.ZT_FLATLINE_CHANCE_PER_UPDATE:
-                self._fault["zt_flatline_remaining"] = self.ZT_FLATLINE_UPDATES
-                self._fault["zt_flatline_value"] = float(zt_obj.presentValue)
-
-        # Start spike?
-        if self._fault["zt_spike_remaining"] <= 0:
-            if random.random() < self.ZT_SPIKE_CHANCE_PER_UPDATE:
-                self._fault["zt_spike_remaining"] = self.ZT_SPIKE_UPDATES
-
-    def _apply_zt_behavior(self, normal_value: float) -> tuple[float, str]:
-        # Flatline priority
-        if self._fault["zt_flatline_remaining"] > 0:
-            self._fault["zt_flatline_remaining"] -= 1
-            return float(self._fault["zt_flatline_value"]), "flatline"
-
-        if self._fault["zt_spike_remaining"] > 0:
-            self._fault["zt_spike_remaining"] -= 1
-            # sensor_bounds.yaml zt bounds are [40,100] => push out
-            return 120.0, "spike"
-
+    def _scheduled_zone_temp(self, normal_value: float, zt_obj: AnalogInputObject) -> tuple[float, str]:
+        """
+        ZoneTemp (polled): use fault_schedule by UTC minute.
+        Returns (value, mode_str) with mode_str in {"normal", "flatline", "bounds"}.
+        """
+        mode = scheduled_mode()
+        if mode == "flatline":
+            if self._zt_flatline_value is None:
+                self._zt_flatline_value = float(zt_obj.presentValue)
+            return self._zt_flatline_value, "flatline"
+        if mode == "bounds":
+            self._zt_flatline_value = None
+            return OUT_OF_BOUNDS_VALUE, "bounds"
+        self._zt_flatline_value = None
         return normal_value, "normal"
 
     async def update_values(self):
@@ -136,7 +123,7 @@ class FakeVAVApplication:
             await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
             print("=" * 60)
             print(
-                "Fake VAV – updating sensor/loop values (fault injection on ZoneTemp)"
+                "Fake VAV – updating sensor/loop values (scheduled faults on ZoneTemp)"
             )
 
             zt = self.points["ZoneTemp"]
@@ -151,12 +138,9 @@ class FakeVAVApplication:
             vfsp_val = max(0.0, float(vfsp.presentValue))
             demand_val = float(zd.presentValue)
 
-            # --- ZoneTemp normal behavior (hover around setpoint) ---
+            # --- ZoneTemp (polled): scheduled flatline/bounds for FDD validation ---
             normal_zone_temp = zsp_val + random.uniform(-3.0, 3.0)
-
-            # maybe start faults + apply
-            self._maybe_start_zt_faults(zt)
-            new_zone_temp, mode = self._apply_zt_behavior(normal_zone_temp)
+            new_zone_temp, mode = self._scheduled_zone_temp(normal_zone_temp, zt)
             zt.presentValue = new_zone_temp
 
             # --- ZoneDemand behavior uses the (possibly faulted) zone temp ---

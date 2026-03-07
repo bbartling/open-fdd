@@ -7,6 +7,7 @@
 - **FDD logs / fault_results:** `docker exec openfdd_timescale psql -U postgres -d openfdd -c "SELECT ... FROM fdd_run_log ..."` and `fault_results`; see docs for queries.
 - **HA addon:** `./scripts/bootstrap.sh --ha-addon` → `openfdd-addon:local`. Copy `stack/ha_addon` to HA addons; image = `openfdd-addon:local`. Smoke test via Developer Tools → Services (`openfdd.*`). Details: `docs/integrations/home_assistant.md`.
 - **PyPI:** Prefer a small **integration-helpers** package only (e.g. `openfdd-client`): HTTP client + optional WS + optional Pydantic models. Full platform stays repo/Docker.
+- **Frontend hot reload:** Turn it off once the UI is solid enough and before Phase 1 (auth). Run the frontend as a production build (e.g. serve `frontend/dist` via Caddy or the API) so E2E and manual testing hit the same bundle you’ll deploy. The stack’s frontend container currently runs `npm run dev`; when you’re ready, switch it to build + serve static (or use Caddy to serve the built app) so there’s no HMR and behavior matches production.
 
 ---
 
@@ -87,3 +88,27 @@
 **Practical dev workflow:** (1) Build image. (2) Run `trivy image <name>:<tag>`. (3) Triage: ignore accepted risks or fix (update base, bump deps). (4) Optionally add a `make trivy` or script so the team runs it before push. Phase 3 = “Trivy in the loop” so scanning is part of normal dev, not only production.
 
 **Docs:** Full quickstart and when-to-use: **docs/howto/trivy.md**. Listed in [How-to Guides](docs/howto/index.md) and referenced from [Security](docs/security.md). **Keep docs up to date:** when you add/rename stack images or change Trivy/CI usage, update the Trivy howto, NOTES Phase 3, and any `trivy-scan` script so Phase 3 stays accurate.
+
+---
+
+## Platform config (RDF) and scrapers – what’s used, what can be cleaned up
+
+**Where config lives:** `config/data_model.ttl` holds `ofdd:platform_config` (lines 7–24). The API loads this into the in-memory graph on startup; GET/PUT `/config` read/write that graph and serialize back to the TTL file. Effective config = overlay from graph (plus env `OFDD_*` as fallback). So the RDF block in `data_model.ttl` is the **source of truth** for the platform when the API is running.
+
+**Open-Meteo scraper:**
+
+- **Standalone** (`run_weather_fetch.py` or `run_weather_fetch.py --loop`): Fetches config via **GET /config** (so it sees the graph/RDF config). Uses `open_meteo_enabled`, `open_meteo_interval_hours`, `open_meteo_latitude`, `open_meteo_longitude`, `open_meteo_days_back`, `open_meteo_timezone`, `open_meteo_site_id`. The **interval** (`open_meteo_interval_hours`, e.g. 24 in the TTL) is only used here: it’s the sleep between fetches when you run `--loop`. So “fetch every 24 h” applies to the standalone weather scraper only.
+- **FDD loop** (`run_rule_loop.py`): Does **not** use `open_meteo_interval_hours`. It fetches weather **once per FDD run** using `get_platform_settings()` (graph overlay). So weather is fetched every **rule_interval_hours** (e.g. 3), using **lookback_days** for the window. So when you use the FDD loop, the “24” in `ofdd:openMeteoIntervalHours` has no effect; only the standalone weather scraper respects it.
+
+**FDD routine vs default config:**
+
+- FDD loop uses: `rule_interval_hours`, `lookback_days`, `rules_dir`, and for weather (before each run): `open_meteo_enabled`, `open_meteo_site_id`, `open_meteo_latitude`, `open_meteo_longitude`, `open_meteo_timezone`, and **lookback_days** (not `open_meteo_days_back` — the FDD loop passes `lookback_days` to the weather fetch so the window matches the rule run). So in the RDF, **openMeteoDaysBack** is used by the standalone scraper and by the API/config display; the FDD loop itself uses **lookbackDays** for the weather window.
+- All keys in the RDF block are still used somewhere (API GET/PUT, FDD loop, BACnet scraper, standalone weather scraper, or graph sync). Nothing in that block is dead.
+
+**Cleanup / consistency done:**
+
+- **bacnet_enabled:** The RDF and API use `bacnet_enabled`; `PlatformSettings` had `bacnet_scrape_enabled`. The overlay was never applied to the BACnet scraper because the attr name didn’t match. **Fixed:** `get_platform_settings()` now maps overlay key `bacnet_enabled` → attr `bacnet_scrape_enabled`, so changing “Enable BACnet” in the UI or via PUT `/config` correctly turns the scraper on/off.
+
+**Optional doc cleanup:**
+
+- In `run_weather_fetch.py` or the weather howto, add one sentence: “When using the FDD loop, weather is fetched every FDD run (every `rule_interval_hours`); `open_meteo_interval_hours` only applies to the standalone `run_weather_fetch.py --loop`.” So it’s clear that the 24 in the TTL is for the standalone scraper, not for the FDD-driven fetch.
