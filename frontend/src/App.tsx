@@ -10,6 +10,8 @@ import { FaultsPage } from "@/components/pages/FaultsPage";
 import { SystemResourcesPage } from "@/components/pages/SystemResourcesPage";
 import { DataModelPage } from "@/components/pages/DataModelPage";
 import { PlotsPage } from "@/components/pages/PlotsPage";
+import { DiagnosticsPage } from "@/components/pages/DiagnosticsPage";
+import { WeatherDataPage } from "@/components/pages/WeatherDataPage";
 import { useWebSocket } from "@/hooks/use-websocket";
 
 const queryClient = new QueryClient({
@@ -33,8 +35,10 @@ function AppRoutes() {
           <Route path="equipment" element={<Navigate to="/config" replace />} />
           <Route path="points" element={<PointsPage />} />
           <Route path="faults" element={<FaultsPage />} />
-          <Route path="system" element={<SystemResourcesPage />} />
           <Route path="plots" element={<PlotsPage />} />
+          <Route path="weather" element={<WeatherDataPage />} />
+          <Route path="diagnostics" element={<DiagnosticsPage />} />
+          <Route path="system" element={<SystemResourcesPage />} />
           <Route path="data-model" element={<DataModelPage />} />
         </Route>
       </Routes>

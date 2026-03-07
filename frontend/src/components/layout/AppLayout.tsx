@@ -5,7 +5,7 @@ import { StackStatusStrip } from "@/components/dashboard/StackStatusStrip";
 
 export function AppLayout() {
   const { pathname } = useLocation();
-  const isPlots = pathname === "/plots";
+  const fullWidthContent = pathname === "/plots" || pathname === "/weather";
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -16,7 +16,7 @@ export function AppLayout() {
         <main className="flex-1 overflow-y-auto">
           <div
             className={
-              isPlots
+              fullWidthContent
                 ? "w-full px-6 py-8"
                 : "mx-auto max-w-7xl px-6 py-8"
             }

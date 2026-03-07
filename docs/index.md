@@ -78,7 +78,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [Integrations](integrations/home_assistant) | **TODO:** Home Assistant integration has been removed from this project. The linked docs are kept for reference only and may be outdated. |
-| [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [danger zone](howto/danger_zone) |
+| [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [Trivy scanning](howto/trivy), [danger zone](howto/danger_zone) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |

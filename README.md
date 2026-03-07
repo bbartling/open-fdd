@@ -51,6 +51,7 @@ pytest -v
 
 - **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
 - Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
+- **E2E frontend (Selenium):** `pip install -e ".[e2e]"` then `python scripts/e2e_frontend_selenium.py` with the stack running. All actions via the UI; validates delete-all/reset, create site, import LLM payload, and that Plots/Weather charts are not blank. See [Contributing — E2E](docs/contributing.md#e2e-frontend-tests-selenium).
 - Style and workflow: [docs/contributing.md](docs/contributing.md).
 
 
@@ -104,7 +105,6 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [docs/contributing.md](docs/contributing.md) for how to get started.
 
-> Pull requests on the `master` branch will be rejected please use the current `dev` branch only.
 
 ---
 

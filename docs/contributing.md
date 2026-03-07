@@ -158,6 +158,16 @@ Open a PR with your changes; for large edits, an issue first can help align with
 
 ---
 
+## E2E frontend tests (Selenium)
+
+End-to-end tests drive the **React frontend** with Selenium (no direct API calls from the test). They cover: delete-all-sites + reset, create site, import LLM payload (`scripts/demo_site_llm_payload.json`), and validation that **Plots** and **Weather** charts render and, when data exists, show data (not blank).
+
+- **Install:** `pip install -e ".[e2e]"` (adds `selenium`, `webdriver-manager`).
+- **Run:** Start the stack (frontend + API), then `python scripts/e2e_frontend_selenium.py`. Use `--frontend-url` if the app is not at `http://localhost:5173`, `--headed` to see the browser, `--only delete-all` or `--only charts` to run a subset.
+- **Chart validation:** The test asserts that Recharts curve/path elements are present; if the BACnet scraper (or other source) has written timeseries data, it also asserts chart paths have data. See `scripts/e2e_frontend_selenium.py` and, for full flow, `docs/howto/e2e_selenium.md` (if present).
+
+---
+
 ## Commit Messages
 
 - Use a clear, short summary line. Optionally add a body with details.

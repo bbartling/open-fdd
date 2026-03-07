@@ -84,6 +84,7 @@ services:
     container_name: openfdd_weather_scraper
     command: ["python", "-u", "-m", "open_fdd.platform.drivers.run_weather_fetch", "--loop"]
     environment:
+      OFDD_API_URL: http://openfdd_api:8000
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_OPEN_METEO_ENABLED: "true"
       OFDD_OPEN_METEO_INTERVAL_HOURS: "24"
