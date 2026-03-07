@@ -15,7 +15,7 @@
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + bacnet-server + bacnet-scraper only (add --with-grafana for Grafana)
 #   ./scripts/bootstrap.sh --verify             # health checks only
-#   ./scripts/bootstrap.sh --test             # run tests: frontend lint+typecheck, backend pytest, Caddy validate; then exit
+#   ./scripts/bootstrap.sh --test             # run tests: frontend lint+typecheck+vitest, backend pytest, Caddy validate; then exit
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
@@ -29,7 +29,7 @@
 # First run (--with-mqtt-bridge): starts the stack with the MQTT broker and bridge (writes env, compose up with mqtt profile, migrations, bootstrap complete).
 # ./scripts/bootstrap.sh --with-mqtt-bridge && ./scripts/bootstrap.sh --verify --test
 #
-# Second run (--verify --test): only verifies services and then runs the test suite (frontend lint, backend pytest, Caddy). It does not start the stack again.
+# Second run (--verify --test): only verifies services and then runs the test suite (frontend lint+typecheck+vitest, backend pytest, Caddy). It does not start the stack again.
 # ./scripts/bootstrap.sh --with-mqtt-bridge && ./scripts/bootstrap.sh --test
 #
 # Verify + tests	./scripts/bootstrap.sh --verify --test
@@ -125,7 +125,7 @@ Core:
   --with-mqtt-bridge        Enable BACnet2MQTT bridge + start MQTT broker (localhost:1883) for Home Assistant on same box
   --verify                  Show running services + health checks (exits before starting stack; run --with-mqtt-bridge without --verify first to enable bridge)
   --verify --test           Verify services then run tests; then exit
-  --test                    Run tests only: frontend (lint + typecheck), backend (pytest), Caddyfile validate; then exit
+  --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddyfile validate; then exit
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
   --maintenance             Safe Docker prune only (NO volumes)
 
@@ -442,28 +442,30 @@ verify() {
   echo ""
 }
 
-# Frontend: lint + typecheck. Backend: pytest. Caddy: validate Caddyfile.
+# Frontend: lint + typecheck + unit tests. Backend: pytest. Caddy: validate Caddyfile.
 verify_code() {
   local failed=0
-  echo "=== Tests: frontend (lint + typecheck), backend (pytest), Caddy ==="
+  echo "=== Tests: frontend (lint + typecheck + vitest), backend (pytest), Caddy ==="
   echo ""
 
-  # Frontend: lint + tsc (no build). Prefer frontend container so host does not need npm.
+  # Frontend: lint + tsc + vitest. Prefer frontend container so host does not need npm.
   if [[ -d "$REPO_ROOT/frontend" ]]; then
-    echo "--- Frontend (lint + typecheck) ---"
+    echo "--- Frontend (lint + typecheck + unit tests) ---"
+    local frontend_ok=true
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_frontend; then
-      if docker exec openfdd_frontend sh -c "cd /app && npm run lint && npx tsc -b --noEmit"; then
+      if docker exec openfdd_frontend sh -c "cd /app && npm run lint && npx tsc -b --noEmit && npm run test"; then
         echo "Frontend: OK (via container)"
       else
-        echo "Frontend: FAIL (container run: docker exec openfdd_frontend sh -c 'cd /app && npm run lint && npx tsc -b --noEmit')"
-        failed=1
+        echo "Frontend: FAIL (container: docker exec openfdd_frontend sh -c 'cd /app && npm run lint && npx tsc -b --noEmit && npm run test')"
+        frontend_ok=false
       fi
-    elif (cd "$REPO_ROOT/frontend" && npm run lint 2>/dev/null && npx tsc -b --noEmit 2>/dev/null); then
+    elif (cd "$REPO_ROOT/frontend" && npm run lint 2>/dev/null && npx tsc -b --noEmit 2>/dev/null && npm run test 2>/dev/null); then
       echo "Frontend: OK (via host npm)"
     else
-      echo "Frontend: FAIL (start stack so openfdd_frontend runs, or install Node/npm and run: cd frontend && npm install && npm run lint && npx tsc -b --noEmit)"
-      failed=1
+      echo "Frontend: FAIL (start stack so openfdd_frontend runs, or: cd frontend && npm install && npm run lint && npx tsc -b --noEmit && npm run test)"
+      frontend_ok=false
     fi
+    $frontend_ok || failed=1
     echo ""
   else
     echo "--- Frontend: skip (no frontend dir) ---"
