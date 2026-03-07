@@ -71,6 +71,14 @@ Or re-run `./scripts/bootstrap.sh` (idempotent; safe for existing DBs).
 
 So: no trigger file → runs on the configured interval with configured lookback. Create the file (or call `POST /run-fdd`) when you want one run now and then resume the normal schedule.
 
+### Verified: hot reload and config parity
+
+- **Frontend (Config):** OpenFDD Config shows **Rule interval (hours)** (e.g. 3.0), **Lookback (days)** (e.g. 3), and **Rules dir** (e.g. `analyst/rules`). These come from the knowledge graph (GET `/config`); edits are saved via PUT `/config`.
+- **Frontend (Faults):** The “FDD rule files (YAML)” section lists the `.yaml` files in that rules dir (GET `/rules` returns `rules_dir` and `files`, e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). Fault definitions in the table come from the database (synced when rules run); the files on disk are the source of truth for the next run.
+- **FDD loop (stack):** Each run (every `rule_interval_hours`, e.g. 3 h) does **not** cache rules: it calls `load_rules_from_dir(rules_path)` so YAML is read fresh from disk. So analysts can edit `analyst/rules/*.yaml` and the next run (or trigger) uses the new params—no restart. The loop uses `lookback_days` (e.g. 3) to load that many days of data from the DB for each run. `rules_path` comes from platform config (same `rules_dir` as in the frontend); in Docker the stack mounts `../analyst/rules` at `/app/analyst/rules` and sets `OFDD_RULES_DIR: "analyst/rules"`.
+
+**Tests:** `open_fdd/tests/platform/test_config.py` and `open_fdd/tests/platform/test_fdd_config_hot_reload.py` assert that GET /config exposes `rules_dir`, `rule_interval_hours`, `lookback_days`; that the FDD loop loads rules from the configured dir on every run (no cache); and that the rules API and the loop resolve the same path for a relative `rules_dir`. Run: `pytest open_fdd/tests/platform/test_config.py open_fdd/tests/platform/test_fdd_config_hot_reload.py -v`.
+
 ### Option A: Trigger the running loop (recommended when fdd-loop is in Docker)
 
 The fdd-loop container runs on a schedule (e.g. every 3 hours). While it’s sleeping, it checks every **60 seconds** for the file `config/.run_fdd_now`. If that file exists, it runs FDD right away, deletes the file, and resets the timer. So creating that file = “run now and reset timer.”

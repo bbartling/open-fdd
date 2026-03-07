@@ -1,12 +1,7 @@
 # Notes (high-level, for maintainer only)
 
-- **Docs:** All documentation lives in `docs/`. Root has only this file and `README.md`.
-- **Docker nuclear prune:** Full teardown (stop, rm containers, rmi images, volumes, networks, prune). See `docs/howto/danger_zone.md` for steps.
-- **FDD ideas (future):** Store fault_energy_impact (low/typical/high); fault_test_vectors + CI runner for regression.
-- **Weather / timeseries:** Open-Meteo → `timeseries_readings` (temp_f, rh_pct, etc.). Check via Grafana or `docs/howto/grafana_cookbook.md`.
-- **FDD logs / fault_results:** `docker exec openfdd_timescale psql -U postgres -d openfdd -c "SELECT ... FROM fdd_run_log ..."` and `fault_results`; see docs for queries.
-- **HA addon:** `./scripts/bootstrap.sh --ha-addon` → `openfdd-addon:local`. Copy `stack/ha_addon` to HA addons; image = `openfdd-addon:local`. Smoke test via Developer Tools → Services (`openfdd.*`). Details: `docs/integrations/home_assistant.md`.
-- **PyPI:** Prefer a small **integration-helpers** package only (e.g. `openfdd-client`): HTTP client + optional WS + optional Pydantic models. Full platform stays repo/Docker.
+- **Git → PR → fetch prune:** `git add .` → `git commit -am 'some note'` → create branch: `git checkout -b feature/short-name` → push: `git push -u origin feature/short-name` → open PR on GitHub → after merge (or when done): `git fetch --prune` then `git checkout master` and `git pull` to sync.
+
 - **Frontend hot reload:** Turn it off once the UI is solid enough and before Phase 1 (auth). Run the frontend as a production build (e.g. serve `frontend/dist` via Caddy or the API) so E2E and manual testing hit the same bundle you’ll deploy. The stack’s frontend container currently runs `npm run dev`; when you’re ready, switch it to build + serve static (or use Caddy to serve the built app) so there’s no HMR and behavior matches production.
 
 ---

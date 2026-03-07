@@ -11,10 +11,15 @@ router = APIRouter(prefix="/rules", tags=["rules"])
 
 
 def _rules_dir_resolved() -> Path:
-    """Return resolved rules_dir from platform config (RDF-backed)."""
+    """Return resolved rules_dir from platform config (RDF-backed). Uses same repo-relative logic as run_fdd_loop so GET /rules and the FDD runner agree."""
     settings = get_platform_settings()
     raw = getattr(settings, "rules_dir", None) or "analyst/rules"
-    return Path(raw).resolve()
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    # Same as loop.run_fdd_loop: repo_root / rules_dir
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    return (repo_root / path).resolve()
 
 
 @router.get("", summary="List rule YAML files")

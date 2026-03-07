@@ -25,6 +25,25 @@ def test_default_platform_config_keys_match_api():
     assert "bacnet_server_url" in DEFAULT_PLATFORM_CONFIG
 
 
+def test_config_exposes_fdd_rule_settings():
+    """GET /config and CONFIG_KEYS include rules_dir, rule_interval_hours, lookback_days so frontend and FDD loop stay in sync."""
+    from unittest.mock import patch
+
+    from open_fdd.platform.api.config import CONFIG_KEYS, get_config
+    from open_fdd.platform.default_config import DEFAULT_PLATFORM_CONFIG
+
+    for key in ("rules_dir", "rule_interval_hours", "lookback_days"):
+        assert key in CONFIG_KEYS, f"CONFIG_KEYS must include {key} for FDD config"
+        assert key in DEFAULT_PLATFORM_CONFIG, f"DEFAULT_PLATFORM_CONFIG must include {key}"
+    set_config_overlay({})
+    with patch("open_fdd.platform.api.config.get_config_from_graph", return_value={}):
+        result = get_config()
+    assert result["rules_dir"] == "analyst/rules"
+    assert result["rule_interval_hours"] == 3.0
+    assert result["lookback_days"] == 3
+    set_config_overlay({})
+
+
 def test_default_platform_config_values():
     """DEFAULT_PLATFORM_CONFIG has expected default values (brick_ttl_dir, rule_interval_hours, etc.)."""
     from open_fdd.platform.default_config import (
