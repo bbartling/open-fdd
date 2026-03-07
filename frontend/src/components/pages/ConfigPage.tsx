@@ -161,9 +161,9 @@ export function ConfigPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const putMutation = useMutation({
+  const putMutation = useMutation<PlatformConfig, Error, Partial<PlatformConfig>>({
     mutationFn: putConfig,
-    onSuccess: (data: PlatformConfig) => {
+    onSuccess: (data) => {
       setForm({ ...data });
       setSaveStatus("success");
       queryClient.invalidateQueries({ queryKey: ["config"] });

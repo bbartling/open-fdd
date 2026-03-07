@@ -23,6 +23,7 @@ import {
   dataModelReset,
   dataModelCheck,
   type SiteCreate,
+  type DataModelCheckResponse,
 } from "@/lib/crud-api";
 import type {
   DataModelExportRow,
@@ -57,7 +58,7 @@ export function DataModelPage() {
   const [sparqlError, setSparqlError] = useState<string | null>(null);
   const [newSiteName, setNewSiteName] = useState("");
   const [newSiteDescription, setNewSiteDescription] = useState("");
-  const [checkResult, setCheckResult] = useState<Record<string, unknown> | null>(null);
+  const [checkResult, setCheckResult] = useState<DataModelCheckResponse | null>(null);
   const [resetConfirm, setResetConfirm] = useState("");
   const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
@@ -96,8 +97,8 @@ export function DataModelPage() {
     onError: (err: Error) => setSparqlError(err.message),
   });
 
-  const importMutation = useMutation({
-    mutationFn: (body: DataModelImportBody) =>
+  const importMutation = useMutation<DataModelImportResponse, Error, DataModelImportBody>({
+    mutationFn: (body) =>
       apiFetch<DataModelImportResponse>("/data-model/import", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -133,7 +134,7 @@ export function DataModelPage() {
 
   const checkMutation = useMutation({
     mutationFn: dataModelCheck,
-    onSuccess: (data) => setCheckResult(data ?? null),
+    onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
   });
 
   const createSiteMutation = useMutation({
@@ -158,7 +159,7 @@ export function DataModelPage() {
   });
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
-  const sparqlBindings = sparqlMutation.data?.bindings ?? [];
+  const sparqlBindings: Record<string, string | null>[] = sparqlMutation.data?.bindings ?? [];
 
   const handleImport = () => {
     try {
@@ -533,9 +534,9 @@ export function DataModelPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sparqlBindings.map((row, i) => (
+                    {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
                       <TableRow key={i}>
-                        {Object.values(row).map((val, j) => (
+                        {Object.values(row).map((val: string | null, j: number) => (
                           <TableCell key={j} className="font-mono text-xs">
                             {val ?? "—"}
                           </TableCell>

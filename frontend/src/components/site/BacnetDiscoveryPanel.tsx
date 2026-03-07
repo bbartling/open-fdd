@@ -18,6 +18,8 @@ import {
   bacnetPointDiscoveryToGraph,
   dataModelExport,
   dataModelImport,
+  type WhoIsResponse,
+  type PointDiscoveryResponse,
 } from "@/lib/crud-api";
 import { useSites } from "@/hooks/use-sites";
 import type { DataModelExportRow } from "@/types/api";
@@ -31,7 +33,7 @@ export function BacnetDiscoveryPanel() {
   const [whoisResult, setWhoisResult] = useState<unknown[] | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<{ object_identifier: string; name: string; commandable: boolean }[] | null>(null);
 
-  const whoisMutation = useMutation({
+  const whoisMutation = useMutation<WhoIsResponse, Error, void>({
     mutationFn: () =>
       bacnetWhoisRange({
         request: { start_instance: whoisStart, end_instance: whoisEnd },
@@ -45,7 +47,7 @@ export function BacnetDiscoveryPanel() {
     onError: () => setWhoisResult([]),
   });
 
-  const discoveryMutation = useMutation({
+  const discoveryMutation = useMutation<PointDiscoveryResponse, Error, void>({
     mutationFn: () =>
       bacnetPointDiscovery({
         instance: { device_instance: deviceInstance },
