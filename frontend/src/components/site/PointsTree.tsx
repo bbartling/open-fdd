@@ -8,12 +8,13 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import type { Point, Equipment, Site } from "@/types/api";
+import { parseUtcTimestamp } from "@/lib/utils";
 import { Circle, CircleDot, ChevronRight, ChevronDown, Server, Box, CircleDotIcon } from "lucide-react";
 
-/** Format ts for display. */
+/** Format ts for display (API timestamps are UTC; we show relative time). */
 function formatLastUpdated(ts: string | null): string {
   if (!ts) return "—";
-  const d = new Date(ts);
+  const d = parseUtcTimestamp(ts) ?? new Date(ts);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffM = Math.floor(diffMs / 60000);
@@ -287,7 +288,7 @@ function TreeRows({
         </TableCell>
         <TableCell className="tabular-nums text-muted-foreground text-xs">
           {p.polling && latest != null ? (
-            <span title={latest.ts ? new Date(latest.ts).toLocaleString() : undefined}>
+            <span title={latest.ts ? (parseUtcTimestamp(latest.ts) ?? new Date(latest.ts)).toLocaleString() : undefined}>
               {latest.value.toLocaleString(undefined, { maximumFractionDigits: 4 })}
               {p.unit ? ` ${p.unit}` : ""}
             </span>

@@ -16,11 +16,11 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:openMeteoDaysBack 3 ;
     ofdd:openMeteoEnabled true ;
     ofdd:openMeteoIntervalHours 24 ;
-    ofdd:openMeteoLatitude "41.88" ;
-    ofdd:openMeteoLongitude "-87.63" ;
+    ofdd:openMeteoLatitude 41.88 ;
+    ofdd:openMeteoLongitude -87.63 ;
     ofdd:openMeteoSiteId "default" ;
     ofdd:openMeteoTimezone "America/Chicago" ;
-    ofdd:ruleIntervalHours "3.0" ;
+    ofdd:ruleIntervalHours 3.0 ;
     ofdd:rulesDir "analyst/rules" .
 
 :pt_01ae71a4_6d73_49c5_9e42_50e70543edb1 a brick:Point ;

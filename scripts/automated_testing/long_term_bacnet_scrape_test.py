@@ -2,26 +2,24 @@
 """
 Long-run BACnet scrape interval test: 1h @ 1 min, 1h @ 5 min, 1h @ 10 min, confirm, repeat.
 
-Production-style: only the CRUD API. At each phase we PUT /config to set
-bacnet_scrape_interval_min (1, 5, 10); the scraper picks up the new interval from config.
-After each 1h wait we validate by comparing the total distinct timestamps BEFORE
-and AFTER the wait to see exactly how many scrapes occurred in that window.
+What gets checked
+-----------------
+Frontend (browser / Selenium):
+  - Config: with --config-via-frontend, opens /config, sets BACnet scrape interval (min), clicks Save, asserts "Saved" appears.
+  - Faults: with --check-faults-via-frontend, opens /faults, asserts the page shows either the active fault table (rows), the empty state, or the "Fault flags over time" chart/summary.
 
-Optional: when fake AHU/VAV devices use the deterministic fault schedule (see
-scripts/fake_bacnet_devices/fault_schedule.py), pass --check-faults to verify that
-Open FDD reported faults in the expected UTC windows (flatline 10–49 past the hour,
-bounds 50–54 past the hour). Requires FDD loop to have run (e.g. rule_interval_hours).
+Backend (Python → API via httpx):
+  - Startup: GET /config (API reachable and auth when OFDD_API_KEY is set).
+  - After each phase: GET /config to confirm bacnet_scrape_interval_min (whether config was set via frontend or API).
+  - Scrape count: GET /download/csv for a date range; count distinct timestamps before vs after the 1h wait; assert "new scrapes this hour" is in the expected range (e.g. 55–65 for 1 min interval). This validates the BACnet scraper is running at the set interval.
+  - Faults (optional): with --check-faults, GET /download/faults; assert fault flags (e.g. flatline_flag, bad_sensor_flag) fall in the expected UTC windows from fault_schedule.py.
 
-Uses stack/.env for OFDD_API_KEY, BASE_URL, OFDD_BACNET_SITE_ID when run from repo root.
+Usage
+-----
+  python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --headed
 
-Usage:
-  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py
-  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py --once
-  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py --once --check-faults
-
-  With explicit env (e.g. after sourcing stack/.env):
-  export OFDD_API_KEY=... BASE_URL=http://localhost:8000
-  python scripts/automated_testing/long_term_bacnet_scrape_test.py --once
+  python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+  $env:OFDD_API_KEY = "same-as-server-stack-.env"
 """
 
 import csv
@@ -30,21 +28,22 @@ import os
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 try:
     import httpx
 except ImportError:
     httpx = None
 
+if TYPE_CHECKING:
+    from selenium.webdriver.chrome.webdriver import WebDriver
 
-def _load_stack_env() -> None:
-    """Load stack/.env into os.environ so OFDD_API_KEY, BASE_URL, etc. are set."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.dirname(script_dir)
-    env_path = os.path.join(repo_root, "stack", ".env")
-    if not os.path.isfile(env_path):
+
+def _load_env_file(path: str) -> None:
+    """Load KEY=VALUE lines from path into os.environ (only if key not already set)."""
+    if not os.path.isfile(path):
         return
-    with open(env_path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -61,11 +60,23 @@ def _load_stack_env() -> None:
                 os.environ[key] = value
 
 
+def _load_stack_env() -> None:
+    """Load stack/.env (when run from repo) then .env in cwd/script dir so OFDD_API_KEY is set for remote test bench."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    _load_env_file(os.path.join(repo_root, "stack", ".env"))
+    _load_env_file(os.path.join(os.getcwd(), ".env"))
+    _load_env_file(os.path.join(script_dir, ".env"))
+
+
 _load_stack_env()
 
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
+# When running from a remote test bench, pass --api-url so the script talks to the Open FDD API (not localhost).
+_API_BASE_OVERRIDE = None
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 SITE_ID = os.environ.get("OFDD_BACNET_SITE_ID", "default")
+FRONTEND_URL_DEFAULT = os.environ.get("FRONTEND_URL", "").strip().rstrip("/")
 
 # Phases: (interval_min, duration_sec, min_expected_scrapes, max_expected_scrapes)
 # Added max_expected so we catch if the scraper is running TOO fast (e.g. stuck at 1min)
@@ -85,7 +96,8 @@ def _headers() -> dict:
 
 
 def _request(method: str, path: str, json_body: dict | None = None):
-    url = f"{BASE_URL}{path}"
+    base = _API_BASE_OVERRIDE if _API_BASE_OVERRIDE is not None else BASE_URL
+    url = f"{base}{path}"
     headers = _headers()
     if json_body and "Content-Type" not in headers:
         headers["Content-Type"] = "application/json"
@@ -217,96 +229,255 @@ def _check_expected_faults_for_phase(phase_end_utc: datetime) -> tuple[bool, str
     return True, "Expected fault windows present in FDD results"
 
 
+def _get_selenium_driver(headed: bool = False):
+    """Lazy import and create Chrome WebDriver (same fashion as e2e_frontend_selenium)."""
+    try:
+        from e2e_frontend_selenium import get_driver
+        return get_driver(headed=headed)
+    except ImportError as e:
+        print(
+            "For --config-via-frontend / --check-faults-via-frontend install: pip install selenium webdriver-manager",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from e
+
+
+def set_bacnet_interval_via_frontend(driver: "WebDriver", frontend_url: str, interval_min: int) -> bool:
+    """
+    Open Config page, set BACnet scrape interval (min), click Save. Returns True on success.
+    Uses data-testid=config-bacnet-scrape-interval and data-testid=config-save-button.
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    from e2e_frontend_selenium import ELEMENT_WAIT, safe_send_keys, wait_for_clickable
+
+    base = frontend_url.rstrip("/")
+    driver.get(f"{base}/config")
+    wait = WebDriverWait(driver, ELEMENT_WAIT)
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid=config-bacnet-scrape-interval]")))
+    time.sleep(0.3)
+    inp = driver.find_element(By.CSS_SELECTOR, "[data-testid=config-bacnet-scrape-interval]")
+    safe_send_keys(inp, str(interval_min), clear_first=True)
+    btn = wait_for_clickable(driver, By.CSS_SELECTOR, "[data-testid=config-save-button]")
+    btn.click()
+    wait.until(
+        lambda d: "Saved" in (d.page_source or "") or "Save failed" in (d.page_source or "") or "error" in (d.page_source or "").lower()
+    )
+    if "Saved" in (driver.page_source or ""):
+        return True
+    return False
+
+
+def verify_faults_visible_via_frontend(driver: "WebDriver", frontend_url: str, timeout_sec: float = 30) -> tuple[bool, str]:
+    """
+    Open Faults page and assert fault data is visible (active table with rows, or chart/summary).
+    Returns (ok, message). Waits up to timeout_sec for faults to appear (FDD may run after scrape).
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    from e2e_frontend_selenium import ELEMENT_WAIT
+
+    base = frontend_url.rstrip("/")
+    driver.get(f"{base}/faults")
+    wait = WebDriverWait(driver, timeout_sec)
+    # Wait for page to load: either fault table with rows or empty state or chart section
+    try:
+        wait.until(
+            lambda d: (
+                d.find_elements(By.CSS_SELECTOR, "[data-testid=faults-active-table] tbody tr")
+                or d.find_elements(By.CSS_SELECTOR, "[data-testid=faults-empty-state]")
+                or "Fault flags over time" in (d.page_source or "")
+            )
+        )
+    except Exception as e:
+        return False, f"Faults page did not load or show table/chart within {timeout_sec}s: {e}"
+    rows = driver.find_elements(By.CSS_SELECTOR, "[data-testid=faults-active-table] tbody tr")
+    if rows:
+        return True, f"Faults page shows {len(rows)} active fault row(s) (Open FDD calculated faults)."
+    if "Fault flags over time" in (driver.page_source or ""):
+        return True, "Faults page loaded; chart/summary visible (fault data may be in range)."
+    return False, "Faults page loaded but no fault table rows and no chart section found."
+
+
+def _parse_frontend_args():
+    """Parse --frontend-url, --api-url, and --headed from argv; return (frontend_url, headed, api_url)."""
+    url = FRONTEND_URL_DEFAULT
+    api_url = None
+    headed = False
+    args = list(sys.argv[1:])
+    i = 0
+    while i < len(args):
+        if args[i] == "--frontend-url" and i + 1 < len(args):
+            url = (args[i + 1] or "").strip().rstrip("/")
+            i += 2
+            continue
+        if args[i] == "--api-url" and i + 1 < len(args):
+            api_url = (args[i + 1] or "").strip().rstrip("/")
+            i += 2
+            continue
+        if args[i] == "--headed":
+            headed = True
+            i += 1
+            continue
+        i += 1
+    return url, headed, api_url
+
+
 def main() -> int:
     once = "--once" in sys.argv or os.environ.get("OFDD_INTERVAL_TEST_ONCE") == "1"
     check_faults = "--check-faults" in sys.argv or os.environ.get("OFDD_CHECK_FAULTS") == "1"
+    config_via_frontend = "--config-via-frontend" in sys.argv or os.environ.get("OFDD_CONFIG_VIA_FRONTEND") == "1"
+    check_faults_via_frontend = "--check-faults-via-frontend" in sys.argv or os.environ.get("OFDD_CHECK_FAULTS_VIA_FRONTEND") == "1"
+    frontend_url, headed, api_url = _parse_frontend_args()
+    # When using frontend from a remote test bench, infer API URL from frontend URL if not set (Caddy: :80 = frontend, :8000 = API).
+    if (config_via_frontend or check_faults_via_frontend) and frontend_url and not api_url:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(frontend_url)
+            netloc = p.netloc or p.path
+            if ":" in netloc:
+                host = netloc.rsplit(":", 1)[0]
+            else:
+                host = netloc
+            api_url = f"{p.scheme or 'http'}://{host}:8000"
+            print(f"API URL (inferred from --frontend-url): {api_url}")
+        except Exception:
+            api_url = None
+    if api_url:
+        global _API_BASE_OVERRIDE
+        _API_BASE_OVERRIDE = api_url
+
+    if (config_via_frontend or check_faults_via_frontend) and not frontend_url:
+        print(
+            "When using --config-via-frontend or --check-faults-via-frontend set --frontend-url or FRONTEND_URL.",
+            file=sys.stderr,
+        )
+        return 1
 
     if not httpx:
         print("Install httpx for API checks: pip install httpx", file=sys.stderr)
         return 1
 
-    # Startup: require API reachable and auth if key is set
-    code, body = _request("GET", "/config")
-    if code == 401:
-        print("API returned 401. Set OFDD_API_KEY (e.g. from stack/.env).", file=sys.stderr)
-        return 1
-    if code != 200:
-        print(f"API not reachable at {BASE_URL} (GET /config -> {code}). Check BASE_URL.", file=sys.stderr)
-        return 1
-    print(f"API OK: {BASE_URL}  site_id={SITE_ID}  (interval test)")
-    if API_KEY:
-        print("  Using OFDD_API_KEY from env / stack/.env")
-    else:
-        print("  No OFDD_API_KEY set (auth disabled on server or local)")
+    # Optional: create Selenium driver for frontend flows (same fashion as e2e_frontend_selenium)
+    driver = None
+    if config_via_frontend or check_faults_via_frontend:
+        try:
+            driver = _get_selenium_driver(headed=headed)
+            print(f"Frontend: {frontend_url}  (config via UI={config_via_frontend}, faults via UI={check_faults_via_frontend})")
+        except SystemExit:
+            raise
+        except Exception as e:
+            print(f"Selenium driver failed: {e}", file=sys.stderr)
+            return 1
 
-    cycle = 0
-    while True:
-        cycle += 1
-        print(f"\n=======================")
-        print(f"=== Cycle {cycle} ===")
-        print(f"=======================\n")
-        
-        for interval_min, duration_sec, min_ts, max_ts in PHASES:
-            print(f"--- Phase: {interval_min} min interval ---")
-            
-            # 1. Update Config
-            print(f"  PUT /config: bacnet_scrape_interval_min={interval_min}")
-            if not put_config_interval(interval_min):
-                print(f"  PUT /config failed.", file=sys.stderr)
-                continue
-                
+    try:
+        # Startup: require API reachable and auth if key is set
+        api_base = _API_BASE_OVERRIDE if _API_BASE_OVERRIDE is not None else BASE_URL
+        try:
+            code, body = _request("GET", "/config")
+        except Exception as e:
+            err = str(e).lower()
+            if "refused" in err or "connection" in err or "10061" in err:
+                print(
+                    "API connection refused. When running from a remote test bench, point to the Open FDD API:",
+                    file=sys.stderr,
+                )
+                print("  --api-url http://OPENFDD_SERVER:8000   (or set BASE_URL)", file=sys.stderr)
+                print("  Example: --api-url http://192.168.204.16:8000", file=sys.stderr)
+                return 1
+            raise
+        if code == 401:
+            print("API returned 401 (auth required).", file=sys.stderr)
+            print("  Set OFDD_API_KEY to the same value as on the Open FDD server (stack/.env):", file=sys.stderr)
+            print("    PowerShell:  $env:OFDD_API_KEY = \"paste-key-here\"", file=sys.stderr)
+            print("    Or create a .env file in this folder with:  OFDD_API_KEY=paste-key-here", file=sys.stderr)
+            return 1
+        if code != 200:
+            print(f"API not reachable at {api_base} (GET /config -> {code}). Check --api-url or BASE_URL.", file=sys.stderr)
+            return 1
+        print(f"API OK: {api_base}  site_id={SITE_ID}  (interval test)")
+        if API_KEY:
+            print("  Using OFDD_API_KEY from env / stack/.env")
+        else:
+            print("  No OFDD_API_KEY set (auth disabled on server or local)")
+
+        cycle = 0
+        while True:
+            cycle += 1
+            print(f"\n=======================")
+            print(f"=== Cycle {cycle} ===")
+            print(f"=======================\n")
+
+            for interval_min, duration_sec, min_ts, max_ts in PHASES:
+                print(f"--- Phase: {interval_min} min interval ---")
+
+                # 1. Update Config (API or frontend)
+                if config_via_frontend and driver:
+                    print(f"  Config via frontend: bacnet_scrape_interval_min={interval_min}")
+                    if not set_bacnet_interval_via_frontend(driver, frontend_url, interval_min):
+                        print("  Config via frontend: Save failed or 'Saved' not seen.", file=sys.stderr)
+                        continue
+                else:
+                    print(f"  PUT /config: bacnet_scrape_interval_min={interval_min}")
+                    if not put_config_interval(interval_min):
+                        print("  PUT /config failed.", file=sys.stderr)
+                        continue
+
+                cfg = get_config()
+                if cfg is not None:
+                    current = cfg.get("bacnet_scrape_interval_min")
+                    print(f"  GET /config confirmed value: {current}")
+
+                # 2. Get baseline timestamp count
+                start_d = date.today() - timedelta(days=2)
+                end_d = date.today() + timedelta(days=1)
+                count_before, _ = get_download_csv_distinct_timestamps(start_d, end_d)
+                print(f"  Baseline total timestamps before wait: {count_before}")
+
+                # 3. Wait
+                print(f"  Waiting {duration_sec // 60} min...")
+                time.sleep(duration_sec)
+
+                # 4. Get post-wait timestamp count
+                count_after, preview = get_download_csv_distinct_timestamps(start_d, end_d)
+                actual_scrapes = count_after - count_before
+                ok = min_ts <= actual_scrapes <= max_ts
+                status = "OK" if ok else "FAIL"
+                print(f"  Total timestamps after wait: {count_after}")
+                print(f"  -> NEW scrapes this hour: {actual_scrapes}")
+                print(f"  -> Expected between {min_ts} and {max_ts} scrapes")
+                print(f"  -> Result: {status}\n")
+                if not ok and preview:
+                    print(f"  Response preview: {preview[:150]}...")
+
+                # Optional: verify FDD reported faults (API)
+                if check_faults:
+                    phase_end_utc = datetime.now(timezone.utc)
+                    fault_ok, fault_msg = _check_expected_faults_for_phase(phase_end_utc)
+                    print(f"  Expected-fault check (API): {'OK' if fault_ok else 'FAIL'} — {fault_msg}")
+
+                # Optional: verify faults visible on frontend (fake devices + FDD → Faults page)
+                if check_faults_via_frontend and driver:
+                    fault_visible_ok, fault_visible_msg = verify_faults_visible_via_frontend(driver, frontend_url)
+                    print(f"  Faults via frontend: {'OK' if fault_visible_ok else 'FAIL'} — {fault_visible_msg}")
+
+            print("--- Confirm: cycle complete ---")
             cfg = get_config()
-            if cfg is not None:
-                current = cfg.get("bacnet_scrape_interval_min")
-                print(f"  GET /config confirmed value: {current}")
+            if cfg:
+                print(f"  GET /config ending value: {cfg.get('bacnet_scrape_interval_min')}")
 
-            # 2. Get baseline timestamp count
-            # Use a wide date range to ensure we don't miss anything if crossing midnight
-            start_d = date.today() - timedelta(days=2)
-            end_d = date.today() + timedelta(days=1)
-            
-            count_before, _ = get_download_csv_distinct_timestamps(start_d, end_d)
-            print(f"  Baseline total timestamps before wait: {count_before}")
-
-            # 3. Wait
-            print(f"  Waiting {duration_sec // 60} min...")
-            time.sleep(duration_sec)
-
-            # 4. Get post-wait timestamp count
-            count_after, preview = get_download_csv_distinct_timestamps(start_d, end_d)
-            
-            # 5. Calculate exactly how many scrapes happened
-            actual_scrapes = count_after - count_before
-            
-            # 6. Validate
-            ok = min_ts <= actual_scrapes <= max_ts
-            status = "OK" if ok else "FAIL"
-            
-            print(f"  Total timestamps after wait: {count_after}")
-            print(f"  -> NEW scrapes this hour: {actual_scrapes}")
-            print(f"  -> Expected between {min_ts} and {max_ts} scrapes")
-            print(f"  -> Result: {status}\n")
-            
-            if not ok and preview:
-                print(f"  Response preview: {preview[:150]}...")
-
-            # Optional: verify FDD reported faults in expected schedule windows (fake devices use UTC minute schedule)
-            if check_faults:
-                phase_end_utc = datetime.now(timezone.utc)
-                fault_ok, fault_msg = _check_expected_faults_for_phase(phase_end_utc)
-                print(f"  Expected-fault check: {'OK' if fault_ok else 'FAIL'} — {fault_msg}")
-
-        print("--- Confirm: cycle complete ---")
-        cfg = get_config()
-        if cfg:
-            current = cfg.get("bacnet_scrape_interval_min")
-            print(f"  GET /config ending value: {current}")
-            
-        if once:
-            print("One cycle done (--once). Exiting.")
-            return 0
-            
-        print("Starting next cycle...\n")
+            if once:
+                print("One cycle done (--once). Exiting.")
+                return 0
+            print("Starting next cycle...\n")
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

@@ -1,14 +1,6 @@
 #!/usr/bin/env python3
 """
-E2E tests for the Open-FDD frontend using Selenium. Browser-level counterpart to
-delete_all_sites_and_reset.py + graph_and_crud_test.py: same flow via the UI (no direct
-API calls). Covers: delete-all-sites + reset, create site (TestBenchSite), import
-demo_site_llm_payload.json, verify equipment/points, site selection, Plots/Weather/Overview.
-
-Requirement: The frontend must be able to fetch sites (GET /sites). When the API
-requires auth, the frontend must be built/served with VITE_OFDD_API_KEY set (same
-value as OFDD_API_KEY in stack/.env). Otherwise the UI shows 0 sites and the
-delete-all section is never rendered — E2E will report "No sites to delete".
+Ran on windows from a seperate test bench machine on the network from the openfdd server
 
 python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
 """

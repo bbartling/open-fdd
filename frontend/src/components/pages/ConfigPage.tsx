@@ -20,6 +20,7 @@ function ConfigField({
   min,
   max,
   step,
+  "data-testid": testId,
 }: {
   label: string;
   value: string | number;
@@ -29,6 +30,7 @@ function ConfigField({
   min?: number;
   max?: number;
   step?: number;
+  "data-testid"?: string;
 }) {
   return (
     <div>
@@ -44,6 +46,7 @@ function ConfigField({
         max={max}
         step={step}
         className={inputClass}
+        data-testid={testId}
       />
     </div>
   );
@@ -256,6 +259,7 @@ export function ConfigPage() {
               value={form.bacnet_scrape_interval_min ?? 1}
               onChange={(v) => update("bacnet_scrape_interval_min", Number(v))}
               min={0}
+              data-testid="config-bacnet-scrape-interval"
             />
             <ConfigField
               label="BACnet server URL"
@@ -339,6 +343,7 @@ export function ConfigPage() {
             type="submit"
             disabled={putMutation.isPending}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            data-testid="config-save-button"
           >
             {putMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

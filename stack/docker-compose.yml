@@ -49,6 +49,7 @@ services:
   # Single gateway: OFDD_BACNET_SERVER_URL + OFDD_BACNET_SITE_ID (site tag for central DB).
   # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id, config_csv}.
   # Central-only (no local BACnet): omit bacnet-server and bacnet-scraper; remote gateways push via OFDD_DB_DSN + OFDD_BACNET_SITE_ID.
+  # When OFDD_API_KEY is set, the scraper calls GET /config (CRUD API) so scrape interval comes from the data model / Config UI; otherwise it uses OFDD_BACNET_SCRAPE_INTERVAL_MIN env.
   bacnet-scraper:
     build:
       context: ..
@@ -60,10 +61,11 @@ services:
       OFDD_BACNET_SERVER_URL: http://host.docker.internal:8080
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_BACNET_SCRAPE_ENABLED: "true"
-      # 1 = every minute (for tests); override via stack/.env OFDD_BACNET_SCRAPE_INTERVAL_MIN
+      # 1 = every minute (for tests); override via stack/.env or Config UI (scraper reads GET /config when OFDD_API_KEY set)
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
       OFDD_API_URL: http://openfdd_api:8000
+      OFDD_API_KEY: ${OFDD_API_KEY:-}
     volumes:
       - ../config:/app/config:ro
     depends_on:
