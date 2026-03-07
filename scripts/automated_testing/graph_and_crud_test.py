@@ -97,7 +97,9 @@ def _load_api_key() -> str:
     key = (os.environ.get("OFDD_API_KEY") or "").strip()
     if key:
         return key
-    env_file = Path(__file__).resolve().parent / ".." / "stack" / ".env"
+    # Script lives in scripts/automated_testing/; stack/.env is at repo root
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    env_file = repo_root / "stack" / ".env"
     if env_file.is_file():
         for line in env_file.read_text().splitlines():
             line = line.strip()

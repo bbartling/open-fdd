@@ -7,15 +7,21 @@ bacnet_scrape_interval_min (1, 5, 10); the scraper picks up the new interval fro
 After each 1h wait we validate by comparing the total distinct timestamps BEFORE
 and AFTER the wait to see exactly how many scrapes occurred in that window.
 
+Optional: when fake AHU/VAV devices use the deterministic fault schedule (see
+scripts/fake_bacnet_devices/fault_schedule.py), pass --check-faults to verify that
+Open FDD reported faults in the expected UTC windows (flatline 10–49 past the hour,
+bounds 50–54 past the hour). Requires FDD loop to have run (e.g. rule_interval_hours).
+
 Uses stack/.env for OFDD_API_KEY, BASE_URL, OFDD_BACNET_SITE_ID when run from repo root.
 
 Usage:
-  cd open-fdd && python scripts/long_term_bacnet_scrape_test.py
-  cd open-fdd && python scripts/long_term_bacnet_scrape_test.py --once
+  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py
+  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py --once
+  cd open-fdd && python scripts/automated_testing/long_term_bacnet_scrape_test.py --once --check-faults
 
   With explicit env (e.g. after sourcing stack/.env):
   export OFDD_API_KEY=... BASE_URL=http://localhost:8000
-  python scripts/long_term_bacnet_scrape_test.py --once
+  python scripts/automated_testing/long_term_bacnet_scrape_test.py --once
 """
 
 import csv
@@ -23,7 +29,7 @@ import io
 import os
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 try:
     import httpx
@@ -120,6 +126,17 @@ def get_config() -> dict | None:
     return body
 
 
+def get_download_faults(start_d: date, end_d: date) -> tuple[list[dict], str]:
+    """GET /download/faults (JSON). Returns (list of fault dicts, error_message or '')."""
+    path = f"/download/faults?site_id={SITE_ID}&start_date={start_d}&end_date={end_d}&format=json"
+    code, body = _request("GET", path)
+    if code != 200:
+        return [], f"GET /download/faults -> {code}"
+    if not isinstance(body, dict) or "faults" not in body:
+        return [], "Response missing faults array"
+    return body.get("faults", []), ""
+
+
 def get_download_csv_distinct_timestamps(start_d: date, end_d: date) -> tuple[int, str]:
     """GET /download/csv and count distinct timestamp values. Returns (count, raw_body_preview)."""
     path = f"/download/csv?site_id={SITE_ID}&start_date={start_d}&end_date={end_d}&format=wide"
@@ -143,8 +160,66 @@ def get_download_csv_distinct_timestamps(start_d: date, end_d: date) -> tuple[in
     return len(seen), body[:200]
 
 
+def _check_expected_faults_for_phase(phase_end_utc: datetime) -> tuple[bool, str]:
+    """
+    Check that Open FDD reported faults in the expected UTC windows for the last hour.
+    Schedule: flatline 10–49 past the hour, bounds 50–54 (see fault_schedule.py).
+    Returns (ok, message).
+    """
+    # Import schedule from fake_bacnet_devices (same schedule the fake devices use)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    fake_dev_dir = os.path.abspath(os.path.join(script_dir, "..", "fake_bacnet_devices"))
+    if fake_dev_dir not in sys.path:
+        sys.path.insert(0, fake_dev_dir)
+    try:
+        from fault_schedule import expected_fault_windows_utc
+    except ImportError as e:
+        return False, f"Cannot import fault_schedule: {e}"
+
+    start_utc = phase_end_utc - timedelta(hours=1)
+    start_d = start_utc.date()
+    end_d = phase_end_utc.date()
+    if start_d != end_d:
+        end_d = end_d + timedelta(days=1)  # span both days for query
+    faults, err = get_download_faults(start_d, end_d)
+    if err:
+        return False, f"Faults fetch failed: {err}"
+
+    windows = expected_fault_windows_utc(start_utc, phase_end_utc)
+    # fault_id in API is the rule flag name, e.g. flatline_flag, bad_sensor_flag
+    for fault_id, ranges in windows.items():
+        if not ranges:
+            continue
+        # Collect fault timestamps for this fault_id (flag_value=1 only)
+        fault_ts = []
+        for f in faults:
+            if f.get("fault_id") != fault_id or f.get("flag_value") != 1:
+                continue
+            ts = f.get("ts")
+            if ts is None:
+                continue
+            if isinstance(ts, str):
+                try:
+                    # Assume UTC if no TZ in string
+                    if ts.endswith("Z") or "+" in ts or ts.count("-") > 2:
+                        fault_ts.append(datetime.fromisoformat(ts.replace("Z", "+00:00")))
+                    else:
+                        fault_ts.append(datetime.fromisoformat(ts).replace(tzinfo=timezone.utc))
+                except Exception:
+                    continue
+            else:
+                fault_ts.append(ts)
+        for (win_start, win_end) in ranges:
+            if any(win_start <= t <= win_end for t in fault_ts):
+                break
+        else:
+            return False, f"Expected at least one {fault_id!r} in window {ranges[0]} (UTC); got {len(fault_ts)} in range"
+    return True, "Expected fault windows present in FDD results"
+
+
 def main() -> int:
     once = "--once" in sys.argv or os.environ.get("OFDD_INTERVAL_TEST_ONCE") == "1"
+    check_faults = "--check-faults" in sys.argv or os.environ.get("OFDD_CHECK_FAULTS") == "1"
 
     if not httpx:
         print("Install httpx for API checks: pip install httpx", file=sys.stderr)
@@ -214,6 +289,12 @@ def main() -> int:
             
             if not ok and preview:
                 print(f"  Response preview: {preview[:150]}...")
+
+            # Optional: verify FDD reported faults in expected schedule windows (fake devices use UTC minute schedule)
+            if check_faults:
+                phase_end_utc = datetime.now(timezone.utc)
+                fault_ok, fault_msg = _check_expected_faults_for_phase(phase_end_utc)
+                print(f"  Expected-fault check: {'OK' if fault_ok else 'FAIL'} — {fault_msg}")
 
         print("--- Confirm: cycle complete ---")
         cfg = get_config()

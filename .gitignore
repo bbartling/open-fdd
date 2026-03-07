@@ -126,6 +126,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv-ansible
 env/
 venv/
 ENV/

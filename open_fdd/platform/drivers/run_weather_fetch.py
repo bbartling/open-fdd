@@ -3,7 +3,9 @@
 Run Open-Meteo weather fetch: once or on an interval → TimescaleDB.
 
 Use only when the FDD loop (run_rule_loop.py) is not running. When the FDD loop
-runs, it fetches weather at the same time; running both is redundant.
+runs, it fetches weather once per FDD run (every rule_interval_hours, using
+lookback_days); open_meteo_interval_hours in config applies only to this
+standalone scraper's --loop sleep.
 
 Fetches hourly weather from Open-Meteo ERA5 archive API, stores in timeseries_readings.
 Points: temp_f, rh_pct, dewpoint_f, wind_mph, gust_mph, wind_dir_deg,

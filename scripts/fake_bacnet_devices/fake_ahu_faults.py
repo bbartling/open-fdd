@@ -5,17 +5,28 @@ Fake AHU BACnet Device for GL36 Trim & Respond Testing
 
 This script creates a fake AHU BACnet/IP device using BACpypes3.
 
-Fault Injection Added:
-- SA-T occasional flatline (stuck value long enough to trip window-based flatline rules)
-- SA-T occasional spike (out-of-bounds value to trip bounds rules)
+Fault behavior (aligned with data_model.ttl polled points and analyst rules):
+- SA-T (Supply_Air_Temperature_Sensor, polled): time-based schedule so faults occur at
+  known times. See fault_schedule.py: minute 10-49 = flatline, 50-54 = out-of-bounds.
+- RA-T, MA-T (polled): same schedule so flatline/bounds rules can fire on them too.
+- All other analog inputs: generic random so the device looks alive; not used for FDD in test bench.
 
-Usage:
-    python fake_ahu.py --name BensFakeAhu --instance 3456789 [--debug]
+Deploy on RPi: copy this file and fault_schedule.py to the same directory; run with
+  python fake_ahu_faults.py --name BensFakeAhu --instance 3456789
 """
 
 import asyncio
 import logging
+import os
 import random
+import sys
+
+# So fault_schedule.py is found when run from any cwd (e.g. on RPi: copy this file + fault_schedule.py to same dir)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
+from fault_schedule import OUT_OF_BOUNDS_VALUE, scheduled_mode
 
 from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.app import Application
@@ -181,88 +192,59 @@ class FakeAHUApplication:
         for obj in self.points.values():
             self.app.add_object(obj)
 
-        # -------------------------------
-        # Fault injection state + knobs
-        # -------------------------------
-        self._fault = {
-            "sa_t_flatline_remaining": 0,
-            "sa_t_flatline_value": None,
-            "sa_t_spike_remaining": 0,
-        }
-
-        # With UPDATE_INTERVAL_SECONDS=5 and flatline window=40,
-        # you want >= 40 updates stuck => >= 200 seconds.
-        self.SAT_FLATLINE_CHANCE_PER_UPDATE = 0.02  # 2% chance each update
-        self.SAT_FLATLINE_UPDATES = 45  # >= 40, reliably trips
-
-        self.SAT_SPIKE_CHANCE_PER_UPDATE = 0.01  # 1% chance each update
-        self.SAT_SPIKE_UPDATES = 2  # brief spikes
+        # Scheduled fault state: hold last value for flatline (per polled point)
+        self._flatline_value: dict[str, float] = {}  # point_name -> stuck value
 
         asyncio.create_task(self.update_values())
 
-    def _maybe_start_sa_t_faults(self, sa_t_obj: AnalogInputObject):
-        # Start flatline?
-        if self._fault["sa_t_flatline_remaining"] <= 0:
-            if random.random() < self.SAT_FLATLINE_CHANCE_PER_UPDATE:
-                self._fault["sa_t_flatline_remaining"] = self.SAT_FLATLINE_UPDATES
-                self._fault["sa_t_flatline_value"] = float(sa_t_obj.presentValue)
-
-        # Start spike?
-        if self._fault["sa_t_spike_remaining"] <= 0:
-            if random.random() < self.SAT_SPIKE_CHANCE_PER_UPDATE:
-                self._fault["sa_t_spike_remaining"] = self.SAT_SPIKE_UPDATES
-
-    def _apply_sa_t_behavior(self, normal_value: float) -> tuple[float, str]:
+    def _scheduled_sensor_value(
+        self, point_name: str, normal_value: float, obj: AnalogInputObject
+    ) -> tuple[float, str]:
         """
-        Returns: (value, mode_str)
-        mode_str in {"normal","flatline","spike"}
+        For polled sensors (SA-T, RA-T, MA-T): use fault_schedule by UTC minute.
+        Returns (value, mode_str) with mode_str in {"normal", "flatline", "bounds"}.
         """
-        # Flatline takes priority over spike (so it can complete and trip window faults)
-        if self._fault["sa_t_flatline_remaining"] > 0:
-            self._fault["sa_t_flatline_remaining"] -= 1
-            return float(self._fault["sa_t_flatline_value"]), "flatline"
-
-        if self._fault["sa_t_spike_remaining"] > 0:
-            self._fault["sa_t_spike_remaining"] -= 1
-            # sensor_bounds.yaml SAT bounds are [40,150], so push out of bounds
-            return 180.0, "spike"
-
+        mode = scheduled_mode()
+        if mode == "flatline":
+            if point_name not in self._flatline_value:
+                self._flatline_value[point_name] = float(obj.presentValue)
+            return self._flatline_value[point_name], "flatline"
+        if mode == "bounds":
+            self._flatline_value.pop(point_name, None)
+            return OUT_OF_BOUNDS_VALUE, "bounds"
+        self._flatline_value.pop(point_name, None)
         return normal_value, "normal"
 
     async def update_values(self):
         """
         Simulate changing sensor values.
+        Polled points (SA-T, RA-T, MA-T) follow fault_schedule; other analogs are generic random.
         Commandable points (SPs, outputs, schedule) are left alone so Niagara / GL36 can drive them.
         """
         while True:
             await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
             print("=" * 60)
-            print("Fake AHU – updating sensor values (with fault injection on SA-T)")
+            print("Fake AHU – updating sensor values (scheduled faults on SA-T, RA-T, MA-T)")
 
             for name, obj in self.points.items():
                 if isinstance(obj, AnalogInputObject):
-                    # Normal behavior
-                    if name == "ELEC-PWR":
-                        normal = random.uniform(120.0, 300.0)
-                        obj.presentValue = normal
-                        print(f"AI  {name}: {normal:.2f}")
-                        continue
-
-                    if name == "SA-T":
-                        # Determine whether to start a fault
-                        self._maybe_start_sa_t_faults(obj)
-
-                        normal = random.uniform(53.0, 60.0)
-                        value, mode = self._apply_sa_t_behavior(normal)
-
+                    # Polled points (data_model.ttl): scheduled flatline/bounds for FDD validation
+                    if name in ("SA-T", "RA-T", "MA-T"):
+                        normal = random.uniform(53.0, 72.0) if name == "SA-T" else random.uniform(65.0, 75.0)
+                        value, mode = self._scheduled_sensor_value(name, normal, obj)
                         obj.presentValue = value
                         print(f"AI  {name}: {value:.2f}   ({mode})")
                         continue
 
-                    if name == "DAP-P":
+                    # Non-polled analogs: generic random so device looks alive
+                    if name == "ELEC-PWR":
+                        normal = random.uniform(120.0, 300.0)
+                    elif name == "DAP-P":
                         normal = random.uniform(0.3, 1.5)
                     elif name == "OA-T":
                         normal = random.uniform(30.0, 95.0)
+                    elif name == "SA-FLOW":
+                        normal = random.uniform(8000.0, 12000.0)
                     else:
                         normal = random.uniform(40.0, 80.0)
 
