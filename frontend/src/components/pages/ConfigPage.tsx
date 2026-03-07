@@ -139,7 +139,7 @@ function ConfigSummary({ config }: { config: PlatformConfig }) {
 
 export function ConfigPage() {
   const queryClient = useQueryClient();
-  const { data: config, isLoading } = useQuery({
+  const { data: config, isLoading } = useQuery<PlatformConfig>({
     queryKey: ["config"],
     queryFn: getConfig,
   });
@@ -147,8 +147,8 @@ export function ConfigPage() {
   const [form, setForm] = useState<PlatformConfig>({});
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   useEffect(() => {
-    if (config) {
-      const normalized = { ...config };
+    if (config && typeof config === "object") {
+      const normalized: PlatformConfig = { ...config };
       if (normalized.rule_interval_hours === 0 || normalized.rule_interval_hours == null) {
         normalized.rule_interval_hours = 3;
       }
@@ -163,7 +163,7 @@ export function ConfigPage() {
 
   const putMutation = useMutation({
     mutationFn: putConfig,
-    onSuccess: (data) => {
+    onSuccess: (data: PlatformConfig) => {
       setForm({ ...data });
       setSaveStatus("success");
       queryClient.invalidateQueries({ queryKey: ["config"] });

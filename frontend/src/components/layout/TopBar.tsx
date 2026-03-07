@@ -15,15 +15,16 @@ export function TopBar() {
     theme === "dark" ||
     (theme === "system" && typeof document !== "undefined" && document.documentElement.classList.contains("dark"));
   const weatherEnabled = config?.open_meteo_enabled === true;
-  const ruleIntervalHours = config?.rule_interval_hours as number | undefined;
+  const ruleIntervalHours =
+    config?.rule_interval_hours != null ? Number(config.rule_interval_hours) : undefined;
   const withFdd = ruleIntervalHours != null && ruleIntervalHours > 0;
   const weatherTimeAgo = withFdd && lastRun?.run_ts ? timeAgo(lastRun.run_ts) : null;
   const standaloneIntervalHours = config?.open_meteo_interval_hours ?? 24;
   const weatherLabel = weatherTimeAgo
     ? weatherTimeAgo
-    : withFdd
-      ? ruleIntervalHours! < 1
-        ? `with FDD (every ${Math.round(ruleIntervalHours! * 60)}m)`
+    : withFdd && ruleIntervalHours != null
+      ? ruleIntervalHours < 1
+        ? `with FDD (every ${Math.round(ruleIntervalHours * 60)}m)`
         : `with FDD (every ${ruleIntervalHours}h)`
       : `every ${standaloneIntervalHours}h`;
   const weatherMeaning = withFdd

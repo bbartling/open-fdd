@@ -62,7 +62,8 @@ export function Sidebar() {
   const isHealthy = health?.status === "ok";
   const gs = health?.graph_serialization;
   const lastFdd = health?.last_fdd_run;
-  const weatherWithFdd = config?.open_meteo_enabled === true && (config?.rule_interval_hours as number) > 0;
+  const ruleHours = config?.rule_interval_hours;
+  const weatherWithFdd = config?.open_meteo_enabled === true && typeof ruleHours === "number" && ruleHours > 0;
   const siteParam = searchParams.get("site");
   const search = siteParam ? `?site=${siteParam}` : "";
 
