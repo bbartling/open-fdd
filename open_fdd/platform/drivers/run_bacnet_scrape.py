@@ -28,6 +28,7 @@ import os
 import sys
 import time
 from pathlib import Path
+import urllib.error
 import urllib.request
 
 
@@ -45,11 +46,23 @@ def _get_api_url() -> str:
 
 
 def _fetch_platform_config(log: logging.Logger) -> dict | None:
-    """Best-effort GET /config. Returns dict or None if API unreachable."""
+    """Best-effort GET /config. Returns dict or None if API unreachable. Sends Bearer token when OFDD_API_KEY is set."""
     url = f"{_get_api_url()}/config"
+    req = urllib.request.Request(url)
+    api_key = os.environ.get("OFDD_API_KEY", "").strip()
+    if api_key:
+        req.add_header("Authorization", f"Bearer {api_key}")
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            log.warning(
+                "GET /config returned 401. Set OFDD_API_KEY in the scraper env (same as stack/.env) so it can read dynamic config.",
+            )
+        else:
+            log.warning("GET /config failed: %s %s. Using env/defaults.", e.code, url)
+        return None
     except Exception as e:
         log.warning(
             "Could not fetch platform config from %s (%s). Using env/defaults.",

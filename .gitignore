@@ -162,3 +162,7 @@ cython_debug/
 
 # FDD trigger file (ephemeral)
 config/.run_fdd_now
+
+# Generated docs PDF (scripts/build_docs_pdf.py) — keep directory, ignore output
+/pdf/*
+!/pdf/.gitkeep

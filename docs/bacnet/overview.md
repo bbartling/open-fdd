@@ -78,10 +78,10 @@ Throttling depends on **how many points** are defined (in the data model or in t
 
 ## Configuration
 
-Scraper config via environment:
+Scraper config comes from **environment** and, when the API uses Bearer auth, from **GET /config** (so the Config UI controls the interval).
 
-- `OFDD_BACNET_SERVER_URL` — diy-bacnet-server base URL (e.g. http://localhost:8080). Required for RPC.
-- `OFDD_BACNET_USE_DATA_MODEL` — Prefer data-model scrape when points have BACnet addressing; fall back to CSV if none (default: true). Use `--data-model` or `--csv-only` in `tools/run_bacnet_scrape.py` to override.
-- `OFDD_BACNET_SCRAPE_INTERVAL_MIN` — Poll interval in minutes (default: 5)
-- `OFDD_BACNET_SCRAPE_CSV` — Path to CSV when using CSV path (default: config/bacnet_discovered.csv). Used by scraper container when CSV fallback is active.
-- `OFDD_DB_*` — TimescaleDB connection
+- **`OFDD_BACNET_SERVER_URL`** — diy-bacnet-server base URL (e.g. http://localhost:8080). Required for RPC.
+- **`OFDD_BACNET_USE_DATA_MODEL`** — Prefer data-model scrape when points have BACnet addressing; fall back to CSV if none (default: true). Use `--data-model` or `--csv-only` in `tools/run_bacnet_scrape.py` to override.
+- **Scrape interval** — When **`OFDD_API_KEY`** is set (same as in `stack/.env`), the scraper calls GET /config and uses **`bacnet_scrape_interval_min`** from the data model (Config UI). If the scraper does not have the API key or GET /config fails, it falls back to **`OFDD_BACNET_SCRAPE_INTERVAL_MIN`** env (default: 5). See [Configuration → Services that read config from the API](configuration#services-that-read-config-from-the-api-bacnet-scraper).
+- **`OFDD_BACNET_SCRAPE_CSV`** — Path to CSV when using CSV path (default: config/bacnet_discovered.csv). Used by scraper container when CSV fallback is active.
+- **`OFDD_DB_*`** — TimescaleDB connection

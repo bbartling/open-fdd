@@ -4,6 +4,8 @@ Delete all sites via the Open-FDD API, then reset the data-model graph/TTL.
 
 - Uses only the API (GET /sites, DELETE /sites/{id}, POST /data-model/reset). No SQL or
   Docker exec required — app users do not need to run anything inside containers.
+- For the same flow via the browser (Data Model page: confirm + Remove all sites and reset),
+  use e2e_frontend_selenium.py (enhanced E2E; step [1] does delete-all + reset via UI).
 - Each DELETE /sites/{id} cascades in the DB: equipment, points, timeseries_readings,
   fault_results, fault_events for that site are removed. So the DB is fully cleared of
   site-related data. The data model (Brick TTL and in-memory graph) is then synced to

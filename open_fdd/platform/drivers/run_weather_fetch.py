@@ -3,21 +3,22 @@
 Run Open-Meteo weather fetch: once or on an interval → TimescaleDB.
 
 Use only when the FDD loop (run_rule_loop.py) is not running. When the FDD loop
-runs, it fetches weather once per FDD run (every rule_interval_hours, using
-lookback_days); open_meteo_interval_hours in config applies only to this
-standalone scraper's --loop sleep.
+runs, it fetches weather once per FDD run (every rule_interval_hours) with a
+1-day lookback; open_meteo_interval_hours and open_meteo_days_back in config
+apply only to this standalone scraper's --loop sleep and fetch window.
 
-Fetches hourly weather from Open-Meteo ERA5 archive API, stores in timeseries_readings.
-Points: temp_f, rh_pct, dewpoint_f, wind_mph, gust_mph, wind_dir_deg,
-shortwave_wm2, direct_wm2, diffuse_wm2, gti_wm2, cloud_pct.
+Config: GET /config when API is reachable (same as BACnet scraper); else env
+(OFDD_OPEN_METEO_*). Fetches hourly weather from Open-Meteo ERA5 archive API,
+stores in timeseries_readings. Points: temp_f, rh_pct, dewpoint_f, wind_mph,
+gust_mph, wind_dir_deg, shortwave_wm2, direct_wm2, diffuse_wm2, gti_wm2, cloud_pct.
 
 Usage:
   python tools/run_weather_fetch.py
   python tools/run_weather_fetch.py --loop
 
-Config (env or .env): OFDD_OPEN_METEO_ENABLED, OFDD_OPEN_METEO_LATITUDE, OFDD_OPEN_METEO_LONGITUDE,
-  OFDD_OPEN_METEO_INTERVAL_HOURS, OFDD_OPEN_METEO_DAYS_BACK, OFDD_OPEN_METEO_TIMEZONE,
-  OFDD_OPEN_METEO_SITE_ID, OFDD_DB_DSN.
+Config (GET /config or env): open_meteo_enabled, open_meteo_interval_hours,
+  open_meteo_days_back, open_meteo_latitude, open_meteo_longitude,
+  open_meteo_timezone, open_meteo_site_id. Env: OFDD_OPEN_METEO_*, OFDD_DB_DSN.
 """
 
 import argparse

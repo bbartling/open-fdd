@@ -40,7 +40,7 @@ function FaultsTable({
 
   if (faults.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="faults-empty-state">
         <p className="text-sm text-muted-foreground">
           No active faults{siteMap ? " across any site" : " for this site"}.
         </p>
@@ -59,7 +59,7 @@ function FaultsTable({
   }
 
   return (
-    <Table>
+    <Table data-testid="faults-active-table">
       <TableHeader>
         <TableRow>
           {siteMap && <TableHead>Site</TableHead>}

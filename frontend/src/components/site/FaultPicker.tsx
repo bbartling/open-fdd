@@ -8,6 +8,8 @@ interface FaultPickerProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   label?: string;
+  /** For E2E: data-testid on the trigger button (e.g. plots-fault-picker). */
+  "data-testid"?: string;
 }
 
 export function FaultPicker({
@@ -15,6 +17,7 @@ export function FaultPicker({
   selectedIds,
   onChange,
   label = "Add faults",
+  "data-testid": testId,
 }: FaultPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -52,6 +55,7 @@ export function FaultPicker({
       <button
         type="button"
         aria-expanded={open}
+        data-testid={testId}
         className="inline-flex h-9 min-w-[10rem] items-center justify-between gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen(!open)}
       >

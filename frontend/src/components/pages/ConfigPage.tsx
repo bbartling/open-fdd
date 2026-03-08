@@ -20,6 +20,7 @@ function ConfigField({
   min,
   max,
   step,
+  "data-testid": testId,
 }: {
   label: string;
   value: string | number;
@@ -29,6 +30,7 @@ function ConfigField({
   min?: number;
   max?: number;
   step?: number;
+  "data-testid"?: string;
 }) {
   return (
     <div>
@@ -44,6 +46,7 @@ function ConfigField({
         max={max}
         step={step}
         className={inputClass}
+        data-testid={testId}
       />
     </div>
   );
@@ -111,13 +114,15 @@ function ConfigSummary({ config }: { config: PlatformConfig }) {
           <span className="col-span-full mt-2 border-b border-border/60 pb-1 font-medium text-muted-foreground">Open-Meteo</span>
           <dt className="text-muted-foreground">Enabled</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_enabled)}</dd>
+          <dt className="text-muted-foreground">Interval (h, standalone)</dt>
+          <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_interval_hours)}</dd>
           <dt className="text-muted-foreground">Latitude</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_latitude)}</dd>
           <dt className="text-muted-foreground">Longitude</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_longitude)}</dd>
           <dt className="text-muted-foreground">Timezone</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_timezone)}</dd>
-          <dt className="text-muted-foreground">Days back</dt>
+          <dt className="text-muted-foreground">Days back (standalone)</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_days_back)}</dd>
           <dt className="text-muted-foreground">Site ID</dt>
           <dd className="font-mono text-foreground">{formatConfigValue(config.open_meteo_site_id)}</dd>
@@ -256,6 +261,7 @@ export function ConfigPage() {
               value={form.bacnet_scrape_interval_min ?? 1}
               onChange={(v) => update("bacnet_scrape_interval_min", Number(v))}
               min={0}
+              data-testid="config-bacnet-scrape-interval"
             />
             <ConfigField
               label="BACnet server URL"
@@ -280,7 +286,7 @@ export function ConfigPage() {
               />
             </div>
             <p className="sm:col-span-2 text-sm text-muted-foreground">
-              Weather is fetched with each FDD run (same as rule interval above). Units: °F, mph, %, W/m².
+              Weather is fetched with each FDD run (same as rule interval above; 1-day lookback). Standalone scraper uses &quot;Days back&quot; and its own interval. Units: °F, mph, %, W/m².
             </p>
             <ConfigField
               label="Latitude"
@@ -303,7 +309,7 @@ export function ConfigPage() {
               placeholder="America/Chicago"
             />
             <ConfigField
-              label="Days back"
+              label="Days back (standalone scraper only)"
               type="number"
               value={form.open_meteo_days_back ?? 3}
               onChange={(v) => update("open_meteo_days_back", Number(v))}
@@ -339,6 +345,7 @@ export function ConfigPage() {
             type="submit"
             disabled={putMutation.isPending}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            data-testid="config-save-button"
           >
             {putMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

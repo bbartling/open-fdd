@@ -47,6 +47,8 @@ def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
     lines.append(f"{pt_uri} a brick:{brick_type} ;")
     lines.append(f'    rdfs:label "{label}" ;')
     lines.append(f"    ofdd:polling {'true' if polling else 'false'} ;")
+    if p.get("unit"):
+        lines.append(f'    ofdd:unit "{_escape(p["unit"])}" ;')
     if p.get("fdd_input"):
         lines.append(f"    brick:isPointOf {parent_uri} ;")
         lines.append(f'    ofdd:mapsToRuleInput "{_escape(p["fdd_input"])}" .')

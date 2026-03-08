@@ -29,6 +29,7 @@ Open-FDD is in **Alpha**. The most valuable contributions right now are **bug re
 - [Your First Code Contribution](#your-first-code-contribution)
 - [Improving the Documentation](#improving-the-documentation)
 - [Styleguides](#styleguides)
+- [Git workflow (branch → PR → sync)](#git-workflow-branch--pr--sync)
 - [Commit Messages](#commit-messages)
 - [Join the Project Team](#join-the-project-team)
 
@@ -146,6 +147,8 @@ Documentation lives in the `docs/` directory and is published at [bbartling.gith
 - Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [Operations](howto/operations), or BACnet).
 - Keep code blocks and links in sync with the codebase.
 
+**Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
+
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
 ---
@@ -165,6 +168,32 @@ End-to-end tests drive the **React frontend** with Selenium (no direct API calls
 - **Install:** `pip install -e ".[e2e]"` (adds `selenium`, `webdriver-manager`).
 - **Run:** Start the stack (frontend + API), then `python scripts/e2e_frontend_selenium.py`. Use `--frontend-url` if the app is not at `http://localhost:5173`, `--headed` to see the browser, `--only delete-all` or `--only charts` to run a subset.
 - **Chart validation:** The test asserts that Recharts curve/path elements are present; if the BACnet scraper (or other source) has written timeseries data, it also asserts chart paths have data. See `scripts/e2e_frontend_selenium.py` and, for full flow, `docs/howto/e2e_selenium.md` (if present).
+
+---
+
+## Git workflow (branch → PR → sync)
+
+1. **Stage and commit**
+   ```bash
+   git add .
+   git commit -m 'short note describing the change'
+   ```
+
+2. **Create a branch and push**
+   ```bash
+   git checkout -b feature/short-name
+   git push -u origin feature/short-name
+   ```
+
+3. **Open a PR** on GitHub from `feature/short-name` into `main` (or `master`).
+
+4. **After merge (or when done)** — sync local with remote and clean up refs:
+   ```bash
+   git fetch --prune
+   git checkout main
+   git pull
+   ```
+   Use `master` instead of `main` if that is your default branch.
 
 ---
 

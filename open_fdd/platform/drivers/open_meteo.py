@@ -37,19 +37,20 @@ WEATHER_POINTS = [
     "gti_wm2",
     "cloud_pct",
 ]
-# Units for Plots/UI: °F, %, mph, °, W/m² (consistent across weather data)
+# Canonical units for data model / Plots: same as AI prompt and BACnet (degF, percent, mph)
+# so weather and BACnet points share the same unit string and group on the same axis.
 WEATHER_UNITS: dict[str, str] = {
-    "temp_f": "°F",
-    "rh_pct": "%",
-    "dewpoint_f": "°F",
+    "temp_f": "degF",
+    "rh_pct": "percent",
+    "dewpoint_f": "degF",
     "wind_mph": "mph",
     "gust_mph": "mph",
-    "wind_dir_deg": "°",
+    "wind_dir_deg": "deg",
     "shortwave_wm2": "W/m²",
     "direct_wm2": "W/m²",
     "diffuse_wm2": "W/m²",
     "gti_wm2": "W/m²",
-    "cloud_pct": "%",
+    "cloud_pct": "percent",
 }
 OPEN_METEO_FIELDS = [
     "temperature_2m",

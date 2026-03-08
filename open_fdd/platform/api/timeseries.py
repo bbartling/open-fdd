@@ -1,10 +1,20 @@
 """Timeseries API — latest value per point for dashboards (HA, Grafana-style)."""
 
+from datetime import timezone
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
 from open_fdd.platform.database import get_conn
+
+
+def _ts_to_iso_utc(dt):
+    """Return ISO string with Z so frontend parses as UTC and displays in local time."""
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 router = APIRouter(
     prefix="/timeseries",
@@ -69,7 +79,7 @@ def get_timeseries_latest(
             "external_id": r["external_id"],
             "equipment_id": r["equipment_id"],
             "value": r["value"],
-            "ts": r["ts"].isoformat() if r["ts"] else None,
+            "ts": _ts_to_iso_utc(r["ts"]),
         }
         for r in rows
     ]

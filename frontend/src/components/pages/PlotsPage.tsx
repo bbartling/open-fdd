@@ -7,7 +7,6 @@ import {
   YAxis,
   CartesianGrid,
   Brush,
-  ReferenceArea,
 } from "recharts";
 import {
   ChartContainer,
@@ -131,7 +130,30 @@ function TrendChart({
   }, []);
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
-  // Use point id as chart key so each series is unique (avoids crash when duplicate equipment/external_id exist).
+  const set = useMemo(
+    () => new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean)),
+    [selectedFaultIds],
+  );
+  const faultKeys = useMemo(() => {
+    if (!faultData?.series?.length || set.size === 0) return [];
+    return faultData.series
+      .filter((s) => set.has(String(s.metric).trim()))
+      .map((s) => String(s.metric).trim());
+  }, [faultData, set]);
+  /** Fault active windows [startMs, endMs) per fault_id for swim-lane value 0/1. */
+  const faultSegmentsList = useMemo(() => {
+    const list: { start: number; end: number; fault_id: string }[] = [];
+    if (!faultData?.series?.length || set.size === 0) return list;
+    const bucketMs = faultBucketMs(start, end);
+    faultData.series
+      .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
+      .forEach((s) => {
+        const t = new Date(s.time).getTime();
+        list.push({ start: t, end: t + bucketMs, fault_id: String(s.metric).trim() });
+      });
+    return list;
+  }, [faultData, set, start, end]);
+
   const config: ChartConfig = useMemo(() => {
     const c: ChartConfig = {};
     pointIds.forEach((id, i) => {
@@ -142,54 +164,100 @@ function TrendChart({
         unit: p?.unit ?? undefined,
       };
     });
+    faultKeys.forEach((fid, i) => {
+      c[fid] = {
+        label: fid,
+        color: COLORS[(pointIds.length + i) % COLORS.length],
+        unit: "0/1",
+      };
+    });
     return c;
-  }, [pointIds, pointMap]);
+  }, [pointIds, pointMap, faultKeys]);
 
   const keys = pointIds.filter(Boolean);
 
-  const faultSegments = useMemo(() => {
-    if (!faultData?.series?.length || selectedFaultIds.length === 0) return [];
-    const bucketMs = faultBucketMs(start, end);
-    const set = new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean));
-    return faultData.series
-      .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
-      .map((s) => {
-        const t = new Date(s.time).getTime();
-        return { fault_id: s.metric, x1: t, x2: t + bucketMs };
-      });
-  }, [faultData, selectedFaultIds, start, end]);
+  /** Group point IDs by unit (data-model unit); order = first occurrence. Enables one axis per unit. */
+  const unitGroups = useMemo((): string[][] => {
+    const seen = new Set<string>();
+    const order: string[] = [];
+    const byUnit = new Map<string, string[]>();
+    for (const id of pointIds) {
+      if (!id) continue;
+      const p = pointMap.get(id);
+      const unit = (p?.unit ?? "") || "_";
+      if (!byUnit.has(unit)) byUnit.set(unit, []);
+      byUnit.get(unit)!.push(id);
+      if (!seen.has(unit)) {
+        seen.add(unit);
+        order.push(unit);
+      }
+    }
+    return order.map((u) => byUnit.get(u) ?? []).filter((g) => g.length > 0);
+  }, [pointIds, pointMap]);
 
-  const faultColor = (faultId: string) => COLORS[selectedFaultIds.indexOf(faultId) % COLORS.length];
+  /** Map each point ID to yAxisId: first unit group = left, second+ = right2 (faults stay on right). */
+  const pointToYAxisId = useMemo((): Map<string, "left" | "right2"> => {
+    const m = new Map<string, "left" | "right2">();
+    unitGroups.forEach((group, i) => {
+      const axisId = i === 0 ? "left" : "right2";
+      group.forEach((id) => m.set(id, axisId));
+    });
+    return m;
+  }, [unitGroups]);
 
-  const fullData = useMemo(() => {
+  const hasSecondPointAxis = unitGroups.length >= 2;
+
+  const faultColor = (faultId: string) =>
+    COLORS[(pointIds.length + faultKeys.indexOf(faultId)) % COLORS.length];
+
+  const isFaultActiveAt = useCallback(
+    (ts: number, faultId: string) =>
+      faultSegmentsList.some((s) => s.fault_id === faultId && ts >= s.start && ts < s.end),
+    [faultSegmentsList],
+  );
+
+  type ChartRow = { timestamp: number; [k: string]: number };
+  const fullData = useMemo((): ChartRow[] => {
     if (data?.length) {
       const timeSet = new Set<number>(data.map((d) => d.timestamp));
-      if (faultData?.series?.length && selectedFaultIds.length > 0) {
-        const set = new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean));
-        const bucketMs = faultBucketMs(start, end);
-        faultData.series
-          .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
-          .forEach((s) => {
-            const t = new Date(s.time).getTime();
-            timeSet.add(t);
-            timeSet.add(t + bucketMs);
-          });
-      }
+      faultSegmentsList.forEach((s) => {
+        timeSet.add(s.start);
+        timeSet.add(s.end - 1);
+      });
       const sorted = Array.from(timeSet).sort((a, b) => a - b);
       return sorted.map((timestamp) => {
         const existing = data.find((d) => d.timestamp === timestamp);
-        return existing ?? { timestamp };
+        const row: ChartRow = { timestamp };
+        if (existing) {
+          for (const key of Object.keys(existing)) {
+            if (key === "timestamp") continue;
+            const v = existing[key];
+            if (typeof v === "number" && !Number.isNaN(v)) row[key] = v;
+          }
+        }
+        faultKeys.forEach((fid) => {
+          row[fid] = isFaultActiveAt(timestamp, fid) ? 1 : 0;
+        });
+        return row;
       });
     }
-    if (faultData?.series?.length) {
+    if (faultData?.series?.length && faultKeys.length > 0) {
       const times = new Set<number>();
-      faultData.series.forEach((s) => times.add(new Date(s.time).getTime()));
-      return Array.from(times)
-        .sort((a, b) => a - b)
-        .map((timestamp) => ({ timestamp }));
+      faultSegmentsList.forEach((s) => {
+        times.add(s.start);
+        times.add(s.end - 1);
+      });
+      const sorted = Array.from(times).sort((a, b) => a - b);
+      return sorted.map((timestamp) => {
+        const row: ChartRow = { timestamp };
+        faultKeys.forEach((fid) => {
+          row[fid] = isFaultActiveAt(timestamp, fid) ? 1 : 0;
+        });
+        return row;
+      });
     }
     return [];
-  }, [data, faultData, selectedFaultIds, start, end]);
+  }, [data, faultData, faultKeys, faultSegmentsList, isFaultActiveAt]);
 
   const displayedData = useMemo(() => {
     if (!fullData.length) return [];
@@ -284,13 +352,15 @@ function TrendChart({
 
   const chartData = displayedData.length > 0 ? displayedData : fullData;
   const hasPointLines = pointIds.length > 0 && keys.length > 0;
+  const hasFaultLines = faultKeys.length > 0;
+  const chartMarginRight = hasSecondPointAxis ? 80 : hasFaultLines ? 52 : 24;
 
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="w-full" style={{ height: CHART_MIN_HEIGHT }}>
         <ChartContainer config={config} className="h-full w-full">
           <ResponsiveContainer width="100%" height={CHART_MIN_HEIGHT}>
-            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+            <LineChart data={chartData} margin={{ top: 8, right: chartMarginRight, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
               <XAxis
                 dataKey="timestamp"
@@ -303,25 +373,37 @@ function TrendChart({
                 axisLine={false}
               />
               <YAxis
+                yAxisId="left"
                 tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
                 tickLine={false}
                 axisLine={false}
               />
+              {hasSecondPointAxis && (
+                <YAxis
+                  yAxisId="right2"
+                  orientation="right"
+                  tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+              )}
+              {hasFaultLines && (
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  domain={[0, 1.2]}
+                  tick={{ fontSize: 10, fill: "hsl(220 8% 46%)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => (v === 1 ? "1" : v === 0 ? "0" : "")}
+                />
+              )}
               <ChartTooltip content={<ChartTooltipContent config={config} formatTime={tooltipFormat} />} />
               <ChartLegend content={<ChartLegendContent config={config} />} />
-              {faultSegments.map((seg, i) => (
-                <ReferenceArea
-                  key={`${seg.fault_id}-${seg.x1}-${i}`}
-                  x1={seg.x1}
-                  x2={seg.x2}
-                  fill={faultColor(seg.fault_id)}
-                  fillOpacity={0.35}
-                  strokeOpacity={0}
-                />
-              ))}
               {hasPointLines && keys.map((key) => (
                 <Line
                   key={key}
+                  yAxisId={pointToYAxisId.get(key) ?? "left"}
                   type="monotone"
                   dataKey={key}
                   stroke={config[key]?.color}
@@ -329,6 +411,19 @@ function TrendChart({
                   dot={false}
                   connectNulls
                   activeDot={{ r: 3, strokeWidth: 0 }}
+                />
+              ))}
+              {hasFaultLines && faultKeys.map((fid) => (
+                <Line
+                  key={fid}
+                  yAxisId="right"
+                  type="stepAfter"
+                  dataKey={fid}
+                  stroke={faultColor(fid)}
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                  activeDot={{ r: 2, strokeWidth: 0 }}
                 />
               ))}
             </LineChart>
@@ -354,6 +449,9 @@ function TrendChart({
               />
               {hasPointLines && keys.map((key) => (
                 <Line key={key} type="monotone" dataKey={key} stroke={config[key]?.color} strokeWidth={1} dot={false} isAnimationActive={false} />
+              ))}
+              {hasFaultLines && faultKeys.map((fid) => (
+                <Line key={fid} type="stepAfter" dataKey={fid} stroke={config[fid]?.color} strokeWidth={1} dot={false} isAnimationActive={false} />
               ))}
             </LineChart>
           </ResponsiveContainer>
@@ -467,6 +565,7 @@ export function PlotsPage() {
             selectedIds={selectedFaultIds}
             onChange={setSelectedFaultIds}
             label="Add faults"
+            data-testid="plots-fault-picker"
           />
           <button
             type="button"
@@ -492,7 +591,7 @@ export function PlotsPage() {
         />
       </div>
 
-      <div className="h-[55vh] min-h-[360px] w-full max-h-[800px]">
+      <div className="h-[55vh] min-h-[360px] w-full max-h-[800px]" data-testid="plots-chart-container">
         <TrendChart
           siteId={selectedSiteId}
           pointIds={selectedPointIds}

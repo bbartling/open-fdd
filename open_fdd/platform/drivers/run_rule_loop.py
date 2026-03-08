@@ -76,16 +76,19 @@ def main() -> int:
                     getattr(settings, "open_meteo_site_id", "default") or "default"
                 )
                 if site_uuid:
+                    # Use 1-day lookback when run from FDD (every rule_interval_hours);
+                    # fetching 3 days every 3h is unnecessary and heavy on the API.
+                    weather_days_back = 1
                     run_open_meteo_fetch(
                         site_uuid,
                         getattr(settings, "open_meteo_latitude", 41.88),
                         getattr(settings, "open_meteo_longitude", -87.63),
-                        days_back=lookback_days,
+                        days_back=weather_days_back,
                         timezone=getattr(
                             settings, "open_meteo_timezone", "America/Chicago"
                         ),
                     )
-                    log.info("Open-Meteo fetch OK before FDD run")
+                    log.info("Open-Meteo fetch OK before FDD run (1-day window)")
             except Exception as we:
                 log.warning("Open-Meteo fetch before FDD run failed (continuing): %s", we)
 
