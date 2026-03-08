@@ -4,7 +4,7 @@ If the data model has no fan/VFD point for motor runtime, returns NO DATA.
 For MSI/cloud integrators and Grafana (via JSON datasource or downstream ETL).
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import pandas as pd
@@ -219,12 +219,20 @@ def get_fault_timeseries(
             )
             rows = cur.fetchall()
 
+    def _ts_iso_utc(dt):
+        """Format datetime as ISO UTC with Z so frontend parses as UTC and displays in local time (DST-safe)."""
+        if dt is None:
+            return None
+        if getattr(dt, "tzinfo", None) is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
     return {
         "site_id": site_id,
         "period": {"start": str(start_date), "end": str(end_date)},
         "bucket": bucket,
         "series": [
-            {"time": r["time"].isoformat() if hasattr(r["time"], "isoformat") else str(r["time"]), "metric": r["metric"], "value": float(r["value"])}
+            {"time": _ts_iso_utc(r["time"]), "metric": r["metric"], "value": float(r["value"])}
             for r in rows
         ],
     }

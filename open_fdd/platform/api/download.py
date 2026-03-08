@@ -252,11 +252,13 @@ def get_download_faults(
     if format == "json":
         from fastapi.responses import JSONResponse
 
+        from open_fdd.platform.api.timeseries import _ts_to_iso_utc
+
         data = []
         for r in rows:
             row = dict(r)
-            if "ts" in row and hasattr(row["ts"], "isoformat"):
-                row["ts"] = row["ts"].isoformat()
+            if "ts" in row:
+                row["ts"] = _ts_to_iso_utc(row["ts"]) if hasattr(row["ts"], "isoformat") else str(row["ts"])
             data.append(row)
         return JSONResponse(
             content={"faults": data, "count": len(data)},
