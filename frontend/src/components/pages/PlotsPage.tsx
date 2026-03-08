@@ -134,11 +134,13 @@ function TrendChart({
     () => new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean)),
     [selectedFaultIds],
   );
+  /** One key per selected fault rule (unique), so legend and tooltip show one entry per rule. */
   const faultKeys = useMemo(() => {
     if (!faultData?.series?.length || set.size === 0) return [];
-    return faultData.series
+    const ids = faultData.series
       .filter((s) => set.has(String(s.metric).trim()))
       .map((s) => String(s.metric).trim());
+    return Array.from(new Set(ids));
   }, [faultData, set]);
   /** Fault active windows [startMs, endMs) per fault_id for swim-lane value 0/1. */
   const faultSegmentsList = useMemo(() => {
@@ -149,6 +151,7 @@ function TrendChart({
       .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
       .forEach((s) => {
         const t = new Date(s.time).getTime();
+        if (!Number.isFinite(t)) return;
         list.push({ start: t, end: t + bucketMs, fault_id: String(s.metric).trim() });
       });
     return list;
@@ -219,12 +222,12 @@ function TrendChart({
   type ChartRow = { timestamp: number; [k: string]: number };
   const fullData = useMemo((): ChartRow[] => {
     if (data?.length) {
-      const timeSet = new Set<number>(data.map((d) => d.timestamp));
+      const timeSet = new Set<number>(data.filter((d) => Number.isFinite(d.timestamp)).map((d) => d.timestamp));
       faultSegmentsList.forEach((s) => {
         timeSet.add(s.start);
         timeSet.add(s.end - 1);
       });
-      const sorted = Array.from(timeSet).sort((a, b) => a - b);
+      const sorted = Array.from(timeSet).filter(Number.isFinite).sort((a, b) => a - b);
       return sorted.map((timestamp) => {
         const existing = data.find((d) => d.timestamp === timestamp);
         const row: ChartRow = { timestamp };
@@ -301,6 +304,11 @@ function TrendChart({
     setBrushRange({ startIndex: range.startIndex, endIndex: range.endIndex });
   }, []);
 
+  const chartData = useMemo(() => {
+    const raw = displayedData.length > 0 ? displayedData : fullData;
+    return raw.filter((row) => Number.isFinite(row.timestamp));
+  }, [displayedData, fullData]);
+
   const loadingPoints = pointIds.length > 0 && isLoading;
   const loadingFaultsOnly = pointIds.length === 0 && selectedFaultIds.length > 0 && faultLoading;
   const hasAnyData = fullData.length > 0;
@@ -350,10 +358,20 @@ function TrendChart({
     );
   }
 
-  const chartData = displayedData.length > 0 ? displayedData : fullData;
   const hasPointLines = pointIds.length > 0 && keys.length > 0;
   const hasFaultLines = faultKeys.length > 0;
   const chartMarginRight = hasSecondPointAxis ? 80 : hasFaultLines ? 52 : 24;
+
+  if (chartData.length === 0) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
+        style={{ minHeight: CHART_MIN_HEIGHT }}
+      >
+        No valid data in this range (timestamps may be invalid).
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-2">
