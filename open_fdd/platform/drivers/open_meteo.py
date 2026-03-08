@@ -122,7 +122,8 @@ def fetch_open_meteo(
     tz = ZoneInfo(timezone)
     ts = pd.to_datetime(times)
     if ts.tz is None:
-        ts = ts.tz_localize(tz)
+        # DST spring-forward: 02:00 may not exist; shift nonexistent times forward
+        ts = ts.tz_localize(tz, nonexistent="shift_forward")
     else:
         ts = ts.tz_convert(tz)
     df = pd.DataFrame({"ts": ts})

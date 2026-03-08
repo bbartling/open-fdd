@@ -129,6 +129,10 @@ function WeatherChartPanel({
     return c;
   }, [pointIds, pointMap]);
   const keys = pointIds.filter(Boolean);
+  const chartData = useMemo(() => {
+    const raw = data?.length ? data : [];
+    return raw.filter((row) => Number.isFinite(row.timestamp));
+  }, [data]);
 
   if (pointIds.length === 0) return null;
 
@@ -150,7 +154,6 @@ function WeatherChartPanel({
       </div>
     );
   }
-  const chartData = data?.length ? data : [];
   if (chartData.length === 0) {
     return (
       <div className="w-full rounded-lg border border-border/60 bg-card p-4">

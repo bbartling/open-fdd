@@ -25,6 +25,8 @@ Usage
   
 
   python long_term_bacnet_scrape_test.py --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+
+Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating scrape intervals or frontend config/faults from a test bench.
 """
 
 import csv
@@ -245,11 +247,11 @@ def _check_expected_faults_for_phase(phase_end_utc: datetime) -> tuple[bool, str
     return True, "Expected fault windows present in FDD results"
 
 
-def _get_selenium_driver(headed: bool = False):
+def _get_selenium_driver(headed: bool = False, capture_browser_logs: bool = False):
     """Lazy import and create Chrome WebDriver (same fashion as e2e_frontend_selenium)."""
     try:
         from e2e_frontend_selenium import get_driver
-        return get_driver(headed=headed)
+        return get_driver(headed=headed, capture_browser_logs=capture_browser_logs)
     except ImportError as e:
         print(
             "For --config-via-frontend / --check-faults-via-frontend install: pip install selenium webdriver-manager",
@@ -258,7 +260,25 @@ def _get_selenium_driver(headed: bool = False):
         raise SystemExit(1) from e
 
 
-def _ensure_driver_alive(driver: "WebDriver | None", headed: bool) -> "WebDriver | None":
+def _report_console_errors(driver: "WebDriver", route_name: str) -> None:
+    """If the driver has browser log capture enabled, fetch console errors/warnings and print them."""
+    try:
+        from e2e_frontend_selenium import get_browser_console_errors
+        entries = get_browser_console_errors(driver)
+        if entries:
+            print(f"  Browser console on {route_name}: {len(entries)} error(s)/warning(s)")
+            for e in entries:
+                level = e.get("level", "?")
+                msg = (e.get("message") or "").strip()
+                if msg:
+                    print(f"    [{level}] {msg[:200]}{'...' if len(msg) > 200 else ''}")
+    except Exception as ex:
+        print(f"  Browser console on {route_name}: could not read logs ({ex})", file=sys.stderr)
+
+
+def _ensure_driver_alive(
+    driver: "WebDriver | None", headed: bool, capture_browser_logs: bool = False
+) -> "WebDriver | None":
     """
     Return a valid driver for frontend checks. After a long wait (e.g. 60 min) the browser
     may have closed; if the session is dead, create a new driver and quit the old one.
@@ -270,7 +290,7 @@ def _ensure_driver_alive(driver: "WebDriver | None", headed: bool) -> "WebDriver
         return driver
     except Exception:
         try:
-            new_driver = _get_selenium_driver(headed=headed)
+            new_driver = _get_selenium_driver(headed=headed, capture_browser_logs=capture_browser_logs)
             try:
                 driver.quit()
             except Exception:
@@ -548,7 +568,10 @@ def main() -> int:
     driver = None
     if config_via_frontend or check_faults_via_frontend:
         try:
-            driver = _get_selenium_driver(headed=headed)
+            driver = _get_selenium_driver(
+                headed=headed,
+                capture_browser_logs=True,
+            )
             print(f"Frontend: {frontend_url}  (config via UI={config_via_frontend}, faults via UI={check_faults_via_frontend})")
         except SystemExit:
             raise
@@ -603,6 +626,7 @@ def main() -> int:
                     if not set_bacnet_interval_via_frontend(driver, frontend_url, interval_min):
                         print("  Config via frontend: Save failed or 'Saved' not seen.", file=sys.stderr)
                         continue
+                    _report_console_errors(driver, "Config")
                 else:
                     print(f"  PUT /config: bacnet_scrape_interval_min={interval_min}")
                     if not put_config_interval(interval_min):
@@ -645,16 +669,21 @@ def main() -> int:
                 # Optional: verify faults visible on frontend (fake devices + FDD → Faults page)
                 # After a long wait the browser may have closed; reconnect if session is dead.
                 if check_faults_via_frontend and driver:
-                    driver = _ensure_driver_alive(driver, headed)
+                    driver = _ensure_driver_alive(
+                        driver, headed, capture_browser_logs=True
+                    )
                     if driver:
                         fault_visible_ok, fault_visible_msg = verify_faults_visible_via_frontend(driver, frontend_url)
                         print(f"  Faults via frontend: {'OK' if fault_visible_ok else 'FAIL'} — {fault_visible_msg}")
+                        _report_console_errors(driver, "Faults")
                         # Plots tab: site selector + Add faults dropdown → fault overlay on chart (Grafana swim lane parity)
                         plots_ok, plots_msg = verify_plots_fault_plot_via_frontend(driver, frontend_url)
                         print(f"  Plots fault plot: {'OK' if plots_ok else 'FAIL'} — {plots_msg}")
+                        _report_console_errors(driver, "Plots (fault overlay)")
                         # Plots: axis-by-unit — two points with different units → multiple Y-axes
                         axis_ok, axis_msg = verify_plots_axis_by_unit_via_frontend(driver, frontend_url)
                         print(f"  Plots axis-by-unit: {'OK' if axis_ok else 'FAIL'} — {axis_msg}")
+                        _report_console_errors(driver, "Plots (axis-by-unit)")
                     else:
                         print("  Faults via frontend: SKIP — browser session lost and could not reconnect.")
 

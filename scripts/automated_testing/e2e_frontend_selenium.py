@@ -37,6 +37,8 @@ Usage:
 
   $env:OFDD_API_KEY = "same-as-server-stack/.env"
   python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+
+Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating the full UI flow from a test bench (stack must be up).
 """
 
 from __future__ import annotations
@@ -129,8 +131,13 @@ TEXT_WAIT = 20
 FAILURE_SCREENSHOT_DIR = Path.home() / ".openfdd_e2e_failures"
 
 
-def get_driver(headed: bool = False, ignore_ssl: bool = False) -> webdriver.Chrome:
-    """Create Chrome WebDriver (headless by default). Optionally ignore SSL errors for HTTPS."""
+def get_driver(
+    headed: bool = False,
+    ignore_ssl: bool = False,
+    capture_browser_logs: bool = False,
+) -> webdriver.Chrome:
+    """Create Chrome WebDriver (headless by default). Optionally ignore SSL errors for HTTPS.
+    When capture_browser_logs is True, enables browser log capture so get_browser_console_errors() can report console errors."""
     from selenium.common.exceptions import WebDriverException
 
     options = ChromeOptions()
@@ -142,6 +149,8 @@ def get_driver(headed: bool = False, ignore_ssl: bool = False) -> webdriver.Chro
     options.add_argument("--window-size=1920,1080")
     if ignore_ssl:
         options.add_argument("--ignore-certificate-errors")
+    if capture_browser_logs:
+        options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     try:
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
@@ -153,6 +162,22 @@ def get_driver(headed: bool = False, ignore_ssl: bool = False) -> webdriver.Chro
             print("Chrome/Chromium not found. Install Chrome or run with Chrome.", file=sys.stderr)
             print("E2E tests are optional; use them locally when the stack and Chrome are available.", file=sys.stderr)
         raise
+
+
+def get_browser_console_errors(
+    driver: webdriver.Chrome,
+    levels: tuple[str, ...] = ("SEVERE", "WARNING"),
+) -> list[dict]:
+    """
+    Return browser console log entries with the given levels (e.g. SEVERE for errors).
+    Each item is a dict with at least 'level' and 'message'. Only entries since the last
+    get_log('browser') (or since load) are returned; call after each route to get per-route errors.
+    """
+    try:
+        entries = driver.get_log("browser")
+    except Exception:
+        return []
+    return [e for e in entries if e.get("level") in levels]
 
 
 # --- Helpers: explicit waits and safe actions ---
