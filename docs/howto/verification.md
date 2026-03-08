@@ -10,6 +10,40 @@ Checks to confirm the platform is running and data is flowing.
 
 ---
 
+## Home page / frontend won't load
+
+If **http://localhost** or **http://\<host-ip\>** (e.g. http://192.168.204.16) does not show the Open-FDD UI:
+
+1. **Check that containers are running**
+   ```bash
+   cd stack
+   docker compose ps
+   ```
+   Ensure `openfdd_frontend` and `openfdd_caddy` are **Up**. If `openfdd_frontend` is restarting or exited, see step 2.
+
+2. **Frontend logs** (Vite must finish `npm install` then `npm run dev`; first start can take 1–2 minutes)
+   ```bash
+   docker compose -f stack/docker-compose.yml logs frontend --tail 80
+   ```
+   Look for `Local: http://localhost:5173/` or errors (e.g. EADDRINUSE, npm install failure). If the container keeps exiting, try a clean frontend install: `./scripts/bootstrap.sh --frontend` then `./scripts/bootstrap.sh`.
+
+3. **Caddy logs** (proxy to frontend)
+   ```bash
+   docker compose -f stack/docker-compose.yml logs caddy --tail 30
+   ```
+   If you see 502 Bad Gateway, the frontend is not ready yet; wait for the frontend healthcheck to pass (Caddy starts only when frontend is healthy).
+
+4. **Try the dev server directly** (bypass Caddy)
+   - Open **http://localhost:5173** (or http://\<host-ip\>:5173). If that loads, the frontend is fine and the issue is Caddy or port 80 (e.g. another service binding to 80).
+
+5. **Port 80 in use**
+   - On Linux: `sudo ss -tlnp | grep :80` or `sudo lsof -i :80`. Stop the conflicting service or change Caddy’s host port in `stack/docker-compose.yml` (e.g. `"8080:80"`).
+
+6. **Remote access**
+   - From another machine use **http://\<server-ip\>** (port 80) or **http://\<server-ip\>:5173**. Ensure firewall allows 80 and 5173.
+
+---
+
 ## Health
 
 ```bash
@@ -114,6 +148,43 @@ docker logs openfdd_weather_scraper --tail 30
 curl -s 'http://localhost:8000/points' | grep -E 'temp_f|rh_pct|shortwave_wm2|cloud_pct'
 docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT COUNT(*) FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id WHERE p.external_id = 'temp_f';"
 ```
+
+---
+
+## Weather page: "No weather points for this site"
+
+The Weather UI shows points (`temp_f`, `rh_pct`, `wind_mph`, etc.) only after **Open-Meteo data has been fetched and stored for the selected site**. Two ways that can happen:
+
+1. **Standalone weather-scraper** (`openfdd_weather_scraper`)  
+   Runs on an interval (default **24 hours**). After stack start it does a first fetch soon; then it sleeps until the next interval. If you just brought the stack up, wait for that first run or trigger once (see below).
+
+2. **FDD loop** (`openfdd_fdd_loop`)  
+   When Open-Meteo is enabled, **weather is fetched at the start of each FDD run** (every `rule_interval_hours`). So the next time the AFDD routine runs, it will fetch weather (1-day lookback) and create/update weather points. No separate weather-scraper needed; do not run both to avoid redundant fetches.
+
+**Checklist:**
+
+- **Open-Meteo enabled:** Config → Open-Meteo (weather) → "Enable Open-Meteo" on, or `GET /config` has `open_meteo_enabled: true` (and in `config/data_model.ttl`: `ofdd:openMeteoEnabled true`).
+- **Which runner is active:**
+  - `docker logs openfdd_weather_scraper --tail 30` — look for "Open-Meteo fetch OK" and "Sleeping N h until next fetch".
+  - `docker logs openfdd_fdd_loop --tail 50` — look for "Open-Meteo fetch OK before FDD run".
+- **Site match:** Weather is stored for the site given by `open_meteo_site_id` (default `"default"`), which resolves to the **first site** in the DB if no site named "default" exists. Ensure the site you have selected in the UI is that site (e.g. TestBenchSite if it’s the only/first site).
+
+**Populate weather immediately (one-off fetch):**
+
+From the repo (with stack up and DB/API reachable):
+
+```bash
+# Uses GET /config or env (OFDD_OPEN_METEO_*, OFDD_DB_DSN); writes to site from open_meteo_site_id
+python -m open_fdd.platform.drivers.run_weather_fetch
+```
+
+Or from inside the API/worker image (replace with your image name if different):
+
+```bash
+docker compose -f stack/docker-compose.yml run --rm api python -m open_fdd.platform.drivers.run_weather_fetch
+```
+
+After a successful run, refresh the Weather page with the correct site selected; you should see temp/RH/wind panels.
 
 ---
 

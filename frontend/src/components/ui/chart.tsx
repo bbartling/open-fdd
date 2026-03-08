@@ -145,6 +145,7 @@ export function ChartLegendContent({ payload, config }: LegendContentProps) {
             />
             <span className="text-muted-foreground">
               {entry?.label ?? key}
+              {entry?.unit ? ` ${entry.unit}` : ""}
             </span>
           </div>
         );

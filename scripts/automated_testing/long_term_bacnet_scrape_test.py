@@ -7,6 +7,7 @@ What gets checked
 Frontend (browser / Selenium):
   - Config: with --config-via-frontend, opens /config, sets BACnet scrape interval (min), clicks Save, asserts "Saved" appears.
   - Faults: with --check-faults-via-frontend, opens /faults, asserts the page shows either the active fault table (rows), the empty state, or the "Fault flags over time" chart/summary.
+  - Plots fault overlay: with --check-faults-via-frontend, opens /plots, selects site (from URL or selector), opens Add faults dropdown, selects a fault if any, and asserts the chart updates (fault swim lane / overlay parity with Grafana "BACnet Plus Fault Data").
 
 Backend (Python → API via httpx):
   - Startup: GET /config (API reachable and auth when OFDD_API_KEY is set).
@@ -16,10 +17,14 @@ Backend (Python → API via httpx):
 
 Usage
 -----
+
+    $env:OFDD_API_KEY = "same-as-server-stack/.env"
   python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --headed
 
   python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
-  $env:OFDD_API_KEY = "same-as-server-stack-.env"
+  
+
+  python long_term_bacnet_scrape_test.py --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
 """
 
 import csv
@@ -138,6 +143,17 @@ def get_config() -> dict | None:
     return body
 
 
+def get_first_site_id() -> str:
+    """GET /sites; return first site id for Plots/context, or 'default' if none."""
+    code, body = _request("GET", "/sites")
+    if code != 200 or not isinstance(body, list) or len(body) == 0:
+        return "default"
+    first = body[0]
+    if isinstance(first, dict) and first.get("id"):
+        return str(first["id"])
+    return "default"
+
+
 def get_download_faults(start_d: date, end_d: date) -> tuple[list[dict], str]:
     """GET /download/faults (JSON). Returns (list of fault dicts, error_message or '')."""
     path = f"/download/faults?site_id={SITE_ID}&start_date={start_d}&end_date={end_d}&format=json"
@@ -242,6 +258,30 @@ def _get_selenium_driver(headed: bool = False):
         raise SystemExit(1) from e
 
 
+def _ensure_driver_alive(driver: "WebDriver | None", headed: bool) -> "WebDriver | None":
+    """
+    Return a valid driver for frontend checks. After a long wait (e.g. 60 min) the browser
+    may have closed; if the session is dead, create a new driver and quit the old one.
+    """
+    if driver is None:
+        return None
+    try:
+        _ = driver.current_url
+        return driver
+    except Exception:
+        try:
+            new_driver = _get_selenium_driver(headed=headed)
+            try:
+                driver.quit()
+            except Exception:
+                pass
+            print("  Browser session lost during wait; reconnected with new driver for frontend checks.")
+            return new_driver
+        except Exception as e:
+            print(f"  Could not reconnect browser for frontend checks: {e}", file=sys.stderr)
+            return None
+
+
 def set_bacnet_interval_via_frontend(driver: "WebDriver", frontend_url: str, interval_min: int) -> bool:
     """
     Open Config page, set BACnet scrape interval (min), click Save. Returns True on success.
@@ -299,6 +339,150 @@ def verify_faults_visible_via_frontend(driver: "WebDriver", frontend_url: str, t
     if "Fault flags over time" in (driver.page_source or ""):
         return True, "Faults page loaded; chart/summary visible (fault data may be in range)."
     return False, "Faults page loaded but no fault table rows and no chart section found."
+
+
+def verify_plots_fault_plot_via_frontend(
+    driver: "WebDriver", frontend_url: str, timeout_sec: float = 25
+) -> tuple[bool, str]:
+    """
+    Open Plots page, select site (via URL or selector), open Add faults dropdown, select a fault
+    if any exist, and verify the chart updates (fault overlay path works — swim lane parity with Grafana).
+    Returns (ok, message). If no fault definitions exist, still passes (picker works).
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    from e2e_frontend_selenium import ELEMENT_WAIT, wait_for_clickable
+
+    base = frontend_url.rstrip("/")
+    site_id = get_first_site_id()
+    driver.get(f"{base}/plots?site={site_id}")
+    wait = WebDriverWait(driver, timeout_sec)
+    time.sleep(0.5)
+
+    # If we landed on "Select a site to view plots", try opening site selector and picking first site
+    if "Select a site to view plots" in (driver.page_source or ""):
+        try:
+            site_btn = driver.find_elements(
+                By.XPATH,
+                "//button[@aria-haspopup='listbox' and (contains(., 'Sites') or contains(., 'All Sites'))]",
+            )
+            if site_btn:
+                site_btn[0].click()
+                time.sleep(0.5)
+                first_site = driver.find_elements(
+                    By.XPATH,
+                    "//div[contains(@class,'rounded-2xl')]//button[.//span[contains(@class,'truncate')]]",
+                )
+                for el in first_site:
+                    if el.text and "All Sites" not in (el.text or ""):
+                        el.click()
+                        break
+                time.sleep(0.8)
+        except Exception:
+            pass
+
+    # Wait for Plots content: fault picker or chart container (site selected)
+    try:
+        wait.until(
+            lambda d: (
+                d.find_elements(By.CSS_SELECTOR, "[data-testid=plots-fault-picker]")
+                or d.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
+            )
+        )
+    except Exception as e:
+        return False, f"Plots page did not show fault picker or chart within {timeout_sec}s: {e}"
+
+    # Still on "Select a site" means we have no site in context
+    if "Select a site to view plots" in (driver.page_source or ""):
+        return False, "Plots page requires a site; site selector did not apply."
+
+    # Open Add faults dropdown
+    try:
+        fault_btn = wait_for_clickable(driver, By.CSS_SELECTOR, "[data-testid=plots-fault-picker]", timeout_sec)
+        fault_btn.click()
+        time.sleep(0.6)
+    except Exception as e:
+        return False, f"Could not open Add faults dropdown: {e}"
+
+    page_src = driver.page_source or ""
+    if "No fault definitions" in page_src:
+        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+        return True, "Plots fault picker OK; no fault definitions to plot (add rules and run FDD)."
+
+    # Select first fault option (label with checkbox)
+    try:
+        first_label = driver.find_elements(
+            By.XPATH,
+            "//div[contains(@class,'absolute') and contains(@class,'z-50')]//label[.//input[@type='checkbox']]",
+        )
+        if not first_label:
+            first_label = driver.find_elements(By.XPATH, "//label[.//input[@type='checkbox']]")
+        if first_label:
+            first_label[0].click()
+            time.sleep(0.5)
+    except Exception:
+        pass
+    driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+    time.sleep(1.2)
+
+    # Chart should update: either "No fault activity in this range" or chart with bands / zoom hint
+    container = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
+    if not container:
+        return False, "Plots chart container not found after selecting fault."
+    text = (container[0].text or "") + " " + (driver.page_source or "")
+    if "No fault activity in this range" in text or "Zoom: drag the handles" in text:
+        return True, "Plots fault overlay path OK (fault selected; chart shows fault state or zoom)."
+    if "No point data in this range" in text:
+        return True, "Plots fault overlay path OK (fault selected; no point data in range)."
+    if "Select points and/or faults" not in text:
+        return True, "Plots fault overlay path OK (chart updated after selecting fault)."
+    return False, "Plots fault selection did not update chart (swim lane / fault overlay may be broken)."
+
+
+def verify_plots_axis_by_unit_via_frontend(
+    driver: "WebDriver", frontend_url: str, timeout_sec: float = 25
+) -> tuple[bool, str]:
+    """
+    On Plots, select two points with different units (e.g. SA-T degF, SA-FLOW cfm) and assert
+    the chart has at least 2 Y-axes (axis-by-unit: data populates on different axes by unit).
+    Returns (ok, message). Uses e2e_frontend_selenium helpers.
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+
+    from e2e_frontend_selenium import (
+        ELEMENT_WAIT,
+        EXPECTED_POINT_NAMES,
+        FALLBACK_POINT_NAMES,
+        SECOND_POINT_DIFFERENT_UNIT,
+        select_known_point,
+        select_second_point_different_unit,
+    )
+
+    base = frontend_url.rstrip("/")
+    driver.get(f"{base}/plots")
+    time.sleep(0.8)
+    if "Select a site to view plots" in (driver.page_source or ""):
+        return False, "Plots axis-by-unit: select a site first (no site in context)."
+    wait = WebDriverWait(driver, timeout_sec)
+    wait.until(
+        lambda d: "Select points" in (d.page_source or "") or d.find_elements(By.CSS_SELECTOR, "[class*='recharts-yAxis']")
+    )
+    preference = list(EXPECTED_POINT_NAMES) + list(FALLBACK_POINT_NAMES)
+    first = select_known_point(driver, preference, timeout=ELEMENT_WAIT)
+    if not first:
+        return False, "Plots axis-by-unit: could not select first point (point picker)."
+    time.sleep(0.4)
+    second = select_second_point_different_unit(driver, preference=SECOND_POINT_DIFFERENT_UNIT, timeout=ELEMENT_WAIT)
+    if not second:
+        return True, "Plots axis-by-unit: only one unit available (single point type); skip multi-axis check."
+    time.sleep(1.0)
+    y_axes = driver.find_elements(By.CSS_SELECTOR, "[class*='recharts-yAxis']")
+    if len(y_axes) >= 2:
+        return True, f"Plots axis-by-unit OK ({len(y_axes)} Y-axes for different units)."
+    return False, f"Plots axis-by-unit: expected >= 2 Y-axes when two units selected; got {len(y_axes)}."
 
 
 def _parse_frontend_args():
@@ -459,9 +643,20 @@ def main() -> int:
                     print(f"  Expected-fault check (API): {'OK' if fault_ok else 'FAIL'} — {fault_msg}")
 
                 # Optional: verify faults visible on frontend (fake devices + FDD → Faults page)
+                # After a long wait the browser may have closed; reconnect if session is dead.
                 if check_faults_via_frontend and driver:
-                    fault_visible_ok, fault_visible_msg = verify_faults_visible_via_frontend(driver, frontend_url)
-                    print(f"  Faults via frontend: {'OK' if fault_visible_ok else 'FAIL'} — {fault_visible_msg}")
+                    driver = _ensure_driver_alive(driver, headed)
+                    if driver:
+                        fault_visible_ok, fault_visible_msg = verify_faults_visible_via_frontend(driver, frontend_url)
+                        print(f"  Faults via frontend: {'OK' if fault_visible_ok else 'FAIL'} — {fault_visible_msg}")
+                        # Plots tab: site selector + Add faults dropdown → fault overlay on chart (Grafana swim lane parity)
+                        plots_ok, plots_msg = verify_plots_fault_plot_via_frontend(driver, frontend_url)
+                        print(f"  Plots fault plot: {'OK' if plots_ok else 'FAIL'} — {plots_msg}")
+                        # Plots: axis-by-unit — two points with different units → multiple Y-axes
+                        axis_ok, axis_msg = verify_plots_axis_by_unit_via_frontend(driver, frontend_url)
+                        print(f"  Plots axis-by-unit: {'OK' if axis_ok else 'FAIL'} — {axis_msg}")
+                    else:
+                        print("  Faults via frontend: SKIP — browser session lost and could not reconnect.")
 
             print("--- Confirm: cycle complete ---")
             cfg = get_config()

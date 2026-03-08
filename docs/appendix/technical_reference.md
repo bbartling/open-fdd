@@ -156,7 +156,7 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 |-------|---------|
 | **sites** | id, name, description, metadata, created_at |
 | **equipment** | id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id |
-| **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, bacnet_*, object_name, polling |
+| **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, unit, bacnet_*, object_name, polling |
 | **timeseries_readings** | ts, site_id, point_id, value, job_id (hypertable; BACnet + weather + CSV ingest) |
 | **ingest_jobs** | id, site_id, name, format, point_columns, row_count (CSV ingest metadata) |
 | **fault_results** | ts, site_id, equipment_id, fault_id, flag_value (hypertable) |
@@ -189,4 +189,4 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 3. **Tag with LLM** — Use prompt in [AI-assisted tagging](../modeling/ai_assisted_tagging).
 4. **Import** — PUT /data-model/import with `points` and optional `equipment`. Set `polling` false on points that should not be scraped.
 
-Prompt summary: Set `site_id`, `external_id`, `brick_type`, `rule_input`; optionally `equipment_id`, `unit`, and equipment `feeds_equipment_id`/`fed_by_equipment_id`. Output is the completed JSON for PUT /data-model/import.
+Prompt summary: Set `site_id`, `external_id`, `brick_type`, `rule_input`; optionally `equipment_id`, **`unit`** (e.g. degF, %, cfm, 0/1 — stored in DB and TTL; frontend uses it for Plots axis labels and grouping), and equipment `feeds_equipment_id`/`fed_by_equipment_id`. Output is the completed JSON for PUT /data-model/import.

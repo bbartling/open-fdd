@@ -73,6 +73,8 @@ def test_build_ttl_one_site_one_point():
     assert "sat" in ttl
     assert "ofdd:mapsToRuleInput" in ttl
     assert "rdfs:label" in ttl
+    assert "ofdd:unit" in ttl
+    assert "degF" in ttl
 
 
 def test_build_ttl_site_with_equipment_and_points():
@@ -106,6 +108,34 @@ def test_build_ttl_site_with_equipment_and_points():
     assert "Supply_Air_Static_Pressure_Sensor" in ttl
     assert "brick:isPointOf" in ttl
     assert "brick:isPartOf" in ttl
+    assert "ofdd:unit" in ttl
+    assert "inH2O" in ttl
+
+
+def test_build_ttl_point_without_unit_omits_ofdd_unit():
+    """When point has no unit (None or missing), TTL must not contain ofdd:unit for that point."""
+    site_id = uuid4()
+    pt_id = uuid4()
+    sites = [{"id": site_id, "name": "NoUnit"}]
+    equipment = []
+    points = [
+        {
+            "id": pt_id,
+            "site_id": site_id,
+            "external_id": "X",
+            "brick_type": "Point",
+            "fdd_input": None,
+            "unit": None,
+            "equipment_id": None,
+        }
+    ]
+    cursor = _mock_cursor(sites, equipment, points)
+    conn = _mock_conn(cursor)
+    with patch("open_fdd.platform.data_model_ttl.get_conn", return_value=conn):
+        ttl = build_ttl_from_db()
+    assert "rdfs:label" in ttl
+    assert 'rdfs:label "X"' in ttl
+    assert "ofdd:unit" not in ttl
 
 
 def test_build_ttl_one_subject_per_entity_no_duplicate_uris():

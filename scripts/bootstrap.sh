@@ -928,7 +928,7 @@ if $MINIMAL; then
   echo "  (Minimal: raw BACnet data only. No FDD, no weather, no API. Add Grafana with --with-grafana.)"
 else
   echo "  API:      http://localhost:8000   (docs: /docs)"
-  echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost:8088)"
+  echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
   echo "  (Grafana not started by default. Use --with-grafana to include it.)"
 fi

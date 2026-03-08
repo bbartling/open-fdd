@@ -30,11 +30,18 @@ _EXCEL_BOM = "\ufeff"
 
 
 def _to_excel_csv(df: pd.DataFrame) -> str:
-    """CSV with UTF-8 BOM and ISO timestamps — opens cleanly in Excel."""
+    """CSV with UTF-8 BOM and ISO timestamps in UTC (Z) so Plots/frontend and Excel parse correctly.
+    Without Z, JS parses timestamps in implementation-defined way and DST can show wrong hour (e.g. 8:02
+    instead of 9:02 CDT after spring-forward)."""
     df = df.copy()
     for col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[col]):
-            df[col] = pd.to_datetime(df[col]).dt.strftime("%Y-%m-%d %H:%M:%S")
+            s = pd.to_datetime(df[col])
+            if s.dt.tz is None:
+                s = s.dt.tz_localize("UTC", ambiguous="infer")
+            else:
+                s = s.dt.tz_convert("UTC")
+            df[col] = s.dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     buf = StringIO()
     df.to_csv(buf, index=False)
     return _EXCEL_BOM + buf.getvalue()

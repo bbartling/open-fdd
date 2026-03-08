@@ -7,6 +7,10 @@ exec python3 "$0" "$@"
 """
 End-to-end CRUD API test: hits Open-FDD API only (no direct calls to diy-bacnet-server).
 
+For the same concepts via the browser (create site, import LLM payload, verify data model,
+Plots, units, axis-by-unit, faults), use e2e_frontend_selenium.py (enhanced E2E). This script
+remains for API-only regression and BACnet/SPARQL/config/CRUD lifecycle coverage.
+
 All requests go to the Open-FDD API (--base-url). For BACnet, the test uses the API’s
 gateway URL in request body (--bacnet-url; when base-url is localhost, default is host.docker.internal:8080 for container-to-host).
 Flow: test → Open-FDD API → (API proxies to) diy-bacnet.

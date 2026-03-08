@@ -37,21 +37,38 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
 | `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id, config_csv}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
 | `bacnet_config_csv` | config/bacnet_discovered.csv | CSV path when using CSV path (fallback or `--csv-only`). Single gateway. |
-| `open_meteo_enabled` | true | Enable weather; when true, **FDD loop runs a weather fetch at the start of each run** so rules see fresh data on the same interval. |
-| `open_meteo_interval_hours` | 24 | Standalone weather-scraper poll interval (hours). Set equal to `rule_interval_hours` in the graph to align scraper with FDD; when weather runs with FDD, this only affects the optional scraper container. |
+| `open_meteo_enabled` | true | Enable weather; when true, **FDD loop runs a weather fetch at the start of each run** (same cadence as rules, every `rule_interval_hours`). |
+| `open_meteo_interval_hours` | 24 | **Standalone weather-scraper only.** Poll interval (hours) when using the optional weather-scraper container. Ignored when weather is run from the FDD loop. |
 | `open_meteo_latitude` | 41.88 | Site latitude |
 | `open_meteo_longitude` | -87.63 | Site longitude |
 | `open_meteo_timezone` | America/Chicago | Timezone |
-| `open_meteo_days_back` | 3 | Days of archive to fetch |
+| `open_meteo_days_back` | 3 | **Standalone weather-scraper only.** Days of archive to fetch per run. When weather runs with FDD, a 1-day lookback is used (no separate config). |
 | `open_meteo_site_id` | default | Site ID for weather points |
 
-**Weather fetch:** Weather is normally fetched **with each FDD run** (same interval as fault rules), so rules see fresh Open-Meteo data. A standalone weather scraper is only for setups that do not run the FDD loop; do not run both to avoid redundant fetches.
+**Weather fetch:** Weather is normally fetched **with each FDD run** (same interval as fault rules, e.g. every 3 h), using a **1-day lookback** so the API is not over-used. A standalone weather scraper is only for setups that do not run the FDD loop; do not run both to avoid redundant fetches. The standalone scraper reads config from **GET /config** (like the BACnet scraper) when available.
 
 **Where to place rules:** Put your project rules in **`analyst/rules/`** (one place). See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
 
 **Hot reload (AFDD tuning):** The project supports **hot reloading of YAML rule files** so the AFDD maintainer can make tweaks and adjustments for fault tuning without restarting the platform. The FDD loop loads rules from `rules_dir` on every run; edit YAML → trigger a run (or wait for the schedule) → results reflect the new params. The `rules_dir` path itself is **RDF-driven**: it comes from platform config (GET `/config` or the same graph that backs PUT `/config`). Unit tests that cover this behaviour: `open_fdd/tests/platform/test_rules_loader.py` (hot-reload hash and reload-on-change) and `open_fdd/tests/platform_api/test_rules.py` (list/read rule files from configured `rules_dir`). A future CRUD-driven rule editor in the frontend (with the same hot-reload semantics) would be a possible evolution; today, YAML in `analyst/rules` is the supported path.
 
 **Rolling window (per rule):** Set `params.rolling_window` in each rule YAML; see [Fault rules for HVAC](rules/overview).
+
+---
+
+## Services that read config from the API (BACnet scraper)
+
+Platform config (e.g. **Scrape interval (min)**) is stored in the data model and served by **GET /config**. Some services need to call the API to get that config so changes in the Config UI take effect.
+
+**BACnet scraper** and **weather scraper (standalone):** Both can read config from **GET /config** (with a short cache) so the Config UI and data model control their behaviour. The BACnet scraper uses `bacnet_scrape_interval_min`; the standalone weather scraper uses `open_meteo_enabled`, `open_meteo_interval_hours`, `open_meteo_days_back`, and the geo/site fields. If GET /config fails (e.g. no `OFDD_API_KEY`), they fall back to env vars.
+
+**BACnet scraper:** The scraper runs on a fixed interval (e.g. every 1, 5, or 10 minutes). It can get that interval in two ways:
+
+1. **From the API (dynamic)** — The scraper calls **GET /config** (with a short cache). It then uses `bacnet_scrape_interval_min` from the response, so whatever you set in the Config UI is what the scraper uses. **This only works when the scraper can authenticate:** the API requires Bearer auth when `OFDD_API_KEY` is set, so the scraper must have **`OFDD_API_KEY`** in its environment (same value as in `stack/.env`). The stack’s `docker-compose.yml` passes `OFDD_API_KEY: ${OFDD_API_KEY:-}` to the bacnet-scraper service for this reason.
+2. **Fallback (env)** — If GET /config fails (e.g. 401 because no API key, or API unreachable), the scraper falls back to **`OFDD_BACNET_SCRAPE_INTERVAL_MIN`** from its environment (e.g. 5 in compose). **So if you set an interval in the Config UI but the scraper does not have `OFDD_API_KEY`, it will ignore the UI and keep using the env default.** Rebuild/restart the bacnet-scraper after ensuring `OFDD_API_KEY` is in `stack/.env` and in the scraper’s env: `./scripts/bootstrap.sh --build bacnet-scraper`.
+
+**Summary:** For the Config UI (and data model) to control the BACnet scrape interval, the API must have `OFDD_API_KEY` set and the bacnet-scraper container must receive the same key so it can call GET /config successfully.
+
+---
 
 ## BACnet: single gateway, remote gateways, central aggregator
 

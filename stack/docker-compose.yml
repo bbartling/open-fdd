@@ -246,6 +246,12 @@ services:
       - frontend_node_modules:/app/node_modules
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:5173/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
     logging:
       driver: json-file
@@ -260,8 +266,10 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
-      - api
-      - frontend
+      api:
+        condition: service_started
+      frontend:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file

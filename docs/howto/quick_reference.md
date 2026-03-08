@@ -154,4 +154,15 @@ docker logs openfdd_fdd_loop --tail 50
 
 ---
 
+## Docs PDF
+
+Build a single PDF of the documentation (offline use or to commit to the repo):
+
+```bash
+python3 scripts/build_docs_pdf.py
+# Output: pdf/open-fdd-docs.pdf. Requires pandoc and weasyprint (pip install weasyprint) or LaTeX.
+```
+
+---
+
 For full procedures (migrations, run FDD now, danger zone, etc.) see [Operations](howto/operations) and [Verification](howto/verification).

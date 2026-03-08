@@ -24,6 +24,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
    - **site_id**, **external_id** (time-series key)
    - **brick_type** (e.g. `Supply_Air_Temperature_Sensor`, `Zone_Air_Temperature_Sensor`)
    - **rule_input** (name FDD rules use)
+   - **unit** when known (e.g. `degF`, `%`, `cfm`, `0/1` for binary). Units are stored in the data model and TTL; the frontend uses them for Plots axis labels and grouping (e.g. temperatures on one axis, humidity on another). Use standard abbreviations so Plots and exports stay consistent.
    - **equipment_id** (optional)
    - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `analyst/rules/` have the required inputs.
    - For **equipment relationships** (Brick feeds/isFedBy), use the import **equipment** array: each item has `equipment_id`, optional `feeds_equipment_id` and `fed_by_equipment_id` (UUIDs from GET /equipment).
@@ -45,7 +46,9 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-For a **full prompt to the LLM**, rules context, and exact schema details, see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the exact import body (points + equipment only).
+The prompt in the [README](https://github.com/bbartling/open-fdd#ai-assisted-data-modeling) is **generic** and works for **any site**: single building, campus, or tenant. The only input that changes is the export JSON (from GET /data-model/export, optionally with `?site_id=YourSiteName`). The LLM must preserve all fields, add brick_type, rule_input, **unit** (when known), and polling, and use equipment by name and site_id from the export.
+
+For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
 ---
 
