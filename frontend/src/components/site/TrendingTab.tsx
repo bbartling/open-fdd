@@ -194,13 +194,20 @@ export function TrendingTab({ siteId, points, equipment }: TrendingTabProps) {
         </div>
       )}
 
-      {selectedIds.length > 0 && !isLoading && !error && data && data.length > 0 && (
+      {selectedIds.length > 0 && !isLoading && !error && data && data.length > 0 && (() => {
+        const chartData = data.filter((row) => Number.isFinite(row.timestamp));
+        if (chartData.length === 0) return (
+          <div className="flex h-72 items-center justify-center rounded-2xl border border-border/60 bg-card">
+            <p className="text-sm text-muted-foreground">No valid timestamps in this range</p>
+          </div>
+        );
+        return (
         <ChartContainer
           config={config}
           className="rounded-2xl border border-border/60 bg-card p-5"
         >
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={data}>
+            <LineChart data={chartData}>
               <CartesianGrid
                 strokeDasharray="3 3"
                 stroke="hsl(220 13% 90% / 0.5)"
@@ -295,7 +302,8 @@ export function TrendingTab({ siteId, points, equipment }: TrendingTabProps) {
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
-      )}
+        );
+      })()}
     </div>
   );
 }

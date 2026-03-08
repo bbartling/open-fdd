@@ -66,6 +66,7 @@ function pivotFaultSeries(series: { time: string; metric: string; value: number 
   const byTs = new Map<number, Record<string, number>>();
   for (const r of series) {
     const t = new Date(r.time).getTime();
+    if (!Number.isFinite(t)) continue;
     if (!byTs.has(t)) byTs.set(t, {});
     byTs.get(t)![r.metric] = r.value;
   }
@@ -94,7 +95,10 @@ export function FaultOverTimeChart({ siteId, definitions }: FaultOverTimeChartPr
   const bucket = preset === "24h" ? "hour" : "day";
   const { data, isLoading, error } = useFaultTimeseries(siteId ?? undefined, start, end, bucket);
 
-  const chartData = useMemo(() => (data?.series ? pivotFaultSeries(data.series) : []), [data]);
+  const chartData = useMemo(() => {
+    const raw = data?.series ? pivotFaultSeries(data.series) : [];
+    return raw.filter((row) => Number.isFinite(row.timestamp));
+  }, [data]);
   const metrics = useMemo(() => {
     const set = new Set<string>();
     data?.series?.forEach((r) => set.add(r.metric));

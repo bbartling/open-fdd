@@ -15,12 +15,17 @@
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
 #   ./scripts/bootstrap.sh --minimal            # DB + bacnet-server + bacnet-scraper only (add --with-grafana for Grafana)
 #   ./scripts/bootstrap.sh --verify             # health checks only
-#   ./scripts/bootstrap.sh --test             # run tests: frontend lint+typecheck+vitest, backend pytest, Caddy validate; then exit
+#   ./scripts/bootstrap.sh --test             # run tests: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit. Does not run E2E/Selenium or long-running tests.
 #   ./scripts/bootstrap.sh --update             # git pull open-fdd + diy-bacnet-server sibling, rebuild, restart (keeps DB)
 #   ./scripts/bootstrap.sh --maintenance        # safe prune only (NO volumes)
 #   ./scripts/bootstrap.sh --build api ...      # rebuild and restart only selected services
 #   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, mosquitto [--with-mqtt-bridge], weather-scraper)
 #   ./scripts/bootstrap.sh --frontend          # before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up)
+#
+# When to re-bootstrap for frontend:
+#   Frontend code (React/TS) changes are picked up by hot reload (npm run dev in container); no re-bootstrap needed.
+#   Use --frontend only if you changed package.json and need a fresh npm install in the container.
+#   Use --build frontend if you need the container image rebuilt with latest code (e.g. no hot reload).
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -125,7 +130,7 @@ Core:
   --with-mqtt-bridge        Enable BACnet2MQTT bridge + start MQTT broker (localhost:1883) for Home Assistant on same box
   --verify                  Show running services + health checks (exits before starting stack; run --with-mqtt-bridge without --verify first to enable bridge)
   --verify --test           Verify services then run tests; then exit
-  --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddyfile validate; then exit
+  --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit (no E2E/Selenium)
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
   --maintenance             Safe Docker prune only (NO volumes)
 
@@ -442,7 +447,9 @@ verify() {
   echo ""
 }
 
-# Frontend: lint + typecheck + unit tests. Backend: pytest. Caddy: validate Caddyfile.
+# --test scope: frontend lint + typecheck + vitest (unit); backend pytest (open_fdd/tests/); Caddy validate.
+# Does not run E2E Selenium (scripts/e2e_frontend_selenium.py) or long-running tests (e.g. long_term_bacnet_scrape_test).
+# Backend runs with OFDD_API_KEY unset so tests use no-auth app.
 verify_code() {
   local failed=0
   echo "=== Tests: frontend (lint + typecheck + vitest), backend (pytest), Caddy ==="
