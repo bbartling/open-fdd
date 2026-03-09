@@ -278,6 +278,15 @@ check_prereqs() {
     echo "  - Install docker compose plugin, or docker-compose."
     exit 1
   fi
+  if ! docker ps >/dev/null 2>&1; then
+    echo "Docker is installed, but this user cannot access the Docker daemon."
+    echo "  - Try: sudo docker ps"
+    echo "  - If that works, add your user to the docker group and log in again:"
+    echo "      sudo usermod -aG docker \$USER"
+    echo "    Then log out and back in (or run: newgrp docker)."
+    echo "  - Check: docker -v && docker compose version && groups"
+    exit 1
+  fi
 }
 
 write_edge_env() {
