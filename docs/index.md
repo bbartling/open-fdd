@@ -77,7 +77,6 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
-| [Integrations](integrations/home_assistant) | **TODO:** Home Assistant integration has been removed from this project. The linked docs are kept for reference only and may be outdated. |
 | [How-to Guides](howto/index) | [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
@@ -99,7 +98,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | **Grafana** | 3000 | **Optional** dashboards (`--with-grafana`); React frontend has equivalent views |
 | **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); POST server_hello returns `mqtt_bridge` when BACnet2MQTT enabled |
 | **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
-| **Mosquitto (MQTT)** | 1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for BACnet2MQTT and Home Assistant |
+| **Mosquitto (MQTT)** | 1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for BACnet2MQTT |
 
 ---
 

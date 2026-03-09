@@ -1,7 +1,5 @@
 # React frontend evaluation
 
-> **TODO:** This document mentions Home Assistant (HA) integration in places. HA integration has been removed from the project; those references are for reference only and may be outdated.
-
 This document summarizes the quality and feature coverage of the Open-FDD React frontend (CRUD UI), its alignment with the API and the Grafana cookbook, and recommendations for WebSockets and the legacy static UI.
 
 ---
@@ -51,7 +49,7 @@ So the frontend is capable of the main cookbook workflows that are data-model/CR
 ## WebSockets: keep or remove?
 
 - **Current use:** The React app uses `/ws/events` with token auth; on `fault.*`, `fdd.run`, `crud.*` it invalidates TanStack Query so lists and banners refresh. The HA integration optionally uses the same WebSocket for coordinator refresh.
-- **Recommendation: keep WebSockets.** They give the React UI (and HA/Node-RED) live updates without polling. If you later add MQTT for some integrations, you can keep WebSockets for the browser and use MQTT elsewhere; they are complementary (WS for real-time UI, MQTT for pub/sub or constrained clients). No need to remove the WebSocket feature.
+- **Recommendation: keep WebSockets.** They give the React UI live updates without polling. If you later add MQTT for some integrations, you can keep WebSockets for the browser and use MQTT elsewhere; they are complementary (WS for real-time UI, MQTT for pub/sub or constrained clients). No need to remove the WebSocket feature.
 
 ---
 
