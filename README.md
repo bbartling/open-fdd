@@ -88,7 +88,7 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 
 ## Online Documentation
 
-[📖 Docs](https://bbartling.github.io/open-fdd/) — For a copy-paste guide to run Open-FDD and Home Assistant on one Linux machine, see [Quick setup: Open-FDD + HA](https://bbartling.github.io/open-fdd/integrations/home_assistant#quick-setup-open-fdd--home-assistant-on-one-linux-machine).
+[📖 Docs](https://bbartling.github.io/open-fdd/) — For a copy-paste guide to run Open-FDD on Linux hardware.
 
 ---
 

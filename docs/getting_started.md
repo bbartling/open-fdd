@@ -3,8 +3,6 @@ title: Getting Started
 nav_order: 3
 ---
 
-> **TODO:** This document previously referenced Home Assistant (HA) setup. HA integration has been removed from the project; any remaining HA mentions are for reference only and may be outdated.
-
 # Getting Started
 
 This page covers **prerequisites** and the **bootstrap script**: how to get the Open-FDD platform running. For configuration, data modeling, and rules, see the [Documentation](index#documentation) index.

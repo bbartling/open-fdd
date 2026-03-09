@@ -5,8 +5,6 @@ nav_order: 2
 nav_exclude: true
 ---
 
-> **TODO:** This document references Home Assistant (HA) integration and stack/ha_integration. HA integration has been removed from the project; content may be outdated.
-
 # Developer guide
 
 This page is for **developers and contributors** who work on the Open-FDD codebase: front-end (Config UI), database schema, and where to find the rest of the technical reference. For day-to-day operations and usage, see [Getting started](../getting_started) and the [Documentation](../) index.
@@ -44,7 +42,7 @@ The API serves this directory with FastAPI’s `StaticFiles` mounted at `/app` (
 - **Endpoint:** `GET /ws/events` (HTTP upgrade to WebSocket). Implemented in `open_fdd/platform/realtime/ws.py`; the hub in `realtime/hub.py` manages connections and broadcasts events (e.g. `fault.*`, `fdd.run.*`, `crud.point.*`).
 - **Auth:** When `OFDD_API_KEY` is set, pass it as the query param `token` (e.g. `ws://localhost:8000/ws/events?token=YOUR_KEY`). Unauthorized connections are closed with 4401.
 - **Bootstrap:** `./scripts/bootstrap.sh` starts the full stack, including the **API container** (`openfdd_api`). That single process serves REST, the Config UI at `/app`, and the WebSocket at `/ws/events`. So after bootstrap, the WebSocket is already available at the same host and port as the API (e.g. `ws://localhost:8000/ws/events`). No extra step or container is required.
-- **Config UI:** The current Config UI uses only REST (no WebSocket in the static JS). The WebSocket is used by the **Home Assistant integration** and **Node-RED** for live updates; front-end devs can add a WebSocket client in `app.js` if they want real-time updates in the browser.
+- **Config UI:** The current Config UI uses only REST (no WebSocket in the static JS). Front-end devs can add a WebSocket client in `app.js` if they want real-time updates in the browser.
 
 ### Stack and conventions
 

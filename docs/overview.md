@@ -3,8 +3,6 @@ title: System Overview
 nav_order: 2
 ---
 
-> **TODO:** "HA-style" below refers to UI style only. Home Assistant integration has been removed from this project.
-
 # System Overview
 
 Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in fault detection and diagnostics (FDD) for HVAC. FDD is often called AFDD when the platform runs it on a schedule (automated FDD). It runs on-premises so facilities keep control of their data and avoid vendor lock-in. This section describes the architecture, services, and data flow.
