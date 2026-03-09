@@ -2,6 +2,7 @@
 title: Platform REST API
 parent: API Reference
 nav_order: 1
+nav_exclude: true
 ---
 
 # Platform REST API

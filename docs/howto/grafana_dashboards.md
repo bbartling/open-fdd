@@ -4,7 +4,9 @@ parent: How-to Guides
 nav_order: 41
 ---
 
-# Grafana dashboards
+# Grafana dashboards (optional)
+
+**Grafana is optional.** Install with `./scripts/bootstrap.sh --with-grafana`. The React frontend provides equivalent timeseries, fault, and system-resource views. Use Grafana when you want custom SQL dashboards or existing Grafana workflows.
 
 No dashboards are provisioned by default. Only the **datasource** (TimescaleDB, uid: `openfdd_timescale`) is prebuilt.
 

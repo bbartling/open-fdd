@@ -144,7 +144,7 @@ To contribute a rule or cookbook change:
 Documentation lives in the `docs/` directory and is published at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Just the Docs theme). Improvements are welcome:
 
 - Fix typos, clarify wording, or update steps.
-- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [Operations](howto/operations), or BACnet).
+- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [How-to Guides](howto/index), or BACnet).
 - Keep code blocks and links in sync with the codebase.
 
 **Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
@@ -173,27 +173,29 @@ End-to-end tests drive the **React frontend** with Selenium (no direct API calls
 
 ## Git workflow (branch → PR → sync)
 
-1. **Stage and commit**
+Create the branch **before** committing so that after the PR is merged, `git pull` on `main`/`master` fast-forwards and you avoid divergent-branch errors (protected `main`/`master`).
+
+1. **Create a branch**
+   ```bash
+   git checkout -b feature/short-name
+   ```
+
+2. **Stage, commit, and push**
    ```bash
    git add .
    git commit -m 'short note describing the change'
-   ```
-
-2. **Create a branch and push**
-   ```bash
-   git checkout -b feature/short-name
    git push -u origin feature/short-name
    ```
 
-3. **Open a PR** on GitHub from `feature/short-name` into `main` (or `master`).
+3. **Open a PR manually on GitHub** from `feature/short-name` into `main` (or `master`). Create the PR in the GitHub UI; we do not use a CLI for this step.
 
-4. **After merge (or when done)** — sync local with remote and clean up refs:
+4. **After the PR is merged** — fetch prune, switch to default branch, and pull to sync:
    ```bash
    git fetch --prune
    git checkout main
    git pull
    ```
-   Use `master` instead of `main` if that is your default branch.
+   Use `master` instead of `main` if that is your default branch. If you ever committed on `main`/`master` before creating the branch, local and remote can diverge after the merge; run `git reset --hard origin/main` (or `origin/master`) to match the remote.
 
 ---
 

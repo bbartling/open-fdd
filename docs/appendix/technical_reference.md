@@ -2,6 +2,7 @@
 title: Technical reference
 parent: Appendix
 nav_order: 1
+nav_exclude: true
 ---
 
 > **TODO:** This document references Home Assistant (HA) integration, stack/ha_integration, and stack/ha_addon. HA integration has been removed from the project; directory layout and env descriptions may be outdated.

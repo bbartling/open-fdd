@@ -168,3 +168,4 @@
     - name: Report fake VAV OK
       ansible.builtin.debug:
         msg: "openfdd-fake-vav is {{ vav_status.stdout }} on {{ inventory_hostname }}"
+

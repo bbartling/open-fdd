@@ -65,6 +65,7 @@ export function DataModelPage() {
   const [ttlError, setTtlError] = useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
+  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
@@ -160,6 +161,11 @@ export function DataModelPage() {
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
   const sparqlBindings: Record<string, string | null>[] = sparqlMutation.data?.bindings ?? [];
+  // Union of all keys so optional SPARQL vars (e.g. ?rule_input) show as a column even if first row lacks it
+  const sparqlColumns =
+    sparqlBindings.length > 0
+      ? Array.from(new Set(sparqlBindings.flatMap((r) => Object.keys(r)))).sort()
+      : [];
 
   const handleImport = () => {
     try {
@@ -501,9 +507,37 @@ export function DataModelPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Run a SPARQL query against the current Brick + BACnet graph. Results appear below.
+              Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
             </p>
+            <input
+              ref={sparqlFileInputRef}
+              type="file"
+              accept=".sparql,text/plain"
+              className="hidden"
+              data-testid="sparql-file-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const text = typeof reader.result === "string" ? reader.result : "";
+                  setSparqlQuery(text);
+                };
+                reader.readAsText(file);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              data-testid="sparql-upload-file-button"
+              onClick={() => sparqlFileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
+            >
+              <FileUp className="h-4 w-4" />
+              Upload .sparql file
+            </button>
             <textarea
+              data-testid="sparql-query-textarea"
               value={sparqlQuery}
               onChange={(e) => setSparqlQuery(e.target.value)}
               className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -511,6 +545,7 @@ export function DataModelPage() {
             />
             <button
               type="button"
+              data-testid="sparql-run-button"
               onClick={() => sparqlMutation.mutate(sparqlQuery)}
               disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -521,12 +556,12 @@ export function DataModelPage() {
             {sparqlError && (
               <p className="text-sm text-destructive">{sparqlError}</p>
             )}
-            {sparqlBindings.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border/60">
+            {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
+              <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {Object.keys(sparqlBindings[0]).map((key) => (
+                      {sparqlColumns.map((key) => (
                         <TableHead key={key} className="font-mono text-xs">
                           {key}
                         </TableHead>
@@ -536,9 +571,9 @@ export function DataModelPage() {
                   <TableBody>
                     {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
                       <TableRow key={i}>
-                        {Object.values(row).map((val: string | null, j: number) => (
-                          <TableCell key={j} className="font-mono text-xs">
-                            {val ?? "—"}
+                        {sparqlColumns.map((key) => (
+                          <TableCell key={key} className="font-mono text-xs">
+                            {row[key] ?? "—"}
                           </TableCell>
                         ))}
                       </TableRow>

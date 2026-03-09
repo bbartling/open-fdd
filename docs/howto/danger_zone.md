@@ -2,6 +2,7 @@
 title: Danger zone — when data is purged
 parent: How-to Guides
 nav_order: 5
+nav_exclude: true
 ---
 
 # Danger zone — when data is purged

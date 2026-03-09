@@ -2,6 +2,7 @@
 title: E2E frontend tests (Selenium)
 parent: How-to Guides
 nav_order: 55
+nav_exclude: true
 ---
 
 # E2E frontend tests (Selenium)

@@ -33,10 +33,8 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `graph_sync_interval_min` | 5 | Minutes between serializing the in-memory graph to `data_model.ttl` (API background thread). Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
-| `bacnet_use_data_model` | true | Prefer scraping points from the data model (points with `bacnet_device_id`/`object_identifier`); fall back to CSV if none. Env: `OFDD_BACNET_USE_DATA_MODEL`. |
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
-| `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id, config_csv}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
-| `bacnet_config_csv` | config/bacnet_discovered.csv | CSV path when using CSV path (fallback or `--csv-only`). Single gateway. |
+| `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |
 | `open_meteo_enabled` | true | Enable weather; when true, **FDD loop runs a weather fetch at the start of each run** (same cadence as rules, every `rule_interval_hours`). |
 | `open_meteo_interval_hours` | 24 | **Standalone weather-scraper only.** Poll interval (hours) when using the optional weather-scraper container. Ignored when weather is run from the FDD loop. |
 | `open_meteo_latitude` | 41.88 | Site latitude |
@@ -73,9 +71,7 @@ Platform config (e.g. **Scrape interval (min)**) is stored in the data model and
 ## BACnet: single gateway, remote gateways, central aggregator
 
 - **Single building (or one remote gateway):** Set `OFDD_BACNET_SERVER_URL` and optionally `OFDD_BACNET_SITE_ID` (e.g. `building-a`). The scraper tags all readings with that site. On a **remote** gateway (diy-bacnet-server + scraper on another subnet), point `OFDD_DB_DSN` at the central Open-FDD DB and set `OFDD_BACNET_SITE_ID` to the site name/UUID used on the central API so data is attributed to that building.
-- **Central aggregator (multiple remote gateways):** On the central host, do **not** run local bacnet-server/bacnet-scraper; run only DB, API, Grafana, FDD loop, and (optional) weather. Set `OFDD_BACNET_GATEWAYS` to a JSON array, e.g.  
-  `[{"url":"http://10.1.1.1:8080","site_id":"building-a","config_csv":"config/bacnet_a.csv"},{"url":"http://10.1.2.1:8080","site_id":"building-b","config_csv":"config/bacnet_b.csv"}]`  
-  and run one scraper container (or cron) that polls each URL and writes to the central DB with the given `site_id`. Alternatively, deploy one scraper per building elsewhere, each with `OFDD_DB_DSN=central` and `OFDD_BACNET_SITE_ID=<that building>`.
+- **Central aggregator (multiple remote gateways):** On the central host, do **not** run local bacnet-server/bacnet-scraper; run only DB, API, Grafana, FDD loop, and (optional) weather. Set `OFDD_BACNET_GATEWAYS` to a JSON array, e.g. `[{"url":"http://10.1.1.1:8080","site_id":"building-a"},{"url":"http://10.1.2.1:8080","site_id":"building-b"}]`, and run one scraper container (or cron) that polls each URL and writes to the central DB with the given `site_id`. Alternatively, deploy one scraper per building elsewhere, each with `OFDD_DB_DSN=central` and `OFDD_BACNET_SITE_ID=<that building>`.
 
 **Open-Meteo weather points** (stored in `timeseries_readings`, `external_id`):
 
@@ -111,7 +107,7 @@ For edge deployments with limited disk, set these at bootstrap (or in `stack/.en
 
 **Log rotation:** Containers use `json-file` driver; size and file count come from the table above. Restart the stack after changing so new values apply.
 
-**Accessing logs:** `docker logs <container> --tail 50` (e.g. `openfdd_weather_scraper`, `openfdd_bacnet_scraper`). See [Verification](howto/verification#logs).
+**Accessing logs:** `docker logs <container> --tail 50` (e.g. `openfdd_weather_scraper`, `openfdd_bacnet_scraper`).
 
 ---
 
@@ -127,8 +123,7 @@ For edge deployments with limited disk, set these at bootstrap (or in `stack/.en
 | `OFDD_DB_USER` | Database user |
 | `OFDD_DB_PASSWORD` | Database password |
 | `OFDD_BACNET_SERVER_URL` | diy-bacnet-server base URL (e.g. http://localhost:8080) |
-| `OFDD_BACNET_USE_DATA_MODEL` | Prefer data-model scrape; fall back to CSV if no BACnet points in DB (default: true) |
 | `OFDD_BACNET_SITE_ID` | Site to tag when scraping (default: default; use on remote gateways) |
-| `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id, config_csv} for central aggregator |
+| `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id} for central aggregator |
 | `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |
 

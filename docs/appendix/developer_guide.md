@@ -2,6 +2,7 @@
 title: Developer guide
 parent: Appendix
 nav_order: 2
+nav_exclude: true
 ---
 
 > **TODO:** This document references Home Assistant (HA) integration and stack/ha_integration. HA integration has been removed from the project; content may be outdated.

@@ -16,4 +16,4 @@ The Open-FDD data model is built around **sites**, **equipment**, and **points**
 - **[SPARQL cookbook](sparql_cookbook)** — Run SPARQL via POST /data-model/sparql only: config, data model, BACnet, FDD rule mapping, time-series references. Copy-paste queries for validation and UIs.
 - **[AI-assisted data modeling](ai_assisted_tagging)** — Export → LLM or human tagging → import (Brick types, rule_input, polling, equipment feeds). See also the [Technical reference](../appendix/technical_reference) for the full LLM prompt and schema.
 
-**Framework:** CRUD is provided by the FastAPI REST API. The data-model API adds bulk export/import and Brick TTL generation; see [Overview](overview) for the flow (DB → TTL → FDD column_map) and [API Reference — Platform REST API](../api/platform) for all endpoints.
+**Framework:** CRUD is provided by the FastAPI REST API. The data-model API adds bulk export/import and Brick TTL generation; see [Overview](overview) for the flow (DB → TTL → FDD column_map) and [Appendix: API Reference](../appendix/api_reference) for endpoints.

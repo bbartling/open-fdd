@@ -13,6 +13,10 @@ This script is the enhanced, browser-based flow that subsumes the old API-only c
       create site by name, paste JSON, Import — equipment (AHU-1, VAV-1), points (SA-T, ZoneTemp, …),
       units (degF, percent, cfm), feeds/fed_by. No API calls from the test bench; all via browser.
 
+  [2a] Optional: BACnet discovery (Points page). When --bacnet-device-instance ID [ID ...] is set, go to
+      Points page and for each device instance: set Device instance, click "Add to data model". Merges
+      BACnet RDF into the graph (same as graph_and_crud_test.py point_discovery_to_graph). E.g. 3456789 3456790.
+
   [2b] Verify equipment and points on Data Model page.
   [2c] Verify units from data model on frontend (Points page: Unit column shows degF, percent, cfm).
 
@@ -34,6 +38,9 @@ The old scripts remain for API-only or automation that cannot use a browser:
 Usage:
 
   python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
+
+  # With BACnet discovery (Points page → Add to data model) for one or more devices:
+  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 --headed
 
   $env:OFDD_API_KEY = "same-as-server-stack/.env"
   python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
@@ -398,6 +405,46 @@ def import_llm_payload_via_ui(
     )
     print(f"  Import: OK (points={len(points)}, equipment={len(equipment)})")
     return len(points), len(equipment)
+
+
+def bacnet_add_to_model_via_ui(
+    driver: webdriver.Chrome,
+    base_url: str,
+    device_instance: int,
+    timeout: float = 40.0,
+) -> bool:
+    """Use Points page BACnet discovery: set device instance, click 'Add to data model'.
+    Merges BACnet RDF into the graph (same as graph_and_crud_test.py point_discovery_to_graph).
+    Returns True if success message appears, False on failure or timeout (e.g. gateway unreachable)."""
+    driver.get(f"{base_url}/points")
+    wait_for_text(driver, "BACnet discovery", timeout=TEXT_WAIT)
+    wait_for_text(driver, "Add to data model", timeout=TEXT_WAIT)
+    try:
+        dev_input = wait_for_element(driver, By.CSS_SELECTOR, "[data-testid=bacnet-device-instance-input]", timeout=10)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", dev_input)
+        time.sleep(0.3)
+        dev_input.clear()
+        dev_input.send_keys(str(device_instance))
+        time.sleep(0.2)
+        add_btn = driver.find_element(By.CSS_SELECTOR, "[data-testid=bacnet-add-to-model-button]")
+        add_btn.click()
+    except Exception as e:
+        print(f"  BACnet discovery: UI interaction failed — {e}")
+        return False
+    wait = WebDriverWait(driver, timeout)
+    try:
+        wait.until(
+            lambda d: "added to graph" in (d.page_source or "").lower()
+            or "Add to graph failed" in (d.page_source or "")
+        )
+    except Exception:
+        print("  BACnet discovery: timeout waiting for result (gateway may be unreachable).")
+        return False
+    if "added to graph" in (driver.page_source or "").lower():
+        print(f"  BACnet discovery: device {device_instance} added to graph (Points page).")
+        return True
+    print(f"  BACnet discovery: Add to data model failed (check BACnet gateway / OFDD_BACNET_SERVER_URL).")
+    return False
 
 
 def verify_data_model_after_import(
@@ -857,9 +904,13 @@ def run_full_flow(
     skip_chart_data: bool,
     ignore_ssl: bool,
     api_url: str | None = None,
+    bacnet_device_instances: list[int] | None = None,
 ) -> None:
     """Run full E2E flow with failure capture and site/import assertions.
-    When api_url is set, run backend timezone checks (GET /config, CSV UTC Z) after the UI flow."""
+    When api_url is set, run backend timezone checks (GET /config, CSV UTC Z) after the UI flow.
+    When bacnet_device_instances is non-empty, run Points page BACnet discovery (Add to data model) for each device after import."""
+    if bacnet_device_instances is None:
+        bacnet_device_instances = []
     driver = get_driver(headed=headed, ignore_ssl=ignore_ssl)
     try:
         driver.get(frontend_url)
@@ -879,6 +930,12 @@ def run_full_flow(
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after create")
             n_pts, n_eq = import_llm_payload_via_ui(driver, frontend_url, DEMO_PAYLOAD_PATH, site_id)
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after import")
+            if bacnet_device_instances:
+                print("[2a] BACnet discovery: Add to data model (Points page) for device(s) %s..." % bacnet_device_instances)
+                for dev_inst in bacnet_device_instances:
+                    if not bacnet_add_to_model_via_ui(driver, frontend_url, dev_inst):
+                        print("  (Device %s failed or skipped; continuing.)" % dev_inst)
+                print("  BACnet discovery step done.")
             print("[2b] Verify equipment and points on Data Model page...")
             verify_data_model_after_import(
                 driver,
@@ -952,7 +1009,23 @@ def main() -> None:
         help="API base URL for backend/timezone checks (e.g. http://192.168.204.16:8000). "
         "Set OFDD_API_KEY to match server for auth. Same pattern as long_term_bacnet_scrape_test.py",
     )
+    parser.add_argument(
+        "--bacnet-device-instance",
+        type=int,
+        nargs="*",
+        default=None,
+        metavar="ID",
+        help="Run BACnet discovery on Points page (Add to data model) for each device instance after import. "
+        "E.g. --bacnet-device-instance 3456789 3456790. Env BACNET_DEVICE_INSTANCE=3456789,3456790. Default: skip.",
+    )
     args = parser.parse_args()
+    instances = args.bacnet_device_instance
+    if instances is None or len(instances) == 0:
+        raw = os.environ.get("BACNET_DEVICE_INSTANCE", "").strip()
+        if raw:
+            instances = [int(x.strip()) for x in raw.split(",") if x.strip()]
+        else:
+            instances = []
     run_full_flow(
         frontend_url=args.frontend_url.rstrip("/"),
         headed=args.headed,
@@ -960,6 +1033,7 @@ def main() -> None:
         skip_chart_data=args.skip_chart_data,
         ignore_ssl=args.ignore_ssl,
         api_url=args.api_url.rstrip("/") if args.api_url else None,
+        bacnet_device_instances=instances,
     )
 
 

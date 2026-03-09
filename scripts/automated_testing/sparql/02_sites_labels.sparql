@@ -1,0 +1,8 @@
+# Recipe 2: All sites with labels
+# Run via POST /data-model/sparql or Data Model page → Run SPARQL
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?site ?site_label WHERE {
+  ?site a brick:Site .
+  ?site rdfs:label ?site_label .
+}
