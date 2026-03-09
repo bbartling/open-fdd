@@ -160,6 +160,9 @@ cython_debug/
 # Pycharm config
 .idea
 
+# Maintainer notes (local only; do not commit)
+NOTES.md
+
 # FDD trigger file (ephemeral)
 config/.run_fdd_now
 
