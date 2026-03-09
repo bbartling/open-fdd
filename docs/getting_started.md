@@ -7,7 +7,7 @@ nav_order: 3
 
 # Getting Started
 
-This page covers **prerequisites** and the **bootstrap script**: how to get the Open-FDD platform running. For deeper directions on verification, operations, data modeling, and rules, see the [How-to Guides](howto/verification).
+This page covers **prerequisites** and the **bootstrap script**: how to get the Open-FDD platform running. For configuration, data modeling, and rules, see the [Documentation](index#documentation) index.
 
 ---
 
@@ -61,9 +61,9 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 5. **Seeds platform config** via PUT /config (waits for API, then sends default or `stack/.env` values into the RDF graph).
 6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
 
-It does **not** purge or wipe the database on a normal run; only `--reset-grafana` wipes the Grafana volume. See [Danger zone](howto/danger_zone) for when data is purged.
+It does **not** purge or wipe the database on a normal run; only `--reset-grafana` wipes the Grafana volume.
 
-**Full stack (default):** TimescaleDB, Grafana, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. For BACnet data you can use the **data model** (discover via API → import points) or a CSV; see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `stack/` if needed.
+**Full stack (default):** TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. Grafana is optional (`--with-grafana`). For BACnet data use the **data model** (discover via frontend or API → import points); see [BACnet overview](bacnet/overview). Optional services (Caddy, host-stats) are in docker-compose; start them with `docker compose up -d` from `stack/` if needed.
 
 **Bootstrap options:** Run `./scripts/bootstrap.sh --help` for the full list. Summary:
 
@@ -99,14 +99,11 @@ To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `.
 
 ---
 
-## Deeper directions: How-to Guides
+## Next steps
 
-For step-by-step procedures and reference, use the howto guides:
-
-- **[Quick reference](howto/quick_reference)** — One-page cheat sheet (endpoints, docker commands, data flow checks, logs).
-- **[Verification](howto/verification)** — Health checks, data flow (curl and DB), logs, weather scraper, FDD loop, Grafana provisioning.
-- **[Operations](howto/operations)** — Start/stop/restart, when to rebuild, run FDD now, migrations, resource check, database, unit tests.
-- **[Danger zone](howto/danger_zone)** — When data is purged, CRUD cascade, how to wipe and start over.
+- **[How-to Guides](howto/index)** — Grafana dashboards (optional) and SQL cookbook.
+- **[Configuration](configuration)** — Platform config, rule YAML, services that read config from the API.
 - **[Security & Caddy](security)** — Basic auth, throttling, TLS.
+- **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance; Swagger at http://localhost:8000/docs.
 
-For **BACnet driver setup** (discovery → curate CSV → scrape): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). To run a simple BACnet + CRUD smoke test with your instance range: `python tools/bacnet_crud_smoke_test.py --start-instance 1 --end-instance 3456999`. For the full CRUD + SPARQL e2e test: `python tools/graph_and_crud_test.py` (see [SPARQL cookbook](modeling/sparql_cookbook)).
+For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview).

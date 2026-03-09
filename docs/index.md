@@ -37,14 +37,14 @@ cd open-fdd
 
 | What | URL | Notes |
 |------|-----|--------|
-| **API (REST + Swagger)** | http://localhost:8000/docs | CRUD, config, data-model, download, analytics. |
-| **Frontend (React)** | http://localhost:5173 | Dashboard, sites, points, faults, plots. |
+| **Frontend (React)** | http://localhost:5173 | Main UI: dashboard, sites, points, config, faults, plots. Use this for day-to-day workflows. |
+| **API (REST)** | http://localhost:8000/docs | Swagger UI for integration and scripts. High-level reference: [Appendix: API Reference](appendix/api_reference). |
 | **Caddy (reverse proxy)** | http://localhost:80 | Default `stack/caddy/Caddyfile` proxies to frontend only. See [Protecting the entire API with Caddy](#protecting-the-entire-api-with-caddy) below. |
 | **TimescaleDB** | localhost:5432 | Database `openfdd` (user `postgres`); keep internal. |
 | **BACnet (diy-bacnet-server)** | http://localhost:8080/docs | JSON-RPC API; UDP 47808 for BACnet/IP. |
-| **Grafana** | http://localhost:3000 | Optional: `./scripts/bootstrap.sh --with-grafana` (admin/admin). |
+| **Grafana** | http://localhost:3000 | **Optional:** `./scripts/bootstrap.sh --with-grafana` (admin/admin). React frontend provides equivalent views. |
 
-**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React frontend connects with `?token=<API_KEY>` when `VITE_OFDD_API_KEY` is set; Bearer auth is used for REST. See [Security & Caddy](security) and [API Reference](api/platform).
+**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React frontend connects with `?token=<API_KEY>` when `VITE_OFDD_API_KEY` is set; Bearer auth is used for REST. See [Security & Caddy](security).
 
 ---
 
@@ -78,15 +78,13 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [Integrations](integrations/home_assistant) | **TODO:** Home Assistant integration has been removed from this project. The linked docs are kept for reference only and may be outdated. |
-| [How-to Guides](howto/verification) | [Quick reference](howto/quick_reference), verification, operations, [Trivy scanning](howto/trivy), [danger zone](howto/danger_zone) |
+| [How-to Guides](howto/index) | [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
-| [API Reference](api/platform) | [REST API](api/platform), [Engine API](api/engine), [Reports API](api/reports) |
-| [Appendix](appendix) | [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) — directory structure, env vars, tests, BACnet scrape, DB schema, **front-end dev**, LLM workflow |
-| [Standalone CSV & pandas](standalone_csv_pandas) | Future PyPI mode: FDD on CSV/DataFrame without the platform; vendor cloud use |
-| [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers, API |
+| [Appendix](appendix) | [API Reference](appendix/api_reference) — REST at a glance; [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) |
+| [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers |
 
-**For maintainers and AI agents:** Technical deep dives (directory structure, env vars, tests, BACnet scrape, data model API, bootstrap, DB schema, LLM workflow) are in the [Appendix — Technical reference](appendix/technical_reference). [Developer guide](appendix/developer_guide) covers Config UI (front-end) development and the full database schema. User-facing UI: [Using the React dashboard](frontend). Guidelines for AI-assisted data modeling and the full LLM tagging prompt are in [AI-assisted tagging](modeling/ai_assisted_tagging).
+**Use the React frontend** for config, sites, points, data model, faults, and plots. **API details** (CRUD, config, data-model, download, analytics, BACnet) are summarized in [Appendix: API Reference](appendix/api_reference); full OpenAPI at `/docs` and `/openapi.json`. **Grafana** is optional; the React UI provides equivalent timeseries and fault views.
 
 ---
 
@@ -98,7 +96,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | **API** | 8000 | REST API, Swagger `/docs`, WebSocket `/ws/events` |
 | **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
 | **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
-| **Grafana** | 3000 | Dashboards (optional: `--with-grafana`) |
+| **Grafana** | 3000 | **Optional** dashboards (`--with-grafana`); React frontend has equivalent views |
 | **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); POST server_hello returns `mqtt_bridge` when BACnet2MQTT enabled |
 | **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
 | **Mosquitto (MQTT)** | 1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for BACnet2MQTT and Home Assistant |

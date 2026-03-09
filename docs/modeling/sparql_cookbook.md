@@ -188,6 +188,29 @@ ORDER BY ?device_instance ?object_identifier
 
 Returns one row per polling point that has a matching BACnet object: `device_instance`, `device_address`, `object_identifier` (e.g. `analog-input,1`), and `point_label`. Use this for scraper config or to list “which BACnet addresses are in the data model and polled.”
 
+**Why "No bindings (empty result)"?** The query above joins **Brick** points to **BACnet** objects. If your graph has no BACnet triples (no discovery has been run, or you only have Brick from a TTL file), there are no `bacnet:Device`, `bacnet:contains`, or `bacnet:object-name` triples, so the join returns nothing. Use the query below when you only have Brick data.
+
+**Polling points with a Brick type (no BACnet)** — use this when the graph has no BACnet data; it returns points that have `ofdd:polling true` and a Brick class (e.g. `Return_Air_Temperature_Sensor`):
+
+```sparql
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?brick_class ?point_label ?unit
+WHERE {
+  ?point ofdd:polling true ;
+         rdfs:label ?point_label ;
+         a ?brick_type .
+  FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+  BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
+  OPTIONAL { ?point ofdd:unit ?unit . }
+}
+ORDER BY ?point_label
+```
+
+**Data Model page: Equipment table vs "View full data model (TTL)"** — The **Equipment** table on the Data Model page comes from the **database** (REST API: sites, equipment, points). The **SPARQL** box and **"View full data model (TTL)"** use the **in-memory graph**, which is synced from the DB (Brick) plus BACnet discovery. If you see a full TTL with equipment but "No equipment configured" in the table, the DB may be empty or out of sync: the graph can be loaded from `config/data_model.ttl` on startup, but the UI list is always from the API/DB. Use the site selector in the top bar ("All sites" vs a specific site); ensure sites and equipment exist in the DB (e.g. create via the UI or import).
+
 ---
 
 ## Recipe 5: FDD — points and rule mapping
@@ -335,9 +358,25 @@ Run the e2e test after bootstrap or after changes to confirm config, data model,
 
 ---
 
-## Saved queries (analyst/sparql/)
+## Saved queries and automated tests
 
-The repo includes sample `.sparql` files in **analyst/sparql/** (e.g. `01_points_rule_mapping.sparql`, `05_site_and_counts.sparql`). Run them via **POST /data-model/sparql/upload** with the file, or paste their contents into **POST /data-model/sparql** in Swagger. They match the FDD-oriented queries in Recipes 5–6 and are useful for validating the model before running the FDD loop or for debugging missing rule inputs.
+**scripts/automated_testing/sparql/** — Cookbook queries as `.sparql` files (e.g. `01_platform_config.sparql`, `02_sites_labels.sparql`, `03_equipment_labels_testbench.sparql`, `05_brick_rule_mapping.sparql`, `07_count_triples.sparql`). Use them with **POST /data-model/sparql** (paste contents) or **POST /data-model/sparql/upload** (upload file).
+
+**SPARQL CRUD + frontend parity test** — From a test bench (e.g. Windows WSL), run:
+
+```bash
+cd /path/to/open-fdd
+pip install -r scripts/automated_testing/requirements-e2e.txt
+python scripts/automated_testing/sparql_crud_and_frontend_test.py --api-url http://OPENFDD_SERVER:8000
+```
+
+With **--frontend-url** and **--frontend-parity**, the script runs each query via the API and again via the Data Model page (SPARQL textarea → Run SPARQL), then asserts the same bindings. Use **--headed** to watch the browser.
+
+```bash
+python scripts/automated_testing/sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-parity --headed
+```
+
+**analyst/sparql/** — Additional `.sparql` files (e.g. `01_points_rule_mapping.sparql`, `05_site_and_counts.sparql`) for FDD-oriented validation. Run via **POST /data-model/sparql/upload** or paste into Swagger / Data Model page.
 
 ---
 

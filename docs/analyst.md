@@ -1,6 +1,7 @@
 ---
 title: Analyst area — Legacy & standalone
 nav_order: 13
+nav_exclude: true
 ---
 
 # Analyst Area — Legacy & Standalone Workflows

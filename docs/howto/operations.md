@@ -2,6 +2,7 @@
 title: Operations
 parent: How-to Guides
 nav_order: 2
+nav_exclude: true
 ---
 
 # Operations

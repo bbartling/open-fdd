@@ -1,6 +1,6 @@
 # Notes (high-level, for maintainer only)
 
-- **Git → PR → fetch prune:** See [Contributing — Git workflow](docs/contributing.md#git-workflow-branch--pr--sync): `git add .` → `git commit -m 'note'` → `git checkout -b feature/short-name` → `git push -u origin feature/short-name` → open PR → after merge: `git fetch --prune` → `git checkout main` (or `master`) → `git pull`.
+- **Git → PR → fetch prune:** See [Contributing — Git workflow](docs/contributing.md#git-workflow-branch--pr--sync): create branch first (`git checkout -b feature/short-name`) → `git add .` → `git commit -m 'note'` → `git push -u origin feature/short-name` → open PR → after merge: `git fetch --prune` → `git checkout main` (or `master`) → `git pull`.
 
 - **Frontend hot reload:** Turn it off once the UI is solid enough and before Phase 1 (auth). Run the frontend as a production build (e.g. serve `frontend/dist` via Caddy or the API) so E2E and manual testing hit the same bundle you’ll deploy. The stack’s frontend container currently runs `npm run dev`; when you’re ready, switch it to build + serve static (or use Caddy to serve the built app) so there’s no HMR and behavior matches production.
 

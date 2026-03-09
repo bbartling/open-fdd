@@ -2,6 +2,7 @@
 title: Trivy security scanning
 parent: How-to Guides
 nav_order: 50
+nav_exclude: true
 ---
 
 # Trivy security scanning

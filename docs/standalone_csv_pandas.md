@@ -1,6 +1,7 @@
 ---
 title: Standalone FDD with pandas
 nav_order: 11
+nav_exclude: true
 ---
 
 # Standalone FDD with pandas

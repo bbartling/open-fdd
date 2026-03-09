@@ -164,6 +164,7 @@ export function BacnetDiscoveryPanel() {
                 value={deviceInstance}
                 onChange={(e) => setDeviceInstance(Number(e.target.value) || 0)}
                 className="h-9 w-32 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                data-testid="bacnet-device-instance-input"
               />
             </div>
             <button
@@ -171,6 +172,7 @@ export function BacnetDiscoveryPanel() {
               onClick={() => discoveryMutation.mutate()}
               disabled={discoveryMutation.isPending}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+              data-testid="bacnet-point-discovery-button"
             >
               {discoveryMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Point discovery"}
             </button>
@@ -179,6 +181,7 @@ export function BacnetDiscoveryPanel() {
               onClick={() => toGraphMutation.mutate()}
               disabled={toGraphMutation.isPending}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              data-testid="bacnet-add-to-model-button"
             >
               {toGraphMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add to data model"}
             </button>

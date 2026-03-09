@@ -33,4 +33,4 @@ The Open-FDD **React frontend** (http://localhost:5173 or via Caddy) is the main
 - **View timeseries:** Plots → pick site and date range → select points → chart. Use Download CSV for the current selection and zoom.
 - **Check faults:** Faults → see active faults and definitions; combine with Plots to correlate with sensor data.
 
-For API-centric workflows (curl, Swagger, scripts), see [API Reference](api/platform) and [Quick reference](howto/quick_reference).
+For API integration (curl, scripts), see [Appendix: API Reference](appendix/api_reference) and Swagger at http://localhost:8000/docs.

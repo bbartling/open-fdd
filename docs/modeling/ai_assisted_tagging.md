@@ -55,6 +55,6 @@ For exact schema details and import body (points + equipment only), see the [Tec
 ## See also
 
 - [Data model overview](overview) — Flow (DB → TTL → FDD)
-- [Platform REST API — Data model](../api/platform#data-model) — Export/import endpoints
+- [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
 - [BACnet overview](../bacnet/overview) — Discovery and data-model scrape
 - [Fault rules](../rules/overview) — Brick-driven rules in `analyst/rules/`

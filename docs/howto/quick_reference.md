@@ -2,6 +2,7 @@
 title: Quick reference
 parent: How-to Guides
 nav_order: 0
+nav_exclude: true
 ---
 
 # Quick reference

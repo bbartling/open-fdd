@@ -2,6 +2,7 @@
 title: BACnet discovery via CRUD (step-by-step)
 parent: How-to Guides
 nav_order: 5
+nav_exclude: true
 ---
 
 # BACnet discovery via CRUD (step-by-step)

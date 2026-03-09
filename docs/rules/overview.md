@@ -23,7 +23,7 @@ Config: `rules_dir: "analyst/rules"` (or `OFDD_RULES_DIR`). If that path doesnâ€
 Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **supports hot reloading of YAML rule files** so the AFDD maintainer can make tweaks and adjustments for fault tuning without restarting the platform. Rule YAML files contain the fault logic and **params** (thresholds, tolerances, windows); the FDD loop loads from `rules_dir` every run, so the rule runner does **not** need a restart. The `rules_dir` path is **RDF-driven** (platform config: GET `/config`).
 
 1. **Edit** a rule in `analyst/rules/*.yaml` (or add a new one). Change `params` (e.g. `low`, `high`, `tolerance`, `rolling_window`) to tune fault sensitivity.
-2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Operations](howto/operations)).
+2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)).
 3. **View** fault results in Grafana (build a Fault Results dashboard from the [Grafana SQL cookbook](howto/grafana_cookbook)). Every run reloads all rules from disk, so the next run uses the latest YAML and params â€” hot reload style.
 
 ---
