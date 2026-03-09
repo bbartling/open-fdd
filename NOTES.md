@@ -1,6 +1,23 @@
 # Notes (high-level, for maintainer only)
 
-- **Git → PR → fetch prune:** See [Contributing — Git workflow](docs/contributing.md#git-workflow-branch--pr--sync): create branch first (`git checkout -b feature/short-name`) → `git add .` → `git commit -m 'note'` → `git push -u origin feature/short-name` → open PR → after merge: `git fetch --prune` → `git checkout main` (or `master`) → `git pull`.
+- **Git workflow (one step at a time).** LLM: help the user follow these in order. Do not skip step 1.
+  1. **Sync first** (before any new work). Run these one at a time:  
+     `git fetch --prune`  
+     `git checkout master`  
+     `git pull`  
+     (Use `main` if that’s the default branch.)
+  2. **Create branch.**  
+     `git checkout -b feature/updated_docs`
+  3. **Make your edits.** Then:  
+     `git add .`  
+     `git commit -m 'Short note describing the change'`  
+     `git push -u origin feature/short-name`
+  4. **Open PR manually** on GitHub (create PR in the UI from your branch into master/main).
+  5. **After Ben merges (and deletes the branch)** — sync again. Run one at a time:  
+     `git fetch --prune`  
+     `git checkout master`  
+     `git pull`  
+  If checkout fails because of uncommitted changes: either `git stash` then checkout then `git stash pop`, or `git restore <file>` to discard the change. See [Contributing — Git workflow](docs/contributing.md#git-workflow-branch--pr--sync).
 
 - **Frontend hot reload:** Turn it off once the UI is solid enough and before Phase 1 (auth). Run the frontend as a production build (e.g. serve `frontend/dist` via Caddy or the API) so E2E and manual testing hit the same bundle you’ll deploy. The stack’s frontend container currently runs `npm run dev`; when you’re ready, switch it to build + serve static (or use Caddy to serve the built app) so there’s no HMR and behavior matches production.
 

@@ -5,8 +5,6 @@ nav_order: 1
 nav_exclude: true
 ---
 
-> **TODO:** This document references Home Assistant (HA) integration, stack/ha_integration, and stack/ha_addon. HA integration has been removed from the project; directory layout and env descriptions may be outdated.
-
 # Technical reference
 
 Developer and maintainer reference: directory layout, environment variables, unit tests, BACnet scrape, data model API, bootstrap, database schema, and LLM tagging workflow. For user-facing docs see the [Documentation](..) index.
@@ -162,14 +160,14 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 | **ingest_jobs** | id, site_id, name, format, point_columns, row_count (CSV ingest metadata) |
 | **fault_results** | ts, site_id, equipment_id, fault_id, flag_value (hypertable) |
 | **fault_events** | id, site_id, equipment_id, fault_id, start_ts, end_ts, duration_seconds, evidence |
-| **fault_state** | current active fault per (site_id, equipment_id, fault_id) for HA binary_sensors |
+| **fault_state** | current active fault per (site_id, equipment_id, fault_id) |
 | **fault_definitions** | fault_id, name, description, severity, category, equipment_types, inputs, params, expression, source |
 | **fdd_run_log** | run_ts, status, sites_processed, faults_written (last FDD run for UI) |
 | **analytics_motor_runtime** | site_id, period_start, period_end, runtime_hours (data-model driven) |
 | **host_metrics** | ts, hostname, mem_*, swap_*, load_1/5/15 (hypertable) |
 | **container_metrics** | ts, container_name, cpu_pct, mem_*, pids, net_*, block_* (hypertable) |
 | **disk_metrics** | ts, hostname, mount_path, total_bytes, used_bytes, free_bytes (hypertable) |
-| **bacnet_write_audit** | point_id, value, source, ts, success, reason (HA/Node-RED write audit) |
+| **bacnet_write_audit** | point_id, value, source, ts, success, reason (write audit) |
 
 ---
 
@@ -177,9 +175,9 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 
 **Legacy PyPI:** An older package named `open-fdd` on PyPI (v1-era) was a small pandas-based library for HVAC fault equations. That work evolved into the [Expression Rule Cookbook](../expression_rule_cookbook) and the full FastAPI AFDD platform in this repo. The version on PyPI is outdated and should not be used.
 
-**Current platform:** Open-FDD is developed and run **from this repo** (or from Docker images built from it). The stack and the HA addon install open-fdd **locally** at build time (`pip install -e ".[platform,brick]"` from the copied repo); nothing in the project depends on the PyPI `open-fdd` package.
+**Current platform:** Open-FDD is developed and run **from this repo** (or from Docker images built from it). The stack installs open-fdd **locally** at build time (`pip install -e ".[platform,brick]"` from the copied repo); nothing in the project depends on the PyPI `open-fdd` package.
 
-**If you publish to PyPI again:** Options are (a) publish the **full current package** (FastAPI API, rules engine, data model) as a new major version so `pip install open-fdd` gives the platform and HA/addon builds could optionally use it, or (b) publish a small **integration-helpers** library for third-party HA/Node-RED or cloud integrations. Until then, install from source: `pip install -e ".[dev]"` or use the Docker stack.
+**If you publish to PyPI again:** Options are (a) publish the **full current package** (FastAPI API, rules engine, data model) as a new major version so `pip install open-fdd` gives the platform, or (b) publish a small **integration-helpers** library for third-party or cloud integrations. Until then, install from source: `pip install -e ".[dev]"` or use the Docker stack.
 
 ---
 
