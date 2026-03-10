@@ -17,6 +17,7 @@ def test_fault_summary_returns_shape():
             {"fault_id": "fc1", "count": 10, "flag_sum": 10},
             {"fault_id": "fc2", "count": 2, "flag_sum": 2},
         ]
+        cur.fetchone.return_value = {"n": 2}
         conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
         conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
         conn.__enter__ = MagicMock(return_value=conn)
@@ -26,8 +27,9 @@ def test_fault_summary_returns_shape():
         r = client.get("/analytics/fault-summary?start_date=2025-01-01&end_date=2025-01-07")
     assert r.status_code == 200
     data = r.json()
-    assert "period" in data and "by_fault_id" in data and "total_faults" in data
+    assert "period" in data and "by_fault_id" in data and "total_faults" in data and "active_in_period" in data
     assert data["total_faults"] == 12
+    assert data["active_in_period"] == 2
     assert len(data["by_fault_id"]) == 2
 
 

@@ -106,9 +106,9 @@ def load_timeseries_for_equipment(
                 """
                 SELECT p.id, p.external_id
                 FROM points p
-                LEFT JOIN equipment e ON p.equipment_id = e.id
+                JOIN equipment e ON p.equipment_id = e.id
                 WHERE (p.site_id = %s OR p.site_id::text = %s)
-                  AND (e.name = %s OR p.external_id IN ('sat','zt','fan_status'))
+                  AND e.name = %s
                 """,
                 (site_uuid, site_id, equipment_id),
             )
@@ -143,6 +143,48 @@ def load_timeseries_for_equipment(
     df = df.rename(columns=csv_cols)
     df["timestamp"] = pd.to_datetime(df["ts"])
     return df
+
+
+def _sync_fault_definitions_from_rules(rules: list) -> None:
+    """
+    Upsert fault_definitions from rule YAML so the matrix and definitions table
+    stay in sync with rules_dir. Called every FDD run after loading rules (hot reload).
+    """
+    if not rules:
+        return
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for r in rules:
+                    fault_id = r.get("flag") or f"{r.get('name', 'rule')}_flag"
+                    name = r.get("name") or fault_id
+                    description = r.get("description")
+                    severity = str(r.get("severity", "warning"))
+                    category = str(r.get("category", "general"))
+                    eq_types = r.get("equipment_types") or r.get("equipment_type")
+                    if isinstance(eq_types, list):
+                        equipment_types = eq_types
+                    elif eq_types is not None:
+                        equipment_types = [eq_types]
+                    else:
+                        equipment_types = None
+                    cur.execute(
+                        """
+                        INSERT INTO fault_definitions (fault_id, name, description, severity, category, equipment_types, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, now())
+                        ON CONFLICT (fault_id) DO UPDATE SET
+                          name = EXCLUDED.name,
+                          description = EXCLUDED.description,
+                          severity = EXCLUDED.severity,
+                          category = EXCLUDED.category,
+                          equipment_types = EXCLUDED.equipment_types,
+                          updated_at = now()
+                        """,
+                        (fault_id, name, description, severity, category, equipment_types),
+                    )
+            conn.commit()
+    except Exception:
+        pass  # do not fail FDD run if sync fails
 
 
 def run_fdd_loop(
@@ -191,6 +233,7 @@ def run_fdd_loop(
 
     # Load rules every run (hot reload for analyst tuning)
     all_rules = load_rules_from_dir(rules_path)
+    _sync_fault_definitions_from_rules(all_rules)
     rules = [
         r
         for r in all_rules
@@ -223,22 +266,54 @@ def run_fdd_loop(
         for row in site_rows:
             sid = str(row["id"])
             site_name = row["name"] or sid
-            df = load_timeseries_for_site(sid, start_ts, end_ts, column_map)
-            if df is None or len(df) < 6:
-                continue
-            sites_processed += 1
-            res = runner.run(
-                df,
-                timestamp_col="timestamp",
-                rolling_window=getattr(settings, "rolling_window", None),
-                column_map=column_map,
-                params={"units": "imperial"},
-                skip_missing_columns=True,
-            )
-            results = results_from_runner_output(
-                res, site_name, site_name, timestamp_col="timestamp"
-            )
-            all_results.extend(results)
+            # Run per-equipment when equipment has points so fault_state shows device name
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, name FROM equipment WHERE site_id = %s ORDER BY name",
+                        (sid,),
+                    )
+                    equipment_rows = cur.fetchall()
+            ran_equipment = False
+            for eq_row in equipment_rows:
+                eq_name = eq_row["name"] or str(eq_row["id"])
+                df = load_timeseries_for_equipment(
+                    sid, eq_name, start_ts, end_ts, column_map
+                )
+                if df is None or len(df) < 6:
+                    continue
+                ran_equipment = True
+                res = runner.run(
+                    df,
+                    timestamp_col="timestamp",
+                    rolling_window=getattr(settings, "rolling_window", None),
+                    column_map=column_map,
+                    params={"units": "imperial"},
+                    skip_missing_columns=True,
+                )
+                results = results_from_runner_output(
+                    res, site_name, eq_name, timestamp_col="timestamp"
+                )
+                all_results.extend(results)
+            # Fallback: site-level run when no equipment had enough data
+            if not ran_equipment:
+                df = load_timeseries_for_site(sid, start_ts, end_ts, column_map)
+                if df is not None and len(df) >= 6:
+                    sites_processed += 1
+                    res = runner.run(
+                        df,
+                        timestamp_col="timestamp",
+                        rolling_window=getattr(settings, "rolling_window", None),
+                        column_map=column_map,
+                        params={"units": "imperial"},
+                        skip_missing_columns=True,
+                    )
+                    results = results_from_runner_output(
+                        res, site_name, site_name, timestamp_col="timestamp"
+                    )
+                    all_results.extend(results)
+            elif ran_equipment:
+                sites_processed += 1
 
         if all_results:
             _write_fault_results(all_results)

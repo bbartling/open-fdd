@@ -76,3 +76,28 @@ def test_rules_get_file_not_found(tmp_path: Path):
     with patch("open_fdd.platform.api.rules._rules_dir_resolved", return_value=tmp_path):
         r = client.get("/rules/nonexistent.yaml")
     assert r.status_code == 404
+
+
+def test_rules_test_inject_disabled_by_default():
+    """POST /rules/test-inject returns 403 when OFDD_ALLOW_TEST_RULES is not set."""
+    r = client.post("/rules/test-inject", json={"filename": "test.yaml", "content": "name: x\n"})
+    assert r.status_code == 403
+
+
+def test_rules_test_inject_and_delete_when_allowed(tmp_path: Path):
+    """When OFDD_ALLOW_TEST_RULES=1, POST test-inject creates file and DELETE removes it."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    with patch("open_fdd.platform.api.rules._ALLOW_TEST_RULES", True), patch(
+        "open_fdd.platform.api.rules._rules_dir_resolved", return_value=tmp_path
+    ):
+        r = client.post(
+            "/rules/test-inject",
+            json={"filename": "hot_reload_test.yaml", "content": "name: hot_reload_test\nflag: hot_reload_test\n"},
+        )
+        assert r.status_code in (200, 201)
+        assert (tmp_path / "hot_reload_test.yaml").is_file()
+        assert (tmp_path / "hot_reload_test.yaml").read_text().strip() == "name: hot_reload_test\nflag: hot_reload_test"
+
+        r2 = client.delete("/rules/test-inject/hot_reload_test.yaml")
+        assert r2.status_code in (200, 204)
+        assert not (tmp_path / "hot_reload_test.yaml").exists()

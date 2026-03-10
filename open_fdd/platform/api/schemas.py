@@ -59,7 +59,7 @@ class EventEnvelope(BaseModel):
 
 
 class FaultStateItem(BaseModel):
-    """Single fault state: active or cleared."""
+    """Single fault state: active or cleared. bacnet_device_id from points when available."""
 
     id: str
     site_id: str
@@ -69,6 +69,7 @@ class FaultStateItem(BaseModel):
     last_changed_ts: datetime
     last_evaluated_ts: Optional[datetime] = None
     context: Optional[dict[str, Any]] = None
+    bacnet_device_id: Optional[str] = None
 
 
 class FaultDefinitionItem(BaseModel):

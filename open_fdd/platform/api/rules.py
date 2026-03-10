@@ -1,13 +1,18 @@
 """Rules API: list and read FDD rule YAML files from the configured rules_dir (GET /config)."""
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
 
 from open_fdd.platform.config import get_platform_settings
 
 router = APIRouter(prefix="/rules", tags=["rules"])
+
+# Test-only: allow injecting/deleting a rule file for hot-reload tests (e.g. 4_hot_reload_test.py)
+_ALLOW_TEST_RULES = os.environ.get("OFDD_ALLOW_TEST_RULES", "").strip().lower() in ("1", "true", "yes")
 
 
 def _rules_dir_resolved() -> Path:
@@ -53,3 +58,67 @@ def get_rule_file(filename: str):
         return PlainTextResponse(content=path.read_text(encoding="utf-8"))
     except OSError as e:
         raise HTTPException(500, f"Cannot read file: {e}") from e
+
+
+# --- Test-only: inject/delete a rule file for hot-reload automation (set OFDD_ALLOW_TEST_RULES=1) ---
+
+
+class TestInjectRuleBody(BaseModel):
+    """Body for POST /rules/test-inject. Only available when OFDD_ALLOW_TEST_RULES=1."""
+
+    filename: str = Field(..., description="Bare filename, e.g. test_hot_reload.yaml")
+    content: str = Field(..., description="Full YAML content of the rule")
+
+
+@router.post("/test-inject", summary="(Test) Write a rule file into rules_dir")
+def test_inject_rule(body: TestInjectRuleBody):
+    """
+    Write a YAML file into the configured rules_dir. For hot-reload testing only.
+    Requires OFDD_ALLOW_TEST_RULES=1 (or true/yes). Filename must end in .yaml and must not contain .. or path separators.
+    """
+    if not _ALLOW_TEST_RULES:
+        raise HTTPException(403, "Test rule inject is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable.")
+    if not body.filename.endswith(".yaml") or ".." in body.filename or "/" in body.filename or "\\" in body.filename:
+        raise HTTPException(400, "Invalid filename (must be .yaml, no path)")
+    base = _rules_dir_resolved()
+    if not base.is_dir():
+        raise HTTPException(503, "rules_dir is not a directory")
+    path = (base / body.filename).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename") from None
+    try:
+        path.write_text(body.content, encoding="utf-8")
+    except OSError as e:
+        raise HTTPException(500, f"Cannot write file: {e}") from e
+    return {"ok": True, "path": str(path), "filename": body.filename}
+
+
+@router.delete("/test-inject/{filename}", summary="(Test) Remove a rule file from rules_dir")
+def test_inject_delete(filename: str):
+    """
+    Delete a YAML file from rules_dir. For hot-reload test cleanup.
+    Requires OFDD_ALLOW_TEST_RULES=1.
+    """
+    if not _ALLOW_TEST_RULES:
+        raise HTTPException(403, "Test rule delete is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable.")
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid filename")
+    if not filename.endswith(".yaml"):
+        raise HTTPException(400, "Only .yaml files are allowed")
+    base = _rules_dir_resolved()
+    if not base.is_dir():
+        raise HTTPException(503, "rules_dir is not a directory")
+    path = (base / filename).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename") from None
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+    try:
+        path.unlink()
+    except OSError as e:
+        raise HTTPException(500, f"Cannot delete file: {e}") from e
+    return {"ok": True, "filename": filename}

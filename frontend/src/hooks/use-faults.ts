@@ -5,6 +5,8 @@ import type {
   FaultDefinition,
   FaultSummaryResponse,
   FaultTimeseriesResponse,
+  FaultsByEquipmentResponse,
+  BacnetDevice,
 } from "@/types/api";
 
 function buildSearchParams(params: Record<string, string | undefined>): string {
@@ -39,23 +41,56 @@ export function useSiteFaults(siteId: string | undefined) {
   });
 }
 
+/** Full fault state (active + cleared) for matrix. */
+export function useFaultState(siteId: string | undefined) {
+  return useQuery<FaultState[]>({
+    queryKey: ["faults", "state", siteId ?? "all"],
+    queryFn: () =>
+      apiFetch<FaultState[]>(
+        siteId ? `/faults/state?site_id=${encodeURIComponent(siteId)}` : "/faults/state",
+      ),
+    staleTime: 30 * 1000,
+  });
+}
+
+/** BACnet devices from data model (points + equipment). */
+export function useBacnetDevices(siteId: string | undefined) {
+  return useQuery<BacnetDevice[]>({
+    queryKey: ["faults", "bacnet-devices", siteId ?? "all"],
+    queryFn: () =>
+      apiFetch<BacnetDevice[]>(
+        siteId
+          ? `/faults/bacnet-devices?site_id=${encodeURIComponent(siteId)}`
+          : "/faults/bacnet-devices",
+      ),
+    staleTime: 60 * 1000,
+  });
+}
+
+/** YYYY-MM-DD for fault-summary API (backend filters by date). */
+function toDateOnly(s: string): string {
+  return s.slice(0, 10);
+}
+
 export function useFaultSummary(
   siteId: string | undefined,
   startDate: string,
   endDate: string,
 ) {
+  const start = toDateOnly(startDate);
+  const end = toDateOnly(endDate);
   return useQuery<FaultSummaryResponse>({
-    queryKey: ["faults", "summary", siteId ?? "all", startDate, endDate],
+    queryKey: ["faults", "summary", siteId ?? "all", start, end],
     queryFn: () =>
       apiFetch<FaultSummaryResponse>(
         `/analytics/fault-summary${buildSearchParams({
           site_id: siteId ?? undefined,
-          start_date: startDate.slice(0, 10),
-          end_date: endDate.slice(0, 10),
+          start_date: start,
+          end_date: end,
         })}`,
       ),
     enabled: !!startDate && !!endDate,
-    staleTime: 60 * 1000,
+    staleTime: 0,
   });
 }
 
@@ -74,6 +109,28 @@ export function useFaultTimeseries(
           start_date: startDate.slice(0, 10),
           end_date: endDate.slice(0, 10),
           bucket,
+        })}`,
+      ),
+    enabled: !!startDate && !!endDate,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useFaultsByEquipment(
+  siteId: string | undefined,
+  startDate: string,
+  endDate: string,
+) {
+  const start = startDate.slice(0, 10);
+  const end = endDate.slice(0, 10);
+  return useQuery<FaultsByEquipmentResponse>({
+    queryKey: ["faults", "by-equipment", siteId ?? "all", start, end],
+    queryFn: () =>
+      apiFetch<FaultsByEquipmentResponse>(
+        `/analytics/faults-by-equipment${buildSearchParams({
+          site_id: siteId ?? undefined,
+          start_date: start,
+          end_date: end,
         })}`,
       ),
     enabled: !!startDate && !!endDate,

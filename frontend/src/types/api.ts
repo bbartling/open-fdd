@@ -74,6 +74,8 @@ export interface FaultState {
   last_changed_ts: string;
   last_evaluated_ts: string | null;
   context: Record<string, unknown> | null;
+  /** BACnet device instance ID when available (from points for this equipment). */
+  bacnet_device_id?: string | null;
 }
 
 export interface FaultDefinition {
@@ -83,6 +85,16 @@ export interface FaultDefinition {
   severity: string;
   category: string;
   equipment_types: string[] | null;
+}
+
+/** GET /faults/bacnet-devices — from data model (points + equipment). */
+export interface BacnetDevice {
+  site_id: string;
+  site_name: string;
+  bacnet_device_id: string;
+  equipment_id: string | null;
+  equipment_name: string;
+  equipment_type: string | null;
 }
 
 export interface FddRunStatus {
@@ -193,6 +205,21 @@ export interface FaultSummaryResponse {
   period: { start: string; end: string };
   by_fault_id: { fault_id: string; count: number; flag_sum: number }[];
   total_faults: number;
+  /** Distinct (site, equipment, fault) active in range; not summed. */
+  active_in_period: number;
+}
+
+/** GET /analytics/faults-by-equipment */
+export interface FaultsByEquipmentResponse {
+  site_id: string | null;
+  period: { start: string; end: string };
+  by_equipment: {
+    site_id: string;
+    equipment_id: string;
+    equipment_name: string;
+    bacnet_device_id: string | null;
+    active_fault_count: number;
+  }[];
 }
 
 /** GET /analytics/fault-timeseries */

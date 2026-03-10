@@ -101,14 +101,14 @@ def test_runner_flatline_rule():
 
 
 def test_runner_from_dir(sample_df):
-    """RuleRunner loads rules from directory."""
+    """RuleRunner loads rules from directory (tests use fixtures/rules)."""
     from pathlib import Path
 
-    rules_dir = Path(__file__).resolve().parent.parent.parent / "rules"
-    if rules_dir.is_dir():
-        runner = RuleRunner(rules_path=rules_dir)
-        result = runner.run(sample_df, skip_missing_columns=True)
-        assert len(result.columns) > len(sample_df.columns)
+    rules_dir = Path(__file__).resolve().parent.parent / "fixtures" / "rules"
+    assert rules_dir.is_dir(), f"expected test rules at {rules_dir}"
+    runner = RuleRunner(rules_path=rules_dir)
+    result = runner.run(sample_df, skip_missing_columns=True)
+    assert len(result.columns) > len(sample_df.columns)
 
 
 def test_runner_fc3_expression():

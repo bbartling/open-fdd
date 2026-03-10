@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,8 +16,6 @@ import {
 } from "@/components/ui/chart";
 import type { ChartConfig } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DateRangeSelect } from "@/components/site/DateRangeSelect";
-import type { DatePreset } from "@/components/site/DateRangeSelect";
 import { useFaultTimeseries } from "@/hooks/use-faults";
 import type { FaultDefinition } from "@/types/api";
 
@@ -32,33 +30,13 @@ const COLORS = [
   "hsl(60, 65%, 38%)",
 ];
 
-function presetRange(preset: DatePreset): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date();
-  switch (preset) {
-    case "24h":
-      start.setHours(start.getHours() - 24);
-      break;
-    case "7d":
-      start.setDate(start.getDate() - 7);
-      break;
-    case "30d":
-      start.setDate(start.getDate() - 30);
-      break;
-    default:
-      start.setDate(start.getDate() - 7);
-  }
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
-function formatLocalDT(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 interface FaultOverTimeChartProps {
   siteId: string | undefined;
   definitions: FaultDefinition[];
+  preset: "24h" | "7d" | "30d" | "custom";
+  start: string;
+  end: string;
+  bucket: "hour" | "day";
 }
 
 /** Pivot API series (time, metric, value) into Recharts rows (timestamp, fault_id: value). */
@@ -75,24 +53,7 @@ function pivotFaultSeries(series: { time: string; metric: string; value: number 
     .map(([timestamp, rest]) => ({ timestamp, ...rest }));
 }
 
-export function FaultOverTimeChart({ siteId, definitions }: FaultOverTimeChartProps) {
-  const [preset, setPreset] = useState<DatePreset>("7d");
-  const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const [customStart, setCustomStart] = useState(formatLocalDT(weekAgo));
-  const [customEnd, setCustomEnd] = useState(formatLocalDT(now));
-
-  const { start, end } = useMemo(() => {
-    if (preset === "custom") {
-      return {
-        start: new Date(customStart).toISOString(),
-        end: new Date(customEnd).toISOString(),
-      };
-    }
-    return presetRange(preset);
-  }, [preset, customStart, customEnd]);
-
-  const bucket = preset === "24h" ? "hour" : "day";
+export function FaultOverTimeChart({ siteId, definitions, preset, start, end, bucket }: FaultOverTimeChartProps) {
   const { data, isLoading, error } = useFaultTimeseries(siteId ?? undefined, start, end, bucket);
 
   const chartData = useMemo(() => {
@@ -132,17 +93,6 @@ export function FaultOverTimeChart({ siteId, definitions }: FaultOverTimeChartPr
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <DateRangeSelect
-          preset={preset}
-          onPresetChange={setPreset}
-          customStart={customStart}
-          customEnd={customEnd}
-          onCustomStartChange={setCustomStart}
-          onCustomEndChange={setCustomEnd}
-        />
-      </div>
-
       {isLoading && <Skeleton className="h-72 w-full rounded-2xl" />}
 
       {!isLoading && chartData.length === 0 && (
@@ -209,3 +159,4 @@ export function FaultOverTimeChart({ siteId, definitions }: FaultOverTimeChartPr
     </div>
   );
 }
+

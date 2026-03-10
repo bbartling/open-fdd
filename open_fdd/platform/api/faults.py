@@ -9,6 +9,55 @@ from open_fdd.platform.api.schemas import FaultStateItem, FaultDefinitionItem
 router = APIRouter(prefix="/faults", tags=["faults"])
 
 
+@router.get("/bacnet-devices", summary="List BACnet devices from data model (points + equipment)")
+def list_bacnet_devices(
+    site_id: str | None = Query(None, description="Filter by site UUID or name; omit for all"),
+):
+    """
+    CRUD/data-model driven: distinct BACnet devices from points (bacnet_device_id not null)
+    joined to equipment and sites. For matrix table: one row per device with equipment_type
+    for N/A logic (fault equipment_types vs device equipment_type).
+    """
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                conditions = ["p.bacnet_device_id IS NOT NULL"]
+                params: list = []
+                if site_id:
+                    conditions.append(
+                        "(s.id::text = %s OR s.name = %s)"
+                    )
+                    params.extend([site_id, site_id])
+                cur.execute(
+                    """
+                    SELECT DISTINCT ON (s.id, p.bacnet_device_id)
+                           s.id AS site_uuid, s.name AS site_name,
+                           p.bacnet_device_id, p.equipment_id AS equipment_uuid,
+                           e.name AS equipment_name, e.equipment_type
+                    FROM points p
+                    JOIN sites s ON s.id = p.site_id
+                    LEFT JOIN equipment e ON e.id = p.equipment_id
+                    WHERE """ + " AND ".join(conditions) + """
+                    ORDER BY s.id, p.bacnet_device_id, e.name NULLS LAST
+                    """,
+                    params,
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "site_id": str(r["site_uuid"]),
+                "site_name": r["site_name"],
+                "bacnet_device_id": r["bacnet_device_id"],
+                "equipment_id": str(r["equipment_uuid"]) if r["equipment_uuid"] else None,
+                "equipment_name": r["equipment_name"] or "—",
+                "equipment_type": r["equipment_type"],
+            }
+            for r in rows
+        ]
+    except psycopg2.Error:
+        return []
+
+
 def _fault_state_table_exists(cur) -> bool:
     cur.execute(
         "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'fault_state'"
@@ -30,33 +79,42 @@ def list_active_faults(
             with conn.cursor() as cur:
                 if not _fault_state_table_exists(cur):
                     return []
+                bacnet_subquery = """
+                    (SELECT p.bacnet_device_id FROM points p
+                     WHERE p.equipment_id = fs.equipment_id AND p.bacnet_device_id IS NOT NULL
+                       AND (p.site_id::text = fs.site_id OR (SELECT s.name FROM sites s WHERE s.id = p.site_id) = fs.site_id)
+                     LIMIT 1)
+                """
                 if equipment_id and site_id:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        WHERE site_id = %s AND equipment_id = %s AND active = true
-                        ORDER BY site_id, equipment_id, fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        WHERE fs.site_id = %s AND fs.equipment_id = %s AND fs.active = true
+                        ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """,
                         (site_id, equipment_id),
                     )
                 elif site_id:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        WHERE site_id = %s AND active = true
-                        ORDER BY site_id, equipment_id, fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        WHERE fs.site_id = %s AND fs.active = true
+                        ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """,
                         (site_id,),
                     )
                 else:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        WHERE active = true
-                        ORDER BY site_id, equipment_id, fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        WHERE fs.active = true
+                        ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """
                     )
                 rows = cur.fetchall()
@@ -76,32 +134,41 @@ def list_fault_state(
             with conn.cursor() as cur:
                 if not _fault_state_table_exists(cur):
                     return []
+                bacnet_subquery = """
+                    (SELECT p.bacnet_device_id FROM points p
+                     WHERE p.equipment_id = fs.equipment_id AND p.bacnet_device_id IS NOT NULL
+                       AND (p.site_id::text = fs.site_id OR (SELECT s.name FROM sites s WHERE s.id = p.site_id) = fs.site_id)
+                     LIMIT 1)
+                """
                 if equipment_id and site_id:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        WHERE site_id = %s AND equipment_id = %s
-                        ORDER BY fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        WHERE fs.site_id = %s AND fs.equipment_id = %s
+                        ORDER BY fs.fault_id
                         """,
                         (site_id, equipment_id),
                     )
                 elif site_id:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        WHERE site_id = %s
-                        ORDER BY equipment_id, fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        WHERE fs.site_id = %s
+                        ORDER BY fs.equipment_id, fs.fault_id
                         """,
                         (site_id,),
                     )
                 else:
                     cur.execute(
-                        """
-                        SELECT id::text, site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context
-                        FROM fault_state
-                        ORDER BY site_id, equipment_id, fault_id
+                        f"""
+                        SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
+                               fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
+                        FROM fault_state fs
+                        ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """
                     )
                 rows = cur.fetchall()

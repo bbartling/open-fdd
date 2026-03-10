@@ -46,6 +46,15 @@ Usage:
   python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
 
 Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating the full UI flow from a test bench (stack must be up).
+
+CRUD-style evaluation (RDF graph and database sync):
+  - Delete: [1] Remove all sites and reset via UI → DELETE sites (cascade equipment/points) then POST /data-model/reset.
+    Proves graph is repopulated from DB only (reset_graph_to_db_only); after wipe, both DB and graph are empty and in sync.
+  - Create: [2] Create site (POST /sites) then Import JSON → backend writes equipment/points to DB, then rebuilds RDF from DB and serializes to TTL. Proves the write path keeps graph and DB in sync (import_data_model: DB first, then build_ttl_from_db + write).
+  - Create (BACnet): [2a] Points page "Add to data model" → merges BACnet RDF into in-memory graph (and DB for points). Proves discovery path also updates graph and persists.
+  - Read: [2b] Data Model page shows equipment names; [2c] Points page shows Unit (degF, percent, cfm); [3] Plots show points and data-model units in legend. All read from APIs backed by the same DB and graph. Proves that what was written (CRUD + import) is readable and that units/metadata flow from data model to UI.
+  - Update: Not exercised explicitly; import can update existing points by point_id (API supports it; E2E uses fresh create + import).
+  No direct assertion that "SPARQL count == DB count"; sync is proven indirectly by: wipe leaves both empty, import writes DB then rebuilds graph from DB, and all read flows show consistent data.
 """
 
 from __future__ import annotations
