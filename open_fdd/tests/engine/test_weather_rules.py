@@ -35,8 +35,8 @@ def weather_df():
 
 
 def test_weather_rules_load(weather_df):
-    """Weather rules load and run from rules dir."""
-    rules_dir = Path(__file__).resolve().parent.parent.parent / "rules"
+    """Weather rules load and run from test fixtures/rules."""
+    rules_dir = Path(__file__).resolve().parent.parent / "fixtures" / "rules"
     runner = RuleRunner(rules_path=rules_dir)
     weather_rules = [
         r for r in runner._rules if r.get("name", "").startswith("weather_")
@@ -64,7 +64,7 @@ def test_weather_rules_load(weather_df):
 
 def test_weather_rh_out_of_range(weather_df):
     """RH out of range flags invalid values."""
-    rules_dir = Path(__file__).resolve().parent.parent.parent / "rules"
+    rules_dir = Path(__file__).resolve().parent.parent / "fixtures" / "rules"
     runner = RuleRunner(rules_path=rules_dir)
     runner._rules = [
         r for r in runner._rules if r.get("name") == "weather_rh_out_of_range"
@@ -94,7 +94,7 @@ def test_weather_gust_lt_wind(weather_df):
     df.loc[5, "gust_mph"] = 7.0  # wind is 8.5
     df.loc[6, "gust_mph"] = 6.0  # wind is 8.0
 
-    rules_dir = Path(__file__).resolve().parent.parent.parent / "rules"
+    rules_dir = Path(__file__).resolve().parent.parent / "fixtures" / "rules"
     runner = RuleRunner(rules_path=rules_dir)
     runner._rules = [
         r for r in runner._rules if r.get("name") == "weather_gust_lt_wind"

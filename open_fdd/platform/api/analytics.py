@@ -146,14 +146,14 @@ def get_fault_summary(
 ):
     """
     Fault counts by fault_id. For MSI/cloud and Grafana JSON datasource.
-    Combine with /analytics/motor-runtime for full fault analytics.
+    active_in_period = count of distinct (site, equipment, fault) that were active (flag_value=1)
+    in the range; not summed. total_faults kept for chart compatibility (sum of flag_value).
     """
     conditions = ["ts::date >= %s", "ts::date <= %s"]
     params: list = [start_date, end_date]
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
             raise HTTPException(404, f"No site found for: {site_id!r}")
-        # Match fault_results by site_id (stored as name or UUID) so count matches fault-timeseries chart
         conditions.append("(site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s))")
         params.extend([site_id, site_id])
 
@@ -170,6 +170,30 @@ def get_fault_summary(
                 params,
             )
             rows = cur.fetchall()
+            # Active-in-period: distinct (site_id, equipment_id, fault_id) with at least one flag_value=1 in range
+            active_conditions = [
+                "ts::date >= %s",
+                "ts::date <= %s",
+                "flag_value = 1",
+            ]
+            active_params: list = [start_date, end_date]
+            if site_id:
+                active_conditions.append(
+                    "(site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+                )
+                active_params.extend([site_id, site_id])
+            cur.execute(
+                f"""
+                SELECT COUNT(*) AS n FROM (
+                    SELECT 1 FROM fault_results
+                    WHERE {" AND ".join(active_conditions)}
+                    GROUP BY site_id, equipment_id, fault_id
+                ) sub
+                """,
+                active_params,
+            )
+            active_row = cur.fetchone()
+    active_in_period = int(active_row["n"]) if active_row else 0
 
     by_fault = [
         {"fault_id": r["fault_id"], "count": r["count"], "flag_sum": r["flag_sum"]}
@@ -180,6 +204,7 @@ def get_fault_summary(
         "period": {"start": str(start_date), "end": str(end_date)},
         "by_fault_id": by_fault,
         "total_faults": sum(r["flag_sum"] for r in rows),
+        "active_in_period": active_in_period,
     }
 
 
@@ -235,6 +260,74 @@ def get_fault_timeseries(
             {"time": _ts_iso_utc(r["time"]), "metric": r["metric"], "value": float(r["value"])}
             for r in rows
         ],
+    }
+
+
+@router.get("/faults-by-equipment", summary="Fault count per device (for bar chart)")
+def get_faults_by_equipment(
+    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
+    start_date: date = Query(..., description="Start of range"),
+    end_date: date = Query(..., description="End of range"),
+):
+    """
+    Per-equipment count of distinct faults active in the period (flag_value=1).
+    Includes equipment name and BACnet device ID when points have one.
+    For bar chart: which device had how many active faults in the range.
+    """
+    conditions = [
+        "fr.ts::date >= %s",
+        "fr.ts::date <= %s",
+        "fr.flag_value = 1",
+    ]
+    params: list = [start_date, end_date]
+    if site_id:
+        if resolve_site_uuid(site_id, create_if_empty=False) is None:
+            raise HTTPException(404, f"No site found for: {site_id!r}")
+        conditions.append(
+            "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
+        params.extend([site_id, site_id])
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # Aggregate by (site_id, equipment_id) from fault_results; resolve to equipment id/name and bacnet
+            cur.execute(
+                f"""
+                WITH active AS (
+                    SELECT fr.site_id, fr.equipment_id,
+                           COUNT(DISTINCT fr.fault_id) AS active_fault_count
+                    FROM fault_results fr
+                    WHERE {" AND ".join(conditions)}
+                    GROUP BY fr.site_id, fr.equipment_id
+                )
+                SELECT a.site_id, a.equipment_id AS equipment_id_text, a.active_fault_count,
+                       e.id AS equipment_uuid, e.name AS equipment_name,
+                       (SELECT p.bacnet_device_id FROM points p
+                        WHERE p.equipment_id = e.id AND p.bacnet_device_id IS NOT NULL
+                        LIMIT 1) AS bacnet_device_id
+                FROM active a
+                LEFT JOIN sites s ON (s.name = a.site_id OR s.id::text = a.site_id)
+                LEFT JOIN equipment e ON e.site_id = s.id
+                    AND (e.name = a.equipment_id OR e.id::text = a.equipment_id)
+                ORDER BY a.active_fault_count DESC, a.equipment_id
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+
+    out = []
+    for r in rows:
+        out.append({
+            "site_id": r["site_id"],
+            "equipment_id": r["equipment_uuid"] if r["equipment_uuid"] else r["equipment_id_text"],
+            "equipment_name": r["equipment_name"] or r["equipment_id_text"] or "—",
+            "bacnet_device_id": r["bacnet_device_id"],
+            "active_fault_count": int(r["active_fault_count"]),
+        })
+    return {
+        "site_id": site_id,
+        "period": {"start": str(start_date), "end": str(end_date)},
+        "by_equipment": out,
     }
 
 

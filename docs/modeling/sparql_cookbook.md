@@ -360,7 +360,7 @@ Run the e2e test after bootstrap or after changes to confirm config, data model,
 
 ## Saved queries and automated tests
 
-**scripts/automated_testing/sparql/** — Cookbook queries as `.sparql` files (e.g. `01_platform_config.sparql`, `02_sites_labels.sparql`, `03_equipment_labels_testbench.sparql`, `05_brick_rule_mapping.sparql`, `07_count_triples.sparql`). Use them with **POST /data-model/sparql** (paste contents) or **POST /data-model/sparql/upload** (upload file).
+**scripts/automated_testing/sparql/** — Cookbook queries as `.sparql` files: `01_platform_config.sparql`, `02_sites_labels.sparql`, `02_site_counts.sparql`, `03_equipment_labels_testbench.sparql`, `03_point_labels_testbench.sparql`, `04_bacnet_devices.sparql`, `05_brick_rule_mapping.sparql`, `06_polling_points_brick_type.sparql`, `07_count_triples.sparql`, `08_bacnet_telemetry_points.sparql`. Use them with **POST /data-model/sparql** (paste contents) or **POST /data-model/sparql/upload** (upload file). Recipe 4 covers the ideas in 04, 06, and 08 (BACnet devices; polling points with Brick type; polling points with optional BACnet join).
 
 **SPARQL CRUD + frontend parity test** — From a test bench (e.g. Windows WSL), run:
 

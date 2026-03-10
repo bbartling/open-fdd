@@ -1,4 +1,4 @@
-"""Fault state API tests (GET /faults/active, /faults/state, /faults/definitions)."""
+"""Fault state API tests (GET /faults/active, /faults/state, /faults/definitions, /faults/bacnet-devices)."""
 
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
@@ -6,6 +6,25 @@ from fastapi.testclient import TestClient
 from open_fdd.platform.api.main import app
 
 client = TestClient(app)
+
+
+def test_faults_bacnet_devices_returns_list():
+    """GET /faults/bacnet-devices returns list from data model (points + equipment)."""
+    with patch("open_fdd.platform.api.faults.get_conn") as mock_conn:
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=None)
+        mock_conn.return_value = conn
+        r = client.get("/faults/bacnet-devices")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    if data:
+        assert "bacnet_device_id" in data[0] and "equipment_name" in data[0]
 
 
 def test_faults_active_empty_without_table():

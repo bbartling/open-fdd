@@ -25,11 +25,16 @@ Asserts: API returns 200 and bindings; when expected is used, API and frontend m
 otherwise API and frontend match each other. When --frontend-parity is used, browser console
 errors are collected and printed at the end.
 
+Graph-DB sync (default on): Compares CRUD counts to SPARQL graph counts. GET /sites, /equipment,
+/points (DB) vs 09_graph_db_sync_counts.sparql (graph). Sites and points must match; equipment
+allows graph >= DB (synthetic equipment for orphan points). Use --skip-graph-db-sync to skip.
+
 Usage:
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --frontend-url http://localhost --frontend-parity
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --expected-from-ttl   # require config/data_model.ttl + rdflib
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --generate-expected   # write sparql/expected/*.json from API
+  python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --skip-graph-db-sync # skip graph vs DB count assertion
 
 Requires: httpx. For --frontend-parity: selenium, webdriver-manager. For --expected-from-ttl: rdflib.
 """
@@ -78,7 +83,7 @@ _load_stack_env()
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 
 
-def _request(api_url: str, method: str, path: str, json_body: dict | None = None) -> tuple[int, dict]:
+def _request(api_url: str, method: str, path: str, json_body: dict | None = None) -> tuple[int, dict | list]:
     try:
         import httpx
     except ImportError:
@@ -94,6 +99,62 @@ def _request(api_url: str, method: str, path: str, json_body: dict | None = None
     except Exception:
         body = {}
     return r.status_code, body
+
+
+def _run_graph_db_sync_check(api_url: str, skip: bool) -> int:
+    """Assert SPARQL (graph) counts match CRUD (DB) counts. Returns number of failures (0 on success).
+    GET /sites, /equipment, /points then run 09_graph_db_sync_counts.sparql.
+    Sites and points must match. Equipment: graph >= DB (graph can have synthetic equipment for
+    sites with orphan points — see data_model_ttl build_ttl_from_db)."""
+    if skip:
+        return 0
+    sync_sparql = (SPARQL_DIR / "09_graph_db_sync_counts.sparql")
+    if not sync_sparql.is_file():
+        print("  Graph-DB sync: skip (09_graph_db_sync_counts.sparql not found)")
+        return 0
+    query = sync_sparql.read_text(encoding="utf-8").strip()
+    query = "\n".join([l for l in query.splitlines() if not l.strip().startswith("#")]).strip()
+    if not query:
+        return 0
+
+    # CRUD counts from DB
+    code_sites, body_sites = _request(api_url, "GET", "/sites")
+    code_equip, body_equip = _request(api_url, "GET", "/equipment")
+    code_pts, body_pts = _request(api_url, "GET", "/points?limit=10000")
+    if code_sites != 200 or code_equip != 200 or code_pts != 200:
+        print("  Graph-DB sync: skip (CRUD endpoints not reachable or auth required)")
+        return 0
+    db_sites = len(body_sites) if isinstance(body_sites, list) else 0
+    db_equipment = len(body_equip) if isinstance(body_equip, list) else 0
+    db_points = len(body_pts) if isinstance(body_pts, list) else 0
+
+    ok, bindings, err = _run_sparql_api(api_url, query)
+    if not ok or not bindings:
+        print(f"  Graph-DB sync: FAIL — SPARQL count query failed ({err or 'no bindings'})")
+        return 1
+    row = bindings[0]
+    row_lower = {k.lower(): v for k, v in row.items()}
+    try:
+        graph_sites = int(str(row_lower.get("site_count", "") or 0))
+        graph_equipment = int(str(row_lower.get("equipment_count", "") or 0))
+        graph_points = int(str(row_lower.get("point_count", "") or 0))
+    except (TypeError, ValueError):
+        print("  Graph-DB sync: FAIL — SPARQL count row missing or non-numeric")
+        return 1
+    failed = 0
+    if db_sites != graph_sites:
+        print(f"  Graph-DB sync: FAIL — sites DB={db_sites} vs graph={graph_sites}")
+        failed += 1
+    if graph_equipment < db_equipment:
+        print(f"  Graph-DB sync: FAIL — equipment graph={graph_equipment} < DB={db_equipment}")
+        failed += 1
+    if db_points != graph_points:
+        print(f"  Graph-DB sync: FAIL — points DB={db_points} vs graph={graph_points}")
+        failed += 1
+    if failed == 0:
+        eq_note = f"equipment={db_equipment}" if graph_equipment == db_equipment else f"equipment={db_equipment}(DB) graph={graph_equipment}(+synthetic)"
+        print(f"  Graph-DB sync: OK (sites={db_sites}, {eq_note}, points={db_points})")
+    return failed
 
 
 def _run_sparql_api(api_url: str, query: str) -> tuple[bool, list[dict], str]:
@@ -357,6 +418,7 @@ def _parse_args():
     print_results = False
     expected_from_ttl = False
     generate_expected = False
+    skip_graph_db_sync = False
     args = list(sys.argv[1:])
     i = 0
     while i < len(args):
@@ -388,12 +450,16 @@ def _parse_args():
             generate_expected = True
             i += 1
             continue
+        if args[i] == "--skip-graph-db-sync":
+            skip_graph_db_sync = True
+            i += 1
+            continue
         i += 1
-    return api_url, frontend_url, frontend_parity, headed, print_results, expected_from_ttl, generate_expected
+    return api_url, frontend_url, frontend_parity, headed, print_results, expected_from_ttl, generate_expected, skip_graph_db_sync
 
 
 def main() -> int:
-    api_url, frontend_url, frontend_parity, headed, print_results, expected_from_ttl, generate_expected = _parse_args()
+    api_url, frontend_url, frontend_parity, headed, print_results, expected_from_ttl, generate_expected, skip_graph_db_sync = _parse_args()
     if not api_url:
         api_url = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
         print(f"Using API URL: {api_url} (set --api-url or BASE_URL to override)")
@@ -443,6 +509,9 @@ def main() -> int:
             else:
                 print(f"  Upload endpoint: bindings differ from POST /data-model/sparql")
                 failed += 1
+
+    # Graph vs DB sync: assert GET /sites, /equipment, /points counts match SPARQL (09_graph_db_sync_counts.sparql)
+    failed += _run_graph_db_sync_check(api_url, skip=skip_graph_db_sync)
 
     driver = None
     if frontend_parity and frontend_url:
