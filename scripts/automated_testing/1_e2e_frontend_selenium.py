@@ -37,13 +37,13 @@ The old scripts remain for API-only or automation that cannot use a browser:
 
 Usage:
 
-  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
+  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
 
   # With BACnet discovery (Points page → Add to data model) for one or more devices:
-  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 --headed
+  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 --headed
 
   $env:OFDD_API_KEY = "same-as-server-stack/.env"
-  python e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
 
 Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating the full UI flow from a test bench (stack must be up).
 
@@ -193,7 +193,10 @@ def get_browser_console_errors(
         entries = driver.get_log("browser")
     except Exception:
         return []
-    return [e for e in entries if e.get("level") in levels]
+    out = [e for e in entries if e.get("level") in levels]
+    # Drop noisy 404s that don't affect tests (favicon requested by browser, not served)
+    out = [e for e in out if not ("favicon.ico" in (e.get("message") or "") and "404" in (e.get("message") or ""))]
+    return out
 
 
 # --- Helpers: explicit waits and safe actions ---

@@ -19,12 +19,12 @@ Usage
 -----
 
     $env:OFDD_API_KEY = "same-as-server-stack/.env"
-  python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --headed
+  python 3_long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --headed
 
-  python long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+  python 3_long_term_bacnet_scrape_test.py --once --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
   
 
-  python long_term_bacnet_scrape_test.py --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+  python 3_long_term_bacnet_scrape_test.py --config-via-frontend --check-faults-via-frontend --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
 
 Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating scrape intervals or frontend config/faults from a test bench.
 """
@@ -34,7 +34,9 @@ import io
 import os
 import sys
 import time
+import importlib.util
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 try:
@@ -44,6 +46,44 @@ except ImportError:
 
 if TYPE_CHECKING:
     from selenium.webdriver.chrome.webdriver import WebDriver
+
+# E2E Selenium module: normal import or load from 1_e2e_frontend_selenium.py when that file exists
+# (Python can't import module names that start with a digit, so we load by path when needed)
+_E2E_MOD = None
+
+
+def _ensure_e2e_module():
+    """Load e2e_frontend_selenium (or 1_e2e_frontend_selenium.py by path) for driver and helpers."""
+    global _E2E_MOD
+    if _E2E_MOD is not None:
+        return _E2E_MOD
+    try:
+        import e2e_frontend_selenium as _E2E_MOD
+    except ImportError:
+        pass
+    if _E2E_MOD is None:
+        script_dir = Path(__file__).resolve().parent
+        for candidate in ("1_e2e_frontend_selenium.py", "e2e_frontend_selenium.py"):
+            path = script_dir / candidate
+            if path.is_file():
+                spec = importlib.util.spec_from_file_location("_e2e_selenium", path)
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    globals()["_E2E_MOD"] = mod
+                    _E2E_MOD = mod
+                    break
+    if _E2E_MOD is None:
+        print(
+            "For --config-via-frontend / --check-faults-via-frontend install: pip install selenium webdriver-manager",
+            file=sys.stderr,
+        )
+        print(
+            "If already installed, ensure e2e_frontend_selenium.py or 1_e2e_frontend_selenium.py is in the same directory as this script.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return _E2E_MOD
 
 
 def _load_env_file(path: str) -> None:
@@ -249,22 +289,15 @@ def _check_expected_faults_for_phase(phase_end_utc: datetime) -> tuple[bool, str
 
 def _get_selenium_driver(headed: bool = False, capture_browser_logs: bool = False):
     """Lazy import and create Chrome WebDriver (same fashion as e2e_frontend_selenium)."""
-    try:
-        from e2e_frontend_selenium import get_driver
-        return get_driver(headed=headed, capture_browser_logs=capture_browser_logs)
-    except ImportError as e:
-        print(
-            "For --config-via-frontend / --check-faults-via-frontend install: pip install selenium webdriver-manager",
-            file=sys.stderr,
-        )
-        raise SystemExit(1) from e
+    mod = _ensure_e2e_module()
+    return mod.get_driver(headed=headed, capture_browser_logs=capture_browser_logs)
 
 
 def _report_console_errors(driver: "WebDriver", route_name: str) -> None:
     """If the driver has browser log capture enabled, fetch console errors/warnings and print them."""
     try:
-        from e2e_frontend_selenium import get_browser_console_errors
-        entries = get_browser_console_errors(driver)
+        mod = _ensure_e2e_module()
+        entries = mod.get_browser_console_errors(driver)
         if entries:
             print(f"  Browser console on {route_name}: {len(entries)} error(s)/warning(s)")
             for e in entries:
@@ -310,7 +343,10 @@ def set_bacnet_interval_via_frontend(driver: "WebDriver", frontend_url: str, int
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
-    from e2e_frontend_selenium import ELEMENT_WAIT, safe_send_keys, wait_for_clickable
+    mod = _ensure_e2e_module()
+    ELEMENT_WAIT = mod.ELEMENT_WAIT
+    safe_send_keys = mod.safe_send_keys
+    wait_for_clickable = mod.wait_for_clickable
 
     base = frontend_url.rstrip("/")
     driver.get(f"{base}/config")
@@ -337,7 +373,8 @@ def verify_faults_visible_via_frontend(driver: "WebDriver", frontend_url: str, t
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
-    from e2e_frontend_selenium import ELEMENT_WAIT
+    mod = _ensure_e2e_module()
+    ELEMENT_WAIT = mod.ELEMENT_WAIT
 
     base = frontend_url.rstrip("/")
     driver.get(f"{base}/faults")
@@ -373,7 +410,9 @@ def verify_plots_fault_plot_via_frontend(
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
-    from e2e_frontend_selenium import ELEMENT_WAIT, wait_for_clickable
+    mod = _ensure_e2e_module()
+    ELEMENT_WAIT = mod.ELEMENT_WAIT
+    wait_for_clickable = mod.wait_for_clickable
 
     base = frontend_url.rstrip("/")
     site_id = get_first_site_id()
@@ -472,18 +511,39 @@ def verify_plots_axis_by_unit_via_frontend(
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
 
-    from e2e_frontend_selenium import (
-        ELEMENT_WAIT,
-        EXPECTED_POINT_NAMES,
-        FALLBACK_POINT_NAMES,
-        SECOND_POINT_DIFFERENT_UNIT,
-        select_known_point,
-        select_second_point_different_unit,
-    )
+    mod = _ensure_e2e_module()
+    ELEMENT_WAIT = mod.ELEMENT_WAIT
+    EXPECTED_POINT_NAMES = mod.EXPECTED_POINT_NAMES
+    FALLBACK_POINT_NAMES = mod.FALLBACK_POINT_NAMES
+    SECOND_POINT_DIFFERENT_UNIT = mod.SECOND_POINT_DIFFERENT_UNIT
+    select_known_point = mod.select_known_point
+    select_second_point_different_unit = mod.select_second_point_different_unit
 
     base = frontend_url.rstrip("/")
-    driver.get(f"{base}/plots")
+    site_id = get_first_site_id()
+    driver.get(f"{base}/plots?site={site_id}")
     time.sleep(0.8)
+    # If URL param didn't apply, try site selector (same as fault overlay)
+    if "Select a site to view plots" in (driver.page_source or ""):
+        try:
+            site_btn = driver.find_elements(
+                By.XPATH,
+                "//button[@aria-haspopup='listbox' and (contains(., 'Sites') or contains(., 'All Sites'))]",
+            )
+            if site_btn:
+                site_btn[0].click()
+                time.sleep(0.5)
+                first_site = driver.find_elements(
+                    By.XPATH,
+                    "//div[contains(@class,'rounded-2xl')]//button[.//span[contains(@class,'truncate')]]",
+                )
+                for el in first_site:
+                    if el.text and "All Sites" not in (el.text or ""):
+                        el.click()
+                        break
+                time.sleep(0.8)
+        except Exception:
+            pass
     if "Select a site to view plots" in (driver.page_source or ""):
         return False, "Plots axis-by-unit: select a site first (no site in context)."
     wait = WebDriverWait(driver, timeout_sec)

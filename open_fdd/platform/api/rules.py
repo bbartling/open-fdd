@@ -1,8 +1,9 @@
-"""Rules API: list and read FDD rule YAML files from the configured rules_dir (GET /config)."""
+"""Rules API: list, read, upload, delete FDD rule YAML files from the configured rules_dir (GET /config)."""
 
 import os
 from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -58,6 +59,91 @@ def get_rule_file(filename: str):
         return PlainTextResponse(content=path.read_text(encoding="utf-8"))
     except OSError as e:
         raise HTTPException(500, f"Cannot read file: {e}") from e
+
+
+def _validate_rule_yaml(content: str) -> dict:
+    """Parse YAML and require at least name or flag. Raises HTTPException if invalid."""
+    try:
+        data = yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        raise HTTPException(400, f"Invalid YAML: {e}") from e
+    if not isinstance(data, dict):
+        raise HTTPException(400, "Rule YAML must be a mapping (dict) with name or flag")
+    if "name" not in data and "flag" not in data:
+        raise HTTPException(400, "Rule must have 'name' or 'flag'")
+    return data
+
+
+class UploadRuleBody(BaseModel):
+    """Body for POST /rules (upload or overwrite a rule file)."""
+
+    filename: str = Field(..., description="Bare filename, e.g. my_rule.yaml")
+    content: str = Field(..., description="Full YAML content of the rule")
+
+
+@router.post("", summary="Upload or overwrite a rule file")
+def upload_rule(body: UploadRuleBody):
+    """
+    Write a YAML rule file into the configured rules_dir. Validates YAML and requires name or flag.
+    Next FDD run will pick it up (hot reload). Use POST /rules/sync-definitions to update definitions table immediately.
+    """
+    if not body.filename.endswith(".yaml") or ".." in body.filename or "/" in body.filename or "\\" in body.filename:
+        raise HTTPException(400, "Invalid filename (must end in .yaml, no path separators)")
+    _validate_rule_yaml(body.content)
+    base = _rules_dir_resolved()
+    if not base.is_dir():
+        raise HTTPException(503, "rules_dir is not a directory")
+    path = (base / body.filename).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename") from None
+    try:
+        path.write_text(body.content, encoding="utf-8")
+    except OSError as e:
+        raise HTTPException(500, f"Cannot write file: {e}") from e
+    return {"ok": True, "path": str(path), "filename": body.filename}
+
+
+@router.post("/sync-definitions", summary="Sync fault_definitions from rules_dir")
+def sync_definitions():
+    """
+    Load all YAML from rules_dir and upsert/prune fault_definitions so the definitions table
+    and Faults matrix update immediately (without waiting for the next FDD run).
+    """
+    from open_fdd.platform.loop import sync_fault_definitions_from_rules_dir
+
+    try:
+        sync_fault_definitions_from_rules_dir()
+    except Exception as e:
+        raise HTTPException(500, str(e)) from e
+    return {"ok": True}
+
+
+@router.delete("/{filename}", summary="Delete a rule file")
+def delete_rule(filename: str):
+    """
+    Remove a YAML rule file from rules_dir. Definition will be pruned on next FDD run or after POST /rules/sync-definitions.
+    """
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid filename")
+    if not filename.endswith(".yaml"):
+        raise HTTPException(400, "Only .yaml files are allowed")
+    base = _rules_dir_resolved()
+    if not base.is_dir():
+        raise HTTPException(503, "rules_dir is not a directory")
+    path = (base / filename).resolve()
+    try:
+        path.relative_to(base.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid filename") from None
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+    try:
+        path.unlink()
+    except OSError as e:
+        raise HTTPException(500, f"Cannot delete file: {e}") from e
+    return {"ok": True, "filename": filename}
 
 
 # --- Test-only: inject/delete a rule file for hot-reload automation (set OFDD_ALLOW_TEST_RULES=1) ---

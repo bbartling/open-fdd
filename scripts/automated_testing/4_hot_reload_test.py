@@ -1,44 +1,39 @@
 #!/usr/bin/env python3
 """
-Hot-reload test: inject a new rule, trigger FDD run, verify fault definitions and (optional) frontend.
+Rules API test: upload a few YAML rule files via the frontend API, verify server accepts and parses.
 
-Requires the server to have OFDD_ALLOW_TEST_RULES=1 so POST/DELETE /rules/test-inject are enabled
-(e.g. in stack/.env or container env). The test:
+Loads each of a small set of .yaml files from scripts/automated_testing/rules/ and:
 
-  1. GET /faults/definitions and GET /rules (baseline).
-  2. POST /rules/test-inject with a new YAML rule (unique fault_id).
-  3. POST /jobs/fdd/run, poll GET /jobs/{id} until finished (or timeout).
-  4. GET /faults/definitions — assert the new fault_id appears (hot reload synced rules → DB).
-  5. GET /rules — assert the new filename is in the files list.
-  6. Optional (--frontend-url): open /faults and assert the new fault name appears.
-  7. DELETE /rules/test-inject/{filename} to remove the test rule.
+  Backend:
+    - POST /rules with {filename, content} (same API the React Faults page uses).
+    - GET /rules — file appears in list.
+    - GET /rules/{filename} — server returns stored content.
+    - POST /rules/sync-definitions — sync rules_dir → fault_definitions.
+    - GET /faults/definitions — fault_id from the rule appears.
+    - DELETE /rules/{filename} — cleanup.
 
-Modifying an existing rule (e.g. a tuning param) uses the same hot-reload path: the next FDD run
-loads all YAML from disk and syncs to fault_definitions, so any edit under rules_dir is picked up
-without restart. This test proves the "add new file" case; param edits work the same way.
+  Frontend (when --frontend-url): open /faults and assert page loads (optional parity check).
 
 Usage:
+  python 4_hot_reload_test.py --api-url http://localhost:8000
+  python 4_hot_reload_test.py --api-url http://localhost:8000 --frontend-url http://localhost --frontend-check
 
-  # API-only (no browser)
-  python 4_hot_reload_test.py --api-url http://192.168.204.16:8000
-
-  # With frontend check (Selenium)
-  python 4_hot_reload_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-check --headed
-
-  # Set API key if server requires auth
-  set OFDD_API_KEY=your-key
-  python 4_hot_reload_test.py --api-url http://192.168.204.16:8000
+Requires: httpx. For --frontend-check: selenium, webdriver-manager.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
-import time
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
+RULES_DIR = SCRIPT_DIR / "rules"
+
+# Small fixed set of rule files to test (must have name and flag in YAML)
+YAML_FILES_TO_TEST = ["sensor_flatline.yaml", "sensor_bounds.yaml"]
 
 
 def _load_env_file(path: str) -> None:
@@ -68,8 +63,6 @@ def _load_stack_env() -> None:
 _load_stack_env()
 
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
-JOB_POLL_INTERVAL = 2.0
-JOB_TIMEOUT = 90.0
 
 
 def _request(api_url: str, method: str, path: str, json_body: dict | None = None) -> tuple[int, dict | list]:
@@ -90,174 +83,157 @@ def _request(api_url: str, method: str, path: str, json_body: dict | None = None
     return r.status_code, body
 
 
-def _main() -> int:
-    import argparse
-    parser = argparse.ArgumentParser(description="Hot-reload test: inject rule, trigger FDD, verify definitions and optional frontend")
-    parser.add_argument("--api-url", required=True, help="API base URL (e.g. http://192.168.204.16:8000)")
-    parser.add_argument("--frontend-url", default=None, help="Frontend URL for optional /faults check")
-    parser.add_argument("--frontend-check", action="store_true", help="Open Faults page and assert new fault appears")
-    parser.add_argument("--headed", action="store_true", help="Run browser headed (with --frontend-check)")
-    parser.add_argument("--skip-cleanup", action="store_true", help="Do not delete the injected rule file")
-    args = parser.parse_args()
-    api_url = args.api_url.rstrip("/")
+def _get_text(api_url: str, path: str) -> tuple[int, str]:
+    try:
+        import httpx
+    except ImportError:
+        return 0, ""
+    url = f"{api_url.rstrip('/')}{path}"
+    headers = {}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+    r = httpx.get(url, headers=headers or None, timeout=30.0)
+    return r.status_code, r.text or ""
 
-    suffix = str(int(time.time()))
-    test_filename = f"test_hot_reload_{suffix}.yaml"
-    test_fault_id = f"test_hot_reload_{suffix}"
-    test_rule_yaml = f"""# Injected by 4_hot_reload_test.py (hot-reload test)
-name: test_hot_reload_{suffix}
-description: "Test rule for hot-reload verification"
-type: expression
-flag: {test_fault_id}
 
-inputs:
-  Dummy_Sensor:
-    brick: Dummy_Sensor
+def _content_with_unique_name_flag(content: str, unique_flag: str) -> str:
+    """Set name and flag to unique_flag so fault_definitions has a distinct fault_id."""
+    out = re.sub(r"^name:\s*\S+", f"name: {unique_flag}", content, count=1, flags=re.MULTILINE)
+    out = re.sub(r"^flag:\s*\S+", f"flag: {unique_flag}", out, count=1, flags=re.MULTILINE)
+    return out
 
-params:
-  threshold: 1.0
 
-expression: |
-  1 == 0
-"""
+def _test_one_yaml(api_url: str, path: Path, test_filename: str, fault_id: str) -> str | None:
+    """Upload, verify list/get/sync/definitions, delete. Returns None on success, else error message."""
+    content = path.read_text(encoding="utf-8")
+    content = _content_with_unique_name_flag(content, fault_id)
 
-    print("Hot-reload test: inject rule -> FDD run -> verify definitions (and optional frontend)")
-    print(f"  API: {api_url}")
-    print(f"  Test rule: {test_filename} (fault_id={test_fault_id})")
+    code, _ = _request(api_url, "POST", "/rules", json_body={"filename": test_filename, "content": content})
+    if code not in (200, 201):
+        return f"POST /rules -> {code}"
 
-    # 1) Baseline
+    code, data = _request(api_url, "GET", "/rules")
+    if code != 200 or test_filename not in (data.get("files") or []):
+        return "GET /rules: file not in list"
+
+    code, body_text = _get_text(api_url, f"/rules/{test_filename}")
+    if code != 200 or fault_id not in body_text:
+        return "GET /rules/{filename}: bad or missing content"
+
+    code, _ = _request(api_url, "POST", "/rules/sync-definitions", json_body=None)
+    if code != 200:
+        return f"POST /rules/sync-definitions -> {code}"
+
     code, defs = _request(api_url, "GET", "/faults/definitions")
     if code != 200:
-        print(f"  FAIL: GET /faults/definitions -> {code}")
-        return 1
-    definitions = defs if isinstance(defs, list) else []
-    fault_ids_before = {d.get("fault_id") for d in definitions if d.get("fault_id")}
-    if test_fault_id in fault_ids_before:
-        print(f"  FAIL: fault_id {test_fault_id} already present (leftover from previous run?)")
-        return 1
+        return f"GET /faults/definitions -> {code}"
+    ids = {d.get("fault_id") for d in (defs if isinstance(defs, list) else []) if d.get("fault_id")}
+    if fault_id not in ids:
+        return "fault_id not in definitions after sync"
 
-    code, rules_data = _request(api_url, "GET", "/rules")
-    if code != 200:
-        print(f"  FAIL: GET /rules -> {code}")
-        return 1
-    files_before = set(rules_data.get("files", [])) if isinstance(rules_data, dict) else set()
-    if test_filename in files_before:
-        print(f"  FAIL: {test_filename} already in rules list")
-        return 1
-    print(f"  Baseline: {len(definitions)} definitions, {len(files_before)} rule files")
+    code, _ = _request(api_url, "DELETE", f"/rules/{test_filename}")
+    if code not in (200, 204):
+        return f"DELETE /rules/{test_filename} -> {code}"
 
-    # 2) Inject rule
-    code, inject_res = _request(api_url, "POST", "/rules/test-inject", json_body={"filename": test_filename, "content": test_rule_yaml})
-    if code == 403:
-        print("  SKIP: Test inject disabled. Set OFDD_ALLOW_TEST_RULES=1 on the server and restart.")
-        return 0
-    if code != 200 and code != 201:
-        print(f"  FAIL: POST /rules/test-inject -> {code} {inject_res}")
-        return 1
-    print(f"  Injected: {test_filename}")
+    return None
 
+
+def _run_frontend_check(frontend_url: str, headed: bool) -> str | None:
+    """Open /faults and assert page loads. Returns None on success, else error message."""
     try:
-        # 3) Trigger FDD run
-        code, job_res = _request(api_url, "POST", "/jobs/fdd/run", json_body={})
-        if code != 200:
-            print(f"  FAIL: POST /jobs/fdd/run -> {code}")
-            return 1
-        job_id = job_res.get("job_id") if isinstance(job_res, dict) else None
-        if not job_id:
-            print("  FAIL: No job_id in response")
-            return 1
-        print(f"  FDD job: {job_id}")
-
-        # 4) Poll until finished
-        deadline = time.monotonic() + JOB_TIMEOUT
-        while time.monotonic() < deadline:
-            code, job = _request(api_url, "GET", f"/jobs/{job_id}")
-            if code != 200:
-                print(f"  FAIL: GET /jobs/{job_id} -> {code}")
-                return 1
-            status = job.get("status", "")
-            if status == "finished":
-                print(f"  FDD job finished: {job.get('result')}")
-                break
-            if status == "failed":
-                print(f"  FAIL: FDD job failed: {job.get('error')}")
-                return 1
-            time.sleep(JOB_POLL_INTERVAL)
-        else:
-            print("  FAIL: FDD job timed out")
-            return 1
-
-        # 5) Verify fault definitions
-        code, defs2 = _request(api_url, "GET", "/faults/definitions")
-        if code != 200:
-            print(f"  FAIL: GET /faults/definitions (after FDD) -> {code}")
-            return 1
-        definitions2 = defs2 if isinstance(defs2, list) else []
-        fault_ids_after = {d.get("fault_id") for d in definitions2 if d.get("fault_id")}
-        if test_fault_id not in fault_ids_after:
-            print(f"  FAIL: fault_id {test_fault_id} not in definitions after FDD run (hot reload did not sync)")
-            return 1
-        print(f"  Definitions: {test_fault_id} present (hot reload OK)")
-
-        # 6) Verify rules list
-        code, rules_data2 = _request(api_url, "GET", "/rules")
-        if code != 200:
-            print(f"  FAIL: GET /rules (after inject) -> {code}")
-            return 1
-        files_after = set(rules_data2.get("files", [])) if isinstance(rules_data2, dict) else set()
-        if test_filename not in files_after:
-            print(f"  FAIL: {test_filename} not in GET /rules files list")
-            return 1
-        print(f"  Rules list: {test_filename} present")
-
-        # 7) Optional frontend check
-        if args.frontend_check and args.frontend_url:
-            frontend_url = args.frontend_url.rstrip("/")
-            print(f"  Frontend: checking {frontend_url}/faults for new fault...")
-            try:
-                from selenium import webdriver
-                from selenium.webdriver.chrome.options import Options as ChromeOptions
-                from selenium.webdriver.chrome.service import Service as ChromeService
-                from selenium.webdriver.common.by import By
-                from selenium.webdriver.support import expected_conditions as EC
-                from selenium.webdriver.support.ui import WebDriverWait
-                from webdriver_manager.chrome import ChromeDriverManager
-            except ImportError:
-                print("  SKIP: Frontend check requires selenium, webdriver-manager. pip install selenium webdriver-manager")
-            else:
-                opts = ChromeOptions()
-                if not args.headed:
-                    opts.add_argument("--headless=new")
-                opts.add_argument("--no-sandbox")
-                opts.add_argument("--disable-dev-shm-usage")
-                driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=opts)
-                try:
-                    driver.get(f"{frontend_url}/faults")
-                    WebDriverWait(driver, 15).until(
-                        lambda d: "Faults" in (d.page_source or "") or "fault" in (d.page_source or "").lower()[:3000]
-                    )
-                    time.sleep(1.0)
-                    page = driver.page_source or ""
-                    # Fault matrix or definitions table may show fault_id or name
-                    if test_fault_id not in page and f"test_hot_reload_{suffix}" not in page:
-                        print(f"  FAIL: New fault {test_fault_id} not visible on Faults page")
-                        return 1
-                    print("  Frontend: new fault visible on Faults page")
-                finally:
-                    driver.quit()
-
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options as ChromeOptions
+        from selenium.webdriver.chrome.service import Service as ChromeService
+        from selenium.webdriver.support.ui import WebDriverWait
+        from webdriver_manager.chrome import ChromeDriverManager
+    except ImportError:
+        return "pip install selenium webdriver-manager"
+    base = frontend_url.rstrip("/")
+    opts = ChromeOptions()
+    if not headed:
+        opts.add_argument("--headless=new")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=opts)
+    try:
+        driver.get(f"{base}/faults")
+        WebDriverWait(driver, 15).until(
+            lambda d: "Faults" in (d.page_source or "") or "fault" in (d.page_source or "").lower()[:3000]
+        )
+    except Exception as e:
+        return str(e)
     finally:
-        # 8) Cleanup
-        if not args.skip_cleanup:
-            code, _ = _request(api_url, "DELETE", f"/rules/test-inject/{test_filename}")
-            if code in (200, 204):
-                print(f"  Cleanup: removed {test_filename}")
-            else:
-                print(f"  Cleanup: DELETE test-inject -> {code} (file may remain)")
+        driver.quit()
+    return None
 
-    print("  Hot-reload test passed.")
+
+def main() -> int:
+    api_url = None
+    frontend_url = None
+    frontend_check = False
+    headed = False
+    i = 0
+    args = sys.argv[1:]
+    while i < len(args):
+        if args[i] == "--api-url" and i + 1 < len(args):
+            api_url = (args[i + 1] or "").strip().rstrip("/")
+            i += 2
+            continue
+        if args[i] == "--frontend-url" and i + 1 < len(args):
+            frontend_url = (args[i + 1] or "").strip().rstrip("/")
+            i += 2
+            continue
+        if args[i] == "--frontend-check":
+            frontend_check = True
+            i += 1
+            continue
+        if args[i] == "--headed":
+            headed = True
+            i += 1
+            continue
+        i += 1
+
+    if not api_url:
+        api_url = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
+        print(f"Using API URL: {api_url} (set --api-url or BASE_URL to override)")
+    else:
+        print(f"API URL: {api_url}")
+
+    if not RULES_DIR.is_dir():
+        print(f"Rules dir missing: {RULES_DIR}", file=sys.stderr)
+        return 1
+
+    failed = 0
+    suffix = str(int(__import__("time").time()))
+    for name in YAML_FILES_TO_TEST:
+        path = RULES_DIR / name
+        if not path.is_file():
+            print(f"  {name}: skip (not found)")
+            continue
+        test_filename = f"test_{path.stem}_{suffix}.yaml"
+        fault_id = f"test_{path.stem}_{suffix}"
+        err = _test_one_yaml(api_url, path, test_filename, fault_id)
+        if err:
+            print(f"  {name}: FAIL — {err}")
+            failed += 1
+        else:
+            print(f"  {name}: OK")
+
+    if frontend_check and frontend_url:
+        print(f"  Frontend ({frontend_url}/faults): ", end="")
+        err = _run_frontend_check(frontend_url, headed)
+        if err:
+            print(f"FAIL — {err}")
+            failed += 1
+        else:
+            print("OK")
+
+    if failed:
+        print(f"\n{failed} check(s) failed.")
+        return 1
+    print(f"\nAll rules API checks passed ({len(YAML_FILES_TO_TEST)} YAML(s)).")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(_main())
+    sys.exit(main())

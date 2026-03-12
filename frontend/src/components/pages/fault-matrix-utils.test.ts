@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   faultAppliesToDevice,
   computeFaultMatrixCellStatus,
+  computeDeviceLastFaultTs,
+  deviceRowKey,
   matrixCellKey,
 } from "./fault-matrix-utils";
 import type { BacnetDevice, FaultDefinition, FaultState } from "@/types/api";
@@ -267,6 +269,74 @@ describe("fault-matrix-utils", () => {
       ];
       const status = computeFaultMatrixCellStatus(devices, definitions, state);
       expect(status.get(matrixCellKey(devices[0], "bad_sensor"))).toBe("active");
+    });
+  });
+
+  describe("deviceRowKey", () => {
+    it("returns stable key from site_id and bacnet_device_id", () => {
+      const dev: BacnetDevice = {
+        site_id: "s1",
+        site_name: "Site1",
+        bacnet_device_id: "3456789",
+        equipment_id: "e1",
+        equipment_name: "AHU-1",
+        equipment_type: "AHU",
+      };
+      expect(deviceRowKey(dev)).toBe("s1-3456789");
+    });
+  });
+
+  describe("computeDeviceLastFaultTs", () => {
+    it("returns null when no state rows for device", () => {
+      const devices: BacnetDevice[] = [
+        {
+          site_id: "s1",
+          site_name: "Site1",
+          bacnet_device_id: "123",
+          equipment_id: "AHU-1",
+          equipment_name: "AHU-1",
+          equipment_type: "AHU",
+        },
+      ];
+      const last = computeDeviceLastFaultTs(devices, []);
+      expect(last.get(deviceRowKey(devices[0]))).toBeNull();
+    });
+
+    it("returns max last_changed_ts across fault_state rows for device", () => {
+      const devices: BacnetDevice[] = [
+        {
+          site_id: "TestBenchSite",
+          site_name: "TestBenchSite",
+          bacnet_device_id: "3456789",
+          equipment_id: "AHU-1",
+          equipment_name: "AHU-1",
+          equipment_type: "AHU",
+        },
+      ];
+      const state: FaultState[] = [
+        {
+          id: "1",
+          site_id: "TestBenchSite",
+          equipment_id: "AHU-1",
+          fault_id: "f1",
+          active: false,
+          last_changed_ts: "2026-01-01T10:00:00Z",
+          last_evaluated_ts: null,
+          context: null,
+        },
+        {
+          id: "2",
+          site_id: "TestBenchSite",
+          equipment_id: "AHU-1",
+          fault_id: "f2",
+          active: true,
+          last_changed_ts: "2026-01-01T12:00:00Z",
+          last_evaluated_ts: null,
+          context: null,
+        },
+      ];
+      const last = computeDeviceLastFaultTs(devices, state);
+      expect(last.get(deviceRowKey(devices[0]))).toBe("2026-01-01T12:00:00Z");
     });
   });
 });

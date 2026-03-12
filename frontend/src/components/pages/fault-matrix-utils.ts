@@ -27,6 +27,42 @@ export function matrixCellKey(
   return `${device.site_id}-${device.bacnet_device_id}-${device.equipment_id ?? ""}-${faultId}`;
 }
 
+/** Row key for a device in the matrix (same as TableRow key). */
+export function deviceRowKey(device: BacnetDevice): string {
+  return `${device.site_id}-${device.bacnet_device_id}`;
+}
+
+/**
+ * Last time any fault state changed for each device (max of last_changed_ts across fault_state rows).
+ * Used to show "Last known fault" per device without hardcoding.
+ */
+export function computeDeviceLastFaultTs(
+  devices: BacnetDevice[],
+  state: FaultState[],
+): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  devices.forEach((d) => {
+    const siteMatches = (s: FaultState) =>
+      s.site_id === d.site_id || s.site_id === d.site_name;
+    const equipMatches = (s: FaultState) =>
+      s.equipment_id === (d.equipment_id ?? "") ||
+      s.equipment_id === d.equipment_name;
+    const relevant = state.filter(
+      (s) => siteMatches(s) && equipMatches(s),
+    );
+    if (relevant.length === 0) {
+      out.set(deviceRowKey(d), null);
+      return;
+    }
+    const latest = relevant.reduce((best, s) => {
+      const ts = s.last_changed_ts ?? "";
+      return ts > (best ?? "") ? ts : best;
+    }, null as string | null);
+    out.set(deviceRowKey(d), latest);
+  });
+  return out;
+}
+
 /**
  * Compute cell status for every (device, definition) in the matrix.
  * Used by FaultMatrixTable so the logic is testable and stable.

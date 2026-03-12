@@ -2,7 +2,9 @@
 Generate Brick TTL from current DB state (sites, equipment, points).
 
 Single source of truth = DB. TTL is derived for FDD column_map and SPARQL validation.
-Points use rdfs:label = external_id (time-series reference) and optional ofdd:mapsToRuleInput = fdd_input.
+Points use rdfs:label = external_id (time-series reference). Brick type is sufficient
+for FDD resolution; ofdd:mapsToRuleInput (fdd_input) is optional and only used when
+multiple points share the same Brick class (disambiguation).
 
 One unified TTL file (config/data_model.ttl): Brick section first, then BACnet discovery
 section after BACNET_SECTION_MARKER. CRUD and point_discovery_to_graph update the in-memory graph; sync writes this file.

@@ -17,6 +17,7 @@ from psycopg2.extras import execute_values
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
+from open_fdd.platform.graph_model import get_ttl_path_resolved
 from open_fdd.platform.site_resolver import resolve_site_uuid
 from open_fdd.schema import FDDResult, results_from_runner_output
 
@@ -148,15 +149,18 @@ def load_timeseries_for_equipment(
 def _sync_fault_definitions_from_rules(rules: list) -> None:
     """
     Upsert fault_definitions from rule YAML so the matrix and definitions table
-    stay in sync with rules_dir. Called every FDD run after loading rules (hot reload).
+    stay in sync with rules_dir. Prunes definitions for rules no longer on disk.
+    Called every FDD run after loading rules (hot reload).
     """
     if not rules:
         return
     try:
+        current_fault_ids: list[str] = []
         with get_conn() as conn:
             with conn.cursor() as cur:
                 for r in rules:
                     fault_id = r.get("flag") or f"{r.get('name', 'rule')}_flag"
+                    current_fault_ids.append(fault_id)
                     name = r.get("name") or fault_id
                     description = r.get("description")
                     severity = str(r.get("severity", "warning"))
@@ -182,9 +186,33 @@ def _sync_fault_definitions_from_rules(rules: list) -> None:
                         """,
                         (fault_id, name, description, severity, category, equipment_types),
                     )
+                # Prune definitions for rules no longer in rules_dir (removes phantom rows)
+                if current_fault_ids:
+                    cur.execute(
+                        "DELETE FROM fault_definitions WHERE fault_id != ALL(%s)",
+                        (current_fault_ids,),
+                    )
             conn.commit()
     except Exception:
         pass  # do not fail FDD run if sync fails
+
+
+def sync_fault_definitions_from_rules_dir() -> None:
+    """
+    Load all rule YAML from configured rules_dir and sync fault_definitions (upsert + prune).
+    Used by POST /rules/sync-definitions so the UI updates without waiting for the next FDD run.
+    """
+    from open_fdd.engine.runner import load_rules_from_dir
+
+    settings = get_platform_settings()
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    rules_path = Path(settings.rules_dir)
+    if not rules_path.is_absolute():
+        rules_path = repo_root / rules_path
+    if not rules_path.exists():
+        rules_path = repo_root / "open_fdd" / "rules"
+    all_rules = load_rules_from_dir(rules_path)
+    _sync_fault_definitions_from_rules(all_rules)
 
 
 def run_fdd_loop(
@@ -218,13 +246,18 @@ def run_fdd_loop(
     if not rules_path.exists():
         rules_path = repo_root / "open_fdd" / "rules"
 
-    ttl_path = brick_ttl or Path(
-        getattr(settings, "brick_ttl_path", None) or settings.brick_ttl_dir
-    )
-    if isinstance(ttl_path, str):
-        ttl_path = Path(ttl_path)
-    if not ttl_path.is_absolute():
-        ttl_path = repo_root / ttl_path
+    # Use same TTL file as the rest of the platform (API, graph sync) so column_map matches the data model.
+    if brick_ttl is not None:
+        ttl_path = Path(brick_ttl) if isinstance(brick_ttl, str) else brick_ttl
+        if not ttl_path.is_absolute():
+            ttl_path = (repo_root / ttl_path).resolve()
+    else:
+        ttl_path = Path(get_ttl_path_resolved())
+    # If config only has brick_ttl_dir (e.g. "config"), resolve to config/data_model.ttl so we have a file, not a dir.
+    if ttl_path.exists() and ttl_path.is_dir():
+        ttl_path = ttl_path / "data_model.ttl"
+    if not ttl_path.exists():
+        ttl_path = (repo_root / "config" / "data_model.ttl").resolve()
 
     column_map = resolve_from_ttl(str(ttl_path)) if ttl_path.exists() else {}
     equipment_types = (

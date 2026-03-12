@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSiteContext } from "@/contexts/site-context";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { apiFetchText } from "@/lib/api";
 import { useRulesList } from "@/hooks/use-rules";
+import { uploadRule, deleteRule, syncRuleDefinitions } from "@/lib/crud-api";
 import {
   Table,
   TableHeader,
@@ -29,6 +31,8 @@ import type { DatePreset } from "@/components/site/DateRangeSelect";
 import type { FaultState, FaultDefinition, Equipment, Site, BacnetDevice } from "@/types/api";
 import {
   computeFaultMatrixCellStatus,
+  computeDeviceLastFaultTs,
+  deviceRowKey,
   matrixCellKey,
 } from "@/components/pages/fault-matrix-utils";
 
@@ -138,6 +142,10 @@ function FaultMatrixTable({
     () => computeFaultMatrixCellStatus(devices, definitions, state),
     [devices, definitions, state],
   );
+  const lastFaultByDevice = useMemo(
+    () => computeDeviceLastFaultTs(devices, state),
+    [devices, state],
+  );
 
   if (devices.length === 0) {
     return (
@@ -163,6 +171,7 @@ function FaultMatrixTable({
             <TableHead className="font-mono">BACnet device</TableHead>
             <TableHead>Equipment</TableHead>
             {siteMap && <TableHead>Site</TableHead>}
+            <TableHead className="text-muted-foreground whitespace-nowrap">Last known fault</TableHead>
             {definitions.map((d) => (
               <TableHead key={d.fault_id} className="text-center font-medium">
                 {d.name}
@@ -172,7 +181,7 @@ function FaultMatrixTable({
         </TableHeader>
         <TableBody>
           {devices.map((dev) => (
-            <TableRow key={`${dev.site_id}-${dev.bacnet_device_id}`}>
+            <TableRow key={deviceRowKey(dev)}>
               <TableCell className="font-mono">{dev.bacnet_device_id}</TableCell>
               <TableCell>{dev.equipment_name}</TableCell>
               {siteMap && (
@@ -180,6 +189,11 @@ function FaultMatrixTable({
                   {siteMap.get(dev.site_id)?.name ?? dev.site_name}
                 </TableCell>
               )}
+              <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                {lastFaultByDevice.get(deviceRowKey(dev))
+                  ? timeAgo(lastFaultByDevice.get(deviceRowKey(dev))!)
+                  : "—"}
+              </TableCell>
               {definitions.map((def) => {
                 const key = matrixCellKey(dev, def.fault_id);
                 const status = cellStatus.get(key) ?? "n_a";
@@ -327,11 +341,15 @@ function labelForPreset(preset: DatePreset): string {
 }
 
 function RuleFilesSection() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useRulesList();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadFilename, setUploadFilename] = useState("");
+  const [uploadContent, setUploadContent] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const openFile = useCallback((filename: string) => {
     setSelectedFile(filename);
@@ -344,6 +362,77 @@ function RuleFilesSection() {
       .finally(() => setFileLoading(false));
   }, []);
 
+  const uploadMutation = useMutation({
+    mutationFn: () => uploadRule(uploadFilename.trim() || "rule.yaml", uploadContent),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["rules"] });
+      queryClient.invalidateQueries({ queryKey: ["faults"] });
+      setUploadFilename("");
+      setUploadContent("");
+      setUploadError(null);
+      if (data?.filename) openFile(data.filename);
+    },
+    onError: (e: Error) => setUploadError(e.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (filename: string) => deleteRule(filename),
+    onSuccess: (_, filename) => {
+      queryClient.invalidateQueries({ queryKey: ["rules"] });
+      queryClient.invalidateQueries({ queryKey: ["faults"] });
+      if (selectedFile === filename) {
+        setSelectedFile(null);
+        setFileContent(null);
+      }
+    },
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: syncRuleDefinitions,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["faults"] }),
+  });
+
+  const handleUpload = (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploadError(null);
+    const fn = uploadFilename.trim();
+    if (!fn.endsWith(".yaml")) {
+      setUploadError("Filename must end with .yaml");
+      return;
+    }
+    uploadMutation.mutate();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const name = file.name.endsWith(".yaml") ? file.name : `${file.name}.yaml`;
+    setUploadFilename(name);
+    const reader = new FileReader();
+    reader.onload = () => setUploadContent(String(reader.result ?? ""));
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleDownload = useCallback((filename: string) => {
+    apiFetchText(`/rules/${encodeURIComponent(filename)}`)
+      .then((text) => {
+        const blob = new Blob([text], { type: "application/x-yaml" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err: Error) => setFileError(err.message));
+  }, []);
+
+  const handleDelete = (filename: string) => {
+    if (!window.confirm(`Remove rule file "${filename}"? Definition will be removed after next FDD run or Sync.`)) return;
+    deleteMutation.mutate(filename);
+  };
+
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
   const files = data?.files ?? [];
   const rulesDir = data?.rules_dir ?? "";
@@ -354,7 +443,7 @@ function RuleFilesSection() {
         FDD rule files (YAML)
       </h2>
       <p className="mb-2 text-xs text-muted-foreground">
-        Rule YAML from platform config (rules_dir via GET /config). FDD loop loads from disk each run—hot reload for fault tuning. Definitions above from database.
+        Rule YAML from platform config (rules_dir via GET /config). Upload, download, or delete files; FDD loop hot-reloads each run.
       </p>
       <Card>
         <CardContent className="pt-4">
@@ -366,23 +455,69 @@ function RuleFilesSection() {
               {rulesDir}
             </p>
           )}
+
+          {/* Upload */}
+          <form onSubmit={handleUpload} className="mb-4 space-y-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <input
+                type="text"
+                placeholder="filename.yaml"
+                value={uploadFilename}
+                onChange={(e) => setUploadFilename(e.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-1.5 font-mono text-sm"
+              />
+              <label className="cursor-pointer">
+                <span className="inline-flex items-center rounded-md border border-input bg-muted px-3 py-1.5 text-sm hover:bg-muted/80">Choose file</span>
+                <input type="file" accept=".yaml,.yml" className="sr-only" onChange={handleFileSelect} />
+              </label>
+              <button
+                type="submit"
+                disabled={uploadMutation.isPending || !uploadContent.trim()}
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted"
+              >
+                {uploadMutation.isPending ? "Uploading…" : "Upload"}
+              </button>
+              <button
+                type="button"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="rounded-md border border-input bg-muted/50 px-3 py-1.5 text-sm hover:bg-muted"
+              >
+                {syncMutation.isPending ? "Syncing…" : "Sync definitions"}
+              </button>
+            </div>
+            <textarea
+              placeholder="Paste YAML or use Choose file…"
+              value={uploadContent}
+              onChange={(e) => setUploadContent(e.target.value)}
+              rows={6}
+              className="w-full rounded-md border border-input bg-muted/30 p-2 font-mono text-xs"
+            />
+            {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+          </form>
+
           {files.length === 0 && !data?.error ? (
             <p className="text-sm text-muted-foreground">No .yaml files in rules_dir.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {files.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => openFile(name)}
-                  className={`rounded-md border px-3 py-1.5 font-mono text-sm transition-colors ${
-                    selectedFile === name
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border hover:bg-muted"
-                  }`}
-                >
-                  {name}
-                </button>
+                <span key={name} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1">
+                  <button
+                    type="button"
+                    onClick={() => openFile(name)}
+                    className={`font-mono text-sm transition-colors ${
+                      selectedFile === name ? "text-primary underline" : "hover:text-primary"
+                    }`}
+                  >
+                    {name}
+                  </button>
+                  <button type="button" className="h-6 px-1 text-xs hover:text-primary" onClick={() => handleDownload(name)} title="Download">
+                    ↓
+                  </button>
+                  <button type="button" className="h-6 px-1 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(name)} title="Delete">
+                    ×
+                  </button>
+                </span>
               ))}
             </div>
           )}
