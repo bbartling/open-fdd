@@ -78,9 +78,43 @@ def test_rules_get_file_not_found(tmp_path: Path):
     assert r.status_code == 404
 
 
+def test_rules_upload_and_delete(tmp_path: Path):
+    """POST /rules uploads a file; DELETE /rules/{filename} removes it."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    with patch("open_fdd.platform.api.rules._rules_dir_resolved", return_value=tmp_path):
+        r = client.post(
+            "/rules",
+            json={"filename": "my_rule.yaml", "content": "name: my_rule\nflag: my_rule_flag\n"},
+        )
+        assert r.status_code == 200
+        assert (tmp_path / "my_rule.yaml").is_file()
+        assert "my_rule" in (tmp_path / "my_rule.yaml").read_text()
+
+        r2 = client.delete("/rules/my_rule.yaml")
+        assert r2.status_code == 200
+        assert not (tmp_path / "my_rule.yaml").exists()
+
+
+def test_rules_upload_rejects_invalid_yaml(tmp_path: Path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    with patch("open_fdd.platform.api.rules._rules_dir_resolved", return_value=tmp_path):
+        r = client.post("/rules", json={"filename": "bad.yaml", "content": "not: a: valid: yaml"})
+        assert r.status_code == 400
+        r2 = client.post("/rules", json={"filename": "no_name.yaml", "content": "description: only\n"})
+        assert r2.status_code == 400
+
+
+def test_rules_sync_definitions():
+    """POST /rules/sync-definitions returns 200 when sync runs (mock to avoid DB)."""
+    with patch("open_fdd.platform.loop.sync_fault_definitions_from_rules_dir", lambda: None):
+        r = client.post("/rules/sync-definitions")
+    assert r.status_code == 200
+
+
 def test_rules_test_inject_disabled_by_default():
     """POST /rules/test-inject returns 403 when OFDD_ALLOW_TEST_RULES is not set."""
-    r = client.post("/rules/test-inject", json={"filename": "test.yaml", "content": "name: x\n"})
+    with patch("open_fdd.platform.api.rules._ALLOW_TEST_RULES", False):
+        r = client.post("/rules/test-inject", json={"filename": "test.yaml", "content": "name: x\n"})
     assert r.status_code == 403
 
 

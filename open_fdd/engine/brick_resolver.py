@@ -20,9 +20,10 @@ def resolve_from_ttl(ttl_path: Union[str, Path]) -> Dict[str, str]:
     """
     Load Brick TTL and return column_map keyed by BRICK class names.
 
-    SPARQL-driven: Brick type + rdfs:label (external_id) provide the mapping.
-    ofdd:mapsToRuleInput is optional (used for disambiguation when multiple
-    points share the same Brick class).
+    Brick type + rdfs:label (external_id) are sufficient for the mapping.
+    ofdd:mapsToRuleInput is optional and only used for disambiguation when
+    multiple points share the same Brick class (e.g. two Valve_Command);
+    when there is a single point per Brick class, Brick alone is used.
 
     Returns:
         Dict mapping Brick class names (and rule_input when present) to DataFrame

@@ -10,23 +10,30 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 
 ---
 
-## Where to place your rules
+## Where rules live: config path and how to manage them
 
-**One place only:** put your project rules in **`analyst/rules/`** (`.yaml` files). The FDD loop loads from this directory every run. Copy or adapt examples from `open_fdd/rules/` (sensor bounds, flatline, weather, AHU). To write new rules, see the [Expression Rule Cookbook](expression_rule_cookbook) and online docs.
+**Single directory:** All FDD rule YAML files live in one directory configured as **`rules_dir`** in platform config (RDF: `ofdd:rulesDir`, e.g. `"analyst/rules"`). The FDD loop loads from this path every run; the rules API (list, upload, download, delete) uses the same path. **You still need `rules_dir` in config** — it defines where files are stored. The frontend does not replace it; it lets you manage the files *in* that directory.
 
-Config: `rules_dir: "analyst/rules"` (or `OFDD_RULES_DIR`). If that path doesn’t exist, the loop falls back to `open_fdd/rules`.
+**Two ways to manage rules:**
+
+| Method | Use case |
+|--------|----------|
+| **React frontend (Faults page)** | Upload new YAML, download existing files, delete files, and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. Preferred when you have UI access. |
+| **Files on disk** | Edit or add files directly under the configured path (e.g. `analyst/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
+
+Config: `rules_dir: "analyst/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `open_fdd/rules`. Default rules ship in `analyst/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). Copy or adapt examples from `open_fdd/rules/`; see the [Expression Rule Cookbook](expression_rule_cookbook).
 
 ---
 
-## Hot reload (edit → run → view in Grafana)
+## Hot reload (edit → run → view)
 
-Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **supports hot reloading of YAML rule files** so the AFDD maintainer can make tweaks and adjustments for fault tuning without restarting the platform. Rule YAML files contain the fault logic and **params** (thresholds, tolerances, windows); the FDD loop loads from `rules_dir` every run, so the rule runner does **not** need a restart. The `rules_dir` path is **RDF-driven** (platform config: GET `/config`).
+Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **supports hot reloading of YAML rule files** so the AFDD maintainer can tune faults without restarting. Rule YAML contains fault logic and **params** (thresholds, tolerances, windows); the FDD loop loads from `rules_dir` every run — no restart.
 
-**Fault definitions:** Each FDD run syncs the loaded rules into the `fault_definitions` table (fault_id from `flag`, name, category, equipment_types, etc.). So when you add or edit a rule YAML in `rules_dir`, the next run updates the DB and the Faults UI (matrix and definitions table) reflects the new or changed fault without any manual step.
+**Fault definitions:** Each FDD run syncs the loaded rules into the `fault_definitions` table (fault_id, name, category, equipment_types). When you add or edit a rule (via frontend upload or by editing a file in `rules_dir`), the next run updates the DB and the Faults UI reflects the change. From the frontend you can also click **Sync definitions** to update the definitions table immediately.
 
-1. **Edit** a rule in `analyst/rules/*.yaml` (or add a new one). Change `params` (e.g. `low`, `high`, `tolerance`, `rolling_window`) to tune fault sensitivity.
-2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger now with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)).
-3. **View** fault results in Grafana (build a Fault Results dashboard from the [Grafana SQL cookbook](howto/grafana_cookbook)). Every run reloads all rules from disk, so the next run uses the latest YAML and params — hot reload style.
+1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `analyst/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
+2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
+3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
 
 ---
 
