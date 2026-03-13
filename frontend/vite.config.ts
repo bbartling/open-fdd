@@ -41,6 +41,7 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   server: {
     host: "0.0.0.0",
+    allowedHosts: ["localhost", ".local"],
     proxy: {
       ...Object.fromEntries(
         apiRoutes.map((r) => [r, { target: apiTarget, bypass: spaBypass }]),
