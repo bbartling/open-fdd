@@ -4,8 +4,9 @@ Build a single PDF from the Open-FDD docs (Just the Docs / Jekyll-style Markdown
 
 Collects all docs/*.md (respecting nav_order and parent from YAML front matter),
 strips front matter, concatenates with headings, and runs Pandoc to produce
-pdf/open-fdd-docs.pdf (project root pdf/ dir). You can commit and push the PDF
-to the repo or build it in CI and attach as an artifact.
+pdf/open-fdd-docs.pdf (project root pdf/ dir). Also writes a .txt file with the
+same combined content in the same output dir (e.g. pdf/open-fdd-docs.txt) for
+LLM context; formatting is plain (same Markdown source, no PDF styling).
 
 Requirements:
   - pandoc (https://pandoc.org/)
@@ -186,6 +187,12 @@ def main() -> int:
     combined_md = "".join(parts)
     combined_path.write_text(combined_md, encoding="utf-8")
     print(f"Wrote {len(sorted_files)} pages to {combined_path}")
+
+    # Same content as a .txt in the same output dir for LLM context (no need to look pretty).
+    txt_output = args.output.with_suffix(".txt")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    txt_output.write_text(combined_md, encoding="utf-8")
+    print(f"Wrote LLM context text to {txt_output}")
 
     if args.no_pdf:
         print("Skipping PDF (--no-pdf).")

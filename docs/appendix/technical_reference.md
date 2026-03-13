@@ -173,7 +173,7 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 
 ## PyPI and this repo
 
-**Legacy PyPI:** An older package named `open-fdd` on PyPI (v1-era) was a small pandas-based library for HVAC fault equations. That work evolved into the [Expression Rule Cookbook](../expression_rule_cookbook) and the full FastAPI AFDD platform in this repo. The version on PyPI is outdated and should not be used.
+**Legacy PyPI:** The package [open-fdd on PyPI](https://pypi.org/project/open-fdd/) is an **old, unsupported release**. It contains FD (fault detection) equations only and **no AFDD framework**—no FastAPI platform, BACnet, or data model. That work evolved into the [Expression Rule Cookbook](../expression_rule_cookbook) and the full FastAPI AFDD platform in this repo. Do not use the PyPI version; use this repository instead.
 
 **Current platform:** Open-FDD is developed and run **from this repo** (or from Docker images built from it). The stack installs open-fdd **locally** at build time (`pip install -e ".[platform,brick]"` from the copied repo); nothing in the project depends on the PyPI `open-fdd` package.
 

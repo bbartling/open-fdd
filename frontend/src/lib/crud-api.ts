@@ -144,3 +144,24 @@ export function bacnetPointDiscoveryToGraph(body: PointDiscoveryToGraphBody) {
     body: JSON.stringify(body),
   });
 }
+
+// Rules API (FDD rule YAML: list, upload, delete, sync definitions)
+export function uploadRule(filename: string, content: string) {
+  return apiFetch<{ ok: boolean; path?: string; filename?: string }>("/rules", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, content }),
+  });
+}
+
+export function deleteRule(filename: string) {
+  return apiFetch<{ ok?: boolean; filename?: string }>(`/rules/${encodeURIComponent(filename)}`, {
+    method: "DELETE",
+  });
+}
+
+export function syncRuleDefinitions() {
+  return apiFetch<{ ok: boolean }>("/rules/sync-definitions", {
+    method: "POST",
+  });
+}

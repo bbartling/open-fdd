@@ -64,7 +64,8 @@ services:
       # 1 = every minute (for tests); override via stack/.env or Config UI (scraper reads GET /config when OFDD_API_KEY set)
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
-      OFDD_API_URL: http://openfdd_api:8000
+      # Use service name 'api' so DNS resolves to current API container after restarts.
+      OFDD_API_URL: http://api:8000
       OFDD_API_KEY: ${OFDD_API_KEY:-}
     volumes:
       - ../config:/app/config:ro
@@ -86,7 +87,8 @@ services:
     container_name: openfdd_weather_scraper
     command: ["python", "-u", "-m", "open_fdd.platform.drivers.run_weather_fetch", "--loop"]
     environment:
-      OFDD_API_URL: http://openfdd_api:8000
+      # Use service name 'api' so DNS resolves to current API container after restarts.
+      OFDD_API_URL: http://api:8000
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_OPEN_METEO_ENABLED: "true"
       OFDD_OPEN_METEO_INTERVAL_HOURS: "24"
@@ -242,7 +244,8 @@ services:
       - "5173:5173"
     environment:
       VITE_OFDD_API_KEY: ${OFDD_API_KEY:-}
-      VITE_API_TARGET: http://openfdd_api:8000
+      # Use service name 'api' so Docker Compose DNS resolves to current API container after restarts (avoids ECONNREFUSED / EAI_AGAIN).
+      VITE_API_TARGET: http://api:8000
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
