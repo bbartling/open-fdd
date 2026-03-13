@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -163,13 +164,15 @@ def _http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 def _validation_exception_handler(request: Request, exc: RequestValidationError):
     """Return uniform error schema for 422 validation errors."""
+    # exc.errors() may contain non-JSON-serializable values (e.g. bytes); coerce to safe types.
+    details = jsonable_encoder({"errors": exc.errors()})
     return JSONResponse(
         status_code=422,
         content=ErrorResponse(
             error=ErrorDetail(
                 code="VALIDATION_ERROR",
                 message="Request validation failed",
-                details={"errors": exc.errors()},
+                details=details,
             )
         ).model_dump(),
     )

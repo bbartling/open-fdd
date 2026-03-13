@@ -52,8 +52,21 @@ For exact schema details and import body (points + equipment only), see the [Tec
 
 ---
 
+## Rules for this project (what to send the LLM)
+
+To have the LLM align **rule_input** and Brick types with your FDD rules, you can include:
+
+- **[Fault rules overview](../rules/overview)** — FDD rule types and YAML format.
+- **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** — AHU, chiller, weather, and advanced recipes; **rule_input** examples (e.g. sat, rat, zone_temp, sf_status).
+- Your project’s **YAML rule files** (e.g. from `analyst/rules/`) — Paste snippets so the LLM uses the same input names.
+
+See [LLM workflow (export + rules + validate → import)](llm_workflow) for the full one-shot flow and validating LLM output so it parses on the backend.
+
+---
+
 ## See also
 
+- [LLM workflow](llm_workflow) — One prompt + export JSON + optional rules; validate with schema/Pydantic; then import and run FDD/tests.
 - [Data model overview](overview) — Flow (DB → TTL → FDD)
 - [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
 - [BACnet overview](../bacnet/overview) — Discovery and data-model scrape

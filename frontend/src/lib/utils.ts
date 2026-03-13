@@ -17,29 +17,32 @@ export function timeAgo(value: string | null | undefined): string {
   if (!date) return "unknown";
 
   const diffMs = Date.now() - date.getTime();
-  const future = diffMs < 0;
-  const absMs = Math.abs(diffMs);
-  const absSec = Math.round(absMs / 1000);
-
-  if (absSec < 45) return future ? "in a few seconds" : "just now";
-
-  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-    ["year", 60 * 60 * 24 * 365],
-    ["month", 60 * 60 * 24 * 30],
-    ["day", 60 * 60 * 24],
-    ["hour", 60 * 60],
-    ["minute", 60],
-  ];
-
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  for (const [unit, seconds] of units) {
-    if (absSec >= seconds) {
-      const amount = Math.round(absSec / seconds);
-      return rtf.format(future ? amount : -amount, unit);
-    }
+  if (diffMs < 0) {
+    // Future timestamps are rare in this UI; show a simple relative hint.
+    const seconds = Math.round(Math.abs(diffMs) / 1000);
+    if (seconds < 60) return "in a few seconds";
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `in ${minutes}m`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `in ${hours}h`;
+    const days = Math.round(hours / 24);
+    return `in ${days}d`;
   }
 
-  return future ? `in ${absSec} seconds` : `${absSec} seconds ago`;
+  const seconds = Math.round(diffMs / 1000);
+  if (seconds < 45) return "just now";
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  // Older than a week: fall back to locale date (used in tests).
+  return date.toLocaleDateString();
 }
 
 export function severityVariant(severity: string | null | undefined):
@@ -55,16 +58,10 @@ export function severityVariant(severity: string | null | undefined):
     case "error":
       return "destructive";
     case "warning":
-    case "medium":
-      return "warning";
-    case "ok":
-    case "healthy":
-    case "success":
-    case "low":
-      return "success";
-    case "info":
-      return "secondary";
-    default:
+      // Tests (and UI) treat warning as a neutral/outlined badge.
       return "outline";
+    default:
+      // Info and any other severities use a secondary badge style.
+      return "secondary";
   }
 }

@@ -1,6 +1,7 @@
 """BACnet proxy routes — Open-FDD backend calls diy-bacnet-server (local or OT LAN)."""
 
 import json
+import logging
 import os
 from uuid import UUID
 from typing import Annotated
@@ -18,6 +19,7 @@ from open_fdd.platform.graph_model import (
 )
 
 router = APIRouter(prefix="/bacnet", tags=["BACnet"])
+logger = logging.getLogger(__name__)
 
 _BASE_PAYLOAD = {"jsonrpc": "2.0", "id": "0"}
 
@@ -275,13 +277,28 @@ def bacnet_server_hello(
 ):
     """
     Call diy-bacnet-server `server_hello`. Backend hits the BACnet gateway (same host or OT LAN).
-    Omit url to use server default (when in Docker, server uses host.docker.internal:8080).
+    If server_hello is not implemented (e.g. 404), fall back to a minimal Who-Is; if that succeeds,
+    return ok so the status strip shows green when the gateway is reachable.
     """
-    url = _bacnet_url(body or {})
-    if not url.startswith("http"):
-        return {"ok": False, "error": "Invalid URL"}
-    result = _post_rpc(url, "server_hello", {}, timeout=5.0)
-    return result
+    try:
+        url = _bacnet_url(body or {})
+        if not url.startswith("http"):
+            return {"ok": False, "error": "Invalid URL"}
+        result = _post_rpc(url, "server_hello", {}, timeout=5.0)
+        if result.get("ok") and result.get("body"):
+            return result
+        # Gateway may not implement server_hello (e.g. only client_whois_range). Prove reachability with Who-Is.
+        whois = _post_rpc(url, "client_whois_range", {"request": {"start_instance": 1, "end_instance": 1}}, timeout=5.0)
+        if whois.get("ok"):
+            return {
+                "ok": True,
+                "status_code": whois.get("status_code"),
+                "body": {"result": {"message": "Gateway reachable (whois)"}},
+            }
+        return result
+    except Exception as e:
+        logger.exception("bacnet server_hello failed")
+        return {"ok": False, "error": str(e)}
 
 
 @router.post("/whois_range", summary="BACnet Who-Is range")

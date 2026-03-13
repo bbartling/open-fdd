@@ -7,7 +7,7 @@
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version)
+![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version) — *PyPI package is legacy (FD equations only; no AFDD framework) and is no longer supported. Use this repo.*
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 
 <div align="center">
@@ -16,7 +16,7 @@
 
 </div>
 
-Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in **fault detection and diagnostics (FDD) for HVAC**. It helps facilities optimize energy use and cut costs; because it runs **on-premises**, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
+Open-FDD is an open-source knowledge graph fault-detection platform for HVAC systems that helps facilities optimize their energy usage and cost-savings. Because it runs on-prem, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
 The building is modeled in a **unified graph**: Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `config/data_model.ttl`.
 
@@ -60,23 +60,230 @@ pytest -v
 
 ## AI Assisted Data Modeling
 
-Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml).
+Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
 
 **Canonical prompt** (as defined in [docs/modeling/ai_assisted_tagging](docs/modeling/ai_assisted_tagging.md)) — copy-paste this into ChatGPT or your LLM. It is **generic** and works for **any site** (single building, campus, or tenant); the export JSON is the only input that varies.
 
 ```text
-I use Open-FDD. I will paste the JSON from GET /data-model/export (and optionally my site identifier).
+I use Open-FDD. I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).
 
-Your job (for any building/site in the export):
-1. **Keep every field** from each point (bacnet_device_id, object_identifier, object_name, external_id, point_id if present); add or fill in: brick_type (Brick class, e.g. Supply_Air_Temperature_Sensor — with or without "brick:" prefix), rule_input (short slug for FDD rules, e.g. ahu_sat, zone_temp), polling (true for points that must be logged for FDD, false otherwise), and **unit** when known. Units are important: they appear in the data model (and TTL), and the frontend uses them for axis labels and grouping on the Plots page (e.g. °F for temperatures, % for humidity, 0/1 for binary/status). Use standard abbreviations: degF or °F, percent or %, cfm, mph, W/m², or "0/1" for binary/boolean.
-2. Assign points to equipment by name only: use "equipment_name": "AHU-1" or "VAV-1" (do NOT use equipment_id or any UUIDs for equipment).
-3. For site_id: use exactly the value from the export. **Important:** Call GET /data-model/export**?site_id=YourSiteName** (or your site name) so the export pre-fills site_id on every row; if you omit that, the export has site_id null and the import will only succeed when there is exactly one site in the database (it will use it automatically). Accepted formats: "site_262dcf0e_b1ec_42ad_b1eb_14881a1516ab" (TTL) or UUID "262dcf0e-b1ec-42ad-b1eb-14881a1516ab".
-4. In the "equipment" array (separate from points), use equipment by name and set feeds/fed_by:
-   - Each item: "equipment_name": "AHU-1" or "VAV-1", "site_id": "<same site_id as in points>".
-   - AHU feeds VAV: use "feeds": ["VAV-1"] or "feeds_equipment_id": "VAV-1".
-   - VAV fed by AHU: use "fed_by": ["AHU-1"] or "fed_by_equipment_id": "AHU-1".
+Your job is to convert that export into CLEAN Open-FDD import JSON.
 
-Return ONLY valid JSON with exactly two top-level keys: "points" (array) and "equipment" (array). No "sites", "equipments", or "relationships". No placeholder UUIDs — use the site_id from the export and equipment names everywhere. Return the full list of points (recommended) or only those you need for FDD/polling; the import creates or updates only the points you send. If the same external_id appears twice (e.g. two devices with object_name "NetworkPort-1"), the import updates the existing point for that site+external_id; the last row wins.
+Return ONLY valid JSON with exactly two top-level keys:
+
+{
+  "points": [...],
+  "equipment": [...]
+}
+
+Do not return markdown or explanations.
+
+---------------------------------------------------------------------
+
+POINT RULES
+
+For each point:
+
+Preserve all existing fields from the export including:
+
+- point_id
+- bacnet_device_id
+- object_identifier
+- object_name
+- external_id
+- site_id
+- site_name
+- equipment_id (preserve but DO NOT use for relationships)
+
+Then add or fill these fields:
+
+- brick_type
+- rule_input
+- polling
+- unit
+- equipment_name
+
+Equipment must be referenced by NAME only.
+
+Example:
+
+"equipment_name": "AHU-1"
+
+Never use equipment UUIDs for relationships.
+
+---------------------------------------------------------------------
+
+SITE ID
+
+Use the exact site_id from the export rows.
+
+Do not invent or modify site_id values.
+
+If site_id is null in the export, leave it null.
+
+---------------------------------------------------------------------
+
+EQUIPMENT ARRAY
+
+Return an "equipment" array describing system relationships.
+
+Each item must include:
+
+- equipment_name
+- site_id
+
+Example:
+
+{
+  "equipment_name": "AHU-1",
+  "site_id": "<site_id>",
+  "feeds": ["VAV-1"]
+}
+
+If a VAV is served by an AHU:
+
+AHU:
+
+"feeds": ["VAV-1"]
+
+VAV:
+
+"fed_by": ["AHU-1"]
+
+Prefer:
+
+"feeds"
+"fed_by"
+
+Only use:
+
+"feeds_equipment_id"
+"fed_by_equipment_id"
+
+if required by the source export.
+
+---------------------------------------------------------------------
+
+BRICK TYPES
+
+Use appropriate Brick classes when possible.
+
+Examples:
+
+brick:Supply_Air_Temperature_Sensor  
+brick:Return_Air_Temperature_Sensor  
+brick:Mixed_Air_Temperature_Sensor  
+brick:Outside_Air_Temperature_Sensor  
+brick:Zone_Air_Temperature_Sensor  
+brick:Supply_Fan_Status  
+brick:Supply_Fan_Command  
+brick:Cooling_Valve_Command  
+brick:Heating_Valve_Command  
+brick:Damper_Position_Command  
+brick:Discharge_Air_Flow_Sensor  
+brick:Discharge_Air_Flow_Setpoint  
+brick:Supply_Air_Temperature_Setpoint  
+
+If a point cannot be confidently mapped:
+
+"brick_type": null
+
+---------------------------------------------------------------------
+
+RULE INPUTS
+
+Set rule_input to short reusable slugs.
+
+Examples:
+
+ahu_sat  
+ahu_sat_sp  
+rat  
+mat  
+oat  
+zone_temp  
+sf_status  
+sf_cmd  
+clg_cmd  
+htg_cmd  
+damper_cmd  
+airflow  
+airflow_sp  
+
+If unknown:
+
+rule_input = null
+
+---------------------------------------------------------------------
+
+POLLING
+
+Set polling=true for points useful for FDD or trending:
+
+temperatures  
+humidity  
+flow  
+pressures  
+fan status  
+commands  
+setpoints  
+valves  
+dampers  
+power
+
+Set polling=false for:
+
+network ports  
+metadata objects  
+housekeeping points
+
+---------------------------------------------------------------------
+
+UNITS
+
+Use consistent engineering units.
+
+Examples:
+
+degF or °F
+%
+cfm
+mph
+W/m²
+0/1 (binary)
+
+If unknown:
+
+unit = null
+
+---------------------------------------------------------------------
+
+DUPLICATES
+
+Do not rename external_id values.
+
+If duplicates exist, keep them unchanged.
+
+Open-FDD import logic uses:
+
+(site_id + external_id)
+
+with last row winning.
+
+---------------------------------------------------------------------
+
+OUTPUT
+
+Return full JSON only.
+
+No markdown  
+No explanation  
+No extra keys
+
+Make the output generic and reusable for any Open-FDD export.
+
+Preserve fields first, enrich second.
+Leave uncertain values as null rather than guessing.
 ```
 
 
@@ -108,6 +315,8 @@ Contributions welcome — especially bug reports, rule recipes (see the [express
 ```bash
 ~/open-fdd$ bash scripts/bootstrap.sh --test
 ```
+
+> **NOTE:** Please contribute on a new branch. Any pushes to the `master` branch, including pull requests opened from `master`, will be rejected.
 
 
 ---

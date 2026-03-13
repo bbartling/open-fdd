@@ -6,7 +6,8 @@ color_scheme: "light"
 
 aux_links:
   "GitHub": "https://github.com/bbartling/open-fdd"
-  "PyPI": "https://pypi.org/project/open-fdd/"
+  # Legacy: PyPI package is an old, unsupported release (FD equations only; no AFDD platform). Use this repo instead.
+  "PyPI (legacy)": "https://pypi.org/project/open-fdd/"
 
 footer_content: "MIT License"
 

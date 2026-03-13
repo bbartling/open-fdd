@@ -10,14 +10,14 @@ import { deletePoint, deleteEquipment, deleteSite } from "@/lib/crud-api";
 
 function useTreeMutations() {
   const queryClient = useQueryClient();
-  const deletePointMutation = useMutation<void, Error, string>({
+  const deletePointMutation = useMutation<{ status: string }, Error, string>({
     mutationFn: deletePoint,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["points"] });
       queryClient.invalidateQueries({ queryKey: ["data-model"] });
     },
   });
-  const deleteEquipmentMutation = useMutation<void, Error, string>({
+  const deleteEquipmentMutation = useMutation<{ status: string }, Error, string>({
     mutationFn: deleteEquipment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["equipment"] });
@@ -25,7 +25,7 @@ function useTreeMutations() {
       queryClient.invalidateQueries({ queryKey: ["data-model"] });
     },
   });
-  const deleteSiteMutation = useMutation<void, Error, string>({
+  const deleteSiteMutation = useMutation<{ status: string }, Error, string>({
     mutationFn: deleteSite,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sites"] });

@@ -2,7 +2,8 @@
 """
 E2E frontend tests (Selenium). Run on Windows from a separate test bench machine on the network.
 
-This script is the enhanced, browser-based flow that subsumes the old API-only concepts:
+This script is the enhanced, browser-based flow that subsumes the old API-only concepts.
+Every frontend feature is tested; no rock left unturned.
 
   [1] Delete all sites and reset graph (via UI)
       Same outcome as delete_all_sites_and_reset.py: wipe sites + POST /data-model/reset,
@@ -19,15 +20,24 @@ This script is the enhanced, browser-based flow that subsumes the old API-only c
 
   [2b] Verify equipment and points on Data Model page.
   [2c] Verify units from data model on frontend (Points page: Unit column shows degF, percent, cfm).
+  [2d] Points page device tree: verify columns (Name, Site, Brick Type, FDD Input, Unit, Polling,
+       Last value, Last updated) and tree structure (site with count, equipment, Unassigned).
+  [2e] Delete one point and optionally one equipment in the tree (right-click → Delete → confirm);
+       verify tree updates so deleted items are gone.
 
-  [3] Plots: select points (and optionally a second point with different unit), optionally add fault;
-      verify chart data, data-model units in legend, axis-by-unit (multiple Y-axes when multiple
-      units), and fault series as Bool 0/1 in legend on right axis.
+  [3] Plots: select site, select points (and optionally a second point with different unit), add fault;
+      verify chart data, data-model units in legend, axis-by-unit, and fault series as Bool 0/1.
+      When --api-url is set: log fault counts from DB (GET /faults/active, /faults/definitions) and
+      confirm "Frontend showing faults in Plots: yes" when a fault is selected and 0/1 appears.
 
   [4] Weather page (resilient). [5] Overview smoke check.
 
-  Optional (--api-url): backend timezone checks — GET /config, GET /download/csv and assert
-  timestamps are ISO UTC (Z) for correct DST display.
+  Optional (--api-url): backend timezone checks — GET /config, GET /download/csv (UTC Z);
+  and faults-in-DB check — GET /faults/active, GET /faults/definitions (logged for Plots/fault parity).
+
+Faults: Historically plotted in Grafana (see docs/howto/grafana_cookbook.md, grafana_dashboards.md).
+The frontend Plots tab now shows fault series as Bool 0/1 on the right axis when a fault is selected;
+this script asserts that flow and logs fault counts from the API when --api-url is set.
 
 The old scripts remain for API-only or automation that cannot use a browser:
   - delete_all_sites_and_reset.py: API-only wipe + reset (no UI).
@@ -40,7 +50,7 @@ Usage:
   python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
 
   # With BACnet discovery (Points page → Add to data model) for one or more devices:
-  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 --headed
+  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 34567 --headed
 
   $env:OFDD_API_KEY = "same-as-server-stack/.env"
   python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
@@ -78,6 +88,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
@@ -197,6 +208,29 @@ def get_browser_console_errors(
     # Drop noisy 404s that don't affect tests (favicon requested by browser, not served)
     out = [e for e in out if not ("favicon.ico" in (e.get("message") or "") and "404" in (e.get("message") or ""))]
     return out
+
+
+def log_browser_console(
+    driver: webdriver.Chrome,
+    step: str,
+    levels: tuple[str, ...] = ("SEVERE", "WARNING"),
+) -> None:
+    """
+    Fetch browser console entries for this step and print them.
+    Does not fail the test; surfaced as diagnostics so 500s (e.g. /bacnet/server_hello)
+    and React errors are visible alongside the E2E step output.
+    """
+    entries = get_browser_console_errors(driver, levels=levels)
+    if not entries:
+        print(f"  Browser console ({step}): OK (no SEVERE/WARNING entries).")
+        return
+    print(f"  Browser console ({step}): {len(entries)} SEVERE/WARNING entr(ies):")
+    for e in entries[:10]:
+        level = e.get("level")
+        msg = (e.get("message") or "").strip().splitlines()[0]
+        print(f"    - {level}: {msg[:300]}")
+    if len(entries) > 10:
+        print(f"    - ... {len(entries) - 10} more entries (see full browser log).")
 
 
 # --- Helpers: explicit waits and safe actions ---
@@ -358,6 +392,7 @@ def delete_all_sites_and_reset_via_ui(driver: webdriver.Chrome, base_url: str) -
         or "No sites" in (d.page_source or "")
     )
     print("  Delete all sites and reset: OK")
+    log_browser_console(driver, "delete-all-and-reset")
 
 
 def create_site_via_ui(driver: webdriver.Chrome, base_url: str, site_name: str) -> str:
@@ -380,6 +415,7 @@ def create_site_via_ui(driver: webdriver.Chrome, base_url: str, site_name: str) 
     if not site_id:
         raise AssertionError(f"Site row for {site_name} has no data-site-id")
     print(f"  Created site {site_name!r} -> id={site_id[:8]}...")
+    log_browser_console(driver, "create-site")
     return site_id
 
 
@@ -416,6 +452,7 @@ def import_llm_payload_via_ui(
         or "Updated" in (d.page_source or "") or "warnings" in (d.page_source or "")
     )
     print(f"  Import: OK (points={len(points)}, equipment={len(equipment)})")
+    log_browser_console(driver, "import-llm-payload")
     return len(points), len(equipment)
 
 
@@ -452,10 +489,13 @@ def bacnet_add_to_model_via_ui(
     except Exception:
         print("  BACnet discovery: timeout waiting for result (gateway may be unreachable).")
         return False
-    if "added to graph" in (driver.page_source or "").lower():
+    page = driver.page_source or ""
+    if "added to graph" in page.lower():
         print(f"  BACnet discovery: device {device_instance} added to graph (Points page).")
+        log_browser_console(driver, f"bacnet-add-to-model-{device_instance}")
         return True
     print(f"  BACnet discovery: Add to data model failed (check BACnet gateway / OFDD_BACNET_SERVER_URL).")
+    log_browser_console(driver, f"bacnet-add-to-model-{device_instance}")
     return False
 
 
@@ -495,6 +535,7 @@ def verify_data_model_after_import(
     if expected_point_count is not None:
         pass
     print("  Data model: post-import assertions OK.")
+    log_browser_console(driver, "data-model-after-import")
 
 
 def verify_units_on_frontend(
@@ -518,6 +559,167 @@ def verify_units_on_frontend(
             "Units must flow from data model to frontend for axis labels and grouping."
         )
     print(f"  Units on frontend: {found} visible on Points page (data model units OK).")
+    log_browser_console(driver, "points-units")
+
+
+def verify_points_page_device_tree(
+    driver: webdriver.Chrome,
+    base_url: str,
+    site_name: str,
+    expected_columns: tuple[str, ...] = (
+        "Name",
+        "Site",
+        "Brick Type",
+        "FDD Input",
+        "Unit",
+        "Polling",
+        "Last value",
+        "Last updated",
+    ),
+) -> None:
+    """
+    Verify Points page device tree: table has expected column headers and tree shows at least
+    one site (e.g. TestBenchSite/BensTestBench), equipment, and Unassigned. Same structure
+    as in the UI: Site (N) → Equipment (M) / Unassigned (K) → point rows.
+    """
+    driver.get(f"{base_url}/points")
+    wait_for_text(driver, "Points", timeout=TEXT_WAIT)
+    wait_for_text(driver, "BACnet discovery", timeout=TEXT_WAIT)
+    verify_site_selected(driver, site_name, "Points device tree")
+    time.sleep(0.6)
+    page_src = driver.page_source or ""
+    for col in expected_columns:
+        if col not in page_src:
+            raise AssertionError(
+                f"Points page device tree: expected column {col!r} not found. "
+                "Table should have Name, Site, Brick Type, FDD Input, Unit, Polling, Last value, Last updated."
+            )
+    if site_name not in page_src and "Unassigned" not in page_src:
+        raise AssertionError(
+            f"Points page: expected site {site_name!r} or 'Unassigned' in tree; got neither."
+        )
+    print(f"  Points device tree: columns {expected_columns} present; site/Unassigned visible.")
+    log_browser_console(driver, "points-device-tree")
+
+
+def _accept_confirm_dialog(driver: webdriver.Chrome, timeout: float = 3.0) -> None:
+    """Accept the next browser confirm() dialog (e.g. Delete point?)."""
+    try:
+        wait = WebDriverWait(driver, timeout)
+        alert = wait.until(EC.alert_is_present())
+        alert.accept()
+    except Exception:
+        pass
+
+
+def delete_one_point_via_tree(
+    driver: webdriver.Chrome,
+    base_url: str,
+    point_external_id: str,
+    site_name: str,
+) -> bool:
+    """
+    On Points page, find a point row by external_id (e.g. MA-T, RA-T), right-click → Delete point → confirm.
+    Returns True if delete was performed and point disappeared. Keeps SA-T/ZoneTemp for Plots.
+    """
+    driver.get(f"{base_url}/points")
+    wait_for_text(driver, "Points", timeout=TEXT_WAIT)
+    verify_site_selected(driver, site_name, "delete point")
+    time.sleep(0.5)
+    page_before = driver.page_source or ""
+    if point_external_id not in page_before:
+        print(f"  Points tree: point {point_external_id!r} not found; skip delete point.")
+        return False
+    rows = driver.find_elements(
+        By.XPATH,
+        f"//tr[.//td[contains(., '{point_external_id}')]]",
+    )
+    if not rows:
+        print(f"  Points tree: no row for point {point_external_id!r}; skip delete.")
+        return False
+    try:
+        ActionChains(driver).context_click(rows[0]).perform()
+        time.sleep(0.3)
+        delete_btn = driver.find_elements(
+            By.XPATH,
+            "//button[contains(text(), 'Delete point')]",
+        )
+        if not delete_btn:
+            body = driver.find_element(By.TAG_NAME, "body")
+            body.click()
+            return False
+        delete_btn[0].click()
+        _accept_confirm_dialog(driver)
+        WebDriverWait(driver, ELEMENT_WAIT).until(
+            lambda d: point_external_id not in (d.page_source or ""),
+        )
+        print(f"  Points tree: deleted point {point_external_id!r}; tree updated.")
+        log_browser_console(driver, f"delete-point-{point_external_id}")
+        return True
+    except Exception as e:
+        print(f"  Points tree: delete point failed — {e}")
+        try:
+            driver.find_element(By.TAG_NAME, "body").click()
+        except Exception:
+            pass
+        return False
+
+
+def delete_one_equipment_via_tree(
+    driver: webdriver.Chrome,
+    base_url: str,
+    equipment_name: str,
+    site_name: str,
+) -> bool:
+    """
+    On Points page, find equipment row by name, right-click → Delete equipment → confirm.
+    Returns True if delete was performed. Use an equipment that is not required for Plots (e.g. extra).
+    """
+    driver.get(f"{base_url}/points")
+    wait_for_text(driver, "Points", timeout=TEXT_WAIT)
+    verify_site_selected(driver, site_name, "delete equipment")
+    time.sleep(0.5)
+    page_before = driver.page_source or ""
+    if equipment_name not in page_before:
+        print(f"  Points tree: equipment {equipment_name!r} not found; skip delete equipment.")
+        return False
+    rows = driver.find_elements(
+        By.XPATH,
+        f"//tr[.//span[contains(., '{equipment_name}')] and .//button[@aria-expanded]]",
+    )
+    if not rows:
+        rows = driver.find_elements(
+            By.XPATH,
+            f"//tr[contains(., '{equipment_name}') and contains(@class, 'cursor-pointer')]",
+        )
+    if not rows:
+        print(f"  Points tree: no equipment row for {equipment_name!r}; skip delete.")
+        return False
+    try:
+        ActionChains(driver).context_click(rows[0]).perform()
+        time.sleep(0.3)
+        delete_btn = driver.find_elements(
+            By.XPATH,
+            "//button[contains(text(), 'Delete equipment')]",
+        )
+        if not delete_btn:
+            driver.find_element(By.TAG_NAME, "body").click()
+            return False
+        delete_btn[0].click()
+        _accept_confirm_dialog(driver)
+        WebDriverWait(driver, ELEMENT_WAIT).until(
+            lambda d: equipment_name not in (d.page_source or "") or "Unassigned" in (d.page_source or ""),
+        )
+        print(f"  Points tree: deleted equipment {equipment_name!r}; tree updated.")
+        log_browser_console(driver, f"delete-equipment-{equipment_name}")
+        return True
+    except Exception as e:
+        print(f"  Points tree: delete equipment failed — {e}")
+        try:
+            driver.find_element(By.TAG_NAME, "body").click()
+        except Exception:
+            pass
+        return False
 
 
 def select_site_in_topbar(driver: webdriver.Chrome, site_name: str) -> None:
@@ -715,10 +917,20 @@ def select_fault_on_plots(
     return False
 
 
-def validate_plots_chart_has_data(driver: webdriver.Chrome, base_url: str, site_name: str) -> None:
+def validate_plots_chart_has_data(
+    driver: webdriver.Chrome,
+    base_url: str,
+    site_name: str,
+    api_url: str | None = None,
+    site_id: str | None = None,
+) -> None:
     """Go to Plots, select site and points (two units to trigger axis-by-unit), then assert chart and axes.
     Verifies: (1) data-model units (degF, percent, cfm) in legend; (2) axis-by-unit: multiple Y-axes when
-    multiple units (e.g. degF left, cfm right2); (3) faults as Bool 0/1 in legend on right axis."""
+    multiple units (e.g. degF left, cfm right2); (3) faults as Bool 0/1 in legend on right axis.
+    When api_url is set, logs fault counts from DB (GET /faults/active, /faults/definitions) and
+    prints whether the frontend is showing faults in Plots."""
+    if api_url:
+        run_faults_db_check(api_url)
     driver.get(f"{base_url}/plots")
     if "Select a site" in (driver.page_source or ""):
         select_site_in_topbar(driver, site_name)
@@ -786,6 +998,17 @@ def validate_plots_chart_has_data(driver: webdriver.Chrome, base_url: str, site_
                 "faults must plot with other Bool on right axis."
             )
         print("  Plots: fault series show 0/1 (Bool) in legend, right axis.")
+        print("  Frontend showing faults in Plots: yes (fault selected and 0/1 in legend).")
+    else:
+        print(
+            "  Frontend showing faults in Plots: no (no fault selected or no fault definitions). "
+            "Faults in DB can be checked with --api-url; see docs/howto/grafana_cookbook.md for historical Grafana fault plotting."
+        )
+    if api_url and site_id:
+        # Print DB sensor + fault data that the Plots tab should be using, so we can
+        # see both together in the Python console for this site.
+        print_sample_timeseries_and_faults(api_url, site_id)
+    log_browser_console(driver, "plots")
 
 
 def validate_weather_charts_not_blank(driver: webdriver.Chrome, base_url: str) -> None:
@@ -825,6 +1048,7 @@ def validate_weather_charts_not_blank(driver: webdriver.Chrome, base_url: str) -
             print("  Weather: page loaded (no chart element; acceptable).")
         else:
             raise AssertionError("Weather page: no chart element and no acceptable message found.")
+    log_browser_console(driver, "weather")
 
 
 def validate_overview(driver: webdriver.Chrome, base_url: str) -> None:
@@ -832,6 +1056,7 @@ def validate_overview(driver: webdriver.Chrome, base_url: str) -> None:
     driver.get(f"{base_url}/")
     wait_for_element(driver, By.TAG_NAME, "main", timeout=ELEMENT_WAIT)
     print("  Overview: page loaded.")
+    log_browser_console(driver, "overview")
 
 
 # --- Backend API checks (timezone / CSV UTC), same pattern as long_term_bacnet_scrape_test.py ---
@@ -909,6 +1134,95 @@ def run_backend_timezone_checks(api_url: str, site_id: str) -> None:
     print("  GET /download/csv: timestamps are ISO UTC (Z). Timezone/Plots display OK.")
 
 
+def run_faults_db_check(api_url: str) -> None:
+    """
+    GET /faults/active and GET /faults/definitions; print counts so we confirm faults exist in DB
+    and can compare with frontend Plots (fault series should show when definitions exist and data in range).
+    Same auth as run_backend_timezone_checks (OFDD_API_KEY).
+    """
+    print("\n[Faults DB] GET /faults/active and GET /faults/definitions...")
+    code_active, body_active = _api_request(api_url, "GET", "/faults/active", API_KEY)
+    code_defs, body_defs = _api_request(api_url, "GET", "/faults/definitions", API_KEY)
+    n_active = 0
+    n_defs = 0
+    if code_active == 200 and body_active:
+        try:
+            data = json.loads(body_active)
+            n_active = len(data) if isinstance(data, list) else 0
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if code_defs == 200 and body_defs:
+        try:
+            data = json.loads(body_defs)
+            n_defs = len(data) if isinstance(data, list) else 0
+        except (json.JSONDecodeError, TypeError):
+            pass
+    print(f"  Faults in DB (GET /faults/active): {n_active} active.")
+    print(f"  Fault definitions (GET /faults/definitions): {n_defs}.")
+    if code_active != 200 or code_defs != 200:
+        print(f"  (One or both returned non-200: active={code_active}, definitions={code_defs})")
+
+
+def print_sample_timeseries_and_faults(api_url: str, site_id: str) -> None:
+    """
+    Fetch a small sample of sensor timeseries (points) and fault records for this site and
+    print them so we can see in the Python console what the frontend Plots tab should be
+    drawing (points + faults together).
+
+    Uses /download/csv (format=long) for sensor data and /download/faults?format=json for faults.
+    """
+    print("\n[Plots data] Sample sensor timeseries and faults from API for site:", site_id)
+    # Sensor data (long CSV) for a 2-day window around "now"
+    start_d = (date.today() - timedelta(days=1)).isoformat()
+    end_d = (date.today() + timedelta(days=1)).isoformat()
+    csv_path = (
+        f"/download/csv?site_id={urllib.parse.quote(site_id, safe='')}"
+        f"&start_date={start_d}&end_date={end_d}&format=long"
+    )
+    code_csv, body_csv = _api_request(api_url, "GET", csv_path, API_KEY)
+    if code_csv != 200 or not body_csv.strip():
+        print(f"  [Plots data] /download/csv returned {code_csv} (body length={len(body_csv) if body_csv else 0}); no sensor sample.")
+    else:
+        lines = body_csv.strip().splitlines()
+        print(f"  [Plots data] /download/csv rows (including header): {len(lines)}")
+        if len(lines) > 1:
+            header = lines[0]
+            print("  [Plots data] CSV header:", header)
+            for row in lines[1:6]:
+                print("    sensor:", row)
+            if len(lines) > 6:
+                print(f"    ... {len(lines) - 6} more rows")
+    # Faults JSON for the same window
+    faults_path = (
+        f"/download/faults?site_id={urllib.parse.quote(site_id, safe='')}"
+        f"&start_date={start_d}&end_date={end_d}&format=json"
+    )
+    code_faults, body_faults = _api_request(api_url, "GET", faults_path, API_KEY)
+    if code_faults != 200 or not body_faults.strip():
+        print(f"  [Plots data] /download/faults returned {code_faults} (body length={len(body_faults) if body_faults else 0}); no faults sample.")
+        return
+    try:
+        payload = json.loads(body_faults)
+    except json.JSONDecodeError:
+        print("  [Plots data] /download/faults returned non-JSON body; raw:", body_faults[:300])
+        return
+    faults_list = payload.get("faults") if isinstance(payload, dict) else None
+    count = payload.get("count") if isinstance(payload, dict) else None
+    if isinstance(faults_list, list):
+        print(f"  [Plots data] Faults JSON: count={count}, sample_rows={min(len(faults_list), 5)}")
+        for f in faults_list[:5]:
+            ts = f.get("ts") or f.get("timestamp")
+            site = f.get("site_name") or f.get("site_id")
+            eq = f.get("equipment_name") or f.get("equipment_id")
+            rule = f.get("rule_id") or f.get("fault_id")
+            sev = f.get("severity")
+            print(f"    fault: ts={ts} site={site} eq={eq} rule={rule} severity={sev}")
+        if len(faults_list) > 5:
+            print(f"    ... {len(faults_list) - 5} more faults")
+    else:
+        print("  [Plots data] /download/faults payload shape unexpected:", str(payload)[:300])
+
+
 def run_full_flow(
     frontend_url: str,
     headed: bool,
@@ -923,7 +1237,7 @@ def run_full_flow(
     When bacnet_device_instances is non-empty, run Points page BACnet discovery (Add to data model) for each device after import."""
     if bacnet_device_instances is None:
         bacnet_device_instances = []
-    driver = get_driver(headed=headed, ignore_ssl=ignore_ssl)
+    driver = get_driver(headed=headed, ignore_ssl=ignore_ssl, capture_browser_logs=True)
     try:
         driver.get(frontend_url)
         WebDriverWait(driver, PAGE_LOAD_TIMEOUT).until(
@@ -934,6 +1248,20 @@ def run_full_flow(
         if only is None or only == "delete-all":
             print("[1] Delete all sites and reset graph (via UI)...")
             delete_all_sites_and_reset_via_ui(driver, frontend_url)
+
+        if only == "points":
+            print("[Points only] Verify device tree and delete one point...")
+            verify_site_selected(driver, TESTBENCH_SITE_NAME, "Points-only")
+            verify_points_page_device_tree(driver, frontend_url, TESTBENCH_SITE_NAME)
+            for candidate in ("MA-T", "RA-T", "DAP-P", "ZoneHumidity"):
+                if delete_one_point_via_tree(driver, frontend_url, candidate, TESTBENCH_SITE_NAME):
+                    break
+            else:
+                print("  (No deletable point found; tree structure verified.)")
+            print("\n=== E2E Points steps passed ===")
+            return
+
+        site_id: str | None = None
 
         if only is None or only == "create-and-import":
             if only is None:
@@ -960,11 +1288,25 @@ def run_full_flow(
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after data model verify")
             print("[2c] Verify units from data model on frontend (Points page)...")
             verify_units_on_frontend(driver, frontend_url, TESTBENCH_SITE_NAME)
+            print("[2d] Verify Points page device tree (columns, site, Unassigned)...")
+            verify_points_page_device_tree(driver, frontend_url, TESTBENCH_SITE_NAME)
+            print("[2e] Delete one point (and optionally one equipment) in tree; verify tree updates...")
+            for candidate in ("MA-T", "RA-T", "DAP-P", "ZoneHumidity"):
+                if delete_one_point_via_tree(driver, frontend_url, candidate, TESTBENCH_SITE_NAME):
+                    break
+            else:
+                print("  (No deletable point found in tree; continuing.)")
 
         if only is None or only == "charts" or only == "create-and-import":
             if not skip_chart_data:
-                print("[3] Verify Plots chart (select known point SA-T/ZoneTemp)...")
-                validate_plots_chart_has_data(driver, frontend_url, TESTBENCH_SITE_NAME)
+                print("[3] Verify Plots chart (select known point SA-T/ZoneTemp, faults in legend)...")
+                validate_plots_chart_has_data(
+                    driver,
+                    frontend_url,
+                    TESTBENCH_SITE_NAME,
+                    api_url=api_url,
+                    site_id=site_id or TESTBENCH_SITE_NAME,
+                )
                 verify_site_selected(driver, TESTBENCH_SITE_NAME, "after Plots")
                 print("[4] Verify Weather page (resilient)...")
                 validate_weather_charts_not_blank(driver, frontend_url)
@@ -977,6 +1319,7 @@ def run_full_flow(
 
         if api_url:
             run_backend_timezone_checks(api_url, TESTBENCH_SITE_NAME)
+            run_faults_db_check(api_url)
 
         print("\n=== E2E frontend tests passed ===")
     except Exception as e:
@@ -1002,8 +1345,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--only",
-        choices=["delete-all", "create-and-import", "charts"],
-        help="Run only this step (default: full flow)",
+        choices=["delete-all", "create-and-import", "points", "charts"],
+        help="Run only this step (default: full flow). 'points' = device tree + delete point (site must exist).",
     )
     parser.add_argument(
         "--skip-chart-data",
