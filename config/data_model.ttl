@@ -5,15 +5,143 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-<bacnet://34567> a bacnet:Device ;
-    rdfs:label "BACnet device 34567" ;
-    bacnet:contains <bacnet://34567/analog-value,1>,
-        <bacnet://34567/analog-value,2>,
-        <bacnet://34567/analog-value,3>,
-        <bacnet://34567/binary-value,1>,
-        <bacnet://34567/network-port,1> ;
-    bacnet:device-address "192.168.204.12" ;
-    bacnet:device-instance 34567 .
+<bacnet://50> a bacnet:Device ;
+    rdfs:label "BACnet device 50" ;
+    bacnet:contains <bacnet://50/analog-input,1>,
+        <bacnet://50/analog-input,11>,
+        <bacnet://50/analog-input,2>,
+        <bacnet://50/analog-input,3>,
+        <bacnet://50/analog-input,4>,
+        <bacnet://50/analog-input,5>,
+        <bacnet://50/analog-input,6>,
+        <bacnet://50/analog-output,25>,
+        <bacnet://50/analog-output,5>,
+        <bacnet://50/analog-value,1>,
+        <bacnet://50/analog-value,10>,
+        <bacnet://50/analog-value,11>,
+        <bacnet://50/analog-value,115>,
+        <bacnet://50/analog-value,118>,
+        <bacnet://50/analog-value,12>,
+        <bacnet://50/analog-value,125>,
+        <bacnet://50/analog-value,126>,
+        <bacnet://50/analog-value,127>,
+        <bacnet://50/analog-value,128>,
+        <bacnet://50/analog-value,13>,
+        <bacnet://50/analog-value,135>,
+        <bacnet://50/analog-value,136>,
+        <bacnet://50/analog-value,14>,
+        <bacnet://50/analog-value,143>,
+        <bacnet://50/analog-value,15>,
+        <bacnet://50/analog-value,2>,
+        <bacnet://50/analog-value,21>,
+        <bacnet://50/analog-value,3>,
+        <bacnet://50/analog-value,4>,
+        <bacnet://50/analog-value,400>,
+        <bacnet://50/analog-value,401>,
+        <bacnet://50/analog-value,402>,
+        <bacnet://50/analog-value,403>,
+        <bacnet://50/analog-value,404>,
+        <bacnet://50/analog-value,405>,
+        <bacnet://50/analog-value,406>,
+        <bacnet://50/analog-value,407>,
+        <bacnet://50/analog-value,408>,
+        <bacnet://50/analog-value,409>,
+        <bacnet://50/analog-value,410>,
+        <bacnet://50/analog-value,411>,
+        <bacnet://50/analog-value,412>,
+        <bacnet://50/analog-value,413>,
+        <bacnet://50/analog-value,414>,
+        <bacnet://50/analog-value,415>,
+        <bacnet://50/analog-value,416>,
+        <bacnet://50/analog-value,417>,
+        <bacnet://50/analog-value,418>,
+        <bacnet://50/analog-value,419>,
+        <bacnet://50/analog-value,420>,
+        <bacnet://50/analog-value,421>,
+        <bacnet://50/analog-value,423>,
+        <bacnet://50/analog-value,424>,
+        <bacnet://50/analog-value,425>,
+        <bacnet://50/analog-value,426>,
+        <bacnet://50/analog-value,427>,
+        <bacnet://50/analog-value,428>,
+        <bacnet://50/analog-value,431>,
+        <bacnet://50/analog-value,432>,
+        <bacnet://50/analog-value,433>,
+        <bacnet://50/analog-value,434>,
+        <bacnet://50/analog-value,437>,
+        <bacnet://50/analog-value,438>,
+        <bacnet://50/analog-value,439>,
+        <bacnet://50/analog-value,440>,
+        <bacnet://50/analog-value,441>,
+        <bacnet://50/analog-value,442>,
+        <bacnet://50/analog-value,443>,
+        <bacnet://50/analog-value,444>,
+        <bacnet://50/analog-value,445>,
+        <bacnet://50/analog-value,446>,
+        <bacnet://50/analog-value,447>,
+        <bacnet://50/analog-value,448>,
+        <bacnet://50/analog-value,45>,
+        <bacnet://50/analog-value,46>,
+        <bacnet://50/analog-value,5>,
+        <bacnet://50/analog-value,52>,
+        <bacnet://50/analog-value,6>,
+        <bacnet://50/analog-value,61>,
+        <bacnet://50/analog-value,62>,
+        <bacnet://50/analog-value,64>,
+        <bacnet://50/analog-value,7>,
+        <bacnet://50/analog-value,73>,
+        <bacnet://50/analog-value,74>,
+        <bacnet://50/analog-value,77>,
+        <bacnet://50/analog-value,78>,
+        <bacnet://50/analog-value,8>,
+        <bacnet://50/analog-value,9>,
+        <bacnet://50/binary-input,29>,
+        <bacnet://50/binary-value,11>,
+        <bacnet://50/binary-value,21>,
+        <bacnet://50/binary-value,22>,
+        <bacnet://50/binary-value,400>,
+        <bacnet://50/binary-value,401>,
+        <bacnet://50/binary-value,403>,
+        <bacnet://50/binary-value,404>,
+        <bacnet://50/binary-value,405>,
+        <bacnet://50/binary-value,406>,
+        <bacnet://50/binary-value,409>,
+        <bacnet://50/binary-value,411>,
+        <bacnet://50/binary-value,412>,
+        <bacnet://50/binary-value,413>,
+        <bacnet://50/binary-value,414>,
+        <bacnet://50/binary-value,62>,
+        <bacnet://50/binary-value,63>,
+        <bacnet://50/binary-value,65>,
+        <bacnet://50/binary-value,77>,
+        <bacnet://50/binary-value,78>,
+        <bacnet://50/binary-value,79>,
+        <bacnet://50/binary-value,80>,
+        <bacnet://50/binary-value,9>,
+        <bacnet://50/event-log,1>,
+        <bacnet://50/file,0>,
+        <bacnet://50/multi-state-input,1>,
+        <bacnet://50/multi-state-value,1>,
+        <bacnet://50/multi-state-value,100>,
+        <bacnet://50/multi-state-value,101>,
+        <bacnet://50/multi-state-value,102>,
+        <bacnet://50/multi-state-value,104>,
+        <bacnet://50/multi-state-value,108>,
+        <bacnet://50/multi-state-value,109>,
+        <bacnet://50/multi-state-value,2>,
+        <bacnet://50/multi-state-value,3>,
+        <bacnet://50/multi-state-value,4>,
+        <bacnet://50/multi-state-value,61>,
+        <bacnet://50/multi-state-value,62>,
+        <bacnet://50/multi-state-value,8>,
+        <bacnet://50/notification-class,1>,
+        <bacnet://50/notification-class,2>,
+        <bacnet://50/notification-class,3>,
+        <bacnet://50/notification-class,4>,
+        <bacnet://50/trend-log,1>,
+        <bacnet://50/trend-log,2> ;
+    bacnet:device-address "192.168.0.147" ;
+    bacnet:device-instance 50 .
 
 ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:bacnetEnabled true ;
@@ -27,207 +155,1239 @@ ofdd:platform_config a ofdd:PlatformConfig ;
     ofdd:openMeteoDaysBack 3 ;
     ofdd:openMeteoEnabled true ;
     ofdd:openMeteoIntervalHours 24 ;
-    ofdd:openMeteoLatitude 41.0 ;
-    ofdd:openMeteoLongitude -87.0 ;
-    ofdd:openMeteoSiteId "TestBenchSite" ;
+    ofdd:openMeteoLatitude 30.42 ;
+    ofdd:openMeteoLongitude -87.21 ;
+    ofdd:openMeteoSiteId "Pensacola" ;
     ofdd:openMeteoTimezone "America/Chicago" ;
-    ofdd:ruleIntervalHours 0.0 ;
+    ofdd:ruleIntervalHours 0.1 ;
     ofdd:rulesDir "analyst/rules" .
 
-:pt_00e20245_5ad2_4168_b131_9c63ca9fd1e1 a brick:Point ;
-    rdfs:label "CLG-O" ;
+:pt_02047f24_0256_49fe_9f08_efa02542dd7a a brick:Point ;
+    rdfs:label "Auto Calibrate" ;
     ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_190c792d_b18e_41d9_aeba_a4cce319a373 a brick:Point ;
-    rdfs:label "OAT-NETWORK" ;
+:pt_028ad026_a19d_464e_b153_7c53a5d4a20d a brick:Point ;
+    rdfs:label "Air Valve Position Status" ;
     ofdd:polling false ;
-    ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_1a55ae4f_6478_48e7_9822_b5b5e3baabf3 a brick:Point ;
-    rdfs:label "web-weather-fetch-ok" ;
+:pt_055c1a58_2179_421d_aa7c_5370dd6cebf6 a brick:Point ;
+    rdfs:label "Tempy" ;
     ofdd:polling false ;
-    brick:isPointOf :site_20016710_2668_4600_85aa_266330c99aa1_points .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_271015b3_35c2_4a31_bbcc_24ee0d55d210 a brick:Point ;
-    rdfs:label "DAP-P" ;
+:pt_06ec7f93_3af4_43ae_bf14_37109846ca52 a brick:Point ;
+    rdfs:label "Pressure Dependent Mode Reheat Enable" ;
     ofdd:polling false ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_34cacea6_cd57_44f1_8abc_16363300adcc a brick:Point ;
-    rdfs:label "web-weather-dewpoint-temp" ;
+:pt_06fdcf0b_a8d5_4cb2_847b_70c7aeb7b809 a brick:Point ;
+    rdfs:label "Fan Latch" ;
     ofdd:polling false ;
-    brick:isPointOf :site_20016710_2668_4600_85aa_266330c99aa1_points .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_3a494257_d3b2_4314_9aa3_a4be2d3d6a6a a brick:Point ;
-    rdfs:label "SA-FLOW" ;
-    ofdd:polling false ;
+:pt_09c223f8_2015_429b_80c6_c5b71563e8cc a brick:Discharge_Air_Flow_Sensor ;
+    rdfs:label "Air Flow Calculated" ;
+    ofdd:mapsToRuleInput "airflow" ;
+    ofdd:polling true ;
     ofdd:unit "cfm" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_6480d532_22ab_4d91_a976_490ec23f783e a brick:Point ;
-    rdfs:label "web-weather-relative-humidity" ;
+:pt_0a87e500_29d5_47e7_b28b_24224dcd4592 a brick:Heating_Valve_Command ;
+    rdfs:label "Heating Loop Output" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0a959d1c_45c6_4473_b423_f1e5545a4f1a a brick:Point ;
+    rdfs:label "Generic VAV Box K-Factor CFM" ;
     ofdd:polling false ;
-    brick:isPointOf :site_20016710_2668_4600_85aa_266330c99aa1_points .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_738b755d_9fc0_4a26_8c2b_66fac835c7f3 a brick:Mixed_Air_Temperature_Sensor ;
-    rdfs:label "MA-T" ;
-    ofdd:mapsToRuleInput "ahu_mat" ;
+:pt_0b0f84c5_503d_4dea_b87c_793d8ad6a5e7 a brick:Point ;
+    rdfs:label "Air Flow Measurement Offset" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0d39fa21_ce29_4f64_a80f_b61fb97f1c00 a brick:Point ;
+    rdfs:label "Fan Safeties OK" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0df7247e_914a_4b0a_a5b3_94bc40239f5c a brick:Point ;
+    rdfs:label "HVAC-Service Required" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0e8797f9_b853_4db9_b339_1153f2c0aad3 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Minimum Setpoint Active" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0efb7348_675a_49cf_a425_0ae938e97af8 a brick:Point ;
+    rdfs:label "Log_Space Temperature Local" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_0f7d1edd_8480_4de9_89b9_5349c876252a a brick:Point ;
+    rdfs:label "wind_dir_deg" ;
+    ofdd:polling true ;
+    ofdd:unit "deg" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_0f9ca5b1_efb5_4c62_965a_65c3a42b41e0 a brick:Point ;
+    rdfs:label "TAV Mode Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_1006a4be_7c3f_4b55_b850_7f88bc8ba85d a brick:Point ;
+    rdfs:label "PD Mode Min Air Valve Position" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_104baf68_9f64_49ed_b296_adb8622d013d a brick:Cooling_Setpoint ;
+    rdfs:label "Unoccupied Cooling Setpoint" ;
     ofdd:polling true ;
     ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_7b5c95f8_2693_4aab_83ba_548daa4ce605 a brick:Point ;
-    rdfs:label "DAP-SP" ;
-    ofdd:polling false ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+:pt_1239af88_fb77_4b27_8da3_a5a01f9290e3 a brick:Heating_Valve_Command ;
+    rdfs:label "Heat Command Request" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_7c00f015_b4e4_4289_bf80_161812f32e79 a brick:Point ;
-    rdfs:label "SF-O" ;
+:pt_12a9a469_1aad_4a18_bcc4_fac230d50391 a brick:Point ;
+    rdfs:label "Space Temperature Setpoint Source Status" ;
     ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_813d03f8_8975_4b11_a104_a7e88fcef6a8 a brick:Point ;
-    rdfs:label "ELEC-PWR" ;
+:pt_141ce35a_50f9_4cd8_b821_d392e5347020 a brick:Point ;
+    rdfs:label "Air Valve Minimum Position Active" ;
     ofdd:polling false ;
-    ofdd:unit "kW" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_855219f8_559f_4352_aeba_2b08a98de7ff a brick:Point ;
-    rdfs:label "VAVFlow" ;
+:pt_1678ad08_bf26_40a5_87af_6310385e58da a brick:Point ;
+    rdfs:label "Space Temperature Source Status" ;
     ofdd:polling false ;
-    ofdd:unit "cfm" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_95b503c6_0bce_4fa1_82d2_3f898cf3f1a5 a brick:Point ;
-    rdfs:label "VAVDamperCmd" ;
-    ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
-
-:pt_978c788d_f868_471a_91a2_0b229a8426ee a brick:Point ;
-    rdfs:label "OA-T" ;
-    ofdd:polling false ;
+:pt_181e134c_8bda_4d01_b9c8_5fb8e7907e5f a brick:Discharge_Air_Temperature_Sensor ;
+    rdfs:label "Discharge Air Temperature" ;
+    ofdd:mapsToRuleInput "dat" ;
+    ofdd:polling true ;
     ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_9eaa0be0_c98e_4bd7_a65f_312571eebb06 a brick:Zone_Air_Temperature_Sensor ;
-    rdfs:label "ZoneTemp" ;
+:pt_1a551a7a_6e74_4647_ae74_45e3e182336b a brick:Point ;
+    rdfs:label "Ventilation Ratio Limit BAS" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_1bdb64db_33f5_4353_a06b_e27675d321e9 a brick:Heating_Setpoint ;
+    rdfs:label "Heating Setpoint Low Limit" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_1e41d887_f3c1_4de1_8af0_2bfccc056b6f a brick:Heating_Valve_Command ;
+    rdfs:label "Active HeatCoil Control Sensor" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_22ed83b0_dd74_4bc4_a43f_fa3235e2a182 a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_2564953b_ce1d_4942_88de_bda7c1570d6f a brick:Point ;
+    rdfs:label "Heat Cool Mode Request" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_26ee0c8a_2ace_4ed0_a049_736abdc74f0e a brick:Point ;
+    rdfs:label "Space CO2 Low Limit" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_2798d1c4_357c_4422_96e8_08423a7ec31c a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Maximum Heat" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_27bd6797_2690_4d5a_b821_6fc7c2ba7cdd a brick:Point ;
+    rdfs:label "Primary Air Temp Enum" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_28184d2e_d7ff_4d3e_a028_d11b05c0fcad a brick:Point ;
+    rdfs:label "Occupancy Request" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_2a008c58_cb08_4765_912f_d570c367083e a brick:Heating_Setpoint ;
+    rdfs:label "Unoccupied Heating Setpoint" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_2a09d18f_6576_4d0c_857b_0dd57aace898 a brick:Point ;
+    rdfs:label "Optional Heat Enable Command" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_2b2c5ef3_9b18_48eb_8d3b_8a43dd1acccd a brick:Point ;
+    rdfs:label "Diagnostic: Space CO2 Source Failure" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_2f630939_a43f_4c7d_a1c9_c844a39293b7 a brick:Point ;
+    rdfs:label "Nominal Air Flow Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_38a7bb49_033b_4ad9_8573_125aba21c02d a brick:Point ;
+    rdfs:label "Air Flow Nominal Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_39eadb1c_3b61_48ec_a55c_629e536eee40 a brick:Cooling_Setpoint ;
+    rdfs:label "Occupied Cooling Setpoint" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_3b270c50_2275_4b4e_84fd_fc6f31ee036c a brick:Damper_Position_Sensor ;
+    rdfs:label "Air Valve Drive Status" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_3d5d5ad4_5af7_4e59_ade9_a06660297ce1 a brick:Point ;
+    rdfs:label "direct_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_428fb16c_4bef_46ac_904e_f6afc73fef70 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Active Maximum" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_4371c0d5_7d7c_458a_8ab3_1e96d8d5d883 a brick:Discharge_Air_Temperature_Setpoint ;
+    rdfs:label "G36 DAT Heating Setpoint Active" ;
+    ofdd:mapsToRuleInput "dat_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_43a24d3f_6ce7_49b5_a5bb_15c3dcbb021a a brick:Point ;
+    rdfs:label "Ventilation Standby Setpoint" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_44702c4b_2f13_4eb8_be5c_2786eecbac8a a brick:Point ;
+    rdfs:label "Occupancy Input" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_48895aee_fd61_45e8_bc86_8acd77448f5c a brick:Point ;
+    rdfs:label "Occupied Standby Offset" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_4cfb176d_b9f4_47e6_87dc_6c7cf1eb251f a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Active" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_4ddc9ed2_066f_433b_b3fb_1222550368a8 a brick:Point ;
+    rdfs:label "Space CO2 High Limit" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_4f3ebfb3_8fd8_4a79_bfd4_dfcd034cc05f a brick:Point ;
+    rdfs:label "gust_mph" ;
+    ofdd:polling true ;
+    ofdd:unit "mph" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_530e2d3b_eed0_4aa2_b504_14d44cbde0c6 a brick:Point ;
+    rdfs:label "Air Flow Override" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_53cb932a_7f53_4109_8ccc_0b22b24688e7 a brick:Zone_Air_Temperature_Sensor ;
+    rdfs:label "Space Temperature BAS" ;
     ofdd:mapsToRuleInput "zone_temp" ;
     ofdd:polling true ;
     ofdd:unit "degF" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_a569e528_47cb_4312_86c0_33743dafcc91 a brick:Supply_Air_Temperature_Sensor ;
-    rdfs:label "SA-T" ;
-    ofdd:mapsToRuleInput "ahu_sat" ;
+:pt_5616257e_6f14_4a54_b892_df9da8c288e6 a brick:Cooling_Setpoint ;
+    rdfs:label "Cooling Setpoint High Limit" ;
     ofdd:polling true ;
     ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_a736712c_a768_4f6a_bddf_67bebffec7a8 a brick:Point ;
-    rdfs:label "SF-S" ;
+:pt_5e10c14d_e616_4952_b0df_67d7b0c602ea a brick:Point ;
+    rdfs:label "Unit Flow Gain" ;
     ofdd:polling false ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:pt_b02a902f_8e72_4110_8535_d3e48b087298 a brick:Point ;
-    rdfs:label "Occ-Schedule" ;
-    ofdd:polling false ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_b708c58e_d11e_42df_aede_6faa9f1b5e5c a brick:Point ;
-    rdfs:label "HTG-O" ;
-    ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_ba66d767_0dab_4d05_a3b0_c7550098bc39 a brick:Point ;
-    rdfs:label "ZoneCoolingSpt" ;
-    ofdd:polling false ;
-    ofdd:unit "degF" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
-
-:pt_bab11e73_02eb_495b_a34a_fc1b4c459910 a brick:Point ;
-    rdfs:label "web-weather-drybulb-temp" ;
-    ofdd:polling false ;
-    brick:isPointOf :site_20016710_2668_4600_85aa_266330c99aa1_points .
-
-:pt_c0eafc87_6921_4fb4_9b50_9875ea037932 a brick:Return_Air_Temperature_Sensor ;
-    rdfs:label "RA-T" ;
-    ofdd:mapsToRuleInput "ahu_rat" ;
+:pt_5e13add8_f5ef_47a6_b4c0_38acd5512593 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint TAV" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
     ofdd:polling true ;
-    ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_c67c96f4_1c02_43ba_9ec1_cd4aa13fbe66 a brick:Point ;
-    rdfs:label "SAT-SP" ;
-    ofdd:polling false ;
-    ofdd:unit "degF" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_c78993d1_f979_471f_9c1b_3aa25dc976d0 a brick:Point ;
-    rdfs:label "SF-C" ;
-    ofdd:polling false ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_cc217308_d143_46ca_8cc2_62ad92ec5258 a brick:Point ;
-    rdfs:label "NetworkPort-1" ;
-    ofdd:polling false ;
-    brick:isPointOf :site_20016710_2668_4600_85aa_266330c99aa1_points .
-
-:pt_e5a5061f_dd67_4389_8d59_204207df713d a brick:Point ;
-    rdfs:label "DPR-O" ;
-    ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_7607b072_0651_46ad_8f98_9d71453b6b7f .
-
-:pt_e9a0d922_2270_4694_a6c8_9c7a1562ca2c a brick:Point ;
-    rdfs:label "ZoneDemand" ;
-    ofdd:polling false ;
-    ofdd:unit "percent" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
-
-:pt_fb412eb3_139c_43f6_9ad4_eaaeb2876445 a brick:Point ;
-    rdfs:label "VAVFlowSpt" ;
-    ofdd:polling false ;
     ofdd:unit "cfm" ;
-    brick:isPointOf :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 .
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-<bacnet://34567/analog-value,1> bacnet:object-identifier "analog-value,1" ;
-    bacnet:object-name "web-weather-drybulb-temp" .
+:pt_61136878_b352_4d75_90df_d887bafc93ae a brick:Humidity_Sensor ;
+    rdfs:label "Space Humidity Local" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-<bacnet://34567/analog-value,2> bacnet:object-identifier "analog-value,2" ;
-    bacnet:object-name "web-weather-dewpoint-temp" .
+:pt_646a2447_96fb_472a_9da0_9e1f276f9558 a brick:Cooling_Valve_Command ;
+    rdfs:label "Cooling Loop Output" ;
+    ofdd:mapsToRuleInput "clg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-<bacnet://34567/analog-value,3> bacnet:object-identifier "analog-value,3" ;
-    bacnet:object-name "web-weather-relative-humidity" .
+:pt_68f543b7_88d5_4259_8c39_977c0c2a7d70 a brick:Point ;
+    rdfs:label "Ventilation Setpoint Active" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-<bacnet://34567/binary-value,1> bacnet:object-identifier "binary-value,1" ;
-    bacnet:object-name "web-weather-fetch-ok" .
+:pt_6968c2ff_be4a_4191_98b6_aeea508c6066 a brick:Heating_Setpoint ;
+    rdfs:label "Occupied Heating Setpoint" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-<bacnet://34567/network-port,1> bacnet:object-identifier "network-port,1" ;
-    bacnet:object-name "NetworkPort-1" .
+:pt_69afe450_387b_46d9_863c_a6e9513b7225 a brick:Point ;
+    rdfs:label "Night Heat Cool" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
 
-:site_20016710_2668_4600_85aa_266330c99aa1 a brick:Site ;
-    rdfs:label "TestBenchSite" .
+:pt_72264945_4d00_4387_8c92_cf0c5fdf8ffa a brick:Point ;
+    rdfs:label "gti_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
 
-:site_20016710_2668_4600_85aa_266330c99aa1_points a brick:Equipment ;
+:pt_732f690f_d60a_4f65_abff_b3217bae61e4 a brick:Point ;
+    rdfs:label "Heat Control Pgain" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_74e02272_b2c0_40bf_9343_01ff69ef00fb a brick:Point ;
+    rdfs:label "Pressure Sensor Calibration Offset" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_74f9df3d_e5a0_49b7_93f9_af04fb180178 a brick:Point ;
+    rdfs:label "Startup Delay Completed" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_770e3339_2423_4040_8318_285c2026097c a brick:Point ;
+    rdfs:label "Heating Capacity Primary Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_7d747244_588a_4399_b991_77f8c46e498e a brick:Point ;
+    rdfs:label "rh_pct" ;
+    ofdd:polling true ;
+    ofdd:unit "percent" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_7e00be70_b92b_4cbb_b173_869fffc8ad22 a brick:Point ;
+    rdfs:label "temp_f" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_7ee9cc29_3508_4423_9264_c7e2e89e35d1 a brick:Cooling_Setpoint ;
+    rdfs:label "Cooling Setpoint Low Limit" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8022ccf6_0402_4e02_a7c5_f1ffdc6be5fe a brick:Point ;
+    rdfs:label "config_file0" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_80bd0ecc_16a6_4da9_816d_f07b52ab57b7 a brick:Zone_Air_Temperature_Sensor ;
+    rdfs:label "Space Temperature Active" ;
+    ofdd:mapsToRuleInput "zone_temp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_84112066_0d41_4677_b3b9_39ef49d90aa7 a brick:Point ;
+    rdfs:label "shortwave_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_850b4adc_e7ae_45ea_bf34_8203804ffcc8 a brick:Point ;
+    rdfs:label "eventLog" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_88c4a3b4_7159_45f7_9a02_640fd74428a8 a brick:Damper_Position_Command ;
+    rdfs:label "Air Valve Drive Command" ;
+    ofdd:mapsToRuleInput "damper_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8a550445_ba20_4973_a648_d0a255ceb442 a brick:Point ;
+    rdfs:label "Reheat Enable Point (Primary Air)" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8d89376e_6c92_4b77_9cc6_d1a73b7dcd7c a brick:Point ;
+    rdfs:label "HVAC-Critical" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8d968eb5_8f52_4a5b_9330_e25e8cb08882 a brick:CO2_Sensor ;
+    rdfs:label "Space CO2 Concentration BAS" ;
+    ofdd:polling true ;
+    ofdd:unit "ppm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8ec2439b_feee_4c75_b509_254077c29297 a brick:Zone_Air_Temperature_Setpoint ;
+    rdfs:label "Space Temperature Setpoint Local" ;
+    ofdd:mapsToRuleInput "zone_temp_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_8fc73779_7b1d_4e92_a78a_1d2353abeaf5 a brick:Zone_Air_Temperature_Setpoint ;
+    rdfs:label "Space Temperature Setpoint Default" ;
+    ofdd:mapsToRuleInput "zone_temp_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_900deccb_0889_4a92_9806_e7f523619420 a brick:Point ;
+    rdfs:label "Cooling Capacity Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9178cf94_f730_442a_b45e_76c7e01a7441 a brick:Point ;
+    rdfs:label "Air Valve P-Gain" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_944ffe9c_80e5_4dfb_95ac_02618ed97b96 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Minimum Standby Heat" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9565c71e_06c7_490c_9425_12bb1a3159cd a brick:Point ;
+    rdfs:label "Active HeatCoil Control Sensor Failed" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_95c10b35_88e8_4ef5_86d9_8d9b9451d0d3 a brick:Zone_Air_Temperature_Setpoint ;
+    rdfs:label "Space Temperature Setpoint Active" ;
+    ofdd:mapsToRuleInput "zone_temp_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_96c255f0_2d12_46e8_89d5_893d584f7dfa a brick:Point ;
+    rdfs:label "Auto Changeover Point" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_97014ef5_1abe_4e72_96c0_1d1315ee7025 a brick:Point ;
+    rdfs:label "Emergency Override BAS" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_98807831_0f22_4cbd_8a81_0702d4c4dd4b a brick:Zone_Air_Temperature_Setpoint ;
+    rdfs:label "Space Temperature Setpoint Deviation" ;
+    ofdd:mapsToRuleInput "zone_temp_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_98bed371_575d_493e_b803_b43502ef339a a brick:Point ;
+    rdfs:label "Heat Cool Mode Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9a7110eb_9c1a_4829_ac51_aac4be3c02e4 a brick:Point ;
+    rdfs:label "HVAC-Information" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9a8c0540_1d76_4b18_a34a_0d0242f48623 a brick:Heating_Valve_Command ;
+    rdfs:label "Heating Output 1 Command" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9b61f9c0_8897_489d_92ab_e7dd6b072ff9 a brick:CO2_Sensor ;
+    rdfs:label "Space CO2 Concentration Local" ;
+    ofdd:polling true ;
+    ofdd:unit "ppm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_9db2f833_03a8_4509_84bf_dd9414e55c9b a brick:CO2_Sensor ;
+    rdfs:label "Space CO2 Concentration Active" ;
+    ofdd:polling true ;
+    ofdd:unit "ppm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a02602d5_207f_4dcf_9fd6_44f122d0c385 a brick:Point ;
+    rdfs:label "VAV Box Size" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a24be795_365a_4047_9d7f_20a164e89208 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Minimum Local Heat" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a33cc941_0d74_4233_993c_82b6547098e1 a brick:Point ;
+    rdfs:label "Default Supply Air Temperature Mode" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a49a366e_60d9_43a1_baea_c66e4c34382a a brick:Point ;
+    rdfs:label "Diagnostic: High Air Flow" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a5962636_5ea5_4e9a_8ec0_69a370635dcc a brick:Point ;
+    rdfs:label "Air Valve Position Request" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a5bec6d1_1dde_4e63_b95b_914a190152d6 a brick:Point ;
+    rdfs:label "Ventilation Corrected Minimum Setpoint" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a696e44a_923c_404f_845a_4f0b3a8a39c4 a brick:Point ;
+    rdfs:label "Air Flow Setpoint Reset Max Local Heat" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_a7f8f9ab_e875_4aa4_9cf5_c7b2a6d95527 a brick:Point ;
+    rdfs:label "Diagnostic: Flow Sensor Failure" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_b06ea131_a7ac_477a_b2e7_6a484035f818 a brick:Point ;
+    rdfs:label "Occupancy Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_b08b4685_bbad_4dba_81d4_e1157fa2d0a5 a brick:Pressure_Sensor ;
+    rdfs:label "Pressure 1" ;
+    ofdd:polling true ;
+    ofdd:unit "Pa" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_b1e5a0da_0028_435a_9fd8_ab5258dfc9d7 a brick:Discharge_Air_Temperature_Setpoint ;
+    rdfs:label "Discharge Air Heating Setpoint Maximum" ;
+    ofdd:mapsToRuleInput "dat_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_b275b2cc_fc85_4a4e_a672_1a12c58a0c7a a brick:Point ;
+    rdfs:label "wind_mph" ;
+    ofdd:polling true ;
+    ofdd:unit "mph" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_b500658b_c9a5_4d65_a5a0_04f1c9e529df a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Minimum Standby" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_b65f3f76_604f_43bd_8582_c5b92ce3822a a brick:Point ;
+    rdfs:label "Heating Lockout BAS" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_bb4963da_34b7_4c4c_a416_bbb9a0f2309d a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Minimum Heat" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_bd4fa738_e6a4_4850_a9eb_a9af6f8197b0 a brick:Point ;
+    rdfs:label "Air Flow Minimum Setpoint Source" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_bf34965b_c64c_4cce_b792_57365b7fe495 a brick:Supply_Fan_Speed_Sensor ;
+    rdfs:label "Supply Fan Speed Status" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_c12d5e72_195f_4f39_967c_8790c84c22f6 a brick:Point ;
+    rdfs:label "Flow Capacity P-Gain" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_c36a24fb_9f67_4c61_8db1_28e23e521c0d a brick:Point ;
+    rdfs:label "G36 Heating DAT Max Limit in Effect" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_c3d794fb_2fd3_4e18_8b65_8efad54f4f91 a brick:Discharge_Air_Temperature_Setpoint ;
+    rdfs:label "Discharge Air Temperature Setpoint Active" ;
+    ofdd:mapsToRuleInput "dat_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_c4a6aaa4_0b04_4526_8e86_98ad3ef8c1d0 a brick:Point ;
+    rdfs:label "Ventilation Ratio" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_c8842d0c_4f62_4f57_9f80_d54a849a7706 a brick:Point ;
+    rdfs:label "Optional Heat Lockout" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ca919302_e448_4c7b_bba3_344afd3cf7bd a brick:Point ;
+    rdfs:label "Ventilation Setpoint BAS" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_cb1847bb_6335_4637_8d51_aaeaac2f807e a brick:Point ;
+    rdfs:label "Actual Air Valve Position" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_cbd79310_1246_43fb_a9bc_91c24a38f625 a brick:Heating_Setpoint ;
+    rdfs:label "Heating Setpoint High Limit" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_cd7e7ca1_9018_438b_9d3b_c0d5f5679678 a brick:Point ;
+    rdfs:label "Air Valve Drive Time Seconds" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ce7d33cd_2e7d_4a24_909f_8b2ce228442e a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "Supply Air Temperature BAS" ;
+    ofdd:mapsToRuleInput "sat" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_cfa5702f_8a23_4a63_b3b8_6bf912be2f7d a brick:Point ;
+    rdfs:label "dewpoint_f" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_d0a1d155_3748_498e_9138_7b6f8cb711b7 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Active Minimum" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_d3df68a4_4f52_470c_bfca_e32a1e01c57f a brick:Point ;
+    rdfs:label "Diagnostic: Flow Sensor Calibration Failure" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_d6f4ccd8_334e_46a6_aa51_92d4737553a6 a brick:Point ;
+    rdfs:label "Diagnostic: Space Temperature Source Failure" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_d7348023_aaad_4a02_a9c4_7cbe12913ae4 a brick:Point ;
+    rdfs:label "Air Flow Gain" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_d89d4045_209e_4bbb_b66d_c2043fc55c4b a brick:Zone_Air_Temperature_Sensor ;
+    rdfs:label "Space Temperature Local" ;
+    ofdd:mapsToRuleInput "zone_temp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_d9f2dce0_b3fd_4c59_bb8c_e12cc31896f4 a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Maximum" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_da623040_3709_43fe_895d_4cca8833c1bf a brick:Point ;
+    rdfs:label "VAV Flow Setpoints Auto Set Release" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_dc3c4e72_c8b1_410d_996a_63848a7a7d8c a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Setpoint Minimum" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ddb16489_ec82_456e_88c8_f69ff3dfda9a a brick:Zone_Air_Temperature_Setpoint ;
+    rdfs:label "Space Temperature Setpoint BAS" ;
+    ofdd:mapsToRuleInput "zone_temp_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_dfaeeebc_db3a_4b2a_98f6_c4904542ecc3 a brick:Point ;
+    rdfs:label "Air Valve Position Control" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_e10f49c0_b536_4220_a78a_1597c37c1570 a brick:Point ;
+    rdfs:label "Occupied Offset" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_e68fce41_4310_4d8a_826c_90e35443c85e a brick:Point ;
+    rdfs:label "Air Flow Setpoint Reset Min Local Heat" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_e7f66880_8b8f_460c_86cb_4fe62650f4c9 a brick:Point ;
+    rdfs:label "Heat Cool Mode Active" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_e8e7e4ca_bf36_4cdb_8d06_19af5d4cb87a a brick:Point ;
+    rdfs:label "HVAC-Warning" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_e9268a5b_b35a_4ce4_8a88_59fc0d68b164 a brick:Point ;
+    rdfs:label "Ventilation Setpoint Local" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ea127841_a3c0_4d65_b238_527fd7457eac a brick:Heating_Valve_Command ;
+    rdfs:label "Active HeatCoil Control Setpoint" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:polling true ;
+    ofdd:unit "%" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_eb33ade1_5914_4042_a4ad_e1064dc14dad a brick:Point ;
+    rdfs:label "VAV Box Fan Type" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ee2a9add_a780_4cd2_a56e_8ef6a8ab78df a brick:Point ;
+    rdfs:label "Auxiliary Heat Control Request" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_eebb64d9_b547_4b7e_9a47_1b032fdcfed2 a brick:Point ;
+    rdfs:label "Heating Capacity Secondary Status" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_ef5d2bf1_8f71_439e_a71b_e39d6df5efa8 a brick:Discharge_Air_Flow_Sensor ;
+    rdfs:label "Discharge Air Flow" ;
+    ofdd:mapsToRuleInput "airflow" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_f011ce31_c067_4804_8ad4_aa9eade7489e a brick:Point ;
+    rdfs:label "Air Flow Override Percent" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_f19d3ab2_30b2_4c59_928c_8a938fa676ed a brick:Point ;
+    rdfs:label "Flow Capacity" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_f625a6c0_03db_4448_96df_a8010d5f1292 a brick:Point ;
+    rdfs:label "Reset TAV" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_f774c4b0_91ba_4448_90e4_aac87f4e6d6d a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    ofdd:polling true ;
+    ofdd:unit "percent" ;
+    brick:isPointOf :eq_fbcd6789_346c_4222_96fa_c68a501051c9 .
+
+:pt_f89a6f62_112a_4ebd_b1ea_24bdee67f9bd a brick:Point ;
+    rdfs:label "tov_Space Temperature Local" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_f99f4218_729b_4100_be7d_3b8cd364c287 a brick:Point ;
+    rdfs:label "Occupied Bypass Time" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_fa8a780c_84eb_4151_a341_0f3fec8addfc a brick:Air_Flow_Setpoint ;
+    rdfs:label "Air Flow Override Flow Setpoint" ;
+    ofdd:mapsToRuleInput "airflow_sp" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+:pt_fa8c7baf_04ab_45e2_839d_b12d09dcef36 a brick:Point ;
+    rdfs:label "Unit Information" ;
+    ofdd:polling false ;
+    brick:isPointOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points .
+
+<bacnet://50/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "Space Temperature Local" .
+
+<bacnet://50/analog-input,11> bacnet:object-identifier "analog-input,11" ;
+    bacnet:object-name "Discharge Air Temperature" .
+
+<bacnet://50/analog-input,2> bacnet:object-identifier "analog-input,2" ;
+    bacnet:object-name "Space Temperature Setpoint Local" .
+
+<bacnet://50/analog-input,3> bacnet:object-identifier "analog-input,3" ;
+    bacnet:object-name "Pressure 1" .
+
+<bacnet://50/analog-input,4> bacnet:object-identifier "analog-input,4" ;
+    bacnet:object-name "Space CO2 Concentration Local" .
+
+<bacnet://50/analog-input,5> bacnet:object-identifier "analog-input,5" ;
+    bacnet:object-name "Space Humidity Local" .
+
+<bacnet://50/analog-input,6> bacnet:object-identifier "analog-input,6" ;
+    bacnet:object-name "Air Valve Drive Status" .
+
+<bacnet://50/analog-output,25> bacnet:object-identifier "analog-output,25" ;
+    bacnet:object-name "Heating Output 1 Command" .
+
+<bacnet://50/analog-output,5> bacnet:object-identifier "analog-output,5" ;
+    bacnet:object-name "Air Valve Drive Command" .
+
+<bacnet://50/analog-value,1> bacnet:object-identifier "analog-value,1" ;
+    bacnet:object-name "Occupied Cooling Setpoint" .
+
+<bacnet://50/analog-value,10> bacnet:object-identifier "analog-value,10" ;
+    bacnet:object-name "Cooling Loop Output" .
+
+<bacnet://50/analog-value,11> bacnet:object-identifier "analog-value,11" ;
+    bacnet:object-name "Heating Loop Output" .
+
+<bacnet://50/analog-value,115> bacnet:object-identifier "analog-value,115" ;
+    bacnet:object-name "Supply Fan Speed Status" .
+
+<bacnet://50/analog-value,118> bacnet:object-identifier "analog-value,118" ;
+    bacnet:object-name "Space Temperature Setpoint Default" .
+
+<bacnet://50/analog-value,12> bacnet:object-identifier "analog-value,12" ;
+    bacnet:object-name "Air Flow Setpoint Active Minimum" .
+
+<bacnet://50/analog-value,125> bacnet:object-identifier "analog-value,125" ;
+    bacnet:object-name "Cooling Setpoint High Limit" .
+
+<bacnet://50/analog-value,126> bacnet:object-identifier "analog-value,126" ;
+    bacnet:object-name "Cooling Setpoint Low Limit" .
+
+<bacnet://50/analog-value,127> bacnet:object-identifier "analog-value,127" ;
+    bacnet:object-name "Heating Setpoint High Limit" .
+
+<bacnet://50/analog-value,128> bacnet:object-identifier "analog-value,128" ;
+    bacnet:object-name "Heating Setpoint Low Limit" .
+
+<bacnet://50/analog-value,13> bacnet:object-identifier "analog-value,13" ;
+    bacnet:object-name "Air Flow Setpoint Active Maximum" .
+
+<bacnet://50/analog-value,135> bacnet:object-identifier "analog-value,135" ;
+    bacnet:object-name "Active HeatCoil Control Sensor" .
+
+<bacnet://50/analog-value,136> bacnet:object-identifier "analog-value,136" ;
+    bacnet:object-name "Active HeatCoil Control Setpoint" .
+
+<bacnet://50/analog-value,14> bacnet:object-identifier "analog-value,14" ;
+    bacnet:object-name "Air Flow Override Flow Setpoint" .
+
+<bacnet://50/analog-value,143> bacnet:object-identifier "analog-value,143" ;
+    bacnet:object-name "Heat Command Request" .
+
+<bacnet://50/analog-value,15> bacnet:object-identifier "analog-value,15" ;
+    bacnet:object-name "Space Temperature Setpoint Deviation" .
+
+<bacnet://50/analog-value,2> bacnet:object-identifier "analog-value,2" ;
+    bacnet:object-name "Occupied Heating Setpoint" .
+
+<bacnet://50/analog-value,21> bacnet:object-identifier "analog-value,21" ;
+    bacnet:object-name "Discharge Air Temperature Setpoint Active" .
+
+<bacnet://50/analog-value,3> bacnet:object-identifier "analog-value,3" ;
+    bacnet:object-name "Occupied Offset" .
+
+<bacnet://50/analog-value,4> bacnet:object-identifier "analog-value,4" ;
+    bacnet:object-name "Occupied Standby Offset" .
+
+<bacnet://50/analog-value,400> bacnet:object-identifier "analog-value,400" ;
+    bacnet:object-name "Air Flow Calculated" .
+
+<bacnet://50/analog-value,401> bacnet:object-identifier "analog-value,401" ;
+    bacnet:object-name "Air Flow Gain" .
+
+<bacnet://50/analog-value,402> bacnet:object-identifier "analog-value,402" ;
+    bacnet:object-name "Air Flow Measurement Offset" .
+
+<bacnet://50/analog-value,403> bacnet:object-identifier "analog-value,403" ;
+    bacnet:object-name "Air Flow Minimum Setpoint Active" .
+
+<bacnet://50/analog-value,404> bacnet:object-identifier "analog-value,404" ;
+    bacnet:object-name "Air Flow Nominal Status" .
+
+<bacnet://50/analog-value,405> bacnet:object-identifier "analog-value,405" ;
+    bacnet:object-name "Air Flow Override Percent" .
+
+<bacnet://50/analog-value,406> bacnet:object-identifier "analog-value,406" ;
+    bacnet:object-name "Air Flow Setpoint Active" .
+
+<bacnet://50/analog-value,407> bacnet:object-identifier "analog-value,407" ;
+    bacnet:object-name "Air Flow Setpoint Maximum" .
+
+<bacnet://50/analog-value,408> bacnet:object-identifier "analog-value,408" ;
+    bacnet:object-name "Air Flow Setpoint Maximum Heat" .
+
+<bacnet://50/analog-value,409> bacnet:object-identifier "analog-value,409" ;
+    bacnet:object-name "Air Flow Setpoint Minimum" .
+
+<bacnet://50/analog-value,410> bacnet:object-identifier "analog-value,410" ;
+    bacnet:object-name "Air Flow Setpoint Minimum Heat" .
+
+<bacnet://50/analog-value,411> bacnet:object-identifier "analog-value,411" ;
+    bacnet:object-name "Air Flow Setpoint Minimum Local Heat" .
+
+<bacnet://50/analog-value,412> bacnet:object-identifier "analog-value,412" ;
+    bacnet:object-name "Air Flow Setpoint Minimum Standby" .
+
+<bacnet://50/analog-value,413> bacnet:object-identifier "analog-value,413" ;
+    bacnet:object-name "Air Flow Setpoint Minimum Standby Heat" .
+
+<bacnet://50/analog-value,414> bacnet:object-identifier "analog-value,414" ;
+    bacnet:object-name "Air Flow Setpoint TAV" .
+
+<bacnet://50/analog-value,415> bacnet:object-identifier "analog-value,415" ;
+    bacnet:object-name "Air Valve Drive Time Seconds" .
+
+<bacnet://50/analog-value,416> bacnet:object-identifier "analog-value,416" ;
+    bacnet:object-name "Air Valve Minimum Position Active" .
+
+<bacnet://50/analog-value,417> bacnet:object-identifier "analog-value,417" ;
+    bacnet:object-name "Air Valve P-Gain" .
+
+<bacnet://50/analog-value,418> bacnet:object-identifier "analog-value,418" ;
+    bacnet:object-name "Air Valve Position Request" .
+
+<bacnet://50/analog-value,419> bacnet:object-identifier "analog-value,419" ;
+    bacnet:object-name "Air Valve Position Status" .
+
+<bacnet://50/analog-value,420> bacnet:object-identifier "analog-value,420" ;
+    bacnet:object-name "Auto Changeover Point" .
+
+<bacnet://50/analog-value,421> bacnet:object-identifier "analog-value,421" ;
+    bacnet:object-name "Auxiliary Heat Control Request" .
+
+<bacnet://50/analog-value,423> bacnet:object-identifier "analog-value,423" ;
+    bacnet:object-name "Discharge Air Heating Setpoint Maximum" .
+
+<bacnet://50/analog-value,424> bacnet:object-identifier "analog-value,424" ;
+    bacnet:object-name "Discharge Air Flow" .
+
+<bacnet://50/analog-value,425> bacnet:object-identifier "analog-value,425" ;
+    bacnet:object-name "G36 DAT Heating Setpoint Active" .
+
+<bacnet://50/analog-value,426> bacnet:object-identifier "analog-value,426" ;
+    bacnet:object-name "Flow Capacity" .
+
+<bacnet://50/analog-value,427> bacnet:object-identifier "analog-value,427" ;
+    bacnet:object-name "Flow Capacity P-Gain" .
+
+<bacnet://50/analog-value,428> bacnet:object-identifier "analog-value,428" ;
+    bacnet:object-name "Generic VAV Box K-Factor CFM" .
+
+<bacnet://50/analog-value,431> bacnet:object-identifier "analog-value,431" ;
+    bacnet:object-name "PD Mode Min Air Valve Position" .
+
+<bacnet://50/analog-value,432> bacnet:object-identifier "analog-value,432" ;
+    bacnet:object-name "Pressure Sensor Calibration Offset" .
+
+<bacnet://50/analog-value,433> bacnet:object-identifier "analog-value,433" ;
+    bacnet:object-name "Reheat Enable Point (Primary Air)" .
+
+<bacnet://50/analog-value,434> bacnet:object-identifier "analog-value,434" ;
+    bacnet:object-name "Supply Air Temperature BAS" .
+
+<bacnet://50/analog-value,437> bacnet:object-identifier "analog-value,437" ;
+    bacnet:object-name "Air Flow Setpoint Reset Max Local Heat" .
+
+<bacnet://50/analog-value,438> bacnet:object-identifier "analog-value,438" ;
+    bacnet:object-name "Air Flow Setpoint Reset Min Local Heat" .
+
+<bacnet://50/analog-value,439> bacnet:object-identifier "analog-value,439" ;
+    bacnet:object-name "Actual Air Valve Position" .
+
+<bacnet://50/analog-value,440> bacnet:object-identifier "analog-value,440" ;
+    bacnet:object-name "Nominal Air Flow Status" .
+
+<bacnet://50/analog-value,441> bacnet:object-identifier "analog-value,441" ;
+    bacnet:object-name "Unit Flow Gain" .
+
+<bacnet://50/analog-value,442> bacnet:object-identifier "analog-value,442" ;
+    bacnet:object-name "Ventilation Corrected Minimum Setpoint" .
+
+<bacnet://50/analog-value,443> bacnet:object-identifier "analog-value,443" ;
+    bacnet:object-name "Ventilation Ratio" .
+
+<bacnet://50/analog-value,444> bacnet:object-identifier "analog-value,444" ;
+    bacnet:object-name "Ventilation Ratio Limit BAS" .
+
+<bacnet://50/analog-value,445> bacnet:object-identifier "analog-value,445" ;
+    bacnet:object-name "Ventilation Setpoint Active" .
+
+<bacnet://50/analog-value,446> bacnet:object-identifier "analog-value,446" ;
+    bacnet:object-name "Ventilation Setpoint BAS" .
+
+<bacnet://50/analog-value,447> bacnet:object-identifier "analog-value,447" ;
+    bacnet:object-name "Ventilation Setpoint Local" .
+
+<bacnet://50/analog-value,448> bacnet:object-identifier "analog-value,448" ;
+    bacnet:object-name "Ventilation Standby Setpoint" .
+
+<bacnet://50/analog-value,45> bacnet:object-identifier "analog-value,45" ;
+    bacnet:object-name "Space CO2 High Limit" .
+
+<bacnet://50/analog-value,46> bacnet:object-identifier "analog-value,46" ;
+    bacnet:object-name "Space CO2 Low Limit" .
+
+<bacnet://50/analog-value,5> bacnet:object-identifier "analog-value,5" ;
+    bacnet:object-name "Unoccupied Cooling Setpoint" .
+
+<bacnet://50/analog-value,52> bacnet:object-identifier "analog-value,52" ;
+    bacnet:object-name "Cooling Capacity Status" .
+
+<bacnet://50/analog-value,6> bacnet:object-identifier "analog-value,6" ;
+    bacnet:object-name "Unoccupied Heating Setpoint" .
+
+<bacnet://50/analog-value,61> bacnet:object-identifier "analog-value,61" ;
+    bacnet:object-name "Heat Control Pgain" .
+
+<bacnet://50/analog-value,62> bacnet:object-identifier "analog-value,62" ;
+    bacnet:object-name "Heating Capacity Primary Status" .
+
+<bacnet://50/analog-value,64> bacnet:object-identifier "analog-value,64" ;
+    bacnet:object-name "Heating Capacity Secondary Status" .
+
+<bacnet://50/analog-value,7> bacnet:object-identifier "analog-value,7" ;
+    bacnet:object-name "Space Temperature Setpoint BAS" .
+
+<bacnet://50/analog-value,73> bacnet:object-identifier "analog-value,73" ;
+    bacnet:object-name "Space Temperature BAS" .
+
+<bacnet://50/analog-value,74> bacnet:object-identifier "analog-value,74" ;
+    bacnet:object-name "Space Temperature Active" .
+
+<bacnet://50/analog-value,77> bacnet:object-identifier "analog-value,77" ;
+    bacnet:object-name "Space CO2 Concentration BAS" .
+
+<bacnet://50/analog-value,78> bacnet:object-identifier "analog-value,78" ;
+    bacnet:object-name "Space CO2 Concentration Active" .
+
+<bacnet://50/analog-value,8> bacnet:object-identifier "analog-value,8" ;
+    bacnet:object-name "Space Temperature Setpoint Active" .
+
+<bacnet://50/analog-value,9> bacnet:object-identifier "analog-value,9" ;
+    bacnet:object-name "Occupied Bypass Time" .
+
+<bacnet://50/binary-input,29> bacnet:object-identifier "binary-input,29" ;
+    bacnet:object-name "Occupancy Input" .
+
+<bacnet://50/binary-value,11> bacnet:object-identifier "binary-value,11" ;
+    bacnet:object-name "Diagnostic: Space Temperature Source Failure" .
+
+<bacnet://50/binary-value,21> bacnet:object-identifier "binary-value,21" ;
+    bacnet:object-name "Heat Cool Mode Active" .
+
+<bacnet://50/binary-value,22> bacnet:object-identifier "binary-value,22" ;
+    bacnet:object-name "Night Heat Cool" .
+
+<bacnet://50/binary-value,400> bacnet:object-identifier "binary-value,400" ;
+    bacnet:object-name "Air Valve Position Control" .
+
+<bacnet://50/binary-value,401> bacnet:object-identifier "binary-value,401" ;
+    bacnet:object-name "Auto Calibrate" .
+
+<bacnet://50/binary-value,403> bacnet:object-identifier "binary-value,403" ;
+    bacnet:object-name "Default Supply Air Temperature Mode" .
+
+<bacnet://50/binary-value,404> bacnet:object-identifier "binary-value,404" ;
+    bacnet:object-name "Diagnostic: Flow Sensor Calibration Failure" .
+
+<bacnet://50/binary-value,405> bacnet:object-identifier "binary-value,405" ;
+    bacnet:object-name "Diagnostic: Flow Sensor Failure" .
+
+<bacnet://50/binary-value,406> bacnet:object-identifier "binary-value,406" ;
+    bacnet:object-name "Diagnostic: High Air Flow" .
+
+<bacnet://50/binary-value,409> bacnet:object-identifier "binary-value,409" ;
+    bacnet:object-name "Pressure Dependent Mode Reheat Enable" .
+
+<bacnet://50/binary-value,411> bacnet:object-identifier "binary-value,411" ;
+    bacnet:object-name "G36 Heating DAT Max Limit in Effect" .
+
+<bacnet://50/binary-value,412> bacnet:object-identifier "binary-value,412" ;
+    bacnet:object-name "Reset TAV" .
+
+<bacnet://50/binary-value,413> bacnet:object-identifier "binary-value,413" ;
+    bacnet:object-name "TAV Mode Status" .
+
+<bacnet://50/binary-value,414> bacnet:object-identifier "binary-value,414" ;
+    bacnet:object-name "VAV Flow Setpoints Auto Set Release" .
+
+<bacnet://50/binary-value,62> bacnet:object-identifier "binary-value,62" ;
+    bacnet:object-name "Fan Latch" .
+
+<bacnet://50/binary-value,63> bacnet:object-identifier "binary-value,63" ;
+    bacnet:object-name "Startup Delay Completed" .
+
+<bacnet://50/binary-value,65> bacnet:object-identifier "binary-value,65" ;
+    bacnet:object-name "Fan Safeties OK" .
+
+<bacnet://50/binary-value,77> bacnet:object-identifier "binary-value,77" ;
+    bacnet:object-name "Active HeatCoil Control Sensor Failed" .
+
+<bacnet://50/binary-value,78> bacnet:object-identifier "binary-value,78" ;
+    bacnet:object-name "Optional Heat Enable Command" .
+
+<bacnet://50/binary-value,79> bacnet:object-identifier "binary-value,79" ;
+    bacnet:object-name "Optional Heat Lockout" .
+
+<bacnet://50/binary-value,80> bacnet:object-identifier "binary-value,80" ;
+    bacnet:object-name "Heating Lockout BAS" .
+
+<bacnet://50/binary-value,9> bacnet:object-identifier "binary-value,9" ;
+    bacnet:object-name "Diagnostic: Space CO2 Source Failure" .
+
+<bacnet://50/event-log,1> bacnet:object-identifier "event-log,1" ;
+    bacnet:object-name "eventLog" .
+
+<bacnet://50/file,0> bacnet:object-identifier "file,0" ;
+    bacnet:object-name "config_file0" .
+
+<bacnet://50/multi-state-input,1> bacnet:object-identifier "multi-state-input,1" ;
+    bacnet:object-name "tov_Space Temperature Local" .
+
+<bacnet://50/multi-state-value,1> bacnet:object-identifier "multi-state-value,1" ;
+    bacnet:object-name "Occupancy Request" .
+
+<bacnet://50/multi-state-value,100> bacnet:object-identifier "multi-state-value,100" ;
+    bacnet:object-name "Unit Information" .
+
+<bacnet://50/multi-state-value,101> bacnet:object-identifier "multi-state-value,101" ;
+    bacnet:object-name "Air Flow Override" .
+
+<bacnet://50/multi-state-value,102> bacnet:object-identifier "multi-state-value,102" ;
+    bacnet:object-name "Air Flow Minimum Setpoint Source" .
+
+<bacnet://50/multi-state-value,104> bacnet:object-identifier "multi-state-value,104" ;
+    bacnet:object-name "Primary Air Temp Enum" .
+
+<bacnet://50/multi-state-value,108> bacnet:object-identifier "multi-state-value,108" ;
+    bacnet:object-name "VAV Box Fan Type" .
+
+<bacnet://50/multi-state-value,109> bacnet:object-identifier "multi-state-value,109" ;
+    bacnet:object-name "VAV Box Size" .
+
+<bacnet://50/multi-state-value,2> bacnet:object-identifier "multi-state-value,2" ;
+    bacnet:object-name "Occupancy Status" .
+
+<bacnet://50/multi-state-value,3> bacnet:object-identifier "multi-state-value,3" ;
+    bacnet:object-name "Heat Cool Mode Request" .
+
+<bacnet://50/multi-state-value,4> bacnet:object-identifier "multi-state-value,4" ;
+    bacnet:object-name "Heat Cool Mode Status" .
+
+<bacnet://50/multi-state-value,61> bacnet:object-identifier "multi-state-value,61" ;
+    bacnet:object-name "Space Temperature Setpoint Source Status" .
+
+<bacnet://50/multi-state-value,62> bacnet:object-identifier "multi-state-value,62" ;
+    bacnet:object-name "Space Temperature Source Status" .
+
+<bacnet://50/multi-state-value,8> bacnet:object-identifier "multi-state-value,8" ;
+    bacnet:object-name "Emergency Override BAS" .
+
+<bacnet://50/notification-class,1> bacnet:object-identifier "notification-class,1" ;
+    bacnet:object-name "HVAC-Critical" .
+
+<bacnet://50/notification-class,2> bacnet:object-identifier "notification-class,2" ;
+    bacnet:object-name "HVAC-Service Required" .
+
+<bacnet://50/notification-class,3> bacnet:object-identifier "notification-class,3" ;
+    bacnet:object-name "HVAC-Warning" .
+
+<bacnet://50/notification-class,4> bacnet:object-identifier "notification-class,4" ;
+    bacnet:object-name "HVAC-Information" .
+
+<bacnet://50/trend-log,1> bacnet:object-identifier "trend-log,1" ;
+    bacnet:object-name "Tempy" .
+
+<bacnet://50/trend-log,2> bacnet:object-identifier "trend-log,2" ;
+    bacnet:object-name "Log_Space Temperature Local" .
+
+:site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193 a brick:Site ;
+    rdfs:label "Pensacola" .
+
+:eq_fbcd6789_346c_4222_96fa_c68a501051c9 a brick:Weather_Service ;
+    rdfs:label "Open-Meteo" ;
+    ofdd:dataSource "open_meteo" ;
+    ofdd:equipmentType "Weather_Service" ;
+    brick:isPartOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193 .
+
+:site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193_points a brick:Equipment ;
     rdfs:label "Points" ;
     ofdd:equipmentType "Unknown" ;
-    brick:isPartOf :site_20016710_2668_4600_85aa_266330c99aa1 .
-
-:eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 a brick:Equipment ;
-    rdfs:label "VAV-1" ;
-    ofdd:equipmentType "Equipment" ;
-    brick:isFedBy :eq_7607b072_0651_46ad_8f98_9d71453b6b7f ;
-    brick:isPartOf :site_20016710_2668_4600_85aa_266330c99aa1 .
-
-:eq_7607b072_0651_46ad_8f98_9d71453b6b7f a brick:Equipment ;
-    rdfs:label "AHU-1" ;
-    ofdd:equipmentType "Equipment" ;
-    brick:feeds :eq_ed34391a_7fb1_44a2_8f25_a4685b6751a7 ;
-    brick:isPartOf :site_20016710_2668_4600_85aa_266330c99aa1 .
+    brick:isPartOf :site_7445bca2_6b24_4177_9bbe_0e5fcb3d2193 .
 

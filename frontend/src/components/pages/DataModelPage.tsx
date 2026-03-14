@@ -79,6 +79,8 @@ export function DataModelPage() {
   });
   const [openAiModel, setOpenAiModel] = useState("gpt-4o");
   const [showAiKey, setShowAiKey] = useState(false);
+  const [autoImportAiTag, setAutoImportAiTag] = useState(false);
+  const [tagSelectedSiteOnly, setTagSelectedSiteOnly] = useState(false);
   const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
   const [aiTagError, setAiTagError] = useState<string | null>(null);
 
@@ -158,9 +160,18 @@ export function DataModelPage() {
     onSuccess: (data) => {
       setAiTagResult(data);
       setAiTagError(null);
-      // Pre-fill import textarea so user can review then click Import
+      // Pre-fill import textarea so user can review the exact tagged payload.
       const payload = { points: data.points, equipment: data.equipment };
       setImportJson(JSON.stringify(payload, null, 2));
+
+      if (data.meta.import_result) {
+        setImportResult(data.meta.import_result);
+        queryClient.invalidateQueries({ queryKey: ["data-model"] });
+        queryClient.invalidateQueries({ queryKey: ["sites"] });
+        queryClient.invalidateQueries({ queryKey: ["equipment"] });
+        queryClient.invalidateQueries({ queryKey: ["points"] });
+        queryClient.invalidateQueries({ queryKey: ["faults"] });
+      }
     },
     onError: (err) => {
       setAiTagError(err.message);
@@ -227,10 +238,11 @@ export function DataModelPage() {
     setAiTagError(null);
     setAiTagResult(null);
     tagWithAiMutation.mutate({
-      site_id: selectedSiteId ?? null,
+      // Match manual workflow by default (all sites). Users can opt into selected-site-only.
+      site_id: tagSelectedSiteOnly ? (selectedSiteId ?? null) : null,
       openai_api_key: openAiKey,
       model: openAiModel,
-      auto_import: false,
+      auto_import: autoImportAiTag,
     });
   };
 
@@ -546,6 +558,40 @@ export function DataModelPage() {
               )}
             </div>
 
+            {/* Auto import toggle */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={autoImportAiTag}
+                  onChange={(e) => setAutoImportAiTag(e.target.checked)}
+                  className="h-4 w-4 rounded border-border/60"
+                  data-testid="ai-tag-auto-import"
+                />
+                Automatically import tagged result
+              </label>
+              <p className="text-xs text-muted-foreground">
+                When enabled, the tagged payload is immediately applied to the data model after validation.
+              </p>
+            </div>
+
+            {/* Scope toggle */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={tagSelectedSiteOnly}
+                  onChange={(e) => setTagSelectedSiteOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-border/60"
+                  data-testid="ai-tag-selected-site-only"
+                />
+                Tag selected site only
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Off (default): tags points from all sites, matching the Export panel above. On: only tags the currently selected site.
+              </p>
+            </div>
+
             {/* Tag button */}
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -560,7 +606,7 @@ export function DataModelPage() {
               </button>
               {tagWithAiMutation.isPending && (
                 <span className="text-xs text-muted-foreground">
-                  Calling OpenAI — this may take up to 60 s for large exports…
+                  Calling OpenAI — this may take several minutes for large sites…
                 </span>
               )}
             </div>
@@ -576,7 +622,15 @@ export function DataModelPage() {
                 {aiTagResult.meta.usage
                   ? ` (${aiTagResult.meta.usage.total_tokens} tokens)`
                   : ""}
-                . Review the JSON in the Import section below, then click Import.
+                . {aiTagResult.meta.import_result
+                  ? "Tagged payload was also imported into the data model."
+                  : "Review the JSON in the Import section below, then click Import."}
+              </p>
+            )}
+            {aiTagResult && aiTagResult.meta.point_count === 0 && (exportData?.length ?? 0) > 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-400" data-testid="ai-tag-zero-points-hint">
+                AI returned zero points even though export has data. If <strong>Tag selected site only</strong> is enabled,
+                switch it off to tag all sites. If it is already off, rerun once and verify the API key/model are valid.
               </p>
             )}
             {aiTagError && (
