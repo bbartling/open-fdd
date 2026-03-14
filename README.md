@@ -62,7 +62,18 @@ pytest -v
 
 Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
 
-**Canonical prompt** (as defined in [docs/modeling/ai_assisted_tagging](docs/modeling/ai_assisted_tagging.md)) — copy-paste this into ChatGPT or your LLM. It is **generic** and works for **any site** (single building, campus, or tenant); the export JSON is the only input that varies.
+### Two tagging paths
+
+| | Automated (UI / API) | Manual (copy-paste) |
+|---|---|---|
+| **Requires** | OpenAI API key | ChatGPT / any LLM |
+| **How** | Enter key in the **Data Model** page → click **Tag with AI** | Export JSON → paste into LLM with canonical prompt below → paste result back |
+| **Result** | Tagged JSON pre-filled in Import textarea | Tagged JSON ready to paste into Import textarea |
+| **Cost** | OpenAI token usage | Free (uses your LLM account) |
+
+The **automated path** calls `POST /data-model/tag-with-openai` server-side. Your API key is sent in the request body and used only for that call — it is never stored on the server. You can optionally remember the key in your browser's localStorage for convenience (toggleable in the UI).
+
+The **manual path** is always available; users without an API key continue to use it unchanged. (manual path — copy-paste into ChatGPT or any LLM; for the automated path use the Data Model page in the UI)
 
 ```text
 I use Open-FDD. I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).

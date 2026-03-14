@@ -720,6 +720,78 @@ def import_data_model(body: DataModelImportBody):
     return out
 
 
+# --- AI tagging: export → OpenAI → validate → optional import ---
+
+
+class TagWithOpenAiRequest(BaseModel):
+    site_id: str | None = Field(
+        None,
+        description="Filter by site (UUID, name, or description) — same as GET /data-model/export?site_id=X. Omit for all sites.",
+    )
+    openai_api_key: str = Field(
+        ...,
+        description="OpenAI API key (sk-...). Used only for this request; never stored server-side.",
+    )
+    model: str = Field(
+        "gpt-4o",
+        description="OpenAI model to use (e.g. gpt-4o, gpt-4o-mini, gpt-4-turbo).",
+    )
+    auto_import: bool = Field(
+        False,
+        description="If true, immediately PUT /data-model/import with the tagged JSON after validation. "
+        "If false (default), returns tagged JSON for review without writing to DB.",
+    )
+
+
+@router.post(
+    "/tag-with-openai",
+    summary="Tag data model with Brick types via OpenAI",
+    response_description=(
+        "Tagged JSON ready to review and import (points + equipment + meta). "
+        "Set auto_import=true to write to DB immediately."
+    ),
+)
+def tag_data_model_with_openai(body: TagWithOpenAiRequest):
+    """Export the current data model, send it to OpenAI using the canonical prompt,
+    validate the tagged response against DataModelImportBody, and optionally import it.
+
+    The openai_api_key is used only for the duration of this request and is never
+    stored or logged server-side. Dry-run (auto_import=false) is the default so
+    users can review the tagged JSON before committing changes to the DB.
+    """
+    from open_fdd.platform.llm_tagger import LlmTaggerError, tag_with_openai as _tag
+
+    export_rows = _build_unified_export(body.site_id)
+    export_dicts = [r.model_dump() for r in export_rows]
+
+    try:
+        import_body, usage = _tag(
+            export_rows=export_dicts,
+            api_key=body.openai_api_key,
+            model=body.model,
+        )
+    except LlmTaggerError as exc:
+        raise HTTPException(exc.status_code, exc.detail)
+
+    meta: dict = {
+        "model": body.model,
+        "point_count": len(import_body.points),
+        "equipment_count": len(import_body.equipment),
+    }
+    if usage:
+        meta["usage"] = usage
+
+    if body.auto_import:
+        import_result = import_data_model(import_body)
+        meta["import_result"] = import_result
+
+    return {
+        "points": [p.model_dump() for p in import_body.points],
+        "equipment": [e.model_dump() for e in import_body.equipment],
+        "meta": meta,
+    }
+
+
 # --- TTL: generate from DB (always in sync with CRUD) ---
 
 

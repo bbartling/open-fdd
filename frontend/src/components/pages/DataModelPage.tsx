@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
+import { Play, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
@@ -22,6 +22,7 @@ import {
   dataModelSerialize,
   dataModelReset,
   dataModelCheck,
+  tagPointsWithOpenAi,
   type SiteCreate,
   type DataModelCheckResponse,
 } from "@/lib/crud-api";
@@ -30,6 +31,8 @@ import type {
   DataModelImportBody,
   DataModelImportResponse,
   SparqlResponse,
+  TagWithOpenAiRequest,
+  TagWithOpenAiResponse,
 } from "@/types/api";
 
 const DEFAULT_SPARQL = `PREFIX brick: <https://brickschema.org/schema/Brick#>
@@ -66,6 +69,18 @@ export function DataModelPage() {
   const [showExportPreview, setShowExportPreview] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const sparqlFileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI tagging state — key loaded from localStorage if user previously enabled remember
+  const [openAiKey, setOpenAiKey] = useState<string>(() => {
+    try { return localStorage.getItem("openFddOpenAiKey") ?? ""; } catch { return ""; }
+  });
+  const [rememberKey, setRememberKey] = useState<boolean>(() => {
+    try { return localStorage.getItem("openFddRememberKey") === "true"; } catch { return false; }
+  });
+  const [openAiModel, setOpenAiModel] = useState("gpt-4o");
+  const [showAiKey, setShowAiKey] = useState(false);
+  const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
+  const [aiTagError, setAiTagError] = useState<string | null>(null);
 
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
@@ -138,6 +153,21 @@ export function DataModelPage() {
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
   });
 
+  const tagWithAiMutation = useMutation<TagWithOpenAiResponse, Error, TagWithOpenAiRequest>({
+    mutationFn: tagPointsWithOpenAi,
+    onSuccess: (data) => {
+      setAiTagResult(data);
+      setAiTagError(null);
+      // Pre-fill import textarea so user can review then click Import
+      const payload = { points: data.points, equipment: data.equipment };
+      setImportJson(JSON.stringify(payload, null, 2));
+    },
+    onError: (err) => {
+      setAiTagError(err.message);
+      setAiTagResult(null);
+    },
+  });
+
   const createSiteMutation = useMutation({
     mutationFn: (body: SiteCreate) => createSite(body),
     onSuccess: () => {
@@ -179,6 +209,29 @@ export function DataModelPage() {
     } catch (e) {
       setImportResult({ total: 0, warnings: [e instanceof Error ? e.message : "Invalid JSON"] });
     }
+  };
+
+  const handleTagWithAi = () => {
+    if (!openAiKey.trim()) return;
+    if (rememberKey) {
+      try {
+        localStorage.setItem("openFddOpenAiKey", openAiKey);
+        localStorage.setItem("openFddRememberKey", "true");
+      } catch { /* storage unavailable */ }
+    } else {
+      try {
+        localStorage.removeItem("openFddOpenAiKey");
+        localStorage.removeItem("openFddRememberKey");
+      } catch { /* storage unavailable */ }
+    }
+    setAiTagError(null);
+    setAiTagResult(null);
+    tagWithAiMutation.mutate({
+      site_id: selectedSiteId ?? null,
+      openai_api_key: openAiKey,
+      model: openAiModel,
+      auto_import: false,
+    });
   };
 
   const handleViewTtl = useCallback(async () => {
@@ -393,6 +446,143 @@ export function DataModelPage() {
             )}
             {!exportLoading && (!exportData || exportData.length === 0) && (
               <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* AI Tagging */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Sparkles className="h-5 w-5" />
+              AI Tagging (OpenAI)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Automatically tag BACnet points with Brick types, rule inputs, and equipment using
+              OpenAI. Enter your API key below and click <strong>Tag with AI</strong> — the tagged
+              JSON will be pre-filled in the Import section below for review before you commit it.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              <strong>No API key?</strong> Use the manual method: export the JSON above, paste it
+              into ChatGPT with the canonical prompt from the README, then paste the result into the
+              Import section below.
+            </p>
+
+            {/* API key input */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                OpenAI API key
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showAiKey ? "text" : "password"}
+                  value={openAiKey}
+                  onChange={(e) => setOpenAiKey(e.target.value)}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                  className="h-9 flex-1 rounded-lg border border-border/60 bg-background px-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  data-testid="ai-tag-api-key-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAiKey((v) => !v)}
+                  className="inline-flex items-center rounded-lg border border-border/60 bg-muted/50 p-2 text-muted-foreground transition-colors hover:bg-muted"
+                  title={showAiKey ? "Hide key" : "Show key"}
+                >
+                  {showAiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenAiKey("");
+                    setRememberKey(false);
+                    try {
+                      localStorage.removeItem("openFddOpenAiKey");
+                      localStorage.removeItem("openFddRememberKey");
+                    } catch { /* storage unavailable */ }
+                  }}
+                  className="inline-flex items-center rounded-lg border border-border/60 bg-muted/50 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted"
+                  title="Clear stored key"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Model selector */}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">Model</label>
+              <select
+                value={openAiModel}
+                onChange={(e) => setOpenAiModel(e.target.value)}
+                className="h-9 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="gpt-4o">gpt-4o</option>
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4-turbo">gpt-4-turbo</option>
+              </select>
+            </div>
+
+            {/* Remember key toggle */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberKey}
+                  onChange={(e) => setRememberKey(e.target.checked)}
+                  className="h-4 w-4 rounded border-border/60"
+                  data-testid="ai-tag-remember-key"
+                />
+                Remember key in this browser
+              </label>
+              {rememberKey && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  ⚠ The key will be saved in this browser&apos;s localStorage. Anyone with access
+                  to this browser profile or device can read it. Only enable this on a private,
+                  trusted device.
+                </p>
+              )}
+            </div>
+
+            {/* Tag button */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleTagWithAi}
+                disabled={!openAiKey.trim() || tagWithAiMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                data-testid="ai-tag-button"
+              >
+                <Sparkles className="h-4 w-4" />
+                {tagWithAiMutation.isPending ? "Tagging…" : "Tag with AI"}
+              </button>
+              {tagWithAiMutation.isPending && (
+                <span className="text-xs text-muted-foreground">
+                  Calling OpenAI — this may take up to 60 s for large exports…
+                </span>
+              )}
+            </div>
+
+            {/* Result summary */}
+            {aiTagResult && (
+              <p className="text-sm text-muted-foreground" data-testid="ai-tag-result">
+                Tagged {aiTagResult.meta.point_count} point
+                {aiTagResult.meta.point_count !== 1 ? "s" : ""} and{" "}
+                {aiTagResult.meta.equipment_count} equipment item
+                {aiTagResult.meta.equipment_count !== 1 ? "s" : ""} using{" "}
+                {aiTagResult.meta.model}
+                {aiTagResult.meta.usage
+                  ? ` (${aiTagResult.meta.usage.total_tokens} tokens)`
+                  : ""}
+                . Review the JSON in the Import section below, then click Import.
+              </p>
+            )}
+            {aiTagError && (
+              <p className="text-sm text-destructive" data-testid="ai-tag-error">
+                {aiTagError}
+              </p>
             )}
           </CardContent>
         </Card>
