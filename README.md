@@ -59,9 +59,19 @@ pytest -v
 
 ## AI Assisted Data Modeling
 
+
+In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement with the Brick ontology and upload it to an LLM for AI-assisted data modeling. Copy the prompt below, upload the YAML files defined for the job, and the LLM should know what to do.
+
 Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
 
-**Canonical prompt** (as defined in [docs/modeling/ai_assisted_tagging](docs/modeling/ai_assisted_tagging.md)) — copy-paste this into ChatGPT or your LLM. It is **generic** and works for **any site** (single building, campus, or tenant); the export JSON is the only input that varies.
+The engineer should chat with the LLM about the task at hand after first understanding the HVAC system from a systems perspective. The LLM can then provide additional metadata, such as Brick classes for point names, along with feeds and fed-by relationships. The final output JSON file is then imported back into Open-FDD, where the backend parses it into a completed data model.
+
+A slightly more polished version for docs or README text:
+
+In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement using the Brick ontology and an LLM for AI-assisted data modeling. Copy the prompt below and upload the YAML files defined for the task, and the LLM should understand how to proceed.
+
+After reviewing the HVAC system from a systems perspective, the engineer can chat with the LLM about the modeling task. The LLM can then generate additional metadata, including Brick classes for point names and feeds/fed-by relationships. The final output JSON file is imported back into Open-FDD, where the backend parses it into a completed data model.
+
 
 ```text
 I use Open-FDD. Please help me model my mechanical system’s feeds and fed-by relationships. If not enough data is available, please ask. Do not infer or assume relationships from probability—only the engineer knows the actual mechanical relationships for the HVAC.
