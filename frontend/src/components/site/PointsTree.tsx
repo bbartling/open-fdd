@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import type { Point, Equipment, Site } from "@/types/api";
 import { parseUtcTimestamp } from "@/lib/utils";
-import { Circle, CircleDot, ChevronRight, ChevronDown, Server, Box, CircleDotIcon } from "lucide-react";
+import { Circle, CircleDot, ChevronRight, ChevronDown, Server, Box, CircleDotIcon, Radio, CircleOff } from "lucide-react";
 
 /** Format ts for display (API timestamps are UTC; we show relative time). */
 function formatLastUpdated(ts: string | null): string {
@@ -110,7 +110,18 @@ export interface PointsTreeProps {
   onDeletePoint?: (pointId: string) => void;
   onDeleteEquipment?: (equipmentId: string, name: string) => void;
   onDeleteSite?: (siteId: string, name: string) => void;
+  /** Set polling for this point (true = BACnet scraper includes it). Shown as "Poll true" / "Poll false" on right-click. */
+  onSetPolling?: (pointId: string, polling: boolean) => void;
 }
+
+/** Test IDs for point context menu (E2E and unit tests). */
+export const POINTS_CONTEXT_MENU_TEST_IDS = {
+  POLL_TRUE: "points-context-menu-poll-true",
+  POLL_FALSE: "points-context-menu-poll-false",
+  DELETE_POINT: "points-context-menu-delete-point",
+  DELETE_EQUIPMENT: "points-context-menu-delete-equipment",
+  DELETE_SITE: "points-context-menu-delete-site",
+} as const;
 
 type ContextMenuState = { x: number; y: number; type: "point"; id: string; name: string } | { x: number; y: number; type: "equipment"; id: string; name: string } | { x: number; y: number; type: "site"; id: string; name: string } | null;
 
@@ -122,6 +133,7 @@ export function PointsTree({
   onDeletePoint,
   onDeleteEquipment,
   onDeleteSite,
+  onSetPolling,
 }: PointsTreeProps) {
   const tree = useMemo(
     () => buildTree(points, equipment, siteMap),
@@ -149,11 +161,15 @@ export function PointsTree({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, type: "point" | "equipment" | "site", id: string, name: string) => {
       e.preventDefault();
-      if ((type === "point" && onDeletePoint) || (type === "equipment" && onDeleteEquipment) || (type === "site" && onDeleteSite)) {
+      if (
+        (type === "point" && (onDeletePoint || onSetPolling)) ||
+        (type === "equipment" && onDeleteEquipment) ||
+        (type === "site" && onDeleteSite)
+      ) {
         setContextMenu({ x: e.clientX, y: e.clientY, type, id, name });
       }
     },
-    [onDeletePoint, onDeleteEquipment, onDeleteSite],
+    [onDeletePoint, onDeleteEquipment, onDeleteSite, onSetPolling],
   );
 
   if (points.length === 0) {
@@ -209,12 +225,47 @@ export function PointsTree({
             onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
           />
           <div
-            className="fixed z-50 min-w-[140px] rounded-lg border border-border/60 bg-card py-1 shadow-lg"
+            className="fixed z-50 min-w-[160px] rounded-lg border border-border/60 bg-card py-1 shadow-lg"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
+            {contextMenu.type === "point" && onSetPolling && (
+              <>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  data-testid={POINTS_CONTEXT_MENU_TEST_IDS.POLL_TRUE}
+                  onClick={() => {
+                    onSetPolling(contextMenu.id, true);
+                    setContextMenu(null);
+                  }}
+                >
+                  <Radio className="h-4 w-4 text-muted-foreground" />
+                  Poll true
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  data-testid={POINTS_CONTEXT_MENU_TEST_IDS.POLL_FALSE}
+                  onClick={() => {
+                    onSetPolling(contextMenu.id, false);
+                    setContextMenu(null);
+                  }}
+                >
+                  <CircleOff className="h-4 w-4 text-muted-foreground" />
+                  Poll false
+                </button>
+              </>
+            )}
             <button
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+              data-testid={
+                contextMenu.type === "point"
+                  ? POINTS_CONTEXT_MENU_TEST_IDS.DELETE_POINT
+                  : contextMenu.type === "equipment"
+                    ? POINTS_CONTEXT_MENU_TEST_IDS.DELETE_EQUIPMENT
+                    : POINTS_CONTEXT_MENU_TEST_IDS.DELETE_SITE
+              }
               onClick={() => {
                 if (contextMenu.type === "point" && onDeletePoint) onDeletePoint(contextMenu.id);
                 if (contextMenu.type === "equipment" && onDeleteEquipment) onDeleteEquipment(contextMenu.id, contextMenu.name);

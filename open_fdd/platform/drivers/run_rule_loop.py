@@ -5,7 +5,7 @@ Run FDD rule loop on a schedule (default: every 3 hours, 3-day lookback).
 Each run: if Open-Meteo is enabled (graph/config), fetches weather for the same
 lookback window so rules have fresh data; then loads rules from YAML, pulls last N days
 of site data into pandas, runs all rules (sensor + weather), writes fault_results.
-Analyst edits to YAML take effect on the next run; no restart required.
+YAML edits take effect on the next run; no restart required.
 
 Weather: Fetched at each FDD run (same interval as rule_interval_hours). To avoid
 redundant fetches, do not run the standalone weather scraper (run_weather_fetch.py --loop)

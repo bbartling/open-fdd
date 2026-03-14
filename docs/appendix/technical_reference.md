@@ -21,7 +21,6 @@ open-fdd/
 │   ├── engine/            # runner, checks, brick_resolver
 │   ├── reports/           # fault_viz, docx, fault_report
 │   ├── schema/            # FDD result/event (canonical)
-│   ├── analyst/           # ingest, to_dataframe, brick_model, run_fdd, run_sparql
 │   ├── platform/          # FastAPI, DB, drivers, loop
 │   │   ├── api/           # CRUD (sites, points, equipment), config, bacnet, data_model, download, analytics, run_fdd
 │   │   ├── drivers/       # open_meteo, bacnet (RPC + data-model scrape), bacnet_validate
@@ -29,8 +28,8 @@ open-fdd/
 │   │   ├── config.py, database.py, data_model_ttl.py, graph_model.py, site_resolver.py
 │   │   ├── loop.py, rules_loader.py
 │   │   └── static/        # Config UI — index.html, app.js, styles.css (served at /app; see Developer guide)
-│   └── tests/             # analyst/, engine/, platform/, test_schema.py
-├── analyst/               # Entry points: sparql, rules, run_all.sh; rules YAML; sparql/*.sparql
+│   └── tests/             # engine/, platform/, test_schema.py
+├── stack/rules/           # Default FDD rule YAML (sensor_bounds, sensor_flatline); upload more via Faults UI
 ├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy
 │   ├── sql/               # 001_init … 015_fault_state_and_audit (migrations; see Developer guide — Database schema)
 │   ├── grafana/           # provisioning/datasources, optional dashboards
@@ -84,7 +83,7 @@ Used to build the PUT /config body at bootstrap; thereafter config is in the gra
 |----------|---------|-------------|
 | `OFDD_RULE_INTERVAL_HOURS` | 3 | FDD run interval (hours). |
 | `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
-| `OFDD_RULES_DIR` | analyst/rules | YAML rules directory (hot reload). |
+| `OFDD_RULES_DIR` | stack/rules | YAML rules directory (hot reload). |
 | `OFDD_BRICK_TTL_DIR` | config | Brick TTL directory. |
 | `OFDD_BACNET_SERVER_URL` | — | diy-bacnet-server URL (e.g. http://localhost:8080). |
 | `OFDD_BACNET_SITE_ID` | default | Site to tag when scraping. |
@@ -103,7 +102,6 @@ Used to build the PUT /config body at bootstrap; thereafter config is in the gra
 
 Tests live under `open_fdd/tests/`. Run: `pytest open_fdd/tests/ -v`. All use in-process mocks; no shared DB or live API. For end-to-end (real API, optional BACnet): `python tools/graph_and_crud_test.py` (see [SPARQL cookbook](../modeling/sparql_cookbook)).
 
-- **analyst/** — brick_model, ingest, run_fdd
 - **engine/** — brick_resolver, runner, weather_rules
 - **platform/** — bacnet_api, bacnet_brick, bacnet_driver, config, crud_api, data_model_api, data_model_ttl, download_api, graph_model, rules_loader, site_resolver
 - **test_schema.py** — FDD result/event to row

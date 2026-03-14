@@ -15,11 +15,11 @@ Loads each .sparql file from scripts/automated_testing/sparql/ and runs it:
     - When no expected is available: we only assert API vs frontend parity.
 
   Frontend (when --frontend-parity):
-    For each query we test both ways a human would use the Data Model page:
+    For each query we test both ways a human would use the Data Model Testing page:
     1) Upload .sparql file: use the UI "Upload .sparql file" button, then Run SPARQL; assert result.
     2) Type in form: put the same SPARQL into the textarea, click Run SPARQL; assert result.
-    Both must match the API (and expected, when available). The Data Model page also has
-    "View full data model (TTL)" to inspect the graph.
+    Both must match the API (and expected, when available). Uses route /data-model-testing
+    (Summarize your HVAC + Custom SPARQL).
 
 Asserts: API returns 200 and bindings; when expected is used, API and frontend match expected;
 otherwise API and frontend match each other. When --frontend-parity is used, browser console
@@ -30,9 +30,8 @@ Graph-DB sync (default on): Compares CRUD counts to SPARQL graph counts. GET /si
 allows graph >= DB (synthetic equipment for orphan points). Use --skip-graph-db-sync to skip.
 
 Usage:
-  python sparql_crud_and_frontend_test.py --api-url http://localhost:8000
-  python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --frontend-url http://localhost --frontend-parity
-  python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --expected-from-ttl   # require config/data_model.ttl + rdflib
+  python 2_sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-parity
+
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --generate-expected   # write sparql/expected/*.json from API
   python sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --skip-graph-db-sync # skip graph vs DB count assertion
 
@@ -277,7 +276,7 @@ def _run_sparql_via_frontend(driver, frontend_url: str, query: str, timeout_sec:
     from selenium.webdriver.support.ui import WebDriverWait
 
     base = frontend_url.rstrip("/")
-    driver.get(f"{base}/data-model")
+    driver.get(f"{base}/data-model-testing")
     wait = WebDriverWait(driver, timeout_sec)
 
     textarea = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid=sparql-query-textarea]")))
@@ -343,7 +342,7 @@ def _run_sparql_via_frontend_file(
     from selenium.webdriver.support.ui import WebDriverWait
 
     base = frontend_url.rstrip("/")
-    driver.get(f"{base}/data-model")
+    driver.get(f"{base}/data-model-testing")
     wait = WebDriverWait(driver, timeout_sec)
 
     file_input = wait.until(

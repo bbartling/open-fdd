@@ -1,0 +1,8 @@
+# Data Model Testing → VAVs per AHU button
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?ahu (COUNT(?vav) AS ?vav_count) WHERE {
+  ?ahu a brick:Air_Handling_Unit .
+  ?vav brick:isPartOf ?ahu .
+  { ?vav a brick:Variable_Air_Volume_Box . } UNION { ?vav a brick:Variable_Air_Volume_Box_With_Reheat . }
+} GROUP BY ?ahu
+ORDER BY DESC(?vav_count)

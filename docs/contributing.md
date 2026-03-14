@@ -116,7 +116,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 **We especially welcome contributions from mechanical engineers and building professionals** who can add or improve FDD rules.
 
-- **Where rules live:** [Fault rules overview](rules/overview) — put project rules in **`analyst/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
+- **Where rules live:** [Fault rules overview](rules/overview) — put project rules in **`stack/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
 - **How to write rules:** [Expression Rule Cookbook](expression_rule_cookbook) — expression-type rules use YAML with BRICK-style inputs, params, and pandas/NumPy expressions. The cookbook includes AHU-style rules (e.g. GL36-inspired) and patterns you can adapt.
 - **What to contribute:**
   - **New rule YAMLs** for common faults (AHU, VAV, plant, sensors) that others can reuse.
@@ -125,7 +125,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 To contribute a rule or cookbook change:
 
-1. Add or edit files under `analyst/rules/` for new/updated rules, or under `docs/expression_rule_cookbook.md` (and related docs) for cookbook content.
+1. Add or edit files under `stack/rules/` for new/updated rules, or under `docs/expression_rule_cookbook.md` (and related docs) for cookbook content.
 2. Follow the existing YAML style and BRICK naming used in the cookbook.
 3. In a PR, describe the fault the rule targets and any assumptions (e.g. Brick types, units). If it's from a standard (e.g. ASHRAE), note the reference.
 
@@ -135,7 +135,7 @@ To contribute a rule or cookbook change:
 
 - Look for issues labeled `good first issue` or `help wanted` (if we've added them).
 - The codebase is Python 3.11+, with FastAPI (API), pandas/NumPy (rules), and Docker for the platform. See [Getting Started](getting_started) and the README for setup.
-- For rule or analyst changes, run the test suite and, if possible, the FDD loop locally with sample data before submitting a PR.
+- For rule changes, run the test suite and, if possible, the FDD loop locally with sample data before submitting a PR.
 
 ---
 
@@ -156,18 +156,8 @@ Open a PR with your changes; for large edits, an issue first can help align with
 ## Styleguides
 
 - **Python:** We use [Black](https://github.com/psf/black) for formatting. Run `black` on changed files before committing.
-- **YAML:** Match the style in `analyst/rules/` and the expression rule cookbook (indentation, key order).
+- **YAML:** Match the style in `stack/rules/` and the expression rule cookbook (indentation, key order).
 - **Markdown:** Use clear headings and lists; link to existing docs where relevant.
-
----
-
-## E2E frontend tests (Selenium)
-
-End-to-end tests drive the **React frontend** with Selenium (no direct API calls from the test). They cover: delete-all-sites + reset, create site, import LLM payload (`scripts/demo_site_llm_payload.json`), and validation that **Plots** and **Weather** charts render and, when data exists, show data (not blank).
-
-- **Install:** `pip install -e ".[e2e]"` (adds `selenium`, `webdriver-manager`).
-- **Run:** Start the stack (frontend + API), then `python scripts/e2e_frontend_selenium.py`. Use `--frontend-url` if the app is not at `http://localhost:5173`, `--headed` to see the browser, `--only delete-all` or `--only charts` to run a subset.
-- **Chart validation:** The test asserts that Recharts curve/path elements are present; if the BACnet scraper (or other source) has written timeseries data, it also asserts chart paths have data. See `scripts/e2e_frontend_selenium.py` and, for full flow, `docs/howto/e2e_selenium.md` (if present).
 
 ---
 

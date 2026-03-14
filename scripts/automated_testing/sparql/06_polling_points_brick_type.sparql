@@ -1,5 +1,5 @@
 # Polling points with Brick type and unit (no BACnet join)
-# Run via POST /data-model/sparql or Data Model page → Run SPARQL
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
 # Returns rows when graph has Brick points; use this when BACnet discovery has not been run.
 PREFIX brick: <https://brickschema.org/schema/Brick#>
 PREFIX ofdd: <http://openfdd.local/ontology#>

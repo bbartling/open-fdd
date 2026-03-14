@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Reports API
 
-Programmatic Python API for fault analytics, visualization, and report generation. Used by analyst workflows, notebooks, and the standalone FDD runner to produce fault summaries, charts, and Word reports. Import from `open_fdd.reports`.
+Programmatic Python API for fault analytics, visualization, and report generation. Used by notebooks and the FDD runner to produce fault summaries, charts, and Word reports. Import from `open_fdd.reports`.
 
 **Dependencies:** Core reporting uses pandas only. Word (.docx) reports require `python-docx` (`pip install python-docx`); without it, `build_report`, `events_from_dataframe`, and `events_to_summary_table` are unavailable.
 
@@ -242,9 +242,7 @@ report_path = build_report(
 
 ---
 
-## Usage in analyst workflow
-
-Typical flow:
+## Typical workflow
 
 1. Run RuleRunner on site/equipment data → `result` DataFrame.
 2. `all_fault_events(result, flag_cols)` → events.
@@ -252,5 +250,3 @@ Typical flow:
 4. `summarize_all_faults(result, flag_cols, column_map, ...)` → summaries.
 5. Optionally `zoom_on_event` or other plots → save paths.
 6. `build_report(result, event_dicts, summaries, output_dir, equipment_name, plot_paths=...)` → .docx.
-
-See `open_fdd.analyst.run_fdd` and analyst config (`reports_root`, `report_docx`) for how the platform uses these APIs.

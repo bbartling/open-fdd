@@ -1,7 +1,7 @@
 """
 Rules loader with hot-reload: check YAML mtime/hash, reload when changed.
 
-Used by FDD loop to pick up analyst tuning without restart.
+Used by FDD loop to pick up rule tuning without restart.
 """
 
 from __future__ import annotations

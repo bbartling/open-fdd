@@ -4,6 +4,7 @@ import type {
   DataModelImportBody,
   DataModelImportResponse,
   PlatformConfig,
+  Point,
   Site,
   TagWithOpenAiRequest,
   TagWithOpenAiResponse,
@@ -90,6 +91,18 @@ export function deleteEquipment(equipmentId: string) {
 export function deletePoint(pointId: string) {
   return apiFetch<{ status: string }>(`/points/${pointId}`, {
     method: "DELETE",
+  });
+}
+
+/** PATCH a point (e.g. set polling so BACnet scraper includes it). */
+export function updatePoint(
+  pointId: string,
+  body: { polling?: boolean },
+): Promise<Point> {
+  return apiFetch<Point>(`/points/${pointId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 

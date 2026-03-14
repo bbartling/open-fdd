@@ -1,5 +1,5 @@
 # BACnet point telemetry list (same logic as scraper: polling=true + Brick type; BACnet when present)
-# Run via POST /data-model/sparql or Data Model page → Run SPARQL
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
 # Always returns polling Brick points; device_instance, device_address, object_identifier
 # are filled when the graph has BACnet discovery data (matching object-name to point label).
 PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>

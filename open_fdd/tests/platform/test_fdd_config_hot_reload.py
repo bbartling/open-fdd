@@ -1,8 +1,8 @@
 """Tests that FDD rule runner uses platform config and loads rules from disk every run (hot reload).
 
 Protects: OpenFDD config (rules_dir, rule_interval_hours, lookback_days), GET /config and
-GET /rules parity with the loop, and that run_fdd_loop does not cache rules (analyst can
-tune YAML and see changes on next run).
+GET /rules parity with the loop, and that run_fdd_loop does not cache rules (edit
+YAML and see changes on next run).
 """
 
 from pathlib import Path
@@ -72,14 +72,14 @@ def test_run_fdd_loop_uses_rules_dir_from_settings(tmp_path):
 
 def test_rules_api_and_loop_resolve_same_path_for_relative_rules_dir():
     """API _rules_dir_resolved() and run_fdd_loop use the same repo-relative path for rules_dir."""
-    set_config_overlay({"rules_dir": "analyst/rules"})
+    set_config_overlay({"rules_dir": "stack/rules"})
 
     from open_fdd.platform import loop as loop_mod
     from open_fdd.platform.api import rules as rules_mod
 
     # Loop: repo_root from loop.py (open_fdd/platform/loop.py -> parent.parent.parent)
     loop_repo_root = Path(loop_mod.__file__).resolve().parent.parent.parent
-    expected = (loop_repo_root / "analyst" / "rules").resolve()
+    expected = (loop_repo_root / "stack" / "rules").resolve()
 
     api_resolved = rules_mod._rules_dir_resolved()
     assert api_resolved == expected, (

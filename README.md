@@ -51,7 +51,6 @@ pytest -v
 
 - **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
 - Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
-- **E2E frontend (Selenium):** `pip install -e ".[e2e]"` then `python scripts/e2e_frontend_selenium.py` with the stack running. All actions via the UI; validates delete-all/reset, create site, import LLM payload, and that Plots/Weather charts are not blank. See [Contributing — E2E](docs/contributing.md#e2e-frontend-tests-selenium).
 - Style and workflow: [docs/contributing.md](docs/contributing.md).
 
 
@@ -62,21 +61,12 @@ pytest -v
 
 Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
 
-### Two tagging paths
-
-| | Automated (UI / API) | Manual (copy-paste) |
-|---|---|---|
-| **Requires** | OpenAI API key | ChatGPT / any LLM |
-| **How** | Enter key in the **Data Model** page → click **Tag with AI** | Export JSON → paste into LLM with canonical prompt below → paste result back |
-| **Result** | Tagged JSON pre-filled in Import textarea | Tagged JSON ready to paste into Import textarea |
-| **Cost** | OpenAI token usage | Free (uses your LLM account) |
-
-The **automated path** calls `POST /data-model/tag-with-openai` server-side. Your API key is sent in the request body and used only for that call — it is never stored on the server. You can optionally remember the key in your browser's localStorage for convenience (toggleable in the UI).
-
-The **manual path** is always available; users without an API key continue to use it unchanged. (manual path — copy-paste into ChatGPT or any LLM; for the automated path use the Data Model page in the UI)
+**Canonical prompt** (as defined in [docs/modeling/ai_assisted_tagging](docs/modeling/ai_assisted_tagging.md)) — copy-paste this into ChatGPT or your LLM. It is **generic** and works for **any site** (single building, campus, or tenant); the export JSON is the only input that varies.
 
 ```text
-I use Open-FDD. I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).
+I use Open-FDD. Please help me model my mechanical system’s feeds and fed-by relationships. If not enough data is available, please ask. Do not infer or assume relationships from probability—only the engineer knows the actual mechanical relationships for the HVAC.
+
+I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).
 
 Your job is to convert that export into CLEAN Open-FDD import JSON.
 
@@ -87,7 +77,7 @@ Return ONLY valid JSON with exactly two top-level keys:
   "equipment": [...]
 }
 
-Do not return markdown or explanations.
+Ensure all devices in the RDF are assigned to the site at hand even if they are not used in a data model or fault rule.
 
 ---------------------------------------------------------------------
 
@@ -113,12 +103,16 @@ Then add or fill these fields:
 - polling
 - unit
 - equipment_name
+- equipment_type
 
 Equipment must be referenced by NAME only.
 
+Set equipment_type to the Brick equipment class (e.g. Air_Handling_Unit, Variable_Air_Volume_Box) so that the Open-FDD Data Model Testing "Summarize your HVAC" buttons (AHUs, VAV boxes, etc.) show results. If omitted, equipment is created as generic Equipment.
+
 Example:
 
-"equipment_name": "AHU-1"
+"equipment_name": "AHU-1",
+"equipment_type": "Air_Handling_Unit"
 
 Never use equipment UUIDs for relationships.
 
@@ -143,10 +137,13 @@ Each item must include:
 - equipment_name
 - site_id
 
+Include equipment_type (Brick equipment class) so that "Summarize your HVAC" (AHUs, VAV boxes, VAVs per AHU, etc.) shows correct counts. Use e.g. Air_Handling_Unit, Variable_Air_Volume_Box, Variable_Air_Volume_Box_With_Reheat, HVAC_Zone, Chiller, Boiler, Cooling_Tower, Weather_Service. If omitted, equipment is created as Equipment.
+
 Example:
 
 {
-  "equipment_name": "AHU-1",
+  "equipment_name": "AHU-5",
+  "equipment_type": "Air_Handling_Unit",
   "site_id": "<site_id>",
   "feeds": ["VAV-1"]
 }
@@ -159,7 +156,7 @@ AHU:
 
 VAV:
 
-"fed_by": ["AHU-1"]
+"fed_by": ["AHU-5"]
 
 Prefer:
 
@@ -172,6 +169,20 @@ Only use:
 "fed_by_equipment_id"
 
 if required by the source export.
+
+---------------------------------------------------------------------
+
+EQUIPMENT TYPE (Brick summaries)
+
+For the Data Model Testing page "Summarize your HVAC" buttons to list AHUs, VAV boxes, etc., equipment must have the correct Brick class. Set equipment_type on points and in the equipment array to the Brick class name (no "brick:" prefix), e.g.:
+
+- Air_Handling_Unit — AHUs
+- Variable_Air_Volume_Box or Variable_Air_Volume_Box_With_Reheat — VAV boxes
+- HVAC_Zone — zones
+- Chiller, Cooling_Tower, Boiler — central plant
+- Weather_Service — weather (optional)
+
+Infer from point names and BACnet device grouping: e.g. points SA-T, MA-T, RA-T, SF-O, CLG-O on one device are typically one AHU; ZoneTemp, VAVFlow, VAVDamperCmd on another device are typically one VAV box. Assign equipment_name and equipment_type so that after import, "AHUs" and "VAV boxes" (and "VAVs per AHU" if you set feeds/fed_by) return counts.
 
 ---------------------------------------------------------------------
 
@@ -229,7 +240,7 @@ rule_input = null
 
 POLLING
 
-Set polling=true for points useful for FDD or trending:
+Set polling=true for points defined in the yaml files for FD rules and typical HVAC RCx data reporting:
 
 temperatures  
 humidity  
@@ -247,6 +258,10 @@ Set polling=false for:
 network ports  
 metadata objects  
 housekeeping points
+vav box air balancing parameters
+pid settings
+bacnet device names
+trend logs
 
 ---------------------------------------------------------------------
 
@@ -295,7 +310,18 @@ Make the output generic and reusable for any Open-FDD export.
 
 Preserve fields first, enrich second.
 Leave uncertain values as null rather than guessing.
+
+Chat With the Engineer asking if this is complete? Verify feeds or fed replationships. And if anything else is needed.
 ```
+
+The final step is for the engineer to perform robust SPARQL query testing to verify that the data model returns the exact expected responses needed to summarize the HVAC system. For example, if the site contains a VAV AHU system with chiller-based cooling, the engineer should test queries that validate the connected relationships in the model, including those needed to support control algorithms and fault detection logic.
+
+There is a SPARQL cookbook in the documentation that can be used for this purpose. These tests should confirm that the data model returns the expected feed and fed-by relationships for the HVAC system. From there, additional SPARQL queries can be developed for algorithm-specific needs. For example, a Guideline 36 duct static pressure reset sequence may require querying for all BACnet devices and point addresses associated with VAV boxes served by a given AHU, including damper positions or commands, airflow sensor values and setpoints, and the AHU duct static pressure sensor and static pressure setpoint.
+
+Overall, SPARQL testing should be used by the engineer to validate that the data model fully supports the optimization algorithms and fault rules planned for the site.
+
+
+## The open-fdd Pyramid
 
 
 If OpenFDD nails the ontology, the project will be a huge success: an open-source knowledge graph for buildings. Everything else is just a nice add-on.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseLongCsv, pivotForChart } from "./csv";
+import { parseLongCsv, parseWideCsv, pivotForChart } from "./csv";
 
 describe("parseLongCsv", () => {
   it("returns empty array for empty string", () => {
@@ -18,6 +18,20 @@ describe("parseLongCsv", () => {
         value: 72.5,
       },
     ]);
+  });
+});
+
+describe("parseWideCsv", () => {
+  it("returns empty headers and rows for empty string", () => {
+    expect(parseWideCsv("")).toEqual({ headers: [], rows: [] });
+  });
+  it("strips BOM and parses wide format (timestamp + point columns)", () => {
+    const csv = "\uFEFFtimestamp,SA-T,RA-T\n2025-03-04T12:00:00Z,72.5,68.2\n2025-03-04T13:00:00Z,73.1,68.5";
+    const out = parseWideCsv(csv);
+    expect(out.headers).toEqual(["timestamp", "SA-T", "RA-T"]);
+    expect(out.rows).toHaveLength(2);
+    expect(out.rows[0]).toEqual(["2025-03-04T12:00:00Z", 72.5, 68.2]);
+    expect(out.rows[1]).toEqual(["2025-03-04T13:00:00Z", 73.1, 68.5]);
   });
 });
 

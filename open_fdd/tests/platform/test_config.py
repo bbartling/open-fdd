@@ -38,7 +38,7 @@ def test_config_exposes_fdd_rule_settings():
     set_config_overlay({})
     with patch("open_fdd.platform.api.config.get_config_from_graph", return_value={}):
         result = get_config()
-    assert result["rules_dir"] == "analyst/rules"
+    assert result["rules_dir"] == "stack/rules"
     assert result["rule_interval_hours"] == 3.0
     assert result["lookback_days"] == 3
     set_config_overlay({})
@@ -58,7 +58,7 @@ def test_default_platform_config_values():
     assert DEFAULT_PLATFORM_CONFIG["rule_interval_hours"] == DEFAULT_RULE_INTERVAL_HOURS == 3.0
     assert DEFAULT_PLATFORM_CONFIG["bacnet_server_url"] == DEFAULT_BACNET_SERVER_URL == "http://localhost:8080"
     assert DEFAULT_PLATFORM_CONFIG["graph_sync_interval_min"] == DEFAULT_GRAPH_SYNC_INTERVAL_MIN == 5
-    assert DEFAULT_PLATFORM_CONFIG["rules_dir"] == "analyst/rules"
+    assert DEFAULT_PLATFORM_CONFIG["rules_dir"] == "stack/rules"
     assert DEFAULT_PLATFORM_CONFIG["bacnet_enabled"] is True
     assert DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"] == "America/Chicago"
 

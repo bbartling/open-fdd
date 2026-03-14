@@ -6,6 +6,8 @@ import type {
   FaultSummaryResponse,
   FaultTimeseriesResponse,
   FaultsByEquipmentResponse,
+  FaultResultsSeriesResponse,
+  FaultResultsRawResponse,
   BacnetDevice,
 } from "@/types/api";
 
@@ -135,5 +137,48 @@ export function useFaultsByEquipment(
       ),
     enabled: !!startDate && !!endDate,
     staleTime: 60 * 1000,
+  });
+}
+
+/** Distinct fault × site × equipment for data preview selector (tabs/dropdown). */
+export function useFaultResultsSeries(
+  siteId: string | undefined,
+  startDate: string,
+  endDate: string,
+) {
+  const start = startDate.slice(0, 10);
+  const end = endDate.slice(0, 10);
+  return useQuery<FaultResultsSeriesResponse>({
+    queryKey: ["faults", "results-series", siteId ?? "all", start, end],
+    queryFn: () =>
+      apiFetch<FaultResultsSeriesResponse>(
+        `/analytics/fault-results-series${buildSearchParams({
+          site_id: siteId ?? undefined,
+          start_date: start,
+          end_date: end,
+        })}`,
+      ),
+    enabled: !!startDate && !!endDate,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** Last N rows of fault_results for selected series (Excel-style grid). */
+export function useFaultResultsRaw(
+  faultId: string,
+  siteId: string | undefined,
+  equipmentId: string | undefined,
+  limit: number,
+) {
+  return useQuery<FaultResultsRawResponse>({
+    queryKey: ["faults", "results-raw", faultId, siteId ?? "", equipmentId ?? "", limit],
+    queryFn: () => {
+      const params = new URLSearchParams({ fault_id: faultId, limit: String(limit) });
+      if (siteId) params.set("site_id", siteId);
+      if (equipmentId) params.set("equipment_id", equipmentId);
+      return apiFetch<FaultResultsRawResponse>(`/analytics/fault-results-raw?${params}`);
+    },
+    enabled: !!faultId && limit >= 1,
+    staleTime: 30 * 1000,
   });
 }

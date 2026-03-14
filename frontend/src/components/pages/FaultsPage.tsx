@@ -24,6 +24,8 @@ import {
   useFaultState,
   useBacnetDevices,
   useSiteFaults,
+  useFaultResultsSeries,
+  useFaultResultsRaw,
 } from "@/hooks/use-faults";
 import { FaultOverTimeChart } from "@/components/dashboard/FaultOverTimeChart";
 import { DateRangeSelect } from "@/components/site/DateRangeSelect";
@@ -297,6 +299,166 @@ function FaultDefinitionsSection() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const ROW_LIMIT_OPTIONS = [25, 50, 100] as const;
+const DEFAULT_ROW_LIMIT = 50;
+
+function FaultDataPreviewSection({
+  siteId,
+  startDate,
+  endDate,
+}: {
+  siteId: string | undefined;
+  startDate: string;
+  endDate: string;
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [rowLimit, setRowLimit] = useState(DEFAULT_ROW_LIMIT);
+
+  const { data: seriesData, isLoading: seriesLoading } = useFaultResultsSeries(
+    siteId,
+    startDate,
+    endDate,
+  );
+  const series = seriesData?.series ?? [];
+  const effectiveIndex =
+    series.length === 0 ? 0 : Math.min(selectedIndex, series.length - 1);
+  const selected = series[effectiveIndex] ?? null;
+
+  const { data: rawData, isLoading: rawLoading } = useFaultResultsRaw(
+    selected?.fault_id ?? "",
+    selected?.site_id,
+    selected?.equipment_id,
+    rowLimit,
+  );
+  const rows = rawData?.rows ?? [];
+
+  return (
+    <details className="group mb-8 rounded-xl border border-border/80 bg-muted/30">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-2">
+          Fault calculation data preview
+          <span className="text-xs font-normal">
+            (last N rows of fault_results per fault × device)
+          </span>
+        </span>
+      </summary>
+      <div className="border-t border-border/80 px-4 pb-4 pt-3">
+        {seriesLoading ? (
+          <Skeleton className="h-32 w-full rounded-lg" />
+        ) : series.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No fault result data in the selected time range. Run FDD and ensure fault_results exist.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">View data for</span>
+                <select
+                  value={effectiveIndex}
+                  onChange={(e) => setSelectedIndex(Number(e.target.value))}
+                  className="rounded-md border border-input bg-background px-2 py-1.5 text-sm font-medium"
+                >
+                  {series.map((s, i) => (
+                    <option key={`${s.fault_id}-${s.site_id}-${s.equipment_id}`} value={i}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Rows to show</span>
+                <select
+                  value={rowLimit}
+                  onChange={(e) => setRowLimit(Number(e.target.value))}
+                  className="rounded-md border border-input bg-background px-2 py-1.5 text-sm tabular-nums"
+                >
+                  {ROW_LIMIT_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {rawLoading ? (
+              <Skeleton className="h-64 w-full rounded-lg" />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-border bg-background shadow-sm">
+                <table
+                  className="w-full min-w-[640px] border-collapse text-sm"
+                  data-testid="fault-data-preview-table"
+                >
+                  <thead>
+                    <tr className="border-b border-border bg-muted/60">
+                      <th className="sticky left-0 z-10 min-w-[180px] border-r border-border bg-muted/60 px-3 py-2 text-left font-semibold">
+                        Timestamp
+                      </th>
+                      <th className="min-w-[100px] border-r border-border px-3 py-2 text-left font-semibold">
+                        Site
+                      </th>
+                      <th className="min-w-[120px] border-r border-border px-3 py-2 text-left font-semibold">
+                        Equipment
+                      </th>
+                      <th className="min-w-[120px] border-r border-border px-3 py-2 text-left font-semibold">
+                        Fault ID
+                      </th>
+                      <th className="min-w-[80px] border-r border-border px-3 py-2 text-right font-semibold tabular-nums">
+                        Flag
+                      </th>
+                      <th className="min-w-[140px] px-3 py-2 text-left font-semibold">
+                        Evidence
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr
+                        key={`${r.ts}-${i}`}
+                        className={`border-b border-border/60 ${
+                          i % 2 === 0 ? "bg-background" : "bg-muted/20"
+                        }`}
+                      >
+                        <td className="sticky left-0 z-10 border-r border-border/60 bg-inherit px-3 py-1.5 font-mono text-xs tabular-nums">
+                          {r.ts}
+                        </td>
+                        <td className="border-r border-border/60 px-3 py-1.5 font-mono text-xs">
+                          {r.site_id}
+                        </td>
+                        <td className="border-r border-border/60 px-3 py-1.5 font-mono text-xs">
+                          {r.equipment_id}
+                        </td>
+                        <td className="border-r border-border/60 px-3 py-1.5 font-mono text-xs">
+                          {r.fault_id}
+                        </td>
+                        <td className="border-r border-border/60 px-3 py-1.5 text-right font-mono tabular-nums">
+                          {r.flag_value}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                          {r.evidence != null
+                            ? typeof r.evidence === "string"
+                              ? r.evidence
+                              : JSON.stringify(r.evidence)
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length === 0 && !rawLoading && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    No rows for this selection.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -653,6 +815,12 @@ export function FaultsPage() {
           </CardContent>
         </Card>
       </section>
+
+      <FaultDataPreviewSection
+        siteId={selectedSiteId ?? undefined}
+        startDate={start.slice(0, 10)}
+        endDate={end.slice(0, 10)}
+      />
 
       <FaultDefinitionsSection />
       <RuleFilesSection />

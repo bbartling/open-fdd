@@ -8,7 +8,7 @@ the same graph; this dict is the default state so the app and tests stay in sync
 # AFDD rule running
 DEFAULT_RULE_INTERVAL_HOURS = 3.0  # Production default; FDD loop runs every N hours
 DEFAULT_LOOKBACK_DAYS = 3
-DEFAULT_RULES_DIR = "analyst/rules"
+DEFAULT_RULES_DIR = "stack/rules"
 
 # Brick / data model TTL location
 DEFAULT_BRICK_TTL_DIR = "config"

@@ -20,7 +20,7 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 
 3. **Rules for this project (optional)** — So the LLM knows which **rule_input** slugs and Brick types your FDD rules expect. You can:
    - Point the LLM at the **[Fault rules overview](../rules/overview)** and **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** (AHU, chiller, weather, advanced recipes). The cookbook is the main reference for rule_input names and expression patterns.
-   - Or paste **YAML** from your project’s rules (e.g. from `analyst/rules/` or your own rule files). The LLM can align `rule_input` with the inputs those rules use (e.g. `sat`, `rat`, `zone_temp`, `sf_status`).
+   - Or paste **YAML** from your project’s rules (e.g. from `stack/rules/` or your own rule files). The LLM can align `rule_input` with the inputs those rules use (e.g. `sat`, `rat`, `zone_temp`, `sf_status`).
 
 ---
 
@@ -30,9 +30,9 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 |------|--------|
 | **Fault rules overview** | [docs/rules/overview](../rules/overview) — FDD rule types, YAML format, Brick-driven inputs. |
 | **Expression Rule Cookbook** | [docs/rules/expression_rule_cookbook](../rules/expression_rule_cookbook) — AHU, chiller, weather, and advanced recipes; **rule_input** examples and expression patterns. |
-| **Actual YAML rule files** | `analyst/rules/` in the repo (or your `rules_dir`). The ME can upload or paste snippets so the LLM uses the same input names. |
+| **Actual YAML rule files** | `stack/rules/` in the repo (or your `rules_dir`). The ME can upload or paste snippets so the LLM uses the same input names. |
 
-The cookbook is **not** a fault rule file itself; it’s documentation. The **rules you want to use** are the YAML files in `analyst/rules/` (or your project’s rules). For the LLM, you can either paste that YAML or say “use rule_input slugs from the Expression Rule Cookbook (sat, rat, zone_temp, …).”
+The cookbook is **not** a fault rule file itself; it’s documentation. The **rules you want to use** are the YAML files in `stack/rules/` (or your project’s rules). For the LLM, you can either paste that YAML or say “use rule_input slugs from the Expression Rule Cookbook (sat, rat, zone_temp, …).”
 
 ---
 
