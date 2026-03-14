@@ -152,7 +152,7 @@ services:
       options: *log-opts
 
   # FDD rule loop — every N hours, loads rules from YAML, pulls last N days, runs all rules, writes fault_results
-  # Analyst edits YAML on host; next run picks up changes (no restart)
+  # YAML edits on host picked up on next run (no restart)
   fdd-loop:
     build:
       context: ..
@@ -163,11 +163,11 @@ services:
       OFDD_DB_DSN: postgresql://postgres:postgres@db:5432/openfdd
       OFDD_RULE_INTERVAL_HOURS: "3"
       OFDD_LOOKBACK_DAYS: "3"
-      OFDD_RULES_DIR: "analyst/rules"
+      OFDD_RULES_DIR: "stack/rules"
       OFDD_BRICK_TTL_PATH: "config/data_model.ttl"
     volumes:
       - ../open_fdd:/app/open_fdd:ro
-      - ../analyst/rules:/app/analyst/rules:ro
+      - ../stack/rules:/app/stack/rules:ro
       # config rw so loop can delete .run_fdd_now after trigger (else trigger fires every 60s)
       - ../config:/app/config
     depends_on:
@@ -223,8 +223,7 @@ services:
       # Enable POST/DELETE /rules/test-inject for hot-reload automation (e.g. 4_hot_reload_test.py). Set in stack/.env.
       OFDD_ALLOW_TEST_RULES: ${OFDD_ALLOW_TEST_RULES:-}
     volumes:
-      - ../open_fdd/rules:/app/open_fdd/rules:ro
-      - ../analyst/rules:/app/analyst/rules:ro
+      - ../stack/rules:/app/stack/rules
       - ../config:/app/config
     depends_on:
       db:

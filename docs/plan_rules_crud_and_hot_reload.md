@@ -3,7 +3,7 @@
 ## Goals
 
 1. **Fix phantom "AHU Short Cycling"** — Definitions table and Faults matrix show only what exists in `rules_dir`; remove stale rows when a rule file is gone.
-2. **Default rules** — Ship with only `sensor_bounds.yaml` and `sensor_flatline.yaml` in `analyst/rules`; no extra files that create phantom definitions.
+2. **Default rules** — Ship with only `sensor_bounds.yaml` and `sensor_flatline.yaml` in `stack/rules`; no extra files that create phantom definitions.
 3. **Rules CRUD + frontend** — Users can upload, download, and delete rule YAML files via the UI; changes hot-reload (next FDD run picks them up).
 
 ---
@@ -25,8 +25,8 @@
 
 ## 2. Default rules (no code change)
 
-- **Repo:** `analyst/rules` already contains only `sensor_bounds.yaml` and `sensor_flatline.yaml`. Keep it that way; do not add an AHU Short Cycling YAML unless you want that rule.
-- **Server:** If the Linux server has extra files in `analyst/rules` that you don’t want, remove them; after the prune logic above and one FDD run, definitions will match the remaining files.
+- **Repo:** `stack/rules` already contains only `sensor_bounds.yaml` and `sensor_flatline.yaml`. Keep it that way; do not add an AHU Short Cycling YAML unless you want that rule.
+- **Server:** If the Linux server has extra files in `stack/rules` that you don’t want, remove them; after the prune logic above and one FDD run, definitions will match the remaining files.
 - **New deployments:** Same two files as defaults; anything else is added by users via the new CRUD (or manually).
 
 ---
@@ -133,7 +133,7 @@
 ## 8. Summary
 
 - **Fix:** Prune `fault_definitions` in sync so only current rule files have rows → phantom “AHU Short Cycling” goes away after one FDD run.
-- **Defaults:** Keep `analyst/rules` with only `sensor_bounds.yaml` and `sensor_flatline.yaml`.
+- **Defaults:** Keep `stack/rules` with only `sensor_bounds.yaml` and `sensor_flatline.yaml`.
 - **CRUD:** Add POST (upload) and DELETE for rule files; reuse GET for download; list already exists.
 - **Frontend:** Add upload (file or paste), download link, delete with confirm; reuse existing list + view.
 - **Hot reload:** Already works; no change. Optional sync-definitions endpoint improves UX by updating definitions immediately after upload/delete.

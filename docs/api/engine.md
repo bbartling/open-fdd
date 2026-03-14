@@ -33,7 +33,7 @@ Load all rules from a directory (all `*.yaml` files).
 ```python
 from open_fdd.engine.runner import load_rules_from_dir
 
-rules = load_rules_from_dir("analyst/rules")
+rules = load_rules_from_dir("stack/rules")
 # Returns list of rule dicts
 ```
 
@@ -47,7 +47,7 @@ rules = load_rules_from_dir("analyst/rules")
 from open_fdd.engine.runner import RuleRunner
 
 # From directory
-runner = RuleRunner(rules_path="analyst/rules")
+runner = RuleRunner(rules_path="stack/rules")
 
 # From list of rule dicts
 runner = RuleRunner(rules=[rule1, rule2, ...])

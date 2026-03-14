@@ -1,12 +1,13 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
+import { Check, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, ListOrdered } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
 import { useAllEquipment, useAllPoints, useEquipment, usePoints, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useSiteFaults } from "@/hooks/use-faults";
 import { EquipmentTable } from "@/components/site/EquipmentTable";
+import { BacnetDiscoveryPanel } from "@/components/site/BacnetDiscoveryPanel";
 import {
   Table,
   TableHeader,
@@ -29,15 +30,7 @@ import type {
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
-  SparqlResponse,
 } from "@/types/api";
-
-const DEFAULT_SPARQL = `PREFIX brick: <https://brickschema.org/schema/Brick#>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?site ?site_label WHERE {
-  ?site a brick:Site .
-  ?site rdfs:label ?site_label
-}`;
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -54,8 +47,6 @@ export function DataModelPage() {
   const { selectedSiteId } = useSiteContext();
   const [importJson, setImportJson] = useState("");
   const [importResult, setImportResult] = useState<DataModelImportResponse | null>(null);
-  const [sparqlQuery, setSparqlQuery] = useState(DEFAULT_SPARQL);
-  const [sparqlError, setSparqlError] = useState<string | null>(null);
   const [newSiteName, setNewSiteName] = useState("");
   const [newSiteDescription, setNewSiteDescription] = useState("");
   const [checkResult, setCheckResult] = useState<DataModelCheckResponse | null>(null);
@@ -65,7 +56,6 @@ export function DataModelPage() {
   const [ttlError, setTtlError] = useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
-  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
@@ -85,17 +75,6 @@ export function DataModelPage() {
     queryKey: ["data-model", "export"],
     queryFn: () => apiFetch<DataModelExportRow[]>("/data-model/export"),
     staleTime: 60 * 1000,
-  });
-
-  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
-    mutationFn: (query) =>
-      apiFetch<SparqlResponse>("/data-model/sparql", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      }),
-    onSuccess: () => setSparqlError(null),
-    onError: (err: Error) => setSparqlError(err.message),
   });
 
   const importMutation = useMutation<DataModelImportResponse, Error, DataModelImportBody>({
@@ -160,12 +139,6 @@ export function DataModelPage() {
   });
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
-  const sparqlBindings: Record<string, string | null>[] = sparqlMutation.data?.bindings ?? [];
-  // Union of all keys so optional SPARQL vars (e.g. ?rule_input) show as a column even if first row lacks it
-  const sparqlColumns =
-    sparqlBindings.length > 0
-      ? Array.from(new Set(sparqlBindings.flatMap((r) => Object.keys(r)))).sort()
-      : [];
 
   const handleImport = () => {
     try {
@@ -210,385 +183,112 @@ export function DataModelPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data model</h1>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Setup</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Export the data model as JSON for AI tagging, paste tagged JSON back to import, and run
-        SPARQL queries against the Brick + BACnet graph.
+        Build your Brick + BACnet data model step by step below. Export JSON for AI tagging, paste tagged JSON back to import, and run
+        SPARQL queries to validate.
       </p>
 
-      <div className="space-y-8">
-        {/* Graph actions */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <RotateCcw className="h-5 w-5" />
-              Graph actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {sites.length > 0 && (
-              <div className="rounded-lg border border-border/60 p-4">
-                <p className="mb-2 text-sm font-medium text-muted-foreground">Remove all sites from data model</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={deleteAllConfirm}
-                    onChange={(e) => setDeleteAllConfirm(e.target.value)}
-                    placeholder={`Type ${sites.length} to confirm`}
-                    className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    data-testid="delete-all-confirm-input"
-                  />
-                  <button
-                    type="button"
-                    data-testid="delete-all-and-reset-button"
-                    onClick={async () => {
-                      if (deleteAllConfirm !== String(sites.length)) {
-                        alert(`Type ${sites.length} in the box to confirm.`);
-                        return;
-                      }
-                      try {
-                        for (const s of sites) {
-                          await deleteSite(s.id);
-                        }
-                        await dataModelReset();
-                        setDeleteAllConfirm("");
-                        queryClient.invalidateQueries({ queryKey: ["sites"] });
-                        queryClient.invalidateQueries({ queryKey: ["data-model"] });
-                        queryClient.invalidateQueries({ queryKey: ["equipment"] });
-                        queryClient.invalidateQueries({ queryKey: ["points"] });
-                        queryClient.invalidateQueries({ queryKey: ["faults"] });
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : "Remove all failed");
-                      }
-                    }}
-                    disabled={deleteAllConfirm !== String(sites.length)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Remove all sites and reset graph
-                  </button>
-                </div>
-              </div>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Serialize in-memory graph to TTL file; reset graph to DB-only (clears BACnet); run integrity check.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleViewTtl}
-                disabled={ttlLoading}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                title="Open full Brick + BACnet TTL in a new tab (raw text)"
-              >
-                <FileText className="h-4 w-4" />
-                {ttlLoading ? "Loading…" : "View full data model (TTL)"}
-              </button>
-              <button
-                type="button"
-                onClick={() => serializeMutation.mutate()}
-                disabled={serializeMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {serializeMutation.isPending ? "Serializing…" : "Serialize to TTL"}
-              </button>
-              <button
-                type="button"
-                onClick={() => checkMutation.mutate()}
-                disabled={checkMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                <Search className="h-4 w-4" />
-                {checkMutation.isPending ? "Checking…" : "Check integrity"}
-              </button>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={resetConfirm}
-                  onChange={(e) => setResetConfirm(e.target.value)}
-                  placeholder="Type reset to confirm"
-                  className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (resetConfirm.trim().toLowerCase() !== "reset") {
-                      alert('Type "reset" to confirm.');
-                      return;
-                    }
-                    resetMutation.mutate();
-                  }}
-                  disabled={resetMutation.isPending || resetConfirm.trim().toLowerCase() !== "reset"}
-                  className="inline-flex items-center gap-2 rounded-lg border border-amber-600/60 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-400"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset graph to DB-only
-                </button>
-              </div>
-            </div>
-            {ttlError && (
-              <p className="text-sm text-destructive">{ttlError}</p>
-            )}
-            {serializeMutation.isSuccess && (
-              <p className="text-sm text-muted-foreground">
-                Serialized to {String((serializeMutation.data as { path?: string })?.path ?? "—")}
-              </p>
-            )}
-            {checkResult != null && (
-              <pre className="max-h-40 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
-                {JSON.stringify(checkResult, null, 2)}
-              </pre>
-            )}
-            {resetMutation.isSuccess && (
-              <p className="text-sm text-muted-foreground">
-                {(resetMutation.data as { message?: string })?.message ?? "Graph reset."}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      {/* Step-by-step guide — matches Open-FDD README workflow */}
+      <Card className="mb-8 border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <ListOrdered className="h-5 w-5" />
+            How to build your data model
+          </CardTitle>
+          <p className="text-sm font-normal text-muted-foreground">
+            Follow these steps in order. Check the Open-FDD README in the git repo for the latest LLM prompt.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ol className="list-decimal space-y-3 pl-5 text-sm">
+            <li>
+              <strong>BACnet Who-Is</strong> — Run Who-Is below to find devices on your network (start/end instance range).
+            </li>
+            <li>
+              <strong>Point discovery + Add to RDF</strong> — For each device, enter its instance, run <strong>Point discovery</strong>, then <strong>Add to data model</strong> to merge BACnet into the graph. Repeat device by device.
+            </li>
+            <li>
+              <strong>Add a site</strong> — In the Sites section below, create a site if you don’t have one. Assign points to it when you import.
+            </li>
+            <li>
+              <strong>Export JSON and open your LLM</strong> — Download the export (Export section below), then open your LLM chat. Get the prompt from the Open-FDD README in the git repo and paste it into the LLM. Upload your <strong>fault rule YAML files</strong> (from the Faults page) so the LLM knows which points your rules need.
+            </li>
+            <li>
+              <strong>Chat with the LLM</strong> — Paste the exported JSON into the LLM. Confirm with the LLM that Brick types, feeds/fed-by, and rule_input are correct before asking for the final JSON.
+            </li>
+            <li>
+              <strong>Apply back in Open-FDD</strong> — Copy the LLM’s JSON output and paste it into the “Paste from AI” section below (or choose a JSON file), then click <strong>Apply to data model</strong>.
+            </li>
+            <li>
+              <strong>SPARQL test</strong> — Use the Data Model Testing page to run predefined summary queries (e.g. count AHUs, chillers) or your own SPARQL to confirm the data model returns the relationships and points you need for your algorithms and fault rules.
+            </li>
+          </ol>
+        </CardContent>
+      </Card>
 
-        {/* Export */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Database className="h-5 w-5" />
-              Export (for AI / copy-paste)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              GET /data-model/export — BACnet discovery + DB points. Copy and paste into your LLM
-              for Brick tagging, then re-import below.
-            </p>
-            {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
-            {!exportLoading && exportJson && (
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
-                    title="Download full export as JSON file"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowExportPreview((v) => !v)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted self-start"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {showExportPreview ? "Hide preview" : "Show preview"}
-                  </button>
-                </div>
-                {showExportPreview && (
-                  <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
-                    {exportJson.slice(0, 2000)}
-                    {exportJson.length > 2000 ? "\n… (truncated; download for full)" : ""}
-                  </pre>
-                )}
-              </div>
-            )}
-            {!exportLoading && (!exportData || exportData.length === 0) && (
-              <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
-            )}
-          </CardContent>
-        </Card>
+      <BacnetDiscoveryPanel />
 
-        {/* Import */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Upload className="h-5 w-5" />
-              Import (paste from AI)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Paste JSON (array of points or <code className="rounded bg-muted px-1">{"{ points: [...] }"}</code>)
-              or upload a JSON file, then click Import to update the data model. Same as PUT /data-model/import.
-            </p>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  try {
-                    const text = String(reader.result ?? "");
-                    JSON.parse(text);
-                    setImportJson(text);
-                  } catch {
-                    setImportJson("");
-                    alert("Invalid JSON in file. Check the file and try again.");
-                  }
-                  e.target.value = "";
-                };
-                reader.readAsText(file);
-              }}
-            />
-            <textarea
-              value={importJson}
-              onChange={(e) => setImportJson(e.target.value)}
-              placeholder='[{"point_id": "...", "brick_type": "Supply_Air_Temperature_Sensor", ...}] or { "points": [...] }'
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-              data-testid="data-model-import-json"
-            />
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => importFileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                title="Load JSON from file into editor"
-              >
-                <FileUp className="h-4 w-4" />
-                Upload JSON file
-              </button>
-              <button
-                type="button"
-                onClick={handleImport}
-                disabled={importMutation.isPending || !importJson.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                data-testid="data-model-import-button"
-              >
-                <Upload className="h-4 w-4" />
-                Import
-              </button>
-              {importResult != null && (
-                <span className="text-sm text-muted-foreground">
-                  {importResult.created != null && `Created: ${importResult.created}`}
-                  {importResult.updated != null && ` Updated: ${importResult.updated}`}
-                  {importResult.total != null && ` Total: ${importResult.total}`}
-                  {importResult.warnings?.length ? ` — ${importResult.warnings.join("; ")}` : ""}
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Equipment */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Server className="h-5 w-5" />
-              Equipment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Equipment in the data model. Filter by site using the site selector in the top bar.
-            </p>
-            {equipmentLoading && <Skeleton className="h-72 w-full rounded-lg" />}
-            {!equipmentLoading && (
-              <EquipmentTable
-                equipment={equipment}
-                points={points}
-                faults={faults}
-                siteMap={selectedSiteId ? undefined : siteMap}
-              />
-            )}
-          </CardContent>
-        </Card>
-
-        {/* SPARQL */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Code className="h-5 w-5" />
-              SPARQL (query the data model)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
-            </p>
-            <input
-              ref={sparqlFileInputRef}
-              type="file"
-              accept=".sparql,text/plain"
-              className="hidden"
-              data-testid="sparql-file-input"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const text = typeof reader.result === "string" ? reader.result : "";
-                  setSparqlQuery(text);
-                };
-                reader.readAsText(file);
-                e.target.value = "";
-              }}
-            />
+      {/* Data model TTL — view, serialize, check (kept near BACnet workflow) */}
+      <Card className="mt-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <FileText className="h-5 w-5" />
+            Data model (TTL)
+          </CardTitle>
+          <p className="text-sm font-normal text-muted-foreground">
+            View full Brick + BACnet graph as TTL, serialize to file, or run integrity check.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              data-testid="sparql-upload-file-button"
-              onClick={() => sparqlFileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
+              onClick={handleViewTtl}
+              disabled={ttlLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+              title="Open full Brick + BACnet TTL in a new tab (raw text)"
             >
-              <FileUp className="h-4 w-4" />
-              Upload .sparql file
+              <FileText className="h-4 w-4" />
+              {ttlLoading ? "Loading…" : "View full data model (TTL)"}
             </button>
-            <textarea
-              data-testid="sparql-query-textarea"
-              value={sparqlQuery}
-              onChange={(e) => setSparqlQuery(e.target.value)}
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-            />
             <button
               type="button"
-              data-testid="sparql-run-button"
-              onClick={() => sparqlMutation.mutate(sparqlQuery)}
-              disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              onClick={() => serializeMutation.mutate()}
+              disabled={serializeMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
             >
-              <Play className="h-4 w-4" />
-              Run SPARQL
+              <Save className="h-4 w-4" />
+              {serializeMutation.isPending ? "Serializing…" : "Serialize to TTL"}
             </button>
-            {sparqlError && (
-              <p className="text-sm text-destructive">{sparqlError}</p>
-            )}
-            {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {sparqlColumns.map((key) => (
-                        <TableHead key={key} className="font-mono text-xs">
-                          {key}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
-                      <TableRow key={i}>
-                        {sparqlColumns.map((key) => (
-                          <TableCell key={key} className="font-mono text-xs">
-                            {row[key] ?? "—"}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-            {sparqlMutation.isSuccess && sparqlBindings.length === 0 && (
-              <p className="text-sm text-muted-foreground">No bindings (empty result).</p>
-            )}
-          </CardContent>
-        </Card>
+            <button
+              type="button"
+              onClick={() => checkMutation.mutate()}
+              disabled={checkMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              <Search className="h-4 w-4" />
+              {checkMutation.isPending ? "Checking…" : "Check integrity"}
+            </button>
+          </div>
+          {ttlError && (
+            <p className="text-sm text-destructive">{ttlError}</p>
+          )}
+          {serializeMutation.isSuccess && (
+            <p className="text-sm text-muted-foreground">
+              Serialized to {String((serializeMutation.data as { path?: string })?.path ?? "—")}
+            </p>
+          )}
+          {checkResult != null && (
+            <pre className="max-h-40 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
+              {JSON.stringify(checkResult, null, 2)}
+            </pre>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Sites */}
+      <div className="mt-8 space-y-8">
+        {/* Sites — create and delete (above Export) */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -674,6 +374,252 @@ export function DataModelPage() {
               </Table>
             </div>
             {sites.length === 0 && <p className="text-sm text-muted-foreground">No sites. Add one above.</p>}
+          </CardContent>
+        </Card>
+
+        {/* Export */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Database className="h-5 w-5" />
+              Export (for AI / copy-paste)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              GET /data-model/export — BACnet discovery + DB points. Copy and paste into your LLM
+              for Brick tagging, then re-import below.
+            </p>
+            {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
+            {!exportLoading && exportJson && (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
+                    title="Download full export as JSON file"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowExportPreview((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted self-start"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {showExportPreview ? "Hide preview" : "Show preview"}
+                  </button>
+                </div>
+                {showExportPreview && (
+                  <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
+                    {exportJson.slice(0, 2000)}
+                    {exportJson.length > 2000 ? "\n… (truncated; download for full)" : ""}
+                  </pre>
+                )}
+              </div>
+            )}
+            {!exportLoading && (!exportData || exportData.length === 0) && (
+              <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Apply pasted/uploaded JSON from LLM */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Upload className="h-5 w-5" />
+              Paste from AI
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Paste the LLM’s JSON here (array of points or <code className="rounded bg-muted px-1">{"{ points: [...], equipment: [...] }"}</code>)
+              or choose a JSON file to load into the box. Then click <strong>Apply to data model</strong> to update sites, equipment, and points.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Be sure to add a site to your data model and upload your fault equation YAML files to the LLM when you send it this JSON.
+            </p>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const text = String(reader.result ?? "");
+                    JSON.parse(text);
+                    setImportJson(text);
+                  } catch {
+                    setImportJson("");
+                    alert("Invalid JSON in file. Check the file and try again.");
+                  }
+                  e.target.value = "";
+                };
+                reader.readAsText(file);
+              }}
+            />
+            <textarea
+              value={importJson}
+              onChange={(e) => setImportJson(e.target.value)}
+              placeholder='[{"point_id": "...", "brick_type": "Supply_Air_Temperature_Sensor", ...}] or { "points": [...] }'
+              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              spellCheck={false}
+              data-testid="data-model-import-json"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                title="Load JSON from file into the box below"
+              >
+                <FileUp className="h-4 w-4" />
+                Choose JSON file
+              </button>
+              <button
+                type="button"
+                onClick={handleImport}
+                disabled={importMutation.isPending || !importJson.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                title="Update the data model with the pasted or loaded JSON"
+                data-testid="data-model-import-button"
+              >
+                <Check className="h-4 w-4" />
+                Apply to data model
+              </button>
+              {importResult != null && (
+                <span className="text-sm text-muted-foreground">
+                  {importResult.created != null && `Created: ${importResult.created}`}
+                  {importResult.updated != null && ` Updated: ${importResult.updated}`}
+                  {importResult.total != null && ` Total: ${importResult.total}`}
+                  {importResult.warnings?.length ? ` — ${importResult.warnings.join("; ")}` : ""}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Equipment */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Server className="h-5 w-5" />
+              Equipment
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Equipment in the data model. Filter by site using the site selector in the top bar.
+            </p>
+            {equipmentLoading && <Skeleton className="h-72 w-full rounded-lg" />}
+            {!equipmentLoading && (
+              <EquipmentTable
+                equipment={equipment}
+                points={points}
+                faults={faults}
+                siteMap={selectedSiteId ? undefined : siteMap}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Remove all / Reset graph — destructive actions at bottom */}
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg text-amber-700 dark:text-amber-400">
+              <Trash2 className="h-5 w-5" />
+              Remove all sites / Reset graph
+            </CardTitle>
+            <p className="text-sm font-normal text-muted-foreground">
+              Irreversible. Use only when clearing the data model or resetting the in-memory graph to DB-only.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {sites.length > 0 && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+                <p className="mb-2 text-sm font-medium text-muted-foreground">Remove all sites from data model</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={deleteAllConfirm}
+                    onChange={(e) => setDeleteAllConfirm(e.target.value)}
+                    placeholder={`Type ${sites.length} to confirm`}
+                    className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    data-testid="delete-all-confirm-input"
+                  />
+                  <button
+                    type="button"
+                    data-testid="delete-all-and-reset-button"
+                    onClick={async () => {
+                      if (deleteAllConfirm !== String(sites.length)) {
+                        alert(`Type ${sites.length} in the box to confirm.`);
+                        return;
+                      }
+                      try {
+                        for (const s of sites) {
+                          await deleteSite(s.id);
+                        }
+                        await dataModelReset();
+                        setDeleteAllConfirm("");
+                        queryClient.invalidateQueries({ queryKey: ["sites"] });
+                        queryClient.invalidateQueries({ queryKey: ["data-model"] });
+                        queryClient.invalidateQueries({ queryKey: ["equipment"] });
+                        queryClient.invalidateQueries({ queryKey: ["points"] });
+                        queryClient.invalidateQueries({ queryKey: ["faults"] });
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Remove all failed");
+                      }
+                    }}
+                    disabled={deleteAllConfirm !== String(sites.length)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-destructive/60 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove all sites and reset graph
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="rounded-lg border border-border/60 p-4">
+              <p className="mb-3 text-sm text-muted-foreground">
+                Serialize in-memory graph to TTL file; reset graph to DB-only (clears BACnet); run integrity check.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  placeholder="Type reset to confirm"
+                  className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (resetConfirm.trim().toLowerCase() !== "reset") {
+                      alert('Type "reset" to confirm.');
+                      return;
+                    }
+                    resetMutation.mutate();
+                  }}
+                  disabled={resetMutation.isPending || resetConfirm.trim().toLowerCase() !== "reset"}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-600/60 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-400"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset graph to DB-only
+                </button>
+              </div>
+              {resetMutation.isSuccess && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {(resetMutation.data as { message?: string })?.message ?? "Graph reset."}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

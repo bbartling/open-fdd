@@ -393,6 +393,10 @@ class EquipmentImportRow(BaseModel):
     equipment_name: str | None = Field(
         None, description="Equipment name (e.g. AHU-1, VAV-1). With site_id, import finds or creates this equipment then sets feeds/fed_by."
     )
+    equipment_type: str | None = Field(
+        None,
+        description="Brick equipment class when creating equipment (e.g. Air_Handling_Unit, Variable_Air_Volume_Box). Used so Data Model Testing 'Summarize your HVAC' (AHUs, VAV boxes, etc.) shows results. Defaults to Equipment.",
+    )
     site_id: str | None = Field(
         None, description="Site UUID. Required when using equipment_name or when feeds_equipment_id/fed_by_equipment_id are equipment names."
     )
@@ -670,17 +674,21 @@ def import_data_model(body: DataModelImportBody):
                             )
             for eq in body.equipment:
                 effective_eq_site_id = eq.site_id if (eq.site_id and str(eq.site_id).strip()) else default_site_id_str
+                eq_type = (eq.equipment_type or "Equipment").strip() or "Equipment"
                 if eq.equipment_id:
                     eq_id = str(_parse_uuid_or_400(eq.equipment_id, "equipment_id", "from GET /equipment (equipment array)"))
                 elif eq.equipment_name and effective_eq_site_id:
                     site_uuid_eq = _parse_uuid_or_400(effective_eq_site_id, "site_id", "from GET /sites (equipment array)")
-                    eq_id = _ensure_equipment(cur, site_uuid_eq, eq.equipment_name, "Equipment")
+                    eq_id = _ensure_equipment(cur, site_uuid_eq, eq.equipment_name, eq_type)
                 else:
                     continue  # skip row without equipment_id or (equipment_name + site_id)
                 site_uuid_for_names = _parse_uuid_or_400(effective_eq_site_id, "site_id", "from GET /sites") if effective_eq_site_id else None
                 feeds_val = eq.feeds_equipment_id or (eq.feeds[0] if getattr(eq, "feeds", None) else None)
                 fed_by_val = eq.fed_by_equipment_id or (eq.fed_by[0] if getattr(eq, "fed_by", None) else None)
                 updates, params = [], []
+                if eq.equipment_type is not None and (eq.equipment_id or (eq.equipment_name and effective_eq_site_id)):
+                    updates.append("equipment_type = %s")
+                    params.append(eq_type)
                 if feeds_val is not None:
                     updates.append("feeds_equipment_id = %s::uuid")
                     if _is_uuid(feeds_val):
@@ -943,10 +951,10 @@ def run_sparql(
 async def run_sparql_upload(
     file: UploadFile = File(
         ...,
-        description="Upload a .sparql file (e.g. from analyst/sparql/). Same as POST /sparql with the file contents as query.",
+        description="Upload a .sparql file (e.g. from scripts/automated_testing/sparql/). Same as POST /sparql with the file contents as query.",
     ),
 ):
-    """Upload a .sparql file to run against the current data model. Use when you have saved queries (e.g. analyst/sparql/05_site_and_counts.sparql). For ad‑hoc queries use POST /data-model/sparql and type the query in Swagger."""
+    """Upload a .sparql file to run against the current data model. Use when you have saved queries (e.g. scripts/automated_testing/sparql/). For ad‑hoc queries use POST /data-model/sparql and type the query in Swagger."""
     if not file.filename or not file.filename.lower().endswith(".sparql"):
         raise HTTPException(400, "Upload a .sparql file")
     query = (await file.read()).decode("utf-8")

@@ -10,13 +10,27 @@ Open-FDD keeps one **knowledge graph** (Brick + BACnet + platform config) in `co
 
 ---
 
+## Data Model Setup vs Data Model Testing
+
+The frontend has two tabs:
+
+| Tab | Route | Purpose |
+|-----|--------|---------|
+| **Data Model Setup** | `/data-model` | Sites, equipment, import/export JSON, view TTL. Build or edit the data model (sites, equipment, points) and paste AI-tagged JSON to import. |
+| **Data Model Testing** | `/data-model-testing` | **Summarize your HVAC** (one-click SPARQL buttons: Sites, AHUs, Zones, Building, VAV boxes, etc.) and **Custom SPARQL** (textarea, Run, upload .sparql file). Same queries as this cookbook. |
+
+Use **Data Model Testing** to run SPARQL in the browser. Use **Data Model Setup** to manage sites, equipment, and import.
+
+---
+
 ## How to run SPARQL
 
 | Method | Use |
 |--------|-----|
+| **Data Model Testing (UI)** | Open **Data Model Testing** → click a predefined button (Sites, AHUs, Zones, …) or paste SPARQL in Custom SPARQL → Run SPARQL. Optional: check "Include BACnet device and point IDs" for `bacnet_device_id` / `object_identifier` in results. |
 | **Swagger** | [http://localhost:8000/docs](http://localhost:8000/docs) → **POST /data-model/sparql** → body `{"query": "SELECT ..."}` → Execute. |
 | **curl** | `curl -X POST http://localhost:8000/data-model/sparql -H "Content-Type: application/json" -d '{"query":"SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10"}'` |
-| **Upload .sparql file** | **POST /data-model/sparql/upload** with a `.sparql` file (e.g. from `analyst/sparql/`). |
+| **Upload .sparql file** | **Data Model Testing** → Custom SPARQL → "Upload .sparql file", then Run; or **POST /data-model/sparql/upload** with a `.sparql` file. |
 
 **Response:** JSON with a `bindings` array; each element is a map of variable names to values (e.g. `{"site_label": {"value": "DemoSite"}}`). Use the `value` field for literals and the full object for URIs.
 
@@ -52,7 +66,7 @@ SELECT ?p ?v WHERE {
 }
 ```
 
-**Example bindings:** `ofdd:ruleIntervalHours`, `ofdd:bacnetServerUrl`, `ofdd:bacnetEnabled`, etc. Predicates are camelCase (e.g. `ruleIntervalHours`). Use this to confirm config is in the graph after seeding or after running `tools/graph_and_crud_test.py` (steps 1c–1e).
+**Example bindings:** `ofdd:ruleIntervalHours`, `ofdd:bacnetServerUrl`, `ofdd:bacnetEnabled`, etc. Predicates are camelCase (e.g. `ruleIntervalHours`). Use this to confirm config is in the graph after seeding.
 
 ---
 
@@ -83,20 +97,20 @@ SELECT ?site_label (COUNT(DISTINCT ?equipment) AS ?equipment_count) (COUNT(?poin
 GROUP BY ?site ?site_label
 ```
 
-Use this to validate the data model after CRUD or import (e.g. in e2e tests or from `tools/graph_and_crud_test.py`; see [Getting started](../getting_started)).
+Use this to validate the data model after CRUD or import (see [Getting started](../getting_started)).
 
 ---
 
 ## Recipe 3: Equipment and points by site
 
-**Equipment labels for a given site** (bind site label in the query or filter in application code):
+**Equipment labels for a given site** (replace `"YourSiteLabel"` with your site name):
 
 ```sparql
 PREFIX brick: <https://brickschema.org/schema/Brick#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?eq_label WHERE {
   ?eq brick:isPartOf ?site .
-  ?site rdfs:label "DemoSite" .
+  ?site rdfs:label "YourSiteLabel" .
   ?eq rdfs:label ?eq_label .
 }
 ```
@@ -109,7 +123,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?pt_label WHERE {
   ?pt brick:isPointOf ?eq .
   ?eq brick:isPartOf ?site .
-  ?site rdfs:label "DemoSite" .
+  ?site rdfs:label "YourSiteLabel" .
   ?pt rdfs:label ?pt_label .
 }
 ```
@@ -121,7 +135,7 @@ PREFIX brick: <https://brickschema.org/schema/Brick#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?eq_label ?feeds_label WHERE {
   ?eq brick:isPartOf ?site .
-  ?site rdfs:label "DemoSite" .
+  ?site rdfs:label "YourSiteLabel" .
   ?eq rdfs:label ?eq_label .
   ?eq brick:feeds ?other .
   ?other rdfs:label ?feeds_label .
@@ -209,7 +223,7 @@ WHERE {
 ORDER BY ?point_label
 ```
 
-**Data Model page: Equipment table vs "View full data model (TTL)"** — The **Equipment** table on the Data Model page comes from the **database** (REST API: sites, equipment, points). The **SPARQL** box and **"View full data model (TTL)"** use the **in-memory graph**, which is synced from the DB (Brick) plus BACnet discovery. If you see a full TTL with equipment but "No equipment configured" in the table, the DB may be empty or out of sync: the graph can be loaded from `config/data_model.ttl` on startup, but the UI list is always from the API/DB. Use the site selector in the top bar ("All sites" vs a specific site); ensure sites and equipment exist in the DB (e.g. create via the UI or import).
+**Data Model Setup: Equipment table vs "View full data model (TTL)"** — The **Equipment** table on **Data Model Setup** comes from the **database** (REST API: sites, equipment, points). **Data Model Testing** (SPARQL) and **"View full data model (TTL)"** on Setup use the **in-memory graph**, which is synced from the DB (Brick) plus BACnet discovery. If you see a full TTL with equipment but "No equipment configured" in the table, the DB may be empty or out of sync: the graph can be loaded from `config/data_model.ttl` on startup, but the UI list is always from the API/DB. Use the site selector in the top bar ("All sites" vs a specific site); ensure sites and equipment exist in the DB (e.g. create via the UI or import).
 
 ---
 
@@ -257,7 +271,7 @@ Use this to ensure every Brick class your rules reference (e.g. `Supply_Air_Temp
 
 ## Recipe 6: FDD — time-series references for rules
 
-Rules in `analyst/rules/` (e.g. `sensor_bounds.yaml`, expression rules) declare **inputs** by Brick class only. The runner uses the Brick TTL (this graph) to resolve:
+Rules in `stack/rules/` (e.g. `sensor_bounds.yaml`, expression rules) declare **inputs** by Brick class only. The runner uses the Brick TTL (this graph) to resolve:
 
 - **Brick class** → points of that type → **rdfs:label** (external_id) → column in the timeseries DataFrame.
 
@@ -272,7 +286,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT ?equipment_label ?point_class ?label ?rule_input WHERE {
   ?site a brick:Site .
-  ?site rdfs:label "DemoSite" .
+  ?site rdfs:label "YourSiteLabel" .
   ?equipment brick:isPartOf ?site .
   ?equipment rdfs:label ?equipment_label .
   ?point brick:isPointOf ?equipment .
@@ -303,7 +317,7 @@ SELECT ?label ?brick_class WHERE {
 ORDER BY ?brick_class ?label
 ```
 
-These queries mirror the logic in `analyst/sparql/01_points_rule_mapping.sparql` and `analyst/sparql/04_brick_classes_used.sparql`; run them via the API for validation or for building a small “FDD readiness” report.
+These queries mirror the logic in `scripts/automated_testing/sparql/` (e.g. 05_brick_rule_mapping.sparql); run them via the API for validation or for building a small “FDD readiness” report.
 
 ---
 
@@ -341,42 +355,26 @@ LIMIT 100
 
 ---
 
-## E2E test coverage (graph_and_crud_test.py)
+## Predefined buttons (Data Model Testing)
 
-The script **`tools/graph_and_crud_test.py`** runs against a live API and exercises CRUD plus SPARQL **only via POST /data-model/sparql**. It does not read the TTL file. Coverage that matches this cookbook:
+The **Data Model Testing** tab has one-click buttons under **Summarize your HVAC** that run the same SPARQL as this cookbook.
 
-| Step | What it does |
-|------|----------------|
-| **0** | POST /data-model/sparql (sites query) — confirms SPARQL is CRUD-only. |
-| **1c–1e** | PUT /config, GET /config, then SPARQL for ofdd:PlatformConfig (Recipe 1). |
-| **1a–1a5** | BACnet: server_hello, whois_range, point_discovery_to_graph; SPARQL for bacnet:Device and object names (Recipe 4). |
-| **2–3** | Sites CRUD; GET /data-model/ttl. |
-| **Later** | Equipment, points, import, export; SPARQL for site labels, equipment labels, point labels, equipment feeds (Recipes 2–3). |
-| **SPARQL** | _sparql_site_labels(), _sparql_point_labels_for_site(), _sparql_equipment_labels_for_site(), _sparql_equipment_feeds_for_site() — all via POST /data-model/sparql. |
+| Button | Recipe |
+|--------|--------|
+| Sites | Recipe 2 (sites with labels) |
+| AHUs, Zones, Building, VAV boxes, VAVs per AHU | Count or list by Brick type |
+| Chillers, Cooling towers, Boilers, Central plant | Count or list equipment types |
+| HVAC equipment, Meters, Points, Class summary | Counts and Brick class summary |
 
-Run the e2e test after bootstrap or after changes to confirm config, data model, and BACnet discovery are queryable through the API. See [Technical reference — Unit tests](../appendix/technical_reference#unit-tests) and [Getting started](../getting_started).
+Checking **Include BACnet device and point IDs** on Data Model Testing runs a variant of each query that adds `bacnet_device_id` and `object_identifier` (for telemetry and algorithms).
 
 ---
 
-## Saved queries and automated tests
+## Saved queries
 
-**scripts/automated_testing/sparql/** — Cookbook queries as `.sparql` files: `01_platform_config.sparql`, `02_sites_labels.sparql`, `02_site_counts.sparql`, `03_equipment_labels_testbench.sparql`, `03_point_labels_testbench.sparql`, `04_bacnet_devices.sparql`, `05_brick_rule_mapping.sparql`, `06_polling_points_brick_type.sparql`, `07_count_triples.sparql`, `08_bacnet_telemetry_points.sparql`. Use them with **POST /data-model/sparql** (paste contents) or **POST /data-model/sparql/upload** (upload file). Recipe 4 covers the ideas in 04, 06, and 08 (BACnet devices; polling points with Brick type; polling points with optional BACnet join).
+The recipes in this cookbook can be saved as `.sparql` files and run via **POST /data-model/sparql**, **POST /data-model/sparql/upload**, or **Data Model Testing** (Custom SPARQL → upload or paste). Recipe 4 covers BACnet devices, polling points with Brick type, and polling points with optional BACnet join.
 
-**SPARQL CRUD + frontend parity test** — From a test bench (e.g. Windows WSL), run:
-
-```bash
-cd /path/to/open-fdd
-pip install -r scripts/automated_testing/requirements-e2e.txt
-python scripts/automated_testing/sparql_crud_and_frontend_test.py --api-url http://OPENFDD_SERVER:8000
-```
-
-With **--frontend-url** and **--frontend-parity**, the script runs each query via the API and again via the Data Model page (SPARQL textarea → Run SPARQL), then asserts the same bindings. Use **--headed** to watch the browser.
-
-```bash
-python scripts/automated_testing/sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-parity --headed
-```
-
-**analyst/sparql/** — Additional `.sparql` files (e.g. `01_points_rule_mapping.sparql`, `05_site_and_counts.sparql`) for FDD-oriented validation. Run via **POST /data-model/sparql/upload** or paste into Swagger / Data Model page.
+**scripts/automated_testing/sparql/** — `.sparql` files for FDD-oriented validation (e.g. brick rule mapping, site counts). Run via **POST /data-model/sparql/upload** or **Data Model Testing** (Custom SPARQL).
 
 ---
 

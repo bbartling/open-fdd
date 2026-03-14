@@ -46,7 +46,7 @@ class PlatformSettings(BaseSettings):
         "config/.run_fdd_now"  # touch to run now + reset timer
     )
     rules_dir: str = (
-        "analyst/rules"  # single place for project rules (hot reload each run)
+        "stack/rules"  # default rules next to stack/docker; hot reload each run
     )
 
     # Driver intervals

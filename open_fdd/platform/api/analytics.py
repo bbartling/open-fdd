@@ -331,6 +331,128 @@ def get_faults_by_equipment(
     }
 
 
+@router.get("/fault-results-series", summary="Distinct fault × site × equipment (for data preview selector)")
+def get_fault_results_series(
+    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
+    start_date: Optional[date] = Query(None, description="Start of range; omit for last 30 days"),
+    end_date: Optional[date] = Query(None, description="End of range; omit for today"),
+):
+    """
+    Returns distinct (fault_id, site_id, equipment_id) that have fault_results in the range.
+    Used by the frontend to build the "which dataframe to view" selector (tabs/dropdown).
+    """
+    end = end_date or date.today()
+    start = start_date or (end - timedelta(days=30))
+    conditions = ["fr.ts::date >= %s", "fr.ts::date <= %s"]
+    params: list = [start, end]
+    if site_id:
+        if resolve_site_uuid(site_id, create_if_empty=False) is None:
+            raise HTTPException(404, f"No site found for: {site_id!r}")
+        conditions.append(
+            "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
+        params.extend([site_id, site_id])
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT fr.fault_id, fr.site_id, fr.equipment_id
+                FROM fault_results fr
+                WHERE {" AND ".join(conditions)}
+                ORDER BY fr.fault_id, fr.site_id, fr.equipment_id
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+            # Resolve equipment names for labels
+            out = []
+            for r in rows:
+                cur.execute(
+                    """
+                    SELECT e.name AS equipment_name
+                    FROM sites s
+                    LEFT JOIN equipment e ON e.site_id = s.id
+                        AND (e.name = %s OR e.id::text = %s)
+                    WHERE s.name = %s OR s.id::text = %s
+                    LIMIT 1
+                    """,
+                    (r["equipment_id"], r["equipment_id"], r["site_id"], r["site_id"]),
+                )
+                eq = cur.fetchone()
+                equipment_name = (eq and eq["equipment_name"]) or r["equipment_id"] or "—"
+                out.append({
+                    "fault_id": r["fault_id"],
+                    "site_id": r["site_id"],
+                    "equipment_id": r["equipment_id"],
+                    "label": f"{r['fault_id']} — {equipment_name}",
+                })
+    return {"series": out, "period": {"start": str(start), "end": str(end)}}
+
+
+def _ts_iso_utc(dt) -> str:
+    if hasattr(dt, "isoformat"):
+        if getattr(dt, "tzinfo", None) is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+    return str(dt)
+
+
+@router.get("/fault-results-raw", summary="Last N rows of fault_results (for data preview grid)")
+def get_fault_results_raw(
+    fault_id: str = Query(..., description="Fault ID (e.g. from YAML)"),
+    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
+    equipment_id: Optional[str] = Query(None, description="Equipment id/name; omit for all"),
+    limit: int = Query(50, ge=1, le=500, description="Number of rows (most recent)"),
+):
+    """
+    Returns the last N rows from fault_results for the given fault_id (and optional site/equipment).
+    For Excel-style data preview: timestamp, site_id, equipment_id, fault_id, flag_value, evidence.
+    """
+    conditions = ["fr.fault_id = %s"]
+    params: list = [fault_id]
+    if site_id:
+        conditions.append(
+            "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
+        params.extend([site_id, site_id])
+    if equipment_id:
+        conditions.append("fr.equipment_id = %s")
+        params.append(equipment_id)
+    params.append(limit)
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT ts, site_id, equipment_id, fault_id, flag_value, evidence
+                FROM fault_results fr
+                WHERE {" AND ".join(conditions)}
+                ORDER BY ts DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+
+    # Most recent first in DB; for spreadsheet show chronological (oldest first)
+    rows = list(reversed(rows))
+    return {
+        "rows": [
+            {
+                "ts": _ts_iso_utc(r["ts"]),
+                "site_id": r["site_id"],
+                "equipment_id": r["equipment_id"],
+                "fault_id": r["fault_id"],
+                "flag_value": int(r["flag_value"]),
+                "evidence": r["evidence"],
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
+
+
 # --- System resources (host_metrics, container_metrics, disk_metrics from stack-host-stats) ---
 
 

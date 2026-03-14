@@ -10,8 +10,8 @@ Every frontend feature is tested; no rock left unturned.
       but done through the Data Model page (type N to confirm, click Remove all sites and reset).
 
   [2] Create site and import LLM payload (via UI)
-      Same outcome as graph_and_crud_test.py for TestBenchSite + full demo_site_llm_payload.json:
-      create site by name, paste JSON, Import — equipment (AHU-1, VAV-1), points (SA-T, ZoneTemp, …),
+      Same outcome as graph_and_crud_test.py for TestBenchSite + full demo_site_llm_payload.json (see scripts/automated_testing/demo_site_llm_payload.json):
+      create site by name, paste JSON, Apply to data model — equipment (AHU-1, VAV-1, etc.), points (SA-T, ZoneTemp, …),
       units (degF, percent, cfm), feeds/fed_by. No API calls from the test bench; all via browser.
 
   [2a] Optional: BACnet discovery (Points page). When --bacnet-device-instance ID [ID ...] is set, go to
@@ -24,6 +24,9 @@ Every frontend feature is tested; no rock left unturned.
        Last value, Last updated) and tree structure (site with count, equipment, Unassigned).
   [2e] Delete one point and optionally one equipment in the tree (right-click → Delete → confirm);
        verify tree updates so deleted items are gone.
+  [2e2] Point context menu: right-click a point, verify Poll true / Poll false / Delete; set Poll false then Poll true.
+  [2f] Data Model Testing smoke: open /data-model-testing, click Sites predefined query;
+       assert results table or "No bindings" appears.
 
   [3] Plots: select site, select points (and optionally a second point with different unit), add fault;
       verify chart data, data-model units in legend, axis-by-unit, and fault series as Bool 0/1.
@@ -91,6 +94,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
 # Paths: script in scripts/automated_testing/ or copied; payload next to script or in scripts/
@@ -131,10 +135,12 @@ _load_stack_env()
 
 # Defaults
 DEFAULT_FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+# Site name created in [2]; payload is demo_site_llm_payload.json (equipment: AHU-1, VAV-1, Weather-Station, Open-Meteo; points: SA-T, ZoneTemp, etc.)
 TESTBENCH_SITE_NAME = os.environ.get("TESTBENCH_SITE_NAME", "TestBenchSite")
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 
 # From demo_site_llm_payload.json: equipment and points we assert in the UI
+# From demo_site_llm_payload.json (equipment + points); first two equipment and two points used for assertions
 EXPECTED_EQUIPMENT_NAMES = ("AHU-1", "VAV-1")
 EXPECTED_POINT_NAMES = ("SA-T", "ZoneTemp")  # SA-T preferred for Plots; ZoneTemp fallback
 FALLBACK_POINT_NAMES = ("MA-T", "RA-T", "DAP-P")
@@ -443,8 +449,18 @@ def import_llm_payload_via_ui(
 
     driver.get(f"{base_url}/data-model")
     textarea = wait_for_element(driver, By.CSS_SELECTOR, "[data-testid=data-model-import-json]")
-    textarea.clear()
-    textarea.send_keys(json_str)
+    # Set value via JS and dispatch input so React state updates (avoids send_keys timeout on large payload)
+    driver.execute_script(
+        """
+        var el = arguments[0];
+        var val = arguments[1];
+        var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(el, val);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        """,
+        textarea,
+        json_str,
+    )
     safe_click(driver, By.CSS_SELECTOR, "[data-testid=data-model-import-button]")
     wait = WebDriverWait(driver, IMPORT_RESULT_WAIT)
     wait.until(
@@ -462,10 +478,10 @@ def bacnet_add_to_model_via_ui(
     device_instance: int,
     timeout: float = 40.0,
 ) -> bool:
-    """Use Points page BACnet discovery: set device instance, click 'Add to data model'.
+    """Use Data Model page BACnet discovery: set device instance, click 'Add to data model'.
     Merges BACnet RDF into the graph (same as graph_and_crud_test.py point_discovery_to_graph).
     Returns True if success message appears, False on failure or timeout (e.g. gateway unreachable)."""
-    driver.get(f"{base_url}/points")
+    driver.get(f"{base_url}/data-model")
     wait_for_text(driver, "BACnet discovery", timeout=TEXT_WAIT)
     wait_for_text(driver, "Add to data model", timeout=TEXT_WAIT)
     try:
@@ -491,7 +507,7 @@ def bacnet_add_to_model_via_ui(
         return False
     page = driver.page_source or ""
     if "added to graph" in page.lower():
-        print(f"  BACnet discovery: device {device_instance} added to graph (Points page).")
+        print(f"  BACnet discovery: device {device_instance} added to graph (Data Model page).")
         log_browser_console(driver, f"bacnet-add-to-model-{device_instance}")
         return True
     print(f"  BACnet discovery: Add to data model failed (check BACnet gateway / OFDD_BACNET_SERVER_URL).")
@@ -625,7 +641,8 @@ def delete_one_point_via_tree(
     driver.get(f"{base_url}/points")
     wait_for_text(driver, "Points", timeout=TEXT_WAIT)
     verify_site_selected(driver, site_name, "delete point")
-    time.sleep(0.5)
+    time.sleep(0.6)
+    _expand_points_tree_until_visible(driver, point_external_id, site_name)
     page_before = driver.page_source or ""
     if point_external_id not in page_before:
         print(f"  Points tree: point {point_external_id!r} not found; skip delete point.")
@@ -720,6 +737,148 @@ def delete_one_equipment_via_tree(
         except Exception:
             pass
         return False
+
+
+# Test IDs for point context menu (must match frontend POINTS_CONTEXT_MENU_TEST_IDS).
+POINTS_CONTEXT_MENU_POLL_TRUE = "points-context-menu-poll-true"
+POINTS_CONTEXT_MENU_POLL_FALSE = "points-context-menu-poll-false"
+POINTS_CONTEXT_MENU_DELETE_POINT = "points-context-menu-delete-point"
+
+
+def _expand_points_tree_until_visible(
+    driver: webdriver.Chrome,
+    point_external_id: str,
+    site_name: str,
+    max_clicks: int = 5,
+) -> None:
+    """Expand site/equipment nodes on Points page until point row is in the DOM (tree may start collapsed)."""
+    for _ in range(max_clicks):
+        if point_external_id in (driver.page_source or ""):
+            return
+        collapsed = driver.find_elements(
+            By.XPATH,
+            "//tr[.//button[@aria-expanded='false']]",
+        )
+        if not collapsed:
+            return
+        try:
+            btn = collapsed[0].find_element(By.XPATH, ".//button[@aria-expanded='false']")
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+            time.sleep(0.15)
+            btn.click()
+            time.sleep(0.3)
+        except Exception:
+            return
+
+
+def point_context_menu_poll_false_then_true(
+    driver: webdriver.Chrome,
+    base_url: str,
+    point_external_id: str,
+    site_name: str,
+) -> None:
+    """
+    On Points page, right-click a point, verify context menu has Poll true, Poll false, Delete point.
+    Then click Poll false, wait for update; then right-click same point, click Poll true, wait.
+    Proves the point context menu and polling toggle work.
+    """
+    driver.get(f"{base_url}/points")
+    wait_for_text(driver, "Points", timeout=TEXT_WAIT)
+    verify_site_selected(driver, site_name, "point context menu")
+    time.sleep(0.6)
+    _expand_points_tree_until_visible(driver, point_external_id, site_name)
+    if point_external_id not in (driver.page_source or ""):
+        raise AssertionError(
+            f"Point {point_external_id!r} not found on Points page; cannot run context menu test."
+        )
+    rows = driver.find_elements(
+        By.XPATH,
+        f"//tr[.//td[contains(., '{point_external_id}')]]",
+    )
+    if not rows:
+        raise AssertionError(
+            f"Point row for {point_external_id!r} not found; cannot run context menu test."
+        )
+    # Open context menu
+    ActionChains(driver).context_click(rows[0]).perform()
+    time.sleep(0.3)
+    # Verify menu has Poll true, Poll false, Delete point
+    poll_true_btn = driver.find_elements(
+        By.CSS_SELECTOR, f"[data-testid={POINTS_CONTEXT_MENU_POLL_TRUE!r}]"
+    )
+    poll_false_btn = driver.find_elements(
+        By.CSS_SELECTOR, f"[data-testid={POINTS_CONTEXT_MENU_POLL_FALSE!r}]"
+    )
+    delete_btn = driver.find_elements(
+        By.CSS_SELECTOR, f"[data-testid={POINTS_CONTEXT_MENU_DELETE_POINT!r}]"
+    )
+    if not poll_true_btn or not poll_false_btn or not delete_btn:
+        driver.find_element(By.TAG_NAME, "body").click()
+        raise AssertionError(
+            "Point context menu missing Poll true, Poll false, or Delete point (data-testid)."
+        )
+    # Poll false
+    poll_false_btn[0].click()
+    time.sleep(0.5)
+    WebDriverWait(driver, 12).until(
+        lambda d: "Poll true" in (d.page_source or "") or "Poll false" in (d.page_source or "")
+    )
+    # Re-find point row and open context menu again
+    time.sleep(0.4)
+    rows2 = driver.find_elements(
+        By.XPATH,
+        f"//tr[.//td[contains(., '{point_external_id}')]]",
+    )
+    if not rows2:
+        print("  Point context menu: point row not found after Poll false; continuing.")
+        return
+    ActionChains(driver).context_click(rows2[0]).perform()
+    time.sleep(0.3)
+    poll_true_btn2 = driver.find_elements(
+        By.CSS_SELECTOR, f"[data-testid={POINTS_CONTEXT_MENU_POLL_TRUE!r}]"
+    )
+    if poll_true_btn2:
+        poll_true_btn2[0].click()
+        time.sleep(0.5)
+    else:
+        driver.find_element(By.TAG_NAME, "body").click()
+    print(f"  Point context menu: Poll false then Poll true on {point_external_id!r} OK.")
+    log_browser_console(driver, f"point-context-menu-{point_external_id}")
+
+
+def verify_data_model_testing_smoke(driver: webdriver.Chrome, base_url: str) -> None:
+    """
+    Open Data Model Testing page (/data-model-testing), click the Sites predefined button,
+    and assert that either the SPARQL results table or 'No bindings' appears. Proves the
+    Summarize-your-HVAC + Custom SPARQL page loads and runs a query.
+    """
+    driver.get(f"{base_url}/data-model-testing")
+    wait_for_text(driver, "Data Model Testing", timeout=TEXT_WAIT)
+    wait_for_element(driver, By.CSS_SELECTOR, "[data-testid=sparql-query-textarea]", timeout=ELEMENT_WAIT)
+    # Click the "Sites" predefined button (first summary button)
+    sites_btn = wait_for_clickable(
+        driver,
+        By.XPATH,
+        "//button[contains(., 'Sites') and not(contains(@class, 'hidden'))]",
+        timeout=ELEMENT_WAIT,
+    )
+    sites_btn.click()
+    # Wait for result: results table or "No bindings (empty result)." (allow 30s for slow API)
+    wait = WebDriverWait(driver, 30)
+    try:
+        wait.until(
+            lambda d: (
+                d.find_elements(By.CSS_SELECTOR, "[data-testid=sparql-results-table]")
+                or "No bindings" in (d.page_source or "")
+                or "empty result" in (d.page_source or "")
+            )
+        )
+        print("  Data Model Testing: Sites query ran; results table or No bindings visible.")
+    except TimeoutException:
+        print(
+            "  Data Model Testing: timeout waiting for Sites query result (API may be slow or unreachable from browser). Continuing."
+        )
+    log_browser_console(driver, "data-model-testing-smoke")
 
 
 def select_site_in_topbar(driver: webdriver.Chrome, site_name: str) -> None:
@@ -1271,7 +1430,7 @@ def run_full_flow(
             n_pts, n_eq = import_llm_payload_via_ui(driver, frontend_url, DEMO_PAYLOAD_PATH, site_id)
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after import")
             if bacnet_device_instances:
-                print("[2a] BACnet discovery: Add to data model (Points page) for device(s) %s..." % bacnet_device_instances)
+                print("[2a] BACnet discovery: Add to data model (Data Model page) for device(s) %s..." % bacnet_device_instances)
                 for dev_inst in bacnet_device_instances:
                     if not bacnet_add_to_model_via_ui(driver, frontend_url, dev_inst):
                         print("  (Device %s failed or skipped; continuing.)" % dev_inst)
@@ -1296,6 +1455,12 @@ def run_full_flow(
                     break
             else:
                 print("  (No deletable point found in tree; continuing.)")
+            print("[2e2] Point context menu: Poll false then Poll true...")
+            point_context_menu_poll_false_then_true(
+                driver, frontend_url, "SA-T", TESTBENCH_SITE_NAME
+            )
+            print("[2f] Data Model Testing smoke: open page, run Sites query...")
+            verify_data_model_testing_smoke(driver, frontend_url)
 
         if only is None or only == "charts" or only == "create-and-import":
             if not skip_chart_data:

@@ -26,9 +26,19 @@ import type { DatePreset } from "@/components/site/DateRangeSelect";
 import { PointPicker } from "@/components/site/PointPicker";
 import { FaultPicker } from "@/components/site/FaultPicker";
 import type { Point } from "@/types/api";
-import { downloadTimeseriesCsv } from "@/lib/csv";
-import { Download } from "lucide-react";
+import { downloadTimeseriesCsv, fetchCsv, parseWideCsv } from "@/lib/csv";
+import type { WideCsvParsed } from "@/lib/csv";
+import { Download, ChevronDown, ChevronUp, Table2 } from "lucide-react";
 import { displayRangeUpdater } from "./plots-display-range";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const COLORS = [
   "hsl(215, 60%, 42%)",
@@ -83,6 +93,8 @@ function tooltipFormat(ts: number) {
 
 const CHART_MIN_HEIGHT = 360;
 const OVERVIEW_HEIGHT = 56;
+/** Max rows shown in the in-browser data table (same data as CSV export). */
+const DATA_TABLE_MAX_ROWS = 500;
 
 /** Bucket width in ms for fault swim lanes (hour or day from API). */
 function faultBucketMs(start: string, end: string): number {
@@ -492,6 +504,8 @@ export function PlotsPage() {
   const [downloadLoading, setDownloadLoading] = useState(false);
   /** Time range currently shown on the chart (zoomed when brush active). Used for CSV download. */
   const [displayRange, setDisplayRange] = useState<{ start: string; end: string } | null>(null);
+  /** Collapsed by default; when true, show spreadsheet-style table (same data as CSV, up to 500 rows). */
+  const [showDataTable, setShowDataTable] = useState(false);
 
   const [preset, setPreset] = useState<DatePreset>("7d");
   const now = new Date();
@@ -513,22 +527,50 @@ export function PlotsPage() {
     return presetRange(preset);
   }, [preset, customStart, customEnd]);
 
+  const rangeForExport = displayRange ?? { start, end };
+  const pointIdsForExport =
+    selectedPointIds.length > 0 ? selectedPointIds : pollingPoints.map((p) => p.id);
+
+  const { data: tableData, isLoading: tableLoading } = useQuery<WideCsvParsed>({
+    queryKey: [
+      "plots-table",
+      selectedSiteId,
+      rangeForExport.start.slice(0, 10),
+      rangeForExport.end.slice(0, 10),
+      pointIdsForExport,
+    ],
+    queryFn: async () => {
+      const csv = await fetchCsv({
+        site_id: selectedSiteId!,
+        start_date: rangeForExport.start.slice(0, 10),
+        end_date: rangeForExport.end.slice(0, 10),
+        format: "wide",
+        point_ids: pointIdsForExport.length > 0 ? pointIdsForExport : undefined,
+      });
+      return parseWideCsv(csv);
+    },
+    enabled: showDataTable && !!selectedSiteId,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const tableRows = tableData
+    ? tableData.rows.slice(0, DATA_TABLE_MAX_ROWS)
+    : [];
+  const tableTotalRows = tableData ? tableData.rows.length : 0;
+
   async function handleDownloadCsv() {
     if (!selectedSiteId) return;
     setDownloadLoading(true);
     try {
-      const range = displayRange ?? { start, end };
-      const startDate = range.start.slice(0, 10);
-      const endDate = range.end.slice(0, 10);
-      const pointIds =
-        selectedPointIds.length > 0 ? selectedPointIds : pollingPoints.map((p) => p.id);
+      const startDate = rangeForExport.start.slice(0, 10);
+      const endDate = rangeForExport.end.slice(0, 10);
       await downloadTimeseriesCsv(
         {
           site_id: selectedSiteId,
           start_date: startDate,
           end_date: endDate,
           format: "wide",
-          point_ids: pointIds.length > 0 ? pointIds : undefined,
+          point_ids: pointIdsForExport.length > 0 ? pointIdsForExport : undefined,
         },
         `timeseries_${startDate}_${endDate}.csv`,
       );
@@ -590,7 +632,7 @@ export function PlotsPage() {
             onClick={handleDownloadCsv}
             disabled={downloadLoading}
             className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            title="Download timeseries as CSV (wide format)"
+            title="Export selected points and date range as CSV (Excel-friendly). Same data as the table below when expanded."
           >
             <Download className="h-4 w-4 shrink-0" />
             {downloadLoading ? "Preparing…" : "Download CSV"}
@@ -619,6 +661,78 @@ export function PlotsPage() {
           selectedFaultIds={selectedFaultIds}
           onDisplayRangeChange={onDisplayRangeChange}
         />
+      </div>
+
+      {/* Collapsible spreadsheet-style table: same data as CSV export, up to 500 rows. Hidden by default. */}
+      <div className="mt-4 rounded-lg border border-border/60 bg-card">
+        <button
+          type="button"
+          onClick={() => setShowDataTable((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-t-lg"
+          data-testid="plots-view-data-table-toggle"
+        >
+          <span className="inline-flex items-center gap-2">
+            <Table2 className="h-4 w-4 text-muted-foreground" />
+            View data table (same as CSV export, up to {DATA_TABLE_MAX_ROWS} rows)
+          </span>
+          {showDataTable ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+        {showDataTable && (
+          <div className="border-t border-border/60 px-2 pb-2">
+            {tableLoading ? (
+              <Skeleton className="h-[400px] w-full rounded-lg" />
+            ) : tableData && tableData.headers.length > 0 ? (
+              <div
+                className="max-h-[70vh] min-h-[200px] overflow-auto rounded-lg border border-border/40"
+                data-testid="plots-data-table-container"
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow className="sticky top-0 z-10 bg-muted/95 hover:bg-muted/95">
+                      {tableData.headers.map((h) => (
+                        <TableHead
+                          key={h}
+                          className="whitespace-nowrap font-mono text-xs font-medium"
+                        >
+                          {h}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tableRows.map((row, ri) => (
+                      <TableRow key={ri} className="border-border/40">
+                        {row.map((cell, ci) => (
+                          <TableCell
+                            key={ci}
+                            className="whitespace-nowrap font-mono text-xs tabular-nums"
+                          >
+                            {typeof cell === "number"
+                              ? cell.toLocaleString(undefined, { maximumFractionDigits: 4 })
+                              : String(cell)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {tableTotalRows > DATA_TABLE_MAX_ROWS && (
+                  <p className="sticky bottom-0 border-t border-border/60 bg-muted/95 px-3 py-2 text-xs text-muted-foreground">
+                    Showing first {DATA_TABLE_MAX_ROWS} of {tableTotalRows} rows. Use Download CSV for the full export.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No data for the selected range and points. Adjust the date range or select points, or use Download CSV to export.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -12,16 +12,16 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 
 ## Where rules live: config path and how to manage them
 
-**Single directory:** All FDD rule YAML files live in one directory configured as **`rules_dir`** in platform config (RDF: `ofdd:rulesDir`, e.g. `"analyst/rules"`). The FDD loop loads from this path every run; the rules API (list, upload, download, delete) uses the same path. **You still need `rules_dir` in config** — it defines where files are stored. The frontend does not replace it; it lets you manage the files *in* that directory.
+**Single directory:** All FDD rule YAML files live in one directory configured as **`rules_dir`** in platform config (RDF: `ofdd:rulesDir`, e.g. `"stack/rules"`). The FDD loop loads from this path every run; the rules API (list, upload, download, delete) uses the same path. **You still need `rules_dir` in config** — it defines where files are stored. The frontend does not replace it; it lets you manage the files *in* that directory.
 
 **Two ways to manage rules:**
 
 | Method | Use case |
 |--------|----------|
 | **React frontend (Faults page)** | Upload new YAML, download existing files, delete files, and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. Preferred when you have UI access. |
-| **Files on disk** | Edit or add files directly under the configured path (e.g. `analyst/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
+| **Files on disk** | Edit or add files directly under the configured path (e.g. `stack/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
 
-Config: `rules_dir: "analyst/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `open_fdd/rules`. Default rules ship in `analyst/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). Copy or adapt examples from `open_fdd/rules/`; see the [Expression Rule Cookbook](expression_rule_cookbook).
+Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](expression_rule_cookbook) to add or adapt rules.
 
 ---
 
@@ -31,7 +31,7 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 
 **Fault definitions:** Each FDD run syncs the loaded rules into the `fault_definitions` table (fault_id, name, category, equipment_types). When you add or edit a rule (via frontend upload or by editing a file in `rules_dir`), the next run updates the DB and the Faults UI reflects the change. From the frontend you can also click **Sync definitions** to update the definitions table immediately.
 
-1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `analyst/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
+1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `stack/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
 2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
 3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
 
@@ -82,7 +82,7 @@ params:
 
 ## Running rules
 
-- **Platform:** FDD loop loads rules from `rules_dir` (default `analyst/rules`) each run; edit YAML and trigger a run to see changes in Grafana.
+- **Platform:** FDD loop loads rules from `rules_dir` (default `stack/rules`) each run; edit YAML and trigger a run to see changes in Grafana.
 - **Standalone:** `RuleRunner(rules_path=...)` or `RuleRunner(rules=[...])`; call `run(df, ...)`.
 
 ---

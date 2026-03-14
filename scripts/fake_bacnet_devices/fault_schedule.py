@@ -1,5 +1,5 @@
 """
-Deterministic fault schedule for fake BACnet devices — aligned with analyst rules.
+Deterministic fault schedule for fake BACnet devices — aligned with FDD rules.
 
 Used by fake_ahu_faults.py and fake_vav_faults.py so faults occur at known times.
 Used by long_term_bacnet_scrape_test.py to compute expected faults and verify Open FDD.

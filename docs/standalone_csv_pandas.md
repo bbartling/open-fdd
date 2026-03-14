@@ -19,6 +19,6 @@ The current repo focuses on the **edge platform** (TimescaleDB, Grafana, BACnet,
 
 ## Archived workflows in the repo
 
-The **[analyst/README.md](https://github.com/bbartling/open-fdd/blob/main/analyst/README.md)** directory in the repo contains archived documentation for the earlier static-CSV, AHU7 tutorial, and Brick-from-catalog workflows. Those flows use `analyst/run_all.sh`, `analyst/sparql/`, `analyst/rules/`, and `open_fdd/analyst/` (ingest, to_dataframe, brick_model, run_fdd). They remain available for note and as a basis for the future standalone CSV/pandas package.
+For the current edge platform use the main docs below.
 
 For the current edge platform, use the main docs: [Home](index), [Overview](overview), [Getting Started](getting_started).

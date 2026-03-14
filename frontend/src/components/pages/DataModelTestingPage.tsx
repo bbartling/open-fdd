@@ -1,0 +1,190 @@
+import { useState, useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Play, Code, FileUp, Wind } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { apiFetch } from "@/lib/api";
+import type { SparqlResponse } from "@/types/api";
+import { PREDEFINED_QUERIES, DEFAULT_SPARQL } from "@/data/data-model-testing-queries";
+
+export function DataModelTestingPage() {
+  const [sparqlQuery, setSparqlQuery] = useState(DEFAULT_SPARQL);
+  const [sparqlError, setSparqlError] = useState<string | null>(null);
+  const [includeBacnetRefs, setIncludeBacnetRefs] = useState(false);
+  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
+
+  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
+    mutationFn: (query) =>
+      apiFetch<SparqlResponse>("/data-model/sparql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      }),
+    onSuccess: () => setSparqlError(null),
+    onError: (err: Error) => setSparqlError(err.message),
+  });
+
+  const runPredefined = (query: string, queryWithBacnet?: string) => {
+    const q = includeBacnetRefs && queryWithBacnet ? queryWithBacnet : query;
+    setSparqlQuery(q);
+    sparqlMutation.mutate(q);
+  };
+
+  const sparqlBindings: Record<string, string | null>[] = sparqlMutation.data?.bindings ?? [];
+  const sparqlColumns =
+    sparqlBindings.length > 0
+      ? Array.from(new Set(sparqlBindings.flatMap((r) => Object.keys(r)))).sort()
+      : [];
+
+  return (
+    <div>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Testing</h1>
+      <p className="mb-8 text-sm text-muted-foreground">
+        Run predefined summary queries or your own SPARQL against the current Brick + BACnet graph. Use these to verify the data model matches how you’d summarize the mechanical system.
+      </p>
+
+      {/* One-click HVAC summary buttons */}
+      <Card className="mb-8 border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Wind className="h-5 w-5" />
+            Summarize your HVAC
+          </CardTitle>
+          <p className="text-sm font-normal text-muted-foreground">
+            Click a button to run a predefined SPARQL query. Results appear below. No SPARQL knowledge required.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={includeBacnetRefs}
+              onChange={(e) => setIncludeBacnetRefs(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+              data-testid="include-bacnet-refs-checkbox"
+            />
+            <span>Include BACnet device and point IDs (for telemetry and algorithms)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {PREDEFINED_QUERIES.map(({ id, label, shortLabel, query, queryWithBacnet, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => runPredefined(query, queryWithBacnet)}
+                disabled={sparqlMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                title={label}
+              >
+                <Icon className="h-4 w-4" />
+                {shortLabel}
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {includeBacnetRefs
+              ? "With the box checked, results include bacnet_device_id and object_identifier for each point (usable for telemetry queries)."
+              : "Results appear in the Custom SPARQL section below."}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Custom SPARQL */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Code className="h-5 w-5" />
+            Custom SPARQL
+          </CardTitle>
+          <p className="text-sm font-normal text-muted-foreground">
+            Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <input
+            ref={sparqlFileInputRef}
+            type="file"
+            accept=".sparql,text/plain"
+            className="hidden"
+            data-testid="sparql-file-input"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                const text = typeof reader.result === "string" ? reader.result : "";
+                setSparqlQuery(text);
+              };
+              reader.readAsText(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            data-testid="sparql-upload-file-button"
+            onClick={() => sparqlFileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
+          >
+            <FileUp className="h-4 w-4" />
+            Upload .sparql file
+          </button>
+          <textarea
+            data-testid="sparql-query-textarea"
+            value={sparqlQuery}
+            onChange={(e) => setSparqlQuery(e.target.value)}
+            className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            data-testid="sparql-run-button"
+            onClick={() => sparqlMutation.mutate(sparqlQuery)}
+            disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Play className="h-4 w-4" />
+            Run SPARQL
+          </button>
+          {sparqlError && (
+            <p className="text-sm text-destructive">{sparqlError}</p>
+          )}
+          {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {sparqlColumns.map((key) => (
+                      <TableHead key={key} className="font-mono text-xs">
+                        {key}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
+                    <TableRow key={i}>
+                      {sparqlColumns.map((key) => (
+                        <TableCell key={key} className="font-mono text-xs">
+                          {row[key] ?? "—"}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          {sparqlMutation.isSuccess && sparqlBindings.length === 0 && (
+            <p className="text-sm text-muted-foreground">No bindings (empty result).</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

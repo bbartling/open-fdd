@@ -51,6 +51,12 @@ def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
     lines.append(f"    ofdd:polling {'true' if polling else 'false'} ;")
     if p.get("unit"):
         lines.append(f'    ofdd:unit "{_escape(p["unit"])}" ;')
+    bacnet_id = p.get("bacnet_device_id")
+    obj_id = p.get("object_identifier")
+    if bacnet_id is not None and str(bacnet_id).strip():
+        lines.append(f'    ofdd:bacnetDeviceId "{_escape(str(bacnet_id).strip())}" ;')
+    if obj_id is not None and str(obj_id).strip():
+        lines.append(f'    ofdd:objectIdentifier "{_escape(str(obj_id).strip())}" ;')
     if p.get("fdd_input"):
         lines.append(f"    brick:isPointOf {parent_uri} ;")
         lines.append(f'    ofdd:mapsToRuleInput "{_escape(p["fdd_input"])}" .')
@@ -91,7 +97,8 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             )
             equipment = cur.fetchall()
             cur.execute(
-                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id, COALESCE(polling, true) AS polling
+                """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id, COALESCE(polling, true) AS polling,
+                   bacnet_device_id, object_identifier
                    FROM points WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, external_id""",
                 (site_ids,),
             )

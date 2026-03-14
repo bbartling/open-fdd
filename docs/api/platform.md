@@ -187,7 +187,7 @@ Run a SPARQL query against the current data model (TTL generated from DB). Use i
 
 ### POST /data-model/sparql/upload
 
-Run a SPARQL query from an uploaded `.sparql` file (e.g. from `analyst/sparql/`). Same behavior as POST /data-model/sparql with the file contents as query.
+Run a SPARQL query from an uploaded `.sparql` file (e.g. from `scripts/automated_testing/sparql/`). Same behavior as POST /data-model/sparql with the file contents as query.
 
 **Body:** multipart/form-data, file = `.sparql` file.
 
