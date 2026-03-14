@@ -20,7 +20,9 @@ def _ts() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def emit(topic: str, data: dict[str, Any], correlation_id: Optional[str] = None) -> None:
+def emit(
+    topic: str, data: dict[str, Any], correlation_id: Optional[str] = None
+) -> None:
     """Broadcast event to WebSocket clients subscribed to topic (or wildcard)."""
     from open_fdd.platform.realtime.hub import get_hub
 

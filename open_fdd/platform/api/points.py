@@ -80,13 +80,22 @@ def create_point(body: PointCreate):
                 row = cur.fetchone()
             except psycopg2.IntegrityError:
                 conn.rollback()
-                raise HTTPException(409, "Point with this external_id already exists for this site")
+                raise HTTPException(
+                    409, "Point with this external_id already exists for this site"
+                )
         conn.commit()
     try:
         sync_ttl_to_file()
     except Exception:
         pass
-    emit(TOPIC_CRUD_POINT + ".created", {"id": str(row["id"]), "site_id": str(row["site_id"]), "external_id": row["external_id"]})
+    emit(
+        TOPIC_CRUD_POINT + ".created",
+        {
+            "id": str(row["id"]),
+            "site_id": str(row["site_id"]),
+            "external_id": row["external_id"],
+        },
+    )
     return PointRead.model_validate(dict(row))
 
 

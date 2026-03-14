@@ -54,11 +54,15 @@ def _mock_export_and_openai(openai_content: str = MOCK_OPENAI_CONTENT):
         return_value=[],
     )
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = _make_openai_response(openai_content)
+    mock_client.chat.completions.create.return_value = _make_openai_response(
+        openai_content
+    )
 
     fake_openai_module = MagicMock()
     fake_openai_module.OpenAI = MagicMock(return_value=mock_client)
-    fake_openai_module.AuthenticationError = type("AuthenticationError", (Exception,), {})
+    fake_openai_module.AuthenticationError = type(
+        "AuthenticationError", (Exception,), {}
+    )
     fake_openai_module.RateLimitError = type("RateLimitError", (Exception,), {})
     fake_openai_module.APITimeoutError = type("APITimeoutError", (Exception,), {})
     fake_openai_module.BadRequestError = type("BadRequestError", (Exception,), {})
@@ -119,7 +123,11 @@ def test_tag_with_openai_auto_import():
         ):
             r = client.post(
                 "/data-model/tag-with-openai",
-                json={"openai_api_key": "sk-test", "model": "gpt-4o", "auto_import": True},
+                json={
+                    "openai_api_key": "sk-test",
+                    "model": "gpt-4o",
+                    "auto_import": True,
+                },
             )
     assert r.status_code == 200
     data = r.json()
@@ -150,9 +158,14 @@ def test_tag_with_openai_invalid_key():
     from open_fdd.platform.llm_tagger import LlmTaggerError
 
     export_patch, _openai_patch = _mock_export_and_openai()
-    with export_patch, patch(
-        "open_fdd.platform.llm_tagger.tag_with_openai",
-        side_effect=LlmTaggerError(401, "Invalid OpenAI API key. Check your key and try again."),
+    with (
+        export_patch,
+        patch(
+            "open_fdd.platform.llm_tagger.tag_with_openai",
+            side_effect=LlmTaggerError(
+                401, "Invalid OpenAI API key. Check your key and try again."
+            ),
+        ),
     ):
         r = client.post(
             "/data-model/tag-with-openai",
@@ -170,9 +183,12 @@ def test_tag_with_openai_timeout():
     from open_fdd.platform.llm_tagger import LlmTaggerError
 
     export_patch, _openai_patch = _mock_export_and_openai()
-    with export_patch, patch(
-        "open_fdd.platform.llm_tagger.tag_with_openai",
-        side_effect=LlmTaggerError(504, "OpenAI API timed out after 120s."),
+    with (
+        export_patch,
+        patch(
+            "open_fdd.platform.llm_tagger.tag_with_openai",
+            side_effect=LlmTaggerError(504, "OpenAI API timed out after 120s."),
+        ),
     ):
         r = client.post(
             "/data-model/tag-with-openai",
@@ -191,7 +207,10 @@ def test_llm_tagger_missing_openai_package():
     from open_fdd.platform import llm_tagger
     from open_fdd.platform.llm_tagger import LlmTaggerError
 
-    with patch("open_fdd.platform.llm_tagger.import_module", side_effect=ImportError("No module named 'openai'")):
+    with patch(
+        "open_fdd.platform.llm_tagger.import_module",
+        side_effect=ImportError("No module named 'openai'"),
+    ):
         with pytest.raises(LlmTaggerError) as exc_info:
             llm_tagger.tag_with_openai([], api_key="sk-test")
     assert exc_info.value.status_code == 500

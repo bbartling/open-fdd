@@ -89,7 +89,9 @@ class ConnectionManager:
         except Exception as e:
             logger.debug("broadcast schedule failed: %s", e)
 
-    async def send_personal(self, websocket: WebSocket, payload: dict[str, Any]) -> None:
+    async def send_personal(
+        self, websocket: WebSocket, payload: dict[str, Any]
+    ) -> None:
         try:
             await websocket.send_text(json.dumps(payload))
         except Exception as e:

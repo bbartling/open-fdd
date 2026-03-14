@@ -44,12 +44,16 @@ def test_run_fdd_loop_loads_rules_from_disk_every_run(tmp_path):
         return []  # no rules so runner gets empty list
 
     with patch("open_fdd.platform.loop.get_conn", return_value=_mock_conn_no_sites()):
-        with patch("open_fdd.engine.runner.load_rules_from_dir", side_effect=record_load):
+        with patch(
+            "open_fdd.engine.runner.load_rules_from_dir", side_effect=record_load
+        ):
             from open_fdd.platform.loop import run_fdd_loop
 
             run_fdd_loop()
             run_fdd_loop()
-    assert len(load_calls) == 2, "load_rules_from_dir must be called every run (hot reload)"
+    assert (
+        len(load_calls) == 2
+    ), "load_rules_from_dir must be called every run (hot reload)"
     assert load_calls[0] == load_calls[1] == tmp_path.resolve()
     assert load_calls[0].name == tmp_path.name
 
@@ -82,6 +86,6 @@ def test_rules_api_and_loop_resolve_same_path_for_relative_rules_dir():
     expected = (loop_repo_root / "stack" / "rules").resolve()
 
     api_resolved = rules_mod._rules_dir_resolved()
-    assert api_resolved == expected, (
-        "GET /rules and FDD loop must resolve the same rules dir (API uses same repo_root logic)"
-    )
+    assert (
+        api_resolved == expected
+    ), "GET /rules and FDD loop must resolve the same rules dir (API uses same repo_root logic)"

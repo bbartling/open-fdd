@@ -25,9 +25,7 @@ def list_equipment(site_id: UUID | None = None):
                     (str(site_id),),
                 )
             else:
-                cur.execute(
-                    f"SELECT {cols} FROM equipment ORDER BY site_id, name"
-                )
+                cur.execute(f"SELECT {cols} FROM equipment ORDER BY site_id, name")
             rows = cur.fetchall()
     return [EquipmentRead.model_validate(dict(r)) for r in rows]
 
@@ -66,7 +64,10 @@ def create_equipment(body: EquipmentCreate):
         sync_ttl_to_file()
     except Exception:
         pass
-    emit(TOPIC_CRUD_EQUIPMENT + ".created", {"id": str(row["id"]), "site_id": str(row["site_id"]), "name": row["name"]})
+    emit(
+        TOPIC_CRUD_EQUIPMENT + ".created",
+        {"id": str(row["id"]), "site_id": str(row["site_id"]), "name": row["name"]},
+    )
     return EquipmentRead.model_validate(dict(row))
 
 
@@ -120,7 +121,11 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
                 if existing:
                     cur.execute(
                         "SELECT id FROM equipment WHERE site_id = %s AND name = %s AND id != %s",
-                        (str(existing["site_id"]), body.name.strip(), str(equipment_id)),
+                        (
+                            str(existing["site_id"]),
+                            body.name.strip(),
+                            str(equipment_id),
+                        ),
                     )
                     if cur.fetchone():
                         raise HTTPException(

@@ -30,15 +30,13 @@ def list_suggested_entities():
     """
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT p.id, p.site_id, p.equipment_id, p.external_id, p.brick_type, p.unit, e.name AS equipment_name
                 FROM points p
                 LEFT JOIN equipment e ON p.equipment_id = e.id
                 WHERE p.brick_type IS NOT NULL
                 ORDER BY p.site_id, p.equipment_id, p.external_id
-                """
-            )
+                """)
             rows = cur.fetchall()
     out = []
     for r in rows:
@@ -48,7 +46,9 @@ def list_suggested_entities():
         external_id = r["external_id"] or ""
         brick_type = r.get("brick_type") or ""
         unit = r.get("unit")
-        equipment_name = (r.get("equipment_name") or "unknown").lower().replace(" ", "_")[:32]
+        equipment_name = (
+            (r.get("equipment_name") or "unknown").lower().replace(" ", "_")[:32]
+        )
         suggested_domain = "sensor"
         suggested_id = f"openfdd_{equipment_name}_{external_id}"[:64]
         if "Occupancy_Status" in brick_type or "occupancy" in brick_type.lower():

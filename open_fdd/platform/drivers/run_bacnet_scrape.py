@@ -31,7 +31,6 @@ from pathlib import Path
 import urllib.error
 import urllib.request
 
-
 # Add project root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -75,7 +74,9 @@ def _fetch_platform_config(log: logging.Logger) -> dict | None:
 _CONFIG_CACHE: dict[str, object] = {"ts": 0.0, "cfg": None}
 
 
-def _fetch_platform_config_cached(log: logging.Logger, ttl_sec: int = 30) -> dict | None:
+def _fetch_platform_config_cached(
+    log: logging.Logger, ttl_sec: int = 30
+) -> dict | None:
     """
     Cache GET /config for a short TTL so the scraper doesn’t hammer the API.
     Returns dict or None.
@@ -115,7 +116,7 @@ def _current_interval_min(log: logging.Logger) -> int:
     if cfg and cfg.get("bacnet_scrape_interval_min") is not None:
         try:
             return int(cfg["bacnet_scrape_interval_min"])
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             log.warning(
                 "Invalid bacnet_scrape_interval_min from API: %r",
                 cfg.get("bacnet_scrape_interval_min"),
@@ -126,7 +127,7 @@ def _current_interval_min(log: logging.Logger) -> int:
         v = os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN")
         if v is not None and str(v).strip():
             return int(v.strip())
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         pass
 
     return get_platform_settings().bacnet_scrape_interval_min
@@ -226,7 +227,9 @@ def main() -> int:
                     continue
 
                 try:
-                    result = run_bacnet_scrape(csv_path, site_id, "bacnet", server_url=url)
+                    result = run_bacnet_scrape(
+                        csv_path, site_id, "bacnet", server_url=url
+                    )
                 except Exception as e:
                     log.exception("Gateway %s failed: %s", site_id, e)
                     continue
@@ -256,7 +259,9 @@ def main() -> int:
 
     # Single-gateway mode
     csv_path = _resolve_csv_path(args.csv, cwd)
-    use_data_model = args.data_model or (settings.bacnet_use_data_model and not args.csv_only)
+    use_data_model = args.data_model or (
+        settings.bacnet_use_data_model and not args.csv_only
+    )
     site_id = args.site if args.site != "default" else settings.bacnet_site_id
 
     if args.validate_only:
@@ -270,7 +275,9 @@ def main() -> int:
         return 1
 
     if not settings.bacnet_scrape_enabled:
-        log.warning("BACnet scrape disabled. Set OFDD_BACNET_SCRAPE_ENABLED=true to enable.")
+        log.warning(
+            "BACnet scrape disabled. Set OFDD_BACNET_SCRAPE_ENABLED=true to enable."
+        )
         return 0
 
     def _run_single() -> dict:
@@ -289,12 +296,18 @@ def main() -> int:
 
             # fallback to CSV only when not forced data-model and CSV exists
             if not args.data_model and csv_path.exists():
-                log.info("No BACnet points in data model; falling back to CSV %s", csv_path)
-                return run_bacnet_scrape(csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url)
+                log.info(
+                    "No BACnet points in data model; falling back to CSV %s", csv_path
+                )
+                return run_bacnet_scrape(
+                    csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url
+                )
 
             return result
 
-        return run_bacnet_scrape(csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url)
+        return run_bacnet_scrape(
+            csv_path, site_id, "bacnet", server_url=settings.bacnet_server_url
+        )
 
     if args.loop:
         interval_min = _current_interval_min(log)

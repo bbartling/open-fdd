@@ -25,6 +25,7 @@ class LlmTaggerError(Exception):
         self.status_code = status_code
         self.detail = detail
 
+
 # ---------------------------------------------------------------------------
 # Canonical system prompt — matches README.md § "Canonical prompt"
 # Keep in sync with docs/modeling/ai_assisted_tagging.md
@@ -289,7 +290,9 @@ def tag_with_openai(
     APITimeoutError = getattr(openai_mod, "APITimeoutError", Exception)
     BadRequestError = getattr(openai_mod, "BadRequestError", Exception)
     if OpenAI is None:
-        raise LlmTaggerError(500, "openai package is present but OpenAI client is unavailable.")
+        raise LlmTaggerError(
+            500, "openai package is present but OpenAI client is unavailable."
+        )
 
     # Inline import avoids circular dependency at module load time.
     from open_fdd.platform.api.data_model import DataModelImportBody
@@ -318,7 +321,9 @@ def tag_with_openai(
             compact.append({k: row.get(k) for k in keep if k in row})
         return compact
 
-    def _call_openai_once(rows: list[dict[str, Any]]) -> tuple[Any, dict[str, Any] | None]:
+    def _call_openai_once(
+        rows: list[dict[str, Any]],
+    ) -> tuple[Any, dict[str, Any] | None]:
         export_json = json.dumps(_compact_export_rows(rows), indent=2)
         user_message = f"Here is the export JSON:\n\n{export_json}"
 
@@ -334,9 +339,13 @@ def tag_with_openai(
                 temperature=0,
             )
         except AuthenticationError:
-            raise LlmTaggerError(401, "Invalid OpenAI API key. Check your key and try again.")
+            raise LlmTaggerError(
+                401, "Invalid OpenAI API key. Check your key and try again."
+            )
         except RateLimitError:
-            raise LlmTaggerError(429, "OpenAI rate limit exceeded. Wait a moment and try again.")
+            raise LlmTaggerError(
+                429, "OpenAI rate limit exceeded. Wait a moment and try again."
+            )
         except APITimeoutError:
             raise LlmTaggerError(504, f"OpenAI API timed out after {int(timeout)}s.")
         except BadRequestError as exc:
@@ -399,7 +408,11 @@ def tag_with_openai(
     ) -> tuple[list[Any], list[Any], dict[str, int]]:
         try:
             body, usage = _call_openai_once(rows)
-            usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            usage_totals = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
             _merge_usage(usage_totals, usage)
             return body.points, body.equipment, usage_totals
         except LlmTaggerError as exc:
@@ -415,10 +428,18 @@ def tag_with_openai(
                 )
                 left_points, left_equipment, left_usage = _tag_rows_resilient(left)
                 right_points, right_equipment, right_usage = _tag_rows_resilient(right)
-                merged_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                merged_usage = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
                 _merge_usage(merged_usage, left_usage)
                 _merge_usage(merged_usage, right_usage)
-                return left_points + right_points, left_equipment + right_equipment, merged_usage
+                return (
+                    left_points + right_points,
+                    left_equipment + right_equipment,
+                    merged_usage,
+                )
             if _is_non_json_error(exc) and len(rows) == 1:
                 raise LlmTaggerError(
                     422,
@@ -433,7 +454,11 @@ def tag_with_openai(
         # If the model output is truncated/non-JSON for large payloads, retry in chunks.
         if not (_is_non_json_error(exc) and len(export_rows) > 1):
             raise
-        logger.warning("LLM tagging returned non-JSON for %d rows; retrying in chunks of %d", len(export_rows), _CHUNK_SIZE)
+        logger.warning(
+            "LLM tagging returned non-JSON for %d rows; retrying in chunks of %d",
+            len(export_rows),
+            _CHUNK_SIZE,
+        )
 
     all_points: list[Any] = []
     all_equipment: list[Any] = []

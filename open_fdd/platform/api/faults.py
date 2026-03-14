@@ -9,9 +9,14 @@ from open_fdd.platform.api.schemas import FaultStateItem, FaultDefinitionItem
 router = APIRouter(prefix="/faults", tags=["faults"])
 
 
-@router.get("/bacnet-devices", summary="List BACnet devices from data model (points + equipment)")
+@router.get(
+    "/bacnet-devices",
+    summary="List BACnet devices from data model (points + equipment)",
+)
 def list_bacnet_devices(
-    site_id: str | None = Query(None, description="Filter by site UUID or name; omit for all"),
+    site_id: str | None = Query(
+        None, description="Filter by site UUID or name; omit for all"
+    ),
 ):
     """
     CRUD/data-model driven: distinct BACnet devices from points (bacnet_device_id not null)
@@ -24,9 +29,7 @@ def list_bacnet_devices(
                 conditions = ["p.bacnet_device_id IS NOT NULL"]
                 params: list = []
                 if site_id:
-                    conditions.append(
-                        "(s.id::text = %s OR s.name = %s)"
-                    )
+                    conditions.append("(s.id::text = %s OR s.name = %s)")
                     params.extend([site_id, site_id])
                 cur.execute(
                     """
@@ -37,7 +40,9 @@ def list_bacnet_devices(
                     FROM points p
                     JOIN sites s ON s.id = p.site_id
                     LEFT JOIN equipment e ON e.id = p.equipment_id
-                    WHERE """ + " AND ".join(conditions) + """
+                    WHERE """
+                    + " AND ".join(conditions)
+                    + """
                     ORDER BY s.id, p.bacnet_device_id, e.name NULLS LAST
                     """,
                     params,
@@ -48,7 +53,9 @@ def list_bacnet_devices(
                 "site_id": str(r["site_uuid"]),
                 "site_name": r["site_name"],
                 "bacnet_device_id": r["bacnet_device_id"],
-                "equipment_id": str(r["equipment_uuid"]) if r["equipment_uuid"] else None,
+                "equipment_id": (
+                    str(r["equipment_uuid"]) if r["equipment_uuid"] else None
+                ),
                 "equipment_name": r["equipment_name"] or "—",
                 "equipment_type": r["equipment_type"],
             }
@@ -108,15 +115,13 @@ def list_active_faults(
                         (site_id,),
                     )
                 else:
-                    cur.execute(
-                        f"""
+                    cur.execute(f"""
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
                         WHERE fs.active = true
                         ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
-                        """
-                    )
+                        """)
                 rows = cur.fetchall()
         return [FaultStateItem.model_validate(dict(r)) for r in rows]
     except psycopg2.Error:
@@ -126,7 +131,9 @@ def list_active_faults(
 @router.get("/state", response_model=list[FaultStateItem])
 def list_fault_state(
     site_id: str | None = Query(None),
-    equipment_id: str | None = Query(None, description="Filter by equipment_id (optional with site_id)"),
+    equipment_id: str | None = Query(
+        None, description="Filter by equipment_id (optional with site_id)"
+    ),
 ):
     """List all fault state rows (active and cleared). Use for full state snapshot."""
     try:
@@ -163,14 +170,12 @@ def list_fault_state(
                         (site_id,),
                     )
                 else:
-                    cur.execute(
-                        f"""
+                    cur.execute(f"""
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
                         ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
-                        """
-                    )
+                        """)
                 rows = cur.fetchall()
         return [FaultStateItem.model_validate(dict(r)) for r in rows]
     except psycopg2.Error:
@@ -183,13 +188,11 @@ def list_fault_definitions():
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     SELECT fault_id, name, description, severity, category, equipment_types
                     FROM fault_definitions
                     ORDER BY category, fault_id
-                    """
-                )
+                    """)
                 rows = cur.fetchall()
         out = []
         for r in rows:

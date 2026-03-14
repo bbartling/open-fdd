@@ -56,6 +56,7 @@ def test_error_response_schema_404():
 
 def test_fault_state_item_schema():
     from datetime import datetime, timezone
+
     item = FaultStateItem(
         id="id1",
         site_id="default",

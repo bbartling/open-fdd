@@ -63,7 +63,9 @@ def _fetch_platform_config(log: logging.Logger) -> dict | None:
 _CONFIG_CACHE: dict[str, object] = {"ts": 0.0, "cfg": None}
 
 
-def _fetch_platform_config_cached(log: logging.Logger, ttl_sec: int = 30) -> dict | None:
+def _fetch_platform_config_cached(
+    log: logging.Logger, ttl_sec: int = 30
+) -> dict | None:
     """
     Cache GET /config for a short TTL so the scraper doesn’t hammer the API.
     Returns dict or None.
@@ -121,14 +123,14 @@ def main() -> int:
     while True:
         # 1. Fetch dynamic config from API, fallback to pydantic defaults
         cfg = _fetch_platform_config_cached(log) or {}
-        
+
         # Helper to get config prioritizing: API -> Pydantic env/defaults
         def get_cfg(key: str, default_val):
             val = cfg.get(key)
             return val if val is not None else default_val
 
         enabled = get_cfg("open_meteo_enabled", settings.open_meteo_enabled)
-        
+
         if not enabled:
             log.info("Open-Meteo disabled via config/env; skipping fetch.")
             if not args.loop:
@@ -138,7 +140,9 @@ def main() -> int:
 
         lat = get_cfg("open_meteo_latitude", settings.open_meteo_latitude)
         lon = get_cfg("open_meteo_longitude", settings.open_meteo_longitude)
-        interval_hours = get_cfg("open_meteo_interval_hours", settings.open_meteo_interval_hours)
+        interval_hours = get_cfg(
+            "open_meteo_interval_hours", settings.open_meteo_interval_hours
+        )
         days_back = get_cfg("open_meteo_days_back", settings.open_meteo_days_back)
         timezone = get_cfg("open_meteo_timezone", settings.open_meteo_timezone)
         site_id_str = get_cfg("open_meteo_site_id", settings.open_meteo_site_id)
@@ -192,7 +196,7 @@ def main() -> int:
         # 4. Sleep logic
         if not args.loop:
             break
-            
+
         sleep_sec = interval_hours * 3600
         log.info("Sleeping %s h until next fetch", interval_hours)
         time.sleep(sleep_sec)

@@ -133,13 +133,9 @@ def _timeseries_to_csv(
     else:
         if use_point_id_key and "point_id" in df.columns:
             df["point_key"] = df["point_id"].astype(str)
-            out = df[["ts", "point_key", "value"]].rename(
-                columns={"ts": "timestamp"}
-            )
+            out = df[["ts", "point_key", "value"]].rename(columns={"ts": "timestamp"})
         else:
-            out = df.rename(
-                columns={"ts": "timestamp", "external_id": "point_key"}
-            )
+            out = df.rename(columns={"ts": "timestamp", "external_id": "point_key"})
             out = out[["timestamp", "point_key", "value"]]
     return _to_excel_csv(out)
 
@@ -195,9 +191,7 @@ def post_download_csv(body: DownloadRequest):
     )
     if not rows:
         raise HTTPException(404, "No data for the given criteria")
-    csv_body = _timeseries_to_csv(
-        rows, body.format, use_point_id_key=use_point_id_key
-    )
+    csv_body = _timeseries_to_csv(rows, body.format, use_point_id_key=use_point_id_key)
     return StreamingResponse(
         iter([csv_body]),
         media_type="text/csv; charset=utf-8",
@@ -258,7 +252,11 @@ def get_download_faults(
         for r in rows:
             row = dict(r)
             if "ts" in row:
-                row["ts"] = _ts_to_iso_utc(row["ts"]) if hasattr(row["ts"], "isoformat") else str(row["ts"])
+                row["ts"] = (
+                    _ts_to_iso_utc(row["ts"])
+                    if hasattr(row["ts"], "isoformat")
+                    else str(row["ts"])
+                )
             data.append(row)
         return JSONResponse(
             content={"faults": data, "count": len(data)},

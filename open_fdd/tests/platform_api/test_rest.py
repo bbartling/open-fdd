@@ -43,6 +43,7 @@ def test_auth_required_when_api_key_set():
 
 def test_error_schema_on_404():
     from unittest.mock import MagicMock, patch
+
     with patch("open_fdd.platform.api.points.get_conn") as mock_get_conn:
         conn = MagicMock()
         cur = MagicMock()
@@ -62,7 +63,10 @@ def test_error_schema_on_404():
 
 def test_config_returns_platform_config():
     with patch("open_fdd.platform.api.config.get_config_overlay", return_value=None):
-        with patch("open_fdd.platform.api.config.get_config_from_graph", return_value={"open_meteo_enabled": False, "open_meteo_interval_hours": 6}):
+        with patch(
+            "open_fdd.platform.api.config.get_config_from_graph",
+            return_value={"open_meteo_enabled": False, "open_meteo_interval_hours": 6},
+        ):
             r = client.get("/config")
     assert r.status_code == 200
     data = r.json()
@@ -72,6 +76,7 @@ def test_config_returns_platform_config():
 def test_points_list_accepts_limit_offset():
     from unittest.mock import MagicMock
     from contextlib import contextmanager
+
     with patch("open_fdd.platform.api.points.get_conn") as mock_get_conn:
         conn = MagicMock()
         cur = MagicMock()

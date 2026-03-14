@@ -33,7 +33,9 @@ def test_jobs_fdd_run_requires_bearer_when_api_key_set():
         m.return_value.api_key = "key789"
         r = client.post("/jobs/fdd/run", json={})
         assert r.status_code == 401
-        r = client.post("/jobs/fdd/run", json={}, headers={"Authorization": "Bearer key789"})
+        r = client.post(
+            "/jobs/fdd/run", json={}, headers={"Authorization": "Bearer key789"}
+        )
         assert r.status_code == 200
         assert "job_id" in r.json()
 

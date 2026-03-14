@@ -24,10 +24,17 @@ def test_fault_summary_returns_shape():
         conn.__exit__ = MagicMock(return_value=None)
         mock_conn.return_value = conn
 
-        r = client.get("/analytics/fault-summary?start_date=2025-01-01&end_date=2025-01-07")
+        r = client.get(
+            "/analytics/fault-summary?start_date=2025-01-01&end_date=2025-01-07"
+        )
     assert r.status_code == 200
     data = r.json()
-    assert "period" in data and "by_fault_id" in data and "total_faults" in data and "active_in_period" in data
+    assert (
+        "period" in data
+        and "by_fault_id" in data
+        and "total_faults" in data
+        and "active_in_period" in data
+    )
     assert data["total_faults"] == 12
     assert data["active_in_period"] == 2
     assert len(data["by_fault_id"]) == 2
