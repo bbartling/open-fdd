@@ -2,7 +2,7 @@
 Canonical real-time FDD result and event schema.
 
 Foundation for writing to TimescaleDB and Grafana. Used by the continuous
-diagnostic loop and analyst backfill.
+diagnostic loop and backfill.
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ Fake AHU BACnet Device for GL36 Trim & Respond Testing
 
 This script creates a fake AHU BACnet/IP device using BACpypes3.
 
-Fault behavior (aligned with data_model.ttl polled points and analyst rules):
+Fault behavior (aligned with data_model.ttl polled points and FDD rules):
 - SA-T (Supply_Air_Temperature_Sensor, polled): time-based schedule so faults occur at
   known times. See fault_schedule.py: minute 10-49 = flatline, 50-54 = out-of-bounds.
 - RA-T, MA-T (polled): same schedule so flatline/bounds rules can fire on them too.

@@ -231,7 +231,7 @@ export function ConfigPage() {
               label="Rules directory"
               value={form.rules_dir ?? ""}
               onChange={(v) => update("rules_dir", String(v))}
-              placeholder="analyst/rules"
+              placeholder="stack/rules"
             />
             <ConfigField
               label="Brick TTL directory"

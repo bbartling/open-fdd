@@ -1,9 +1,9 @@
 """
 Continuous FDD loop: periodic rule runs with hot-reload.
 
-Every run (default every 3 hours): loads rules from YAML (analyst changes apply immediately),
+Every run (default every 3 hours): loads rules from YAML (rule edits apply immediately),
 pulls last N days of data into pandas, runs all rules, writes fault_results.
-Analysts tune rules in YAML, spot-check in Grafana, no restart needed.
+Operators tune rules in YAML, spot-check in Grafana, no restart needed.
 """
 
 from __future__ import annotations
@@ -210,7 +210,7 @@ def sync_fault_definitions_from_rules_dir() -> None:
     if not rules_path.is_absolute():
         rules_path = repo_root / rules_path
     if not rules_path.exists():
-        rules_path = repo_root / "open_fdd" / "rules"
+        rules_path = repo_root / "stack" / "rules"
     all_rules = load_rules_from_dir(rules_path)
     _sync_fault_definitions_from_rules(all_rules)
 
@@ -223,7 +223,7 @@ def run_fdd_loop(
 ) -> list[FDDResult]:
     """
     Run FDD on last N days of data, write fault_results to DB.
-    Loads rules from YAML every run (analyst edits apply immediately).
+    Loads rules from YAML every run (rule edits apply immediately).
     Runs all rules (sensor + weather) against site-level data.
     """
     from open_fdd.engine.brick_resolver import (
@@ -235,7 +235,7 @@ def run_fdd_loop(
     settings = get_platform_settings()
     lookback = lookback_days if lookback_days is not None else settings.lookback_days
 
-    # Rules: one place (analyst/rules); fallback to open_fdd/rules if missing
+    # Rules: one place (stack/rules by default); fallback to stack/rules if configured path missing
     repo_root = Path(__file__).resolve().parent.parent.parent
     if rules_dir is not None:
         rules_path = Path(rules_dir)
@@ -244,7 +244,7 @@ def run_fdd_loop(
         if not rules_path.is_absolute():
             rules_path = repo_root / rules_path
     if not rules_path.exists():
-        rules_path = repo_root / "open_fdd" / "rules"
+        rules_path = repo_root / "stack" / "rules"
 
     # Use same TTL file as the rest of the platform (API, graph sync) so column_map matches the data model.
     if brick_ttl is not None:
@@ -264,7 +264,7 @@ def run_fdd_loop(
         get_equipment_types_from_ttl(str(ttl_path)) if ttl_path.exists() else []
     )
 
-    # Load rules every run (hot reload for analyst tuning)
+    # Load rules every run (hot reload for rule tuning)
     all_rules = load_rules_from_dir(rules_path)
     _sync_fault_definitions_from_rules(all_rules)
     rules = [

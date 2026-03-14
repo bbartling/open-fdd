@@ -1,5 +1,5 @@
 # Recipe 1: Platform config (ofdd:PlatformConfig)
-# Run via POST /data-model/sparql or Data Model page → Run SPARQL
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
 PREFIX ofdd: <http://openfdd.local/ontology#>
 SELECT ?p ?v WHERE {
   ?c a ofdd:PlatformConfig .

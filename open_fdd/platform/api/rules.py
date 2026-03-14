@@ -19,7 +19,7 @@ _ALLOW_TEST_RULES = os.environ.get("OFDD_ALLOW_TEST_RULES", "").strip().lower() 
 def _rules_dir_resolved() -> Path:
     """Return resolved rules_dir from platform config (RDF-backed). Uses same repo-relative logic as run_fdd_loop so GET /rules and the FDD runner agree."""
     settings = get_platform_settings()
-    raw = getattr(settings, "rules_dir", None) or "analyst/rules"
+    raw = getattr(settings, "rules_dir", None) or "stack/rules"
     path = Path(raw)
     if path.is_absolute():
         return path

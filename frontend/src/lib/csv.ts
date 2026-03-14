@@ -53,6 +53,27 @@ export async function fetchCsv(body: CsvRequest): Promise<string> {
   });
 }
 
+/** Parsed wide-format CSV (same as export): first column timestamp, then one column per point. */
+export interface WideCsvParsed {
+  headers: string[];
+  rows: (string | number)[][];
+}
+
+/** Parse wide CSV from /download/csv format=wide (BOM, ISO timestamps, one column per point). */
+export function parseWideCsv(csv: string): WideCsvParsed {
+  const normalized = csv.replace(/^\uFEFF/, "").trim();
+  if (!normalized) return { headers: [], rows: [] };
+  const lines = normalized.split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) return { headers: [], rows: [] };
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim());
+  const rows = lines.slice(1).map((line) => parseCsvLine(line).map((cell) => {
+    const trimmed = cell.trim();
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : trimmed;
+  }));
+  return { headers, rows };
+}
+
 export function parseLongCsv(csv: string): LongCsvRow[] {
   const normalized = csv.replace(/^\uFEFF/, "").trim();
   if (!normalized) return [];

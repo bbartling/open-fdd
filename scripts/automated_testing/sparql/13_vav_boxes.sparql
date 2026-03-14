@@ -1,0 +1,7 @@
+# Data Model Testing → VAV boxes button (count VAV + VAV with reheat)
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?vav) AS ?count) WHERE {
+  { ?vav a brick:Variable_Air_Volume_Box . }
+  UNION
+  { ?vav a brick:Variable_Air_Volume_Box_With_Reheat . }
+}

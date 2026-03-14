@@ -115,12 +115,11 @@ export function BacnetDiscoveryPanel() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Who-Is to find devices, then point discovery for a device. Add to data model to merge BACnet RDF into the
-          graph (same as script <code className="rounded bg-muted px-1">graph_and_crud_test.py</code>).
+          Who-Is to find devices, then point discovery for a device.
         </p>
 
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Who-Is start</label>
               <input
@@ -154,7 +153,7 @@ export function BacnetDiscoveryPanel() {
             </button>
           </div>
 
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
               <input

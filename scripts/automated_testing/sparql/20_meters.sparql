@@ -1,0 +1,6 @@
+# Data Model Testing → Meters button (electrical meters and energy sensors)
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?m) AS ?meters) (COUNT(?s) AS ?energy_sensors) WHERE {
+  OPTIONAL { ?m a brick:Building_Electrical_Meter . }
+  OPTIONAL { ?s a brick:Electrical_Energy_Usage_Sensor . }
+}

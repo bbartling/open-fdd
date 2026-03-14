@@ -9,7 +9,7 @@ nav_order: 12
 
 ## Platform config (RDF + CRUD)
 
-Platform config lives in the **same RDF graph** as Brick and BACnet (`config/data_model.ttl`). No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph. The **entire app is bootstrapped from this data model** (sites, equipment, points, and platform config such as `ofdd:rulesDir`, `ofdd:bacnetScrapeIntervalMin`, etc.). **`rules_dir` (ofdd:rulesDir) remains required**: it is the path where FDD rule YAML files are stored; the frontend upload/download UI manages files *in* that path and does not replace the need for the path itself. **Individual rule YAML files are not stored in the data model**—only the single directory path (e.g. `ofdd:rulesDir "analyst/rules"`) is; the files themselves live on disk under that path.
+Platform config lives in the **same RDF graph** as Brick and BACnet (`config/data_model.ttl`). No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph. The **entire app is bootstrapped from this data model** (sites, equipment, points, and platform config such as `ofdd:rulesDir`, `ofdd:bacnetScrapeIntervalMin`, etc.). **`rules_dir` (ofdd:rulesDir) remains required**: it is the path where FDD rule YAML files are stored; the frontend upload/download UI manages files *in* that path and does not replace the need for the path itself. **Individual rule YAML files are not stored in the data model**—only the single directory path (e.g. `ofdd:rulesDir "stack/rules"`) is; the files themselves live on disk under that path.
 
 - **Bootstrap:** `./scripts/bootstrap.sh` seeds config via PUT /config (defaults or `OFDD_*` from `stack/.env`).
 - **API:** GET /config, PUT /config; query via POST /data-model/sparql.
@@ -28,7 +28,7 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 |-----|---------|-------------|
 | `rule_interval_hours` | 3 | FDD loop run interval (when no trigger file: run every N hours) |
 | `lookback_days` | 3 | Days of data loaded per run (each run pulls last N days into the rule engine) |
-| `rules_dir` | analyst/rules | **Single directory for your rules** (hot reload) |
+| `rules_dir` | stack/rules | **Single directory for your rules** (hot reload) |
 | `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
 | `graph_sync_interval_min` | 5 | Minutes between serializing the in-memory graph to `data_model.ttl` (API background thread). Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. |
@@ -45,7 +45,7 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 **Weather fetch:** Weather is normally fetched **with each FDD run** (same interval as fault rules, e.g. every 3 h), using a **1-day lookback** so the API is not over-used. A standalone weather scraper is only for setups that do not run the FDD loop; do not run both to avoid redundant fetches. The standalone scraper reads config from **GET /config** (like the BACnet scraper) when available.
 
-**Where rules live:** Platform config includes **`rules_dir`** (e.g. `analyst/rules`). This path is **required**: the FDD loop and the rules API both use it. Rule YAML files are stored there; you can manage them in two ways. (1) **React frontend (Faults page):** upload, download, delete YAML and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. (2) **Files on disk:** edit or add files under the configured path (e.g. `analyst/rules/`). Both target the same `rules_dir`; the frontend is the preferred path when you have UI access. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
+**Where rules live:** Platform config includes **`rules_dir`** (e.g. `stack/rules`). This path is **required**: the FDD loop and the rules API both use it. Rule YAML files are stored there; you can manage them in two ways. (1) **React frontend (Faults page):** upload, download, delete YAML and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. (2) **Files on disk:** edit or add files under the configured path (e.g. `stack/rules/`). Both target the same `rules_dir`; the frontend is the preferred path when you have UI access. See [Fault rules overview](rules/overview) and the [Expression Rule Cookbook](expression_rule_cookbook).
 
 **Hot reload (AFDD tuning):** The FDD loop loads rules from `rules_dir` on every run (no cache). Edit YAML on disk or upload via the frontend → trigger a run (or wait for the schedule) or click **Sync definitions** in the UI → results and the definitions table reflect the new rules. The `rules_dir` path is **RDF-driven** (GET/PUT `/config`, same graph as the rest of platform config). Unit tests: `open_fdd/tests/platform/test_rules_loader.py`, `open_fdd/tests/platform_api/test_rules.py`.
 
@@ -125,5 +125,5 @@ For edge deployments with limited disk, set these at bootstrap (or in `stack/.en
 | `OFDD_BACNET_SERVER_URL` | diy-bacnet-server base URL (e.g. http://localhost:8080) |
 | `OFDD_BACNET_SITE_ID` | Site to tag when scraping (default: default; use on remote gateways) |
 | `OFDD_BACNET_GATEWAYS` | JSON array of {url, site_id} for central aggregator |
-| `OFDD_RULES_DIR` | Rules directory (default: analyst/rules) |
+| `OFDD_RULES_DIR` | Rules directory (default: stack/rules) |
 

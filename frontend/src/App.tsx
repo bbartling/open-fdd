@@ -9,6 +9,7 @@ import { PointsPage } from "@/components/pages/PointsPage";
 import { FaultsPage } from "@/components/pages/FaultsPage";
 import { SystemResourcesPage } from "@/components/pages/SystemResourcesPage";
 import { DataModelPage } from "@/components/pages/DataModelPage";
+import { DataModelTestingPage } from "@/components/pages/DataModelTestingPage";
 import { PlotsPage } from "@/components/pages/PlotsPage";
 import { DiagnosticsPage } from "@/components/pages/DiagnosticsPage";
 import { WeatherDataPage } from "@/components/pages/WeatherDataPage";
@@ -40,6 +41,7 @@ function AppRoutes() {
           <Route path="diagnostics" element={<DiagnosticsPage />} />
           <Route path="system" element={<SystemResourcesPage />} />
           <Route path="data-model" element={<DataModelPage />} />
+          <Route path="data-model-testing" element={<DataModelTestingPage />} />
         </Route>
       </Routes>
     </SiteProvider>

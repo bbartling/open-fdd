@@ -8,7 +8,7 @@ nav_order: 4
 
 Open-FDD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump BACnet discovery and existing points as JSON, then have an **LLM or human** add Brick types, rule inputs, equipment relationships, and which points to poll — and send the result to **PUT /data-model/import**. The platform stays the single source of truth; tagging is the step where raw BACnet objects become a curated, rule-ready dataset.
 
-This workflow is intended for **mechanical engineers and building operators** who need the data model tagged so that FDD rules in `analyst/rules/` have the correct inputs and only the right points are logged long-term.
+This workflow is intended for **mechanical engineers and building operators** who need the data model tagged so that FDD rules in `stack/rules/` have the correct inputs and only the right points are logged long-term.
 
 ---
 
@@ -26,7 +26,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
    - **rule_input** (name FDD rules use)
    - **unit** when known (e.g. `degF`, `%`, `cfm`, `0/1` for binary). Units are stored in the data model and TTL; the frontend uses them for Plots axis labels and grouping (e.g. temperatures on one axis, humidity on another). Use standard abbreviations so Plots and exports stay consistent.
    - **equipment_id** (optional)
-   - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `analyst/rules/` have the required inputs.
+   - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `stack/rules/` have the required inputs.
    - For **equipment relationships** (Brick feeds/isFedBy), use the import **equipment** array: each item has `equipment_id`, optional `feeds_equipment_id` and `fed_by_equipment_id` (UUIDs from GET /equipment).
 
 5. **Import** — **PUT /data-model/import** with body: **points** (array) and optional **equipment** (array for feeds/fed_by only). The API accepts **only** these two keys — no `sites`, `equipments`, or `relationships`. The backend creates/updates points and equipment relationships, then rebuilds the RDF and TTL.
@@ -58,7 +58,7 @@ To have the LLM align **rule_input** and Brick types with your FDD rules, you ca
 
 - **[Fault rules overview](../rules/overview)** — FDD rule types and YAML format.
 - **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** — AHU, chiller, weather, and advanced recipes; **rule_input** examples (e.g. sat, rat, zone_temp, sf_status).
-- Your project’s **YAML rule files** (e.g. from `analyst/rules/`) — Paste snippets so the LLM uses the same input names.
+- Your project’s **YAML rule files** (e.g. from `stack/rules/`) — Paste snippets so the LLM uses the same input names.
 
 See [LLM workflow (export + rules + validate → import)](llm_workflow) for the full one-shot flow and validating LLM output so it parses on the backend.
 
@@ -70,4 +70,4 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 - [Data model overview](overview) — Flow (DB → TTL → FDD)
 - [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
 - [BACnet overview](../bacnet/overview) — Discovery and data-model scrape
-- [Fault rules](../rules/overview) — Brick-driven rules in `analyst/rules/`
+- [Fault rules](../rules/overview) — Brick-driven rules in `stack/rules/`

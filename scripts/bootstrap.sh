@@ -586,7 +586,7 @@ om_site = os.environ.get('OPEN_METEO_SITE_ID_OVERRIDE') or os.environ.get('OFDD_
 print(json.dumps({
     'rule_interval_hours': env('OFDD_RULE_INTERVAL_HOURS', 0.1),
     'lookback_days': env('OFDD_LOOKBACK_DAYS', 3),
-    'rules_dir': os.environ.get('OFDD_RULES_DIR', 'analyst/rules'),
+    'rules_dir': os.environ.get('OFDD_RULES_DIR', 'stack/rules'),
     'brick_ttl_dir': os.environ.get('OFDD_BRICK_TTL_DIR', 'config'),
     'bacnet_enabled': env('OFDD_BACNET_SCRAPE_ENABLED', True),
     'bacnet_scrape_interval_min': env('OFDD_BACNET_SCRAPE_INTERVAL_MIN', 1),
@@ -601,7 +601,7 @@ print(json.dumps({
     'open_meteo_site_id': om_site,
     'graph_sync_interval_min': env('OFDD_GRAPH_SYNC_INTERVAL_MIN', 5),
 }))
-" 2>/dev/null) || body="{\"rule_interval_hours\":0.1,\"lookback_days\":3,\"rules_dir\":\"analyst/rules\",\"brick_ttl_dir\":\"config\",\"bacnet_enabled\":true,\"bacnet_scrape_interval_min\":1,\"bacnet_server_url\":\"http://localhost:8080\",\"bacnet_site_id\":\"default\",\"open_meteo_enabled\":true,\"open_meteo_interval_hours\":24,\"open_meteo_latitude\":41.88,\"open_meteo_longitude\":-87.63,\"open_meteo_timezone\":\"America/Chicago\",\"open_meteo_days_back\":3,\"open_meteo_site_id\":\"default\",\"graph_sync_interval_min\":5}"
+" 2>/dev/null) || body="{\"rule_interval_hours\":0.1,\"lookback_days\":3,\"rules_dir\":\"stack/rules\",\"brick_ttl_dir\":\"config\",\"bacnet_enabled\":true,\"bacnet_scrape_interval_min\":1,\"bacnet_server_url\":\"http://localhost:8080\",\"bacnet_site_id\":\"default\",\"open_meteo_enabled\":true,\"open_meteo_interval_hours\":24,\"open_meteo_latitude\":41.88,\"open_meteo_longitude\":-87.63,\"open_meteo_timezone\":\"America/Chicago\",\"open_meteo_days_back\":3,\"open_meteo_site_id\":\"default\",\"graph_sync_interval_min\":5}"
 
   if curl -sf -X PUT "$API_BASE/config" -H "Content-Type: application/json" "${curl_auth[@]}" -d "$body" >/dev/null 2>&1; then
     echo "  PUT /config OK (config stored in RDF)."

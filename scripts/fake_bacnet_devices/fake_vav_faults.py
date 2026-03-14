@@ -3,7 +3,7 @@
 Fake VAV Box BACnet Device for GL36 VAV Request Testing
 =======================================================
 
-Fault behavior (aligned with data_model.ttl and analyst rules):
+Fault behavior (aligned with data_model.ttl and FDD rules):
 - ZoneTemp (Zone_Air_Temperature_Sensor, polled): time-based schedule so faults occur at
   known times. See fault_schedule.py: minute 10-49 = flatline, 50-54 = out-of-bounds.
 - Other points: unchanged (commandable or derived) so the device works for e2e.

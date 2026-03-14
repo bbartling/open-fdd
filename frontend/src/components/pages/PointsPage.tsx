@@ -5,8 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAllPoints, useAllEquipment, usePoints, useEquipment, useSites } from "@/hooks/use-sites";
 import { useTimeseriesLatest } from "@/hooks/use-timeseries-latest";
 import { PointsTree } from "@/components/site/PointsTree";
-import { BacnetDiscoveryPanel } from "@/components/site/BacnetDiscoveryPanel";
-import { deletePoint, deleteEquipment, deleteSite } from "@/lib/crud-api";
+import { deletePoint, deleteEquipment, deleteSite, updatePoint } from "@/lib/crud-api";
 
 function useTreeMutations() {
   const queryClient = useQueryClient();
@@ -34,7 +33,17 @@ function useTreeMutations() {
       queryClient.invalidateQueries({ queryKey: ["data-model"] });
     },
   });
+  const setPollingMutation = useMutation({
+    mutationFn: ({ pointId, polling }: { pointId: string; polling: boolean }) =>
+      updatePoint(pointId, { polling }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["points"] });
+      queryClient.invalidateQueries({ queryKey: ["data-model"] });
+    },
+  });
   return {
+    onSetPolling: (id: string, polling: boolean) =>
+      setPollingMutation.mutate({ pointId: id, polling }),
     onDeletePoint: (id: string) => {
       if (window.confirm("Delete this point? Timeseries for this point will be removed.")) {
         deletePointMutation.mutate(id);
@@ -114,9 +123,8 @@ export function PointsPage() {
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">Points</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Polling (data model) indicates whether the BACnet scraper polls this point; last value and time come from
-        timeseries. Use BACnet discovery below to run Who-Is, point discovery, and add devices to the data model. Right-click tree nodes to delete.
+        timeseries. Right-click a point for Poll true, Poll false, or Delete. BACnet discovery is on the Data model page.
       </p>
-      <BacnetDiscoveryPanel />
       {selectedSiteId ? <SitePointsView siteId={selectedSiteId} /> : <AllPointsView />}
     </div>
   );

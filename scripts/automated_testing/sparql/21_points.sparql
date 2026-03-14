@@ -1,0 +1,5 @@
+# Data Model Testing → Points button (count points)
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?p) AS ?count) WHERE {
+  ?p a brick:Point .
+}

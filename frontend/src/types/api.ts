@@ -230,6 +230,25 @@ export interface FaultTimeseriesResponse {
   series: { time: string; metric: string; value: number }[];
 }
 
+/** GET /analytics/fault-results-series — distinct fault × site × equipment for data preview selector */
+export interface FaultResultsSeriesResponse {
+  series: { fault_id: string; site_id: string; equipment_id: string; label: string }[];
+  period: { start: string; end: string };
+}
+
+/** GET /analytics/fault-results-raw — last N rows for Excel-style data preview */
+export interface FaultResultsRawResponse {
+  rows: {
+    ts: string;
+    site_id: string;
+    equipment_id: string;
+    fault_id: string;
+    flag_value: number;
+    evidence: unknown;
+  }[];
+  count: number;
+}
+
 /** GET /analytics/system/host */
 export interface SystemHostResponse {
   hosts: {
