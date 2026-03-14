@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
+import { Play, Check, ListOrdered, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
@@ -32,6 +32,8 @@ import type {
   DataModelImportBody,
   DataModelImportResponse,
   SparqlResponse,
+  TagWithOpenAiRequest,
+  TagWithOpenAiResponse,
 } from "@/types/api";
 
 function downloadJson(data: unknown, filename: string) {
@@ -57,6 +59,22 @@ export function DataModelPage() {
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlError, setTtlError] = useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = useState(false);
+  const [showAiAssist, setShowAiAssist] = useState(false);
+  const [sparqlQuery, setSparqlQuery] = useState("");
+  const [sparqlBindings, setSparqlBindings] = useState<Record<string, string | null>[]>([]);
+  const [sparqlColumns, setSparqlColumns] = useState<string[]>([]);
+  const [sparqlError, setSparqlError] = useState<string | null>(null);
+
+  const [openAiKey, setOpenAiKey] = useState("");
+  const [rememberKey, setRememberKey] = useState(false);
+  const [tagSelectedSiteOnly, setTagSelectedSiteOnly] = useState(false);
+  const [openAiModel, setOpenAiModel] = useState("gpt-4o-mini");
+  const [autoImportAiTag, setAutoImportAiTag] = useState(false);
+  const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
+  const [aiTagError, setAiTagError] = useState<string | null>(null);
+  const [aiTagStatus, setAiTagStatus] = useState<string>("");
+  const [aiTagPhase, setAiTagPhase] = useState<"idle" | "running" | "success" | "error">("idle");
+
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const sparqlFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,27 +138,62 @@ export function DataModelPage() {
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
   });
 
+  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
+    mutationFn: (query: string) =>
+      apiFetch<SparqlResponse>("/data-model/sparql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      }),
+    onSuccess: (data) => {
+      const bindings = data?.bindings ?? [];
+      setSparqlBindings(bindings);
+      const cols = bindings.length > 0 ? Object.keys(bindings[0] ?? {}) : [];
+      setSparqlColumns(cols);
+      setSparqlError(null);
+    },
+    onError: (err) => {
+      setSparqlBindings([]);
+      setSparqlColumns([]);
+      setSparqlError(err.message);
+    },
+  });
+
   const tagWithAiMutation = useMutation<TagWithOpenAiResponse, Error, TagWithOpenAiRequest>({
     mutationFn: tagPointsWithOpenAi,
+    onMutate: () => {
+      setAiTagPhase("running");
+      setAiTagStatus("Tagging started. Calling OpenAI and preparing import JSON...");
+      setAiTagError(null);
+      setAiTagResult(null);
+    },
     onSuccess: (data) => {
       setAiTagResult(data);
       setAiTagError(null);
+      setAiTagPhase("success");
       // Pre-fill import textarea so user can review the exact tagged payload.
       const payload = { points: data.points, equipment: data.equipment };
       setImportJson(JSON.stringify(payload, null, 2));
 
       if (data.meta.import_result) {
+        setAiTagStatus(
+          `Tagging complete. Auto-import finished: Created ${data.meta.import_result.created ?? 0}, Updated ${data.meta.import_result.updated ?? 0}.`
+        );
         setImportResult(data.meta.import_result);
         queryClient.invalidateQueries({ queryKey: ["data-model"] });
         queryClient.invalidateQueries({ queryKey: ["sites"] });
         queryClient.invalidateQueries({ queryKey: ["equipment"] });
         queryClient.invalidateQueries({ queryKey: ["points"] });
         queryClient.invalidateQueries({ queryKey: ["faults"] });
+      } else {
+        setAiTagStatus("Tagging complete. Review the generated JSON in Import and click Import when ready.");
       }
     },
     onError: (err) => {
       setAiTagError(err.message);
       setAiTagResult(null);
+      setAiTagPhase("error");
+      setAiTagStatus(`Tagging failed: ${err.message}`);
     },
   });
 
@@ -167,6 +220,17 @@ export function DataModelPage() {
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
 
+  useEffect(() => {
+    try {
+      const savedKey = localStorage.getItem("openFddOpenAiKey") ?? "";
+      const savedRemember = localStorage.getItem("openFddRememberKey") === "true";
+      setOpenAiKey(savedKey);
+      setRememberKey(savedRemember);
+    } catch {
+      // localStorage may be unavailable in strict browser environments.
+    }
+  }, []);
+
   const handleImport = () => {
     try {
       const parsed = JSON.parse(importJson) as DataModelImportBody | DataModelExportRow[];
@@ -182,7 +246,11 @@ export function DataModelPage() {
   };
 
   const handleTagWithAi = () => {
-    if (!openAiKey.trim()) return;
+    if (!openAiKey.trim()) {
+      setAiTagPhase("error");
+      setAiTagStatus("Enter an OpenAI API key to start tagging.");
+      return;
+    }
     if (rememberKey) {
       try {
         localStorage.setItem("openFddOpenAiKey", openAiKey);
@@ -338,6 +406,8 @@ export function DataModelPage() {
         </CardContent>
       </Card>
 
+        <div className="mt-6 space-y-6">
+
         {/* Export */}
         <Card>
           <CardHeader className="pb-2">
@@ -372,7 +442,123 @@ export function DataModelPage() {
                     <FileText className="h-4 w-4" />
                     {showExportPreview ? "Hide preview" : "Show preview"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAiAssist((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/20 self-start"
+                    data-testid="openai-assist-toggle"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {showAiAssist ? "Hide OpenAI Assist" : "OpenAI API Assist"}
+                  </button>
                 </div>
+                {showAiAssist && (
+                  <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-card/70 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Use OpenAI to auto-tag Brick types and rule inputs, then prefill Import JSON. Optional auto-import can apply immediately.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted-foreground">OpenAI API key</label>
+                        <input
+                          type="password"
+                          value={openAiKey}
+                          onChange={(e) => setOpenAiKey(e.target.value)}
+                          placeholder="sk-..."
+                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          data-testid="openai-api-key-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted-foreground">Model</label>
+                        <select
+                          value={openAiModel}
+                          onChange={(e) => setOpenAiModel(e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="gpt-4o-mini">gpt-4o-mini</option>
+                          <option value="gpt-4o">gpt-4o</option>
+                          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={rememberKey}
+                          onChange={(e) => setRememberKey(e.target.checked)}
+                        />
+                        Remember API key in browser
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={tagSelectedSiteOnly}
+                          onChange={(e) => setTagSelectedSiteOnly(e.target.checked)}
+                          disabled={!selectedSiteId}
+                        />
+                        Tag selected site only
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={autoImportAiTag}
+                          onChange={(e) => setAutoImportAiTag(e.target.checked)}
+                        />
+                        Auto-import tagged JSON
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleTagWithAi}
+                        disabled={tagWithAiMutation.isPending || !openAiKey.trim()}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        data-testid="openai-assist-run"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {tagWithAiMutation.isPending ? "Tagging..." : "Tag with OpenAI"}
+                      </button>
+                      {aiTagResult && (
+                        <span className="text-sm text-muted-foreground">
+                          Tagged {aiTagResult.meta.point_count} points, {aiTagResult.meta.equipment_count} equipment with {aiTagResult.meta.model}.
+                        </span>
+                      )}
+                    </div>
+                    {aiTagPhase !== "idle" && (
+                      <div
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          aiTagPhase === "running"
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : aiTagPhase === "success"
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                              : "border-destructive/40 bg-destructive/10 text-destructive"
+                        }`}
+                        data-testid="openai-assist-status"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              aiTagPhase === "running"
+                                ? "animate-pulse bg-primary"
+                                : aiTagPhase === "success"
+                                  ? "bg-emerald-500"
+                                  : "bg-destructive"
+                            }`}
+                          />
+                          <span>{aiTagStatus}</span>
+                        </div>
+                        {aiTagPhase === "running" && (
+                          <p className="mt-1 text-xs opacity-80">
+                            Large payloads may take up to a minute depending on model and point count.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {aiTagError && <p className="text-sm text-destructive">{aiTagError}</p>}
+                  </div>
+                )}
                 {showExportPreview && (
                   <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
                     {exportJson.slice(0, 2000)}
