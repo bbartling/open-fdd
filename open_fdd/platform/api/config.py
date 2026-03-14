@@ -40,23 +40,35 @@ CONFIG_KEYS = {
 class ConfigBody(BaseModel):
     """Platform config (RDF-backed). Omitted keys are left unchanged."""
 
-    rule_interval_hours: float | None = Field(None, description="FDD rule run interval (hours)")
+    rule_interval_hours: float | None = Field(
+        None, description="FDD rule run interval (hours)"
+    )
     lookback_days: int | None = Field(None, description="Days of data per FDD run")
     rules_dir: str | None = Field(None, description="Path to FDD rules YAML")
     brick_ttl_dir: str | None = Field(None, description="Directory for Brick TTL")
     bacnet_enabled: bool | None = Field(None, description="Enable BACnet scraper")
-    bacnet_scrape_interval_min: int | None = Field(None, description="BACnet scrape interval (minutes)")
+    bacnet_scrape_interval_min: int | None = Field(
+        None, description="BACnet scrape interval (minutes)"
+    )
     bacnet_server_url: str | None = Field(None, description="diy-bacnet-server URL")
-    bacnet_site_id: str | None = Field(None, description="Default site for BACnet scrape")
+    bacnet_site_id: str | None = Field(
+        None, description="Default site for BACnet scrape"
+    )
     bacnet_gateways: str | None = Field(None, description="JSON array of gateways")
     open_meteo_enabled: bool | None = Field(None, description="Enable Open-Meteo fetch")
-    open_meteo_interval_hours: int | None = Field(None, description="Weather fetch interval (hours)")
+    open_meteo_interval_hours: int | None = Field(
+        None, description="Weather fetch interval (hours)"
+    )
     open_meteo_latitude: float | None = Field(None, description="Latitude")
     open_meteo_longitude: float | None = Field(None, description="Longitude")
     open_meteo_timezone: str | None = Field(None, description="Timezone")
-    open_meteo_days_back: int | None = Field(None, description="Days of weather to fetch")
+    open_meteo_days_back: int | None = Field(
+        None, description="Days of weather to fetch"
+    )
     open_meteo_site_id: str | None = Field(None, description="Site for weather points")
-    graph_sync_interval_min: int | None = Field(None, description="Graph sync to TTL (minutes)")
+    graph_sync_interval_min: int | None = Field(
+        None, description="Graph sync to TTL (minutes)"
+    )
 
 
 def _normalize_config_for_display(raw: dict) -> dict:
@@ -109,7 +121,12 @@ def put_config(body: ConfigBody):
         raise HTTPException(500, f"Failed to write TTL: {err}")
     set_config_overlay(merged)
     try:
-        from open_fdd.platform.realtime import emit, TOPIC_CONFIG_UPDATED, TOPIC_GRAPH_UPDATED
+        from open_fdd.platform.realtime import (
+            emit,
+            TOPIC_CONFIG_UPDATED,
+            TOPIC_GRAPH_UPDATED,
+        )
+
         emit(TOPIC_CONFIG_UPDATED, {"keys": list(updates.keys())})
         emit(TOPIC_GRAPH_UPDATED, {})
     except Exception:

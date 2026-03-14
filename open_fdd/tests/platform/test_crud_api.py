@@ -170,7 +170,9 @@ def test_sites_delete_404():
 
 def test_sites_create_409_duplicate_name():
     """POST /sites with an existing name returns 409 so serialized graph has no duplicate site names."""
-    conn = _mock_conn(fetchone={"id": str(uuid4())})  # duplicate check finds existing site
+    conn = _mock_conn(
+        fetchone={"id": str(uuid4())}
+    )  # duplicate check finds existing site
     with _patch_db(conn):
         r = client.post("/sites", json={"name": "ExistingSite", "description": "x"})
     assert r.status_code == 409
@@ -201,7 +203,9 @@ def test_equipment_list_empty():
 def test_equipment_create_409_duplicate_name_same_site():
     """POST /equipment with same (site_id, name) returns 409 so serialized graph has no duplicate equipment per site."""
     site_id = uuid4()
-    conn = _mock_conn(fetchone={"id": str(uuid4())})  # duplicate check finds existing equipment
+    conn = _mock_conn(
+        fetchone={"id": str(uuid4())}
+    )  # duplicate check finds existing equipment
     with _patch_db(conn):
         r = client.post(
             "/equipment",
@@ -292,7 +296,10 @@ def test_points_create_409_duplicate_external_id_same_site():
         pytest.skip("psycopg2 required for IntegrityError test")
     site_id = uuid4()
     cursor = MagicMock()
-    cursor.execute.side_effect = [None, psycopg2.IntegrityError("duplicate key value violates unique constraint")]
+    cursor.execute.side_effect = [
+        None,
+        psycopg2.IntegrityError("duplicate key value violates unique constraint"),
+    ]
     cursor.fetchone.return_value = None  # SELECT finds no existing
     conn = MagicMock()
     conn.__enter__ = MagicMock(return_value=conn)

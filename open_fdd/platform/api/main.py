@@ -47,7 +47,9 @@ async def lifespan(app: FastAPI):
     )
 
     load_from_file()
-    set_config_overlay(get_config_from_graph())  # so get_platform_settings() sees RDF config
+    set_config_overlay(
+        get_config_from_graph()
+    )  # so get_platform_settings() sees RDF config
     write_ttl_to_file()  # ensure file exists and health state is set
     start_sync_thread()
     yield
@@ -99,6 +101,7 @@ def _custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     from fastapi.openapi.utils import get_openapi
+
     schema = get_openapi(
         title=app.title,
         version=app.version,
@@ -183,6 +186,7 @@ def _unified_error_handler(request: Request, exc: Exception):
     """Catch-all for unexpected errors; re-raise so default 500 behavior or other handlers can run."""
     raise exc
 
+
 app.include_router(config_router.router)
 app.include_router(sites.router)
 app.include_router(points.router)
@@ -233,6 +237,7 @@ def health():
     out.update(get_serialization_status())
     try:
         from open_fdd.platform.database import get_conn
+
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -241,7 +246,11 @@ def health():
                 row = cur.fetchone()
         if row:
             out["last_fdd_run"] = {
-                "run_ts": row["run_ts"].isoformat() if hasattr(row["run_ts"], "isoformat") else str(row["run_ts"]),
+                "run_ts": (
+                    row["run_ts"].isoformat()
+                    if hasattr(row["run_ts"], "isoformat")
+                    else str(row["run_ts"])
+                ),
                 "status": row["status"],
                 "sites_processed": row["sites_processed"],
                 "faults_written": row["faults_written"],

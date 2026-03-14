@@ -164,6 +164,7 @@ def _get_container_metrics() -> list[dict]:
 def _get_disk_metrics(proc_root: str = "/host/proc") -> list[dict]:
     """Get disk usage for one or more mount points. Uses / or env OFDD_DISK_MOUNT_PATHS (comma-separated)."""
     import os
+
     paths_str = os.environ.get("OFDD_DISK_MOUNT_PATHS", "/")
     paths = [p.strip() for p in paths_str.split(",") if p.strip()]
     out = []

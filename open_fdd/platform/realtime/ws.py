@@ -54,7 +54,9 @@ async def websocket_events(
         while True:
             try:
                 # Wait for either client message or heartbeat timeout
-                msg = await asyncio.wait_for(websocket.receive_text(), timeout=_HEARTBEAT_INTERVAL)
+                msg = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=_HEARTBEAT_INTERVAL
+                )
                 last_heartbeat = asyncio.get_event_loop().time()
             except asyncio.TimeoutError:
                 # Send heartbeat

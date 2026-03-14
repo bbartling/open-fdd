@@ -68,6 +68,25 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 
 - [LLM workflow](llm_workflow) — One prompt + export JSON + optional rules; validate with schema/Pydantic; then import and run FDD/tests.
 - [Data model overview](overview) — Flow (DB → TTL → FDD)
+
+---
+
+## Automated tagging via the API
+
+If you have an OpenAI API key, you can skip the copy-paste step entirely:
+
+1. Open the **Data Model** page in the frontend.
+2. In the **AI Tagging** card (between Export and Import), enter your OpenAI API key and select a model.
+3. Click **Tag with AI** — the platform calls `POST /data-model/tag-with-openai`, which:
+   - Runs `GET /data-model/export` server-side (respecting the site filter from the top bar).
+   - Sends the canonical prompt + export JSON to OpenAI.
+   - Validates the response against the import schema.
+   - Returns the tagged JSON, pre-filling the Import textarea below.
+4. Review the tagged JSON, then click **Import**.
+
+**Key handling:** Your API key is sent in the request body over HTTPS and is used only for the duration of that request. It is never stored on the server. You can optionally enable *Remember key in this browser* in the UI, which saves the key in `localStorage` — only enable this on a private, trusted device.
+
+**Users without an API key:** The manual copy-paste workflow described in the Workflow section above remains fully supported and is always available.
 - [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
 - [BACnet overview](../bacnet/overview) — Discovery and data-model scrape
 - [Fault rules](../rules/overview) — Brick-driven rules in `stack/rules/`

@@ -40,7 +40,10 @@ class PointCreate(BaseModel):
     bacnet_device_id: Optional[str] = Field(None, max_length=64)
     object_identifier: Optional[str] = Field(None, max_length=128)
     object_name: Optional[str] = Field(None, max_length=256)
-    polling: Optional[bool] = Field(True, description="If true, BACnet scraper polls this point; set false to exclude from scrape.")
+    polling: Optional[bool] = Field(
+        True,
+        description="If true, BACnet scraper polls this point; set false to exclude from scrape.",
+    )
 
 
 class PointUpdate(BaseModel):
@@ -79,8 +82,12 @@ class EquipmentCreate(BaseModel):
     description: Optional[str] = None
     equipment_type: Optional[str] = None
     metadata_: Optional[dict] = Field(None, alias="metadata")
-    feeds_equipment_id: Optional[UUID] = Field(None, description="Brick: this equipment feeds that one.")
-    fed_by_equipment_id: Optional[UUID] = Field(None, description="Brick: this equipment is fed by that one.")
+    feeds_equipment_id: Optional[UUID] = Field(
+        None, description="Brick: this equipment feeds that one."
+    )
+    fed_by_equipment_id: Optional[UUID] = Field(
+        None, description="Brick: this equipment is fed by that one."
+    )
 
 
 class EquipmentUpdate(BaseModel):

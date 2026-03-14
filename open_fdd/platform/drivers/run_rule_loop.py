@@ -90,7 +90,9 @@ def main() -> int:
                     )
                     log.info("Open-Meteo fetch OK before FDD run (1-day window)")
             except Exception as we:
-                log.warning("Open-Meteo fetch before FDD run failed (continuing): %s", we)
+                log.warning(
+                    "Open-Meteo fetch before FDD run failed (continuing): %s", we
+                )
 
         log.info(
             "FDD run: lookback=%d days, rules reload from YAML",

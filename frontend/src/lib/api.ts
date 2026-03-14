@@ -13,22 +13,45 @@ function buildUrl(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+function stringifyUnknown(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => stringifyUnknown(item)).filter(Boolean);
+    return parts.join("; ");
+  }
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const preferred = [obj.msg, obj.message, obj.detail, obj.error]
+      .map((item) => stringifyUnknown(item))
+      .find(Boolean);
+    if (preferred) return preferred;
+    try {
+      return JSON.stringify(obj);
+    } catch {
+      return String(obj);
+    }
+  }
+  return String(value);
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get("content-type") ?? "";
 
   try {
     if (contentType.includes("application/json")) {
       const payload = (await response.json()) as {
-        detail?: string | { msg?: string }[];
-        error?: string;
-        message?: string;
+        detail?: unknown;
+        error?: unknown;
+        message?: unknown;
       };
-      if (typeof payload.detail === "string") return payload.detail;
-      if (Array.isArray(payload.detail)) {
-        return payload.detail.map((item) => item.msg ?? "Validation error").join("; ");
-      }
-      if (payload.error) return payload.error;
-      if (payload.message) return payload.message;
+      const detailText = stringifyUnknown(payload.detail);
+      if (detailText) return detailText;
+      const errorText = stringifyUnknown(payload.error);
+      if (errorText) return errorText;
+      const messageText = stringifyUnknown(payload.message);
+      if (messageText) return messageText;
     }
 
     const text = await response.text();

@@ -148,7 +148,9 @@ def test_build_ttl_one_subject_per_entity_no_duplicate_uris():
         {"id": site_id1, "name": "SiteA"},
         {"id": site_id2, "name": "SiteB"},
     ]
-    equipment = [{"id": eq_id, "site_id": site_id1, "name": "AHU-1", "equipment_type": "AHU"}]
+    equipment = [
+        {"id": eq_id, "site_id": site_id1, "name": "AHU-1", "equipment_type": "AHU"}
+    ]
     points = [
         {
             "id": pt_id,

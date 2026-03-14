@@ -28,7 +28,9 @@ def test_faults_bacnet_devices_returns_list():
 
 
 def test_faults_active_empty_without_table():
-    with patch("open_fdd.platform.api.faults._fault_state_table_exists", return_value=False):
+    with patch(
+        "open_fdd.platform.api.faults._fault_state_table_exists", return_value=False
+    ):
         r = client.get("/faults/active")
     assert r.status_code == 200
     assert r.json() == []

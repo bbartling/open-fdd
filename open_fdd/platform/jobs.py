@@ -69,14 +69,19 @@ def set_job_failed(job_id: str, error: str) -> None:
             _JOB_STORE[job_id]["error"] = error
 
 
-def run_bacnet_discovery_job(job_id: str, gateway_id: Optional[str], instance: dict) -> None:
+def run_bacnet_discovery_job(
+    job_id: str, gateway_id: Optional[str], instance: dict
+) -> None:
     """Run BACnet discovery in a thread; emit events."""
     from open_fdd.platform.api.bacnet import (
         _resolve_gateway_url,
         _get_gateways_list,
         _post_rpc,
     )
-    from open_fdd.platform.graph_model import update_bacnet_from_point_discovery, write_ttl_to_file
+    from open_fdd.platform.graph_model import (
+        update_bacnet_from_point_discovery,
+        write_ttl_to_file,
+    )
 
     url = _resolve_gateway_url(gateway_id) if gateway_id else None
     if not url:
@@ -85,33 +90,55 @@ def run_bacnet_discovery_job(job_id: str, gateway_id: Optional[str], instance: d
             break
     if not url:
         set_job_failed(job_id, "No BACnet gateway URL")
-        emit(TOPIC_BACNET_DISCOVERY + ".failed", {"job_id": job_id, "error": "No gateway URL"})
+        emit(
+            TOPIC_BACNET_DISCOVERY + ".failed",
+            {"job_id": job_id, "error": "No gateway URL"},
+        )
         return
 
-    emit(TOPIC_BACNET_DISCOVERY + ".started", {"job_id": job_id, "gateway_id": gateway_id})
+    emit(
+        TOPIC_BACNET_DISCOVERY + ".started",
+        {"job_id": job_id, "gateway_id": gateway_id},
+    )
     set_job_running(job_id)
     try:
-        result = _post_rpc(url, "client_point_discovery", {"instance": instance or {"device_instance": 3456789}})
+        result = _post_rpc(
+            url,
+            "client_point_discovery",
+            {"instance": instance or {"device_instance": 3456789}},
+        )
         if not result.get("ok") or not result.get("body"):
             set_job_failed(job_id, result.get("body") or str(result))
-            emit(TOPIC_BACNET_DISCOVERY + ".failed", {"job_id": job_id, "result": result})
+            emit(
+                TOPIC_BACNET_DISCOVERY + ".failed", {"job_id": job_id, "result": result}
+            )
             return
         res = result.get("body", {})
         rpc_result = res.get("result") if isinstance(res, dict) else res
-        data = (rpc_result.get("data") or rpc_result) if isinstance(rpc_result, dict) else {}
+        data = (
+            (rpc_result.get("data") or rpc_result)
+            if isinstance(rpc_result, dict)
+            else {}
+        )
         objs = data.get("objects") or []
         dev_inst = (instance or {}).get("device_instance", 3456789)
         addr = data.get("device_address") or ""
         dev_name = None
         for o in objs:
-            if isinstance(o, dict) and (o.get("object_identifier") or "").startswith("device,"):
+            if isinstance(o, dict) and (o.get("object_identifier") or "").startswith(
+                "device,"
+            ):
                 dev_name = o.get("object_name") or o.get("name")
                 break
         update_bacnet_from_point_discovery(dev_inst, addr, objs, device_name=dev_name)
         write_ok, write_err = write_ttl_to_file()
         set_job_finished(
             job_id,
-            {"objects_count": len(objs), "write_ok": write_ok, "write_error": write_err},
+            {
+                "objects_count": len(objs),
+                "write_ok": write_ok,
+                "write_error": write_err,
+            },
         )
         emit(
             TOPIC_BACNET_DISCOVERY + ".finished",
@@ -130,8 +157,14 @@ def run_fdd_job(job_id: str) -> None:
     set_job_running(job_id)
     try:
         results = run_fdd_loop()
-        set_job_finished(job_id, {"faults_written": len(results), "sites_processed": "see fdd_run_log"})
-        emit(TOPIC_FDD_RUN + ".finished", {"job_id": job_id, "faults_written": len(results)})
+        set_job_finished(
+            job_id,
+            {"faults_written": len(results), "sites_processed": "see fdd_run_log"},
+        )
+        emit(
+            TOPIC_FDD_RUN + ".finished",
+            {"job_id": job_id, "faults_written": len(results)},
+        )
     except Exception as e:
         set_job_failed(job_id, str(e))
         emit(TOPIC_FDD_RUN + ".failed", {"job_id": job_id, "error": str(e)})

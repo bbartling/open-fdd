@@ -184,7 +184,14 @@ def _sync_fault_definitions_from_rules(rules: list) -> None:
                           equipment_types = EXCLUDED.equipment_types,
                           updated_at = now()
                         """,
-                        (fault_id, name, description, severity, category, equipment_types),
+                        (
+                            fault_id,
+                            name,
+                            description,
+                            severity,
+                            category,
+                            equipment_types,
+                        ),
                     )
                 # Prune definitions for rules no longer in rules_dir (removes phantom rows)
                 if current_fault_ids:
@@ -351,7 +358,10 @@ def run_fdd_loop(
         if all_results:
             _write_fault_results(all_results)
             try:
-                from open_fdd.platform.fault_state_sync import sync_fault_state_from_results
+                from open_fdd.platform.fault_state_sync import (
+                    sync_fault_state_from_results,
+                )
+
                 sync_fault_state_from_results(all_results)
             except Exception:
                 pass  # do not fail FDD run if fault_state sync fails

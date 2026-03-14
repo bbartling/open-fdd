@@ -13,7 +13,11 @@ from open_fdd.platform.config import get_platform_settings
 router = APIRouter(prefix="/rules", tags=["rules"])
 
 # Test-only: allow injecting/deleting a rule file for hot-reload tests (e.g. 4_hot_reload_test.py)
-_ALLOW_TEST_RULES = os.environ.get("OFDD_ALLOW_TEST_RULES", "").strip().lower() in ("1", "true", "yes")
+_ALLOW_TEST_RULES = os.environ.get("OFDD_ALLOW_TEST_RULES", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 def _rules_dir_resolved() -> Path:
@@ -33,12 +37,18 @@ def list_rules():
     """Return the configured rules_dir path and the list of .yaml filenames in it. Path comes from GET /config (RDF)."""
     base = _rules_dir_resolved()
     if not base.is_dir():
-        return {"rules_dir": str(base), "files": [], "error": "rules_dir is not a directory"}
+        return {
+            "rules_dir": str(base),
+            "files": [],
+            "error": "rules_dir is not a directory",
+        }
     files = sorted(f.name for f in base.glob("*.yaml"))
     return {"rules_dir": str(base), "files": files}
 
 
-@router.get("/{filename}", response_class=PlainTextResponse, summary="Get rule file content")
+@router.get(
+    "/{filename}", response_class=PlainTextResponse, summary="Get rule file content"
+)
 def get_rule_file(filename: str):
     """Return the raw content of a single .yaml file in the configured rules_dir. Filename must be a bare name (e.g. sensor_bounds.yaml)."""
     if not filename.endswith(".yaml"):
@@ -87,8 +97,15 @@ def upload_rule(body: UploadRuleBody):
     Write a YAML rule file into the configured rules_dir. Validates YAML and requires name or flag.
     Next FDD run will pick it up (hot reload). Use POST /rules/sync-definitions to update definitions table immediately.
     """
-    if not body.filename.endswith(".yaml") or ".." in body.filename or "/" in body.filename or "\\" in body.filename:
-        raise HTTPException(400, "Invalid filename (must end in .yaml, no path separators)")
+    if (
+        not body.filename.endswith(".yaml")
+        or ".." in body.filename
+        or "/" in body.filename
+        or "\\" in body.filename
+    ):
+        raise HTTPException(
+            400, "Invalid filename (must end in .yaml, no path separators)"
+        )
     _validate_rule_yaml(body.content)
     base = _rules_dir_resolved()
     if not base.is_dir():
@@ -163,8 +180,15 @@ def test_inject_rule(body: TestInjectRuleBody):
     Requires OFDD_ALLOW_TEST_RULES=1 (or true/yes). Filename must end in .yaml and must not contain .. or path separators.
     """
     if not _ALLOW_TEST_RULES:
-        raise HTTPException(403, "Test rule inject is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable.")
-    if not body.filename.endswith(".yaml") or ".." in body.filename or "/" in body.filename or "\\" in body.filename:
+        raise HTTPException(
+            403, "Test rule inject is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable."
+        )
+    if (
+        not body.filename.endswith(".yaml")
+        or ".." in body.filename
+        or "/" in body.filename
+        or "\\" in body.filename
+    ):
         raise HTTPException(400, "Invalid filename (must be .yaml, no path)")
     base = _rules_dir_resolved()
     if not base.is_dir():
@@ -181,14 +205,18 @@ def test_inject_rule(body: TestInjectRuleBody):
     return {"ok": True, "path": str(path), "filename": body.filename}
 
 
-@router.delete("/test-inject/{filename}", summary="(Test) Remove a rule file from rules_dir")
+@router.delete(
+    "/test-inject/{filename}", summary="(Test) Remove a rule file from rules_dir"
+)
 def test_inject_delete(filename: str):
     """
     Delete a YAML file from rules_dir. For hot-reload test cleanup.
     Requires OFDD_ALLOW_TEST_RULES=1.
     """
     if not _ALLOW_TEST_RULES:
-        raise HTTPException(403, "Test rule delete is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable.")
+        raise HTTPException(
+            403, "Test rule delete is disabled. Set OFDD_ALLOW_TEST_RULES=1 to enable."
+        )
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     if not filename.endswith(".yaml"):

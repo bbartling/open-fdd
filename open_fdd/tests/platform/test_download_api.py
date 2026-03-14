@@ -137,8 +137,18 @@ def test_download_csv_200_long_weather_point_ids():
     pt_id_2 = uuid4()
     valid_ids = [{"id": pt_id_1}, {"id": pt_id_2}]
     rows = [
-        {"ts": "2024-01-01 12:00:00", "point_id": pt_id_1, "external_id": "temp_f", "value": 72.5},
-        {"ts": "2024-01-01 12:00:00", "point_id": pt_id_2, "external_id": "rh_pct", "value": 55.0},
+        {
+            "ts": "2024-01-01 12:00:00",
+            "point_id": pt_id_1,
+            "external_id": "temp_f",
+            "value": 72.5,
+        },
+        {
+            "ts": "2024-01-01 12:00:00",
+            "point_id": pt_id_2,
+            "external_id": "rh_pct",
+            "value": 55.0,
+        },
     ]
     cursor = MagicMock()
     cursor.execute.return_value = None

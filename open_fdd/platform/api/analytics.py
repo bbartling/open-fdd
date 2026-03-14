@@ -154,7 +154,9 @@ def get_fault_summary(
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
             raise HTTPException(404, f"No site found for: {site_id!r}")
-        conditions.append("(site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s))")
+        conditions.append(
+            "(site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
         params.extend([site_id, site_id])
 
     with get_conn() as conn:
@@ -227,7 +229,9 @@ def get_fault_timeseries(
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
             raise HTTPException(404, f"No site found for: {site_id!r}")
-        conditions.append("(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))")
+        conditions.append(
+            "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
         params.extend([site_id, site_id])
 
     with get_conn() as conn:
@@ -257,7 +261,11 @@ def get_fault_timeseries(
         "period": {"start": str(start_date), "end": str(end_date)},
         "bucket": bucket,
         "series": [
-            {"time": _ts_iso_utc(r["time"]), "metric": r["metric"], "value": float(r["value"])}
+            {
+                "time": _ts_iso_utc(r["time"]),
+                "metric": r["metric"],
+                "value": float(r["value"]),
+            }
             for r in rows
         ],
     }
@@ -317,13 +325,19 @@ def get_faults_by_equipment(
 
     out = []
     for r in rows:
-        out.append({
-            "site_id": r["site_id"],
-            "equipment_id": r["equipment_uuid"] if r["equipment_uuid"] else r["equipment_id_text"],
-            "equipment_name": r["equipment_name"] or r["equipment_id_text"] or "—",
-            "bacnet_device_id": r["bacnet_device_id"],
-            "active_fault_count": int(r["active_fault_count"]),
-        })
+        out.append(
+            {
+                "site_id": r["site_id"],
+                "equipment_id": (
+                    r["equipment_uuid"]
+                    if r["equipment_uuid"]
+                    else r["equipment_id_text"]
+                ),
+                "equipment_name": r["equipment_name"] or r["equipment_id_text"] or "—",
+                "bacnet_device_id": r["bacnet_device_id"],
+                "active_fault_count": int(r["active_fault_count"]),
+            }
+        )
     return {
         "site_id": site_id,
         "period": {"start": str(start_date), "end": str(end_date)},
@@ -331,10 +345,15 @@ def get_faults_by_equipment(
     }
 
 
-@router.get("/fault-results-series", summary="Distinct fault × site × equipment (for data preview selector)")
+@router.get(
+    "/fault-results-series",
+    summary="Distinct fault × site × equipment (for data preview selector)",
+)
 def get_fault_results_series(
     site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
-    start_date: Optional[date] = Query(None, description="Start of range; omit for last 30 days"),
+    start_date: Optional[date] = Query(
+        None, description="Start of range; omit for last 30 days"
+    ),
     end_date: Optional[date] = Query(None, description="End of range; omit for today"),
 ):
     """
@@ -380,13 +399,17 @@ def get_fault_results_series(
                     (r["equipment_id"], r["equipment_id"], r["site_id"], r["site_id"]),
                 )
                 eq = cur.fetchone()
-                equipment_name = (eq and eq["equipment_name"]) or r["equipment_id"] or "—"
-                out.append({
-                    "fault_id": r["fault_id"],
-                    "site_id": r["site_id"],
-                    "equipment_id": r["equipment_id"],
-                    "label": f"{r['fault_id']} — {equipment_name}",
-                })
+                equipment_name = (
+                    (eq and eq["equipment_name"]) or r["equipment_id"] or "—"
+                )
+                out.append(
+                    {
+                        "fault_id": r["fault_id"],
+                        "site_id": r["site_id"],
+                        "equipment_id": r["equipment_id"],
+                        "label": f"{r['fault_id']} — {equipment_name}",
+                    }
+                )
     return {"series": out, "period": {"start": str(start), "end": str(end)}}
 
 
@@ -398,11 +421,15 @@ def _ts_iso_utc(dt) -> str:
     return str(dt)
 
 
-@router.get("/fault-results-raw", summary="Last N rows of fault_results (for data preview grid)")
+@router.get(
+    "/fault-results-raw", summary="Last N rows of fault_results (for data preview grid)"
+)
 def get_fault_results_raw(
     fault_id: str = Query(..., description="Fault ID (e.g. from YAML)"),
     site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
-    equipment_id: Optional[str] = Query(None, description="Equipment id/name; omit for all"),
+    equipment_id: Optional[str] = Query(
+        None, description="Equipment id/name; omit for all"
+    ),
     limit: int = Query(50, ge=1, le=500, description="Number of rows (most recent)"),
 ):
     """
@@ -476,20 +503,22 @@ def get_system_host():
         return {"hosts": []}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT DISTINCT ON (hostname) hostname, ts,
                   mem_total_bytes, mem_used_bytes, mem_available_bytes,
                   swap_total_bytes, swap_used_bytes, load_1, load_5, load_15
                 FROM host_metrics ORDER BY hostname, ts DESC
-                """
-            )
+                """)
             rows = cur.fetchall()
     return {
         "hosts": [
             {
                 "hostname": r["hostname"],
-                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "ts": (
+                    r["ts"].isoformat()
+                    if hasattr(r["ts"], "isoformat")
+                    else str(r["ts"])
+                ),
                 "mem_used_gb": round(r["mem_used_bytes"] / (1024**3), 2),
                 "mem_available_gb": round(r["mem_available_bytes"] / (1024**3), 2),
                 "mem_total_gb": round(r["mem_total_bytes"] / (1024**3), 2),
@@ -514,7 +543,7 @@ def get_system_host_series(
     try:
         from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
         to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         raise HTTPException(400, "Invalid from_ts or to_ts")
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -537,12 +566,54 @@ def get_system_host_series(
     for r in rows:
         t = r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"])
         host = r["hostname"] or "host"
-        series.append({"time": t, "metric": "mem_used_gb", "value": float(r["mem_used_gb"]), "hostname": host})
-        series.append({"time": t, "metric": "mem_available_gb", "value": float(r["mem_available_gb"]), "hostname": host})
-        series.append({"time": t, "metric": "load_1", "value": float(r["load_1"]), "hostname": host})
-        series.append({"time": t, "metric": "load_5", "value": float(r["load_5"]), "hostname": host})
-        series.append({"time": t, "metric": "load_15", "value": float(r["load_15"]), "hostname": host})
-        series.append({"time": t, "metric": "swap_used_gb", "value": float(r["swap_used_gb"]), "hostname": host})
+        series.append(
+            {
+                "time": t,
+                "metric": "mem_used_gb",
+                "value": float(r["mem_used_gb"]),
+                "hostname": host,
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": "mem_available_gb",
+                "value": float(r["mem_available_gb"]),
+                "hostname": host,
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": "load_1",
+                "value": float(r["load_1"]),
+                "hostname": host,
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": "load_5",
+                "value": float(r["load_5"]),
+                "hostname": host,
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": "load_15",
+                "value": float(r["load_15"]),
+                "hostname": host,
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": "swap_used_gb",
+                "value": float(r["swap_used_gb"]),
+                "hostname": host,
+            }
+        )
     return {"series": series}
 
 
@@ -553,22 +624,26 @@ def get_system_containers():
         return {"containers": []}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT DISTINCT ON (container_name) container_name, ts,
                   cpu_pct, mem_usage_bytes, mem_limit_bytes, mem_pct, pids
                 FROM container_metrics ORDER BY container_name, ts DESC
-                """
-            )
+                """)
             rows = cur.fetchall()
     return {
         "containers": [
             {
                 "container_name": r["container_name"],
-                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "ts": (
+                    r["ts"].isoformat()
+                    if hasattr(r["ts"], "isoformat")
+                    else str(r["ts"])
+                ),
                 "cpu_pct": round(r["cpu_pct"], 1),
                 "mem_mb": round(r["mem_usage_bytes"] / (1024 * 1024), 1),
-                "mem_pct": round(r["mem_pct"], 1) if r.get("mem_pct") is not None else None,
+                "mem_pct": (
+                    round(r["mem_pct"], 1) if r.get("mem_pct") is not None else None
+                ),
                 "pids": r["pids"],
             }
             for r in rows
@@ -576,7 +651,9 @@ def get_system_containers():
     }
 
 
-@router.get("/system/containers/series", summary="Container metrics time series for charts")
+@router.get(
+    "/system/containers/series", summary="Container metrics time series for charts"
+)
 def get_system_containers_series(
     from_ts: str = Query(..., description="ISO datetime"),
     to_ts: str = Query(..., description="ISO datetime"),
@@ -587,7 +664,7 @@ def get_system_containers_series(
     try:
         from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
         to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         raise HTTPException(400, "Invalid from_ts or to_ts")
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -606,8 +683,22 @@ def get_system_containers_series(
     series = []
     for r in rows:
         t = r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"])
-        series.append({"time": t, "metric": r["container_name"], "value": float(r["mem_mb"]), "type": "mem_mb"})
-        series.append({"time": t, "metric": r["container_name"], "value": float(r["cpu_pct"]), "type": "cpu_pct"})
+        series.append(
+            {
+                "time": t,
+                "metric": r["container_name"],
+                "value": float(r["mem_mb"]),
+                "type": "mem_mb",
+            }
+        )
+        series.append(
+            {
+                "time": t,
+                "metric": r["container_name"],
+                "value": float(r["cpu_pct"]),
+                "type": "cpu_pct",
+            }
+        )
     return {"series": series}
 
 
@@ -618,24 +709,30 @@ def get_system_disk():
         return {"disks": []}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT DISTINCT ON (hostname, mount_path) hostname, mount_path, ts,
                   total_bytes, used_bytes, free_bytes
                 FROM disk_metrics ORDER BY hostname, mount_path, ts DESC
-                """
-            )
+                """)
             rows = cur.fetchall()
     return {
         "disks": [
             {
                 "hostname": r["hostname"],
                 "mount_path": r["mount_path"],
-                "ts": r["ts"].isoformat() if hasattr(r["ts"], "isoformat") else str(r["ts"]),
+                "ts": (
+                    r["ts"].isoformat()
+                    if hasattr(r["ts"], "isoformat")
+                    else str(r["ts"])
+                ),
                 "used_gb": round(r["used_bytes"] / (1024**3), 2),
                 "free_gb": round(r["free_bytes"] / (1024**3), 2),
                 "total_gb": round(r["total_bytes"] / (1024**3), 2),
-                "used_pct": round(100.0 * r["used_bytes"] / r["total_bytes"], 1) if r["total_bytes"] else 0,
+                "used_pct": (
+                    round(100.0 * r["used_bytes"] / r["total_bytes"], 1)
+                    if r["total_bytes"]
+                    else 0
+                ),
             }
             for r in rows
         ]

@@ -85,7 +85,9 @@ def update_site(site_id: UUID, body: SiteUpdate):
                     (body.name.strip(), str(site_id)),
                 )
                 if cur.fetchone():
-                    raise HTTPException(409, "Another site with this name already exists")
+                    raise HTTPException(
+                        409, "Another site with this name already exists"
+                    )
     params.append(str(site_id))
     with get_conn() as conn:
         with conn.cursor() as cur:

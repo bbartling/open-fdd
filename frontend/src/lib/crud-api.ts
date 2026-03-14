@@ -6,6 +6,8 @@ import type {
   PlatformConfig,
   Point,
   Site,
+  TagWithOpenAiRequest,
+  TagWithOpenAiResponse,
 } from "@/types/api";
 
 export interface SiteCreate {
@@ -111,6 +113,14 @@ export function dataModelExport() {
 export function dataModelImport(body: DataModelImportBody) {
   return apiFetch<DataModelImportResponse>("/data-model/import", {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function tagPointsWithOpenAi(body: TagWithOpenAiRequest) {
+  return apiFetch<TagWithOpenAiResponse>("/data-model/tag-with-openai", {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });

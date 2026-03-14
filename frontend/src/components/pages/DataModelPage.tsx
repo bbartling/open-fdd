@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, ListOrdered } from "lucide-react";
+import { Play, Check, ListOrdered, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
@@ -23,6 +23,7 @@ import {
   dataModelSerialize,
   dataModelReset,
   dataModelCheck,
+  tagPointsWithOpenAi,
   type SiteCreate,
   type DataModelCheckResponse,
 } from "@/lib/crud-api";
@@ -30,6 +31,9 @@ import type {
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
+  SparqlResponse,
+  TagWithOpenAiRequest,
+  TagWithOpenAiResponse,
 } from "@/types/api";
 
 function downloadJson(data: unknown, filename: string) {
@@ -55,7 +59,24 @@ export function DataModelPage() {
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlError, setTtlError] = useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = useState(false);
+  const [showAiAssist, setShowAiAssist] = useState(false);
+  const [sparqlQuery, setSparqlQuery] = useState("");
+  const [sparqlBindings, setSparqlBindings] = useState<Record<string, string | null>[]>([]);
+  const [sparqlColumns, setSparqlColumns] = useState<string[]>([]);
+  const [sparqlError, setSparqlError] = useState<string | null>(null);
+
+  const [openAiKey, setOpenAiKey] = useState("");
+  const [rememberKey, setRememberKey] = useState(false);
+  const [tagSelectedSiteOnly, setTagSelectedSiteOnly] = useState(false);
+  const [openAiModel, setOpenAiModel] = useState("gpt-4o-mini");
+  const [autoImportAiTag, setAutoImportAiTag] = useState(false);
+  const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
+  const [aiTagError, setAiTagError] = useState<string | null>(null);
+  const [aiTagStatus, setAiTagStatus] = useState<string>("");
+  const [aiTagPhase, setAiTagPhase] = useState<"idle" | "running" | "success" | "error">("idle");
+
   const importFileInputRef = useRef<HTMLInputElement>(null);
+  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
@@ -117,6 +138,65 @@ export function DataModelPage() {
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
   });
 
+  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
+    mutationFn: (query: string) =>
+      apiFetch<SparqlResponse>("/data-model/sparql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      }),
+    onSuccess: (data) => {
+      const bindings = data?.bindings ?? [];
+      setSparqlBindings(bindings);
+      const cols = bindings.length > 0 ? Object.keys(bindings[0] ?? {}) : [];
+      setSparqlColumns(cols);
+      setSparqlError(null);
+    },
+    onError: (err) => {
+      setSparqlBindings([]);
+      setSparqlColumns([]);
+      setSparqlError(err.message);
+    },
+  });
+
+  const tagWithAiMutation = useMutation<TagWithOpenAiResponse, Error, TagWithOpenAiRequest>({
+    mutationFn: tagPointsWithOpenAi,
+    onMutate: () => {
+      setAiTagPhase("running");
+      setAiTagStatus("Tagging started. Calling OpenAI and preparing import JSON...");
+      setAiTagError(null);
+      setAiTagResult(null);
+    },
+    onSuccess: (data) => {
+      setAiTagResult(data);
+      setAiTagError(null);
+      setAiTagPhase("success");
+      // Pre-fill import textarea so user can review the exact tagged payload.
+      const payload = { points: data.points, equipment: data.equipment };
+      setImportJson(JSON.stringify(payload, null, 2));
+
+      if (data.meta.import_result) {
+        setAiTagStatus(
+          `Tagging complete. Auto-import finished: Created ${data.meta.import_result.created ?? 0}, Updated ${data.meta.import_result.updated ?? 0}.`
+        );
+        setImportResult(data.meta.import_result);
+        queryClient.invalidateQueries({ queryKey: ["data-model"] });
+        queryClient.invalidateQueries({ queryKey: ["sites"] });
+        queryClient.invalidateQueries({ queryKey: ["equipment"] });
+        queryClient.invalidateQueries({ queryKey: ["points"] });
+        queryClient.invalidateQueries({ queryKey: ["faults"] });
+      } else {
+        setAiTagStatus("Tagging complete. Review the generated JSON in Import and click Import when ready.");
+      }
+    },
+    onError: (err) => {
+      setAiTagError(err.message);
+      setAiTagResult(null);
+      setAiTagPhase("error");
+      setAiTagStatus(`Tagging failed: ${err.message}`);
+    },
+  });
+
   const createSiteMutation = useMutation({
     mutationFn: (body: SiteCreate) => createSite(body),
     onSuccess: () => {
@@ -140,6 +220,17 @@ export function DataModelPage() {
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
 
+  useEffect(() => {
+    try {
+      const savedKey = localStorage.getItem("openFddOpenAiKey") ?? "";
+      const savedRemember = localStorage.getItem("openFddRememberKey") === "true";
+      setOpenAiKey(savedKey);
+      setRememberKey(savedRemember);
+    } catch {
+      // localStorage may be unavailable in strict browser environments.
+    }
+  }, []);
+
   const handleImport = () => {
     try {
       const parsed = JSON.parse(importJson) as DataModelImportBody | DataModelExportRow[];
@@ -152,6 +243,34 @@ export function DataModelPage() {
     } catch (e) {
       setImportResult({ total: 0, warnings: [e instanceof Error ? e.message : "Invalid JSON"] });
     }
+  };
+
+  const handleTagWithAi = () => {
+    if (!openAiKey.trim()) {
+      setAiTagPhase("error");
+      setAiTagStatus("Enter an OpenAI API key to start tagging.");
+      return;
+    }
+    if (rememberKey) {
+      try {
+        localStorage.setItem("openFddOpenAiKey", openAiKey);
+        localStorage.setItem("openFddRememberKey", "true");
+      } catch { /* storage unavailable */ }
+    } else {
+      try {
+        localStorage.removeItem("openFddOpenAiKey");
+        localStorage.removeItem("openFddRememberKey");
+      } catch { /* storage unavailable */ }
+    }
+    setAiTagError(null);
+    setAiTagResult(null);
+    tagWithAiMutation.mutate({
+      // Match manual workflow by default (all sites). Users can opt into selected-site-only.
+      site_id: tagSelectedSiteOnly ? (selectedSiteId ?? null) : null,
+      openai_api_key: openAiKey,
+      model: openAiModel,
+      auto_import: autoImportAiTag,
+    });
   };
 
   const handleViewTtl = useCallback(async () => {
@@ -287,8 +406,365 @@ export function DataModelPage() {
         </CardContent>
       </Card>
 
-      <div className="mt-8 space-y-8">
-        {/* Sites — create and delete (above Export) */}
+        <div className="mt-6 space-y-6">
+
+        {/* Export */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Database className="h-5 w-5" />
+              Export (for AI / copy-paste)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              GET /data-model/export — BACnet discovery + DB points. Copy and paste into your LLM
+              for Brick tagging, then re-import below.
+            </p>
+            {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
+            {!exportLoading && exportJson && (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
+                    title="Download full export as JSON file"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowExportPreview((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted self-start"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {showExportPreview ? "Hide preview" : "Show preview"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAiAssist((v) => !v)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/20 self-start"
+                    data-testid="openai-assist-toggle"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {showAiAssist ? "Hide OpenAI Assist" : "OpenAI API Assist"}
+                  </button>
+                </div>
+                {showAiAssist && (
+                  <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-card/70 p-4">
+                    <p className="text-sm text-muted-foreground">
+                      Use OpenAI to auto-tag Brick types and rule inputs, then prefill Import JSON. Optional auto-import can apply immediately.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted-foreground">OpenAI API key</label>
+                        <input
+                          type="password"
+                          value={openAiKey}
+                          onChange={(e) => setOpenAiKey(e.target.value)}
+                          placeholder="sk-..."
+                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          data-testid="openai-api-key-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted-foreground">Model</label>
+                        <select
+                          value={openAiModel}
+                          onChange={(e) => setOpenAiModel(e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="gpt-4o-mini">gpt-4o-mini</option>
+                          <option value="gpt-4o">gpt-4o</option>
+                          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={rememberKey}
+                          onChange={(e) => setRememberKey(e.target.checked)}
+                        />
+                        Remember API key in browser
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={tagSelectedSiteOnly}
+                          onChange={(e) => setTagSelectedSiteOnly(e.target.checked)}
+                          disabled={!selectedSiteId}
+                        />
+                        Tag selected site only
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={autoImportAiTag}
+                          onChange={(e) => setAutoImportAiTag(e.target.checked)}
+                        />
+                        Auto-import tagged JSON
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleTagWithAi}
+                        disabled={tagWithAiMutation.isPending || !openAiKey.trim()}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                        data-testid="openai-assist-run"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {tagWithAiMutation.isPending ? "Tagging..." : "Tag with OpenAI"}
+                      </button>
+                      {aiTagResult && (
+                        <span className="text-sm text-muted-foreground">
+                          Tagged {aiTagResult.meta.point_count} points, {aiTagResult.meta.equipment_count} equipment with {aiTagResult.meta.model}.
+                        </span>
+                      )}
+                    </div>
+                    {aiTagPhase !== "idle" && (
+                      <div
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          aiTagPhase === "running"
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : aiTagPhase === "success"
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                              : "border-destructive/40 bg-destructive/10 text-destructive"
+                        }`}
+                        data-testid="openai-assist-status"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              aiTagPhase === "running"
+                                ? "animate-pulse bg-primary"
+                                : aiTagPhase === "success"
+                                  ? "bg-emerald-500"
+                                  : "bg-destructive"
+                            }`}
+                          />
+                          <span>{aiTagStatus}</span>
+                        </div>
+                        {aiTagPhase === "running" && (
+                          <p className="mt-1 text-xs opacity-80">
+                            Large payloads may take up to a minute depending on model and point count.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {aiTagError && <p className="text-sm text-destructive">{aiTagError}</p>}
+                  </div>
+                )}
+                {showExportPreview && (
+                  <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
+                    {exportJson.slice(0, 2000)}
+                    {exportJson.length > 2000 ? "\n… (truncated; download for full)" : ""}
+                  </pre>
+                )}
+              </div>
+            )}
+            {!exportLoading && (!exportData || exportData.length === 0) && (
+              <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Import */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Upload className="h-5 w-5" />
+              Import (paste from AI)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Paste JSON (array of points or <code className="rounded bg-muted px-1">{"{ points: [...] }"}</code>)
+              or upload a JSON file, then click Import to update the data model. Same as PUT /data-model/import.
+            </p>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  try {
+                    const text = String(reader.result ?? "");
+                    JSON.parse(text);
+                    setImportJson(text);
+                  } catch {
+                    setImportJson("");
+                    alert("Invalid JSON in file. Check the file and try again.");
+                  }
+                  e.target.value = "";
+                };
+                reader.readAsText(file);
+              }}
+            />
+            <textarea
+              value={importJson}
+              onChange={(e) => setImportJson(e.target.value)}
+              placeholder='[{"point_id": "...", "brick_type": "Supply_Air_Temperature_Sensor", ...}] or { "points": [...] }'
+              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              spellCheck={false}
+              data-testid="data-model-import-json"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                title="Load JSON from file into editor"
+              >
+                <FileUp className="h-4 w-4" />
+                Upload JSON file
+              </button>
+              <button
+                type="button"
+                onClick={handleImport}
+                disabled={importMutation.isPending || !importJson.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                data-testid="data-model-import-button"
+              >
+                <Upload className="h-4 w-4" />
+                Import
+              </button>
+              {importResult != null && (
+                <span className="text-sm text-muted-foreground">
+                  {importResult.created != null && `Created: ${importResult.created}`}
+                  {importResult.updated != null && ` Updated: ${importResult.updated}`}
+                  {importResult.total != null && ` Total: ${importResult.total}`}
+                  {importResult.warnings?.length ? ` — ${importResult.warnings.join("; ")}` : ""}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Equipment */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Server className="h-5 w-5" />
+              Equipment
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Equipment in the data model. Filter by site using the site selector in the top bar.
+            </p>
+            {equipmentLoading && <Skeleton className="h-72 w-full rounded-lg" />}
+            {!equipmentLoading && (
+              <EquipmentTable
+                equipment={equipment}
+                points={points}
+                faults={faults}
+                siteMap={selectedSiteId ? undefined : siteMap}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* SPARQL */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Code className="h-5 w-5" />
+              SPARQL (query the data model)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
+            </p>
+            <input
+              ref={sparqlFileInputRef}
+              type="file"
+              accept=".sparql,text/plain"
+              className="hidden"
+              data-testid="sparql-file-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const text = typeof reader.result === "string" ? reader.result : "";
+                  setSparqlQuery(text);
+                };
+                reader.readAsText(file);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              data-testid="sparql-upload-file-button"
+              onClick={() => sparqlFileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
+            >
+              <FileUp className="h-4 w-4" />
+              Upload .sparql file
+            </button>
+            <textarea
+              data-testid="sparql-query-textarea"
+              value={sparqlQuery}
+              onChange={(e) => setSparqlQuery(e.target.value)}
+              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              data-testid="sparql-run-button"
+              onClick={() => sparqlMutation.mutate(sparqlQuery)}
+              disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Play className="h-4 w-4" />
+              Run SPARQL
+            </button>
+            {sparqlError && (
+              <p className="text-sm text-destructive">{sparqlError}</p>
+            )}
+            {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
+              <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {sparqlColumns.map((key) => (
+                        <TableHead key={key} className="font-mono text-xs">
+                          {key}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
+                      <TableRow key={i}>
+                        {sparqlColumns.map((key) => (
+                          <TableCell key={key} className="font-mono text-xs">
+                            {row[key] ?? "—"}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            {sparqlMutation.isSuccess && sparqlBindings.length === 0 && (
+              <p className="text-sm text-muted-foreground">No bindings (empty result).</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sites */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg">
