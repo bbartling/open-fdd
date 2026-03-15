@@ -157,6 +157,31 @@ export interface DataModelImportResponse {
   warnings?: string[];
 }
 
+/** POST /data-model/tag-with-openai request */
+export interface TagWithOpenAiRequest {
+  site_id?: string | null;
+  openai_api_key: string;
+  model: string;
+  auto_import?: boolean;
+}
+
+/** POST /data-model/tag-with-openai response */
+export interface TagWithOpenAiResponse {
+  points: DataModelExportRow[];
+  equipment: unknown[];
+  meta: {
+    model: string;
+    point_count: number;
+    equipment_count: number;
+    usage?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
+    import_result?: DataModelImportResponse;
+  };
+}
+
 /** POST /data-model/sparql response */
 export interface SparqlResponse {
   bindings: Record<string, string | null>[];

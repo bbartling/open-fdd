@@ -16,6 +16,7 @@ def _ts_to_iso_utc(dt):
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
+
 router = APIRouter(
     prefix="/timeseries",
     tags=["timeseries"],

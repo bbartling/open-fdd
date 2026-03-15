@@ -41,7 +41,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         settings = get_platform_settings()
         # Trust requests that Caddy already authenticated (Basic auth); Caddy sets X-Caddy-Auth when auth succeeded.
         caddy_secret = getattr(settings, "caddy_internal_secret", None)
-        x_caddy = request.headers.get("X-Caddy-Auth") or request.headers.get("x-caddy-auth")
+        x_caddy = request.headers.get("X-Caddy-Auth") or request.headers.get(
+            "x-caddy-auth"
+        )
         if caddy_secret and x_caddy == caddy_secret:
             return await call_next(request)
         api_key = getattr(settings, "api_key", None)

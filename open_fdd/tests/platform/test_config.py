@@ -18,7 +18,9 @@ def test_default_platform_config_keys_match_api():
     from open_fdd.platform.api.config import CONFIG_KEYS
 
     for key in DEFAULT_PLATFORM_CONFIG:
-        assert key in CONFIG_KEYS, f"DEFAULT_PLATFORM_CONFIG has extra key not in CONFIG_KEYS: {key}"
+        assert (
+            key in CONFIG_KEYS
+        ), f"DEFAULT_PLATFORM_CONFIG has extra key not in CONFIG_KEYS: {key}"
     # All non-optional defaults that GET /config should expose when graph is empty
     assert "brick_ttl_dir" in DEFAULT_PLATFORM_CONFIG
     assert "rule_interval_hours" in DEFAULT_PLATFORM_CONFIG
@@ -34,7 +36,9 @@ def test_config_exposes_fdd_rule_settings():
 
     for key in ("rules_dir", "rule_interval_hours", "lookback_days"):
         assert key in CONFIG_KEYS, f"CONFIG_KEYS must include {key} for FDD config"
-        assert key in DEFAULT_PLATFORM_CONFIG, f"DEFAULT_PLATFORM_CONFIG must include {key}"
+        assert (
+            key in DEFAULT_PLATFORM_CONFIG
+        ), f"DEFAULT_PLATFORM_CONFIG must include {key}"
     set_config_overlay({})
     with patch("open_fdd.platform.api.config.get_config_from_graph", return_value={}):
         result = get_config()
@@ -55,9 +59,21 @@ def test_default_platform_config_values():
     )
 
     assert DEFAULT_PLATFORM_CONFIG["brick_ttl_dir"] == DEFAULT_BRICK_TTL_DIR == "config"
-    assert DEFAULT_PLATFORM_CONFIG["rule_interval_hours"] == DEFAULT_RULE_INTERVAL_HOURS == 3.0
-    assert DEFAULT_PLATFORM_CONFIG["bacnet_server_url"] == DEFAULT_BACNET_SERVER_URL == "http://localhost:8080"
-    assert DEFAULT_PLATFORM_CONFIG["graph_sync_interval_min"] == DEFAULT_GRAPH_SYNC_INTERVAL_MIN == 5
+    assert (
+        DEFAULT_PLATFORM_CONFIG["rule_interval_hours"]
+        == DEFAULT_RULE_INTERVAL_HOURS
+        == 3.0
+    )
+    assert (
+        DEFAULT_PLATFORM_CONFIG["bacnet_server_url"]
+        == DEFAULT_BACNET_SERVER_URL
+        == "http://localhost:8080"
+    )
+    assert (
+        DEFAULT_PLATFORM_CONFIG["graph_sync_interval_min"]
+        == DEFAULT_GRAPH_SYNC_INTERVAL_MIN
+        == 5
+    )
     assert DEFAULT_PLATFORM_CONFIG["rules_dir"] == "stack/rules"
     assert DEFAULT_PLATFORM_CONFIG["bacnet_enabled"] is True
     assert DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"] == "America/Chicago"
@@ -96,7 +112,9 @@ def test_platform_settings_overlay():
     set_config_overlay({})
     s = get_platform_settings()
     assert s.rule_interval_hours == 3.0
-    set_config_overlay({"rule_interval_hours": 0.1, "bacnet_server_url": "http://localhost:8080"})
+    set_config_overlay(
+        {"rule_interval_hours": 0.1, "bacnet_server_url": "http://localhost:8080"}
+    )
     s2 = get_platform_settings()
     assert s2.rule_interval_hours == 0.1
     assert s2.bacnet_server_url == "http://localhost:8080"

@@ -30,13 +30,11 @@ def sync_fault_state_from_results(results: list[FDDResult]) -> None:
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 SELECT site_id, equipment_id, fault_id, active
                 FROM fault_state
                 WHERE active = true
-                """
-            )
+                """)
             rows = cur.fetchall()
 
     previously_active = {(r["site_id"], r["equipment_id"], r["fault_id"]) for r in rows}
@@ -45,7 +43,7 @@ def sync_fault_state_from_results(results: list[FDDResult]) -> None:
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for (site_id, equipment_id, fault_id) in raised:
+            for site_id, equipment_id, fault_id in raised:
                 cur.execute(
                     """
                     INSERT INTO fault_state (site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context)
@@ -64,7 +62,7 @@ def sync_fault_state_from_results(results: list[FDDResult]) -> None:
                         "last_changed_ts": now.isoformat(),
                     },
                 )
-            for (site_id, equipment_id, fault_id) in cleared:
+            for site_id, equipment_id, fault_id in cleared:
                 cur.execute(
                     """
                     INSERT INTO fault_state (site_id, equipment_id, fault_id, active, last_changed_ts, last_evaluated_ts, context)
@@ -84,7 +82,7 @@ def sync_fault_state_from_results(results: list[FDDResult]) -> None:
                     },
                 )
             # Mark all current_active as last_evaluated (even if unchanged)
-            for (site_id, equipment_id, fault_id) in current_active:
+            for site_id, equipment_id, fault_id in current_active:
                 cur.execute(
                     """
                     UPDATE fault_state

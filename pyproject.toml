@@ -49,6 +49,7 @@ dev = [
     "uvicorn[standard]",
     "python-multipart",
     "rdflib",
+    "openai>=1.0",
 ]
 # Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
 test = [
@@ -64,6 +65,7 @@ test = [
     "uvicorn[standard]",
     "python-multipart",
     "rdflib",
+    "openai>=1.0",
 ]
 # E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)
 e2e = [
@@ -87,6 +89,7 @@ platform = [
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
+    "openai>=1.0",
 ]
 bacnet = [
     "bacpypes3",

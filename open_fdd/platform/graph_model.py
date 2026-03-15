@@ -210,7 +210,13 @@ def set_config_in_graph(config: dict) -> None:
         for t in to_remove:
             g.remove(t)
         # Add type
-        g.add((subj, URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), URIRef(OFDD_NS + "PlatformConfig")))
+        g.add(
+            (
+                subj,
+                URIRef("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                URIRef(OFDD_NS + "PlatformConfig"),
+            )
+        )
         for key, val in config.items():
             if key not in CONFIG_KEY_TO_PREDICATE or val is None:
                 continue
@@ -486,7 +492,9 @@ def reset_graph_to_db_only() -> None:
     with _graph_lock:
         g.remove((None, None, None))
     sync_brick_from_db()
-    set_config_in_graph(config_snapshot if config_snapshot else dict(DEFAULT_PLATFORM_CONFIG))
+    set_config_in_graph(
+        config_snapshot if config_snapshot else dict(DEFAULT_PLATFORM_CONFIG)
+    )
 
 
 def _sync_loop() -> None:

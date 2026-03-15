@@ -37,20 +37,28 @@ def _get_gateways_list() -> list[dict]:
     """Return list of {id, url, site_id?} from config (default + bacnet_gateways). Used for GET /bacnet/gateways and gateway resolution."""
     s = get_platform_settings()
     default_url = _effective_bacnet_server_url()
-    out = [{"id": "default", "url": default_url, "description": "Config default (OFDD_BACNET_SERVER_URL)"}]
+    out = [
+        {
+            "id": "default",
+            "url": default_url,
+            "description": "Config default (OFDD_BACNET_SERVER_URL)",
+        }
+    ]
     if s.bacnet_gateways:
         try:
             gw = json.loads(s.bacnet_gateways)
             if isinstance(gw, list):
                 for i, g in enumerate(gw):
                     if isinstance(g, dict) and g.get("url"):
-                        out.append({
-                            "id": str(i),
-                            "url": str(g["url"]).strip().rstrip("/"),
-                            "site_id": g.get("site_id"),
-                            "description": f"Gateway {i} ({g.get('site_id', '')})",
-                        })
-        except (json.JSONDecodeError, TypeError):
+                        out.append(
+                            {
+                                "id": str(i),
+                                "url": str(g["url"]).strip().rstrip("/"),
+                                "site_id": g.get("site_id"),
+                                "description": f"Gateway {i} ({g.get('site_id', '')})",
+                            }
+                        )
+        except json.JSONDecodeError, TypeError:
             pass
     return out
 
@@ -107,7 +115,10 @@ class WhoIsBody(BaseModel):
 WHOIS_EXAMPLES = {
     "default": {
         "summary": "Default range (1–3.4M); change start/end as needed",
-        "value": {"url": None, "request": {"start_instance": 1, "end_instance": 3456799}},
+        "value": {
+            "url": None,
+            "request": {"start_instance": 1, "end_instance": 3456799},
+        },
     },
     "low": {
         "summary": "Low instance IDs (1–999)",
@@ -115,7 +126,10 @@ WHOIS_EXAMPLES = {
     },
     "high": {
         "summary": "Full BACnet range (1–4194303)",
-        "value": {"url": None, "request": {"start_instance": 1, "end_instance": 4194303}},
+        "value": {
+            "url": None,
+            "request": {"start_instance": 1, "end_instance": 4194303},
+        },
     },
 }
 
@@ -210,7 +224,9 @@ POINT_DISCOVERY_TO_GRAPH_EXAMPLES = {
 }
 
 
-def _body_to_dict(body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBody | dict) -> dict:
+def _body_to_dict(
+    body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBody | dict,
+) -> dict:
     """Normalize body to dict for _bacnet_url and RPC params."""
     if hasattr(body, "model_dump"):
         return body.model_dump(exclude_none=True, by_alias=False)
@@ -219,7 +235,8 @@ def _body_to_dict(body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBo
 
 def _bacnet_url(body: dict, override_url: str | None = None) -> str:
     """Resolve BACnet gateway URL. override_url (from ?gateway=) wins; else body.url; else effective default.
-    Effective default prefers env OFDD_BACNET_SERVER_URL so Docker (host.docker.internal) works from Swagger when url is omitted."""
+    Effective default prefers env OFDD_BACNET_SERVER_URL so Docker (host.docker.internal) works from Swagger when url is omitted.
+    """
     if override_url:
         return override_url.strip().rstrip("/")
     url = (body.get("url") or "").strip().rstrip("/")
@@ -288,7 +305,12 @@ def bacnet_server_hello(
         if result.get("ok") and result.get("body"):
             return result
         # Gateway may not implement server_hello (e.g. only client_whois_range). Prove reachability with Who-Is.
-        whois = _post_rpc(url, "client_whois_range", {"request": {"start_instance": 1, "end_instance": 1}}, timeout=5.0)
+        whois = _post_rpc(
+            url,
+            "client_whois_range",
+            {"request": {"start_instance": 1, "end_instance": 1}},
+            timeout=5.0,
+        )
         if whois.get("ok"):
             return {
                 "ok": True,
@@ -319,7 +341,9 @@ def bacnet_whois_range(
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     req = body.request
-    request = req.model_dump() if req else {"start_instance": 1, "end_instance": 3456799}
+    request = (
+        req.model_dump() if req else {"start_instance": 1, "end_instance": 3456799}
+    )
     result = _post_rpc(url, "client_whois_range", {"request": request})
     return result
 
@@ -418,8 +442,12 @@ class WritePointBody(BaseModel):
 
     point_id: UUID = Field(..., description="Point UUID from GET /points")
     value: float = Field(..., description="Value to write")
-    ttl_seconds: int | None = Field(None, ge=1, le=86400, description="Optional lease/timeout in seconds")
-    source: str | None = Field(None, max_length=64, description="Audit: e.g. home_assistant, node_red")
+    ttl_seconds: int | None = Field(
+        None, ge=1, le=86400, description="Optional lease/timeout in seconds"
+    )
+    source: str | None = Field(
+        None, max_length=64, description="Audit: e.g. home_assistant, node_red"
+    )
 
 
 @router.post(
@@ -428,7 +456,9 @@ class WritePointBody(BaseModel):
 )
 def bacnet_write_point(
     body: WritePointBody,
-    gateway: str | None = Query(None, description="Gateway id from GET /bacnet/gateways"),
+    gateway: str | None = Query(
+        None, description="Gateway id from GET /bacnet/gateways"
+    ),
 ):
     """
     Write a value to a BACnet point. Open-FDD validates the point, records audit log,
@@ -463,10 +493,18 @@ def bacnet_write_point(
                     INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
                     VALUES (%s, %s, %s, now(), false, %s)
                     """,
-                    (str(body.point_id), body.value, body.source or "", "point_not_bacnet_addressed"),
+                    (
+                        str(body.point_id),
+                        body.value,
+                        body.source or "",
+                        "point_not_bacnet_addressed",
+                    ),
                 )
                 conn.commit()
-        emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": "point_not_bacnet_addressed"})
+        emit(
+            TOPIC_BACNET_WRITE + ".failed",
+            {"point_id": str(body.point_id), "reason": "point_not_bacnet_addressed"},
+        )
         return {
             "ok": False,
             "error": "Point has no BACnet address (bacnet_device_id / object_identifier)",
@@ -486,17 +524,33 @@ def bacnet_write_point(
                     INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
                     VALUES (%s, %s, %s, now(), false, %s)
                     """,
-                    (str(body.point_id), body.value, body.source or "", "no_gateway_url"),
+                    (
+                        str(body.point_id),
+                        body.value,
+                        body.source or "",
+                        "no_gateway_url",
+                    ),
                 )
                 conn.commit()
-        emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": "no_gateway_url"})
-        return {"ok": False, "error": "No BACnet gateway URL", "audit": {"success": False, "reason": "no_gateway_url"}}
+        emit(
+            TOPIC_BACNET_WRITE + ".failed",
+            {"point_id": str(body.point_id), "reason": "no_gateway_url"},
+        )
+        return {
+            "ok": False,
+            "error": "No BACnet gateway URL",
+            "audit": {"success": False, "reason": "no_gateway_url"},
+        }
 
     # Optional: min/max from point metadata could go here
     params = {
         "object_identifier": object_identifier,
         "value": body.value,
-        "device_instance": int(bacnet_device_id) if str(bacnet_device_id).isdigit() else bacnet_device_id,
+        "device_instance": (
+            int(bacnet_device_id)
+            if str(bacnet_device_id).isdigit()
+            else bacnet_device_id
+        ),
     }
     result = _post_rpc(url, "client_write_property", params)
     success = result.get("ok", False)
@@ -516,7 +570,13 @@ def bacnet_write_point(
         conn.commit()
 
     if success:
-        emit(TOPIC_BACNET_WRITE + ".succeeded", {"point_id": str(body.point_id), "value": body.value})
+        emit(
+            TOPIC_BACNET_WRITE + ".succeeded",
+            {"point_id": str(body.point_id), "value": body.value},
+        )
         return {"ok": True, "audit": {"success": True}}
-    emit(TOPIC_BACNET_WRITE + ".failed", {"point_id": str(body.point_id), "reason": reason})
+    emit(
+        TOPIC_BACNET_WRITE + ".failed",
+        {"point_id": str(body.point_id), "reason": reason},
+    )
     return {"ok": False, "error": reason, "audit": {"success": False, "reason": reason}}

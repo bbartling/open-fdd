@@ -62,6 +62,8 @@ pytest -v
 
 In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement with the Brick ontology and upload it to an LLM for AI-assisted data modeling. Copy the prompt below, upload the YAML files defined for the job, and the LLM should know what to do.
 
+Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
+
 The engineer should chat with the LLM about the task at hand after first understanding the HVAC system from a systems perspective. The LLM can then provide additional metadata, such as Brick classes for point names, along with feeds and fed-by relationships. The final output JSON file is then imported back into Open-FDD, where the backend parses it into a completed data model.
 
 A slightly more polished version for docs or README text:

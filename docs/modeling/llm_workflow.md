@@ -8,6 +8,8 @@ nav_order: 5
 
 This page describes a **single upload** workflow for mechanical engineers: send the **canonical prompt**, the **data-model export JSON**, and (optionally) the **rules you want to use** to an LLM; get back import-ready JSON; **validate** it so you know it will parse on the Open-FDD backend; then **PUT /data-model/import** and run FDD (or Sparkl/tests) as needed.
 
+> **Automated path available:** If you have an OpenAI API key, you can skip the copy-paste steps entirely. Enter your key in the **AI Tagging** card on the **Data Model** page — the platform runs the export, calls OpenAI with the canonical prompt, validates the response, and pre-fills the Import textarea. See [AI-assisted tagging](ai_assisted_tagging#automated-tagging-via-the-api) for details. The manual workflow below is always available for users without an API key.
+
 ---
 
 ## What you upload to the LLM

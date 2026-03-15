@@ -86,10 +86,13 @@ class PlatformSettings(BaseSettings):
 
 def get_platform_settings() -> PlatformSettings:
     """Effective settings: env first, then overlay from RDF (PUT /config). Not cached so overlay is visible.
-    Overlay uses API keys (e.g. bacnet_enabled); we map to settings attrs (e.g. bacnet_scrape_enabled)."""
+    Overlay uses API keys (e.g. bacnet_enabled); we map to settings attrs (e.g. bacnet_scrape_enabled).
+    """
     s = PlatformSettings()
     overlay = get_config_overlay()
-    key_to_attr = {"bacnet_enabled": "bacnet_scrape_enabled"}  # RDF/API name -> PlatformSettings attr
+    key_to_attr = {
+        "bacnet_enabled": "bacnet_scrape_enabled"
+    }  # RDF/API name -> PlatformSettings attr
     for k, v in overlay.items():
         attr = key_to_attr.get(k, k)
         if hasattr(s, attr):

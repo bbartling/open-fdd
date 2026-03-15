@@ -85,12 +85,18 @@ def test_reset_graph_to_db_only_seeds_default_config_when_graph_empty():
     assert cfg.get("bacnet_server_url") is not None
     # Defaults from default_config
     assert cfg.get("rules_dir") == DEFAULT_PLATFORM_CONFIG["rules_dir"]
-    assert cfg.get("open_meteo_timezone") == DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"]
+    assert (
+        cfg.get("open_meteo_timezone") == DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"]
+    )
 
 
 def test_reset_graph_to_db_only_preserves_existing_config():
     """When graph has config, reset preserves it (snapshot and restore)."""
-    custom = {"rule_interval_hours": 2.5, "lookback_days": 7, "bacnet_site_id": "building-a"}
+    custom = {
+        "rule_interval_hours": 2.5,
+        "lookback_days": 7,
+        "bacnet_site_id": "building-a",
+    }
     set_config_in_graph(custom)
     with patch("open_fdd.platform.graph_model.sync_brick_from_db"):
         reset_graph_to_db_only()

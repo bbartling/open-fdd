@@ -33,7 +33,9 @@ class ErrorDetail(BaseModel):
 
     code: str = Field(..., description="Machine-readable code")
     message: str = Field(..., description="Human-readable message")
-    details: Optional[dict[str, Any]] = Field(None, description="Optional extra context")
+    details: Optional[dict[str, Any]] = Field(
+        None, description="Optional extra context"
+    )
 
 
 class ErrorResponse(BaseModel):
