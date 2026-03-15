@@ -46,7 +46,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-The prompt in the [README](https://github.com/bbartling/open-fdd#ai-assisted-data-modeling) is **generic** and works for **any site**: single building, campus, or tenant. The only input that changes is the export JSON (from GET /data-model/export, optionally with `?site_id=YourSiteName`). The LLM must preserve all fields, add brick_type, rule_input, **unit** (when known), and polling, and use equipment by name and site_id from the export.
+The **canonical prompt** lives in a single file: **`config/canonical_llm_prompt.txt`** (see [README](https://github.com/bbartling/open-fdd#ai-assisted-data-modeling)). The backend loads it when present (fallback: built-in prompt in code); you can edit the file at any time. The prompt is generic and works for **any site**: single building, campus, or tenant. The only input that changes is the export JSON (from GET /data-model/export, optionally with `?site_id=YourSiteName`). The LLM must preserve all fields, add brick_type, rule_input, **unit** (when known), and polling, and use equipment by name and site_id from the export. The same file can be used as **model context** (e.g. in `pdf/open-fdd-docs.txt` or when building custom doc bundles for an LLM).
 
 For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
@@ -71,22 +71,61 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 
 ---
 
-## Automated tagging via the API
+## In-house AI agent (OpenAI API Assist)
 
-If you have an OpenAI API key, you can skip the copy-paste step entirely:
+**Where it runs:** In the frontend, open **Data Model Setup** → **Export (for AI / copy-paste)** → click **OpenAI API Assist**. The agent is **optional**; the manual export → external LLM → import flow is always available without it.
 
-1. Open the **Data Model** page in the frontend.
-2. In the **AI Tagging** card (between Export and Import), enter your OpenAI API key and select a model.
-3. Click **Tag with AI** — the platform calls `POST /data-model/tag-with-openai`, which:
-   - Runs `GET /data-model/export` server-side (respecting the site filter from the top bar).
-   - Sends the canonical prompt + export JSON to OpenAI.
-   - Validates the response against the import schema.
-   - Returns the tagged JSON, pre-filling the Import textarea below.
-4. Review the tagged JSON, then click **Import**.
+**How it’s invoked:** When you click **Tag with OpenAI**, the frontend sends **POST /data-model/tag-with-openai** with your API key, optional chat prompt (HVAC description), model choice, and optional auto-import flag. The backend runs the agent (see below) and returns tagged JSON plus an **agent log**; the UI shows the log and pre-fills the Import textarea.
 
-**Key handling:** Your API key is sent in the request body over HTTPS and is used only for the duration of that request. It is never stored on the server. You can optionally enable *Remember key in this browser* in the UI, which saves the key in `localStorage` — only enable this on a private, trusted device.
+**What the agent does:** It uses the **same API as the manual process**: server-side **GET /data-model/export** (with optional site filter), then a single LLM call (or chunked calls for large payloads) with the **canonical prompt** from `config/canonical_llm_prompt.txt` (or built-in fallback). The response is validated with the same **DataModelImportBody** Pydantic model as **PUT /data-model/import**. If you enable auto-import, the backend then calls the import logic so the data model is updated in one step. The engineer can still validate on the **Data Model Testing** page (SPARQL / “Summarize your HVAC”) and treat the result as pass or fail.
 
-**Users without an API key:** The manual copy-paste workflow described in the Workflow section above remains fully supported and is always available.
+---
+
+### How the agent works: retry and prompt chaining
+
+The agent is **not** a long-lived process; it runs inside a single **POST /data-model/tag-with-openai** request:
+
+1. **Export** — The backend builds the same export as GET /data-model/export (optionally filtered by site).
+2. **System prompt** — Loaded from **`config/canonical_llm_prompt.txt`** when the file exists (otherwise a built-in prompt in code). Edit the file to change behavior; no app restart needed for the next request.
+3. **User message** — The export JSON is sent as the user message. If you filled the **chat prompt** in the UI (e.g. “Describe HVAC system and feeds or fed-by relationships for AI to tag”), that text is prepended so the LLM can use your description for Brick types and equipment relationships.
+4. **LLM call** — One request to OpenAI (or, for very large exports, the backend may split into chunks of 120 rows and merge results) with `response_format={"type": "json_object"}`.
+5. **Validation** — The response is parsed as JSON and validated with **DataModelImportBody** (same schema as import). If validation fails:
+   - **Prompt chaining:** The error text (e.g. “OpenAI response failed schema validation: …”) is appended to the **next** attempt’s user message, so the model sees what went wrong and is asked to fix it.
+   - **Retry** — The backend retries up to a configurable number of attempts (default 3; see `open_fdd/platform/llm_tagger.py` constants). Each attempt is a new LLM call with the same export and, from the second attempt onward, the previous validation error in the prompt.
+6. **Agent log** — Each attempt and outcome (attempt, validation_failed, success) is recorded and returned in the response **meta.agent_log**; the UI shows this so you can see retries and that the agent produced valid import JSON.
+7. **Optional import** — If you set **Auto-import tagged JSON** in the UI, the backend runs the same import logic as PUT /data-model/import and returns the import result in the response.
+
+So the agent uses **rule-based retry** with **prompt chaining**: same export and rules each time, but after a validation failure the next prompt includes the error so the LLM can correct the output. Constants (max retries, chunk size) live in **`open_fdd/platform/llm_tagger.py`**; the API request can override `max_retries` (1–10).
+
+**Optional dependency:** The `openai` package is required only for this endpoint. If it is not installed, the API returns 500 with a message to install it; the rest of the platform (including manual export/import) works without it.
+
+---
+
+## Automated tagging via the API (summary)
+
+1. Open the **Data Model Setup** page in the frontend.
+2. Expand **OpenAI API Assist** (under Export). Optionally edit the **chat prompt** (default: “Describe HVAC system and feeds or fed-by relationships for AI to tag”).
+3. Enter your OpenAI API key and select a model. If you have multiple sites, optionally check **Tag specific site** and pick the site in the dropdown.
+4. Click **Tag with OpenAI** — the platform calls **POST /data-model/tag-with-openai**, which runs the in-house agent (export → LLM with retry and prompt chaining → validate → optional import). The response includes **meta.agent_log**; the UI shows the log and pre-fills the Import textarea.
+5. Review the tagged JSON (and agent log). If you did not auto-import, click **Import** when ready. Use the **Data Model Testing** page to validate (SPARQL / Summarize your HVAC) and pass or fail the result.
+
+**Key handling:** Your API key is sent in the request body over HTTPS and is used only for that request. It is never stored on the server. You can optionally enable *Remember key in this browser* in the UI (saved in `localStorage`) — only on a private, trusted device.
+
+**Users without an API key:** The manual copy-paste workflow (Export → external LLM → Import) remains fully supported.
+
+---
+
+## Possible extension: AI assist on Data Model Testing
+
+A future **Data Model Testing** page could offer a second in-house AI assist, same chat style as on Data Model Setup: the engineer describes what they see (e.g. SPARQL summary, missing relationships, or test failure), and the model suggests **changes as import JSON** (points/equipment) so the engineer can apply and re-test. Under the hood this would use a **separate prompt** from the tagging prompt:
+
+- **Input:** Current data model context (e.g. TTL snippet or SPARQL “Summarize your HVAC” result) plus the engineer’s message (e.g. “Add feeds/fed-by between AHU-1 and VAV-1”, “Fix the brick_type for SA-T”).
+- **Output:** Same schema as the tagging flow — valid **points** and **equipment** import JSON only — so the same **PUT /data-model/import** and validation path apply. The engineer reviews, applies, then re-runs SPARQL or predefined tests and passes/fails.
+
+That way: **Setup** = tag from export (canonical prompt in `config/canonical_llm_prompt.txt`); **Testing** = revise from current model + chat (optional prompt e.g. `config/canonical_llm_prompt_testing.txt`). Both use the same API and retry/prompt-chaining behavior; only the system prompt and user message differ.
+
+---
+
 - [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
 - [BACnet overview](../bacnet/overview) — Discovery and data-model scrape
 - [Fault rules](../rules/overview) — Brick-driven rules in `stack/rules/`

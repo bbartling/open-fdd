@@ -58,7 +58,7 @@ def _get_gateways_list() -> list[dict]:
                                 "description": f"Gateway {i} ({g.get('site_id', '')})",
                             }
                         )
-        except json.JSONDecodeError, TypeError:
+        except (json.JSONDecodeError, TypeError):
             pass
     return out
 

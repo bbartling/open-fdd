@@ -1,0 +1,406 @@
+@prefix : <http://openfdd.local/site#> .
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<bacnet://3456789> a bacnet:Device ;
+    rdfs:label "BACnet device 3456789" ;
+    bacnet:contains <bacnet://3456789/analog-input,1>,
+        <bacnet://3456789/analog-input,2>,
+        <bacnet://3456789/analog-input,3>,
+        <bacnet://3456789/analog-input,4>,
+        <bacnet://3456789/analog-input,5>,
+        <bacnet://3456789/analog-input,6>,
+        <bacnet://3456789/analog-input,7>,
+        <bacnet://3456789/analog-output,1>,
+        <bacnet://3456789/analog-output,2>,
+        <bacnet://3456789/analog-output,3>,
+        <bacnet://3456789/analog-output,4>,
+        <bacnet://3456789/analog-value,1>,
+        <bacnet://3456789/analog-value,2>,
+        <bacnet://3456789/analog-value,3>,
+        <bacnet://3456789/binary-input,1>,
+        <bacnet://3456789/binary-output,1>,
+        <bacnet://3456789/multi-state-value,1>,
+        <bacnet://3456789/network-port,1> ;
+    bacnet:device-address "192.168.204.13" ;
+    bacnet:device-instance 3456789 .
+
+<bacnet://3456790> a bacnet:Device ;
+    rdfs:label "BACnet device 3456790" ;
+    bacnet:contains <bacnet://3456790/analog-input,1>,
+        <bacnet://3456790/analog-input,2>,
+        <bacnet://3456790/analog-output,1>,
+        <bacnet://3456790/analog-value,1>,
+        <bacnet://3456790/analog-value,2>,
+        <bacnet://3456790/analog-value,3>,
+        <bacnet://3456790/network-port,1> ;
+    bacnet:device-address "192.168.204.14" ;
+    bacnet:device-instance 3456790 .
+
+ofdd:platform_config a ofdd:PlatformConfig ;
+    ofdd:bacnetEnabled true ;
+    ofdd:bacnetGateways "" ;
+    ofdd:bacnetScrapeIntervalMin 1 ;
+    ofdd:bacnetServerUrl "http://localhost:8080" ;
+    ofdd:bacnetSiteId "default" ;
+    ofdd:brickTtlDir "config" ;
+    ofdd:graphSyncIntervalMin 5 ;
+    ofdd:lookbackDays 3 ;
+    ofdd:openMeteoDaysBack 3 ;
+    ofdd:openMeteoEnabled true ;
+    ofdd:openMeteoIntervalHours 24 ;
+    ofdd:openMeteoLatitude 41.0 ;
+    ofdd:openMeteoLongitude -87.0 ;
+    ofdd:openMeteoSiteId "BensOffice" ;
+    ofdd:openMeteoTimezone "America/Chicago" ;
+    ofdd:ruleIntervalHours 0.0 ;
+    ofdd:rulesDir "stack/rules" .
+
+:pt_1580ce8e_02e6_448a_826f_60587135fa99 a brick:Discharge_Air_Pressure_Sensor ;
+    rdfs:label "DAP-P" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "dap" ;
+    ofdd:objectIdentifier "analog-input,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_15ce5073_9055_429d_805b_23ab6f9a80a1 a brick:Supply_Fan_Command ;
+    rdfs:label "SF-O" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "sf_cmd" ;
+    ofdd:objectIdentifier "analog-output,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_2ff4e1da_362f_4521_990f_97321dc71b50 a brick:Discharge_Air_Flow_Sensor ;
+    rdfs:label "VAVFlow" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:mapsToRuleInput "airflow" ;
+    ofdd:objectIdentifier "analog-input,2" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_3258b8a6_9fdd_4012_a14f_7ff9bf332f86 a brick:Heating_Valve_Command ;
+    rdfs:label "HTG-O" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "htg_cmd" ;
+    ofdd:objectIdentifier "analog-output,2" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_34cfe5c6_e253_47f2_aeb2_342210ca7ab9 a brick:Point ;
+    rdfs:label "dewpoint_f" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_38c30800_42d8_48f0_bca5_14e5951d32cb a brick:Supply_Air_Temperature_Setpoint ;
+    rdfs:label "SAT-SP" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "sat_sp" ;
+    ofdd:objectIdentifier "analog-value,2" ;
+    ofdd:polling false ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_3f55410f_78ad_495b_ad5f_16a60716297b a brick:Point ;
+    rdfs:label "ELEC-PWR" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "analog-input,7" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_4152f799_9ab7_4097_8f4f_c4c85b853f4a a brick:Mixed_Air_Temperature_Sensor ;
+    rdfs:label "MA-T" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "mat" ;
+    ofdd:objectIdentifier "analog-input,3" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_41cbdd67_a487_48bb_948c_1d9dde65a25c a brick:Point ;
+    rdfs:label "gti_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_4dd1fad9_6ca2_41bc_9fb0_b80f98f2bd1f a brick:Outside_Air_Temperature_Sensor ;
+    rdfs:label "OA-T" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "oat" ;
+    ofdd:objectIdentifier "analog-input,6" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_52d726cd_e905_4887_8dde_744545902499 a brick:Return_Air_Temperature_Sensor ;
+    rdfs:label "RA-T" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "rat" ;
+    ofdd:objectIdentifier "analog-input,4" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_614fc809_c65a_459d_8a9d_a48f71b5f2c1 a brick:Point ;
+    rdfs:label "Occ-Schedule" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "multi-state-value,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_670c0d79_5e94_4414_9c6a_444541af7d91 a brick:Point ;
+    rdfs:label "shortwave_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_6c63a5a3_5aee_4cd5_a4f6_bcc39fac7fdf a brick:Point ;
+    rdfs:label "gust_mph" ;
+    ofdd:polling true ;
+    ofdd:unit "mph" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_75e129a3_561c_4219_9f06_e78e686224e1 a brick:Point ;
+    rdfs:label "DPR-O" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "analog-output,4" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_76dab19b_521c_494c_ba4f_3979c3fd60f1 a brick:Supply_Air_Temperature_Sensor ;
+    rdfs:label "SA-T" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "sat" ;
+    ofdd:objectIdentifier "analog-input,2" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_815cce72_3925_46fd_bcd9_3163c0f5aa55 a brick:Point ;
+    rdfs:label "rh_pct" ;
+    ofdd:polling true ;
+    ofdd:unit "percent" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_8c821010_cba8_452f_9def_79cdfb5bf22a a brick:Point ;
+    rdfs:label "ZoneDemand" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:objectIdentifier "analog-value,2" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_92ce5b9c_12fa_4f8e_b9cf_d76c27ac8d33 a brick:Damper_Position_Command ;
+    rdfs:label "VAVDamperCmd" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:mapsToRuleInput "damper_cmd" ;
+    ofdd:objectIdentifier "analog-output,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_991db0e5_879d_42cd_8130_6fbe458ff5a1 a brick:Point ;
+    rdfs:label "ZoneCoolingSpt" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:objectIdentifier "analog-value,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_a1ba96db_40f3_4d0d_8ec7_283d8f422f9c a brick:Point ;
+    rdfs:label "wind_mph" ;
+    ofdd:polling true ;
+    ofdd:unit "mph" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_a6c0949d_9389_4732_beb8_37dc7d0cd8f0 a brick:Discharge_Air_Flow_Sensor ;
+    rdfs:label "SA-FLOW" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "airflow" ;
+    ofdd:objectIdentifier "analog-input,5" ;
+    ofdd:polling true ;
+    ofdd:unit "cfm" ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_adff3d42_234e_4386_9059_ce8082cda67d a brick:Zone_Air_Temperature_Sensor ;
+    rdfs:label "ZoneTemp" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:mapsToRuleInput "zone_temp" ;
+    ofdd:objectIdentifier "analog-input,1" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_aed6f23b_f6a5_41a4_929f_57f40a0f3efc a brick:Cooling_Valve_Command ;
+    rdfs:label "CLG-O" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "clg_cmd" ;
+    ofdd:objectIdentifier "analog-output,3" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_bcfd8025_bab2_46d0_a2a1_196101458921 a brick:Supply_Fan_Status ;
+    rdfs:label "SF-S" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:mapsToRuleInput "sf_status" ;
+    ofdd:objectIdentifier "binary-input,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_bd8ad758_5812_49fb_8e31_9bb573db9e84 a brick:Point ;
+    rdfs:label "temp_f" ;
+    ofdd:polling true ;
+    ofdd:unit "degF" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_be33f58c_ef3f_479c_8b01_3250fc953c10 a brick:Point ;
+    rdfs:label "OAT-NETWORK" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "analog-value,3" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_cff8cbe5_acfb_469d_b8f4_f32e435cc434 a brick:Point ;
+    rdfs:label "direct_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_d69f9fdb_a1c3_42d7_996b_2a284542722c a brick:Point ;
+    rdfs:label "diffuse_wm2" ;
+    ofdd:polling true ;
+    ofdd:unit "W/m²" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_d9fad75b_c4c2_4b85_9b3b_7c3e5399c26f a brick:Point ;
+    rdfs:label "SF-C" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "binary-output,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_dceab589_0fa1_45a6_a1f4_0d9037b66bb3 a brick:Point ;
+    rdfs:label "DAP-SP" ;
+    ofdd:bacnetDeviceId "3456789" ;
+    ofdd:objectIdentifier "analog-value,1" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd .
+
+:pt_ed4cc13a_8c80_4b47_a00d_46346043a9fb a brick:Point ;
+    rdfs:label "cloud_pct" ;
+    ofdd:polling true ;
+    ofdd:unit "percent" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+:pt_f89ce811_8f03_4790_9f3f_9f2d1a2bf770 a brick:Point ;
+    rdfs:label "VAVFlowSpt" ;
+    ofdd:bacnetDeviceId "3456780" ;
+    ofdd:objectIdentifier "analog-value,3" ;
+    ofdd:polling false ;
+    brick:isPointOf :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 .
+
+:pt_fdb31269_9275_4c32_936b_e69cf639be2e a brick:Point ;
+    rdfs:label "wind_dir_deg" ;
+    ofdd:polling true ;
+    ofdd:unit "deg" ;
+    brick:isPointOf :eq_8f95e094_90cb_4c12_978d_a6ad7860c328 .
+
+<bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "DAP-P" .
+
+<bacnet://3456789/analog-input,2> bacnet:object-identifier "analog-input,2" ;
+    bacnet:object-name "SA-T" .
+
+<bacnet://3456789/analog-input,3> bacnet:object-identifier "analog-input,3" ;
+    bacnet:object-name "MA-T" .
+
+<bacnet://3456789/analog-input,4> bacnet:object-identifier "analog-input,4" ;
+    bacnet:object-name "RA-T" .
+
+<bacnet://3456789/analog-input,5> bacnet:object-identifier "analog-input,5" ;
+    bacnet:object-name "SA-FLOW" .
+
+<bacnet://3456789/analog-input,6> bacnet:object-identifier "analog-input,6" ;
+    bacnet:object-name "OA-T" .
+
+<bacnet://3456789/analog-input,7> bacnet:object-identifier "analog-input,7" ;
+    bacnet:object-name "ELEC-PWR" .
+
+<bacnet://3456789/analog-output,1> bacnet:object-identifier "analog-output,1" ;
+    bacnet:object-name "SF-O" .
+
+<bacnet://3456789/analog-output,2> bacnet:object-identifier "analog-output,2" ;
+    bacnet:object-name "HTG-O" .
+
+<bacnet://3456789/analog-output,3> bacnet:object-identifier "analog-output,3" ;
+    bacnet:object-name "CLG-O" .
+
+<bacnet://3456789/analog-output,4> bacnet:object-identifier "analog-output,4" ;
+    bacnet:object-name "DPR-O" .
+
+<bacnet://3456789/analog-value,1> bacnet:object-identifier "analog-value,1" ;
+    bacnet:object-name "DAP-SP" .
+
+<bacnet://3456789/analog-value,2> bacnet:object-identifier "analog-value,2" ;
+    bacnet:object-name "SAT-SP" .
+
+<bacnet://3456789/analog-value,3> bacnet:object-identifier "analog-value,3" ;
+    bacnet:object-name "OAT-NETWORK" .
+
+<bacnet://3456789/binary-input,1> bacnet:object-identifier "binary-input,1" ;
+    bacnet:object-name "SF-S" .
+
+<bacnet://3456789/binary-output,1> bacnet:object-identifier "binary-output,1" ;
+    bacnet:object-name "SF-C" .
+
+<bacnet://3456789/multi-state-value,1> bacnet:object-identifier "multi-state-value,1" ;
+    bacnet:object-name "Occ-Schedule" .
+
+<bacnet://3456789/network-port,1> bacnet:object-identifier "network-port,1" ;
+    bacnet:object-name "NetworkPort-1" .
+
+<bacnet://3456790/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "ZoneTemp" .
+
+<bacnet://3456790/analog-input,2> bacnet:object-identifier "analog-input,2" ;
+    bacnet:object-name "VAVFlow" .
+
+<bacnet://3456790/analog-output,1> bacnet:object-identifier "analog-output,1" ;
+    bacnet:object-name "VAVDamperCmd" .
+
+<bacnet://3456790/analog-value,1> bacnet:object-identifier "analog-value,1" ;
+    bacnet:object-name "ZoneCoolingSpt" .
+
+<bacnet://3456790/analog-value,2> bacnet:object-identifier "analog-value,2" ;
+    bacnet:object-name "ZoneDemand" .
+
+<bacnet://3456790/analog-value,3> bacnet:object-identifier "analog-value,3" ;
+    bacnet:object-name "VAVFlowSpt" .
+
+<bacnet://3456790/network-port,1> bacnet:object-identifier "network-port,1" ;
+    bacnet:object-name "NetworkPort-1" .
+
+:site_f3fb7572_93da_40c1_8f13_8390280970b4 a brick:Site ;
+    rdfs:label "BensOffice" .
+
+:eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 a brick:Equipment ;
+    rdfs:label "VAV-1" ;
+    ofdd:equipmentType "Equipment" ;
+    brick:isFedBy :eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd ;
+    brick:isPartOf :site_f3fb7572_93da_40c1_8f13_8390280970b4 .
+
+:eq_8f95e094_90cb_4c12_978d_a6ad7860c328 a brick:Weather_Service ;
+    rdfs:label "Open-Meteo" ;
+    ofdd:dataSource "open_meteo" ;
+    ofdd:equipmentType "Weather_Service" ;
+    brick:isPartOf :site_f3fb7572_93da_40c1_8f13_8390280970b4 .
+
+:eq_2fcf1b07_f2cc_40db_9af7_b7d62b8224fd a brick:Equipment ;
+    rdfs:label "AHU-1" ;
+    ofdd:equipmentType "Equipment" ;
+    brick:feeds :eq_f2de776d_fee4_4957_b1c0_1388ee35a4e9 ;
+    brick:isPartOf :site_f3fb7572_93da_40c1_8f13_8390280970b4 .
+

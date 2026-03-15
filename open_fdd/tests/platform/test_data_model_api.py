@@ -311,6 +311,33 @@ def test_data_model_import_rejects_placeholder_site_id():
     assert "SITE_UUID" in detail
 
 
+def test_data_model_import_missing_site_returns_400():
+    """Import returns 400 with clear message when point references a site_id not in the DB."""
+    existing_site_id = uuid4()
+    missing_site_id = uuid4()
+    body = {
+        "points": [
+            {
+                "point_id": None,
+                "site_id": str(missing_site_id),
+                "external_id": "SA-T",
+                "bacnet_device_id": "1",
+                "object_identifier": "ai,1",
+                "object_name": "SA-T",
+            }
+        ]
+    }
+    with patch(
+        "open_fdd.platform.api.data_model.get_conn",
+        side_effect=lambda: _mock_conn_with_cursor([{"id": existing_site_id}]),
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 400
+    detail = (r.json().get("error") or {}).get("message", "") or str(r.json())
+    assert "Missing site" in detail
+    assert "add the site" in detail.lower() or "try again" in detail.lower()
+
+
 def _sample_object_names_from_point_discovery_response(
     pdg_response: dict, max_names: int = 5
 ) -> list[str]:

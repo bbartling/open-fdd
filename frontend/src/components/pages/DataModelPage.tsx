@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Check, ListOrdered, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
+import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
@@ -31,7 +31,6 @@ import type {
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
-  SparqlResponse,
   TagWithOpenAiRequest,
   TagWithOpenAiResponse,
 } from "@/types/api";
@@ -58,26 +57,24 @@ export function DataModelPage() {
   const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlError, setTtlError] = useState<string | null>(null);
-  const [showExportPreview, setShowExportPreview] = useState(false);
   const [showAiAssist, setShowAiAssist] = useState(false);
-  const [sparqlQuery, setSparqlQuery] = useState("");
-  const [sparqlBindings, setSparqlBindings] = useState<Record<string, string | null>[]>([]);
-  const [sparqlColumns, setSparqlColumns] = useState<string[]>([]);
-  const [sparqlError, setSparqlError] = useState<string | null>(null);
-
+  /** Chat prompt for in-house agent: describe HVAC and feeds/fed_by for tagging. */
+  const [agentChatPrompt, setAgentChatPrompt] = useState(
+    "Describe HVAC system and feeds or fed by relationships for AI to tag"
+  );
   const [openAiKey, setOpenAiKey] = useState("");
   const [rememberKey, setRememberKey] = useState(false);
-  const [tagSelectedSiteOnly, setTagSelectedSiteOnly] = useState(false);
+  /** When true and multiple sites exist, only tag the site chosen in tagSiteId dropdown. */
+  const [tagSpecificSite, setTagSpecificSite] = useState(false);
+  /** Site to tag when tagSpecificSite is true (multiple sites). Ignored when only one site. */
+  const [tagSiteId, setTagSiteId] = useState<string | null>(null);
   const [openAiModel, setOpenAiModel] = useState("gpt-4o-mini");
-  const [autoImportAiTag, setAutoImportAiTag] = useState(false);
   const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
   const [aiTagError, setAiTagError] = useState<string | null>(null);
   const [aiTagStatus, setAiTagStatus] = useState<string>("");
   const [aiTagPhase, setAiTagPhase] = useState<"idle" | "running" | "success" | "error">("idle");
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
-  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
-
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
   const { data: pointsAll = [] } = useAllPoints();
@@ -91,6 +88,12 @@ export function DataModelPage() {
   const faults = selectedSiteId ? faultsSite : faultsAll;
   const equipmentLoading = selectedSiteId ? equipmentSiteLoading : equipmentAllLoading;
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
+  /** site_id to send to tag-with-openai: one site → that site; multiple → tagSpecificSite ? tagSiteId : null */
+  const tagWithAiSiteId = useMemo(() => {
+    if (sites.length === 0) return null;
+    if (sites.length === 1) return sites[0].id;
+    return tagSpecificSite ? (tagSiteId ?? sites[0]?.id ?? null) : null;
+  }, [sites, tagSpecificSite, tagSiteId]);
 
   const { data: exportData, isLoading: exportLoading } = useQuery<DataModelExportRow[]>({
     queryKey: ["data-model", "export"],
@@ -136,27 +139,6 @@ export function DataModelPage() {
   const checkMutation = useMutation({
     mutationFn: dataModelCheck,
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
-  });
-
-  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
-    mutationFn: (query: string) =>
-      apiFetch<SparqlResponse>("/data-model/sparql", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      }),
-    onSuccess: (data) => {
-      const bindings = data?.bindings ?? [];
-      setSparqlBindings(bindings);
-      const cols = bindings.length > 0 ? Object.keys(bindings[0] ?? {}) : [];
-      setSparqlColumns(cols);
-      setSparqlError(null);
-    },
-    onError: (err) => {
-      setSparqlBindings([]);
-      setSparqlColumns([]);
-      setSparqlError(err.message);
-    },
   });
 
   const tagWithAiMutation = useMutation<TagWithOpenAiResponse, Error, TagWithOpenAiRequest>({
@@ -231,6 +213,15 @@ export function DataModelPage() {
     }
   }, []);
 
+  // When multiple sites, keep tagSiteId in sync (default to selected site or first)
+  useEffect(() => {
+    if (sites.length <= 1) return;
+    const ids = new Set(sites.map((s) => s.id));
+    if (!tagSiteId || !ids.has(tagSiteId)) {
+      setTagSiteId(selectedSiteId && ids.has(selectedSiteId) ? selectedSiteId : sites[0]?.id ?? null);
+    }
+  }, [sites, selectedSiteId, tagSiteId]);
+
   const handleImport = () => {
     try {
       const parsed = JSON.parse(importJson) as DataModelImportBody | DataModelExportRow[];
@@ -265,11 +256,12 @@ export function DataModelPage() {
     setAiTagError(null);
     setAiTagResult(null);
     tagWithAiMutation.mutate({
-      // Match manual workflow by default (all sites). Users can opt into selected-site-only.
-      site_id: tagSelectedSiteOnly ? (selectedSiteId ?? null) : null,
+      site_id: tagWithAiSiteId,
       openai_api_key: openAiKey,
       model: openAiModel,
-      auto_import: autoImportAiTag,
+      auto_import: true,
+      user_summary: agentChatPrompt?.trim() || undefined,
+      max_retries: 3,
     });
   };
 
@@ -328,7 +320,7 @@ export function DataModelPage() {
               <strong>Point discovery + Add to RDF</strong> — For each device, enter its instance, run <strong>Point discovery</strong>, then <strong>Add to data model</strong> to merge BACnet into the graph. Repeat device by device.
             </li>
             <li>
-              <strong>Add a site</strong> — In the Sites section below, create a site if you don’t have one. Assign points to it when you import.
+              <strong>Add a site (Step 2)</strong> — In the Sites section below BACnet discover and add to model, create a site if you don’t have one. Assign points to it when you import.
             </li>
             <li>
               <strong>Export JSON and open your LLM</strong> — Download the export (Export section below), then open your LLM chat. Get the prompt from the Open-FDD README in the git repo and paste it into the LLM. Upload your <strong>fault rule YAML files</strong> (from the Faults page) so the LLM knows which points your rules need.
@@ -347,6 +339,96 @@ export function DataModelPage() {
       </Card>
 
       <BacnetDiscoveryPanel />
+
+      {/* Step 2: Sites — add a site so you can assign points when you import */}
+      <Card className="mt-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Building2 className="h-5 w-5" />
+                <span className="text-base font-medium text-muted-foreground">Step 2</span>
+                Sites
+              </CardTitle>
+              <p className="text-sm font-normal text-muted-foreground">
+                Create a site if you don’t have one. Assign points to it when you import.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+                  <input
+                    type="text"
+                    value={newSiteName}
+                    onChange={(e) => setNewSiteName(e.target.value)}
+                    placeholder="Site name"
+                    className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    data-testid="new-site-name-input"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Description (optional)</label>
+                  <input
+                    type="text"
+                    value={newSiteDescription}
+                    onChange={(e) => setNewSiteDescription(e.target.value)}
+                    placeholder="Optional"
+                    className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newSiteName.trim()) return;
+                    createSiteMutation.mutate({ name: newSiteName.trim(), description: newSiteDescription.trim() || null });
+                  }}
+                  disabled={createSiteMutation.isPending || !newSiteName.trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  data-testid="add-site-button"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add site
+                </button>
+              </div>
+              {createSiteMutation.isError && (
+                <p className="text-sm text-destructive">{createSiteMutation.error?.message}</p>
+              )}
+              <div className="overflow-x-auto rounded-lg border border-border/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sites.map((site) => (
+                      <TableRow key={site.id} data-site-id={site.id}>
+                        <TableCell className="font-medium">{site.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{site.description ?? "—"}</TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Delete site "${site.name}"? This removes all equipment, points, timeseries, and faults for this site.`)) {
+                                deleteSiteMutation.mutate(site.id);
+                              }
+                            }}
+                            disabled={deleteSiteMutation.isPending}
+                            className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Delete
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {sites.length === 0 && <p className="text-sm text-muted-foreground">No sites. Add one above.</p>}
+            </CardContent>
+          </Card>
 
       {/* Data model TTL — view, serialize, check (kept near BACnet workflow) */}
       <Card className="mt-6">
@@ -418,8 +500,9 @@ export function DataModelPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              GET /data-model/export — BACnet discovery + DB points. Copy and paste into your LLM
-              for Brick tagging, then re-import below.
+              GET /data-model/export — BACnet discovery + DB points. Download JSON for manual
+              export to an external LLM (copy-paste there, then re-import below), or use the in-house
+              OpenAI API Assist to chat with the agent and tag via the same API.
             </p>
             {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
             {!exportLoading && exportJson && (
@@ -429,18 +512,10 @@ export function DataModelPage() {
                     type="button"
                     onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
                     className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
-                    title="Download full export as JSON file"
+                    title="Download full export as JSON file for manual tagging in an external LLM"
                   >
                     <Download className="h-4 w-4" />
                     Download JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowExportPreview((v) => !v)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted self-start"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {showExportPreview ? "Hide preview" : "Show preview"}
                   </button>
                   <button
                     type="button"
@@ -455,8 +530,19 @@ export function DataModelPage() {
                 {showAiAssist && (
                   <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-card/70 p-4">
                     <p className="text-sm text-muted-foreground">
-                      Use OpenAI to auto-tag Brick types and rule inputs, then prefill Import JSON. Optional auto-import can apply immediately.
+                      In-house agent: describe your HVAC system and feeds/fed_by in the chat below. The agent calls the same export/import API with retries; then validate on the Data Model Testing tab and pass/fail the result.
                     </p>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Chat prompt (describe HVAC and relationships for AI to tag)</label>
+                      <textarea
+                        value={agentChatPrompt}
+                        onChange={(e) => setAgentChatPrompt(e.target.value)}
+                        placeholder="Describe HVAC system and feeds or fed by relationships for AI to tag"
+                        rows={3}
+                        className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        data-testid="openai-assist-chat-prompt"
+                      />
+                    </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-xs font-medium text-muted-foreground">OpenAI API key</label>
@@ -491,23 +577,38 @@ export function DataModelPage() {
                         />
                         Remember API key in browser
                       </label>
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={tagSelectedSiteOnly}
-                          onChange={(e) => setTagSelectedSiteOnly(e.target.checked)}
-                          disabled={!selectedSiteId}
-                        />
-                        Tag selected site only
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={autoImportAiTag}
-                          onChange={(e) => setAutoImportAiTag(e.target.checked)}
-                        />
-                        Auto-import tagged JSON
-                      </label>
+                      {sites.length === 1 && (
+                        <span className="text-muted-foreground">
+                          Tagging your only site ({sites[0].name}).
+                        </span>
+                      )}
+                      {sites.length > 1 && (
+                        <>
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={tagSpecificSite}
+                              onChange={(e) => setTagSpecificSite(e.target.checked)}
+                              data-testid="tag-specific-site-checkbox"
+                            />
+                            Tag specific site
+                          </label>
+                          {tagSpecificSite && (
+                            <select
+                              value={tagSiteId ?? ""}
+                              onChange={(e) => setTagSiteId(e.target.value || null)}
+                              className="h-9 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              data-testid="tag-site-select"
+                            >
+                              {sites.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <button
@@ -556,14 +657,38 @@ export function DataModelPage() {
                         )}
                       </div>
                     )}
-                    {aiTagError && <p className="text-sm text-destructive">{aiTagError}</p>}
+                    {aiTagError && (
+                      <div className="space-y-1">
+                        <p className="text-sm text-destructive">{aiTagError}</p>
+                        {aiTagError.includes("Missing site") && (
+                          <p className="text-xs text-muted-foreground">
+                            The AI returned a site ID that isn’t in your database. Create the site in <strong>Step 2 (Sites)</strong>, or if you have multiple sites turn on <strong>Tag specific site</strong> and pick the site in the dropdown, then try again.
+                          </p>
+                        )}
+                        {aiTagError.includes("500") && !aiTagError.includes("Missing site") && (
+                          <p className="text-xs text-muted-foreground">
+                            If the message is unclear, ensure the backend has the <code className="rounded bg-muted px-1">openai</code> package:{" "}
+                            <code className="rounded bg-muted px-1">pip install &apos;openai&gt;=1.0&apos;</code> or{" "}
+                            <code className="rounded bg-muted px-1">pip install -e &apos;.[platform]&apos;</code>.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {aiTagResult?.meta?.agent_log && aiTagResult.meta.agent_log.length > 0 && (
+                      <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
+                        <p className="mb-2 text-xs font-medium text-muted-foreground">Agent log</p>
+                        <ul className="max-h-48 list-inside list-disc space-y-1 overflow-auto text-xs font-mono">
+                          {aiTagResult.meta.agent_log.map((entry, i) => (
+                            <li key={i}>
+                              <span className="font-medium">{entry.step}</span>
+                              {entry.attempt != null && ` (attempt ${entry.attempt})`}
+                              {entry.detail && ` — ${entry.detail}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                )}
-                {showExportPreview && (
-                  <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
-                    {exportJson.slice(0, 2000)}
-                    {exportJson.length > 2000 ? "\n… (truncated; download for full)" : ""}
-                  </pre>
                 )}
               </div>
             )}
@@ -636,339 +761,6 @@ export function DataModelPage() {
               >
                 <Upload className="h-4 w-4" />
                 Import
-              </button>
-              {importResult != null && (
-                <span className="text-sm text-muted-foreground">
-                  {importResult.created != null && `Created: ${importResult.created}`}
-                  {importResult.updated != null && ` Updated: ${importResult.updated}`}
-                  {importResult.total != null && ` Total: ${importResult.total}`}
-                  {importResult.warnings?.length ? ` — ${importResult.warnings.join("; ")}` : ""}
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Equipment */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Server className="h-5 w-5" />
-              Equipment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Equipment in the data model. Filter by site using the site selector in the top bar.
-            </p>
-            {equipmentLoading && <Skeleton className="h-72 w-full rounded-lg" />}
-            {!equipmentLoading && (
-              <EquipmentTable
-                equipment={equipment}
-                points={points}
-                faults={faults}
-                siteMap={selectedSiteId ? undefined : siteMap}
-              />
-            )}
-          </CardContent>
-        </Card>
-
-        {/* SPARQL */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Code className="h-5 w-5" />
-              SPARQL (query the data model)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
-            </p>
-            <input
-              ref={sparqlFileInputRef}
-              type="file"
-              accept=".sparql,text/plain"
-              className="hidden"
-              data-testid="sparql-file-input"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const text = typeof reader.result === "string" ? reader.result : "";
-                  setSparqlQuery(text);
-                };
-                reader.readAsText(file);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              data-testid="sparql-upload-file-button"
-              onClick={() => sparqlFileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
-            >
-              <FileUp className="h-4 w-4" />
-              Upload .sparql file
-            </button>
-            <textarea
-              data-testid="sparql-query-textarea"
-              value={sparqlQuery}
-              onChange={(e) => setSparqlQuery(e.target.value)}
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              data-testid="sparql-run-button"
-              onClick={() => sparqlMutation.mutate(sparqlQuery)}
-              disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Play className="h-4 w-4" />
-              Run SPARQL
-            </button>
-            {sparqlError && (
-              <p className="text-sm text-destructive">{sparqlError}</p>
-            )}
-            {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {sparqlColumns.map((key) => (
-                        <TableHead key={key} className="font-mono text-xs">
-                          {key}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
-                      <TableRow key={i}>
-                        {sparqlColumns.map((key) => (
-                          <TableCell key={key} className="font-mono text-xs">
-                            {row[key] ?? "—"}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-            {sparqlMutation.isSuccess && sparqlBindings.length === 0 && (
-              <p className="text-sm text-muted-foreground">No bindings (empty result).</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Sites */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Building2 className="h-5 w-5" />
-              Sites
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Create and delete sites. Deleting a site cascades to equipment, points, timeseries, and faults.
-            </p>
-            <div className="flex flex-wrap items-end gap-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
-                <input
-                  type="text"
-                  value={newSiteName}
-                  onChange={(e) => setNewSiteName(e.target.value)}
-                  placeholder="Site name"
-                  className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  data-testid="new-site-name-input"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Description (optional)</label>
-                <input
-                  type="text"
-                  value={newSiteDescription}
-                  onChange={(e) => setNewSiteDescription(e.target.value)}
-                  placeholder="Optional"
-                  className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!newSiteName.trim()) return;
-                  createSiteMutation.mutate({ name: newSiteName.trim(), description: newSiteDescription.trim() || null });
-                }}
-                disabled={createSiteMutation.isPending || !newSiteName.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                data-testid="add-site-button"
-              >
-                <Plus className="h-4 w-4" />
-                Add site
-              </button>
-            </div>
-            {createSiteMutation.isError && (
-              <p className="text-sm text-destructive">{createSiteMutation.error?.message}</p>
-            )}
-            <div className="overflow-x-auto rounded-lg border border-border/60">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sites.map((site) => (
-                    <TableRow key={site.id} data-site-id={site.id}>
-                      <TableCell className="font-medium">{site.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{site.description ?? "—"}</TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm(`Delete site "${site.name}"? This removes all equipment, points, timeseries, and faults for this site.`)) {
-                              deleteSiteMutation.mutate(site.id);
-                            }
-                          }}
-                          disabled={deleteSiteMutation.isPending}
-                          className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Delete
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {sites.length === 0 && <p className="text-sm text-muted-foreground">No sites. Add one above.</p>}
-          </CardContent>
-        </Card>
-
-        {/* Export */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Database className="h-5 w-5" />
-              Export (for AI / copy-paste)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              GET /data-model/export — BACnet discovery + DB points. Copy and paste into your LLM
-              for Brick tagging, then re-import below.
-            </p>
-            {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
-            {!exportLoading && exportJson && (
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
-                    title="Download full export as JSON file"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowExportPreview((v) => !v)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted self-start"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {showExportPreview ? "Hide preview" : "Show preview"}
-                  </button>
-                </div>
-                {showExportPreview && (
-                  <pre className="max-h-80 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-4 text-xs font-mono">
-                    {exportJson.slice(0, 2000)}
-                    {exportJson.length > 2000 ? "\n… (truncated; download for full)" : ""}
-                  </pre>
-                )}
-              </div>
-            )}
-            {!exportLoading && (!exportData || exportData.length === 0) && (
-              <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Apply pasted/uploaded JSON from LLM */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Upload className="h-5 w-5" />
-              Paste from AI
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Paste the LLM’s JSON here (array of points or <code className="rounded bg-muted px-1">{"{ points: [...], equipment: [...] }"}</code>)
-              or choose a JSON file to load into the box. Then click <strong>Apply to data model</strong> to update sites, equipment, and points.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Be sure to add a site to your data model and upload your fault equation YAML files to the LLM when you send it this JSON.
-            </p>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  try {
-                    const text = String(reader.result ?? "");
-                    JSON.parse(text);
-                    setImportJson(text);
-                  } catch {
-                    setImportJson("");
-                    alert("Invalid JSON in file. Check the file and try again.");
-                  }
-                  e.target.value = "";
-                };
-                reader.readAsText(file);
-              }}
-            />
-            <textarea
-              value={importJson}
-              onChange={(e) => setImportJson(e.target.value)}
-              placeholder='[{"point_id": "...", "brick_type": "Supply_Air_Temperature_Sensor", ...}] or { "points": [...] }'
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-              data-testid="data-model-import-json"
-            />
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => importFileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                title="Load JSON from file into the box below"
-              >
-                <FileUp className="h-4 w-4" />
-                Choose JSON file
-              </button>
-              <button
-                type="button"
-                onClick={handleImport}
-                disabled={importMutation.isPending || !importJson.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                title="Update the data model with the pasted or loaded JSON"
-                data-testid="data-model-import-button"
-              >
-                <Check className="h-4 w-4" />
-                Apply to data model
               </button>
               {importResult != null && (
                 <span className="text-sm text-muted-foreground">
