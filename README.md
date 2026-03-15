@@ -323,7 +323,7 @@ Make the output generic and reusable for any Open-FDD export.
 Preserve fields first, enrich second.
 Leave uncertain values as null rather than guessing.
 
-Chat With the Engineer asking if this is complete? Verify feeds or fed replationships. And if anything else is needed.
+If relationship data is incomplete or ambiguous, leave uncertain fields as null and still return valid JSON only.
 ```
 
 </details>

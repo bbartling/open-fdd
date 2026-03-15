@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Play, Check, ListOrdered, Database, Upload, Code, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
+import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
@@ -31,7 +31,6 @@ import type {
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
-  SparqlResponse,
   TagWithOpenAiRequest,
   TagWithOpenAiResponse,
 } from "@/types/api";
@@ -63,11 +62,6 @@ export function DataModelPage() {
   const [agentChatPrompt, setAgentChatPrompt] = useState(
     "Describe HVAC system and feeds or fed by relationships for AI to tag"
   );
-  const [sparqlQuery, setSparqlQuery] = useState("");
-  const [sparqlBindings, setSparqlBindings] = useState<Record<string, string | null>[]>([]);
-  const [sparqlColumns, setSparqlColumns] = useState<string[]>([]);
-  const [sparqlError, setSparqlError] = useState<string | null>(null);
-
   const [openAiKey, setOpenAiKey] = useState("");
   const [rememberKey, setRememberKey] = useState(false);
   /** When true and multiple sites exist, only tag the site chosen in tagSiteId dropdown. */
@@ -81,8 +75,6 @@ export function DataModelPage() {
   const [aiTagPhase, setAiTagPhase] = useState<"idle" | "running" | "success" | "error">("idle");
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
-  const sparqlFileInputRef = useRef<HTMLInputElement>(null);
-
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
   const { data: equipmentSite = [], isLoading: equipmentSiteLoading } = useEquipment(selectedSiteId ?? undefined);
   const { data: pointsAll = [] } = useAllPoints();
@@ -147,27 +139,6 @@ export function DataModelPage() {
   const checkMutation = useMutation({
     mutationFn: dataModelCheck,
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
-  });
-
-  const sparqlMutation = useMutation<SparqlResponse, Error, string>({
-    mutationFn: (query: string) =>
-      apiFetch<SparqlResponse>("/data-model/sparql", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      }),
-    onSuccess: (data) => {
-      const bindings = data?.bindings ?? [];
-      setSparqlBindings(bindings);
-      const cols = bindings.length > 0 ? Object.keys(bindings[0] ?? {}) : [];
-      setSparqlColumns(cols);
-      setSparqlError(null);
-    },
-    onError: (err) => {
-      setSparqlBindings([]);
-      setSparqlColumns([]);
-      setSparqlError(err.message);
-    },
   });
 
   const tagWithAiMutation = useMutation<TagWithOpenAiResponse, Error, TagWithOpenAiRequest>({
@@ -824,210 +795,6 @@ export function DataModelPage() {
                 siteMap={selectedSiteId ? undefined : siteMap}
               />
             )}
-          </CardContent>
-        </Card>
-
-        {/* SPARQL */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Code className="h-5 w-5" />
-              SPARQL (query the data model)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Run a SPARQL query against the current Brick + BACnet graph. Upload a .sparql file or type below. Results appear below.
-            </p>
-            <input
-              ref={sparqlFileInputRef}
-              type="file"
-              accept=".sparql,text/plain"
-              className="hidden"
-              data-testid="sparql-file-input"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const text = typeof reader.result === "string" ? reader.result : "";
-                  setSparqlQuery(text);
-                };
-                reader.readAsText(file);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              data-testid="sparql-upload-file-button"
-              onClick={() => sparqlFileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-muted/80"
-            >
-              <FileUp className="h-4 w-4" />
-              Upload .sparql file
-            </button>
-            <textarea
-              data-testid="sparql-query-textarea"
-              value={sparqlQuery}
-              onChange={(e) => setSparqlQuery(e.target.value)}
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              data-testid="sparql-run-button"
-              onClick={() => sparqlMutation.mutate(sparqlQuery)}
-              disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Play className="h-4 w-4" />
-              Run SPARQL
-            </button>
-            {sparqlError && (
-              <p className="text-sm text-destructive">{sparqlError}</p>
-            )}
-            {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {sparqlColumns.map((key) => (
-                        <TableHead key={key} className="font-mono text-xs">
-                          {key}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sparqlBindings.map((row: Record<string, string | null>, i: number) => (
-                      <TableRow key={i}>
-                        {sparqlColumns.map((key) => (
-                          <TableCell key={key} className="font-mono text-xs">
-                            {row[key] ?? "—"}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-            {sparqlMutation.isSuccess && sparqlBindings.length === 0 && (
-              <p className="text-sm text-muted-foreground">No bindings (empty result).</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Export */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Database className="h-5 w-5" />
-              Export (for AI / copy-paste)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              GET /data-model/export — BACnet discovery + DB points. Download JSON for manual
-              export to an external LLM, or use OpenAI API Assist on the main Export card above.
-            </p>
-            {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
-            {!exportLoading && exportJson && (
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => exportData && downloadJson(exportData, "data-model-export.json")}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted self-start"
-                  title="Download full export as JSON file for manual tagging in an external LLM"
-                >
-                  <Download className="h-4 w-4" />
-                  Download JSON
-                </button>
-              </div>
-            )}
-            {!exportLoading && (!exportData || exportData.length === 0) && (
-              <p className="text-sm text-muted-foreground">No points in the data model yet.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Apply pasted/uploaded JSON from LLM */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Upload className="h-5 w-5" />
-              Paste from AI
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Paste the LLM’s JSON here (array of points or <code className="rounded bg-muted px-1">{"{ points: [...], equipment: [...] }"}</code>)
-              or choose a JSON file to load into the box. Then click <strong>Apply to data model</strong> to update sites, equipment, and points.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Be sure to add a site to your data model and upload your fault equation YAML files to the LLM when you send it this JSON.
-            </p>
-            <input
-              ref={importFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                  try {
-                    const text = String(reader.result ?? "");
-                    JSON.parse(text);
-                    setImportJson(text);
-                  } catch {
-                    setImportJson("");
-                    alert("Invalid JSON in file. Check the file and try again.");
-                  }
-                  e.target.value = "";
-                };
-                reader.readAsText(file);
-              }}
-            />
-            <textarea
-              value={importJson}
-              onChange={(e) => setImportJson(e.target.value)}
-              placeholder='[{"point_id": "...", "brick_type": "Supply_Air_Temperature_Sensor", ...}] or { "points": [...] }'
-              className="h-40 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              spellCheck={false}
-              data-testid="data-model-import-json"
-            />
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => importFileInputRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
-                title="Load JSON from file into the box below"
-              >
-                <FileUp className="h-4 w-4" />
-                Choose JSON file
-              </button>
-              <button
-                type="button"
-                onClick={handleImport}
-                disabled={importMutation.isPending || !importJson.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                title="Update the data model with the pasted or loaded JSON"
-                data-testid="data-model-import-button"
-              >
-                <Check className="h-4 w-4" />
-                Apply to data model
-              </button>
-              {importResult != null && (
-                <span className="text-sm text-muted-foreground">
-                  {importResult.created != null && `Created: ${importResult.created}`}
-                  {importResult.updated != null && ` Updated: ${importResult.updated}`}
-                  {importResult.total != null && ` Total: ${importResult.total}`}
-                  {importResult.warnings?.length ? ` — ${importResult.warnings.join("; ")}` : ""}
-                </span>
-              )}
-            </div>
           </CardContent>
         </Card>
 

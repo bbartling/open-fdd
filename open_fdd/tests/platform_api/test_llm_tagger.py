@@ -310,7 +310,7 @@ def test_llm_tagger_retry_with_prompt_chain_succeeds_on_second_attempt():
         "equipment": [],
     }
 
-    export_patch, openai_patch = _mock_export_and_openai()
+    export_patch, _openai_patch = _mock_export_and_openai()
     mock_client = MagicMock()
     mock_client.chat.completions.create.side_effect = [
         _make_openai_response(json.dumps(invalid_payload)),
@@ -327,7 +327,7 @@ def test_llm_tagger_retry_with_prompt_chain_succeeds_on_second_attempt():
         "open_fdd.platform.llm_tagger.import_module",
         return_value=fake_openai_module,
     ):
-        body, usage, agent_log = llm_tagger.tag_with_openai(
+        body, _usage, agent_log = llm_tagger.tag_with_openai(
             [{"point_id": invalid_payload["points"][0]["point_id"], "site_id": invalid_payload["points"][0]["site_id"], "external_id": "SA-T", "bacnet_device_id": "1", "object_identifier": "ai,1"}],
             api_key="sk-test",
             max_retries=3,
@@ -353,7 +353,7 @@ def test_llm_tagger_retry_exhausted_returns_422():
     # point_id as int fails validation (must be str)
     invalid_payload = {"points": [{"point_id": 123}], "equipment": []}
 
-    export_patch, openai_patch = _mock_export_and_openai(json.dumps(invalid_payload))
+    export_patch, _openai_patch = _mock_export_and_openai(json.dumps(invalid_payload))
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = _make_openai_response(
         json.dumps(invalid_payload)

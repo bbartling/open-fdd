@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 # LLM tagging constants (single source of truth for API and tagger)
 # ---------------------------------------------------------------------------
 TAGGER_PROMPT_PATH = Path("config") / "canonical_llm_prompt.txt"
+# Optional future: Data Model Testing AI assist can load a different prompt (e.g. canonical_llm_prompt_testing.txt)
+# that takes TTL/SPARQL context + engineer message and returns import JSON for revision-then-retest.
 TAGGER_DEFAULT_MAX_RETRIES = 3
 TAGGER_MAX_RETRIES_MIN = 1
 TAGGER_MAX_RETRIES_MAX = 10
