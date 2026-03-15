@@ -40,7 +40,7 @@ This will start the full AFDD edge stack locally. The stack includes Grafana, Ti
 
 ### Development: branches and tests
 
-Work off the **`dev`** branch for day-to-day development; open feature branches from `dev` and merge back to `dev`. Releases are cut from `master`. No Docker needed for the test suite. From the repo root:
+Work off the **`develop`** branch for day-to-day development; open feature branches from `develop` and merge back to `develop`. Releases are cut from `master`. No Docker needed for the test suite. From the repo root:
 
 ```bash
 python3 -m venv .venv
