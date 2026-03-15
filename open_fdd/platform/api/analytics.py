@@ -543,7 +543,7 @@ def get_system_host_series(
     try:
         from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
         to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         raise HTTPException(400, "Invalid from_ts or to_ts")
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -664,7 +664,7 @@ def get_system_containers_series(
     try:
         from_dt = datetime.fromisoformat(from_ts.replace("Z", "+00:00"))
         to_dt = datetime.fromisoformat(to_ts.replace("Z", "+00:00"))
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         raise HTTPException(400, "Invalid from_ts or to_ts")
     with get_conn() as conn:
         with conn.cursor() as cur:

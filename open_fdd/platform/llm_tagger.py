@@ -10,11 +10,21 @@ from __future__ import annotations
 import json
 import logging
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# LLM tagging constants (single source of truth for API and tagger)
+# ---------------------------------------------------------------------------
+TAGGER_PROMPT_PATH = Path("config") / "canonical_llm_prompt.txt"
+TAGGER_DEFAULT_MAX_RETRIES = 3
+TAGGER_MAX_RETRIES_MIN = 1
+TAGGER_MAX_RETRIES_MAX = 10
+TAGGER_CHUNK_SIZE = 120
 
 
 class LlmTaggerError(Exception):
@@ -27,8 +37,8 @@ class LlmTaggerError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Canonical system prompt — matches README.md § "Canonical prompt"
-# Keep in sync with docs/modeling/ai_assisted_tagging.md
+# Built-in system prompt (fallback when config/canonical_llm_prompt.txt is missing).
+# Prefer editing config/canonical_llm_prompt.txt; it is loaded at first use. See README.
 # ---------------------------------------------------------------------------
 _SYSTEM_PROMPT = """\
 I use Open-FDD. I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).
@@ -96,9 +106,9 @@ Never use equipment UUIDs for relationships.
 
 SITE ID
 
-Use the exact site_id from the export rows.
+Use the exact site_id from the export rows. Copy it character-for-character.
 
-Do not invent or modify site_id values.
+Do not invent or modify site_id values. Never make up a UUID — if the export has a site_id, use that same string in every point and in equipment.
 
 If site_id is null in the export, leave it null.
 
@@ -261,7 +271,28 @@ No markdown
 No explanation
 """
 
-_CHUNK_SIZE = 120
+_loaded_system_prompt: str | None = None
+
+
+def _get_system_prompt() -> str:
+    """Return the canonical system prompt: from config/canonical_llm_prompt.txt if present, else built-in."""
+    global _loaded_system_prompt
+    if _loaded_system_prompt is not None:
+        return _loaded_system_prompt
+    # Try cwd (repo root or /app in container), then repo root relative to this file.
+    for base in (Path.cwd(), Path(__file__).resolve().parent.parent.parent):
+        path = base / TAGGER_PROMPT_PATH
+        if path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8").strip()
+                if text:
+                    _loaded_system_prompt = text
+                    logger.info("Using canonical LLM prompt from %s", path)
+                    return text
+            except Exception as e:
+                logger.warning("Could not read %s: %s. Using built-in prompt.", path, e)
+    _loaded_system_prompt = _SYSTEM_PROMPT
+    return _SYSTEM_PROMPT
 
 
 def tag_with_openai(
@@ -269,12 +300,23 @@ def tag_with_openai(
     api_key: str,
     model: str = "gpt-4o",
     timeout: float = 120.0,
-) -> tuple[Any, dict[str, Any] | None]:
-    """Call OpenAI to tag *export_rows* with Brick types and return (DataModelImportBody, usage_dict).
+    user_summary: str | None = None,
+    max_retries: int = TAGGER_DEFAULT_MAX_RETRIES,
+) -> tuple[Any, dict[str, Any] | None, list[dict[str, Any]]]:
+    """Call OpenAI to tag *export_rows* with Brick types and return (DataModelImportBody, usage_dict, agent_log).
+
+    If *user_summary* is provided, it is prepended to the user message so the LLM can use the
+    engineer's description of the HVAC system and feeds/fed_by. On Pydantic validation failure,
+    the call is retried up to *max_retries* times. *agent_log* lists each attempt and outcome
+    for display in the UI.
 
     Raises LlmTaggerError on all error conditions so the API endpoint can propagate
     a clean status code without leaking internal details or the API key.
     """
+    # Validate request first so we return 400 for bad input even when openai is not installed.
+    if not api_key or not api_key.strip():
+        raise LlmTaggerError(400, "openai_api_key is required.")
+
     # Late import: openai is optional; surfaces a clear 500 when not installed.
     try:
         openai_mod = import_module("openai")
@@ -296,9 +338,6 @@ def tag_with_openai(
 
     # Inline import avoids circular dependency at module load time.
     from open_fdd.platform.api.data_model import DataModelImportBody
-
-    if not api_key or not api_key.strip():
-        raise LlmTaggerError(400, "openai_api_key is required.")
 
     def _compact_export_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         keep = {
@@ -323,16 +362,31 @@ def tag_with_openai(
 
     def _call_openai_once(
         rows: list[dict[str, Any]],
+        previous_error: str | None = None,
     ) -> tuple[Any, dict[str, Any] | None]:
         export_json = json.dumps(_compact_export_rows(rows), indent=2)
-        user_message = f"Here is the export JSON:\n\n{export_json}"
+        if user_summary and user_summary.strip():
+            user_message = (
+                f"The user provided this description of the HVAC system and relationships:\n\n{user_summary.strip()}\n\n"
+                "Use it to improve Brick types, rule_input, and equipment feeds/fed_by. Then tag the following export JSON:\n\n"
+                f"{export_json}"
+            )
+        else:
+            user_message = f"Here is the export JSON:\n\n{export_json}"
+        if previous_error:
+            err_snippet = (previous_error[:600] + "...") if len(previous_error) > 600 else previous_error
+            user_message += (
+                "\n\n[Previous attempt failed validation: "
+                + err_snippet
+                + " Please fix and return only valid JSON with exactly \"points\" and \"equipment\" keys.]"
+            )
 
         try:
             client = OpenAI(api_key=api_key.strip(), timeout=timeout)
             response = client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": _get_system_prompt()},
                     {"role": "user", "content": user_message},
                 ],
                 response_format={"type": "json_object"},
@@ -447,46 +501,80 @@ def tag_with_openai(
                 )
             raise
 
-    # Fast path: single request.
-    try:
-        return _call_openai_once(export_rows)
-    except LlmTaggerError as exc:
-        # If the model output is truncated/non-JSON for large payloads, retry in chunks.
-        if not (_is_non_json_error(exc) and len(export_rows) > 1):
-            raise
-        logger.warning(
-            "LLM tagging returned non-JSON for %d rows; retrying in chunks of %d",
-            len(export_rows),
-            _CHUNK_SIZE,
+    agent_log: list[dict[str, Any]] = []
+    retries = max(TAGGER_MAX_RETRIES_MIN, min(max_retries, TAGGER_MAX_RETRIES_MAX))
+
+    def _run_tagging(previous_error: str | None = None) -> tuple[Any, dict[str, Any] | None]:
+        # Fast path: single request (with optional prompt chain from previous attempt).
+        try:
+            return _call_openai_once(export_rows, previous_error)
+        except LlmTaggerError as exc:
+            # If the model output is truncated/non-JSON for large payloads, retry in chunks.
+            if not (_is_non_json_error(exc) and len(export_rows) > 1):
+                raise
+            logger.warning(
+                "LLM tagging returned non-JSON for %d rows; retrying in chunks of %d",
+                len(export_rows),
+                TAGGER_CHUNK_SIZE,
+            )
+
+        all_points_list: list[Any] = []
+        all_equipment_list: list[Any] = []
+        usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+        for i in range(0, len(export_rows), TAGGER_CHUNK_SIZE):
+            chunk = export_rows[i : i + TAGGER_CHUNK_SIZE]
+            points_chunk, equipment_chunk, usage_chunk = _tag_rows_resilient(chunk)
+            all_points_list.extend(points_chunk)
+            all_equipment_list.extend(equipment_chunk)
+            _merge_usage(usage_totals, usage_chunk)
+
+        # De-duplicate equipment rows from chunked responses.
+        seen_equipment: set[tuple[str, str, str]] = set()
+        deduped_equipment: list[Any] = []
+        for eq in all_equipment_list:
+            eq_id = str(getattr(eq, "equipment_id", "") or "")
+            site_id = str(getattr(eq, "site_id", "") or "")
+            eq_name = str(getattr(eq, "equipment_name", "") or "")
+            key = (eq_id, site_id, eq_name)
+            if key in seen_equipment:
+                continue
+            seen_equipment.add(key)
+            deduped_equipment.append(eq)
+
+        merged_raw = {
+            "points": [p.model_dump() for p in all_points_list],
+            "equipment": [e.model_dump() for e in deduped_equipment],
+        }
+        merged_body = DataModelImportBody.model_validate(merged_raw)
+        return merged_body, usage_totals
+
+    last_error: str | None = None
+    for attempt in range(1, retries + 1):
+        agent_log.append(
+            {"step": "attempt", "attempt": attempt, "detail": f"Attempt {attempt} of {retries}."}
         )
-
-    all_points: list[Any] = []
-    all_equipment: list[Any] = []
-    usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-
-    for i in range(0, len(export_rows), _CHUNK_SIZE):
-        chunk = export_rows[i : i + _CHUNK_SIZE]
-        points_chunk, equipment_chunk, usage_chunk = _tag_rows_resilient(chunk)
-        all_points.extend(points_chunk)
-        all_equipment.extend(equipment_chunk)
-        _merge_usage(usage_totals, usage_chunk)
-
-    # De-duplicate equipment rows from chunked responses.
-    seen_equipment: set[tuple[str, str, str]] = set()
-    deduped_equipment: list[Any] = []
-    for eq in all_equipment:
-        eq_id = str(getattr(eq, "equipment_id", "") or "")
-        site_id = str(getattr(eq, "site_id", "") or "")
-        eq_name = str(getattr(eq, "equipment_name", "") or "")
-        key = (eq_id, site_id, eq_name)
-        if key in seen_equipment:
+        try:
+            body, usage = _run_tagging(previous_error=last_error)
+            agent_log.append(
+                {"step": "success", "attempt": attempt, "detail": "Valid import JSON produced."}
+            )
+            return body, usage, agent_log
+        except LlmTaggerError as exc:
+            if exc.status_code == 422 and "schema validation" in (exc.detail or ""):
+                last_error = exc.detail or str(exc)
+                agent_log.append(
+                    {"step": "validation_failed", "attempt": attempt, "detail": exc.detail}
+                )
+                if attempt == retries:
+                    raise
+                continue
+            raise
+        except ValidationError as exc:
+            last_error = str(exc)
+            agent_log.append(
+                {"step": "validation_failed", "attempt": attempt, "detail": str(exc)}
+            )
+            if attempt == retries:
+                raise LlmTaggerError(422, f"Validation failed after {retries} attempts: {exc}")
             continue
-        seen_equipment.add(key)
-        deduped_equipment.append(eq)
-
-    merged_raw = {
-        "points": [p.model_dump() for p in all_points],
-        "equipment": [e.model_dump() for e in deduped_equipment],
-    }
-    merged_body = DataModelImportBody.model_validate(merged_raw)
-    return merged_body, usage_totals

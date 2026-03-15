@@ -68,10 +68,12 @@ The engineer should chat with the LLM about the task at hand after first underst
 
 A slightly more polished version for docs or README text:
 
-In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement using the Brick ontology and an LLM for AI-assisted data modeling. Copy the prompt below and upload the YAML files defined for the task, and the LLM should understand how to proceed.
+In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement using the Brick ontology and an LLM for AI-assisted data modeling. Copy the **canonical prompt** from [config/canonical_llm_prompt.txt](config/canonical_llm_prompt.txt) and upload the YAML files defined for the task, and the LLM should understand how to proceed.
 
-After reviewing the HVAC system from a systems perspective, the engineer can chat with the LLM about the modeling task. The LLM can then generate additional metadata, including Brick classes for point names and feeds/fed-by relationships. The final output JSON file is imported back into Open-FDD, where the backend parses it into a completed data model.
+After reviewing the HVAC system from a systems perspective, the engineer can chat with the LLM about the modeling task. The LLM can then generate additional metadata, including Brick classes for point names and feeds/fed-by relationships. The final output JSON file is imported back into Open-FDD, where the backend parses it into a completed data model. The in-app "OpenAI API Assist" and manual export/import both use the same canonical prompt; the backend loads it from `config/canonical_llm_prompt.txt` when present (fallback: built-in prompt in code). Edit that file anytime; changes apply on the next tag-with-openai request or next manual paste.
 
+<details>
+<summary>Canonical prompt (inline copy; prefer editing <a href="config/canonical_llm_prompt.txt">config/canonical_llm_prompt.txt</a>)</summary>
 
 ```text
 I use Open-FDD. Please help me model my mechanical system’s feeds and fed-by relationships. If not enough data is available, please ask. Do not infer or assume relationships from probability—only the engineer knows the actual mechanical relationships for the HVAC.
@@ -323,6 +325,8 @@ Leave uncertain values as null rather than guessing.
 
 Chat With the Engineer asking if this is complete? Verify feeds or fed replationships. And if anything else is needed.
 ```
+
+</details>
 
 The final step is for the engineer to perform robust SPARQL query testing to verify that the data model returns the exact expected responses needed to summarize the HVAC system. For example, if the site contains a VAV AHU system with chiller-based cooling, the engineer should test queries that validate the connected relationships in the model, including those needed to support control algorithms and fault detection logic.
 

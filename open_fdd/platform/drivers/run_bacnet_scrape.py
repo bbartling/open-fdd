@@ -116,7 +116,7 @@ def _current_interval_min(log: logging.Logger) -> int:
     if cfg and cfg.get("bacnet_scrape_interval_min") is not None:
         try:
             return int(cfg["bacnet_scrape_interval_min"])
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             log.warning(
                 "Invalid bacnet_scrape_interval_min from API: %r",
                 cfg.get("bacnet_scrape_interval_min"),
@@ -127,7 +127,7 @@ def _current_interval_min(log: logging.Logger) -> int:
         v = os.environ.get("OFDD_BACNET_SCRAPE_INTERVAL_MIN")
         if v is not None and str(v).strip():
             return int(v.strip())
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         pass
 
     return get_platform_settings().bacnet_scrape_interval_min

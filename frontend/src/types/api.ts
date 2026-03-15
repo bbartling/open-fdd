@@ -163,6 +163,17 @@ export interface TagWithOpenAiRequest {
   openai_api_key: string;
   model: string;
   auto_import?: boolean;
+  /** Engineer's description of HVAC system and feeds/fed_by for the in-house agent. */
+  user_summary?: string | null;
+  /** Max retries on validation failure (default 3). */
+  max_retries?: number;
+}
+
+/** One step in the tagging agent log (attempt, success, validation_failed). */
+export interface TagWithOpenAiAgentLogEntry {
+  step: string;
+  attempt?: number;
+  detail?: string;
 }
 
 /** POST /data-model/tag-with-openai response */
@@ -173,6 +184,8 @@ export interface TagWithOpenAiResponse {
     model: string;
     point_count: number;
     equipment_count: number;
+    /** Log of agent attempts and outcomes for display in the UI. */
+    agent_log?: TagWithOpenAiAgentLogEntry[];
     usage?: {
       prompt_tokens: number;
       completion_tokens: number;

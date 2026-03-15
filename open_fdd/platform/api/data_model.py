@@ -9,6 +9,7 @@ and BACnet bindings stay valid. Single source of truth = DB; TTL = DB + in-memor
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -19,6 +20,11 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.config import get_platform_settings
+from open_fdd.platform.llm_tagger import (
+    TAGGER_DEFAULT_MAX_RETRIES,
+    TAGGER_MAX_RETRIES_MAX,
+    TAGGER_MAX_RETRIES_MIN,
+)
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.data_model_ttl import (
     build_ttl_from_db,
@@ -35,6 +41,7 @@ from open_fdd.platform.graph_model import (
     write_ttl_to_file,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/data-model", tags=["data-model"])
 
 
@@ -480,7 +487,7 @@ def _normalize_ttl_id_to_uuid(s: str) -> str | None:
                 try:
                     UUID(tail)
                     return tail
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     pass
     return None
 
@@ -494,13 +501,13 @@ def _parse_uuid_or_400(
     s = value.strip()
     try:
         return UUID(s)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         pass
     normalized = _normalize_ttl_id_to_uuid(s)
     if normalized:
         try:
             return UUID(normalized)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             pass
     raise HTTPException(
         400,
@@ -524,7 +531,7 @@ def _is_uuid(s: str | None) -> bool:
     try:
         UUID(s.strip())
         return True
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return False
 
 
@@ -582,9 +589,36 @@ def import_data_model(body: DataModelImportBody):
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM sites")
             sites = cur.fetchall()
+            existing_site_ids = {str(r["id"]) for r in sites}
             default_site_id_str: str | None = (
                 str(sites[0]["id"]) if len(sites) == 1 else None
             )
+            # Validate all referenced site_ids exist so we return a clear error instead of FK violation
+            missing_sites: list[str] = []
+            for row in body.points:
+                if row.site_id and str(row.site_id).strip():
+                    try:
+                        sid = str(UUID(str(row.site_id).strip()))
+                        if sid not in existing_site_ids:
+                            missing_sites.append(str(row.site_id).strip())
+                    except (ValueError, TypeError):
+                        pass
+            for eq in body.equipment:
+                if eq.site_id and str(eq.site_id).strip():
+                    try:
+                        sid = str(UUID(str(eq.site_id).strip()))
+                        if sid not in existing_site_ids:
+                            missing_sites.append(str(eq.site_id).strip())
+                    except (ValueError, TypeError):
+                        pass
+            if missing_sites:
+                unique_missing = sorted(set(missing_sites))
+                raise HTTPException(
+                    400,
+                    f"Missing site(s): {', '.join(unique_missing)}. "
+                    "The tagged JSON references site IDs that are not in your database — the LLM may have invented them. "
+                    "Add the site in Step 2 (Sites) and try again, or use « Tag selected site only » and re-tag so the export (and the AI) use your real site ID.",
+                )
             for row in body.points:
                 if row.point_id:
                     # Update existing point
@@ -872,6 +906,17 @@ class TagWithOpenAiRequest(BaseModel):
         description="If true, immediately PUT /data-model/import with the tagged JSON after validation. "
         "If false (default), returns tagged JSON for review without writing to DB.",
     )
+    user_summary: str | None = Field(
+        None,
+        description="Optional description of the HVAC system and feeds/fed_by from the engineer. "
+        "Passed to the LLM to improve Brick tagging; same API as manual export/import.",
+    )
+    max_retries: int = Field(
+        TAGGER_DEFAULT_MAX_RETRIES,
+        ge=TAGGER_MAX_RETRIES_MIN,
+        le=TAGGER_MAX_RETRIES_MAX,
+        description="Number of attempts on Pydantic validation failure. Agent log reports each attempt.",
+    )
 
 
 @router.post(
@@ -890,37 +935,49 @@ def tag_data_model_with_openai(body: TagWithOpenAiRequest):
     stored or logged server-side. Dry-run (auto_import=false) is the default so
     users can review the tagged JSON before committing changes to the DB.
     """
-    from open_fdd.platform.llm_tagger import LlmTaggerError, tag_with_openai as _tag
-
-    export_rows = _build_unified_export(body.site_id)
-    export_dicts = [r.model_dump() for r in export_rows]
-
     try:
-        import_body, usage = _tag(
-            export_rows=export_dicts,
-            api_key=body.openai_api_key,
-            model=body.model,
-        )
-    except LlmTaggerError as exc:
-        raise HTTPException(exc.status_code, exc.detail)
+        from open_fdd.platform.llm_tagger import LlmTaggerError, tag_with_openai as _tag
 
-    meta: dict = {
-        "model": body.model,
-        "point_count": len(import_body.points),
-        "equipment_count": len(import_body.equipment),
-    }
-    if usage:
-        meta["usage"] = usage
+        export_rows = _build_unified_export(body.site_id)
+        export_dicts = [r.model_dump() for r in export_rows]
 
-    if body.auto_import:
-        import_result = import_data_model(import_body)
-        meta["import_result"] = import_result
+        try:
+            import_body, usage, agent_log = _tag(
+                export_rows=export_dicts,
+                api_key=body.openai_api_key,
+                model=body.model,
+                user_summary=body.user_summary,
+                max_retries=body.max_retries,
+            )
+        except LlmTaggerError as exc:
+            raise HTTPException(exc.status_code, exc.detail)
 
-    return {
-        "points": [p.model_dump() for p in import_body.points],
-        "equipment": [e.model_dump() for e in import_body.equipment],
-        "meta": meta,
-    }
+        meta: dict = {
+            "model": body.model,
+            "point_count": len(import_body.points),
+            "equipment_count": len(import_body.equipment),
+            "agent_log": agent_log,
+        }
+        if usage:
+            meta["usage"] = usage
+
+        if body.auto_import:
+            import_result = import_data_model(import_body)
+            meta["import_result"] = import_result
+
+        return {
+            "points": [p.model_dump() for p in import_body.points],
+            "equipment": [e.model_dump() for e in import_body.equipment],
+            "meta": meta,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Tag-with-OpenAI failed")
+        msg = str(exc).strip() or type(exc).__name__
+        if not msg or len(msg) > 500:
+            msg = f"{type(exc).__name__}: see server logs"
+        raise HTTPException(500, msg)
 
 
 # --- TTL: generate from DB (always in sync with CRUD) ---
@@ -934,7 +991,7 @@ def _resolve_site_id_by_name(cur: Any, name: str | None) -> str | None:
     try:
         UUID(s)
         return s
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         pass
     cur.execute(
         """SELECT id FROM sites WHERE name ILIKE %s OR description ILIKE %s LIMIT 1""",
