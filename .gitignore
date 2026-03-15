@@ -166,6 +166,9 @@ NOTES.md
 # FDD trigger file (ephemeral)
 config/.run_fdd_now
 
+# Brick + BACnet TTL generated at runtime (DB + in-memory graph); do not track
+config/data_model.ttl
+
 # Generated docs PDF (scripts/build_docs_pdf.py) — commit pdf/open-fdd-docs.pdf to allow download
 /pdf/*
 !/pdf/.gitkeep

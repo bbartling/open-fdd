@@ -38,9 +38,9 @@ cd open-fdd
 This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
 
 
-### Development: run unit tests
+### Development: branches and tests
 
-No Docker needed for the test suite. From the repo root:
+Work off the **`dev`** branch for day-to-day development; open feature branches from `dev` and merge back to `dev`. Releases are cut from `master`. No Docker needed for the test suite. From the repo root:
 
 ```bash
 python3 -m venv .venv
