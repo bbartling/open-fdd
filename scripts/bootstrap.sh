@@ -2,7 +2,7 @@
 #
 # open-fdd bootstrap: full Docker stack — DB, Grafana, BACnet server, BACnet scraper,
 # weather scraper, FDD loop, host-stats, API, Caddy.
-#
+# ./scripts/bootstrap.sh --reset-data && ./scripts/bootstrap.sh --test
 # Default behavior (no args):
 #   ./scripts/bootstrap.sh
 #     -> builds and starts the FULL stack (Grafana is NOT started by default)

@@ -13,7 +13,7 @@ The Open-FDD **React frontend** (http://localhost:5173 or via Caddy) is the main
 
 | Page | Purpose |
 |------|---------|
-| **Overview** | High-level summary: site selector, FDD/weather status, links into the app. |
+| **Overview** | High-level summary: site selector, FDD/weather status, links into the app. **Overview AI assistant** (read-only chat): ask questions in natural language; the assistant automatically attaches fault and sensor data (last 24h) and offers advice. It receives a **fixed excerpt of the platform docs** (capped size) plus live DB context; it does **not** use conversation history (each request is standalone). Charts and tables can be popped out and downloaded as CSV. **OpenAI is called by the backend**—you provide your API key in the UI; the frontend sends it to the Open-FDD API, which calls OpenAI server-side (key is not stored). Supported models in the UI: **GPT-5 mini** (default), **GPT-5.4 pro**. See [API Reference — Overview AI context and behavior](appendix/api_reference#overview-ai-context-and-behavior). |
 | **OpenFDD Config** | View and edit platform config (GET/PUT `/config`): FDD rule interval, lookback, BACnet, Open-Meteo, graph sync. Current settings are shown in a read-only summary; use the form to change values and Save. |
 | **Points** | List points (optionally by site). Shows external ID, equipment, Brick type, FDD input, unit, polling, last value and time. Use for BACnet discovery (Who-Is, point discovery, add to data model) and CRUD. |
 | **Data model** | Equipment tree, points, export/import, TTL view, SPARQL. Manage sites, equipment, and points; run data-model export/import and SPARQL. |

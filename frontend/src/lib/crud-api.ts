@@ -1,5 +1,7 @@
 import { apiFetch } from "@/lib/api";
 import type {
+  AiAgentRequest,
+  AiAgentResponse,
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
@@ -186,5 +188,13 @@ export function deleteRule(filename: string) {
 export function syncRuleDefinitions() {
   return apiFetch<{ ok: boolean }>("/rules/sync-definitions", {
     method: "POST",
+  });
+}
+
+export function callAiAgent(body: AiAgentRequest) {
+  return apiFetch<AiAgentResponse>("/ai/agent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }

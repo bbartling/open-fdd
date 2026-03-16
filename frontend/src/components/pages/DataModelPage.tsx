@@ -34,6 +34,7 @@ import type {
   TagWithOpenAiRequest,
   TagWithOpenAiResponse,
 } from "@/types/api";
+import { AI_MODEL_OPTIONS, DEFAULT_AI_MODEL } from "@/data/ai-models";
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -68,7 +69,7 @@ export function DataModelPage() {
   const [tagSpecificSite, setTagSpecificSite] = useState(false);
   /** Site to tag when tagSpecificSite is true (multiple sites). Ignored when only one site. */
   const [tagSiteId, setTagSiteId] = useState<string | null>(null);
-  const [openAiModel, setOpenAiModel] = useState("gpt-4o-mini");
+  const [openAiModel, setOpenAiModel] = useState(DEFAULT_AI_MODEL);
   const [aiTagResult, setAiTagResult] = useState<TagWithOpenAiResponse | null>(null);
   const [aiTagError, setAiTagError] = useState<string | null>(null);
   const [aiTagStatus, setAiTagStatus] = useState<string>("");
@@ -562,9 +563,11 @@ export function DataModelPage() {
                           onChange={(e) => setOpenAiModel(e.target.value)}
                           className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         >
-                          <option value="gpt-4o-mini">gpt-4o-mini</option>
-                          <option value="gpt-4o">gpt-4o</option>
-                          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                          {AI_MODEL_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>

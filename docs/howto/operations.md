@@ -46,14 +46,13 @@ Or: `docker compose -f stack/docker-compose.yml up -d` from repo root. Reboot: c
 
 ## New SQL migrations
 
-When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql` … `011_polling.sql`):
+When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql` through `016_equipment_unique_site_name.sql`), apply any new files under `stack/sql/` in order, or re-run bootstrap:
 
 ```bash
 cd stack
-docker compose exec -T db psql -U postgres -d openfdd -f - < sql/008_fdd_run_log.sql
-docker compose exec -T db psql -U postgres -d openfdd -f - < sql/009_analytics_motor_runtime.sql
-docker compose exec -T db psql -U postgres -d openfdd -f - < sql/010_equipment_feeds.sql
-docker compose exec -T db psql -U postgres -d openfdd -f - < sql/011_polling.sql
+for f in sql/008_*.sql sql/009_*.sql sql/010_*.sql sql/011_*.sql sql/012_*.sql sql/013_*.sql sql/014_*.sql sql/015_*.sql sql/016_*.sql; do
+  [ -f "$f" ] && docker compose exec -T db psql -U postgres -d openfdd -f - < "$f" || true
+done
 ```
 
 Or re-run `./scripts/bootstrap.sh` (idempotent; safe for existing DBs).

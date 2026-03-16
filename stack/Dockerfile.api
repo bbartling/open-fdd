@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md MANIFEST.in ./
 COPY open_fdd ./open_fdd
+COPY pdf ./pdf
 RUN pip install --no-cache-dir -e ".[platform,brick]"
 
 EXPOSE 8000

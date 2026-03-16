@@ -122,6 +122,10 @@ The default **`stack/caddy/Caddyfile`** in the repo only proxies **port 80 → f
 		header_up X-Caddy-Auth "your_internal_secret"
 		reverse_proxy api:8000
 	}
+	handle /ai* {
+		header_up X-Caddy-Auth "your_internal_secret"
+		reverse_proxy api:8000
+	}
 
 	# Optional: Grafana when started with --with-grafana
 	# handle /grafana/* {

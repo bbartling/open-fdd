@@ -386,8 +386,11 @@ def run_fdd_loop(
 
 
 def _write_fault_results(results: list[FDDResult]) -> None:
-    """Bulk insert fault_results."""
-    rows = [r.to_row() for r in results]
+    """Bulk insert fault_results. Coerce site_id/equipment_id to str so UUID never reaches psycopg2."""
+    rows = []
+    for r in results:
+        row = r.to_row()
+        rows.append((row[0], str(row[1]), str(row[2]), row[3], row[4], row[5]))
     with get_conn() as conn:
         with conn.cursor() as cur:
             execute_values(

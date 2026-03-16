@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.api import (
+    ai_agent,
     analytics,
     bacnet,
     config as config_router,
@@ -202,6 +203,7 @@ app.include_router(jobs_router.router)
 app.include_router(bacnet.router)
 app.include_router(run_fdd.router)
 app.include_router(ws_router)
+app.include_router(ai_agent.router)
 
 # Legacy config UI at /app/ (optional; removed when using React frontend only)
 _static_dir = Path(__file__).resolve().parent.parent / "static"

@@ -336,3 +336,54 @@ export interface SystemDiskResponse {
     used_pct: number;
   }[];
 }
+
+/** Point-timeseries payload (same series shape as fault-timeseries for charts). */
+export interface PointTimeseriesResponse {
+  period: { start: string; end: string };
+  series: { time: string; metric: string; value: number }[];
+  point_labels?: Record<string, string>;
+}
+
+/** Last N fault_results rows (for tabular display in chat). */
+export interface FaultResultsSampleResponse {
+  rows: {
+    ts: string;
+    site_id: string;
+    equipment_id: string;
+    fault_id: string;
+    flag_value: number;
+    evidence?: unknown;
+  }[];
+  count: number;
+}
+
+/** POST /ai/agent request */
+export interface AiAgentRequest {
+  mode: "overview_chat";
+  message: string;
+  openai_api_key: string;
+  model?: string;
+  site_id?: string | null;
+  include_context?: boolean;
+  /** Point UUIDs to include as a point-timeseries chart (last 7 days). */
+  plot_point_ids?: string[] | null;
+  /** Include last N fault_results rows as table (1–50). */
+  include_table_fault_results?: number | null;
+}
+
+/** POST /ai/agent response */
+export interface AiAgentResponse {
+  mode: "overview_chat";
+  answer: string;
+  context?: Record<string, unknown> | null;
+  /** Fault-timeseries for inline chart (last 7 days). */
+  plots?: FaultTimeseriesResponse | null;
+  /** Faults-by-equipment for inline table (last 7 days). */
+  tables?: FaultsByEquipmentResponse | null;
+  /** Point-timeseries when plot_point_ids was provided. */
+  point_plots?: PointTimeseriesResponse | null;
+  /** Last N fault_results when include_table_fault_results was set. */
+  table_fault_results?: FaultResultsSampleResponse | null;
+  /** When the last FDD run failed, the raw error message (for UI alert). */
+  last_fdd_error?: string | null;
+}

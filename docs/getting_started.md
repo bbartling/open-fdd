@@ -72,7 +72,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
 | `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
 | `--test` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
-| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `weather-scraper`. |
+| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
 | `--build-all` | Rebuild and restart all services; then exit. |
 | `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |
 | `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |
