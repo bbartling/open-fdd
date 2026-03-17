@@ -59,31 +59,10 @@ pytest -v
 
 ## AI and data modeling
 
-### Overview AI agent (read-only)
+- **Overview AI assistant (read-only):** On the **Overview** page you can ask questions like “How is the HVAC running?” or “What faults are configured?”. The backend attaches live data and a docs excerpt, then calls OpenAI with your key (never stored) to produce a read‑only summary with charts/tables. See the **Overview AI** section in the docs for full behavior and API details.
+- **Data model export / AI-assisted tagging:** On the **Data model** page you can export the RDF model to JSON, enhance it either manually or with an LLM (Brick types, feeds/fed_by, rule inputs), and re‑import it. The in‑app “OpenAI API Assist” uses a canonical prompt and the same import API as manual workflows.
 
-On the **Overview** page, the **Overview AI assistant** lets you ask questions in natural language (e.g. “How is the HVAC running?” or “What faults are configured?”). The backend attaches live fault and sensor data (last 24h) and an excerpt of the platform docs, then calls OpenAI (you supply your API key in the UI; it is not stored). The agent answers from that context only and does not change the system. Charts and tables can be popped out and downloaded as CSV. See [docs/appendix/api_reference.md#overview-ai-context-and-behavior](docs/appendix/api_reference.md#overview-ai-context-and-behavior).
-
-### Data model: export → enhance → re-import
-
-You can improve the RDF data model by exporting it to JSON, enhancing it (with or without an LLM), then re-importing.
-
-- **Without LLM (standalone):** Export the data model to JSON (frontend **Data model** page or `GET /data-model/export`), edit the JSON manually (e.g. add Brick types, equipment, feeds/fed-by), then import via the frontend or `PUT /data-model/import`. No OpenAI or other LLM calls required.
-- **With LLM (AI-assisted):** Export to JSON, then use the in-app **“OpenAI API Assist”** (Tag with OpenAI) or an external LLM (e.g. ChatGPT) to tag BACnet points with Brick classes, rule inputs, and equipment. Copy the **canonical prompt** from [config/canonical_llm_prompt.txt](config/canonical_llm_prompt.txt) and the YAML files for the task; the LLM returns tagged JSON that you import back. The backend loads the prompt from `config/canonical_llm_prompt.txt` when present (fallback: built-in prompt). For **deterministic mapping** (repeatable, rules-style), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow**, see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
-
-After reviewing the HVAC system from a systems perspective, the engineer can chat with the LLM about the modeling task; the LLM adds metadata (Brick classes, feeds/fed-by). The final JSON is imported into Open-FDD and parsed into the data model.
-
-<details>
-<summary>Canonical prompt (inline copy; prefer editing <a href="config/canonical_llm_prompt.txt">config/canonical_llm_prompt.txt</a>)</summary>
-
-
-
-</details>
-
-The final step is for the engineer to perform robust SPARQL query testing to verify that the data model returns the exact expected responses needed to summarize the HVAC system. For example, if the site contains a VAV AHU system with chiller-based cooling, the engineer should test queries that validate the connected relationships in the model, including those needed to support control algorithms and fault detection logic.
-
-There is a SPARQL cookbook in the documentation that can be used for this purpose. These tests should confirm that the data model returns the expected feed and fed-by relationships for the HVAC system. From there, additional SPARQL queries can be developed for algorithm-specific needs. For example, a Guideline 36 duct static pressure reset sequence may require querying for all BACnet devices and point addresses associated with VAV boxes served by a given AHU, including damper positions or commands, airflow sensor values and setpoints, and the AHU duct static pressure sensor and static pressure setpoint.
-
-Overall, SPARQL testing should be used by the engineer to validate that the data model fully supports the optimization algorithms and fault rules planned for the site.
+For end‑to‑end examples, SPARQL validation patterns, and the canonical prompts/templates, see the modeling docs under `docs/modeling/` and the API appendix.
 
 
 ## The open-fdd Pyramid
@@ -112,9 +91,7 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 ## Contributing
 
-Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [docs/contributing.md](docs/contributing.md) for how to get started.
-
-We use a **`develop`** branch for integration. Open pull requests **into `develop`**, not `master`. Branch from `develop` for your work; `master` is reserved for releases and is protected.
+Contributions welcome — Please use the **`develop`** branch for integration. Open pull requests **into `develop`**, not `master`. Branch from `develop` for your work; `master` is reserved for releases and is protected. PR's to the `master` branch will be rejected.
 
 ### Syncing your fork with upstream
 
@@ -133,11 +110,11 @@ git push origin develop
 
 Then rebase or merge `develop` into your feature branch as needed. Use `git pull --rebase upstream develop` on your branch if you prefer a linear history.
 
+### Run unit tests before pushing to GitHub
+
 ```bash
 ~/open-fdd$ bash scripts/bootstrap.sh --test
 ```
-
-> **NOTE:** Do not open pull requests from or push to `master`. Contributions go through `develop`.
 
 
 ---

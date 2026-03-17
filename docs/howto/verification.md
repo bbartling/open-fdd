@@ -92,7 +92,7 @@ You can confirm that the BACnet scraper, weather scraper, and FDD loop are runni
 
 3. **DB — recent BACnet-only rows:**  
    `docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT ts, p.external_id, tr.value FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id WHERE p.bacnet_device_id IS NOT NULL ORDER BY tr.ts DESC LIMIT 10;"`  
-   Recent `ts` and rows = scraper is writing. Empty or very old `ts` = no BACnet points in the data model, or scraper not reaching the gateway.
+   Recent `ts` and rows = scraper is writing. Empty or stale `ts` (older than the expected scrape interval) = no BACnet points in the data model, or scraper not reaching the gateway.
 
 **Prerequisites for BACnet data:** Points in the data model must have `bacnet_device_id`, `object_identifier`, and `polling = true` (or equivalent). Add them via BACnet discovery → Add to data model, or data-model import. If there are no such points, the scraper has nothing to poll.
 

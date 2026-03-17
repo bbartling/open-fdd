@@ -90,6 +90,11 @@ export function DataModelPage() {
   const faults = selectedSiteId ? faultsSite : faultsAll;
   const equipmentLoading = selectedSiteId ? equipmentSiteLoading : equipmentAllLoading;
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
+  const appendAiMessage = useCallback(
+    (msg: { role: "user" | "assistant"; content: string }) =>
+      setAiMessages((prev) => [...prev, msg].slice(-100)),
+    [],
+  );
   /** site_id to send to tag-with-openai: one site → that site; multiple → tagSpecificSite ? tagSiteId : null */
   const tagWithAiSiteId = useMemo(() => {
     if (sites.length === 0) return null;
@@ -184,13 +189,10 @@ export function DataModelPage() {
       } else {
         summaryParts.push("Review the proposed tags below, then click Import when you're satisfied.");
       }
-      setAiMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: summaryParts.join(" "),
-        },
-      ]);
+      appendAiMessage({
+        role: "assistant",
+        content: summaryParts.join(" "),
+      });
     },
     onError: (err) => {
       let msg = err.message;
@@ -203,13 +205,10 @@ export function DataModelPage() {
       setAiTagResult(null);
       setAiTagPhase("error");
       setAiTagStatus("Tagging failed. See assistant message below.");
-      setAiMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: msg,
-        },
-      ]);
+      appendAiMessage({
+        role: "assistant",
+        content: msg,
+      });
     },
   });
 
@@ -290,7 +289,7 @@ export function DataModelPage() {
     setAiTagError(null);
     setAiTagResult(null);
     const question = agentChatPrompt?.trim() || "Tag current data model for Brick types and feeds/fed_by.";
-    setAiMessages((prev) => [...prev, { role: "user", content: question }]);
+    appendAiMessage({ role: "user", content: question });
     tagWithAiMutation.mutate({
       site_id: tagWithAiSiteId,
       openai_api_key: openAiKey,

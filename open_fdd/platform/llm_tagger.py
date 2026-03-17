@@ -385,16 +385,19 @@ def tag_with_openai(
 
         try:
             client = OpenAI(api_key=api_key.strip(), timeout=timeout)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
+            request_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": _get_system_prompt()},
                     {"role": "user", "content": user_message},
                 ],
-                response_format={"type": "json_object"},
-                # Some models (e.g. gpt-5-mini) only support the default temperature=1.
-                temperature=1,
-            )
+                "response_format": {"type": "json_object"},
+            }
+            # gpt-5 models reject explicit temperature; for older models we keep output deterministic.
+            if not model.startswith("gpt-5"):
+                request_kwargs["temperature"] = 0
+
+            response = client.chat.completions.create(**request_kwargs)
         except AuthenticationError:
             raise LlmTaggerError(
                 401, "Invalid OpenAI API key. Check your key and try again."

@@ -443,6 +443,11 @@ def _call_openai_chat(
         logger.error("OpenAI chat call failed: %s", type(exc).__name__, exc_info=False)
         raise AiAgentError(502, f"OpenAI API error: {type(exc).__name__}") from exc
 
+    if not response.choices:
+        raise AiAgentError(
+            502,
+            "OpenAI returned no response choices. Try again or check the model name.",
+        )
     content = (response.choices[0].message.content or "").strip()
     if not content:
         raise AiAgentError(
@@ -484,6 +489,9 @@ def ai_agent(body: AiAgentRequest) -> AiAgentResponse:
         )
         model = "gpt-5-mini"
 
+    # Use the requested model directly; let OpenAI validate it.
+    model = body.model
+
     try:
         answer = _call_openai_chat(
             api_key=body.openai_api_key,
@@ -494,8 +502,8 @@ def ai_agent(body: AiAgentRequest) -> AiAgentResponse:
     except AiAgentError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
 
-    # Default window for plots/tables: last 24 hours. This is short enough for
-    # quick troubleshooting but still useful for “what just happened?” questions.
+    # Default window for plots/tables: today and yesterday (2-day date range).
+    # Short enough for quick troubleshooting but still useful for “what just happened?” questions.
     end_date = date.today()
     start_date = end_date - timedelta(days=1)
     try:

@@ -467,12 +467,11 @@ function OverviewChatFaultResultsTable({
 
 function getStoredAiSettings() {
   try {
-    const raw = window.localStorage.getItem("openfdd_ai_settings");
-    if (!raw) return { apiKey: "", model: DEFAULT_AI_MODEL };
-    const parsed = JSON.parse(raw) as { apiKey?: string; model?: string };
+    const storedModel = window.localStorage.getItem("openfdd_ai_model");
+    const apiKey = window.sessionStorage.getItem("openfdd_ai_api_key") ?? "";
     return {
-      apiKey: parsed.apiKey ?? "",
-      model: parsed.model ?? DEFAULT_AI_MODEL,
+      apiKey,
+      model: storedModel ?? DEFAULT_AI_MODEL,
     };
   } catch {
     return { apiKey: "", model: DEFAULT_AI_MODEL };
@@ -481,10 +480,8 @@ function getStoredAiSettings() {
 
 function saveAiSettings(apiKey: string, model: string) {
   try {
-    window.localStorage.setItem(
-      "openfdd_ai_settings",
-      JSON.stringify({ apiKey, model }),
-    );
+    window.localStorage.setItem("openfdd_ai_model", model);
+    window.sessionStorage.setItem("openfdd_ai_api_key", apiKey);
   } catch {
     // ignore storage errors
   }

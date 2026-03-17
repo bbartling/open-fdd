@@ -119,7 +119,7 @@ def load_timeseries_for_equipment(
                 SELECT tr.ts, p.external_id, tr.value
                 FROM timeseries_readings tr
                 JOIN points p ON tr.point_id = p.id
-                WHERE tr.point_id::text = ANY(%s)
+                WHERE tr.point_id = ANY(%s::uuid[])
                   AND tr.ts >= %s AND tr.ts <= %s
                 """,
                 (point_ids, start_ts, end_ts),

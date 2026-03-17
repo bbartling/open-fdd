@@ -90,6 +90,9 @@ def test_load_timeseries_for_equipment_uses_string_site_id(monkeypatch):
     calls: list[tuple[tuple, dict]] = []
 
     class FakeCursor:
+        def __init__(self, which_cursor: int):
+            self._which_cursor = which_cursor
+
         def __enter__(self):
             return self
 
@@ -97,13 +100,25 @@ def test_load_timeseries_for_equipment_uses_string_site_id(monkeypatch):
             return False
 
         def execute(self, _query, params=None):
-            # Record params for assertion; simulate empty result.
             calls.append((params or (), {}))
 
         def fetchall(self):
-            return []
+            # Cursor 0: points query → one row so second get_conn/execute runs.
+            # Cursor 1: timeseries query → row with ts/external_id/value so pivot_table succeeds.
+            if self._which_cursor == 0:
+                return [{"id": "11111111-1111-1111-1111-111111111111", "external_id": "p1"}]
+            return [
+                {
+                    "ts": datetime(2024, 1, 1, 0, 0),
+                    "external_id": "p1",
+                    "value": 1.0,
+                }
+            ]
 
     class FakeConn:
+        def __init__(self):
+            self._cursor_calls = 0
+
         def __enter__(self):
             return self
 
@@ -111,7 +126,9 @@ def test_load_timeseries_for_equipment_uses_string_site_id(monkeypatch):
             return False
 
         def cursor(self):
-            return FakeCursor()
+            c = FakeCursor(self._cursor_calls)
+            self._cursor_calls += 1
+            return c
 
     with patch.object(loop, "get_conn", return_value=FakeConn()):
         df = loop.load_timeseries_for_equipment(
@@ -122,9 +139,9 @@ def test_load_timeseries_for_equipment_uses_string_site_id(monkeypatch):
             column_map={},
         )
 
-    # No data is fine (we mocked fetchall to be empty), but the execute params
-    # must all be plain strings, not uuid.UUID instances.
-    assert df is None
-    assert calls, "Expected at least one DB call"
+    # We don't care about df shape here, only that both queries ran with non-UUID params.
+    assert len(calls) >= 2, "Expected both points and timeseries query"
     first_params = calls[0][0]
     assert all(not hasattr(p, "hex") for p in first_params), "UUID objects should not be passed to psycopg2"
+    second_params = calls[1][0]
+    assert all(not hasattr(p, "hex") for p in second_params), "UUID objects should not be passed to psycopg2"
