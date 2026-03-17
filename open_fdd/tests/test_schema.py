@@ -1,6 +1,7 @@
 """Tests for canonical FDD schema."""
 
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -80,3 +81,50 @@ def test_events_from_flag_series():
     assert events[0].fault_id == "hp_discharge_cold_flag"
     # 10:05 to 10:15 = 10 min = 600 sec
     assert events[0].duration_seconds == 600
+
+
+def test_load_timeseries_for_equipment_uses_string_site_id(monkeypatch):
+    """Regression: load_timeseries_for_equipment must not pass UUID objects to psycopg2."""
+    from open_fdd.platform import loop
+
+    calls: list[tuple[tuple, dict]] = []
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, _query, params=None):
+            # Record params for assertion; simulate empty result.
+            calls.append((params or (), {}))
+
+        def fetchall(self):
+            return []
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def cursor(self):
+            return FakeCursor()
+
+    with patch.object(loop, "get_conn", return_value=FakeConn()):
+        df = loop.load_timeseries_for_equipment(
+            site_id="c7c9dfb8-9c1f-4a1b-bf3f-9f3e5aa4f111",
+            equipment_id="AHU-1",
+            start_ts=datetime(2024, 1, 1),
+            end_ts=datetime(2024, 1, 2),
+            column_map={},
+        )
+
+    # No data is fine (we mocked fetchall to be empty), but the execute params
+    # must all be plain strings, not uuid.UUID instances.
+    assert df is None
+    assert calls, "Expected at least one DB call"
+    first_params = calls[0][0]
+    assert all(not hasattr(p, "hex") for p in first_params), "UUID objects should not be passed to psycopg2"

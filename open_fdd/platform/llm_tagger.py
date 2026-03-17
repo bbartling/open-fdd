@@ -392,7 +392,8 @@ def tag_with_openai(
                     {"role": "user", "content": user_message},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0,
+                # Some models (e.g. gpt-5-mini) only support the default temperature=1.
+                temperature=1,
             )
         except AuthenticationError:
             raise LlmTaggerError(

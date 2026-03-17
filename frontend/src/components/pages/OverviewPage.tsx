@@ -63,7 +63,7 @@ function downloadCsv(filename: string, csvContent: string) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function faultTimeseriesToCsv(data: FaultTimeseriesResponse): string {
@@ -201,7 +201,9 @@ function OverviewChatFaultChart({
   }, [data]);
   const metrics = useMemo(() => {
     const set = new Set<string>();
-    data?.series?.forEach((r) => set.add(r.metric));
+    for (const r of data?.series ?? []) {
+      set.add(r.metric);
+    }
     return Array.from(set);
   }, [data]);
   const config: ChartConfig = useMemo(() => {
@@ -338,7 +340,9 @@ function OverviewChatPointChart({
   }, [data]);
   const metrics = useMemo(() => {
     const set = new Set<string>();
-    data?.series?.forEach((r) => set.add(r.metric));
+    for (const r of data?.series ?? []) {
+      set.add(r.metric);
+    }
     return Array.from(set);
   }, [data]);
   const config: ChartConfig = useMemo(() => {
@@ -572,6 +576,17 @@ function OverviewAiChat() {
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2000);
   }
+
+  useEffect(() => {
+    if (!popout) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPopout(null);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [popout]);
 
   return (
     <Card className="mt-6">

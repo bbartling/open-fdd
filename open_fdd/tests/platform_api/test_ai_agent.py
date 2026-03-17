@@ -63,7 +63,7 @@ def test_ai_agent_overview_chat_success():
     return_value=fake_tables,
   ), patch(
     "open_fdd.platform.api.ai_agent.get_point_ids_for_agent",
-    return_value=[],
+    return_value=["point-1", "point-2"],
   ), patch(
     "open_fdd.platform.api.ai_agent.fetch_point_timeseries_data",
     return_value=fake_point_plots,

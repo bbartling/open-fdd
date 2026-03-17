@@ -80,6 +80,22 @@ You can confirm that the BACnet scraper, weather scraper, and FDD loop are runni
 
 **BACnet scraper:**
 
+**Quick verification (is BACnet scraping?):**
+
+1. **Scraper running and logging:**  
+   `docker logs openfdd_bacnet_scraper --tail 30`  
+   Look for "Scraped N points" or similar; no repeated connection/401 errors.
+
+2. **API — latest readings (BACnet + weather):**  
+   `curl -s "http://localhost:8000/timeseries/latest"`  
+   If scraping is working, you get at least one object with `point_id`, `value`, and a recent `ts` (e.g. within the last scrape interval). With auth: `curl -s -H "Authorization: Bearer YOUR_KEY" "http://localhost:8000/timeseries/latest"`.
+
+3. **DB — recent BACnet-only rows:**  
+   `docker exec openfdd_timescale psql -U postgres -d openfdd -t -c "SELECT ts, p.external_id, tr.value FROM timeseries_readings tr JOIN points p ON p.id = tr.point_id WHERE p.bacnet_device_id IS NOT NULL ORDER BY tr.ts DESC LIMIT 10;"`  
+   Recent `ts` and rows = scraper is writing. Empty or very old `ts` = no BACnet points in the data model, or scraper not reaching the gateway.
+
+**Prerequisites for BACnet data:** Points in the data model must have `bacnet_device_id`, `object_identifier`, and `polling = true` (or equivalent). Add them via BACnet discovery → Add to data model, or data-model import. If there are no such points, the scraper has nothing to poll.
+
 - **Grafana:** Build a BACnet dashboard from the [Grafana SQL cookbook](grafana_cookbook) (Recipe 1), or run the same SQL in **Explore**.
 - **API:** `GET /points?site_id=<uuid>` and check which points have `bacnet_device_id` and `object_identifier`. Recent data appears in `timeseries_readings` (see Data flow check above).
 

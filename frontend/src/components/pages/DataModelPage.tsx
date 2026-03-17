@@ -74,6 +74,7 @@ export function DataModelPage() {
   const [aiTagError, setAiTagError] = useState<string | null>(null);
   const [aiTagStatus, setAiTagStatus] = useState<string>("");
   const [aiTagPhase, setAiTagPhase] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [aiMessages, setAiMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const { data: equipmentAll = [], isLoading: equipmentAllLoading } = useAllEquipment();
@@ -171,12 +172,44 @@ export function DataModelPage() {
       } else {
         setAiTagStatus("Tagging complete. Review the generated JSON in Import and click Import when ready.");
       }
+
+      const summaryParts: string[] = [];
+      summaryParts.push(
+        `I tagged ${data.meta.point_count} points and ${data.meta.equipment_count} equipment using ${data.meta.model}.`
+      );
+      if (data.meta.import_result) {
+        summaryParts.push(
+          `Auto-import created ${data.meta.import_result.created ?? 0} and updated ${data.meta.import_result.updated ?? 0} items.`
+        );
+      } else {
+        summaryParts.push("Review the proposed tags below, then click Import when you're satisfied.");
+      }
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: summaryParts.join(" "),
+        },
+      ]);
     },
     onError: (err) => {
-      setAiTagError(err.message);
+      let msg = err.message;
+      if (msg.includes("Equipment name") && msg.includes("not found for site")) {
+        msg =
+          "I tried to tag using an equipment name (for example 'VAV-1') that does not exist for this site. " +
+          "Create that equipment in Step 2 (Sites/Equipment) or adjust the names/UUIDs in the data model, then try tagging again.";
+      }
+      setAiTagError(msg);
       setAiTagResult(null);
       setAiTagPhase("error");
-      setAiTagStatus(`Tagging failed: ${err.message}`);
+      setAiTagStatus("Tagging failed. See assistant message below.");
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: msg,
+        },
+      ]);
     },
   });
 
@@ -256,6 +289,8 @@ export function DataModelPage() {
     }
     setAiTagError(null);
     setAiTagResult(null);
+    const question = agentChatPrompt?.trim() || "Tag current data model for Brick types and feeds/fed_by.";
+    setAiMessages((prev) => [...prev, { role: "user", content: question }]);
     tagWithAiMutation.mutate({
       site_id: tagWithAiSiteId,
       openai_api_key: openAiKey,
@@ -533,6 +568,26 @@ export function DataModelPage() {
                     <p className="text-sm text-muted-foreground">
                       In-house agent: describe your HVAC system and feeds/fed_by in the chat below. The agent calls the same export/import API with retries; then validate on the Data Model Testing tab and pass/fail the result.
                     </p>
+                    <div className="h-56 overflow-y-auto rounded-md border bg-muted/40 p-3 text-xs space-y-2">
+                      {aiMessages.length === 0 ? (
+                        <p className="italic text-muted-foreground">
+                          e.g. “Anything need to be tagged or is it good enough? AHU feeds VAV and VAV feeds zone temp; also set fed_by relationships.”
+                        </p>
+                      ) : (
+                        aiMessages.map((m, idx) => (
+                          <div
+                            key={idx}
+                            className={`max-w-[90%] rounded-md px-2 py-1 ${
+                              m.role === "user"
+                                ? "ml-auto bg-primary text-primary-foreground"
+                                : "mr-auto w-full max-w-md bg-background border text-foreground"
+                            }`}
+                          >
+                            <div className="whitespace-pre-wrap text-xs">{m.content}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium text-muted-foreground">Chat prompt (describe HVAC and relationships for AI to tag)</label>
                       <textarea

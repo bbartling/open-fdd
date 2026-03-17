@@ -300,7 +300,9 @@ def _build_overview_context(site_filter: str | None = None) -> dict[str, Any]:
             }
         except Exception:
             # Non-fatal; just omit schedules if unavailable
-            pass
+            logger.debug(
+                "Could not fetch graph serialization status", exc_info=True
+            )
     except Exception:
         logger.exception("Failed to build fault/FDD summary for AI agent")
         context.setdefault("warnings", []).append(
@@ -402,7 +404,7 @@ def _call_openai_chat(
         raise AiAgentError(
             500,
             "openai package is not installed. Add it with: pip install 'openai>=1.0'",
-        )
+        ) from None
 
     OpenAI = getattr(openai_mod, "OpenAI", None)
     AuthenticationError = getattr(openai_mod, "AuthenticationError", Exception)
@@ -423,23 +425,23 @@ def _call_openai_chat(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.2,
+            temperature=1,  # Some models (e.g. gpt-5-mini) only support default 1
         )
-    except AuthenticationError:
+    except AuthenticationError as err:
         raise AiAgentError(
             401, "Invalid OpenAI API key. Check your key and try again."
-        )
-    except RateLimitError:
+        ) from err
+    except RateLimitError as err:
         raise AiAgentError(
             429, "OpenAI rate limit exceeded. Wait a moment and try again."
-        )
-    except APITimeoutError:
-        raise AiAgentError(504, f"OpenAI API timed out after {int(timeout)}s.")
-    except BadRequestError as exc:
-        raise AiAgentError(400, f"OpenAI rejected the request: {exc}")
+        ) from err
+    except APITimeoutError as err:
+        raise AiAgentError(504, f"OpenAI API timed out after {int(timeout)}s.") from err
+    except BadRequestError as err:
+        raise AiAgentError(400, f"OpenAI rejected the request: {err}") from err
     except Exception as exc:
         logger.error("OpenAI chat call failed: %s", type(exc).__name__, exc_info=False)
-        raise AiAgentError(502, f"OpenAI API error: {type(exc).__name__}")
+        raise AiAgentError(502, f"OpenAI API error: {type(exc).__name__}") from exc
 
     content = (response.choices[0].message.content or "").strip()
     if not content:
@@ -471,15 +473,26 @@ def ai_agent(body: AiAgentRequest) -> AiAgentResponse:
     context = _build_overview_context(site_filter=body.site_id)
     system_prompt, user_prompt = _build_overview_prompt(context, body.message)
 
+    # Validate model: gpt-5-mini is the only guaranteed chat/completions model here.
+    model = body.model
+    supported_chat_models = {"gpt-5-mini"}
+    if model not in supported_chat_models:
+        logger.warning(
+            "Requested model %s is not supported for chat/completions; "
+            "falling back to gpt-5-mini for overview_chat.",
+            model,
+        )
+        model = "gpt-5-mini"
+
     try:
         answer = _call_openai_chat(
             api_key=body.openai_api_key,
-            model=body.model,
+            model=model,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
         )
     except AiAgentError as exc:
-        raise HTTPException(exc.status_code, exc.detail)
+        raise HTTPException(exc.status_code, exc.detail) from exc
 
     # Default window for plots/tables: last 24 hours. This is short enough for
     # quick troubleshooting but still useful for “what just happened?” questions.

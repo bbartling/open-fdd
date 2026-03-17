@@ -268,7 +268,11 @@ def get_fault_timeseries(
     site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
     start_date: date = Query(..., description="Start of range"),
     end_date: date = Query(..., description="End of range"),
-    bucket: str = Query("hour", description="Time bucket: hour or day"),
+    bucket: str = Query(
+        "hour",
+        description="Time bucket: hour or day",
+        pattern="^(hour|day)$",
+    ),
 ):
     """
     Time-series of fault flag values (for React/Grafana-style charts).

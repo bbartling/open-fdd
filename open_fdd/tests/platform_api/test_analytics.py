@@ -73,7 +73,7 @@ def test_fault_timeseries_returns_shape():
     assert data["series"][0]["metric"] == "fc1" and data["series"][0]["value"] == 1.0
 
 
-def test_fault_timeseries_invalid_bucket_defaults_to_hour():
+def test_fault_timeseries_invalid_bucket_rejected():
     with patch("open_fdd.platform.api.analytics.get_conn") as mock_conn:
         conn = MagicMock()
         cur = MagicMock()
@@ -87,8 +87,7 @@ def test_fault_timeseries_invalid_bucket_defaults_to_hour():
         r = client.get(
             "/analytics/fault-timeseries?start_date=2025-01-01&end_date=2025-01-07&bucket=invalid"
         )
-    assert r.status_code == 200
-    assert r.json()["bucket"] == "hour"
+    assert r.status_code == 422
 
 
 def test_system_host_empty_when_no_table():
