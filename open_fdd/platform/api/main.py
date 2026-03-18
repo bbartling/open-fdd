@@ -3,6 +3,7 @@
 import importlib.metadata
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -273,7 +274,18 @@ def capabilities():
     """
     Return version and feature flags. Use for discovery and to decide whether to
     use WebSocket (/ws/events), fault state (/faults/active), jobs (/jobs/*), or BACnet write.
+
+    Open‑Claw-only AI:
+    - If Open‑Claw is configured (base URL + API key present), ai_available=true.
+    - Otherwise ai_available=false and ai_backend="disabled".
     """
+    s = get_platform_settings()
+    open_claw_ready = bool(getattr(s, "open_claw_base_url", None)) and bool(
+        getattr(s, "open_claw_api_key", None)
+    )
+    ai_backend: Literal["open_claw", "disabled"] = (
+        "open_claw" if open_claw_ready else "disabled"
+    )
     return CapabilityResponse(
         version=_app_version(),
         features={
@@ -282,6 +294,8 @@ def capabilities():
             "jobs": True,
             "bacnet_write": True,
         },
+        ai_available=open_claw_ready,
+        ai_backend=ai_backend,
     )
 
 

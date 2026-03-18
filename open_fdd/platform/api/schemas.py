@@ -1,7 +1,7 @@
 """API response schemas for capabilities, errors, events, faults, and jobs."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,16 @@ class CapabilityResponse(BaseModel):
     features: dict[str, bool] = Field(
         ...,
         description="Feature flags: websocket, fault_state, jobs, bacnet_write",
+    )
+    # Open‑Claw-only AI: when Open‑Claw isn’t configured, the UI should hide AI
+    # controls and AI endpoints should return 503.
+    ai_available: bool = Field(
+        False,
+        description="If false, AI features are disabled (Open‑Claw not configured).",
+    )
+    ai_backend: Literal["open_claw", "disabled"] = Field(
+        "disabled",
+        description="Effective AI backend: open_claw when enabled; disabled otherwise.",
     )
 
 

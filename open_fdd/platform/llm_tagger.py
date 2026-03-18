@@ -300,12 +300,13 @@ def _get_system_prompt() -> str:
 def tag_with_openai(
     export_rows: list[dict[str, Any]],
     api_key: str,
+    base_url: str | None = None,
     model: str = "gpt-4o",
     timeout: float = 120.0,
     user_summary: str | None = None,
     max_retries: int = TAGGER_DEFAULT_MAX_RETRIES,
 ) -> tuple[Any, dict[str, Any] | None, list[dict[str, Any]]]:
-    """Call OpenAI to tag *export_rows* with Brick types and return (DataModelImportBody, usage_dict, agent_log).
+    """Call OpenAI/OpenAI-compatible LLM to tag *export_rows* with Brick types and return (DataModelImportBody, usage_dict, agent_log).
 
     If *user_summary* is provided, it is prepended to the user message so the LLM can use the
     engineer's description of the HVAC system and feeds/fed_by. On Pydantic validation failure,
@@ -384,7 +385,10 @@ def tag_with_openai(
             )
 
         try:
-            client = OpenAI(api_key=api_key.strip(), timeout=timeout)
+            client_kwargs: dict[str, Any] = {"api_key": api_key.strip(), "timeout": timeout}
+            if base_url:
+                client_kwargs["base_url"] = base_url.strip()
+            client = OpenAI(**client_kwargs)
             request_kwargs: dict[str, Any] = {
                 "model": model,
                 "messages": [

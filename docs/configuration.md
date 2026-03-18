@@ -53,6 +53,22 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 ---
 
+## AI backend (Open‑Claw only)
+
+Open‑FDD AI features (Overview chat and data model tagging) are **Open‑Claw-only**.
+
+When `OFDD_OPEN_CLAW_BASE_URL` and `OFDD_OPEN_CLAW_API_KEY` are set in `stack/.env` (or injected into the API container env), the API uses them server-side and the frontend enables AI controls. If either value is missing, the API returns `503` for AI endpoints and the frontend hides/disables AI controls.
+
+| Variable | Description |
+|----------|-------------|
+| `OFDD_OPEN_CLAW_BASE_URL` | Base URL of the Open‑Claw API (e.g. `https://your-open-claw.example/v1`). |
+| `OFDD_OPEN_CLAW_API_KEY` | API key for Open‑Claw. If your Open‑Claw deployment uses OpenAI, you can set this to your **OpenAI API key**; otherwise use the key provided by your Open‑Claw host. |
+
+Data model **export/import (JSON)** works without any AI—manual copy-paste or external LLM is always an option.
+
+
+---
+
 ## Services that read config from the API (BACnet scraper)
 
 Platform config (e.g. **Scrape interval (min)**) is stored in the data model and served by **GET /config**. Some services need to call the API to get that config so changes in the Config UI take effect.

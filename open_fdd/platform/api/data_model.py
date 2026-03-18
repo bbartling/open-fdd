@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 import psycopg2
@@ -893,10 +893,6 @@ class TagWithOpenAiRequest(BaseModel):
         None,
         description="Filter by site (UUID, name, or description) — same as GET /data-model/export?site_id=X. Omit for all sites.",
     )
-    openai_api_key: str = Field(
-        ...,
-        description="OpenAI API key (sk-...). Used only for this request; never stored server-side.",
-    )
     model: str = Field(
         "gpt-4o",
         description="OpenAI model to use (e.g. gpt-4o, gpt-4o-mini, gpt-4-turbo).",
@@ -931,12 +927,25 @@ def tag_data_model_with_openai(body: TagWithOpenAiRequest):
     """Export the current data model, send it to OpenAI using the canonical prompt,
     validate the tagged response against DataModelImportBody, and optionally import it.
 
-    The openai_api_key is used only for the duration of this request and is never
-    stored or logged server-side. Dry-run (auto_import=false) is the default so
-    users can review the tagged JSON before committing changes to the DB.
+    Open‑Claw-only AI: when Open‑Claw is not configured, this endpoint returns 503.
+    When enabled, the server uses OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY
+    (OpenAI-compatible) and ignores any client-supplied key.
     """
     try:
         from open_fdd.platform.llm_tagger import LlmTaggerError, tag_with_openai as _tag
+
+        settings = get_platform_settings()
+        open_claw_ready = bool(getattr(settings, "open_claw_base_url", None)) and bool(
+            getattr(settings, "open_claw_api_key", None)
+        )
+        if not open_claw_ready:
+            raise HTTPException(
+                503,
+                "AI disabled: Open‑Claw is not configured. Bootstrap with --with-open-claw and set OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY.",
+            )
+
+        api_key = settings.open_claw_api_key or ""
+        base_url = settings.open_claw_base_url
 
         export_rows = _build_unified_export(body.site_id)
         export_dicts = [r.model_dump() for r in export_rows]
@@ -944,7 +953,8 @@ def tag_data_model_with_openai(body: TagWithOpenAiRequest):
         try:
             import_body, usage, agent_log = _tag(
                 export_rows=export_dicts,
-                api_key=body.openai_api_key,
+                api_key=api_key,
+                base_url=base_url,
                 model=body.model,
                 user_summary=body.user_summary,
                 max_retries=body.max_retries,

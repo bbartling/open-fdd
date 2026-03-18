@@ -81,6 +81,13 @@ class PlatformSettings(BaseSettings):
     # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.
     caddy_internal_secret: Optional[str] = None
 
+    # Open‑Claw-only AI:
+    # Effective AI availability is determined by whether open_claw_base_url and
+    # open_claw_api_key are set. When missing, AI endpoints return 503.
+    ai_backend: str = "disabled"
+    open_claw_base_url: Optional[str] = None
+    open_claw_api_key: Optional[str] = None
+
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 
 
@@ -91,7 +98,8 @@ def get_platform_settings() -> PlatformSettings:
     s = PlatformSettings()
     overlay = get_config_overlay()
     key_to_attr = {
-        "bacnet_enabled": "bacnet_scrape_enabled"
+        "bacnet_enabled": "bacnet_scrape_enabled",
+        "ai_backend": "ai_backend",
     }  # RDF/API name -> PlatformSettings attr
     for k, v in overlay.items():
         attr = key_to_attr.get(k, k)

@@ -160,7 +160,6 @@ export interface DataModelImportResponse {
 /** POST /data-model/tag-with-openai request */
 export interface TagWithOpenAiRequest {
   site_id?: string | null;
-  openai_api_key: string;
   model: string;
   auto_import?: boolean;
   /** Engineer's description of HVAC system and feeds/fed_by for the in-house agent. */
@@ -208,6 +207,10 @@ export interface Capabilities {
     jobs: boolean;
     bacnet_write: boolean;
   };
+  /** When false, Open‑Claw AI is disabled and the UI should hide AI controls. */
+  ai_available: boolean;
+  /** Effective AI backend: open_claw when enabled, disabled otherwise. */
+  ai_backend: "open_claw" | "disabled";
 }
 
 /** POST /bacnet/server_hello response (API returns { ok, body? } where body is JSON-RPC). */
@@ -361,7 +364,6 @@ export interface FaultResultsSampleResponse {
 export interface AiAgentRequest {
   mode: "overview_chat";
   message: string;
-  openai_api_key: string;
   model?: string;
   site_id?: string | null;
   include_context?: boolean;

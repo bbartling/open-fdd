@@ -1,5 +1,6 @@
 """Tests for POST /ai/agent Overview AI endpoint."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -38,12 +39,12 @@ def _mock_openai(content: str = "Hello from Overview AI"):
 
 
 def test_ai_agent_requires_api_key():
-  """openai_api_key is required by request schema."""
+  """When Open‑Claw is not configured, the endpoint returns 503."""
   r = client.post(
     "/ai/agent",
     json={"mode": "overview_chat", "message": "How is the HVAC running?"},
   )
-  assert r.status_code == 422
+  assert r.status_code == 503
 
 
 def test_ai_agent_overview_chat_success():
@@ -52,7 +53,14 @@ def test_ai_agent_overview_chat_success():
   fake_tables = {"site_id": None, "period": {"start": "2025-01-01", "end": "2025-01-08"}, "by_equipment": []}
   fake_point_plots = {"period": {"start": "2025-01-01", "end": "2025-01-08"}, "series": [], "point_labels": {}}
   fake_fault_results = {"rows": [], "count": 0}
-  with patch(
+  with patch.dict(
+    "os.environ",
+    {
+      "OFDD_OPEN_CLAW_BASE_URL": "http://openclaw.test/v1",
+      "OFDD_OPEN_CLAW_API_KEY": "sk-openclaw-test",
+    },
+    clear=False,
+  ), patch(
     "open_fdd.platform.api.ai_agent._build_overview_context",
     return_value={"data_model": {"site_count": 1}},
   ), patch(
@@ -76,7 +84,6 @@ def test_ai_agent_overview_chat_success():
       json={
         "mode": "overview_chat",
         "message": "How is the HVAC running?",
-        "openai_api_key": "sk-test",
         "include_context": True,
       },
     )
@@ -103,7 +110,6 @@ def test_ai_agent_rejects_unknown_mode():
     json={
       "mode": "unknown_mode",
       "message": "Test",
-      "openai_api_key": "sk-test",
     },
   )
   assert r.status_code == 400
@@ -116,18 +122,22 @@ def test_ai_agent_invalid_openai_key():
   """AuthenticationError from OpenAI should map to 401."""
   from open_fdd.platform.api.ai_agent import AiAgentError
 
-  with patch(
+  with patch.dict(
+    "os.environ",
+    {
+      "OFDD_OPEN_CLAW_BASE_URL": "http://openclaw.test/v1",
+      "OFDD_OPEN_CLAW_API_KEY": "sk-openclaw-test",
+    },
+    clear=False,
+  ), patch(
     "open_fdd.platform.api.ai_agent._call_openai_chat",
-    side_effect=AiAgentError(
-      401, "Invalid OpenAI API key. Check your key and try again."
-    ),
+    side_effect=AiAgentError(401, "Invalid OpenAI API key. Check your key and try again."),
   ):
     r = client.post(
       "/ai/agent",
       json={
         "mode": "overview_chat",
         "message": "How is the HVAC running?",
-        "openai_api_key": "sk-bad",
       },
     )
   assert r.status_code == 401

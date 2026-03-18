@@ -1,5 +1,5 @@
 /**
- * Shared OpenAI model options for Overview AI chat and Data Model Setup (Tag with OpenAI).
+ * Shared Open‑Claw model options for Overview AI chat and Data Model Setup (Tag with Open‑Claw).
  * Two options: GPT-5 mini (default, cost-efficient) and GPT-5.4 pro (for more complex tasks).
  */
 

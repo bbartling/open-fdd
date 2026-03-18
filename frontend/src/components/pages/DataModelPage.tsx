@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
 import { useAllEquipment, useAllPoints, useEquipment, usePoints, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useSiteFaults } from "@/hooks/use-faults";
+import { useCapabilities } from "@/hooks/use-fdd-status";
 import { EquipmentTable } from "@/components/site/EquipmentTable";
 import { BacnetDiscoveryPanel } from "@/components/site/BacnetDiscoveryPanel";
 import {
@@ -51,6 +52,7 @@ export function DataModelPage() {
   const { selectedSiteId } = useSiteContext();
   const [importJson, setImportJson] = useState("");
   const [importResult, setImportResult] = useState<DataModelImportResponse | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [newSiteName, setNewSiteName] = useState("");
   const [newSiteDescription, setNewSiteDescription] = useState("");
   const [checkResult, setCheckResult] = useState<DataModelCheckResponse | null>(null);
@@ -63,8 +65,6 @@ export function DataModelPage() {
   const [agentChatPrompt, setAgentChatPrompt] = useState(
     "Describe HVAC system and feeds or fed by relationships for AI to tag"
   );
-  const [openAiKey, setOpenAiKey] = useState("");
-  const [rememberKey, setRememberKey] = useState(false);
   /** When true and multiple sites exist, only tag the site chosen in tagSiteId dropdown. */
   const [tagSpecificSite, setTagSpecificSite] = useState(false);
   /** Site to tag when tagSpecificSite is true (multiple sites). Ignored when only one site. */
@@ -84,6 +84,8 @@ export function DataModelPage() {
   const { data: faultsAll = [] } = useActiveFaults();
   const { data: faultsSite = [] } = useSiteFaults(selectedSiteId ?? undefined);
   const { data: sites = [] } = useSites();
+  const { data: capabilities } = useCapabilities();
+  const aiAvailable = capabilities?.ai_available === true;
 
   const equipment = selectedSiteId ? equipmentSite : equipmentAll;
   const points = selectedSiteId ? pointsSite : pointsAll;
@@ -116,12 +118,16 @@ export function DataModelPage() {
         body: JSON.stringify(body),
       }),
     onSuccess: (data) => {
+      setImportError(null);
       setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ["data-model"] });
       queryClient.invalidateQueries({ queryKey: ["sites"] });
       queryClient.invalidateQueries({ queryKey: ["faults"] });
     },
-    onError: (err: Error) => setImportResult({ total: 0, warnings: [err.message] }),
+    onError: (err: Error) => {
+      setImportError(err.message);
+      setImportResult(null);
+    },
   });
 
   const serializeMutation = useMutation({
@@ -152,7 +158,7 @@ export function DataModelPage() {
     mutationFn: tagPointsWithOpenAi,
     onMutate: () => {
       setAiTagPhase("running");
-      setAiTagStatus("Tagging started. Calling OpenAI and preparing import JSON...");
+      setAiTagStatus("Tagging started. Calling Open‑Claw and preparing import JSON...");
       setAiTagError(null);
       setAiTagResult(null);
     },
@@ -235,16 +241,7 @@ export function DataModelPage() {
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
 
-  useEffect(() => {
-    try {
-      const savedKey = localStorage.getItem("openFddOpenAiKey") ?? "";
-      const savedRemember = localStorage.getItem("openFddRememberKey") === "true";
-      setOpenAiKey(savedKey);
-      setRememberKey(savedRemember);
-    } catch {
-      // localStorage may be unavailable in strict browser environments.
-    }
-  }, []);
+  // Open‑Claw-only: there is no client-side LLM API key input.
 
   // When multiple sites, keep tagSiteId in sync (default to selected site or first)
   useEffect(() => {
@@ -260,31 +257,23 @@ export function DataModelPage() {
       const parsed = JSON.parse(importJson) as DataModelImportBody | DataModelExportRow[];
       const body: DataModelImportBody = Array.isArray(parsed) ? { points: parsed } : parsed;
       if (!body.points?.length) {
+        setImportError(null);
         setImportResult({ total: 0, warnings: ["No points in payload"] });
         return;
       }
+      setImportError(null);
       importMutation.mutate(body);
     } catch (e) {
-      setImportResult({ total: 0, warnings: [e instanceof Error ? e.message : "Invalid JSON"] });
+      setImportError(e instanceof Error ? e.message : "Invalid JSON");
+      setImportResult(null);
     }
   };
 
   const handleTagWithAi = () => {
-    if (!openAiKey.trim()) {
+    if (!aiAvailable) {
       setAiTagPhase("error");
-      setAiTagStatus("Enter an OpenAI API key to start tagging.");
+      setAiTagStatus("AI disabled. Run bootstrap with --with-open-claw and set OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY.");
       return;
-    }
-    if (rememberKey) {
-      try {
-        localStorage.setItem("openFddOpenAiKey", openAiKey);
-        localStorage.setItem("openFddRememberKey", "true");
-      } catch { /* storage unavailable */ }
-    } else {
-      try {
-        localStorage.removeItem("openFddOpenAiKey");
-        localStorage.removeItem("openFddRememberKey");
-      } catch { /* storage unavailable */ }
     }
     setAiTagError(null);
     setAiTagResult(null);
@@ -292,7 +281,6 @@ export function DataModelPage() {
     appendAiMessage({ role: "user", content: question });
     tagWithAiMutation.mutate({
       site_id: tagWithAiSiteId,
-      openai_api_key: openAiKey,
       model: openAiModel,
       auto_import: true,
       user_summary: agentChatPrompt?.trim() || undefined,
@@ -537,7 +525,7 @@ export function DataModelPage() {
             <p className="text-sm text-muted-foreground">
               GET /data-model/export — BACnet discovery + DB points. Download JSON for manual
               export to an external LLM (copy-paste there, then re-import below), or use the in-house
-              OpenAI API Assist to chat with the agent and tag via the same API.
+              Open‑Claw API Assist to chat with the agent and tag via the same API.
             </p>
             {exportLoading && <Skeleton className="h-48 w-full rounded-lg" />}
             {!exportLoading && exportJson && (
@@ -552,17 +540,23 @@ export function DataModelPage() {
                     <Download className="h-4 w-4" />
                     Download JSON
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAiAssist((v) => !v)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/20 self-start"
-                    data-testid="openai-assist-toggle"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {showAiAssist ? "Hide OpenAI Assist" : "OpenAI API Assist"}
-                  </button>
+                  {aiAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAiAssist((v) => !v)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/20 self-start"
+                      data-testid="openai-assist-toggle"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {showAiAssist ? "Hide Open‑Claw Assist" : "Open‑Claw API Assist"}
+                    </button>
+                  ) : (
+                    <span className="self-start text-xs text-muted-foreground">
+                      AI disabled (bootstrap with `--with-open-claw`).
+                    </span>
+                  )}
                 </div>
-                {showAiAssist && (
+                {aiAvailable && showAiAssist && (
                   <div className="mt-2 space-y-3 rounded-lg border border-border/60 bg-card/70 p-4">
                     <p className="text-sm text-muted-foreground">
                       In-house agent: describe your HVAC system and feeds/fed_by in the chat below. The agent calls the same export/import API with retries; then validate on the Data Model Testing tab and pass/fail the result.
@@ -598,18 +592,7 @@ export function DataModelPage() {
                         data-testid="openai-assist-chat-prompt"
                       />
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-muted-foreground">OpenAI API key</label>
-                        <input
-                          type="password"
-                          value={openAiKey}
-                          onChange={(e) => setOpenAiKey(e.target.value)}
-                          placeholder="sk-..."
-                          className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                          data-testid="openai-api-key-input"
-                        />
-                      </div>
+                    <div className="grid gap-3 md:grid-cols-1">
                       <div>
                         <label className="mb-1 block text-xs font-medium text-muted-foreground">Model</label>
                         <select
@@ -626,14 +609,6 @@ export function DataModelPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-sm">
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={rememberKey}
-                          onChange={(e) => setRememberKey(e.target.checked)}
-                        />
-                        Remember API key in browser
-                      </label>
                       {sites.length === 1 && (
                         <span className="text-muted-foreground">
                           Tagging your only site ({sites[0].name}).
@@ -671,12 +646,12 @@ export function DataModelPage() {
                       <button
                         type="button"
                         onClick={handleTagWithAi}
-                        disabled={tagWithAiMutation.isPending || !openAiKey.trim()}
+                        disabled={tagWithAiMutation.isPending || !aiAvailable}
                         className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
                         data-testid="openai-assist-run"
                       >
                         <Sparkles className="h-4 w-4" />
-                        {tagWithAiMutation.isPending ? "Tagging..." : "Tag with OpenAI"}
+                        {tagWithAiMutation.isPending ? "Tagging..." : "Tag with Open‑Claw"}
                       </button>
                       {aiTagResult && (
                         <span className="text-sm text-muted-foreground">
@@ -768,6 +743,11 @@ export function DataModelPage() {
               Paste JSON (array of points or <code className="rounded bg-muted px-1">{"{ points: [...] }"}</code>)
               or upload a JSON file, then click Import to update the data model. Same as PUT /data-model/import.
             </p>
+            {importError && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <span className="font-medium">Import failed:</span> {importError}
+              </div>
+            )}
             <input
               ref={importFileInputRef}
               type="file"

@@ -32,6 +32,22 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ---
 
+## AI: Open‑Claw-only
+
+Open‑FDD AI features are available only when Open‑Claw is configured.
+
+1. In `stack/.env`, set:
+   - `OFDD_OPEN_CLAW_BASE_URL=` your Open‑Claw API base URL (e.g. `https://your-open-claw.example/v1`)
+   - `OFDD_OPEN_CLAW_API_KEY=` your Open‑Claw API key
+2. Run `./scripts/bootstrap.sh --with-open-claw`.
+   - If Open‑Claw isn’t configured, the UI hides/disables AI controls and AI endpoints return `503`.
+
+Manual Data Model export/import (JSON) always works without AI.
+
+See [Configuration → AI backend](configuration#ai-backend-open-claw) and [API Reference](appendix/api_reference) for details.
+
+---
+
 ## Prerequisites
 
 - **OS:** Linux only (Ubuntu Server latest, or Linux Mint). **Tested on x86;** should work on ARM but is untested. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
@@ -85,6 +101,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
 | `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
+| `--with-open-claw` | Configure the stack for Open‑Claw AI: ensure `OFDD_OPEN_CLAW_BASE_URL` and `OFDD_OPEN_CLAW_API_KEY` are set in `stack/.env`. See [Configuration → AI backend](configuration#ai-backend-open-claw). |
 
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
@@ -104,4 +121,4 @@ To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `.
 - **[Security & Caddy](security)** — Basic auth, throttling, TLS.
 - **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance; Swagger at http://localhost:8000/docs.
 
-For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview).
+For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.

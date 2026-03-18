@@ -33,7 +33,7 @@ The Open-FDD platform exposes a **REST API** (port 8000) for CRUD, config, data 
 
 ## Overview AI context and behavior
 
-**POST /ai/agent** (mode `overview_chat`) powers the Overview AI assistant in the React UI. The backend calls OpenAI with the following context; the browser never talks to OpenAI directly.
+**POST /ai/agent** (mode `overview_chat`) powers the Overview AI assistant in the React UI. The backend calls an **OpenAI-compatible Open‑Claw** service with the following context; the browser never talks to the LLM provider directly.
 
 ### What the agent receives on each request
 
@@ -43,9 +43,20 @@ The Open-FDD platform exposes a **REST API** (port 8000) for CRUD, config, data 
 
 ### What the agent does *not* use
 
-- **Conversation history** — Each request is **stateless**. The API does not send prior messages or replies to OpenAI. The UI may show a scroll of past Q&A, but the backend has no access to that; every call is a single user question and a single assistant reply. Multi-turn or “get more context as needed” in a thread is not implemented.
+- **Conversation history** — Each request is **stateless**. The API does not send prior messages or replies to Open‑Claw. The UI may show a scroll of past Q&A, but the backend has no access to that; every call is a single user question and a single assistant reply. Multi-turn or “get more context as needed” in a thread is not implemented.
 
 ### Models and keys
 
 - **Models** — The API accepts any `model` string; the frontend offers **GPT-5 mini** (default, cost-efficient) and **GPT-5.4 pro** (for more complex tasks). No 4o or other model names are assumed in the docs.
-- **OpenAI API key** — Sent in the request body; used by the backend for that request only and never stored.
+- **Open‑Claw API key** — The server uses `OFDD_OPEN_CLAW_API_KEY`. The UI never sends an API key in request bodies. If Open‑Claw is not configured, AI endpoints return `503` and the UI hides/disables AI controls.
+
+### Open‑Claw configuration (AI enabled/disabled)
+
+Overview chat and **POST /data-model/tag-with-openai** (Data Model → Tag with Open‑Claw) both use the same Open‑Claw backend (OpenAI-compatible). Configure it via environment variables (see [Configuration](../configuration#ai-backend-open-claw)):
+
+| Variable | Description |
+|----------|-------------|
+| `OFDD_OPEN_CLAW_BASE_URL` | Base URL of the Open‑Claw API (e.g. `https://your-open-claw.example/v1`). |
+| `OFDD_OPEN_CLAW_API_KEY` | API key for Open‑Claw. Used by the backend for Overview chat and tag-with-openai; not sent from the browser. |
+
+If Open‑Claw is not configured, the API returns `503` for AI endpoints and the UI hides/disables AI controls. JSON export/import for the data model always works without any AI (manual copy-paste or external LLM).

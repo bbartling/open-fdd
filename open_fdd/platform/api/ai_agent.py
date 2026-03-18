@@ -27,6 +27,7 @@ from open_fdd.platform.api.analytics import (
     fetch_point_timeseries_data,
     get_point_ids_for_agent,
 )
+from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.graph_model import get_serialization_status
 
@@ -45,10 +46,6 @@ class AiAgentRequest(BaseModel):
     message: str = Field(
         ...,
         description="User question, e.g. 'How is the HVAC running overall?'",
-    )
-    openai_api_key: str = Field(
-        ...,
-        description="OpenAI API key (sk-...). Used only for this request; never stored server-side.",
     )
     model: str = Field(
         "gpt-5-mini",
@@ -356,7 +353,8 @@ def _build_overview_prompt(context: dict[str, Any], user_message: str) -> tuple[
         "When the last FDD run status is 'error', use last_run_error_message to explain what went wrong. "
         "Your reply is shown together with inline charts and tables (fault timeseries, point timeseries, "
         "faults by equipment, fault result rows). Describe what that data shows; do NOT say you cannot "
-        "generate plots or tables—they are attached automatically to your response."
+        "generate plots or tables—they are attached automatically to your response. "
+        "The human is an engineer most likely always generate plots with units on different axes."
     )
     if docs_excerpt:
         system_prompt += (
@@ -389,14 +387,15 @@ class AiAgentError(Exception):
 
 def _call_openai_chat(
     api_key: str,
+    base_url: str | None,
     model: str,
     system_prompt: str,
     user_prompt: str,
     timeout: float = 60.0,
 ) -> str:
-    """Call OpenAI chat completion API and return the answer text."""
+    """Call OpenAI-compatible chat completion API and return the answer text."""
     if not api_key or not api_key.strip():
-        raise AiAgentError(400, "openai_api_key is required.")
+        raise AiAgentError(400, "LLM API key is required.")
 
     try:
         openai_mod = import_module("openai")
@@ -418,7 +417,10 @@ def _call_openai_chat(
         )
 
     try:
-        client = OpenAI(api_key=api_key.strip(), timeout=timeout)
+        client_kwargs: dict[str, Any] = {"api_key": api_key.strip(), "timeout": timeout}
+        if base_url:
+            client_kwargs["base_url"] = base_url.strip()
+        client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -467,12 +469,22 @@ def ai_agent(body: AiAgentRequest) -> AiAgentResponse:
     """AI assistant entrypoint.
 
     Currently supports only mode=\"overview_chat\": builds a read-only context from the
-    data model and FDD state, calls OpenAI once, and returns a natural-language answer.
+    data model and FDD state, calls Open‑Claw (OpenAI-compatible) once, and returns a natural-language answer.
     """
     if body.mode != "overview_chat":
         raise HTTPException(
             400,
             f"Unsupported mode {body.mode!r}. Phase 1 supports only mode='overview_chat'.",
+        )
+
+    settings = get_platform_settings()
+    open_claw_ready = bool(getattr(settings, "open_claw_base_url", None)) and bool(
+        getattr(settings, "open_claw_api_key", None)
+    )
+    if not open_claw_ready:
+        raise HTTPException(
+            503,
+            "AI disabled: Open‑Claw is not configured. Bootstrap with --with-open-claw and set OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY.",
         )
 
     context = _build_overview_context(site_filter=body.site_id)
@@ -489,12 +501,13 @@ def ai_agent(body: AiAgentRequest) -> AiAgentResponse:
         )
         model = "gpt-5-mini"
 
-    # Use the requested model directly; let OpenAI validate it.
-    model = body.model
+    api_key = settings.open_claw_api_key or ""
+    base_url = settings.open_claw_base_url
 
     try:
         answer = _call_openai_chat(
-            api_key=body.openai_api_key,
+            api_key=api_key,
+            base_url=base_url,
             model=model,
             system_prompt=system_prompt,
             user_prompt=user_prompt,

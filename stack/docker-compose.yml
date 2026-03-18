@@ -218,6 +218,9 @@ services:
       OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
       # Optional Bearer auth; bootstrap generates and writes to stack/.env unless --no-auth
       OFDD_API_KEY: ${OFDD_API_KEY:-}
+      # Open‑Claw (OpenAI-compatible) AI backend. When unset/missing, the API returns 503 for AI endpoints.
+      OFDD_OPEN_CLAW_BASE_URL: ${OFDD_OPEN_CLAW_BASE_URL:-}
+      OFDD_OPEN_CLAW_API_KEY: ${OFDD_OPEN_CLAW_API_KEY:-}
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
       OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
       # Enable POST/DELETE /rules/test-inject for hot-reload automation (e.g. 4_hot_reload_test.py). Set in stack/.env.

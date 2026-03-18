@@ -30,6 +30,7 @@ import {
 import type { ChartConfig } from "@/components/ui/chart";
 import { useSites, useAllEquipment, useAllPoints, useEquipment, usePoints } from "@/hooks/use-sites";
 import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
+import { useCapabilities } from "@/hooks/use-fdd-status";
 import { callAiAgent } from "@/lib/crud-api";
 import type {
   AiAgentResponse,
@@ -38,7 +39,7 @@ import type {
   FaultsByEquipmentResponse,
   PointTimeseriesResponse,
 } from "@/types/api";
-import { AI_MODEL_OPTIONS, DEFAULT_AI_MODEL } from "@/data/ai-models";
+// Overview AI (Open‑Claw-only): no client-side model selection.
 
 const CHART_COLORS = [
   "hsl(215, 60%, 42%)",
@@ -465,28 +466,6 @@ function OverviewChatFaultResultsTable({
   );
 }
 
-function getStoredAiSettings() {
-  try {
-    const storedModel = window.localStorage.getItem("openfdd_ai_model");
-    const apiKey = window.sessionStorage.getItem("openfdd_ai_api_key") ?? "";
-    return {
-      apiKey,
-      model: storedModel ?? DEFAULT_AI_MODEL,
-    };
-  } catch {
-    return { apiKey: "", model: DEFAULT_AI_MODEL };
-  }
-}
-
-function saveAiSettings(apiKey: string, model: string) {
-  try {
-    window.localStorage.setItem("openfdd_ai_model", model);
-    window.sessionStorage.setItem("openfdd_ai_api_key", apiKey);
-  } catch {
-    // ignore storage errors
-  }
-}
-
 type PopoutState =
   | { kind: "fault-chart"; data: FaultTimeseriesResponse }
   | { kind: "point-chart"; data: PointTimeseriesResponse }
@@ -495,9 +474,9 @@ type PopoutState =
 
 function OverviewAiChat() {
   const { selectedSiteId } = useSiteContext();
+  const { data: capabilities } = useCapabilities();
+  const aiAvailable = capabilities?.ai_available === true;
 
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(DEFAULT_AI_MODEL);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<
     {
@@ -511,21 +490,14 @@ function OverviewAiChat() {
   >([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedFeedback, setSavedFeedback] = useState(false);
   const [lastFddError, setLastFddError] = useState<string | null>(null);
   const [popout, setPopout] = useState<PopoutState | null>(null);
-
-  useEffect(() => {
-    const stored = getStoredAiSettings();
-    setApiKey(stored.apiKey);
-    setModel(stored.model);
-  }, []);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim()) return;
-    if (!apiKey.trim()) {
-      setError("Set your OpenAI API key first.");
+    if (!aiAvailable) {
+      setError("AI disabled: bootstrap with --with-open-claw and set OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY.");
       return;
     }
     const question = input.trim();
@@ -537,8 +509,6 @@ function OverviewAiChat() {
       const body = {
         mode: "overview_chat" as const,
         message: question,
-        openai_api_key: apiKey,
-        model,
         include_context: false,
         site_id: selectedSiteId ?? undefined,
       };
@@ -566,12 +536,6 @@ function OverviewAiChat() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleSaveSettings() {
-    saveAiSettings(apiKey, model);
-    setSavedFeedback(true);
-    setTimeout(() => setSavedFeedback(false), 2000);
   }
 
   useEffect(() => {
@@ -608,49 +572,26 @@ function OverviewAiChat() {
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-muted-foreground">
-              OpenAI API key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-full rounded-md border bg-background px-2 py-1 text-xs"
-              placeholder="sk-..."
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-muted-foreground">
-              Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {AI_MODEL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleSaveSettings}
-          className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
-        >
-          {savedFeedback ? "Saved" : "Save AI settings (local only)"}
-        </button>
+        {aiAvailable ? (
+          <p className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            Using server-configured Open‑Claw. No API key needed.
+          </p>
+        ) : (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            AI disabled. Run bootstrap with <code className="rounded bg-muted px-1">--with-open-claw</code> and set <code className="rounded bg-muted px-1">OFDD_OPEN_CLAW_BASE_URL</code> + <code className="rounded bg-muted px-1">OFDD_OPEN_CLAW_API_KEY</code>.
+          </p>
+        )}
 
-        <div className="h-px w-full bg-border" />
+        {aiAvailable && (
+          <>
+            <div className="h-px w-full bg-border" />
 
-        <p className="text-xs text-muted-foreground">
-          Ask a question and click Send. The assistant automatically attaches fault and sensor data (last 24h) and offers advice based on what it sees.
-        </p>
+            <p className="text-xs text-muted-foreground">
+              Ask a question and click Send. The assistant automatically attaches fault and sensor data (last 24h) and offers advice based on what it sees.
+            </p>
+          </>
+        )}
+        {aiAvailable && (
           <div className="h-56 overflow-y-auto rounded-md border bg-muted/40 p-3 text-xs space-y-2">
             {messages.length === 0 ? (
               <p className="text-muted-foreground italic">
@@ -703,33 +644,38 @@ function OverviewAiChat() {
               ))
             )}
           </div>
-          <form onSubmit={handleSend} className="flex gap-2">
-            <label className="sr-only" htmlFor="overview-ai-input">
-              Your question
-            </label>
-            <input
-              id="overview-ai-input"
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              className="flex-1 rounded-md border-2 border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Ask the Overview assistant a question..."
-              aria-label="Your question"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {loading ? "Thinking..." : "Send"}
-            </button>
-          </form>
-          {error && (
-            <p className="text-xs text-destructive">
-              {error}
-            </p>
           )}
 
+        {aiAvailable && (
+          <>
+            <form onSubmit={handleSend} className="flex gap-2">
+              <label className="sr-only" htmlFor="overview-ai-input">
+                Your question
+              </label>
+              <input
+                id="overview-ai-input"
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                className="flex-1 rounded-md border-2 border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Ask the Overview assistant a question..."
+                aria-label="Your question"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex items-center rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {loading ? "Thinking..." : "Send"}
+              </button>
+            </form>
+            {error && (
+              <p className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
+          </>
+        )}
         {popout && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
