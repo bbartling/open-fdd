@@ -1,5 +1,6 @@
 # Open-FDD
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
 ![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Development Status](https://img.shields.io/badge/status-3%20--%20Alpha-orange)
@@ -8,7 +9,7 @@
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
 ![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version) — *PyPI package is legacy (FD equations only; no AFDD framework) and is no longer supported. Use this repo.*
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
+
 
 <div align="center">
 
@@ -38,9 +39,9 @@ cd open-fdd
 This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
 
 
-### Development: run unit tests
+### Development: branches and tests
 
-No Docker needed for the test suite. From the repo root:
+Work off the **`develop`** branch for day-to-day development; open feature branches from `develop` and merge back to `develop`. Releases are cut from `master`. No Docker needed for the test suite. From the repo root:
 
 ```bash
 python3 -m venv .venv
@@ -57,282 +58,12 @@ pytest -v
 ---
 
 
-## AI Assisted Data Modeling
+## AI and data modeling
 
+- **Overview AI assistant (read-only):** On the **Overview** page you can ask questions like “How is the HVAC running?” or “What faults are configured?”. The backend attaches live data and a docs excerpt, then calls OpenAI with your key (never stored) to produce a read‑only summary with charts/tables. See the **Overview AI** section in the docs for full behavior and API details.
+- **Data model export / AI-assisted tagging:** On the **Data model** page you can export the RDF model to JSON, enhance it either manually or with an LLM (Brick types, feeds/fed_by, rule inputs), and re‑import it. The in‑app “OpenAI API Assist” uses a canonical prompt and the same import API as manual workflows.
 
-In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement with the Brick ontology and upload it to an LLM for AI-assisted data modeling. Copy the prompt below, upload the YAML files defined for the job, and the LLM should know what to do.
-
-Use the export API and an LLM (e.g. ChatGPT) to tag BACnet discovery points with Brick types, rule inputs, and equipment; then import the tagged JSON so the platform creates equipment by name and links points without pasting UUIDs. For full workflow and **deterministic mapping** (repeatable, rules-style tagging), see [docs/modeling/ai_assisted_tagging.md](docs/modeling/ai_assisted_tagging.md) and [docs/modeling/llm_mapping_template.yaml](docs/modeling/llm_mapping_template.yaml). For a **one-shot LLM workflow** (upload prompt + export JSON + optional rules YAML, validate with schema so backend accepts it, then import and run FDD/tests), see [docs/modeling/llm_workflow.md](docs/modeling/llm_workflow.md).
-
-The engineer should chat with the LLM about the task at hand after first understanding the HVAC system from a systems perspective. The LLM can then provide additional metadata, such as Brick classes for point names, along with feeds and fed-by relationships. The final output JSON file is then imported back into Open-FDD, where the backend parses it into a completed data model.
-
-A slightly more polished version for docs or README text:
-
-In the Open-FDD frontend, there is a feature to export the RDF data model to JSON for further enhancement using the Brick ontology and an LLM for AI-assisted data modeling. Copy the **canonical prompt** from [config/canonical_llm_prompt.txt](config/canonical_llm_prompt.txt) and upload the YAML files defined for the task, and the LLM should understand how to proceed.
-
-After reviewing the HVAC system from a systems perspective, the engineer can chat with the LLM about the modeling task. The LLM can then generate additional metadata, including Brick classes for point names and feeds/fed-by relationships. The final output JSON file is imported back into Open-FDD, where the backend parses it into a completed data model. The in-app "OpenAI API Assist" and manual export/import both use the same canonical prompt; the backend loads it from `config/canonical_llm_prompt.txt` when present (fallback: built-in prompt in code). Edit that file anytime; changes apply on the next tag-with-openai request or next manual paste.
-
-<details>
-<summary>Canonical prompt (inline copy; prefer editing <a href="config/canonical_llm_prompt.txt">config/canonical_llm_prompt.txt</a>)</summary>
-
-```text
-I use Open-FDD. Please help me model my mechanical system’s feeds and fed-by relationships. If not enough data is available, please ask. Do not infer or assume relationships from probability—only the engineer knows the actual mechanical relationships for the HVAC.
-
-I will paste JSON from GET /data-model/export (optionally filtered with ?site_id=YourSiteName).
-
-Your job is to convert that export into CLEAN Open-FDD import JSON.
-
-Return ONLY valid JSON with exactly two top-level keys:
-
-{
-  "points": [...],
-  "equipment": [...]
-}
-
-Ensure all devices in the RDF are assigned to the site at hand even if they are not used in a data model or fault rule.
-
----------------------------------------------------------------------
-
-POINT RULES
-
-For each point:
-
-Preserve all existing fields from the export including:
-
-- point_id
-- bacnet_device_id
-- object_identifier
-- object_name
-- external_id
-- site_id
-- site_name
-- equipment_id (preserve but DO NOT use for relationships)
-
-Then add or fill these fields:
-
-- brick_type
-- rule_input
-- polling
-- unit
-- equipment_name
-- equipment_type
-
-Equipment must be referenced by NAME only.
-
-Set equipment_type to the Brick equipment class (e.g. Air_Handling_Unit, Variable_Air_Volume_Box) so that the Open-FDD Data Model Testing "Summarize your HVAC" buttons (AHUs, VAV boxes, etc.) show results. If omitted, equipment is created as generic Equipment.
-
-Example:
-
-"equipment_name": "AHU-1",
-"equipment_type": "Air_Handling_Unit"
-
-Never use equipment UUIDs for relationships.
-
----------------------------------------------------------------------
-
-SITE ID
-
-Use the exact site_id from the export rows.
-
-Do not invent or modify site_id values.
-
-If site_id is null in the export, leave it null.
-
----------------------------------------------------------------------
-
-EQUIPMENT ARRAY
-
-Return an "equipment" array describing system relationships.
-
-Each item must include:
-
-- equipment_name
-- site_id
-
-Include equipment_type (Brick equipment class) so that "Summarize your HVAC" (AHUs, VAV boxes, VAVs per AHU, etc.) shows correct counts. Use e.g. Air_Handling_Unit, Variable_Air_Volume_Box, Variable_Air_Volume_Box_With_Reheat, HVAC_Zone, Chiller, Boiler, Cooling_Tower, Weather_Service. If omitted, equipment is created as Equipment.
-
-Example:
-
-{
-  "equipment_name": "AHU-5",
-  "equipment_type": "Air_Handling_Unit",
-  "site_id": "<site_id>",
-  "feeds": ["VAV-1"]
-}
-
-If a VAV is served by an AHU:
-
-AHU:
-
-"feeds": ["VAV-1"]
-
-VAV:
-
-"fed_by": ["AHU-5"]
-
-Prefer:
-
-"feeds"
-"fed_by"
-
-Only use:
-
-"feeds_equipment_id"
-"fed_by_equipment_id"
-
-if required by the source export.
-
----------------------------------------------------------------------
-
-EQUIPMENT TYPE (Brick summaries)
-
-For the Data Model Testing page "Summarize your HVAC" buttons to list AHUs, VAV boxes, etc., equipment must have the correct Brick class. Set equipment_type on points and in the equipment array to the Brick class name (no "brick:" prefix), e.g.:
-
-- Air_Handling_Unit — AHUs
-- Variable_Air_Volume_Box or Variable_Air_Volume_Box_With_Reheat — VAV boxes
-- HVAC_Zone — zones
-- Chiller, Cooling_Tower, Boiler — central plant
-- Weather_Service — weather (optional)
-
-Infer from point names and BACnet device grouping: e.g. points SA-T, MA-T, RA-T, SF-O, CLG-O on one device are typically one AHU; ZoneTemp, VAVFlow, VAVDamperCmd on another device are typically one VAV box. Assign equipment_name and equipment_type so that after import, "AHUs" and "VAV boxes" (and "VAVs per AHU" if you set feeds/fed_by) return counts.
-
----------------------------------------------------------------------
-
-BRICK TYPES
-
-Use appropriate Brick classes when possible.
-
-Examples:
-
-brick:Supply_Air_Temperature_Sensor  
-brick:Return_Air_Temperature_Sensor  
-brick:Mixed_Air_Temperature_Sensor  
-brick:Outside_Air_Temperature_Sensor  
-brick:Zone_Air_Temperature_Sensor  
-brick:Supply_Fan_Status  
-brick:Supply_Fan_Command  
-brick:Cooling_Valve_Command  
-brick:Heating_Valve_Command  
-brick:Damper_Position_Command  
-brick:Discharge_Air_Flow_Sensor  
-brick:Discharge_Air_Flow_Setpoint  
-brick:Supply_Air_Temperature_Setpoint  
-
-If a point cannot be confidently mapped:
-
-"brick_type": null
-
----------------------------------------------------------------------
-
-RULE INPUTS
-
-Set rule_input to short reusable slugs.
-
-Examples:
-
-ahu_sat  
-ahu_sat_sp  
-rat  
-mat  
-oat  
-zone_temp  
-sf_status  
-sf_cmd  
-clg_cmd  
-htg_cmd  
-damper_cmd  
-airflow  
-airflow_sp  
-
-If unknown:
-
-rule_input = null
-
----------------------------------------------------------------------
-
-POLLING
-
-Set polling=true for points defined in the yaml files for FD rules and typical HVAC RCx data reporting:
-
-temperatures  
-humidity  
-flow  
-pressures  
-fan status  
-commands  
-setpoints  
-valves  
-dampers  
-power
-
-Set polling=false for:
-
-network ports  
-metadata objects  
-housekeeping points
-vav box air balancing parameters
-pid settings
-bacnet device names
-trend logs
-
----------------------------------------------------------------------
-
-UNITS
-
-Use consistent engineering units.
-
-Examples:
-
-degF or °F
-%
-cfm
-mph
-W/m²
-0/1 (binary)
-
-If unknown:
-
-unit = null
-
----------------------------------------------------------------------
-
-DUPLICATES
-
-Do not rename external_id values.
-
-If duplicates exist, keep them unchanged.
-
-Open-FDD import logic uses:
-
-(site_id + external_id)
-
-with last row winning.
-
----------------------------------------------------------------------
-
-OUTPUT
-
-Return full JSON only.
-
-No markdown  
-No explanation  
-No extra keys
-
-Make the output generic and reusable for any Open-FDD export.
-
-Preserve fields first, enrich second.
-Leave uncertain values as null rather than guessing.
-
-If relationship data is incomplete or ambiguous, leave uncertain fields as null and still return valid JSON only.
-```
-
-</details>
-
-The final step is for the engineer to perform robust SPARQL query testing to verify that the data model returns the exact expected responses needed to summarize the HVAC system. For example, if the site contains a VAV AHU system with chiller-based cooling, the engineer should test queries that validate the connected relationships in the model, including those needed to support control algorithms and fault detection logic.
-
-There is a SPARQL cookbook in the documentation that can be used for this purpose. These tests should confirm that the data model returns the expected feed and fed-by relationships for the HVAC system. From there, additional SPARQL queries can be developed for algorithm-specific needs. For example, a Guideline 36 duct static pressure reset sequence may require querying for all BACnet devices and point addresses associated with VAV boxes served by a given AHU, including damper positions or commands, airflow sensor values and setpoints, and the AHU duct static pressure sensor and static pressure setpoint.
-
-Overall, SPARQL testing should be used by the engineer to validate that the data model fully supports the optimization algorithms and fault rules planned for the site.
+For end‑to‑end examples, SPARQL validation patterns, and the canonical prompts/templates, see the modeling docs under `docs/modeling/` and the API appendix.
 
 
 ## The open-fdd Pyramid
@@ -361,13 +92,30 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 ## Contributing
 
-Contributions welcome — especially bug reports, rule recipes (see the [expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook)), BACnet integration tests, and documentation. See [docs/contributing.md](docs/contributing.md) for how to get started.
+Contributions welcome — Please use the **`develop`** branch for integration. Open pull requests **into `develop`**, not `master`. Branch from `develop` for your work; `master` is reserved for releases and is protected. PR's to the `master` branch will be rejected.
+
+### Syncing your fork with upstream
+
+To bring your fork up to date with the latest `develop` from this repo:
+
+```bash
+# Add the upstream repo once (replace with this repo’s URL if you forked from another fork)
+git remote add upstream https://github.com/bbartling/open-fdd.git
+
+# Fetch upstream and update your local develop
+git fetch upstream
+git checkout develop
+git merge upstream/develop
+git push origin develop
+```
+
+Then rebase or merge `develop` into your feature branch as needed. Use `git pull --rebase upstream develop` on your branch if you prefer a linear history.
+
+### Run unit tests before pushing to GitHub
 
 ```bash
 ~/open-fdd$ bash scripts/bootstrap.sh --test
 ```
-
-> **NOTE:** Please contribute on a new branch. Any pushes to the `master` branch, including pull requests opened from `master`, will be rejected.
 
 
 ---

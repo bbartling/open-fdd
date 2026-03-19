@@ -2,7 +2,7 @@
 #
 # open-fdd bootstrap: full Docker stack — DB, Grafana, BACnet server, BACnet scraper,
 # weather scraper, FDD loop, host-stats, API, Caddy.
-#
+# ./scripts/bootstrap.sh --reset-data && ./scripts/bootstrap.sh --test
 # Default behavior (no args):
 #   ./scripts/bootstrap.sh
 #     -> builds and starts the FULL stack (Grafana is NOT started by default)
@@ -468,17 +468,41 @@ verify_code() {
   if [[ -d "$REPO_ROOT/frontend" ]]; then
     echo "--- Frontend (lint + typecheck + unit tests) ---"
     local frontend_ok=true
+    local frontend_running=false
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_frontend; then
-      if docker exec openfdd_frontend sh -c "cd /app && npm run lint && npx tsc -b --noEmit && npm run test"; then
+      frontend_running=true
+    else
+      # If host npm is missing, auto-start frontend container so --test is truly one command.
+      if ! have_cmd npm; then
+        echo "Frontend container not running; starting frontend service for tests..."
+        local dc
+        dc="$(docker_compose_cmd)"
+        if (cd "$STACK_DIR" && $dc up -d frontend >/dev/null 2>&1); then
+          if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_frontend; then
+            frontend_running=true
+          fi
+        fi
+      fi
+    fi
+    if $frontend_running; then
+      # Ensure new frontend deps are present when package.json changed.
+      if docker exec openfdd_frontend sh -c "cd /app && npm install && npm run lint && npx tsc -b --noEmit && npm run test"; then
         echo "Frontend: OK (via container)"
       else
-        echo "Frontend: FAIL (container: docker exec openfdd_frontend sh -c 'cd /app && npm run lint && npx tsc -b --noEmit && npm run test')"
+        echo "Frontend: FAIL (container: docker exec openfdd_frontend sh -c 'cd /app && npm install && npm run lint && npx tsc -b --noEmit && npm run test')"
         frontend_ok=false
       fi
     elif (cd "$REPO_ROOT/frontend" && npm run lint 2>/dev/null && npx tsc -b --noEmit 2>/dev/null && npm run test 2>/dev/null); then
       echo "Frontend: OK (via host npm)"
     else
-      echo "Frontend: FAIL (start stack so openfdd_frontend runs, or: cd frontend && npm install && npm run lint && npx tsc -b --noEmit && npm run test)"
+      if ! have_cmd npm; then
+        echo "Frontend: FAIL (npm not installed and frontend container unavailable)."
+        echo "Run one of:"
+        echo "  1) ./scripts/bootstrap.sh   # starts stack incl. openfdd_frontend"
+        echo "  2) sudo apt install npm && cd frontend && npm install"
+      else
+        echo "Frontend: FAIL (start stack so openfdd_frontend runs, or: cd frontend && npm install && npm run lint && npx tsc -b --noEmit && npm run test)"
+      fi
       frontend_ok=false
     fi
     $frontend_ok || failed=1
@@ -740,6 +764,7 @@ fi
 write_edge_env
 # Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
 [[ -f "$STACK_DIR/.env" ]] && set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
+
 check_prereqs
 ensure_diy_bacnet_sibling
 

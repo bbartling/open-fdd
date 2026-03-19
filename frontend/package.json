@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,8 @@
     "react-is": "^19.2.4",
     "react-router-dom": "^7.13.1",
     "react-grid-layout": "^2.2.2",
+    "papaparse": "^5.5.3",
+    "plotly.js-dist-min": "^3.2.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.5.0"
   },
@@ -28,6 +30,7 @@
     "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.2.1",
     "@types/node": "^24.10.1",
+    "@types/papaparse": "^5.3.16",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",

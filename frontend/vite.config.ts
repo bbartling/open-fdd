@@ -8,6 +8,7 @@ const apiTarget = process.env.VITE_API_TARGET ?? "http://localhost:8000";
 
 const apiRoutes = [
   "/api",
+  "/ai",
   "/sites",
   "/equipment",
   "/points",

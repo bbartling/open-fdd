@@ -107,6 +107,8 @@ docker compose exec db psql -U postgres -d openfdd -c "SELECT id, site_id, equip
 docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, value FROM timeseries_readings ORDER BY ts DESC LIMIT 5;"
 ```
 
+**Verify BACnet scraping:** `curl -s http://localhost:8000/timeseries/latest` (recent `ts` = data flowing). Scraper logs: `docker logs openfdd_bacnet_scraper --tail 30`. Full steps: [Verification — BACnet scraper](verification#validating-scrapers-and-fdd-api--grafana).
+
 ---
 
 ## Logs

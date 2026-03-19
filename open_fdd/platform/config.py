@@ -36,7 +36,7 @@ class PlatformSettings(BaseSettings):
         "config/data_model.ttl"  # unified graph: Brick + BACnet + config; auto-synced on CRUD
     )
     app_title: str = "Open-FDD API"
-    app_version: str = "2.0.2"
+    app_version: str = "2.0.4"
     debug: bool = False
 
     # FDD loop
@@ -81,6 +81,9 @@ class PlatformSettings(BaseSettings):
     # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.
     caddy_internal_secret: Optional[str] = None
 
+    # Reserved for RDF overlay compatibility (always "disabled" in core builds).
+    ai_backend: str = "disabled"
+
     model_config = {"env_prefix": "OFDD_", "env_file": ".env"}
 
 
@@ -91,7 +94,8 @@ def get_platform_settings() -> PlatformSettings:
     s = PlatformSettings()
     overlay = get_config_overlay()
     key_to_attr = {
-        "bacnet_enabled": "bacnet_scrape_enabled"
+        "bacnet_enabled": "bacnet_scrape_enabled",
+        "ai_backend": "ai_backend",
     }  # RDF/API name -> PlatformSettings attr
     for k, v in overlay.items():
         attr = key_to_attr.get(k, k)

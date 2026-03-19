@@ -25,5 +25,36 @@ The Open-FDD platform exposes a **REST API** (port 8000) for CRUD, config, data 
 | **Faults** | **GET /faults/active**, **GET /faults/state**, **GET /faults/definitions** — active state, full state, definitions. |
 | **Jobs** | **POST /jobs/bacnet/discovery**, **POST /jobs/fdd/run** — async BACnet discovery and FDD run. **GET /jobs/{job_id}** — status. |
 | **Run FDD** | **POST /run-fdd** — trigger FDD run now. **GET /run-fdd/status** — last run. |
+| **Model context** | **GET /model-context/docs** — serve Open-FDD documentation as plain-text model context for external agents (supports excerpt/full/slice and keyword retrieval via `query`). |
+| **MCP-style discovery** | **GET /mcp/manifest** — JSON manifest listing logical resources (e.g. `openfdd://docs`) and HTTP mappings for common “tools” (docs, export, import, capabilities). Not a full MCP JSON-RPC server; see [Open‑Claw integration](../openclaw_integration). |
 
 **Base URL:** `http://localhost:8000` (use your host or IP when remote). **Auth:** When `OFDD_API_KEY` is set, send `Authorization: Bearer <key>`; the React frontend does this when built with `VITE_OFDD_API_KEY`.
+
+---
+
+## MCP manifest (`GET /mcp/manifest`)
+
+Agents can use this endpoint to **discover** stable URLs without hand-copying from Swagger:
+
+- **Resources**: e.g. documentation as `openfdd://docs` → `GET /model-context/docs`
+- **Tools**: JSON metadata with `http.method` and `http.path` for docs fetch, data-model export/import, and `GET /capabilities`
+
+When `OFDD_API_KEY` is set, the manifest endpoint is protected like other routes (Bearer required).
+
+---
+
+## Model context docs endpoint
+
+Open‑FDD can serve its documentation as plain text model context via:
+
+- `GET /model-context/docs`
+
+This endpoint is designed for external LLM agents (OpenAI-compatible providers like Open‑Claw). Open‑FDD does not embed or run an LLM; it only provides documentation context.
+
+By default, `mode=excerpt` returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or `OFDD_DOCS_PATH` if set). For more control:
+
+- `mode=full` returns the entire file.
+- `mode=slice&offset=...` returns a substring.
+- `query=...` returns keyword-retrieved relevant doc sections (simple lexical matching) to help keep prompts smaller.
+
+When `OFDD_API_KEY` auth is enabled, this endpoint requires Bearer auth like other API routes.

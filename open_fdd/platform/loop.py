@@ -92,14 +92,6 @@ def load_timeseries_for_equipment(
     Load timeseries_readings for one equipment into a DataFrame.
     Requires points.equipment_id and equipment table; falls back to site-level points.
     """
-    import uuid
-
-    try:
-        site_uuid = uuid.UUID(site_id)
-    except ValueError:
-        site_uuid = site_id
-    except TypeError:
-        site_uuid = site_id
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -111,7 +103,7 @@ def load_timeseries_for_equipment(
                 WHERE (p.site_id = %s OR p.site_id::text = %s)
                   AND e.name = %s
                 """,
-                (site_uuid, site_id, equipment_id),
+                (site_id, site_id, equipment_id),
             )
             rows = cur.fetchall()
     if not rows:
@@ -127,7 +119,7 @@ def load_timeseries_for_equipment(
                 SELECT tr.ts, p.external_id, tr.value
                 FROM timeseries_readings tr
                 JOIN points p ON tr.point_id = p.id
-                WHERE tr.point_id = ANY(%s)
+                WHERE tr.point_id = ANY(%s::uuid[])
                   AND tr.ts >= %s AND tr.ts <= %s
                 """,
                 (point_ids, start_ts, end_ts),
@@ -386,8 +378,19 @@ def run_fdd_loop(
 
 
 def _write_fault_results(results: list[FDDResult]) -> None:
-    """Bulk insert fault_results."""
-    rows = [r.to_row() for r in results]
+    """Bulk insert fault_results. Coerce site_id/equipment_id to str so UUID never reaches psycopg2."""
+    rows = []
+    for r in results:
+        rows.append(
+            (
+                r.ts,
+                str(r.site_id),
+                str(r.equipment_id),
+                r.fault_id,
+                r.flag_value,
+                r.evidence,
+            )
+        )
     with get_conn() as conn:
         with conn.cursor() as cur:
             execute_values(

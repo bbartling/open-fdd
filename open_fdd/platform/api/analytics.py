@@ -210,25 +210,29 @@ def get_fault_summary(
     }
 
 
-@router.get("/fault-timeseries", summary="Fault flags over time (for charts)")
-def get_fault_timeseries(
-    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
-    start_date: date = Query(..., description="Start of range"),
-    end_date: date = Query(..., description="End of range"),
-    bucket: str = Query("hour", description="Time bucket: hour or day"),
-):
-    """
-    Time-series of fault flag values (for React/Grafana-style charts).
-    Returns one row per (time_bucket, fault_id) with SUM(flag_value).
-    Join to fault_definitions for display names; here we return fault_id as metric.
-    """
+def _ts_iso_utc(dt: Optional[datetime]) -> Optional[str]:
+    """Format datetime as ISO UTC with Z so frontend parses as UTC."""
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def fetch_fault_timeseries_data(
+    site_id: Optional[str],
+    start_date: date,
+    end_date: date,
+    bucket: str = "day",
+) -> dict[str, Any]:
+    """Return fault-timeseries payload for charts (GET /analytics/fault-timeseries)."""
     if bucket not in ("hour", "day"):
-        bucket = "hour"
-    conditions = ["ts::date >= %s", "ts::date <= %s"]
+        bucket = "hour"  # API default for invalid bucket; AI agent passes "day" explicitly
+    conditions = ["fr.ts::date >= %s", "fr.ts::date <= %s"]
     params: list = [start_date, end_date]
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
-            raise HTTPException(404, f"No site found for: {site_id!r}")
+            return {"site_id": site_id, "period": {"start": str(start_date), "end": str(end_date)}, "bucket": bucket, "series": []}
         conditions.append(
             "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
         )
@@ -248,40 +252,43 @@ def get_fault_timeseries(
             )
             rows = cur.fetchall()
 
-    def _ts_iso_utc(dt):
-        """Format datetime as ISO UTC with Z so frontend parses as UTC and displays in local time (DST-safe)."""
-        if dt is None:
-            return None
-        if getattr(dt, "tzinfo", None) is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     return {
         "site_id": site_id,
         "period": {"start": str(start_date), "end": str(end_date)},
         "bucket": bucket,
         "series": [
-            {
-                "time": _ts_iso_utc(r["time"]),
-                "metric": r["metric"],
-                "value": float(r["value"]),
-            }
+            {"time": _ts_iso_utc(r["time"]), "metric": r["metric"], "value": float(r["value"])}
             for r in rows
         ],
     }
 
 
-@router.get("/faults-by-equipment", summary="Fault count per device (for bar chart)")
-def get_faults_by_equipment(
+@router.get("/fault-timeseries", summary="Fault flags over time (for charts)")
+def get_fault_timeseries(
     site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
     start_date: date = Query(..., description="Start of range"),
     end_date: date = Query(..., description="End of range"),
+    bucket: str = Query(
+        "hour",
+        description="Time bucket: hour or day",
+        pattern="^(hour|day)$",
+    ),
 ):
     """
-    Per-equipment count of distinct faults active in the period (flag_value=1).
-    Includes equipment name and BACnet device ID when points have one.
-    For bar chart: which device had how many active faults in the range.
+    Time-series of fault flag values (for React/Grafana-style charts).
+    Returns one row per (time_bucket, fault_id) with SUM(flag_value).
     """
+    if site_id and resolve_site_uuid(site_id, create_if_empty=False) is None:
+        raise HTTPException(404, f"No site found for: {site_id!r}")
+    return fetch_fault_timeseries_data(site_id, start_date, end_date, bucket)
+
+
+def fetch_faults_by_equipment_data(
+    site_id: Optional[str],
+    start_date: date,
+    end_date: date,
+) -> dict[str, Any]:
+    """Return faults-by-equipment payload for tables/charts (GET /analytics/faults-by-equipment)."""
     conditions = [
         "fr.ts::date >= %s",
         "fr.ts::date <= %s",
@@ -290,7 +297,7 @@ def get_faults_by_equipment(
     params: list = [start_date, end_date]
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
-            raise HTTPException(404, f"No site found for: {site_id!r}")
+            return {"site_id": site_id, "period": {"start": str(start_date), "end": str(end_date)}, "by_equipment": []}
         conditions.append(
             "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
         )
@@ -298,7 +305,6 @@ def get_faults_by_equipment(
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # Aggregate by (site_id, equipment_id) from fault_results; resolve to equipment id/name and bacnet
             cur.execute(
                 f"""
                 WITH active AS (
@@ -328,11 +334,7 @@ def get_faults_by_equipment(
         out.append(
             {
                 "site_id": r["site_id"],
-                "equipment_id": (
-                    r["equipment_uuid"]
-                    if r["equipment_uuid"]
-                    else r["equipment_id_text"]
-                ),
+                "equipment_id": r["equipment_uuid"] if r["equipment_uuid"] else r["equipment_id_text"],
                 "equipment_name": r["equipment_name"] or r["equipment_id_text"] or "—",
                 "bacnet_device_id": r["bacnet_device_id"],
                 "active_fault_count": int(r["active_fault_count"]),
@@ -343,6 +345,21 @@ def get_faults_by_equipment(
         "period": {"start": str(start_date), "end": str(end_date)},
         "by_equipment": out,
     }
+
+
+@router.get("/faults-by-equipment", summary="Fault count per device (for bar chart)")
+def get_faults_by_equipment(
+    site_id: Optional[str] = Query(None, description="Site name or UUID; omit for all"),
+    start_date: date = Query(..., description="Start of range"),
+    end_date: date = Query(..., description="End of range"),
+):
+    """
+    Per-equipment count of distinct faults active in the period (flag_value=1).
+    For bar chart: which device had how many active faults in the range.
+    """
+    if site_id and resolve_site_uuid(site_id, create_if_empty=False) is None:
+        raise HTTPException(404, f"No site found for: {site_id!r}")
+    return fetch_faults_by_equipment_data(site_id, start_date, end_date)
 
 
 @router.get(
@@ -413,12 +430,118 @@ def get_fault_results_series(
     return {"series": out, "period": {"start": str(start), "end": str(end)}}
 
 
-def _ts_iso_utc(dt) -> str:
+def _ts_iso_utc_str(dt) -> str:
+    """Format for fault-results-raw response (returns str)."""
     if hasattr(dt, "isoformat"):
         if getattr(dt, "tzinfo", None) is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat().replace("+00:00", "Z")
     return str(dt)
+
+
+def get_point_ids_for_agent(site_id: Optional[str], limit: int = 20) -> list[str]:
+    """Return up to limit point UUIDs for Overview AI (all points or for site). Used to auto-include point plots."""
+    site_uuid = resolve_site_uuid(site_id, create_if_empty=False) if site_id else None
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if site_uuid is not None:
+                cur.execute(
+                    "SELECT id FROM points WHERE site_id = %s ORDER BY external_id LIMIT %s",
+                    (str(site_uuid), limit),
+                )
+            else:
+                cur.execute(
+                    "SELECT id FROM points ORDER BY external_id LIMIT %s",
+                    (limit,),
+                )
+            rows = cur.fetchall()
+    return [str(r["id"]) for r in rows]
+
+
+def fetch_point_timeseries_data(
+    point_ids: list[str],
+    start_date: date,
+    end_date: date,
+) -> dict[str, Any]:
+    """Return point timeseries for charts (plots UI / analytics)."""
+    if not point_ids:
+        return {"period": {"start": str(start_date), "end": str(end_date)}, "series": [], "point_labels": {}}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tr.ts, p.id AS point_id, p.external_id, tr.value
+                FROM timeseries_readings tr
+                JOIN points p ON tr.point_id = p.id
+                WHERE p.id::text = ANY(%s)
+                  AND tr.ts::date >= %s AND tr.ts::date <= %s
+                ORDER BY tr.ts, p.id
+                """,
+                (point_ids, start_date, end_date),
+            )
+            rows = cur.fetchall()
+    point_labels: dict[str, str] = {}
+    series = []
+    for r in rows:
+        pid = str(r["point_id"])
+        external_id = r["external_id"] or pid
+        point_labels[pid] = external_id
+        series.append({
+            "time": _ts_iso_utc(r["ts"]),
+            "metric": external_id,
+            "value": float(r["value"]),
+        })
+    return {
+        "period": {"start": str(start_date), "end": str(end_date)},
+        "series": series,
+        "point_labels": point_labels,
+    }
+
+
+def fetch_fault_results_sample(
+    site_id: Optional[str],
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Return last N fault_results rows (any fault) for tabular display."""
+    conditions = []
+    params: list = []
+    if site_id:
+        if resolve_site_uuid(site_id, create_if_empty=False) is None:
+            return {"rows": [], "count": 0}
+        conditions.append(
+            "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
+        params.extend([site_id, site_id])
+    params.append(limit)
+    where = " AND ".join(conditions) if conditions else "1=1"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT ts, site_id, equipment_id, fault_id, flag_value, evidence
+                FROM fault_results fr
+                WHERE {where}
+                ORDER BY ts DESC
+                LIMIT %s
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+    rows = list(reversed(rows))  # chronological for display
+    return {
+        "rows": [
+            {
+                "ts": _ts_iso_utc_str(r["ts"]),
+                "site_id": r["site_id"],
+                "equipment_id": r["equipment_id"],
+                "fault_id": r["fault_id"],
+                "flag_value": int(r["flag_value"]),
+                "evidence": r["evidence"],
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
 
 
 @router.get(
@@ -467,7 +590,7 @@ def get_fault_results_raw(
     return {
         "rows": [
             {
-                "ts": _ts_iso_utc(r["ts"]),
+                "ts": _ts_iso_utc_str(r["ts"]),
                 "site_id": r["site_id"],
                 "equipment_id": r["equipment_id"],
                 "fault_id": r["fault_id"],
