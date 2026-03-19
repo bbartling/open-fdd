@@ -13,6 +13,7 @@ The Open-FDD data model is built around **sites**, **equipment**, and **points**
 - **[Sites](sites)** — Buildings or facilities. All equipment and points are scoped to a site.
 - **[Equipment](equipment)** — Physical devices (AHUs, VAVs, heat pumps). Belong to a site; have points.
 - **[Points](points)** — Time-series references (sensors, setpoints). Link to equipment and site; store `external_id`, optional `brick_type` and `rule_input` for FDD.
+- **[External representations (Brick v1.3)](external_representations)** — `ref:hasExternalReference` mappings from points to BACnet and timeseries systems.
 - **[SPARQL cookbook](sparql_cookbook)** — Run SPARQL via POST /data-model/sparql only: config, data model, BACnet, FDD rule mapping, time-series references. Copy-paste queries for validation and UIs.
 - **[AI-assisted data modeling](ai_assisted_tagging)** — Export → LLM or human tagging → import (Brick types, rule_input, polling, equipment feeds). External agents (e.g. Open‑Claw) can use `GET /model-context/docs` as platform documentation context and `GET /mcp/manifest` for HTTP discovery; the canonical import schema is the same.
 - **[LLM workflow (export + rules + validate → import)](llm_workflow)** — One-shot upload: canonical prompt, export JSON, optional rules (cookbook or YAML); validate with schema or Pydantic so import parses on the backend; then PUT /data-model/import and run FDD/tests.

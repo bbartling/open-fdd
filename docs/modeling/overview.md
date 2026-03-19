@@ -37,12 +37,18 @@ Sites + Equipment + Points (DB)  ← single source of truth
 ```turtle
 :oat_sensor a brick:Outside_Air_Temperature_Sensor ;
     rdfs:label "OAT (°F)" ;
+    ref:hasExternalReference [
+        a ref:TimeseriesReference ;
+        ref:hasTimeseriesId "oat_sensor" ;
+        ref:storedAt "postgresql://localhost:5432/openfdd/timeseries_readings"
+    ] ;
     brick:isPointOf :ahu_7 ;
     ofdd:mapsToRuleInput "oat" .
 ```
 
 - Brick classes define sensor types
 - `ofdd:mapsToRuleInput` maps to FDD DataFrame columns
+- `ref:hasExternalReference` links points to BACnet/timeseries external systems
 - `rdfs:label` for display
 
 ---
