@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import re
-from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Query, HTTPException
@@ -22,7 +21,6 @@ DEFAULT_EXCERPT_MAX_CHARS = 28_000
 DEFAULT_TOP_K = 6
 
 
-@lru_cache(maxsize=1)
 def _resolve_docs_path() -> Path | None:
     env_path = os.environ.get("OFDD_DOCS_PATH")
     if env_path:
