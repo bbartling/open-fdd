@@ -20,11 +20,6 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.config import get_platform_settings
-from open_fdd.platform.llm_tagger import (
-    TAGGER_DEFAULT_MAX_RETRIES,
-    TAGGER_MAX_RETRIES_MAX,
-    TAGGER_MAX_RETRIES_MIN,
-)
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.data_model_ttl import (
     build_ttl_from_db,
@@ -883,111 +878,6 @@ def import_data_model(body: DataModelImportBody):
     if warnings:
         out["warnings"] = warnings
     return out
-
-
-# --- AI tagging: export → OpenAI → validate → optional import ---
-
-
-class TagWithOpenAiRequest(BaseModel):
-    site_id: str | None = Field(
-        None,
-        description="Filter by site (UUID, name, or description) — same as GET /data-model/export?site_id=X. Omit for all sites.",
-    )
-    model: str = Field(
-        "gpt-4o",
-        description="OpenAI model to use (e.g. gpt-4o, gpt-4o-mini, gpt-4-turbo).",
-    )
-    auto_import: bool = Field(
-        False,
-        description="If true, immediately PUT /data-model/import with the tagged JSON after validation. "
-        "If false (default), returns tagged JSON for review without writing to DB.",
-    )
-    user_summary: str | None = Field(
-        None,
-        description="Optional description of the HVAC system and feeds/fed_by from the engineer. "
-        "Passed to the LLM to improve Brick tagging; same API as manual export/import.",
-    )
-    max_retries: int = Field(
-        TAGGER_DEFAULT_MAX_RETRIES,
-        ge=TAGGER_MAX_RETRIES_MIN,
-        le=TAGGER_MAX_RETRIES_MAX,
-        description="Number of attempts on Pydantic validation failure. Agent log reports each attempt.",
-    )
-
-
-@router.post(
-    "/tag-with-openai",
-    summary="Tag data model with Brick types via OpenAI",
-    response_description=(
-        "Tagged JSON ready to review and import (points + equipment + meta). "
-        "Set auto_import=true to write to DB immediately."
-    ),
-)
-def tag_data_model_with_openai(body: TagWithOpenAiRequest):
-    """Export the current data model, send it to OpenAI using the canonical prompt,
-    validate the tagged response against DataModelImportBody, and optionally import it.
-
-    Open‑Claw-only AI: when Open‑Claw is not configured, this endpoint returns 503.
-    When enabled, the server uses OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY
-    (OpenAI-compatible) and ignores any client-supplied key.
-    """
-    try:
-        from open_fdd.platform.llm_tagger import LlmTaggerError, tag_with_openai as _tag
-
-        settings = get_platform_settings()
-        open_claw_ready = bool(getattr(settings, "open_claw_base_url", None)) and bool(
-            getattr(settings, "open_claw_api_key", None)
-        )
-        if not open_claw_ready:
-            raise HTTPException(
-                503,
-                "AI disabled: Open‑Claw is not configured. Bootstrap with --with-open-claw and set OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY.",
-            )
-
-        api_key = settings.open_claw_api_key or ""
-        base_url = settings.open_claw_base_url
-
-        export_rows = _build_unified_export(body.site_id)
-        export_dicts = [r.model_dump() for r in export_rows]
-
-        try:
-            import_body, usage, agent_log = _tag(
-                export_rows=export_dicts,
-                api_key=api_key,
-                base_url=base_url,
-                model=body.model,
-                user_summary=body.user_summary,
-                max_retries=body.max_retries,
-            )
-        except LlmTaggerError as exc:
-            raise HTTPException(exc.status_code, exc.detail)
-
-        meta: dict = {
-            "model": body.model,
-            "point_count": len(import_body.points),
-            "equipment_count": len(import_body.equipment),
-            "agent_log": agent_log,
-        }
-        if usage:
-            meta["usage"] = usage
-
-        if body.auto_import:
-            import_result = import_data_model(import_body)
-            meta["import_result"] = import_result
-
-        return {
-            "points": [p.model_dump() for p in import_body.points],
-            "equipment": [e.model_dump() for e in import_body.equipment],
-            "meta": meta,
-        }
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Tag-with-OpenAI failed")
-        msg = str(exc).strip() or type(exc).__name__
-        if not msg or len(msg) > 500:
-            msg = f"{type(exc).__name__}: see server logs"
-        raise HTTPException(500, msg)
 
 
 # --- TTL: generate from DB (always in sync with CRUD) ---

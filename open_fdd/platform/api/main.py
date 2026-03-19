@@ -14,7 +14,6 @@ from fastapi.staticfiles import StaticFiles
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.api import (
-    ai_agent,
     analytics,
     bacnet,
     config as config_router,
@@ -23,6 +22,8 @@ from open_fdd.platform.api import (
     entities,
     faults,
     jobs as jobs_router,
+    mcp_bridge,
+    model_context,
     points,
     equipment,
     rules as rules_router,
@@ -204,7 +205,8 @@ app.include_router(jobs_router.router)
 app.include_router(bacnet.router)
 app.include_router(run_fdd.router)
 app.include_router(ws_router)
-app.include_router(ai_agent.router)
+app.include_router(model_context.router)
+app.include_router(mcp_bridge.router)
 
 # Legacy config UI at /app/ (optional; removed when using React frontend only)
 _static_dir = Path(__file__).resolve().parent.parent / "static"
@@ -275,17 +277,9 @@ def capabilities():
     Return version and feature flags. Use for discovery and to decide whether to
     use WebSocket (/ws/events), fault state (/faults/active), jobs (/jobs/*), or BACnet write.
 
-    Open‑Claw-only AI:
-    - If Open‑Claw is configured (base URL + API key present), ai_available=true.
-    - Otherwise ai_available=false and ai_backend="disabled".
+    External model context (documentation) is exposed via `/model-context/*`.
+    Built-in Open-Claw AI endpoints are intentionally disabled.
     """
-    s = get_platform_settings()
-    open_claw_ready = bool(getattr(s, "open_claw_base_url", None)) and bool(
-        getattr(s, "open_claw_api_key", None)
-    )
-    ai_backend: Literal["open_claw", "disabled"] = (
-        "open_claw" if open_claw_ready else "disabled"
-    )
     return CapabilityResponse(
         version=_app_version(),
         features={
@@ -294,8 +288,8 @@ def capabilities():
             "jobs": True,
             "bacnet_write": True,
         },
-        ai_available=open_claw_ready,
-        ai_backend=ai_backend,
+        ai_available=False,
+        ai_backend="disabled",
     )
 
 

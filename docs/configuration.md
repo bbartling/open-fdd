@@ -53,18 +53,17 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 ---
 
-## AI backend (Open‑Claw only)
+## Model context endpoint (external agents)
 
-Open‑FDD AI features (Overview chat and data model tagging) are **Open‑Claw-only**.
+Open‑FDD can serve its own documentation as plain-text model context for external AI agents (for example an OpenAI-compatible tool like Open‑Claw).
 
-When `OFDD_OPEN_CLAW_BASE_URL` and `OFDD_OPEN_CLAW_API_KEY` are set in `stack/.env` (or injected into the API container env), the API uses them server-side and the frontend enables AI controls. If either value is missing, the API returns `503` for AI endpoints and the frontend hides/disables AI controls.
+The endpoint is `GET /model-context/docs`.
 
-| Variable | Description |
-|----------|-------------|
-| `OFDD_OPEN_CLAW_BASE_URL` | Base URL of the Open‑Claw API (e.g. `https://your-open-claw.example/v1`). |
-| `OFDD_OPEN_CLAW_API_KEY` | API key for Open‑Claw. If your Open‑Claw deployment uses OpenAI, you can set this to your **OpenAI API key**; otherwise use the key provided by your Open‑Claw host. |
+By default it returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or the file pointed to by `OFDD_DOCS_PATH` if set). If you need specific sections, pass `query=...` for keyword retrieval and control output size with `max_chars`.
 
-Data model **export/import (JSON)** works without any AI—manual copy-paste or external LLM is always an option.
+Open‑FDD does not embed or run an LLM; you supply the LLM provider externally.
+
+Security note: when `OFDD_API_KEY` is enabled, this endpoint requires Bearer auth like other API routes.
 
 
 ---

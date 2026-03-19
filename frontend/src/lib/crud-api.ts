@@ -1,15 +1,11 @@
 import { apiFetch } from "@/lib/api";
 import type {
-  AiAgentRequest,
-  AiAgentResponse,
   DataModelExportRow,
   DataModelImportBody,
   DataModelImportResponse,
   PlatformConfig,
   Point,
   Site,
-  TagWithOpenAiRequest,
-  TagWithOpenAiResponse,
 } from "@/types/api";
 
 export interface SiteCreate {
@@ -120,14 +116,6 @@ export function dataModelImport(body: DataModelImportBody) {
   });
 }
 
-export function tagPointsWithOpenAi(body: TagWithOpenAiRequest) {
-  return apiFetch<TagWithOpenAiResponse>("/data-model/tag-with-openai", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 export function dataModelSerialize() {
   return apiFetch<{ status: string; path?: string; path_resolved?: string; error?: string }>(
     "/data-model/serialize",
@@ -188,13 +176,5 @@ export function deleteRule(filename: string) {
 export function syncRuleDefinitions() {
   return apiFetch<{ ok: boolean }>("/rules/sync-definitions", {
     method: "POST",
-  });
-}
-
-export function callAiAgent(body: AiAgentRequest) {
-  return apiFetch<AiAgentResponse>("/ai/agent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
 }

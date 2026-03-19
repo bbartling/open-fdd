@@ -41,17 +41,16 @@ Or: `docker compose -f stack/docker-compose.yml up -d` from repo root. Reboot: c
 | **FDD loop, BACnet scraper code** | `docker compose build bacnet-scraper fdd-loop` (or `--build`); fdd-loop also mounts `open_fdd` from host, so host code changes apply on restart. |
 | **Config UI scrape interval ignored by BACnet scraper** | When the API has Bearer auth (`OFDD_API_KEY`), the scraper must have the same key to call GET /config. Ensure `OFDD_API_KEY` is in `stack/.env` and passed to the bacnet-scraper service in docker-compose; then `./scripts/bootstrap.sh --build bacnet-scraper` so the scraper restarts with the key. See [Configuration → Services that read config from the API](configuration#services-that-read-config-from-the-api-bacnet-scraper). |
 | **Grafana datasource missing or wrong** | `./scripts/bootstrap.sh --reset-grafana` |
-| **AI backend (Open‑Claw-only)** | Set `OFDD_OPEN_CLAW_BASE_URL` and `OFDD_OPEN_CLAW_API_KEY` in `stack/.env`; then restart API: `docker compose restart api` or `./scripts/bootstrap.sh --build api`. See [Configuration → AI backend](configuration#ai-backend-open-claw). |
 
 ---
 
 ## New SQL migrations
 
-When upgrading to a release that adds migrations (e.g. `008_fdd_run_log.sql` through `016_equipment_unique_site_name.sql`), apply any new files under `stack/sql/` in order, or re-run bootstrap:
+When upgrading to a release that adds migrations, apply any new files under `stack/sql/` in order, or re-run bootstrap:
 
 ```bash
 cd stack
-for f in sql/008_*.sql sql/009_*.sql sql/010_*.sql sql/011_*.sql sql/012_*.sql sql/013_*.sql sql/014_*.sql sql/015_*.sql sql/016_*.sql; do
+for f in $(printf '%s\n' sql/*.sql | sort); do
   [ -f "$f" ] && docker compose exec -T db psql -U postgres -d openfdd -f - < "$f" || true
 done
 ```

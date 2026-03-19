@@ -71,47 +71,42 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 
 ---
 
-## In-house AI agent (Open‑Claw API Assist)
+## External agent integration (Open‑Claw or any OpenAI-compatible LLM)
 
-**Where it runs:** In the frontend, open **Data Model Setup** → **Export (for AI / copy-paste)** → click **Open‑Claw API Assist**. The agent is **optional**; the manual export → external LLM → import flow is always available without it.
+**Where it runs:** Outside Open‑FDD (in your external LLM/Open‑Claw environment). Open‑FDD stays the single source of truth; your agent orchestrates `GET /data-model/export` → LLM tagging → `PUT /data-model/import`.
 
-**How it’s invoked:** When you click **Tag with Open‑Claw**, the frontend sends **POST /data-model/tag-with-openai** with the chosen model, optional chat prompt (HVAC description), and optional auto-import flag. The backend runs the agent (see below) and returns tagged JSON plus an **agent log**; the UI shows the log and pre-fills the Import textarea.
+**How it’s invoked:** Your external agent calls `GET /data-model/export` (optionally with a site filter), tags the export via Open‑Claw (OpenAI-compatible) using the canonical prompt, then imports validated JSON with `PUT /data-model/import`. If validation fails, include the error text and retry (prompt chaining).
 
-**What the agent does:** It uses the **same API as the manual process**: server-side **GET /data-model/export** (with optional site filter), then a single LLM call (or chunked calls for large payloads) with the **canonical prompt** from `config/canonical_llm_prompt.txt` (or built-in fallback). The response is validated with the same **DataModelImportBody** Pydantic model as **PUT /data-model/import**. If you enable auto-import, the backend then calls the import logic so the data model is updated in one step. The engineer can still validate on the **Data Model Testing** page (SPARQL / “Summarize your HVAC”) and treat the result as pass or fail.
+**What the agent does:** It uses the same API endpoints as the manual process: `GET /data-model/export` (optionally filtered by site) → LLM tagging using the canonical prompt → validate that the returned JSON matches Open‑FDD’s import schema → `PUT /data-model/import` (or return JSON for the engineer to import).
 
 ---
 
-### How the agent works: retry and prompt chaining
+### External retry loop (prompt chaining)
 
-The agent is **not** a long-lived process; it runs inside a single **POST /data-model/tag-with-openai** request:
+The agent is typically **not** a long-lived process; your external loop exports the model, tags it, validates the output, and retries when needed:
 
-1. **Export** — The backend builds the same export as GET /data-model/export (optionally filtered by site).
-2. **System prompt** — Loaded from **`config/canonical_llm_prompt.txt`** when the file exists (otherwise a built-in prompt in code). Edit the file to change behavior; no app restart needed for the next request.
-3. **User message** — The export JSON is sent as the user message. If you filled the **chat prompt** in the UI (e.g. “Describe HVAC system and feeds or fed-by relationships for AI to tag”), that text is prepended so the LLM can use your description for Brick types and equipment relationships.
-4. **LLM call** — One request to Open‑Claw (OpenAI-compatible) (or, for very large exports, the backend may split into chunks of 120 rows and merge results) with `response_format={"type": "json_object"}`.
+1. **Export** — Call `GET /data-model/export` (optionally filtered by site) and send the export JSON to your agent.
+2. **System prompt** — Use the canonical prompt from `config/canonical_llm_prompt.txt` (or wrap it in your Open‑Claw/OpenAI-compatible system prompt). Provide it as the LLM system prompt.
+3. **User message** — Send the export JSON as the user message. Optionally prepend any engineer description of feeds/fed_by topology and assumptions so the LLM can choose correct Brick types and relationships.
+4. **LLM call** — Call your Open‑Claw/OpenAI-compatible LLM once (for typical payloads). For very large exports, your agent may split into chunks and merge results. Request JSON output (for example with `response_format={"type": "json_object"}`).
 5. **Validation** — The response is parsed as JSON and validated with **DataModelImportBody** (same schema as import). If validation fails:
-   - **Prompt chaining:** The error text (e.g. “Open‑Claw response failed schema validation: …”) is appended to the **next** attempt’s user message, so the model sees what went wrong and is asked to fix it.
-   - **Retry** — The backend retries up to a configurable number of attempts (default 3; see `open_fdd/platform/llm_tagger.py` constants). Each attempt is a new LLM call with the same export and, from the second attempt onward, the previous validation error in the prompt.
-6. **Agent log** — Each attempt and outcome (attempt, validation_failed, success) is recorded and returned in the response **meta.agent_log**; the UI shows this so you can see retries and that the agent produced valid import JSON.
-7. **Optional import** — If you set **Auto-import tagged JSON** in the UI, the backend runs the same import logic as PUT /data-model/import and returns the import result in the response.
+   - **Prompt chaining:** When validation fails, append the error text to the next attempt so the model can correct the JSON.
+   - **Retry** — Retry up to a configurable max attempts in your agent.
+6. **Agent log** — Optionally log attempts/outcomes so the engineer can inspect what changed between retries.
+7. **Optional import** — Either return JSON for review, or immediately call `PUT /data-model/import` after validation.
 
-So the agent uses **rule-based retry** with **prompt chaining**: same export and rules each time, but after a validation failure the next prompt includes the error so the LLM can correct the output. Constants (max retries, chunk size) live in **`open_fdd/platform/llm_tagger.py`**; the API request can override `max_retries` (1–10).
-
-**Optional dependency:** The `openai` package is required only for this endpoint. If it is not installed, the API returns 500 with a message to install it; the rest of the platform (including manual export/import) works without it.
+So the agent uses **retry** with **prompt chaining**: keep the same export/rules, and after a validation failure include the error so the LLM can correct its output.
 
 ---
 
-## Automated tagging via the API (summary)
+## Automating tagging (external agents)
 
-1. Open the **Data Model Setup** page in the frontend.
-2. Expand **Open‑Claw API Assist** (under Export). Optionally edit the **chat prompt** (default: “Describe HVAC system and feeds or fed-by relationships for AI to tag”).
-3. Select a model (no API key entry is needed). If you have multiple sites, optionally check **Tag specific site** and pick the site in the dropdown.
-4. Click **Tag with Open‑Claw** — the platform calls **POST /data-model/tag-with-openai**, which runs the in-house agent (export → LLM with retry and prompt chaining → validate → optional import). The response includes **meta.agent_log**; the UI shows the log and pre-fills the Import textarea.
-5. Review the tagged JSON (and agent log). If you did not auto-import, click **Import** when ready. Use the **Data Model Testing** page to validate (SPARQL / Summarize your HVAC) and pass or fail the result.
-
-**Key handling:** The Open‑Claw API key is configured server-side via `OFDD_OPEN_CLAW_API_KEY`. The UI never sends an API key in request bodies.
-
-**Users without an API key:** The manual copy-paste workflow (Export → external LLM → Import) remains fully supported.
+1. Call `GET /data-model/export` to get the export JSON (optionally with `?site_id=...`).
+2. Fetch Open‑FDD documentation context for the LLM: `GET /model-context/docs` (use `query=...` to retrieve relevant sections).
+3. Prompt/tag with Open‑Claw (OpenAI-compatible) to produce import JSON that matches the Open‑FDD schema.
+4. Validate and import:
+   - either return JSON for the engineer to review, or
+   - call `PUT /data-model/import` with the validated JSON.
 
 ---
 
@@ -130,14 +125,14 @@ Human fix:
 2. Keep `site_name` unchanged (e.g. `"BensOffice"`).
 3. Click **Import** again.
 
-If you’re using the in-house **Tag with Open‑Claw** flow and auto-import fails, switch to the manual workflow:
-**Export → tag externally → import** (so you can edit the JSON in the Import textarea before retrying).
+If `PUT /data-model/import` rejects otherwise-valid JSON, re-run tagging with prompt chaining:
+include the import error text in your next LLM attempt so it can correct UUIDs/references, or return the JSON for a human to edit and import manually.
 
 ---
 
 ## Possible extension: AI assist on Data Model Testing
 
-A future **Data Model Testing** page could offer a second in-house AI assist, same chat style as on Data Model Setup: the engineer describes what they see (e.g. SPARQL summary, missing relationships, or test failure), and the model suggests **changes as import JSON** (points/equipment) so the engineer can apply and re-test. Under the hood this would use a **separate prompt** from the tagging prompt:
+A future **Data Model Testing** page could offer a second AI assist (same chat style as on Data Model Setup): the engineer describes what they see (e.g. SPARQL summary, missing relationships, or test failure), and the model suggests **changes as import JSON** (points/equipment) so the engineer can apply and re-test. Under the hood this would use a **separate prompt** from the tagging prompt:
 
 - **Input:** Current data model context (e.g. TTL snippet or SPARQL “Summarize your HVAC” result) plus the engineer’s message (e.g. “Add feeds/fed-by between AHU-1 and VAV-1”, “Fix the brick_type for SA-T”).
 - **Output:** Same schema as the tagging flow — valid **points** and **equipment** import JSON only — so the same **PUT /data-model/import** and validation path apply. The engineer reviews, applies, then re-runs SPARQL or predefined tests and passes/fails.

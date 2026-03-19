@@ -25,38 +25,36 @@ The Open-FDD platform exposes a **REST API** (port 8000) for CRUD, config, data 
 | **Faults** | **GET /faults/active**, **GET /faults/state**, **GET /faults/definitions** — active state, full state, definitions. |
 | **Jobs** | **POST /jobs/bacnet/discovery**, **POST /jobs/fdd/run** — async BACnet discovery and FDD run. **GET /jobs/{job_id}** — status. |
 | **Run FDD** | **POST /run-fdd** — trigger FDD run now. **GET /run-fdd/status** — last run. |
-| **AI** | **POST /ai/agent** — Overview chat (mode `overview_chat`). See [Overview AI context and behavior](#overview-ai-context-and-behavior) below. |
+| **Model context** | **GET /model-context/docs** — serve Open-FDD documentation as plain-text model context for external agents (supports excerpt/full/slice and keyword retrieval via `query`). |
+| **MCP-style discovery** | **GET /mcp/manifest** — JSON manifest listing logical resources (e.g. `openfdd://docs`) and HTTP mappings for common “tools” (docs, export, import, capabilities). Not a full MCP JSON-RPC server; see [Open‑Claw integration](../openclaw_integration). |
 
 **Base URL:** `http://localhost:8000` (use your host or IP when remote). **Auth:** When `OFDD_API_KEY` is set, send `Authorization: Bearer <key>`; the React frontend does this when built with `VITE_OFDD_API_KEY`.
 
 ---
 
-## Overview AI context and behavior
+## MCP manifest (`GET /mcp/manifest`)
 
-**POST /ai/agent** (mode `overview_chat`) powers the Overview AI assistant in the React UI. The backend calls an **OpenAI-compatible Open‑Claw** service with the following context; the browser never talks to the LLM provider directly.
+Agents can use this endpoint to **discover** stable URLs without hand-copying from Swagger:
 
-### What the agent receives on each request
+- **Resources**: e.g. documentation as `openfdd://docs` → `GET /model-context/docs`
+- **Tools**: JSON metadata with `http.method` and `http.path` for docs fetch, data-model export/import, and `GET /capabilities`
 
-1. **Live context (JSON)** — Built from the database and graph on every request: data model summary (sites, equipment, points, rule definitions), active fault count, last FDD run status (and error message if the run failed), BACnet summary, graph serialization status.
-2. **Platform documentation excerpt** — The first **~28,000 characters** of `pdf/open-fdd-docs.txt` (or the file at `OFDD_DOCS_PATH` if set). This gives the agent enough to explain what Open-FDD is, quick start, stack, and key concepts. The **full doc is not sent** (the file is ~213k characters / ~56k tokens); a fixed cap keeps token usage and cost reasonable. The excerpt is loaded once per request; there is no “fetch more doc as needed” (no RAG or chunk retrieval).
-3. **Attached data** — The backend always attaches fault and sensor charts and tabular data for the last 24 hours; the model is told these are attached and should describe what they show.
+When `OFDD_API_KEY` is set, the manifest endpoint is protected like other routes (Bearer required).
 
-### What the agent does *not* use
+---
 
-- **Conversation history** — Each request is **stateless**. The API does not send prior messages or replies to Open‑Claw. The UI may show a scroll of past Q&A, but the backend has no access to that; every call is a single user question and a single assistant reply. Multi-turn or “get more context as needed” in a thread is not implemented.
+## Model context docs endpoint
 
-### Models and keys
+Open‑FDD can serve its documentation as plain text model context via:
 
-- **Models** — The API accepts any `model` string; the frontend offers **GPT-5 mini** (default, cost-efficient) and **GPT-5.4 pro** (for more complex tasks). No 4o or other model names are assumed in the docs.
-- **Open‑Claw API key** — The server uses `OFDD_OPEN_CLAW_API_KEY`. The UI never sends an API key in request bodies. If Open‑Claw is not configured, AI endpoints return `503` and the UI hides/disables AI controls.
+- `GET /model-context/docs`
 
-### Open‑Claw configuration (AI enabled/disabled)
+This endpoint is designed for external LLM agents (OpenAI-compatible providers like Open‑Claw). Open‑FDD does not embed or run an LLM; it only provides documentation context.
 
-Overview chat and **POST /data-model/tag-with-openai** (Data Model → Tag with Open‑Claw) both use the same Open‑Claw backend (OpenAI-compatible). Configure it via environment variables (see [Configuration](../configuration#ai-backend-open-claw)):
+By default, `mode=excerpt` returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or `OFDD_DOCS_PATH` if set). For more control:
 
-| Variable | Description |
-|----------|-------------|
-| `OFDD_OPEN_CLAW_BASE_URL` | Base URL of the Open‑Claw API (e.g. `https://your-open-claw.example/v1`). |
-| `OFDD_OPEN_CLAW_API_KEY` | API key for Open‑Claw. Used by the backend for Overview chat and tag-with-openai; not sent from the browser. |
+- `mode=full` returns the entire file.
+- `mode=slice&offset=...` returns a substring.
+- `query=...` returns keyword-retrieved relevant doc sections (simple lexical matching) to help keep prompts smaller.
 
-If Open‑Claw is not configured, the API returns `503` for AI endpoints and the UI hides/disables AI controls. JSON export/import for the data model always works without any AI (manual copy-paste or external LLM).
+When `OFDD_API_KEY` auth is enabled, this endpoint requires Bearer auth like other API routes.

@@ -8,7 +8,7 @@ nav_order: 5
 
 This page describes a **single upload** workflow for mechanical engineers: send the **canonical prompt**, the **data-model export JSON**, and (optionally) the **rules you want to use** to an LLM; get back import-ready JSON; **validate** it so you know it will parse on the Open-FDD backend; then **PUT /data-model/import** and run FDD (or Sparkl/tests) as needed.
 
-> **Automated path available:** If Open‑Claw is configured, you can skip the copy-paste steps entirely. On the **Data Model** page, expand **Open‑Claw API Assist** — the platform runs the export, calls Open‑Claw (OpenAI-compatible) with the canonical prompt, validates the response, and pre-fills the Import textarea. See [AI-assisted tagging](ai_assisted_tagging#automated-tagging-via-the-api) for details. The manual workflow below is always available.
+> **Automated path available:** External OpenAI-compatible agents (for example Open‑Claw) can automate the same flow by calling `GET /data-model/export`, fetching platform documentation context from `GET /model-context/docs`, and then calling `PUT /data-model/import` with validated import JSON. The manual copy-paste workflow below always works too.
 
 ---
 
@@ -81,7 +81,7 @@ For every point/equipment:
 1. **Create site** (and optionally equipment) via API or UI; note **site_id**.
 2. **Export** — GET /data-model/export?site_id=YourSiteName (or no filter for full dump).
 3. **Upload to LLM** — Paste (a) canonical prompt, (b) export JSON, (c) optional rules (cookbook link or YAML snippets). Optionally include the import JSON Schema so the LLM returns valid payload.
-   - If you are using a **manual/external** LLM tagging workflow (no in-house agent), you can paste this as a hard instruction to your LLM system/developer prompt:
+   - If you are using a **manual/external** LLM tagging workflow (no in-house agent), you can paste this as a hard instruction to your LLM system/developer prompt. The UUID and equipment rules below match the [Model instruction](#model-instruction-to-paste-into-your-llm-manual-tagging) above; keep both in sync when requirements change.
 ```text
 Return ONLY valid Open-FDD import JSON with exactly two top-level keys:
 {

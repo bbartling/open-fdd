@@ -225,7 +225,7 @@ def fetch_fault_timeseries_data(
     end_date: date,
     bucket: str = "day",
 ) -> dict[str, Any]:
-    """Return fault-timeseries payload for charts. Used by GET /analytics/fault-timeseries and /ai/agent."""
+    """Return fault-timeseries payload for charts (GET /analytics/fault-timeseries)."""
     if bucket not in ("hour", "day"):
         bucket = "hour"  # API default for invalid bucket; AI agent passes "day" explicitly
     conditions = ["fr.ts::date >= %s", "fr.ts::date <= %s"]
@@ -288,7 +288,7 @@ def fetch_faults_by_equipment_data(
     start_date: date,
     end_date: date,
 ) -> dict[str, Any]:
-    """Return faults-by-equipment payload for tables/charts. Used by GET /analytics/faults-by-equipment and /ai/agent."""
+    """Return faults-by-equipment payload for tables/charts (GET /analytics/faults-by-equipment)."""
     conditions = [
         "fr.ts::date >= %s",
         "fr.ts::date <= %s",
@@ -463,7 +463,7 @@ def fetch_point_timeseries_data(
     start_date: date,
     end_date: date,
 ) -> dict[str, Any]:
-    """Return point timeseries for charts. Used by /ai/agent (auto or when plot_point_ids is set)."""
+    """Return point timeseries for charts (plots UI / analytics)."""
     if not point_ids:
         return {"period": {"start": str(start_date), "end": str(end_date)}, "series": [], "point_labels": {}}
     with get_conn() as conn:
@@ -502,7 +502,7 @@ def fetch_fault_results_sample(
     site_id: Optional[str],
     limit: int = 10,
 ) -> dict[str, Any]:
-    """Return last N fault_results rows (any fault) for tabular display. Used by /ai/agent."""
+    """Return last N fault_results rows (any fault) for tabular display."""
     conditions = []
     params: list = []
     if site_id:

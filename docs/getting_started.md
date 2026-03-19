@@ -32,19 +32,17 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ---
 
-## AI: Open‑Claw-only
+## External AI (OpenAI-compatible)
 
-Open‑FDD AI features are available only when Open‑Claw is configured.
+Open‑FDD does not embed an LLM. Instead, external AI agents (for example an OpenAI-compatible tool like Open‑Claw) can take advantage of Open‑FDD by calling its APIs:
 
-1. In `stack/.env`, set:
-   - `OFDD_OPEN_CLAW_BASE_URL=` your Open‑Claw API base URL (e.g. `https://your-open-claw.example/v1`)
-   - `OFDD_OPEN_CLAW_API_KEY=` your Open‑Claw API key
-2. Run `./scripts/bootstrap.sh --with-open-claw`.
-   - If Open‑Claw isn’t configured, the UI hides/disables AI controls and AI endpoints return `503`.
+1. Export the current data model JSON: `GET /data-model/export`
+2. Fetch documentation as model context: `GET /model-context/docs` (optionally with `query=...` / keyword retrieval)
+3. Import tagged JSON back into the platform: `PUT /data-model/import`
 
-Manual Data Model export/import (JSON) always works without AI.
+Manual Data Model export/import (JSON) always works without any AI.
 
-See [Configuration → AI backend](configuration#ai-backend-open-claw) and [API Reference](appendix/api_reference) for details.
+See [Open‑Claw integration](openclaw_integration) and [API Reference](appendix/api_reference) for endpoint details.
 
 ---
 
@@ -101,8 +99,6 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
 | `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
-| `--with-open-claw` | Configure the stack for Open‑Claw AI: ensure `OFDD_OPEN_CLAW_BASE_URL` and `OFDD_OPEN_CLAW_API_KEY` are set in `stack/.env`. See [Configuration → AI backend](configuration#ai-backend-open-claw). |
-
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
 ---

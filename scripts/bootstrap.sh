@@ -65,7 +65,6 @@ SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
 FRONTEND_RESET=false
 WITH_MQTT_BRIDGE=false
-WITH_OPEN_CLAW=false
 
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -100,7 +99,6 @@ while [[ $i -lt ${#args[@]} ]]; do
     --reset-grafana) RESET_GRAFANA=true ;;
     --with-grafana) WITH_GRAFANA=true ;;
     --with-mqtt-bridge) WITH_MQTT_BRIDGE=true ;;
-    --with-open-claw) WITH_OPEN_CLAW=true ;;
     --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
@@ -130,7 +128,6 @@ Core:
   --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; use --with-grafana to add Grafana)
   --with-grafana            Include Grafana in the stack (default: not installed)
   --with-mqtt-bridge        Enable BACnet2MQTT bridge + start MQTT broker (localhost:1883) for Home Assistant on same box
-  --with-open-claw         Configure the stack to use Open‑Claw as the AI backend (requires OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY in stack/.env)
   --verify                  Show running services + health checks (exits before starting stack; run --with-mqtt-bridge without --verify first to enable bridge)
   --verify --test           Verify services then run tests; then exit
   --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit (no E2E/Selenium)
@@ -744,23 +741,6 @@ write_edge_env
 # Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
 [[ -f "$STACK_DIR/.env" ]] && set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
 
-if $WITH_OPEN_CLAW; then
-  env_file="$STACK_DIR/.env"
-  # Enable the Open‑Claw AI backend in env (effective AI availability still depends
-  # on OFDD_OPEN_CLAW_BASE_URL + OFDD_OPEN_CLAW_API_KEY being present).
-  if grep -qE '^OFDD_AI_BACKEND=' "$env_file" 2>/dev/null; then
-    sed -i "s/^OFDD_AI_BACKEND=.*/OFDD_AI_BACKEND=open_claw/" "$env_file" 2>/dev/null || true
-  else
-    echo "OFDD_AI_BACKEND=open_claw" >> "$env_file"
-  fi
-
-  if ! grep -qE '^OFDD_OPEN_CLAW_BASE_URL=' "$env_file" 2>/dev/null; then
-    echo "Warning: --with-open-claw set but OFDD_OPEN_CLAW_BASE_URL is not in stack/.env."
-  fi
-  if ! grep -qE '^OFDD_OPEN_CLAW_API_KEY=' "$env_file" 2>/dev/null; then
-    echo "Warning: --with-open-claw set but OFDD_OPEN_CLAW_API_KEY is not in stack/.env."
-  fi
-fi
 check_prereqs
 ensure_diy_bacnet_sibling
 

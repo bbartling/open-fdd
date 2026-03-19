@@ -23,15 +23,15 @@ class CapabilityResponse(BaseModel):
         ...,
         description="Feature flags: websocket, fault_state, jobs, bacnet_write",
     )
-    # Open‑Claw-only AI: when Open‑Claw isn’t configured, the UI should hide AI
-    # controls and AI endpoints should return 503.
+    # Built-in LLM endpoints are not part of Open-FDD; use external tooling +
+    # GET /model-context/docs and GET /mcp/manifest for discovery.
     ai_available: bool = Field(
         False,
-        description="If false, AI features are disabled (Open‑Claw not configured).",
+        description="Always false in core Open-FDD; use an external agent stack.",
     )
-    ai_backend: Literal["open_claw", "disabled"] = Field(
+    ai_backend: Literal["disabled"] = Field(
         "disabled",
-        description="Effective AI backend: open_claw when enabled; disabled otherwise.",
+        description="Core API does not embed an LLM; value is always disabled.",
     )
 
 

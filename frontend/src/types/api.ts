@@ -157,43 +157,6 @@ export interface DataModelImportResponse {
   warnings?: string[];
 }
 
-/** POST /data-model/tag-with-openai request */
-export interface TagWithOpenAiRequest {
-  site_id?: string | null;
-  model: string;
-  auto_import?: boolean;
-  /** Engineer's description of HVAC system and feeds/fed_by for the in-house agent. */
-  user_summary?: string | null;
-  /** Max retries on validation failure (default 3). */
-  max_retries?: number;
-}
-
-/** One step in the tagging agent log (attempt, success, validation_failed). */
-export interface TagWithOpenAiAgentLogEntry {
-  step: string;
-  attempt?: number;
-  detail?: string;
-}
-
-/** POST /data-model/tag-with-openai response */
-export interface TagWithOpenAiResponse {
-  points: DataModelExportRow[];
-  equipment: unknown[];
-  meta: {
-    model: string;
-    point_count: number;
-    equipment_count: number;
-    /** Log of agent attempts and outcomes for display in the UI. */
-    agent_log?: TagWithOpenAiAgentLogEntry[];
-    usage?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    };
-    import_result?: DataModelImportResponse;
-  };
-}
-
 /** POST /data-model/sparql response */
 export interface SparqlResponse {
   bindings: Record<string, string | null>[];
@@ -207,10 +170,10 @@ export interface Capabilities {
     jobs: boolean;
     bacnet_write: boolean;
   };
-  /** When false, Open‑Claw AI is disabled and the UI should hide AI controls. */
+  /** Always false in core Open-FDD; use external agents with /model-context and /mcp/manifest. */
   ai_available: boolean;
-  /** Effective AI backend: open_claw when enabled, disabled otherwise. */
-  ai_backend: "open_claw" | "disabled";
+  /** Core API does not embed an LLM; value is always "disabled". */
+  ai_backend: "disabled";
 }
 
 /** POST /bacnet/server_hello response (API returns { ok, body? } where body is JSON-RPC). */
@@ -360,32 +323,3 @@ export interface FaultResultsSampleResponse {
   count: number;
 }
 
-/** POST /ai/agent request */
-export interface AiAgentRequest {
-  mode: "overview_chat";
-  message: string;
-  model?: string;
-  site_id?: string | null;
-  include_context?: boolean;
-  /** Point UUIDs to include as a point-timeseries chart (last 7 days). */
-  plot_point_ids?: string[] | null;
-  /** Include last N fault_results rows as table (1–50). */
-  include_table_fault_results?: number | null;
-}
-
-/** POST /ai/agent response */
-export interface AiAgentResponse {
-  mode: "overview_chat";
-  answer: string;
-  context?: Record<string, unknown> | null;
-  /** Fault-timeseries for inline chart (last 7 days). */
-  plots?: FaultTimeseriesResponse | null;
-  /** Faults-by-equipment for inline table (last 7 days). */
-  tables?: FaultsByEquipmentResponse | null;
-  /** Point-timeseries when plot_point_ids was provided. */
-  point_plots?: PointTimeseriesResponse | null;
-  /** Last N fault_results when include_table_fault_results was set. */
-  table_fault_results?: FaultResultsSampleResponse | null;
-  /** When the last FDD run failed, the raw error message (for UI alert). */
-  last_fdd_error?: string | null;
-}

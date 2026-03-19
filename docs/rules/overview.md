@@ -21,7 +21,7 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 | **React frontend (Faults page)** | Upload new YAML, download existing files, delete files, and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. Preferred when you have UI access. |
 | **Files on disk** | Edit or add files directly under the configured path (e.g. `stack/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
 
-Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](expression_rule_cookbook) to add or adapt rules.
+Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
 
 ---
 
