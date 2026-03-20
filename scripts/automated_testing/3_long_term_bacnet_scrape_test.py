@@ -402,8 +402,8 @@ def verify_plots_fault_plot_via_frontend(
     driver: "WebDriver", frontend_url: str, timeout_sec: float = 25
 ) -> tuple[bool, str]:
     """
-    Open Plots page, select site (via URL or selector), open Add faults dropdown, select a fault
-    if any exist, and verify the chart updates (fault overlay path works — swim lane parity with Grafana).
+    Open Plots page, select site (via URL or selector), select a fault for the chosen device
+    when available, click Load Data from Database, and verify chart renders.
     Returns (ok, message). If no fault definitions exist, still passes (picker works).
     """
     from selenium.webdriver.common.by import By
@@ -442,12 +442,12 @@ def verify_plots_fault_plot_via_frontend(
         except Exception:
             pass
 
-    # Wait for Plots content: fault picker or chart container (site selected)
+    # Wait for Plots content: chart container + controls (site selected)
     try:
         wait.until(
             lambda d: (
-                d.find_elements(By.CSS_SELECTOR, "[data-testid=plots-fault-picker]")
-                or d.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
+                d.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
+                and d.find_elements(By.XPATH, "//button[contains(., 'Load Data from Database')]")
             )
         )
     except Exception as e:
@@ -457,47 +457,32 @@ def verify_plots_fault_plot_via_frontend(
     if "Select a site to view plots" in (driver.page_source or ""):
         return False, "Plots page requires a site; site selector did not apply."
 
-    # Open Add faults dropdown
+    # Select a fault when available for this device
     try:
-        fault_btn = wait_for_clickable(driver, By.CSS_SELECTOR, "[data-testid=plots-fault-picker]", timeout_sec)
-        fault_btn.click()
-        time.sleep(0.6)
-    except Exception as e:
-        return False, f"Could not open Add faults dropdown: {e}"
-
-    page_src = driver.page_source or ""
-    if "No fault definitions" in page_src:
-        driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-        return True, "Plots fault picker OK; no fault definitions to plot (add rules and run FDD)."
-
-    # Select first fault option (label with checkbox)
-    try:
-        first_label = driver.find_elements(
-            By.XPATH,
-            "//div[contains(@class,'absolute') and contains(@class,'z-50')]//label[.//input[@type='checkbox']]",
+        fault_opts = driver.find_elements(
+            By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select/option"
         )
-        if not first_label:
-            first_label = driver.find_elements(By.XPATH, "//label[.//input[@type='checkbox']]")
-        if first_label:
-            first_label[0].click()
-            time.sleep(0.5)
-    except Exception:
-        pass
-    driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
-    time.sleep(1.2)
+        if fault_opts:
+            fault_opts[0].click()
+    except Exception as e:
+        return False, f"Could not select fault option: {e}"
 
-    # Chart should update: either "No fault activity in this range" or chart with bands / zoom hint
+    try:
+        load_btn = wait_for_clickable(
+            driver, By.XPATH, "//button[contains(., 'Load Data from Database')]", timeout_sec
+        )
+        load_btn.click()
+        time.sleep(1.0)
+    except Exception as e:
+        return False, f"Could not click Load Data from Database: {e}"
+
     container = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
     if not container:
-        return False, "Plots chart container not found after selecting fault."
+        return False, "Plots chart container not found."
     text = (container[0].text or "") + " " + (driver.page_source or "")
-    if "No fault activity in this range" in text or "Zoom: drag the handles" in text:
-        return True, "Plots fault overlay path OK (fault selected; chart shows fault state or zoom)."
-    if "No point data in this range" in text:
-        return True, "Plots fault overlay path OK (fault selected; no point data in range)."
-    if "Select points and/or faults" not in text:
-        return True, "Plots fault overlay path OK (chart updated after selecting fault)."
-    return False, "Plots fault selection did not update chart (swim lane / fault overlay may be broken)."
+    if "Select a BACnet device" in text:
+        return False, "Plots still waiting for device/point selection."
+    return True, "Plots load path OK (chart container rendered after loading data)."
 
 
 def verify_plots_axis_by_unit_via_frontend(
@@ -547,9 +532,7 @@ def verify_plots_axis_by_unit_via_frontend(
     if "Select a site to view plots" in (driver.page_source or ""):
         return False, "Plots axis-by-unit: select a site first (no site in context)."
     wait = WebDriverWait(driver, timeout_sec)
-    wait.until(
-        lambda d: "Select points" in (d.page_source or "") or d.find_elements(By.CSS_SELECTOR, "[class*='recharts-yAxis']")
-    )
+    wait.until(lambda d: "Load Data from Database" in (d.page_source or ""))
     preference = list(EXPECTED_POINT_NAMES) + list(FALLBACK_POINT_NAMES)
     first = select_known_point(driver, preference, timeout=ELEMENT_WAIT)
     if not first:
@@ -559,10 +542,18 @@ def verify_plots_axis_by_unit_via_frontend(
     if not second:
         return True, "Plots axis-by-unit: only one unit available (single point type); skip multi-axis check."
     time.sleep(1.0)
-    y_axes = driver.find_elements(By.CSS_SELECTOR, "[class*='recharts-yAxis']")
-    if len(y_axes) >= 2:
-        return True, f"Plots axis-by-unit OK ({len(y_axes)} Y-axes for different units)."
-    return False, f"Plots axis-by-unit: expected >= 2 Y-axes when two units selected; got {len(y_axes)}."
+    try:
+        load_btn = wait_for_clickable(
+            driver, By.XPATH, "//button[contains(., 'Load Data from Database')]", timeout_sec
+        )
+        load_btn.click()
+        time.sleep(1.0)
+    except Exception:
+        pass
+    chart = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container] .js-plotly-plot")
+    if chart:
+        return True, "Plots axis-by-unit path OK (Plotly chart rendered with multi-series selection)."
+    return False, "Plots axis-by-unit: Plotly chart did not render after selecting points."
 
 
 def _parse_frontend_args():

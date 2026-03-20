@@ -17,6 +17,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { apiFetch, apiFetchText } from "@/lib/api";
+import { writeTtlToPopup } from "@/lib/ttl-popup";
 import {
   createSite,
   deleteSite,
@@ -161,25 +162,37 @@ export function DataModelPage() {
   const handleViewTtl = useCallback(async () => {
     setTtlError(null);
     setTtlLoading(true);
+    const ttlPath = "/data-model/ttl?save=false";
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setTtlError("Popup blocked. Allow popups for this site and try again.");
+      setTtlLoading(false);
+      return;
+    }
+    popup.document.write(
+      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Data model TTL</title></head><body style="font-family:ui-sans-serif,system-ui,sans-serif;padding:1rem;"><p style="margin:0 0 .75rem 0;">Loading TTL graph...</p><p style="margin:0;color:#666;">If this takes too long, <a href="${ttlPath}" target="_self" rel="noopener">open raw TTL directly</a>.</p></body></html>`,
+    );
+    popup.document.close();
     try {
-      const ttl = await apiFetchText("/data-model/ttl?save=true", {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 45000);
+      const ttl = await apiFetchText(ttlPath, {
         headers: { Accept: "text/plain" },
+        signal: controller.signal,
       });
-      const escaped = ttl
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(
-          `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Data model TTL</title></head><body><pre style="margin:0;padding:1rem;font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;">${escaped}</pre></body></html>`
-        );
-        w.document.close();
-      } else {
-        setTtlError("Popup blocked. Allow popups for this site and try again.");
-      }
+      window.clearTimeout(timer);
+      writeTtlToPopup(popup, ttl);
     } catch (err) {
-      setTtlError(err instanceof Error ? err.message : "Failed to load TTL");
+      try {
+        popup.location.href = ttlPath;
+      } catch {
+        popup.close?.();
+      }
+      setTtlError(
+        err instanceof Error
+          ? `Failed to load TTL in-app: ${err.message}`
+          : "Failed to load TTL",
+      );
     } finally {
       setTtlLoading(false);
     }

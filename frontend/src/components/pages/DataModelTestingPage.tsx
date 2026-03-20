@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Play, Code, FileUp, Wind } from "lucide-react";
+import { Play, Code, FileUp, Wind, Cog } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -18,6 +18,8 @@ export function DataModelTestingPage() {
   const [sparqlQuery, setSparqlQuery] = useState(DEFAULT_SPARQL);
   const [sparqlError, setSparqlError] = useState<string | null>(null);
   const [includeBacnetRefs, setIncludeBacnetRefs] = useState(false);
+  /** Incremented on every SPARQL mutation settle (success or error); used by E2E to avoid reading stale tables. */
+  const [sparqlFinishedGen, setSparqlFinishedGen] = useState(0);
   const sparqlFileInputRef = useRef<HTMLInputElement>(null);
 
   const sparqlMutation = useMutation<SparqlResponse, Error, string>({
@@ -29,6 +31,7 @@ export function DataModelTestingPage() {
       }),
     onSuccess: () => setSparqlError(null),
     onError: (err: Error) => setSparqlError(err.message),
+    onSettled: () => setSparqlFinishedGen((g) => g + 1),
   });
 
   const runPredefined = (query: string, queryWithBacnet?: string) => {
@@ -45,6 +48,12 @@ export function DataModelTestingPage() {
 
   return (
     <div>
+      <span
+        data-testid="sparql-finished-generation"
+        data-gen={sparqlFinishedGen}
+        className="hidden"
+        aria-hidden={true}
+      />
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Testing</h1>
       <p className="mb-8 text-sm text-muted-foreground">
         Run predefined summary queries or your own SPARQL against the current Brick + BACnet graph. Use these to verify the data model matches how you’d summarize the mechanical system.
@@ -72,20 +81,32 @@ export function DataModelTestingPage() {
             />
             <span>Include BACnet device and point IDs (for telemetry and algorithms)</span>
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {PREDEFINED_QUERIES.map(({ id, label, shortLabel, query, queryWithBacnet, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => runPredefined(query, queryWithBacnet)}
                 disabled={sparqlMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted"
+                className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
                 title={label}
               >
                 <Icon className="h-4 w-4" />
                 {shortLabel}
               </button>
             ))}
+            {sparqlMutation.isPending && (
+              <span
+                className="inline-flex items-center gap-2 text-sm text-primary"
+                data-testid="sparql-running-indicator"
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <Cog className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                Running SPARQL…
+              </span>
+            )}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             {includeBacnetRefs
@@ -148,11 +169,17 @@ export function DataModelTestingPage() {
             disabled={sparqlMutation.isPending || !sparqlQuery.trim()}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            <Play className="h-4 w-4" />
-            Run SPARQL
+            {sparqlMutation.isPending ? (
+              <Cog className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden />
+            )}
+            {sparqlMutation.isPending ? "Running…" : "Run SPARQL"}
           </button>
           {sparqlError && (
-            <p className="text-sm text-destructive">{sparqlError}</p>
+            <p className="text-sm text-destructive" data-testid="sparql-error">
+              {sparqlError}
+            </p>
           )}
           {sparqlBindings.length > 0 && sparqlColumns.length > 0 && (
             <div className="overflow-x-auto rounded-lg border border-border/60" data-testid="sparql-results-table">

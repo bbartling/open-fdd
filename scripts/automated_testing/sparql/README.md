@@ -36,3 +36,4 @@ The script **2_sparql_crud_and_frontend_test.py** in the parent directory:
 | 20_meters.sparql | **Meters** button |
 | 21_points.sparql | **Points** button |
 | 22_class_summary.sparql | **Class summary** button |
+| 23_orphan_external_references.sparql | Ref-schema hygiene: orphan `ref:BACnetReference` / `ref:TimeseriesReference` nodes not linked by `ref:hasExternalReference` |

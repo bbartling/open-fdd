@@ -97,11 +97,17 @@ export function joinFaultSignals(
   if (metrics.length === 0) return csv;
 
   const activeByMetric = new Map<string, Array<{ start: number; end: number }>>();
+  const latestBucketStartByMetric = new Map<string, number>();
   for (const metric of metrics) activeByMetric.set(metric, []);
   for (const f of faults) {
-    if (!f.metric || f.value <= 0) continue;
+    if (!f.metric) continue;
     const start = Date.parse(f.time);
     if (!Number.isFinite(start)) continue;
+    const prevLatest = latestBucketStartByMetric.get(f.metric);
+    if (prevLatest == null || start > prevLatest) {
+      latestBucketStartByMetric.set(f.metric, start);
+    }
+    if (f.value <= 0) continue;
     activeByMetric.get(f.metric)?.push({ start, end: start + bucketMs });
   }
 
@@ -110,6 +116,12 @@ export function joinFaultSignals(
     const ts = toTsMs(row[xColumn]);
     const next: Record<string, CsvCell> = { ...row };
     for (const metric of metrics) {
+      const latest = latestBucketStartByMetric.get(metric);
+      if (ts != null && latest != null && ts >= latest + bucketMs) {
+        // No FDD bucket exists yet for this timestamp; keep value unknown instead of false 0.
+        next[`fault_${metric}`] = null;
+        continue;
+      }
       const active = (activeByMetric.get(metric) ?? []).some(
         (w) => ts != null && ts >= w.start && ts < w.end,
       );

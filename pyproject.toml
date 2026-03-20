@@ -48,7 +48,8 @@ dev = [
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
-    "rdflib",
+    # SPARQL: rdflib pulls pyparsing; regression coverage in test_rdflib_sparql_stack.py (pytest).
+    "rdflib>=7.5.0,<8",
     "openai>=1.0",
 ]
 # Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
@@ -64,7 +65,7 @@ test = [
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
-    "rdflib",
+    "rdflib>=7.5.0,<8",
     "openai>=1.0",
 ]
 # E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)
@@ -76,7 +77,7 @@ viz = [
     "matplotlib",
 ]
 brick = [
-    "rdflib",
+    "rdflib>=7.5.0,<8",
 ]
 docx = [
     "python-docx",

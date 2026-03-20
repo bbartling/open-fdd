@@ -51,8 +51,12 @@ pytest -v
 ```
 
 - **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
+- **`./scripts/bootstrap.sh --test`** runs frontend checks + pytest + Caddy validate; pytest includes **`test_rdflib_sparql_stack.py`**, which runs the same SPARQL path as `POST /data-model/sparql` so a broken **rdflib + pyparsing** install fails CI before you deploy.
 - Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
 - Style and workflow: [docs/contributing.md](docs/contributing.md).
+
+
+> NOTE: If there is not a develop branch open feel free to ask for one on Discord in the `#dev-chat` channel
 
 
 ---

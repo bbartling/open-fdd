@@ -22,6 +22,49 @@ This page describes a **single upload** workflow for mechanical engineers: send 
    - Point the LLM at the **[Fault rules overview](../rules/overview)** and **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** (AHU, chiller, weather, advanced recipes). The cookbook is the main reference for rule_input names and expression patterns.
    - Or paste **YAML** from your project’s rules (e.g. from `stack/rules/` or your own rule files). The LLM can align `rule_input` with the inputs those rules use (e.g. `sat`, `rat`, `zone_temp`, `sf_status`).
 
+> For best polling decisions, include your actual rule YAMLs. Otherwise many BACnet points may be correctly tagged but still unnecessary for FDD/trending and should remain `polling: false`.
+
+---
+
+## Copy/paste prompt template (recommended)
+
+Use this as your LLM system/developer prompt when transforming `GET /data-model/export` into import JSON:
+
+```text
+You are transforming Open-FDD export JSON into Open-FDD import JSON.
+
+Return ONLY valid JSON with EXACTLY these top-level keys:
+{
+  "points": [...],
+  "equipment": [...]
+}
+
+No markdown. No prose. No comments. No extra top-level keys.
+
+POINTS:
+- Preserve all existing point fields from export unless explicitly changed.
+- Fill/adjust: brick_type, rule_input, polling, unit, equipment_name.
+- Prefer standard Brick class names.
+- rule_input is OPTIONAL: set only when needed for disambiguation/explicit aliasing.
+- If one Brick class is unambiguous in scope, set rule_input to null.
+- If unknown: brick_type=null, rule_input=null, unit=null, polling=false.
+
+EQUIPMENT ASSIGNMENT:
+- Prefer equipment_name for grouping and assignment.
+- equipment_id may be null in manual workflows; Open-FDD can resolve/create by equipment_name when site_id is present.
+
+EQUIPMENT ARRAY:
+- Include one row per equipment that needs relationship updates.
+- Allowed shape uses equipment_name + site_id (+ optional feeds/fed_by lists by name).
+- Do not invent relationships; only set feeds/fed_by when known.
+
+DATA QUALITY:
+- Keep site_id exactly from export when present.
+- If duplicate external_id appears for same site, keep the last.
+```
+
+This template works for manual copy-paste and external agents (including Open-Claw workflows).
+
 ---
 
 ## Where the rules live
@@ -72,7 +115,7 @@ For every point/equipment:
 - If site_id is missing/unknown in the export, keep it null and keep site_name.
 ```
 
-3. **Pydantic in the repo** — The backend defines the import shape in **open_fdd/platform/api/data_model.py**: `DataModelImportBody`, `PointImportRow`, `EquipmentImportRow`. A script or pipeline can import those models and validate the LLM output (e.g. `DataModelImportBody.model_validate(json.loads(llm_output))`) before returning it to the human. That way the human only sees JSON that is known to parse on the backend.
+4. **Pydantic in the repo** — The backend defines the import shape in **open_fdd/platform/api/data_model.py**: `DataModelImportBody`, `PointImportRow`, `EquipmentImportRow`. A script or pipeline can import those models and validate the LLM output (e.g. `DataModelImportBody.model_validate(json.loads(llm_output))`) before returning it to the human. That way the human only sees JSON that is known to parse on the backend.
 
 ---
 

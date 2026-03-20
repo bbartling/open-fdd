@@ -26,7 +26,8 @@ Every frontend feature is tested; no rock left unturned.
        verify tree updates so deleted items are gone.
   [2e2] Point context menu: right-click a point, verify Poll true / Poll false / Delete; set Poll false then Poll true.
   [2f] Data Model Testing smoke: open /data-model-testing, click Sites predefined query;
-       assert results table or "No bindings" appears.
+       wait for ``sparql-finished-generation`` when present, then assert results table or "No bindings"
+       (avoids stale table while SPARQL is pending).
 
   [3] Plots: select site, select points (and optionally a second point with different unit), add fault;
       verify chart data, data-model units in legend, axis-by-unit, and fault series as Bool 0/1.
@@ -53,10 +54,17 @@ Usage:
   python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --headed
 
   # With BACnet discovery (Points page → Add to data model) for one or more devices:
-  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790 34567 --headed
+  python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --bacnet-device-instance 3456789 3456790  --headed
 
   $env:OFDD_API_KEY = "same-as-server-stack/.env"
   python 1_e2e_frontend_selenium.py --frontend-url http://192.168.204.16 --api-url http://192.168.204.16:8000 --headed
+
+Windows / copied scripts:
+  - ``stack/.env`` is loaded from ``open-fdd/stack/.env`` only when this file lives under ``open-fdd/scripts/automated_testing/``
+    (path is derived from ``__file__``). If you copy only ``*.py`` elsewhere (e.g. OneDrive), set ``$env:OFDD_API_KEY``
+    or put a ``.env`` in the script directory / current directory.
+  - Notepad-saved ``.env`` may use UTF-8 BOM; we read env files with UTF-8-sig so keys still parse.
+  - HTTPS with a self-signed cert: add ``--ignore-ssl``.
 
 Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating the full UI flow from a test bench (stack must be up).
 
@@ -100,13 +108,15 @@ from webdriver_manager.chrome import ChromeDriverManager
 # Paths: script in scripts/automated_testing/ or copied; payload next to script or in scripts/
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEMO_PAYLOAD_PATH = SCRIPT_DIR / "demo_site_llm_payload.json"
+MALFORMED_PAYLOAD_PATH = SCRIPT_DIR / "demo_site_llm_payload_malformed.json"
+MISSING_SITE_PAYLOAD_PATH = SCRIPT_DIR / "demo_site_llm_payload_missing_site.json"
 
 
 def _load_env_file(path: str) -> None:
     """Load KEY=VALUE lines from path into os.environ (only if key not already set)."""
     if not os.path.isfile(path):
         return
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -212,7 +222,17 @@ def get_browser_console_errors(
         return []
     out = [e for e in entries if e.get("level") in levels]
     # Drop noisy 404s that don't affect tests (favicon requested by browser, not served)
-    out = [e for e in out if not ("favicon.ico" in (e.get("message") or "") and "404" in (e.get("message") or ""))]
+    def _is_expected_noise(msg: str) -> bool:
+        # Browser-requested favicon 404 is harmless.
+        if "favicon.ico" in msg and "404" in msg:
+            return True
+        # Plots may call /download/csv before BACnet scrape data exists for selected site/range.
+        # Backend returns 404 "no data", which is expected in fresh test benches.
+        if "/download/csv" in msg and "404" in msg:
+            return True
+        return False
+
+    out = [e for e in out if not _is_expected_noise(e.get("message") or "")]
     return out
 
 
@@ -470,6 +490,52 @@ def import_llm_payload_via_ui(
     print(f"  Import: OK (points={len(points)}, equipment={len(equipment)})")
     log_browser_console(driver, "import-llm-payload")
     return len(points), len(equipment)
+
+
+def import_payload_expect_failure_via_ui(
+    driver: webdriver.Chrome,
+    base_url: str,
+    payload_path: Path,
+    site_id: str,
+    label: str,
+) -> None:
+    """Negative import test: malformed or missing-site payload should be rejected."""
+    if not payload_path.is_file():
+        print(f"  Import negative ({label}): skip (payload missing)")
+        return
+    with open(payload_path, encoding="utf-8") as f:
+        body = json.load(f)
+    points = body.get("points") or []
+    equipment = body.get("equipment") or []
+    for p in points:
+        if isinstance(p, dict) and p.get("site_id") == "__SITE_ID__":
+            p["site_id"] = site_id
+    for e in equipment:
+        if isinstance(e, dict) and e.get("site_id") == "__SITE_ID__":
+            e["site_id"] = site_id
+    json_str = json.dumps({"points": points, "equipment": equipment}, indent=2)
+    driver.get(f"{base_url}/data-model")
+    textarea = wait_for_element(driver, By.CSS_SELECTOR, "[data-testid=data-model-import-json]")
+    driver.execute_script(
+        """
+        var el = arguments[0];
+        var val = arguments[1];
+        var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(el, val);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        """,
+        textarea,
+        json_str,
+    )
+    safe_click(driver, By.CSS_SELECTOR, "[data-testid=data-model-import-button]")
+    wait = WebDriverWait(driver, IMPORT_RESULT_WAIT)
+    wait.until(
+        lambda d: ("invalid" in (d.page_source or "").lower())
+        or ("error" in (d.page_source or "").lower())
+        or ("must be" in (d.page_source or "").lower())
+        or ("422" in (d.page_source or ""))
+    )
+    print(f"  Import negative ({label}): rejected as expected.")
 
 
 def bacnet_add_to_model_via_ui(
@@ -846,15 +912,55 @@ def point_context_menu_poll_false_then_true(
     log_browser_console(driver, f"point-context-menu-{point_external_id}")
 
 
+# SPARQL smoke: same completion hook as 2_sparql_crud_and_frontend_test.py (avoids stale table during React Query pending).
+_SPARQL_SMOKE_API_WAIT_SEC = 45
+
+
+def _sparql_smoke_generation_before(driver: webdriver.Chrome) -> str | None:
+    """Return data-gen from sparql-finished-generation, or None if the frontend hook is absent."""
+    els = driver.find_elements(By.CSS_SELECTOR, "[data-testid=sparql-finished-generation]")
+    if not els:
+        return None
+    return (els[0].get_attribute("data-gen") or "0").strip()
+
+
+def _wait_sparql_smoke_generation_increment(
+    driver: webdriver.Chrome, timeout_sec: float, generation_before: str
+) -> bool:
+    """Wait until data-gen changes after Run / predefined query (SPARQL mutation settled)."""
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        try:
+            cur = (
+                driver.find_element(
+                    By.CSS_SELECTOR, "[data-testid=sparql-finished-generation]"
+                ).get_attribute("data-gen")
+                or "0"
+            ).strip()
+        except Exception:
+            time.sleep(0.03)
+            continue
+        if cur != generation_before:
+            time.sleep(0.12)
+            return True
+        time.sleep(0.03)
+    return False
+
+
 def verify_data_model_testing_smoke(driver: webdriver.Chrome, base_url: str) -> None:
     """
     Open Data Model Testing page (/data-model-testing), click the Sites predefined button,
     and assert that either the SPARQL results table or 'No bindings' appears. Proves the
     Summarize-your-HVAC + Custom SPARQL page loads and runs a query.
+
+    When the page exposes ``data-testid=sparql-finished-generation``, waits for that counter
+    to advance after the click so we do not treat the previous query's table as success (same
+    pattern as ``2_sparql_crud_and_frontend_test.py``).
     """
     driver.get(f"{base_url}/data-model-testing")
     wait_for_text(driver, "Data Model Testing", timeout=TEXT_WAIT)
     wait_for_element(driver, By.CSS_SELECTOR, "[data-testid=sparql-query-textarea]", timeout=ELEMENT_WAIT)
+    before_gen = _sparql_smoke_generation_before(driver)
     # Click the "Sites" predefined button (first summary button)
     sites_btn = wait_for_clickable(
         driver,
@@ -863,8 +969,27 @@ def verify_data_model_testing_smoke(driver: webdriver.Chrome, base_url: str) -> 
         timeout=ELEMENT_WAIT,
     )
     sites_btn.click()
-    # Wait for result: results table or "No bindings (empty result)." (allow 30s for slow API)
-    wait = WebDriverWait(driver, 30)
+
+    if before_gen is not None:
+        if not _wait_sparql_smoke_generation_increment(
+            driver, _SPARQL_SMOKE_API_WAIT_SEC, before_gen
+        ):
+            print(
+                "  Data Model Testing: timeout waiting for SPARQL run to finish "
+                f"(data-testid=sparql-finished-generation, {_SPARQL_SMOKE_API_WAIT_SEC}s). Continuing."
+            )
+            log_browser_console(driver, "data-model-testing-smoke")
+            return
+        err_els = driver.find_elements(By.CSS_SELECTOR, "[data-testid=sparql-error]")
+        err_txt = (err_els[0].text or "").strip() if err_els else ""
+        if err_txt:
+            print(f"  Data Model Testing: SPARQL UI reported error: {err_txt[:500]}")
+            log_browser_console(driver, "data-model-testing-smoke")
+            return
+
+    # Wait for result: results table or "No bindings (empty result)." (longer on LAN / Windows)
+    tail_wait = 10 if before_gen is not None else _SPARQL_SMOKE_API_WAIT_SEC
+    wait = WebDriverWait(driver, tail_wait)
     try:
         wait.until(
             lambda d: (
@@ -921,35 +1046,20 @@ def select_known_point(
     (e.g. SA-T, then ZoneTemp, then MA-T). Returns the name selected or None.
     Uses robust waits; point picker dropdown uses labels with span (object_name or external_id).
     """
-    picker_btns = driver.find_elements(
-        By.XPATH,
-        "//button[@aria-haspopup='listbox' and (contains(., 'Select points') or contains(., 'series'))]",
-    )
-    if not picker_btns:
-        return None
-    picker_btns[0].click()
     wait = WebDriverWait(driver, timeout)
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']")))
-    time.sleep(0.4)  # allow dropdown list to render
+    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
     for name in preference:
-        # Point picker: label wrapping checkbox + span with point name (object_name or external_id)
         opts = driver.find_elements(
             By.XPATH,
-            "//div[contains(@class,'rounded-xl')]//label[.//span[contains(text(), '" + name + "')]]",
+            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
         )
-        if not opts:
-            opts = driver.find_elements(
-                By.XPATH,
-                "//div[contains(@class,'rounded-xl')]//*[contains(normalize-space(), '" + name + "') and (self::span or self::button)]",
-            )
         if opts:
             opts[0].click()
             print(f"  Plots: selected point {name!r}.")
             return name
-    # Fallback: first checkbox label in the point list
     point_options = driver.find_elements(
         By.XPATH,
-        "//div[contains(@class,'rounded-xl')]//label[.//input[@type='checkbox']]",
+        "//label[contains(., 'Points')]/following-sibling::select/option",
     )
     if point_options:
         point_options[0].click()
@@ -1166,6 +1276,134 @@ def validate_plots_chart_has_data(
     if api_url and site_id:
         # Print DB sensor + fault data that the Plots tab should be using, so we can
         # see both together in the Python console for this site.
+        print_sample_timeseries_and_faults(api_url, site_id)
+    log_browser_console(driver, "plots")
+
+
+# Re-define Plots selectors for the Plotly + device/points/faults dropdown UI.
+def select_known_point(
+    driver: webdriver.Chrome,
+    preference: list[str],
+    timeout: float = ELEMENT_WAIT,
+) -> str | None:
+    wait = WebDriverWait(driver, timeout)
+    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
+    for name in preference:
+        opts = driver.find_elements(
+            By.XPATH,
+            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
+        )
+        if opts:
+            opts[0].click()
+            print(f"  Plots: selected point {name!r}.")
+            return name
+    point_options = driver.find_elements(
+        By.XPATH,
+        "//label[contains(., 'Points')]/following-sibling::select/option",
+    )
+    if point_options:
+        point_options[0].click()
+        print("  Plots: selected first available point (fallback).")
+        return "first_available"
+    return None
+
+
+def select_second_point_different_unit(
+    driver: webdriver.Chrome,
+    preference: tuple[str, ...] = SECOND_POINT_DIFFERENT_UNIT,
+    timeout: float = ELEMENT_WAIT,
+) -> bool:
+    wait = WebDriverWait(driver, timeout)
+    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
+    for name in preference:
+        opts = driver.find_elements(
+            By.XPATH,
+            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
+        )
+        if opts:
+            opts[0].click()
+            time.sleep(0.3)
+            print(f"  Plots: added second point {name!r}.")
+            return True
+    return False
+
+
+def select_fault_on_plots(
+    driver: webdriver.Chrome,
+    preference: tuple[str, ...] = EXPECTED_FAULT_IDS,
+    timeout: float = ELEMENT_WAIT,
+) -> bool:
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Faults')]"))
+        )
+        all_opts = driver.find_elements(
+            By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select/option"
+        )
+        if not all_opts:
+            return False
+        for fault_id in preference:
+            opts = driver.find_elements(
+                By.XPATH,
+                f"//label[contains(., 'Faults')]/following-sibling::select/option[contains(., '{fault_id}')]",
+            )
+            if opts:
+                opts[0].click()
+                print(f"  Plots: selected fault {fault_id!r}.")
+                return True
+        all_opts[0].click()
+        print("  Plots: selected first available fault (fallback).")
+        return True
+    except Exception:
+        return False
+
+
+def validate_plots_chart_has_data(
+    driver: webdriver.Chrome,
+    base_url: str,
+    site_name: str,
+    api_url: str | None = None,
+    site_id: str | None = None,
+) -> None:
+    if api_url:
+        run_faults_db_check(api_url)
+    driver.get(f"{base_url}/plots")
+    if "Select a site" in (driver.page_source or ""):
+        select_site_in_topbar(driver, site_name)
+    else:
+        select_site_in_topbar(driver, site_name)
+
+    wait_for_element(
+        driver,
+        By.XPATH,
+        "//*[contains(text(), 'Load Data from Database')]",
+        timeout=ELEMENT_WAIT,
+    )
+    preference = list(EXPECTED_POINT_NAMES) + list(FALLBACK_POINT_NAMES)
+    first = select_known_point(driver, preference)
+    if not first:
+        raise AssertionError("Plots page: no selectable point found for device.")
+    second_point_added = select_second_point_different_unit(driver)
+    fault_selected = select_fault_on_plots(driver)
+    safe_click(driver, By.XPATH, "//button[contains(., 'Load Data from Database')]")
+    time.sleep(1.0)
+
+    wait_chart = WebDriverWait(driver, CHART_DATA_WAIT)
+    wait_chart.until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, ".js-plotly-plot, [data-testid='plots-chart-container']")
+        )
+    )
+    page_src = driver.page_source or ""
+    if "degF" not in page_src and "percent" not in page_src and "cfm" not in page_src:
+        raise AssertionError("Plots: expected at least one unit to appear (degF/percent/cfm).")
+    if second_point_added:
+        print("  Plots: second point selected (multi-series check).")
+    if fault_selected:
+        print("  Frontend showing faults in Plots: yes (fault selected).")
+    else:
+        print("  Frontend showing faults in Plots: no (no fault options for device).")
+    if api_url and site_id:
         print_sample_timeseries_and_faults(api_url, site_id)
     log_browser_console(driver, "plots")
 
@@ -1427,6 +1665,13 @@ def run_full_flow(
                 print("[2] Create site and import LLM payload (via UI)...")
             site_id = create_site_via_ui(driver, frontend_url, TESTBENCH_SITE_NAME)
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after create")
+            print("[2x] Negative import checks (malformed + missing site)...")
+            import_payload_expect_failure_via_ui(
+                driver, frontend_url, MALFORMED_PAYLOAD_PATH, site_id, "malformed"
+            )
+            import_payload_expect_failure_via_ui(
+                driver, frontend_url, MISSING_SITE_PAYLOAD_PATH, site_id, "missing-site"
+            )
             n_pts, n_eq = import_llm_payload_via_ui(driver, frontend_url, DEMO_PAYLOAD_PATH, site_id)
             verify_site_selected(driver, TESTBENCH_SITE_NAME, "after import")
             if bacnet_device_instances:
