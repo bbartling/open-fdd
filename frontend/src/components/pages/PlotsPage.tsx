@@ -134,15 +134,15 @@ export function PlotsPage() {
   }, [preset, customStart, customEnd]);
 
   const deviceOptions = useMemo(() => {
-    const map = new Map<string, { label: string; equipmentId: string | null }>();
+    const map = new Map<string, { label: string }>();
     for (const p of pollingPoints) {
       if (!p.bacnet_device_id) continue;
       const eq = equipment.find((e) => e.id === p.equipment_id);
       const label = eq ? `${p.bacnet_device_id} - ${eq.name}` : p.bacnet_device_id;
-      map.set(p.bacnet_device_id, { label, equipmentId: p.equipment_id });
+      map.set(p.bacnet_device_id, { label });
     }
     return Array.from(map.entries())
-      .map(([id, v]) => ({ id, label: v.label, equipmentId: v.equipmentId }))
+      .map(([id, v]) => ({ id, label: v.label }))
       .sort((a, b) => a.id.localeCompare(b.id));
   }, [pollingPoints, equipment]);
 
@@ -291,11 +291,16 @@ export function PlotsPage() {
     }
   }, [selectedDeviceId, deviceOptions]);
 
+  const pollingPointsRef = useRef(pollingPoints);
+  pollingPointsRef.current = pollingPoints;
+
   useEffect(() => {
     if (!selectedDeviceId) return;
-    const defaults = pointsForDevice.slice(0, 4).map((p) => p.id);
-    setSelectedPointIds(defaults);
-  }, [selectedDeviceId, pointsForDevice]);
+    const forDevice = pollingPointsRef.current.filter(
+      (p) => p.bacnet_device_id === selectedDeviceId,
+    );
+    setSelectedPointIds(forDevice.slice(0, 4).map((p) => p.id));
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     if (faultIdsForDevice.length === 0) {
