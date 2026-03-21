@@ -1,5 +1,0 @@
-# Data Model Testing → HVAC equipment button (count all HVAC equipment)
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-SELECT (COUNT(?e) AS ?count) WHERE {
-  ?e a brick:HVAC_Equipment .
-}

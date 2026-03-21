@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.0.4"
+version = "2.0.5"
 description = "Fault Detection and Diagnostics for HVAC systems — config-driven, pandas-based"
 readme = "README.md"
 license = { text = "MIT" }
@@ -48,7 +48,9 @@ dev = [
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
-    "rdflib",
+    # SPARQL: rdflib pulls pyparsing; pyparsing>=3.2 breaks rdflib 7.x SPARQL (Param.postParse2 / tokenList).
+    "rdflib>=7.5.0,<8",
+    "pyparsing>=2.1.0,<3.2",
     "openai>=1.0",
 ]
 # Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
@@ -64,7 +66,8 @@ test = [
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
-    "rdflib",
+    "rdflib>=7.5.0,<8",
+    "pyparsing>=2.1.0,<3.2",
     "openai>=1.0",
 ]
 # E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)
@@ -76,7 +79,8 @@ viz = [
     "matplotlib",
 ]
 brick = [
-    "rdflib",
+    "rdflib>=7.5.0,<8",
+    "pyparsing>=2.1.0,<3.2",
 ]
 docx = [
     "python-docx",

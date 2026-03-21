@@ -90,6 +90,31 @@ def test_fault_timeseries_invalid_bucket_rejected():
     assert r.status_code == 422
 
 
+def test_fault_timeseries_equipment_ids_adds_sql_filter():
+    """Plots page passes equipment_ids so aggregates are not site-wide for a single device."""
+    eq = "550e8400-e29b-41d4-a716-446655440000"
+    with patch("open_fdd.platform.api.analytics.get_conn") as mock_conn:
+        conn = MagicMock()
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=None)
+        mock_conn.return_value = conn
+
+        r = client.get(
+            f"/analytics/fault-timeseries?start_date=2025-01-01&end_date=2025-01-07&bucket=hour"
+            f"&equipment_ids={eq}"
+        )
+    assert r.status_code == 200
+    assert r.json()["equipment_ids"] == [eq]
+    cur.execute.assert_called_once()
+    sql, params = cur.execute.call_args[0]
+    assert "fr.equipment_id IN" in sql
+    assert eq in params
+
+
 def test_system_host_empty_when_no_table():
     with patch("open_fdd.platform.api.analytics._table_exists", return_value=False):
         r = client.get("/analytics/system/host")

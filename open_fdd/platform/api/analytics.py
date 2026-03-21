@@ -6,6 +6,7 @@ For MSI/cloud integrators and Grafana (via JSON datasource or downstream ETL).
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
+from uuid import UUID
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
@@ -224,8 +225,13 @@ def fetch_fault_timeseries_data(
     start_date: date,
     end_date: date,
     bucket: str = "day",
+    equipment_ids: Optional[list[str]] = None,
 ) -> dict[str, Any]:
-    """Return fault-timeseries payload for charts (GET /analytics/fault-timeseries)."""
+    """Return fault-timeseries payload for charts (GET /analytics/fault-timeseries).
+
+    When ``equipment_ids`` is set, aggregates are limited to those equipment rows
+    (Plots page device scope). Otherwise behavior is site-wide (dashboard chart).
+    """
     if bucket not in ("hour", "day"):
         bucket = "hour"  # API default for invalid bucket; AI agent passes "day" explicitly
     conditions = ["fr.ts::date >= %s", "fr.ts::date <= %s"]
@@ -237,6 +243,10 @@ def fetch_fault_timeseries_data(
             "(fr.site_id = %s OR fr.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
         )
         params.extend([site_id, site_id])
+    if equipment_ids:
+        placeholders = ",".join(["%s"] * len(equipment_ids))
+        conditions.append(f"fr.equipment_id IN ({placeholders})")
+        params.extend(equipment_ids)
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -252,7 +262,7 @@ def fetch_fault_timeseries_data(
             )
             rows = cur.fetchall()
 
-    return {
+    out: dict[str, Any] = {
         "site_id": site_id,
         "period": {"start": str(start_date), "end": str(end_date)},
         "bucket": bucket,
@@ -261,6 +271,9 @@ def fetch_fault_timeseries_data(
             for r in rows
         ],
     }
+    if equipment_ids is not None:
+        out["equipment_ids"] = equipment_ids
+    return out
 
 
 @router.get("/fault-timeseries", summary="Fault flags over time (for charts)")
@@ -273,14 +286,23 @@ def get_fault_timeseries(
         description="Time bucket: hour or day",
         pattern="^(hour|day)$",
     ),
+    equipment_ids: list[UUID] | None = Query(
+        None,
+        description=(
+            "Repeatable. When set, restrict series to fault_results rows for these equipment IDs "
+            "(e.g. BACnet device scope on Plots)."
+        ),
+    ),
 ):
     """
     Time-series of fault flag values (for React/Grafana-style charts).
     Returns one row per (time_bucket, fault_id) with SUM(flag_value).
+    Without equipment_ids, aggregates are site-wide; with equipment_ids, only those rows contribute.
     """
     if site_id and resolve_site_uuid(site_id, create_if_empty=False) is None:
         raise HTTPException(404, f"No site found for: {site_id!r}")
-    return fetch_fault_timeseries_data(site_id, start_date, end_date, bucket)
+    eq_strs = [str(u) for u in equipment_ids] if equipment_ids else None
+    return fetch_fault_timeseries_data(site_id, start_date, end_date, bucket, eq_strs)
 
 
 def fetch_faults_by_equipment_data(

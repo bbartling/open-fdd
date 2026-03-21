@@ -28,7 +28,7 @@ This project is an open-source stack; a cloud or MSI vendor can develop their ow
 | **BACnet scraper** | Polls diy-bacnet-server via JSON-RPC. Writes readings to `timeseries_readings`. |
 | **Weather scraper** | Fetches from Open-Meteo ERA5 (temp, RH, dewpoint, wind, solar/radiation, cloud cover). |
 | **FDD loop** | Runs every N hours (see `rule_interval_hours`, `lookback_days` in platform config). Pulls last N days from DB into pandas, **reloads all rules from YAML on every run** (hot reload), runs rules, writes `fault_results` back to DB. No restart needed when tuning rule params. |
-| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP JSON-RPC bridge. Discovered devices/points → CSV; scraper reads present-value via RPC. |
+| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP JSON-RPC bridge. Discovery and present-value reads via JSON-RPC; Open-FDD merges discovery into the **data model** (RDF/TTL), not a required CSV. |
 
 ---
 
@@ -38,7 +38,7 @@ This project is an open-source stack; a cloud or MSI vendor can develop their ow
 
 Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be deployed **across each subnet** on the internal campus IT network. Typically each building has its own BACnet network on a unique subnet; a gateway per building or per subnet keeps BACnet traffic local while forwarding data to a **centralized** Open-FDD instance (API, Grafana, FDD loop, database). That gives the campus a single integration point for the cloud-based vendor of choice—one API and one data model for the whole portfolio, without the vendor touching each building’s BACnet network directly.
 
-**How to set it up:** (1) **Remote gateway per building:** On each subnet run diy-bacnet-server + scraper; set the scraper’s `OFDD_DB_DSN` to the central database and `OFDD_BACNET_SITE_ID` to that building’s site (create the site on the central API first). (2) **Central aggregator:** On the central host run only DB, API, Grafana, FDD loop (no local BACnet containers); set `OFDD_BACNET_GATEWAYS` to a JSON array of `{url, site_id, config_csv}` and run one scraper that polls each remote gateway. See [Configuration — BACnet](configuration#bacnet-single-gateway-remote-gateways-central-aggregator) for keys and examples.
+**How to set it up:** (1) **Remote gateway per building (recommended pattern):** On each subnet run diy-bacnet-server + scraper pointed at the **central Open-FDD API**—create each building’s **site** on the central API first and set **`OFDD_BACNET_SITE_ID`** (and related env) so readings and metadata align with the central data model. Prefer **API-mediated** configuration and ingestion over giving every gateway direct **database** credentials. (2) **Central aggregator:** On the central host run DB, API, Grafana, FDD loop (no local BACnet); set **`OFDD_BACNET_GATEWAYS`** to a JSON array of `{url, site_id}` so one scraper polls remote gateways (see [Configuration — BACnet](configuration#bacnet-single-gateway-remote-gateways-central-aggregator)). (3) **Advanced / internal-network only:** Pointing **`OFDD_DB_DSN`** at the central Postgres from remote scrapers avoids the API path but **widens exposure** of the database—use only on a trusted LAN with locked-down firewall and ops approval; not the default recommendation. **`run_bacnet_scrape.py`** and per-gateway CSV/env options remain available for special deployments; they are **not** the default product path.
 
 ---
 

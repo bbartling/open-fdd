@@ -16,7 +16,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 1. **Discover** — Use the API: **POST /bacnet/whois_range**, then **POST /bacnet/point_discovery_to_graph** per device. The in-memory graph and `config/data_model.ttl` now contain BACnet devices and objects.
 
-2. **Sites and equipment** — Create the building/site and equipment (AHUs, VAVs, zones) via **POST /sites** and **POST /equipment**. Note the returned `site_id` and `equipment_id` UUIDs; the import body requires real UUIDs from the API.
+2. **Sites and equipment** — Create the building/site and equipment (AHUs, VAVs, zones) via **POST /sites** and **POST /equipment**. Keep `site_id` UUIDs from export when present. For equipment assignment on import, you can use `equipment_id` UUIDs or `equipment_name` (resolved/created under `site_id`).
 
 3. **Export** — **GET /data-model/export** (or `?bacnet_only=true` for discovery-only). Returns a single JSON array: BACnet discovery rows plus all DB points. Unimported BACnet rows have `point_id: null`, `polling: false`, and null `site_id`/`equipment_id`/`brick_type`/`rule_input`.
 
@@ -25,9 +25,9 @@ This workflow is intended for **mechanical engineers and building operators** wh
    - **brick_type** (e.g. `Supply_Air_Temperature_Sensor`, `Zone_Air_Temperature_Sensor`)
    - **rule_input** (name FDD rules use)
    - **unit** when known (e.g. `degF`, `%`, `cfm`, `0/1` for binary). Units are stored in the data model and TTL; the frontend uses them for Plots axis labels and grouping (e.g. temperatures on one axis, humidity on another). Use standard abbreviations so Plots and exports stay consistent.
-   - **equipment_id** (optional)
+   - **equipment_id** (optional) or **equipment_name** (optional, with site_id)
    - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `stack/rules/` have the required inputs.
-   - For **equipment relationships** (Brick feeds/isFedBy), use the import **equipment** array: each item has `equipment_id`, optional `feeds_equipment_id` and `fed_by_equipment_id` (UUIDs from GET /equipment).
+   - For **equipment relationships** (Brick feeds/isFedBy), use the import **equipment** array. UUID-based and name-based forms are both supported; name-based relationship rows require `site_id`.
 
 5. **Import** — **PUT /data-model/import** with body: **points** (array) and optional **equipment** (array for feeds/fed_by only). The API accepts **only** these two keys — no `sites`, `equipments`, or `relationships`. The backend creates/updates points and equipment relationships, then rebuilds the RDF and TTL.
 
@@ -37,8 +37,8 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## API contract (import)
 
-- **points** (required): Each row is a point to **create** (omit `point_id`; set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier`) or **update** (set `point_id` and fields to change). **site_id** and **equipment_id** must be real UUIDs from GET /sites and GET /equipment.
-- **equipment** (optional): Updates existing equipment with Brick feeds/isFedBy. Each item: `{ "equipment_id": "<uuid>", "feeds_equipment_id": "<uuid> | null", "fed_by_equipment_id": "<uuid> | null" }`.
+- **points** (required): Each row is a point to **create** (omit `point_id`; set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier`) or **update** (set `point_id` and fields to change). `site_id` should remain the export UUID when present. `equipment_id` is optional if `equipment_name` is provided with `site_id`.
+- **equipment** (optional): Updates equipment with Brick feeds/isFedBy. Rows may use UUID fields (`equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id`) or name fields (`equipment_name`, `feeds`, `fed_by`) with `site_id` for resolution.
 
 **diy-bacnet ready:** The list of points to poll is **GET /data-model/export** filtered to rows where **polling === true**; each has `bacnet_device_id` and `object_identifier`.
 
@@ -46,7 +46,11 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-The **canonical prompt** lives in a single file: **`config/canonical_llm_prompt.txt`** (see [README](https://github.com/bbartling/open-fdd#ai-assisted-data-modeling)). The backend loads it when present (fallback: built-in prompt in code); you can edit the file at any time. The prompt is generic and works for **any site**: single building, campus, or tenant. The only input that changes is the export JSON (from GET /data-model/export, optionally with `?site_id=YourSiteName`). The LLM must preserve all fields, add brick_type, rule_input, **unit** (when known), and polling, and use equipment by name and site_id from the export. The same file can be used as **model context** (e.g. in `pdf/open-fdd-docs.txt` or when building custom doc bundles for an LLM).
+**Where this is documented:** the tagging rules and agent flow are described **on this page** (you are in the right place) and summarized under **[LLM tagging workflow](../appendix/technical_reference#llm-tagging-workflow)** in the Technical reference. The [README](https://github.com/bbartling/open-fdd#ai-and-data-modeling) points here under **AI and data modeling**.
+
+**File `pdf/canonical_llm_prompt.txt`:** The **full** copy-paste system prompt (points + equipment rules, strict JSON output) lives next to other doc bundles under **`pdf/canonical_llm_prompt.txt`** and is duplicated in the docs under **[LLM workflow — Copy/paste prompt template](llm_workflow#copy-paste-prompt-template-recommended)**. Edit either place and keep them in sync when you change instructions. The running API does **not** auto-inject this file into chat UIs; load it yourself or point agents at it. For **HTTP model context**, use **`GET /model-context/docs`**, which serves **`pdf/open-fdd-docs.txt`** (or **`OFDD_DOCS_PATH`**)—regenerate that bundle after doc changes so agents see updates.
+
+**What the prompt must cover:** It should be generic for **any site** (single building, campus, or tenant). The only input that changes per run is the export JSON from **GET /data-model/export** (optionally `?site_id=YourSiteName`). The LLM must preserve all fields, add **brick_type**, **rule_input**, **unit** (when known), and **polling**, and use equipment by name and **site_id** from the export.
 
 For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
@@ -86,7 +90,7 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 The agent is typically **not** a long-lived process; your external loop exports the model, tags it, validates the output, and retries when needed:
 
 1. **Export** — Call `GET /data-model/export` (optionally filtered by site) and send the export JSON to your agent.
-2. **System prompt** — Use the canonical prompt from `config/canonical_llm_prompt.txt` (or wrap it in your Open‑Claw/OpenAI-compatible system prompt). Provide it as the LLM system prompt.
+2. **System prompt** — Use the full tagging instructions (this page + Technical reference, or your local `pdf/canonical_llm_prompt.txt` if you maintain one) as the Open‑Claw/OpenAI-compatible **system** prompt.
 3. **User message** — Send the export JSON as the user message. Optionally prepend any engineer description of feeds/fed_by topology and assumptions so the LLM can choose correct Brick types and relationships.
 4. **LLM call** — Call your Open‑Claw/OpenAI-compatible LLM once (for typical payloads). For very large exports, your agent may split into chunks and merge results. Request JSON output (for example with `response_format={"type": "json_object"}`).
 5. **Validation** — The response is parsed as JSON and validated with **DataModelImportBody** (same schema as import). If validation fails:
@@ -118,12 +122,13 @@ Sometimes the LLM returns valid JSON that passes schema validation, but `PUT /da
 
 If the UI shows an error like:
 `site_id must be a valid UUID ... Got: 'BensOffice'`
-it means the tagged JSON contains a human-readable site name in `points[].site_id` instead of the UUID from the export.
+it means a **UUID field** holds a human-readable value (often the site name was pasted into `points[].site_id`).
 
-Human fix:
-1. In `points[]`, set `site_id` to `null` (or remove the key) for the failing entries.
-2. Keep `site_name` unchanged (e.g. `"BensOffice"`).
-3. Click **Import** again.
+Human fix (pick the path that matches your row shape):
+
+1. **Preferred:** Replace the bad value with the **real site UUID** from `GET /data-model/export` or `GET /sites` (same site the row belongs to). This is always safe for **updates** (`point_id` set) and for **creates**, and it keeps **name-based** `equipment[]` rows valid — those rows still **require** a proper `site_id` UUID alongside `equipment_name` / `feeds` / `fed_by`.
+2. **Creates only (`point_id` omitted):** If the backend should resolve the site by name, you may set `site_id` to `null` (or remove the key) **and** set `site_name` to an existing site name (see import logic in the API). Do **not** use this as a blanket fix for every row: any row that uses **equipment by name** must keep a valid `site_id` UUID.
+3. **Bad equipment or point UUIDs:** If the error is about `point_id` or `equipment_id`, remove or replace only those fields with IDs from your DB/export — don’t strip `site_id` from unrelated rows.
 
 If `PUT /data-model/import` rejects otherwise-valid JSON, re-run tagging with prompt chaining:
 include the import error text in your next LLM attempt so it can correct UUIDs/references, or return the JSON for a human to edit and import manually.
@@ -137,7 +142,7 @@ A future **Data Model Testing** page could offer a second AI assist (same chat s
 - **Input:** Current data model context (e.g. TTL snippet or SPARQL “Summarize your HVAC” result) plus the engineer’s message (e.g. “Add feeds/fed-by between AHU-1 and VAV-1”, “Fix the brick_type for SA-T”).
 - **Output:** Same schema as the tagging flow — valid **points** and **equipment** import JSON only — so the same **PUT /data-model/import** and validation path apply. The engineer reviews, applies, then re-runs SPARQL or predefined tests and passes/fails.
 
-That way: **Setup** = tag from export (canonical prompt in `config/canonical_llm_prompt.txt`); **Testing** = revise from current model + chat (optional prompt e.g. `config/canonical_llm_prompt_testing.txt`). Both use the same API and retry/prompt-chaining behavior; only the system prompt and user message differ.
+That way: **Setup** = tag from export (same instructions as above, optionally stored in `pdf/canonical_llm_prompt.txt`); **Testing** = revise from current model + chat (optional second file e.g. `pdf/canonical_llm_prompt_testing.txt`). Both use the same API and retry/prompt-chaining behavior; only the system prompt and user message differ.
 
 ---
 

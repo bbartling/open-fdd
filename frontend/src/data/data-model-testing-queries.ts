@@ -1,4 +1,5 @@
-import { Wind, Building2, Box, Flame, ThermometerSun, Layers, LayoutGrid, Gauge, List, Network, Code } from "lucide-react";
+/** Summarize-your-HVAC SPARQL (Brick NS below). Parity-tested by scripts/automated_testing/2_sparql_crud_and_frontend_test.py — keep queries valid for current Brick classes. */
+import { Wind, Building2, Box, Flame, ThermometerSun, Layers, LayoutGrid, Gauge, List, Network, Code, GitBranch } from "lucide-react";
 
 const BRICK = "https://brickschema.org/schema/Brick#";
 const RDFS = "http://www.w3.org/2000/01/rdf-schema#";
@@ -155,6 +156,38 @@ SELECT ?ahu ?ahu_label ?vav ?vav_label ?point ?point_label ?bacnet_device_id ?ob
   OPTIONAL { ?point ofdd:objectIdentifier ?object_identifier . }
 }
 ORDER BY ?ahu ?vav ?point`,
+  },
+  {
+    id: "equipment_feeds_topology",
+    label: "Equipment feeds and fed-by (Brick topology)",
+    shortLabel: "Feed topology",
+    icon: GitBranch,
+    query: `PREFIX brick: <${BRICK}>
+PREFIX rdfs: <${RDFS}>
+SELECT ?site_label ?from_label ?relationship ?to_label WHERE {
+  {
+    ?from brick:feeds ?to .
+    BIND("feeds" AS ?relationship)
+    OPTIONAL {
+      ?from brick:isPartOf ?site .
+      OPTIONAL { ?site rdfs:label ?site_label . }
+    }
+    OPTIONAL { ?from rdfs:label ?from_label . }
+    OPTIONAL { ?to rdfs:label ?to_label . }
+  }
+  UNION
+  {
+    ?from brick:isFedBy ?to .
+    BIND("fed_by" AS ?relationship)
+    OPTIONAL {
+      ?from brick:isPartOf ?site .
+      OPTIONAL { ?site rdfs:label ?site_label . }
+    }
+    OPTIONAL { ?from rdfs:label ?from_label . }
+    OPTIONAL { ?to rdfs:label ?to_label . }
+  }
+}
+ORDER BY ?site_label ?from_label ?relationship ?to_label`,
   },
   {
     id: "count-chillers",

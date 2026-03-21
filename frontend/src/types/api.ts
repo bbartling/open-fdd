@@ -232,6 +232,8 @@ export interface FaultTimeseriesResponse {
   period: { start: string; end: string };
   bucket: string;
   series: { time: string; metric: string; value: number }[];
+  /** Present when the request scoped by equipment (Plots device overlay). */
+  equipment_ids?: string[];
 }
 
 /** GET /analytics/fault-results-series — distinct fault × site × equipment for data preview selector */

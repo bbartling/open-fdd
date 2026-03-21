@@ -33,7 +33,7 @@ Only **one** process on the host can use port 47808 (BACnet/IP). Run discovery *
 
 ## Discovery and getting points into the data model
 
-All BACnet configuration is done via the **data model** and the **React frontend** (or the API). There is no CSV-based scrape path.
+All BACnet configuration for the **default stack** is done via the **data model** and the **React frontend** (or the API). The bundled scraper does not use a BACnet CSV file.
 
 1. **Run Who-Is and point discovery** — Use the React frontend (Config or Data model → BACnet panel) or the API. From the BACnet panel you can run **Test connection**, **Who-Is range**, and **Point discovery** (these proxy to diy-bacnet-server). diy-bacnet-server must be running (e.g. `./scripts/bootstrap.sh` starts it).
 2. **Graph and data model** — Use **POST /bacnet/point_discovery_to_graph** (device instance) to put BACnet devices and points into the in-memory graph and sync `config/data_model.ttl`. Create points in the DB via the frontend or CRUD (set `bacnet_device_id`, `object_identifier`, `object_name`), or use **GET /data-model/export** → LLM/human tagging → **PUT /data-model/import**.

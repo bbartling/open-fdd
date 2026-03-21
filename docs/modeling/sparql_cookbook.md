@@ -143,6 +143,8 @@ SELECT ?eq_label ?feeds_label WHERE {
 }
 ```
 
+In the **Data Model Testing** UI, the **Feed topology** button runs a graph-wide query that lists both `brick:feeds` and `brick:isFedBy` edges (with optional site / equipment labels). See `frontend/src/data/data-model-testing-queries.ts` (`equipment_feeds_topology`).
+
 ---
 
 ## Recipe 3b: External references (Brick v1.3)

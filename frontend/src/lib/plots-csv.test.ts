@@ -32,7 +32,10 @@ describe("plots-csv helpers", () => {
     const joined = joinFaultSignals(
       csv,
       "timestamp",
-      [{ time: "2026-01-01T00:00:00Z", metric: "sat_high_flag", value: 1 }],
+      [
+        { time: "2026-01-01T00:00:00Z", metric: "sat_high_flag", value: 1 },
+        { time: "2026-01-01T01:00:00Z", metric: "sat_high_flag", value: 0 },
+      ],
       "hour",
     );
     expect(joined.headers).toContain("fault_sat_high_flag");
@@ -51,11 +54,32 @@ describe("plots-csv helpers", () => {
     const joined = joinFaultSignals(
       csv,
       "timestamp",
-      [{ time: "2026-01-01T00:00:00Z", metric: "sat_high_flag", value: 1 }],
+      [
+        { time: "2026-01-01T00:00:00Z", metric: "sat_high_flag", value: 1 },
+        { time: "2026-01-01T01:00:00Z", metric: "sat_high_flag", value: 0 },
+      ],
       "hour",
     );
     expect(joined.rows[0]["fault_sat_high_flag"]).toBe(1);
     expect(joined.rows[1]["fault_sat_high_flag"]).toBe(0);
+  });
+
+  test("joinFaultSignals marks rows after latest fault bucket as unknown", () => {
+    const csv = parseCsvText(
+      "timestamp,temp\n2026-01-01T00:00:00Z,70\n2026-01-01T01:00:00Z,72\n2026-01-01T03:00:00Z,74",
+    );
+    const joined = joinFaultSignals(
+      csv,
+      "timestamp",
+      [
+        { time: "2026-01-01T00:00:00Z", metric: "sat_high_flag", value: 1 },
+        { time: "2026-01-01T01:00:00Z", metric: "sat_high_flag", value: 0 },
+      ],
+      "hour",
+    );
+    expect(joined.rows[0]["fault_sat_high_flag"]).toBe(1);
+    expect(joined.rows[1]["fault_sat_high_flag"]).toBe(0);
+    expect(joined.rows[2]["fault_sat_high_flag"]).toBeNull();
   });
 });
 
