@@ -457,13 +457,18 @@ def verify_plots_fault_plot_via_frontend(
     if "Select a site to view plots" in (driver.page_source or ""):
         return False, "Plots page requires a site; site selector did not apply."
 
-    # Select a fault when available for this device
+    # Select a fault when available for this device (skip if Faults select is disabled — no faults for device)
     try:
-        fault_opts = driver.find_elements(
-            By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select/option"
+        fault_select_els = driver.find_elements(
+            By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select"
         )
-        if fault_opts:
-            fault_opts[0].click()
+        if fault_select_els:
+            sel = fault_select_els[0]
+            disabled = sel.get_attribute("disabled") is not None or not sel.is_enabled()
+            if not disabled:
+                fault_opts = sel.find_elements(By.TAG_NAME, "option")
+                if fault_opts:
+                    fault_opts[0].click()
     except Exception as e:
         return False, f"Could not select fault option: {e}"
 
@@ -498,6 +503,7 @@ def verify_plots_axis_by_unit_via_frontend(
 
     mod = _ensure_e2e_module()
     ELEMENT_WAIT = mod.ELEMENT_WAIT
+    wait_for_clickable = mod.wait_for_clickable
     EXPECTED_POINT_NAMES = mod.EXPECTED_POINT_NAMES
     FALLBACK_POINT_NAMES = mod.FALLBACK_POINT_NAMES
     SECOND_POINT_DIFFERENT_UNIT = mod.SECOND_POINT_DIFFERENT_UNIT
@@ -548,8 +554,8 @@ def verify_plots_axis_by_unit_via_frontend(
         )
         load_btn.click()
         time.sleep(1.0)
-    except Exception:
-        pass
+    except Exception as e:
+        return False, f"Plots axis-by-unit: could not click Load Data from Database: {e}"
     chart = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container] .js-plotly-plot")
     if chart:
         return True, "Plots axis-by-unit path OK (Plotly chart rendered with multi-series selection)."

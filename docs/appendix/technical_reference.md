@@ -34,10 +34,10 @@ open-fdd/
 │   ├── sql/               # 001_init … 015_fault_state_and_audit (migrations; see Developer guide — Database schema)
 │   ├── grafana/           # provisioning/datasources, optional dashboards
 │   └── caddy/             # Caddyfile (optional reverse proxy)
-├── config/                # data_model.ttl (Brick + BACnet + platform config), BACnet CSV(s) optional
-├── scripts/               # bootstrap.sh, discover_bacnet.sh, fake_*_faults.py
+├── config/                # data_model.ttl (Brick + BACnet + platform config)
+├── scripts/               # bootstrap.sh, fake_*_faults.py
 ├── tools/
-│   ├── discover_bacnet.py # BACnet discovery → CSV (bacpypes3)
+│   ├── discover_bacnet.py # Optional: BACnet discovery → CSV (bacpypes3); not used by default stack scrape
 │   ├── run_bacnet_scrape.py, run_weather_fetch.py, run_rule_loop.py, run_host_stats.py
 │   ├── graph_and_crud_test.py # Full CRUD + RDF + SPARQL e2e (see SPARQL cookbook)
 │   ├── bacnet_crud_smoke_test.py # Simple BACnet instance range + CRUD smoke test
@@ -90,7 +90,7 @@ Used to build the PUT /config body at bootstrap; thereafter config is in the gra
 | `OFDD_BACNET_GATEWAYS` | — | JSON array for central aggregator. |
 | `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
 | `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). |
-| `OFDD_BACNET_USE_DATA_MODEL` | true | Prefer data-model scrape over CSV. |
+| `OFDD_BACNET_USE_DATA_MODEL` | true | Use data-model scrape (default). When false, `run_bacnet_scrape.py` may use a CSV path; the bundled **bacnet-scraper** container expects the data model. |
 | `OFDD_OPEN_METEO_*` | (see Configuration) | enabled, interval_hours, latitude, longitude, timezone, days_back, site_id. |
 | `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Graph sync interval (also in graph). |
 

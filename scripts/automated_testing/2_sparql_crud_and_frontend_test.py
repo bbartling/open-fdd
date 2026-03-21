@@ -1178,6 +1178,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if frontend_parity and not frontend_url:
+        print("--frontend-parity requires --frontend-url", file=sys.stderr)
+        return 1
     _HTTP_TIMEOUT_SEC = http_timeout_sec
     if not api_url:
         api_url = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
@@ -1300,12 +1303,32 @@ def main() -> int:
     console_errors: list[tuple[str, list[dict]]] = []
     for path in sparql_files:
         name = path.name
+        t0 = time.perf_counter()
+        rec_status = "skipped"
+        rec_err: str | None = None
+        rec_rows: int | None = None
+
+        def _append_sparql_file_report() -> None:
+            if report_data is None:
+                return
+            report_data["sparql_file_results"].append(
+                {
+                    "file": str(path),
+                    "name": name,
+                    "status": rec_status,
+                    "error": rec_err,
+                    "row_count": rec_rows,
+                    "elapsed_sec": round(time.perf_counter() - t0, 4),
+                }
+            )
+
         query = path.read_text(encoding="utf-8-sig").strip()
         # Strip leading comment-only lines (files start with # Recipe ...)
         lines = [l for l in query.splitlines() if not l.strip().startswith("#")]
         query = "\n".join(lines).strip()
         if not query:
             print(f"  {name}: skip (no query after stripping comments)")
+            _append_sparql_file_report()
             continue
 
         # Resolve expected: from TTL (config/data_model.ttl), or from sparql/expected/<stem>.json
@@ -1315,6 +1338,9 @@ def main() -> int:
             if expected_from_ttl and expected is None:
                 print(f"  {name}: expected-from-ttl FAIL — could not run query against {DATA_MODEL_TTL} (install rdflib?)")
                 failed += 1
+                rec_status = "error"
+                rec_err = f"expected-from-ttl: could not run query against {DATA_MODEL_TTL}"
+                _append_sparql_file_report()
                 continue
         if expected is None and EXPECTED_DIR.is_dir():
             expected = _load_expected_json(EXPECTED_DIR / f"{path.stem}.json")
@@ -1324,7 +1350,13 @@ def main() -> int:
         if not ok:
             print(f"  {name}: API FAIL — {err}")
             failed += 1
+            rec_status = "api_error"
+            rec_err = str(err) if err else "API request failed"
+            _append_sparql_file_report()
             continue
+
+        rec_rows = len(api_bindings)
+        rec_status = "success"
 
         if generate_expected:
             import json
@@ -1365,6 +1397,8 @@ def main() -> int:
                 errs = _get_console_errors(driver)
                 if errs:
                     console_errors.append((name, errs))
+            rec_status = "generated_expected"
+            _append_sparql_file_report()
             continue
 
         print(f"  {name}: API OK — {len(api_bindings)} row(s)")
@@ -1377,6 +1411,9 @@ def main() -> int:
         if reference is not None:
             if not _assert_bindings_match(reference, api_bindings, "API vs expected"):
                 failed += 1
+                rec_status = "expected_mismatch"
+                rec_err = "API bindings differ from expected (TTL or JSON)"
+                _append_sparql_file_report()
                 continue
             print(f"         API matches expected (data_model.ttl)" if use_ttl_expected else f"         API matches expected ({path.stem}.json)")
 
@@ -1389,6 +1426,9 @@ def main() -> int:
             if not ok_f_file:
                 print(f"         Frontend (file upload) FAIL — {err_f_file}")
                 failed += 1
+                rec_status = "frontend_upload_error"
+                rec_err = str(err_f_file) if err_f_file else "frontend file upload failed"
+                _append_sparql_file_report()
                 continue
             ref_fe_file = _api_bindings_fresh_after_ui(
                 api_url, query, ref, "Frontend (file upload)"
@@ -1406,18 +1446,25 @@ def main() -> int:
             if not ok_f:
                 print(f"         Frontend (textarea) FAIL — {err_f}")
                 failed += 1
+                rec_status = "frontend_textarea_error"
+                rec_err = str(err_f) if err_f else "frontend textarea run failed"
+                _append_sparql_file_report()
                 continue
             ref_fe_ta = _api_bindings_fresh_after_ui(
                 api_url, query, ref, "Frontend (textarea)"
             )
             if not _assert_bindings_match(ref_fe_ta, fe_bindings, "Frontend (textarea)"):
                 failed += 1
+                rec_status = "frontend_parity_mismatch"
+                rec_err = "Frontend (textarea) bindings differ from API"
+                _append_sparql_file_report()
                 continue
             print(f"         Frontend (textarea) OK")
         if driver and (frontend_parity and frontend_url):
             errs = _get_console_errors(driver)
             if errs:
                 console_errors.append((name, errs))
+        _append_sparql_file_report()
 
     if driver:
         if frontend_parity and frontend_url and not no_predefined_buttons:

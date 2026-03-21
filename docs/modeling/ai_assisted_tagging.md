@@ -118,12 +118,13 @@ Sometimes the LLM returns valid JSON that passes schema validation, but `PUT /da
 
 If the UI shows an error like:
 `site_id must be a valid UUID ... Got: 'BensOffice'`
-it means the tagged JSON contains a human-readable site name in `points[].site_id` instead of the UUID from the export.
+it means a **UUID field** holds a human-readable value (often the site name was pasted into `points[].site_id`).
 
-Human fix:
-1. In `points[]`, set `site_id` to `null` (or remove the key) for the failing entries.
-2. Keep `site_name` unchanged (e.g. `"BensOffice"`).
-3. Click **Import** again.
+Human fix (pick the path that matches your row shape):
+
+1. **Preferred:** Replace the bad value with the **real site UUID** from `GET /data-model/export` or `GET /sites` (same site the row belongs to). This is always safe for **updates** (`point_id` set) and for **creates**, and it keeps **name-based** `equipment[]` rows valid — those rows still **require** a proper `site_id` UUID alongside `equipment_name` / `feeds` / `fed_by`.
+2. **Creates only (`point_id` omitted):** If the backend should resolve the site by name, you may set `site_id` to `null` (or remove the key) **and** set `site_name` to an existing site name (see import logic in the API). Do **not** use this as a blanket fix for every row: any row that uses **equipment by name** must keep a valid `site_id` UUID.
+3. **Bad equipment or point UUIDs:** If the error is about `point_id` or `equipment_id`, remove or replace only those fields with IDs from your DB/export — don’t strip `site_id` from unrelated rows.
 
 If `PUT /data-model/import` rejects otherwise-valid JSON, re-run tagging with prompt chaining:
 include the import error text in your next LLM attempt so it can correct UUIDs/references, or return the JSON for a human to edit and import manually.

@@ -151,21 +151,27 @@ export function PlotsPage() {
     [pollingPoints, selectedDeviceId],
   );
 
-  const selectedDeviceEquipmentId = useMemo(
-    () => deviceOptions.find((d) => d.id === selectedDeviceId)?.equipmentId ?? null,
-    [deviceOptions, selectedDeviceId],
-  );
+  /** All equipment IDs tied to the selected BACnet device (one device can span multiple equipment records). */
+  const selectedDeviceEquipmentIds = useMemo(() => {
+    if (!selectedDeviceId) return new Set<string>();
+    const ids = new Set<string>();
+    for (const p of pollingPoints) {
+      if (p.bacnet_device_id !== selectedDeviceId) continue;
+      if (p.equipment_id) ids.add(p.equipment_id);
+    }
+    return ids;
+  }, [pollingPoints, selectedDeviceId]);
 
   const faultIdsForDevice = useMemo(() => {
-    if (!selectedDeviceEquipmentId) return [];
+    if (selectedDeviceEquipmentIds.size === 0) return [];
     const set = new Set(
       faultState
-        .filter((f) => f.equipment_id === selectedDeviceEquipmentId)
+        .filter((f) => f.equipment_id && selectedDeviceEquipmentIds.has(f.equipment_id))
         .map((f) => String(f.fault_id))
         .filter(Boolean),
     );
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [faultState, selectedDeviceEquipmentId]);
+  }, [faultState, selectedDeviceEquipmentIds]);
 
   const pointIdsForExport = selectedPointIds.length > 0 ? selectedPointIds : pointsForDevice.map((p) => p.id);
   const faultBucket = pickFaultBucket(start, end);
@@ -256,7 +262,12 @@ export function PlotsPage() {
   }, [effectiveCsv, yColumns, plotMode, selectedFaultId, faultData, showFaultOverlays]);
 
   useEffect(() => {
-    if (!selectedDeviceId && deviceOptions.length > 0) {
+    if (deviceOptions.length === 0) {
+      if (selectedDeviceId) setSelectedDeviceId("");
+      return;
+    }
+    const stillValid = deviceOptions.some((o) => o.id === selectedDeviceId);
+    if (!stillValid || !selectedDeviceId) {
       setSelectedDeviceId(deviceOptions[0].id);
     }
   }, [selectedDeviceId, deviceOptions]);

@@ -56,7 +56,7 @@ pytest -v
 - Style and workflow: [docs/contributing.md](docs/contributing.md).
 
 
-> NOTE: If there is not a develop branch open feel free to ask for one on Discord in the `#dev-chat` channel
+> **Note:** If a `develop` branch does not exist, please request one in the `#dev-chat` channel on Discord.
 
 
 ---
