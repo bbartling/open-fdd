@@ -291,16 +291,29 @@ export function PlotsPage() {
     }
   }, [selectedDeviceId, deviceOptions]);
 
-  const pollingPointsRef = useRef(pollingPoints);
-  pollingPointsRef.current = pollingPoints;
+  const prevPointSeedDeviceIdRef = useRef<string>("");
 
   useEffect(() => {
-    if (!selectedDeviceId) return;
-    const forDevice = pollingPointsRef.current.filter(
-      (p) => p.bacnet_device_id === selectedDeviceId,
-    );
-    setSelectedPointIds(forDevice.slice(0, 4).map((p) => p.id));
-  }, [selectedDeviceId]);
+    if (!selectedDeviceId) {
+      prevPointSeedDeviceIdRef.current = "";
+      return;
+    }
+    const forDevice = pollingPoints.filter((p) => p.bacnet_device_id === selectedDeviceId);
+    const defaults = forDevice.slice(0, 4).map((p) => p.id);
+    const deviceChanged = prevPointSeedDeviceIdRef.current !== selectedDeviceId;
+    if (deviceChanged) {
+      prevPointSeedDeviceIdRef.current = selectedDeviceId;
+      setSelectedPointIds(defaults);
+      return;
+    }
+    setSelectedPointIds((prev) => {
+      const valid = prev.filter((id) => forDevice.some((p) => p.id === id));
+      if (valid.length !== prev.length) {
+        return valid.length > 0 ? valid : defaults;
+      }
+      return prev;
+    });
+  }, [selectedDeviceId, pollingPoints]);
 
   useEffect(() => {
     if (faultIdsForDevice.length === 0) {
@@ -376,8 +389,14 @@ export function PlotsPage() {
       <div className="rounded-lg border border-border/60 bg-card p-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">BACnet device instance ID</label>
+            <label
+              htmlFor="plots-device-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              BACnet device instance ID
+            </label>
             <select
+              id="plots-device-select"
               value={selectedDeviceId}
               onChange={(e) => setSelectedDeviceId(e.target.value)}
               className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm"
@@ -390,8 +409,14 @@ export function PlotsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Points (for selected device)</label>
+            <label
+              htmlFor="plots-points-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Points (for selected device)
+            </label>
             <select
+              id="plots-points-select"
               multiple
               value={selectedPointIds}
               onChange={(e) => setSelectedPointIds(Array.from(e.target.selectedOptions).map((o) => o.value))}
@@ -405,8 +430,14 @@ export function PlotsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Faults (for selected device)</label>
+            <label
+              htmlFor="plots-faults-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Faults (for selected device)
+            </label>
             <select
+              id="plots-faults-select"
               value={selectedFaultId}
               onChange={(e) => setSelectedFaultId(e.target.value)}
               className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm"
@@ -447,8 +478,14 @@ export function PlotsPage() {
       {effectiveCsv && (
         <div className="rounded-lg border border-border/60 bg-card p-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Y columns (multi-select)</label>
+            <label
+              htmlFor="plots-y-columns-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Y columns (multi-select)
+            </label>
             <select
+              id="plots-y-columns-select"
               multiple
               value={yColumns}
               onChange={(e) => {
