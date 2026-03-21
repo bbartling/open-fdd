@@ -29,6 +29,8 @@ def test_prefixes():
     assert "@prefix brick:" in p
     assert "brickschema.org" in p
     assert "ofdd:" in p
+    assert "@prefix ref:" in p
+    assert "@prefix bacnet:" in p
 
 
 def test_escape():
@@ -75,6 +77,10 @@ def test_build_ttl_one_site_one_point():
     assert "rdfs:label" in ttl
     assert "ofdd:unit" in ttl
     assert "degF" in ttl
+    assert "ref:hasExternalReference" in ttl
+    assert "ref:TimeseriesReference" in ttl
+    assert 'ref:hasTimeseriesId "SA-T"' in ttl
+    assert "ref:storedAt" in ttl
 
 
 def test_build_ttl_site_with_equipment_and_points():
@@ -110,6 +116,37 @@ def test_build_ttl_site_with_equipment_and_points():
     assert "brick:isPartOf" in ttl
     assert "ofdd:unit" in ttl
     assert "inH2O" in ttl
+    assert "ref:TimeseriesReference" in ttl
+
+
+def test_build_ttl_bacnet_external_reference_when_point_has_bacnet_fields():
+    site_id = uuid4()
+    pt_id = uuid4()
+    sites = [{"id": site_id, "name": "BACnet Site"}]
+    equipment = []
+    points = [
+        {
+            "id": pt_id,
+            "site_id": site_id,
+            "external_id": "ZoneTemp",
+            "brick_type": "Zone_Air_Temperature_Sensor",
+            "fdd_input": None,
+            "unit": "degF",
+            "equipment_id": None,
+            "bacnet_device_id": "123",
+            "object_identifier": "analog-input,3",
+            "object_name": "BLDG-Z410-ZATS",
+        }
+    ]
+    cursor = _mock_cursor(sites, equipment, points)
+    conn = _mock_conn(cursor)
+    with patch("open_fdd.platform.data_model_ttl.get_conn", return_value=conn):
+        ttl = build_ttl_from_db()
+    assert "ref:BACnetReference" in ttl
+    assert 'bacnet:object-identifier "analog-input,3"' in ttl
+    assert 'bacnet:object-name "BLDG-Z410-ZATS"' in ttl
+    assert 'brick:BACnetURI "bacnet://123/analog-input,3/present-value"' in ttl
+    assert "bacnet:objectOf <bacnet://123>" in ttl
 
 
 def test_build_ttl_point_without_unit_omits_ofdd_unit():

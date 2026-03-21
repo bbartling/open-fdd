@@ -1,8 +1,0 @@
-# Data Model Testing → Class summary button (Brick classes used)
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-SELECT ?type (COUNT(?e) AS ?count) WHERE {
-  ?e a ?type .
-  FILTER(STRSTARTS(STR(?type), "https://brickschema.org/schema/Brick#"))
-} GROUP BY ?type
-ORDER BY DESC(?count)
-LIMIT 50

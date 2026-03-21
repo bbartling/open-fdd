@@ -1,7 +1,7 @@
 """API response schemas for capabilities, errors, events, faults, and jobs."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,16 @@ class CapabilityResponse(BaseModel):
     features: dict[str, bool] = Field(
         ...,
         description="Feature flags: websocket, fault_state, jobs, bacnet_write",
+    )
+    # Built-in LLM endpoints are not part of Open-FDD; use external tooling +
+    # GET /model-context/docs and GET /mcp/manifest for discovery.
+    ai_available: bool = Field(
+        False,
+        description="Always false in core Open-FDD; use an external agent stack.",
+    )
+    ai_backend: Literal["disabled"] = Field(
+        "disabled",
+        description="Core API does not embed an LLM; value is always disabled.",
     )
 
 

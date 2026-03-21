@@ -37,12 +37,18 @@ Sites + Equipment + Points (DB)  ← single source of truth
 ```turtle
 :oat_sensor a brick:Outside_Air_Temperature_Sensor ;
     rdfs:label "OAT (°F)" ;
+    ref:hasExternalReference [
+        a ref:TimeseriesReference ;
+        ref:hasTimeseriesId "oat_sensor" ;
+        ref:storedAt "postgresql://localhost:5432/openfdd/timeseries_readings"
+    ] ;
     brick:isPointOf :ahu_7 ;
     ofdd:mapsToRuleInput "oat" .
 ```
 
 - Brick classes define sensor types
 - `ofdd:mapsToRuleInput` maps to FDD DataFrame columns
+- `ref:hasExternalReference` links points to BACnet/timeseries external systems
 - `rdfs:label` for display
 
 ---
@@ -51,7 +57,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
 
 1. **Discover** — BACnet discovery and/or manual entry populate **sites**, **equipment**, and **points** in the DB.
 2. **Export** — Use **GET /data-model/export** (or the Export card on the Data Model Setup page) to get JSON for tagging.
-3. **Tag** — Either **manual**: copy JSON → use an external LLM or human → paste back; or **in-house agent**: Data Model Setup → **OpenAI API Assist** → **Tag with OpenAI** (POST /data-model/tag-with-openai), which uses retry and **prompt chaining** on validation errors (see [AI-assisted tagging](ai_assisted_tagging#in-house-ai-agent-openai-api-assist)).
+3. **Tag** — Either **manual**: copy JSON → use an external LLM or human → paste back (or automate with an external agent like Open‑Claw). If your agent needs platform documentation as context, fetch it from `GET /model-context/docs`.
 4. **Import** — **PUT /data-model/import** (or the Import card / auto-import from the agent) writes tagged points and optional equipment relationships into the DB and reserializes the Brick TTL.
 5. **Validate** — Use the **Data Model Testing** page (SPARQL, “Summarize your HVAC”) to confirm the model; treat the result as pass or fail.
 
@@ -63,7 +69,6 @@ Sites + Equipment + Points (DB)  ← single source of truth
 |----------|-------------|
 | `GET /data-model/export` | Single export route: BACnet discovery + DB points (optional `?bacnet_only=true`, `?site_id=...`). Use for [AI-assisted tagging](ai_assisted_tagging). |
 | `PUT /data-model/import` | Import JSON: **points** (required) and optional **equipment** (feeds/fed_by). Creates/updates points; does not accept sites or equipments. |
-| `POST /data-model/tag-with-openai` | In-house AI agent: export + canonical prompt + optional user summary → OpenAI → validate (with retry and prompt chaining on failure) → return tagged JSON and agent log. Optional auto-import. See [AI-assisted tagging](ai_assisted_tagging#in-house-ai-agent-openai-api-assist). |
 | `GET /data-model/ttl` | Generate Brick TTL from DB (and in-memory BACnet graph). Optional `?save=true` to write to file. |
 | `POST /data-model/sparql` | Run SPARQL query against the current data model. |
 

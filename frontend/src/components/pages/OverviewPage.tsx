@@ -7,6 +7,44 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useSites, useAllEquipment, useAllPoints, useEquipment, usePoints } from "@/hooks/use-sites";
 import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
+import { useCapabilities } from "@/hooks/use-fdd-status";
+
+/** Static hints for external agents; Open-FDD does not call LLMs from the UI. */
+function ModelContextCard() {
+  const { data: capabilities } = useCapabilities();
+
+  return (
+    <Card className="mt-6">
+      <CardContent className="pt-6 space-y-3">
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground">
+            External agents &amp; MCP-style discovery
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Open-FDD serves documentation as plain text at{" "}
+            <code className="rounded bg-muted px-1 text-[11px]">GET /model-context/docs</code> and
+            publishes an HTTP discovery manifest at{" "}
+            <code className="rounded bg-muted px-1 text-[11px]">GET /mcp/manifest</code>{" "}
+            (resource URI <code className="text-[11px]">openfdd://docs</code>). Pair with{" "}
+            <code className="rounded bg-muted px-1 text-[11px]">GET /data-model/export</code> and{" "}
+            <code className="rounded bg-muted px-1 text-[11px]">PUT /data-model/import</code> from your
+            own OpenAI-compatible stack.
+          </p>
+        </div>
+        {capabilities && (
+          <p className="text-xs text-muted-foreground">
+            API <span className="font-medium">v{capabilities.version}</span> — built-in{" "}
+            <code className="rounded bg-muted px-1">ai_available</code> is{" "}
+            <span className="font-medium">{String(capabilities.ai_available)}</span> (use external tooling).
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          See <span className="font-medium">docs/openclaw_integration.md</span> in the repo for integration notes.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function AllSitesView() {
   const { setSelectedSiteId } = useSiteContext();
@@ -147,8 +185,18 @@ export function OverviewPage() {
   const { selectedSiteId } = useSiteContext();
 
   if (selectedSiteId) {
-    return <SiteSummaryView siteId={selectedSiteId} />;
+    return (
+      <>
+        <SiteSummaryView siteId={selectedSiteId} />
+        <ModelContextCard />
+      </>
+    );
   }
 
-  return <AllSitesView />;
+  return (
+    <>
+      <AllSitesView />
+      <ModelContextCard />
+    </>
+  );
 }

@@ -31,6 +31,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
+      # pdf/open-fdd-docs.txt is gitignored; generate it so /model-context/docs matches release builds.
+      - name: Build combined docs text (LLM context)
+        run: python scripts/build_docs_pdf.py --no-pdf
+
       - name: Backend (pytest)
         run: pytest open_fdd/tests/ -v --tb=short
         env:

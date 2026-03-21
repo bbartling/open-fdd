@@ -44,11 +44,12 @@ The graph uses these namespaces. Include them in your queries:
 |--------|-----------|
 | `brick:` | https://brickschema.org/schema/Brick# |
 | `rdfs:` | http://www.w3.org/2000/01/rdf-schema# |
+| `ref:` | https://brickschema.org/schema/Brick/ref# |
 | `ofdd:` | http://openfdd.local/ontology# |
 | `bacnet:` | http://data.ashrae.org/bacnet/2020# |
 | `:` (default) | http://openfdd.local/site# |
 
-**Graph contents:** Brick triples (sites, equipment, points from the DB), BACnet triples (devices and objects from discovery), and **ofdd:PlatformConfig** (platform config from GET/PUT /config). All are queryable together.
+**Graph contents:** Brick triples (sites, equipment, points from the DB), Brick external references (`ref:BACnetReference`, `ref:TimeseriesReference`), BACnet triples (devices and objects from discovery), and **ofdd:PlatformConfig** (platform config from GET/PUT /config). All are queryable together.
 
 ---
 
@@ -142,7 +143,47 @@ SELECT ?eq_label ?feeds_label WHERE {
 }
 ```
 
+In the **Data Model Testing** UI, the **Feed topology** button runs a graph-wide query that lists both `brick:feeds` and `brick:isFedBy` edges (with optional site / equipment labels). See `frontend/src/data/data-model-testing-queries.ts` (`equipment_feeds_topology`).
+
 ---
+
+## Recipe 3b: External references (Brick v1.3)
+
+List point-to-reference relationships:
+
+```sparql
+PREFIX ref: <https://brickschema.org/schema/Brick/ref#>
+SELECT ?point ?rep ?type WHERE {
+  ?point ref:hasExternalReference ?rep .
+  ?rep a ?type .
+}
+LIMIT 200
+```
+
+BACnet references from point metadata:
+
+```sparql
+PREFIX ref: <https://brickschema.org/schema/Brick/ref#>
+PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+SELECT ?point ?oid ?device WHERE {
+  ?point ref:hasExternalReference ?rep .
+  ?rep a ref:BACnetReference ;
+       bacnet:object-identifier ?oid ;
+       bacnet:objectOf ?device .
+}
+```
+
+Timeseries references:
+
+```sparql
+PREFIX ref: <https://brickschema.org/schema/Brick/ref#>
+SELECT ?point ?tsid ?store WHERE {
+  ?point ref:hasExternalReference ?rep .
+  ?rep a ref:TimeseriesReference ;
+       ref:hasTimeseriesId ?tsid ;
+       ref:storedAt ?store .
+}
+```
 
 ## Recipe 4: BACnet devices and objects
 

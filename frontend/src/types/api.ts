@@ -157,44 +157,6 @@ export interface DataModelImportResponse {
   warnings?: string[];
 }
 
-/** POST /data-model/tag-with-openai request */
-export interface TagWithOpenAiRequest {
-  site_id?: string | null;
-  openai_api_key: string;
-  model: string;
-  auto_import?: boolean;
-  /** Engineer's description of HVAC system and feeds/fed_by for the in-house agent. */
-  user_summary?: string | null;
-  /** Max retries on validation failure (default 3). */
-  max_retries?: number;
-}
-
-/** One step in the tagging agent log (attempt, success, validation_failed). */
-export interface TagWithOpenAiAgentLogEntry {
-  step: string;
-  attempt?: number;
-  detail?: string;
-}
-
-/** POST /data-model/tag-with-openai response */
-export interface TagWithOpenAiResponse {
-  points: DataModelExportRow[];
-  equipment: unknown[];
-  meta: {
-    model: string;
-    point_count: number;
-    equipment_count: number;
-    /** Log of agent attempts and outcomes for display in the UI. */
-    agent_log?: TagWithOpenAiAgentLogEntry[];
-    usage?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    };
-    import_result?: DataModelImportResponse;
-  };
-}
-
 /** POST /data-model/sparql response */
 export interface SparqlResponse {
   bindings: Record<string, string | null>[];
@@ -208,6 +170,10 @@ export interface Capabilities {
     jobs: boolean;
     bacnet_write: boolean;
   };
+  /** Always false in core Open-FDD; use external agents with /model-context and /mcp/manifest. */
+  ai_available: boolean;
+  /** Core API does not embed an LLM; value is always "disabled". */
+  ai_backend: "disabled";
 }
 
 /** POST /bacnet/server_hello response (API returns { ok, body? } where body is JSON-RPC). */
@@ -266,6 +232,8 @@ export interface FaultTimeseriesResponse {
   period: { start: string; end: string };
   bucket: string;
   series: { time: string; metric: string; value: number }[];
+  /** Present when the request scoped by equipment (Plots device overlay). */
+  equipment_ids?: string[];
 }
 
 /** GET /analytics/fault-results-series — distinct fault × site × equipment for data preview selector */
@@ -336,3 +304,24 @@ export interface SystemDiskResponse {
     used_pct: number;
   }[];
 }
+
+/** Point-timeseries payload (same series shape as fault-timeseries for charts). */
+export interface PointTimeseriesResponse {
+  period: { start: string; end: string };
+  series: { time: string; metric: string; value: number }[];
+  point_labels?: Record<string, string>;
+}
+
+/** Last N fault_results rows (for tabular display in chat). */
+export interface FaultResultsSampleResponse {
+  rows: {
+    ts: string;
+    site_id: string;
+    equipment_id: string;
+    fault_id: string;
+    flag_value: number;
+    evidence?: unknown;
+  }[];
+  count: number;
+}
+

@@ -32,6 +32,20 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ---
 
+## External AI (OpenAI-compatible)
+
+Open‑FDD does not embed an LLM. Instead, external AI agents (for example an OpenAI-compatible tool like Open‑Claw) can take advantage of Open‑FDD by calling its APIs:
+
+1. Export the current data model JSON: `GET /data-model/export`
+2. Fetch documentation as model context: `GET /model-context/docs` (optionally with `query=...` / keyword retrieval)
+3. Import tagged JSON back into the platform: `PUT /data-model/import`
+
+Manual Data Model export/import (JSON) always works without any AI.
+
+See [Open‑Claw integration](openclaw_integration) and [API Reference](appendix/api_reference) for endpoint details.
+
+---
+
 ## Prerequisites
 
 - **OS:** Linux only (Ubuntu Server latest, or Linux Mint). **Tested on x86;** should work on ARM but is untested. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
@@ -44,7 +58,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
   git clone https://github.com/bbartling/open-fdd.git
   cd open-fdd
   ```
-- **BACnet (default data driver):** The default data driver is BACnet. Bootstrap **automatically** builds and starts [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as its own Docker container (plus the BACnet scraper). You must run **BACnet discovery first** and curate the resulting CSV before the platform can scrape data—the scraper uses that CSV as its config. See [BACnet → Setup](bacnet/index#setup) and [BACnet overview](bacnet/overview). To run without BACnet (e.g. central-only with remote gateways), start only the services you need (e.g. `docker compose up -d db grafana api fdd-loop weather-scraper` from `stack/`).
+- **BACnet (default data driver):** The default data driver is BACnet. Bootstrap **automatically** builds and starts [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as its own Docker container (plus the BACnet scraper). Run **BACnet discovery** from the UI or API, then add points to the **data model** (with `bacnet_device_id` / `object_identifier`)—the scraper reads **only the database + graph**, not a CSV file. See [BACnet → Setup](bacnet/index#setup) and [BACnet overview](bacnet/overview). To run without BACnet (e.g. central-only with remote gateways), start only the services you need (e.g. `docker compose up -d db grafana api fdd-loop weather-scraper` from `stack/`).
 
 ---
 
@@ -72,7 +86,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
 | `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
 | `--test` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
-| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `weather-scraper`. |
+| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
 | `--build-all` | Rebuild and restart all services; then exit. |
 | `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |
 | `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |
@@ -85,7 +99,6 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
 | `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
-
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
 ---
@@ -104,4 +117,4 @@ To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `.
 - **[Security & Caddy](security)** — Basic auth, throttling, TLS.
 - **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance; Swagger at http://localhost:8000/docs.
 
-For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview).
+For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.

@@ -1,55 +1,19 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Brush,
-} from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-} from "@/components/ui/chart";
-import type { ChartConfig } from "@/components/ui/chart";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
 import { usePoints, useEquipment } from "@/hooks/use-sites";
-import { useTrendingData } from "@/hooks/use-trending";
-import { useFaultDefinitions, useFaultTimeseries } from "@/hooks/use-faults";
+import { useFaultTimeseries, useFaultState } from "@/hooks/use-faults";
 import { DateRangeSelect } from "@/components/site/DateRangeSelect";
 import type { DatePreset } from "@/components/site/DateRangeSelect";
-import { PointPicker } from "@/components/site/PointPicker";
-import { FaultPicker } from "@/components/site/FaultPicker";
-import type { Point } from "@/types/api";
-import { downloadTimeseriesCsv, fetchCsv, parseWideCsv } from "@/lib/csv";
-import type { WideCsvParsed } from "@/lib/csv";
-import { Download, ChevronDown, ChevronUp, Table2 } from "lucide-react";
-import { displayRangeUpdater } from "./plots-display-range";
-import { useQuery } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
+import { fetchCsv } from "@/lib/csv";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-const COLORS = [
-  "hsl(215, 60%, 42%)",
-  "hsl(338, 65%, 48%)",
-  "hsl(142, 71%, 35%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(262, 52%, 50%)",
-  "hsl(190, 70%, 40%)",
-  "hsl(330, 55%, 45%)",
-  "hsl(60, 65%, 38%)",
-];
+  inferYColumns,
+  joinFaultSignals,
+  parseCsvText,
+  pickFaultBucket,
+  type ParsedCsv,
+} from "@/lib/plots-csv";
+import { ChartLine, RefreshCw } from "lucide-react";
 
 function presetRange(preset: DatePreset): { start: string; end: string } {
   const end = new Date();
@@ -75,447 +39,89 @@ function formatLocalDT(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function timeFormat(ts: number) {
-  return new Date(ts).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-  });
-}
-function tooltipFormat(ts: number) {
-  return new Date(ts).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const PLOT_COLORS = [
+  "#1d4ed8",
+  "#be185d",
+  "#15803d",
+  "#d97706",
+  "#7c3aed",
+  "#0891b2",
+  "#b91c1c",
+  "#4d7c0f",
+];
 
-const CHART_MIN_HEIGHT = 360;
-const OVERVIEW_HEIGHT = 56;
-/** Max rows shown in the in-browser data table (same data as CSV export). */
-const DATA_TABLE_MAX_ROWS = 500;
-
-/** Bucket width in ms for fault swim lanes (hour or day from API). */
-function faultBucketMs(start: string, end: string): number {
-  const span = new Date(end).getTime() - new Date(start).getTime();
-  return span <= 2 * 24 * 60 * 60 * 1000 ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+type PlotMode = "lines" | "points" | "both";
+function toDateOnly(iso: string): string {
+  return iso.slice(0, 10);
 }
 
-interface TrendChartProps {
-  siteId: string;
-  pointIds: string[];
-  points: Point[];
-  start: string;
-  end: string;
-  selectedFaultIds: string[];
-  /** When the user zooms (brush), report the displayed time range for CSV download. */
-  onDisplayRangeChange?: (displayStart: string, displayEnd: string) => void;
-}
-
-function TrendChart({
-  siteId,
-  pointIds,
-  points,
-  start,
-  end,
-  selectedFaultIds,
-  onDisplayRangeChange,
-}: TrendChartProps) {
-  const [brushRange, setBrushRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
-
-  const { data, isLoading, error } = useTrendingData(siteId, pointIds, start, end);
-  const bucket = start && end && new Date(end).getTime() - new Date(start).getTime() < 2 * 24 * 60 * 60 * 1000 ? "hour" : "day";
-  const { data: faultData, isLoading: faultLoading } = useFaultTimeseries(
-    selectedFaultIds.length > 0 ? siteId : undefined,
-    start,
-    end,
-    bucket,
-  );
-
+function PlotlyCanvas({
+  traces,
+  title,
+}: {
+  traces: Record<string, unknown>[];
+  title: string;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setBrushRange(null);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  const pointMap = useMemo(() => new Map(points.map((p) => [p.id, p])), [points]);
-  const set = useMemo(
-    () => new Set(selectedFaultIds.map((id) => String(id).trim()).filter(Boolean)),
-    [selectedFaultIds],
-  );
-  /** One key per selected fault rule (unique), so legend and tooltip show one entry per rule. */
-  const faultKeys = useMemo(() => {
-    if (!faultData?.series?.length || set.size === 0) return [];
-    const ids = faultData.series
-      .filter((s) => set.has(String(s.metric).trim()))
-      .map((s) => String(s.metric).trim());
-    return Array.from(new Set(ids));
-  }, [faultData, set]);
-  /** Fault active windows [startMs, endMs) per fault_id for swim-lane value 0/1. */
-  const faultSegmentsList = useMemo(() => {
-    const list: { start: number; end: number; fault_id: string }[] = [];
-    if (!faultData?.series?.length || set.size === 0) return list;
-    const bucketMs = faultBucketMs(start, end);
-    faultData.series
-      .filter((s) => s.value > 0 && set.has(String(s.metric).trim()))
-      .forEach((s) => {
-        const t = new Date(s.time).getTime();
-        if (!Number.isFinite(t)) return;
-        list.push({ start: t, end: t + bucketMs, fault_id: String(s.metric).trim() });
-      });
-    return list;
-  }, [faultData, set, start, end]);
-
-  const config: ChartConfig = useMemo(() => {
-    const c: ChartConfig = {};
-    pointIds.forEach((id, i) => {
-      const p = pointMap.get(id);
-      c[id] = {
-        label: p?.object_name ?? p?.external_id ?? id,
-        color: COLORS[i % COLORS.length],
-        unit: p?.unit ?? undefined,
+    let mounted = true;
+    async function draw() {
+      if (!ref.current) return;
+      const Plotly = (await import("plotly.js-dist-min")).default as {
+        react: (el: HTMLDivElement, data: unknown[], layout: unknown, config: unknown) => void;
       };
-    });
-    faultKeys.forEach((fid, i) => {
-      c[fid] = {
-        label: fid,
-        color: COLORS[(pointIds.length + i) % COLORS.length],
-        unit: "0/1",
-      };
-    });
-    return c;
-  }, [pointIds, pointMap, faultKeys]);
-
-  const keys = pointIds.filter(Boolean);
-
-  /** Group point IDs by unit (data-model unit); order = first occurrence. Enables one axis per unit. */
-  const unitGroups = useMemo((): string[][] => {
-    const seen = new Set<string>();
-    const order: string[] = [];
-    const byUnit = new Map<string, string[]>();
-    for (const id of pointIds) {
-      if (!id) continue;
-      const p = pointMap.get(id);
-      const unit = (p?.unit ?? "") || "_";
-      if (!byUnit.has(unit)) byUnit.set(unit, []);
-      byUnit.get(unit)!.push(id);
-      if (!seen.has(unit)) {
-        seen.add(unit);
-        order.push(unit);
-      }
+      if (!mounted || !ref.current) return;
+      Plotly.react(
+        ref.current,
+        traces,
+        {
+          title,
+          autosize: true,
+          margin: { t: 50, r: 24, b: 48, l: 56 },
+          paper_bgcolor: "transparent",
+          plot_bgcolor: "transparent",
+          xaxis: { title: "X", automargin: true },
+          yaxis: { title: "Value", automargin: true },
+          yaxis2: { title: "Fault 0/1", overlaying: "y", side: "right", range: [0, 1.1] },
+          legend: { orientation: "h" },
+        },
+        {
+          responsive: true,
+          displaylogo: false,
+          modeBarButtonsToRemove: ["lasso2d", "select2d"],
+        },
+      );
     }
-    return order.map((u) => byUnit.get(u) ?? []).filter((g) => g.length > 0);
-  }, [pointIds, pointMap]);
-
-  /** Map each point ID to yAxisId: first unit group = left, second+ = right2 (faults stay on right). */
-  const pointToYAxisId = useMemo((): Map<string, "left" | "right2"> => {
-    const m = new Map<string, "left" | "right2">();
-    unitGroups.forEach((group, i) => {
-      const axisId = i === 0 ? "left" : "right2";
-      group.forEach((id) => m.set(id, axisId));
-    });
-    return m;
-  }, [unitGroups]);
-
-  const hasSecondPointAxis = unitGroups.length >= 2;
-
-  const faultColor = (faultId: string) =>
-    COLORS[(pointIds.length + faultKeys.indexOf(faultId)) % COLORS.length];
-
-  const isFaultActiveAt = useCallback(
-    (ts: number, faultId: string) =>
-      faultSegmentsList.some((s) => s.fault_id === faultId && ts >= s.start && ts < s.end),
-    [faultSegmentsList],
-  );
-
-  type ChartRow = { timestamp: number; [k: string]: number };
-  const fullData = useMemo((): ChartRow[] => {
-    if (data?.length) {
-      const timeSet = new Set<number>(data.filter((d) => Number.isFinite(d.timestamp)).map((d) => d.timestamp));
-      faultSegmentsList.forEach((s) => {
-        timeSet.add(s.start);
-        timeSet.add(s.end - 1);
-      });
-      const sorted = Array.from(timeSet).filter(Number.isFinite).sort((a, b) => a - b);
-      return sorted.map((timestamp) => {
-        const existing = data.find((d) => d.timestamp === timestamp);
-        const row: ChartRow = { timestamp };
-        if (existing) {
-          for (const key of Object.keys(existing)) {
-            if (key === "timestamp") continue;
-            const v = existing[key];
-            if (typeof v === "number" && !Number.isNaN(v)) row[key] = v;
-          }
-        }
-        faultKeys.forEach((fid) => {
-          row[fid] = isFaultActiveAt(timestamp, fid) ? 1 : 0;
-        });
-        return row;
-      });
-    }
-    if (faultData?.series?.length && faultKeys.length > 0) {
-      const times = new Set<number>();
-      faultSegmentsList.forEach((s) => {
-        times.add(s.start);
-        times.add(s.end - 1);
-      });
-      const sorted = Array.from(times).sort((a, b) => a - b);
-      return sorted.map((timestamp) => {
-        const row: ChartRow = { timestamp };
-        faultKeys.forEach((fid) => {
-          row[fid] = isFaultActiveAt(timestamp, fid) ? 1 : 0;
-        });
-        return row;
-      });
-    }
-    return [];
-  }, [data, faultData, faultKeys, faultSegmentsList, isFaultActiveAt]);
-
-  const displayedData = useMemo(() => {
-    if (!fullData.length) return [];
-    if (!brushRange) return fullData;
-    const { startIndex, endIndex } = brushRange;
-    const lo = Math.max(0, Math.min(startIndex, fullData.length - 1));
-    const hi = Math.max(0, Math.min(endIndex, fullData.length - 1));
-    return fullData.slice(Math.min(lo, hi), Math.max(lo, hi) + 1);
-  }, [fullData, brushRange]);
-
-  // Report effective display range for CSV download (zoomed range when brush active, else full range).
-  // Only call when the reported range actually changes to avoid setState loops in parent.
-  const lastReportedRange = useRef<{ start: string; end: string } | null>(null);
-  useEffect(() => {
-    if (!onDisplayRangeChange) return;
-    let newStart: string;
-    let newEnd: string;
-    if (fullData.length === 0) {
-      newStart = start;
-      newEnd = end;
-    } else if (brushRange != null) {
-      const lo = Math.max(0, Math.min(brushRange.startIndex, fullData.length - 1));
-      const hi = Math.max(0, Math.min(brushRange.endIndex, fullData.length - 1));
-      newStart = new Date(fullData[Math.min(lo, hi)].timestamp).toISOString();
-      newEnd = new Date(fullData[Math.max(lo, hi)].timestamp).toISOString();
-    } else {
-      newStart = start;
-      newEnd = end;
-    }
-    const last = lastReportedRange.current;
-    if (last && last.start === newStart && last.end === newEnd) return;
-    lastReportedRange.current = { start: newStart, end: newEnd };
-    onDisplayRangeChange(newStart, newEnd);
-  }, [onDisplayRangeChange, fullData, brushRange, start, end]);
-
-  const handleBrushChange = useCallback((range: { startIndex?: number; endIndex?: number } | null) => {
-    if (range == null || range.startIndex == null || range.endIndex == null) {
-      setBrushRange(null);
-      return;
-    }
-    setBrushRange({ startIndex: range.startIndex, endIndex: range.endIndex });
-  }, []);
-
-  const chartData = useMemo(() => {
-    const raw = displayedData.length > 0 ? displayedData : fullData;
-    return raw.filter((row) => Number.isFinite(row.timestamp));
-  }, [displayedData, fullData]);
-
-  const loadingPoints = pointIds.length > 0 && isLoading;
-  const loadingFaultsOnly = pointIds.length === 0 && selectedFaultIds.length > 0 && faultLoading;
-  const hasAnyData = fullData.length > 0;
-
-  if (pointIds.length === 0 && selectedFaultIds.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
-        style={{ minHeight: CHART_MIN_HEIGHT }}
-      >
-        Select points and/or faults from the dropdowns. Drag the brush below to zoom, Escape to reset.
-      </div>
-    );
-  }
-  if (pointIds.length > 0 && error) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50/80 p-6 dark:border-amber-800 dark:bg-amber-950/30"
-        style={{ minHeight: CHART_MIN_HEIGHT }}
-      >
-        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Could not load data</p>
-        <p className="text-xs text-amber-700 dark:text-amber-300">Check range and selected points, or try again.</p>
-      </div>
-    );
-  }
-  if (loadingPoints || loadingFaultsOnly) {
-    return <Skeleton className="w-full rounded-lg" style={{ minHeight: CHART_MIN_HEIGHT }} />;
-  }
-  if (pointIds.length > 0 && !hasAnyData && !selectedFaultIds.length) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
-        style={{ minHeight: CHART_MIN_HEIGHT }}
-      >
-        No point data in this range. Select points or widen the date range. Add faults to see when they fire.
-      </div>
-    );
-  }
-  if (pointIds.length === 0 && selectedFaultIds.length > 0 && !faultData?.series?.length) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
-        style={{ minHeight: CHART_MIN_HEIGHT }}
-      >
-        No fault activity in this range. Widen the date range or run FDD.
-      </div>
-    );
-  }
-
-  const hasPointLines = pointIds.length > 0 && keys.length > 0;
-  const hasFaultLines = faultKeys.length > 0;
-  const chartMarginRight = hasSecondPointAxis ? 80 : hasFaultLines ? 52 : 24;
-
-  if (chartData.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground"
-        style={{ minHeight: CHART_MIN_HEIGHT }}
-      >
-        No valid data in this range (timestamps may be invalid).
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="w-full" style={{ height: CHART_MIN_HEIGHT }}>
-        <ChartContainer config={config} className="h-full w-full">
-          <ResponsiveContainer width="100%" height={CHART_MIN_HEIGHT}>
-            <LineChart data={chartData} margin={{ top: 8, right: chartMarginRight, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 13% 90% / 0.5)" vertical={false} />
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                domain={["dataMin", "dataMax"]}
-                scale="time"
-                tickFormatter={timeFormat}
-                tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                yAxisId="left"
-                tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-                tickLine={false}
-                axisLine={false}
-              />
-              {hasSecondPointAxis && (
-                <YAxis
-                  yAxisId="right2"
-                  orientation="right"
-                  tick={{ fontSize: 11, fill: "hsl(220 8% 46%)" }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-              )}
-              {hasFaultLines && (
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  domain={[0, 1.2]}
-                  tick={{ fontSize: 10, fill: "hsl(220 8% 46%)" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => (v === 1 ? "1" : v === 0 ? "0" : "")}
-                />
-              )}
-              <ChartTooltip content={<ChartTooltipContent config={config} formatTime={tooltipFormat} />} />
-              <ChartLegend content={<ChartLegendContent config={config} />} />
-              {hasPointLines && keys.map((key) => (
-                <Line
-                  key={key}
-                  yAxisId={pointToYAxisId.get(key) ?? "left"}
-                  type="monotone"
-                  dataKey={key}
-                  stroke={config[key]?.color}
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                  activeDot={{ r: 3, strokeWidth: 0 }}
-                />
-              ))}
-              {hasFaultLines && faultKeys.map((fid) => (
-                <Line
-                  key={fid}
-                  yAxisId="right"
-                  type="stepAfter"
-                  dataKey={fid}
-                  stroke={faultColor(fid)}
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                  activeDot={{ r: 2, strokeWidth: 0 }}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-      </div>
-
-      {hasAnyData && fullData.length > 0 && (
-        <div className="shrink-0 rounded border border-border/60 bg-muted/20 p-1.5">
-          <p className="mb-1 text-xs text-muted-foreground">Zoom: drag the handles or the shaded area. Press Escape to reset.</p>
-          <ResponsiveContainer width="100%" height={OVERVIEW_HEIGHT}>
-            <LineChart data={fullData} syncId="plotsZoom" margin={{ top: 0, right: 4, left: 4, bottom: 0 }}>
-              <XAxis dataKey="timestamp" type="number" scale="time" hide />
-              <YAxis hide domain={["dataMin", "dataMax"]} />
-              <Brush
-                dataKey="timestamp"
-                height={OVERVIEW_HEIGHT - 8}
-                stroke="hsl(220 13% 46%)"
-                fill="hsl(220 13% 96%)"
-                startIndex={brushRange?.startIndex ?? 0}
-                endIndex={brushRange?.endIndex ?? fullData.length - 1}
-                onChange={handleBrushChange}
-              />
-              {hasPointLines && keys.map((key) => (
-                <Line key={key} type="monotone" dataKey={key} stroke={config[key]?.color} strokeWidth={1} dot={false} isAnimationActive={false} />
-              ))}
-              {hasFaultLines && faultKeys.map((fid) => (
-                <Line key={fid} type="stepAfter" dataKey={fid} stroke={config[fid]?.color} strokeWidth={1} dot={false} isAnimationActive={false} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  );
+    void draw();
+    return () => {
+      mounted = false;
+    };
+  }, [traces, title]);
+  return <div ref={ref} className="h-[62vh] min-h-[420px] w-full rounded-lg border border-border/60 bg-card" />;
 }
 
 export function PlotsPage() {
   const { selectedSiteId } = useSiteContext();
   const { data: points = [], isLoading: ptsLoading } = usePoints(selectedSiteId ?? undefined);
   const { data: equipment = [], isLoading: eqLoading } = useEquipment(selectedSiteId ?? undefined);
-  const { data: definitions = [] } = useFaultDefinitions();
-
+  const { data: faultState = [] } = useFaultState(selectedSiteId ?? undefined);
   const pollingPoints = useMemo(() => points.filter((p) => p.polling), [points]);
 
+  const [plotMode, setPlotMode] = useState<PlotMode>("lines");
+  const [showFaultOverlays, setShowFaultOverlays] = useState(true);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
-  const [selectedFaultIds, setSelectedFaultIds] = useState<string[]>([]);
-  const [downloadLoading, setDownloadLoading] = useState(false);
-  /** Time range currently shown on the chart (zoomed when brush active). Used for CSV download. */
-  const [displayRange, setDisplayRange] = useState<{ start: string; end: string } | null>(null);
-  /** Collapsed by default; when true, show spreadsheet-style table (same data as CSV, up to 500 rows). */
-  const [showDataTable, setShowDataTable] = useState(false);
+  const [selectedFaultId, setSelectedFaultId] = useState<string>("");
+  const [loadingCsv, setLoadingCsv] = useState(false);
+  const [parsedCsv, setParsedCsv] = useState<ParsedCsv | null>(null);
+  const [yColumns, setYColumns] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const [preset, setPreset] = useState<DatePreset>("7d");
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const [customStart, setCustomStart] = useState(formatLocalDT(weekAgo));
   const [customEnd, setCustomEnd] = useState(formatLocalDT(now));
-
-  const onDisplayRangeChange = useCallback((s: string, e: string) => {
-    setDisplayRange((prev) => displayRangeUpdater(prev, s, e));
-  }, []);
 
   const { start, end } = useMemo(() => {
     if (preset === "custom") {
@@ -527,60 +133,197 @@ export function PlotsPage() {
     return presetRange(preset);
   }, [preset, customStart, customEnd]);
 
-  const rangeForExport = displayRange ?? { start, end };
-  const pointIdsForExport =
-    selectedPointIds.length > 0 ? selectedPointIds : pollingPoints.map((p) => p.id);
+  const deviceOptions = useMemo(() => {
+    const map = new Map<string, { label: string }>();
+    for (const p of pollingPoints) {
+      if (!p.bacnet_device_id) continue;
+      const eq = equipment.find((e) => e.id === p.equipment_id);
+      const label = eq ? `${p.bacnet_device_id} - ${eq.name}` : p.bacnet_device_id;
+      map.set(p.bacnet_device_id, { label });
+    }
+    return Array.from(map.entries())
+      .map(([id, v]) => ({ id, label: v.label }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  }, [pollingPoints, equipment]);
 
-  const { data: tableData, isLoading: tableLoading } = useQuery<WideCsvParsed>({
-    queryKey: [
-      "plots-table",
-      selectedSiteId,
-      rangeForExport.start.slice(0, 10),
-      rangeForExport.end.slice(0, 10),
-      pointIdsForExport,
-    ],
-    queryFn: async () => {
+  const pointsForDevice = useMemo(
+    () => pollingPoints.filter((p) => p.bacnet_device_id === selectedDeviceId),
+    [pollingPoints, selectedDeviceId],
+  );
+
+  /** All equipment IDs tied to the selected BACnet device (one device can span multiple equipment records). */
+  const selectedDeviceEquipmentIds = useMemo(() => {
+    if (!selectedDeviceId) return new Set<string>();
+    const ids = new Set<string>();
+    for (const p of pollingPoints) {
+      if (p.bacnet_device_id !== selectedDeviceId) continue;
+      if (p.equipment_id) ids.add(p.equipment_id);
+    }
+    return ids;
+  }, [pollingPoints, selectedDeviceId]);
+
+  const faultIdsForDevice = useMemo(() => {
+    if (selectedDeviceEquipmentIds.size === 0) return [];
+    const set = new Set(
+      faultState
+        .filter((f) => f.equipment_id && selectedDeviceEquipmentIds.has(f.equipment_id))
+        .map((f) => String(f.fault_id))
+        .filter(Boolean),
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [faultState, selectedDeviceEquipmentIds]);
+
+  const pointIdsForExport = selectedPointIds.length > 0 ? selectedPointIds : pointsForDevice.map((p) => p.id);
+  const pointSelectionKey = useMemo(() => {
+    const ids = selectedPointIds.length > 0 ? selectedPointIds : pointsForDevice.map((p) => p.id);
+    return [...ids].sort().join("\0");
+  }, [selectedPointIds, pointsForDevice]);
+  const faultBucket = pickFaultBucket(start, end);
+  /** Equipment rows tied to the selected BACnet device — backend must filter fault_results, not only site + fault_id. */
+  const equipmentIdsForFaultOverlay = useMemo(
+    () => Array.from(selectedDeviceEquipmentIds).sort(),
+    [selectedDeviceEquipmentIds],
+  );
+  const { data: faultData } = useFaultTimeseries(selectedSiteId ?? undefined, start, end, faultBucket, {
+    enabled: !!(
+      selectedSiteId &&
+      selectedFaultId &&
+      start &&
+      end &&
+      equipmentIdsForFaultOverlay.length > 0
+    ),
+    equipmentIds: equipmentIdsForFaultOverlay,
+  });
+
+  const onCsvLoaded = useCallback((text: string) => {
+    const parsed = parseCsvText(text);
+    setParsedCsv(parsed);
+    const x = "timestamp";
+    setYColumns(inferYColumns(parsed, x));
+    setError(null);
+  }, []);
+
+  /** Drop loaded CSV when load inputs change so we never join fault data onto a stale export. */
+  useEffect(() => {
+    setParsedCsv(null);
+    setYColumns([]);
+  }, [selectedSiteId, selectedDeviceId, start, end, pointSelectionKey]);
+
+  const loadOpenFddCsv = useCallback(async () => {
+    if (!selectedSiteId) return;
+    setLoadingCsv(true);
+    try {
       const csv = await fetchCsv({
-        site_id: selectedSiteId!,
-        start_date: rangeForExport.start.slice(0, 10),
-        end_date: rangeForExport.end.slice(0, 10),
+        site_id: selectedSiteId,
+        start_date: toDateOnly(start),
+        end_date: toDateOnly(end),
         format: "wide",
         point_ids: pointIdsForExport.length > 0 ? pointIdsForExport : undefined,
       });
-      return parseWideCsv(csv);
-    },
-    enabled: showDataTable && !!selectedSiteId,
-    staleTime: 2 * 60 * 1000,
-  });
-
-  const tableRows = tableData
-    ? tableData.rows.slice(0, DATA_TABLE_MAX_ROWS)
-    : [];
-  const tableTotalRows = tableData ? tableData.rows.length : 0;
-
-  async function handleDownloadCsv() {
-    if (!selectedSiteId) return;
-    setDownloadLoading(true);
-    try {
-      const startDate = rangeForExport.start.slice(0, 10);
-      const endDate = rangeForExport.end.slice(0, 10);
-      await downloadTimeseriesCsv(
-        {
-          site_id: selectedSiteId,
-          start_date: startDate,
-          end_date: endDate,
-          format: "wide",
-          point_ids: pointIdsForExport.length > 0 ? pointIdsForExport : undefined,
-        },
-        `timeseries_${startDate}_${endDate}.csv`,
-      );
+      onCsvLoaded(csv);
     } catch (err) {
-      console.error("Download failed:", err);
-      alert(err instanceof Error ? err.message : "Download failed.");
+      setError(err instanceof Error ? err.message : "Failed to load CSV from Open-FDD.");
     } finally {
-      setDownloadLoading(false);
+      setLoadingCsv(false);
     }
-  }
+  }, [selectedSiteId, start, end, pointIdsForExport, onCsvLoaded]);
+  const effectiveCsv = useMemo(() => {
+    if (!parsedCsv || !selectedFaultId) return parsedCsv;
+    const faults = (faultData?.series ?? []).filter((f) => String(f.metric) === selectedFaultId);
+    return joinFaultSignals(parsedCsv, "timestamp", faults, faultBucket);
+  }, [parsedCsv, selectedFaultId, faultData, faultBucket]);
+
+  const traces = useMemo(() => {
+    if (!effectiveCsv || yColumns.length === 0) return [];
+    const mode = plotMode === "both" ? "lines+markers" : plotMode === "points" ? "markers" : "lines";
+    const rows = effectiveCsv.rows;
+    const out: Record<string, unknown>[] = [];
+    yColumns.forEach((col, i) => {
+      const x: Array<string | number> = [];
+      const y: number[] = [];
+      for (const row of rows) {
+        const xv = row.timestamp;
+        const yv = row[col];
+        const yNum = typeof yv === "number" ? yv : Number(yv);
+        if (xv == null || xv === "" || !Number.isFinite(yNum)) continue;
+        x.push(xv as string | number);
+        y.push(yNum);
+      }
+      out.push({
+        x,
+        y,
+        type: "scatter",
+        mode,
+        name: col,
+        line: { width: 2, color: PLOT_COLORS[i % PLOT_COLORS.length] },
+        marker: { size: 5, color: PLOT_COLORS[i % PLOT_COLORS.length] },
+      });
+    });
+    if (showFaultOverlays && selectedFaultId && faultData?.series?.length) {
+      const series = faultData.series.filter((s) => String(s.metric) === selectedFaultId);
+      const x: string[] = [];
+      const y: number[] = [];
+      for (const s of series) {
+        x.push(s.time);
+        y.push(s.value > 0 ? 1 : 0);
+      }
+      out.push({
+        x,
+        y,
+        type: "scatter",
+        mode: "lines",
+        name: `fault:${selectedFaultId}`,
+        line: { shape: "hv", width: 1.5, dash: "dot", color: PLOT_COLORS[yColumns.length % PLOT_COLORS.length] },
+        yaxis: "y2",
+      });
+    }
+    return out;
+  }, [effectiveCsv, yColumns, plotMode, selectedFaultId, faultData, showFaultOverlays]);
+
+  useEffect(() => {
+    if (deviceOptions.length === 0) {
+      if (selectedDeviceId) setSelectedDeviceId("");
+      return;
+    }
+    const stillValid = deviceOptions.some((o) => o.id === selectedDeviceId);
+    if (!stillValid || !selectedDeviceId) {
+      setSelectedDeviceId(deviceOptions[0].id);
+    }
+  }, [selectedDeviceId, deviceOptions]);
+
+  const prevPointSeedDeviceIdRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!selectedDeviceId) {
+      prevPointSeedDeviceIdRef.current = "";
+      return;
+    }
+    const forDevice = pollingPoints.filter((p) => p.bacnet_device_id === selectedDeviceId);
+    const defaults = forDevice.slice(0, 4).map((p) => p.id);
+    const deviceChanged = prevPointSeedDeviceIdRef.current !== selectedDeviceId;
+    if (deviceChanged) {
+      prevPointSeedDeviceIdRef.current = selectedDeviceId;
+      setSelectedPointIds(defaults);
+      return;
+    }
+    setSelectedPointIds((prev) => {
+      const valid = prev.filter((id) => forDevice.some((p) => p.id === id));
+      if (valid.length !== prev.length) {
+        return valid.length > 0 ? valid : defaults;
+      }
+      return prev;
+    });
+  }, [selectedDeviceId, pollingPoints]);
+
+  useEffect(() => {
+    if (faultIdsForDevice.length === 0) {
+      setSelectedFaultId("");
+      return;
+    }
+    if (!faultIdsForDevice.includes(selectedFaultId)) {
+      setSelectedFaultId(faultIdsForDevice[0]);
+    }
+  }, [faultIdsForDevice, selectedFaultId]);
 
   if (!selectedSiteId) {
     return (
@@ -604,39 +347,13 @@ export function PlotsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Plots</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            One trend chart. Select points and/or faults; faults show as vertical bands when they fire. Drag the brush to zoom, Escape to reset.
+            Plot BACnet device trends with fault overlays.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <PointPicker
-            points={pollingPoints}
-            equipment={equipment}
-            selectedIds={selectedPointIds}
-            onChange={setSelectedPointIds}
-            label="Select points"
-          />
-          <FaultPicker
-            definitions={definitions}
-            selectedIds={selectedFaultIds}
-            onChange={setSelectedFaultIds}
-            label="Add faults"
-            data-testid="plots-fault-picker"
-          />
-          <button
-            type="button"
-            onClick={handleDownloadCsv}
-            disabled={downloadLoading}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border/60 bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            title="Export selected points and date range as CSV (Excel-friendly). Same data as the table below when expanded."
-          >
-            <Download className="h-4 w-4 shrink-0" />
-            {downloadLoading ? "Preparing…" : "Download CSV"}
-          </button>
         </div>
       </div>
 
@@ -649,88 +366,157 @@ export function PlotsPage() {
           onCustomStartChange={setCustomStart}
           onCustomEndChange={setCustomEnd}
         />
-      </div>
-
-      <div className="h-[55vh] min-h-[360px] w-full max-h-[800px]" data-testid="plots-chart-container">
-        <TrendChart
-          siteId={selectedSiteId}
-          pointIds={selectedPointIds}
-          points={points}
-          start={start}
-          end={end}
-          selectedFaultIds={selectedFaultIds}
-          onDisplayRangeChange={onDisplayRangeChange}
-        />
-      </div>
-
-      {/* Collapsible spreadsheet-style table: same data as CSV export, up to 500 rows. Hidden by default. */}
-      <div className="mt-4 rounded-lg border border-border/60 bg-card">
-        <button
-          type="button"
-          onClick={() => setShowDataTable((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-t-lg"
-          data-testid="plots-view-data-table-toggle"
+        <label className="text-sm">Mode:</label>
+        <select
+          value={plotMode}
+          onChange={(e) => setPlotMode(e.target.value as PlotMode)}
+          className="h-9 rounded-lg border border-border/60 bg-background px-3 text-sm"
         >
-          <span className="inline-flex items-center gap-2">
-            <Table2 className="h-4 w-4 text-muted-foreground" />
-            View data table (same as CSV export, up to {DATA_TABLE_MAX_ROWS} rows)
-          </span>
-          {showDataTable ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
-        {showDataTable && (
-          <div className="border-t border-border/60 px-2 pb-2">
-            {tableLoading ? (
-              <Skeleton className="h-[400px] w-full rounded-lg" />
-            ) : tableData && tableData.headers.length > 0 ? (
-              <div
-                className="max-h-[70vh] min-h-[200px] overflow-auto rounded-lg border border-border/40"
-                data-testid="plots-data-table-container"
-              >
-                <Table>
-                  <TableHeader>
-                    <TableRow className="sticky top-0 z-10 bg-muted/95 hover:bg-muted/95">
-                      {tableData.headers.map((h) => (
-                        <TableHead
-                          key={h}
-                          className="whitespace-nowrap font-mono text-xs font-medium"
-                        >
-                          {h}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tableRows.map((row, ri) => (
-                      <TableRow key={ri} className="border-border/40">
-                        {row.map((cell, ci) => (
-                          <TableCell
-                            key={ci}
-                            className="whitespace-nowrap font-mono text-xs tabular-nums"
-                          >
-                            {typeof cell === "number"
-                              ? cell.toLocaleString(undefined, { maximumFractionDigits: 4 })
-                              : String(cell)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {tableTotalRows > DATA_TABLE_MAX_ROWS && (
-                  <p className="sticky bottom-0 border-t border-border/60 bg-muted/95 px-3 py-2 text-xs text-muted-foreground">
-                    Showing first {DATA_TABLE_MAX_ROWS} of {tableTotalRows} rows. Use Download CSV for the full export.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No data for the selected range and points. Adjust the date range or select points, or use Download CSV to export.
-              </p>
-            )}
+          <option value="lines">Lines</option>
+          <option value="points">Points</option>
+          <option value="both">Both</option>
+        </select>
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showFaultOverlays}
+            onChange={(e) => setShowFaultOverlays(e.target.checked)}
+          />
+          Show fault overlays
+        </label>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div>
+            <label
+              htmlFor="plots-device-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              BACnet device instance ID
+            </label>
+            <select
+              id="plots-device-select"
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm"
+            >
+              {deviceOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="plots-points-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Points (for selected device)
+            </label>
+            <select
+              id="plots-points-select"
+              multiple
+              value={selectedPointIds}
+              onChange={(e) => setSelectedPointIds(Array.from(e.target.selectedOptions).map((o) => o.value))}
+              className="h-28 w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm"
+            >
+              {pointsForDevice.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.object_name ?? p.external_id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="plots-faults-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Faults (for selected device)
+            </label>
+            <select
+              id="plots-faults-select"
+              value={selectedFaultId}
+              onChange={(e) => setSelectedFaultId(e.target.value)}
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm"
+              disabled={faultIdsForDevice.length === 0}
+            >
+              {faultIdsForDevice.length === 0 ? (
+                <option value="">None available</option>
+              ) : (
+                faultIdsForDevice.map((faultId) => (
+                  <option key={faultId} value={faultId}>
+                    {faultId}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={loadOpenFddCsv}
+            disabled={loadingCsv || !selectedDeviceId || pointIdsForExport.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {loadingCsv ? "Loading..." : "Load Data from Database"}
+          </button>
+          <span className="text-xs text-muted-foreground">Timestamp is fixed to `timestamp`; fault data is joined automatically when available.</span>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {effectiveCsv && (
+        <div className="rounded-lg border border-border/60 bg-card p-4">
+          <div>
+            <label
+              htmlFor="plots-y-columns-select"
+              className="mb-1 block text-xs font-medium text-muted-foreground"
+            >
+              Y columns (multi-select)
+            </label>
+            <select
+              id="plots-y-columns-select"
+              multiple
+              value={yColumns}
+              onChange={(e) => {
+                const vals = Array.from(e.target.selectedOptions).map((o) => o.value);
+                setYColumns(vals);
+              }}
+              className="h-28 w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm"
+            >
+              {effectiveCsv.headers.filter((h) => h !== "timestamp").map((h) => (
+                <option key={h} value={h}>{h}</option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Loaded {effectiveCsv.rows.length.toLocaleString()} rows, {effectiveCsv.headers.length} columns.
+          </p>
+        </div>
+      )}
+
+      <div className="w-full" data-testid="plots-chart-container">
+        {traces.length > 0 ? (
+          <PlotlyCanvas
+            traces={traces}
+            title="Open-FDD Trends"
+          />
+        ) : (
+          <div className="flex h-[50vh] min-h-[360px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <ChartLine className="h-4 w-4" />
+              Select a BACnet device, choose points, then load data to plot.
+            </span>
           </div>
         )}
       </div>

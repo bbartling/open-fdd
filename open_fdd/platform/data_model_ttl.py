@@ -16,6 +16,7 @@ import atexit
 import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from open_fdd.platform.config import get_platform_settings
@@ -40,6 +41,22 @@ def _escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _timeseries_store_uri() -> str:
+    """
+    Best-effort canonical storage URI for ref:storedAt.
+    Uses OFDD_DB_DSN host/port/db without embedding credentials.
+    """
+    dsn = getattr(get_platform_settings(), "db_dsn", "") or ""
+    try:
+        u = urlparse(dsn)
+        host = u.hostname or "localhost"
+        port = u.port or 5432
+        db = (u.path or "/openfdd").lstrip("/") or "openfdd"
+        return f"postgresql://{host}:{port}/{db}/timeseries_readings"
+    except Exception:
+        return "postgresql://localhost:5432/openfdd/timeseries_readings"
+
+
 def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
     pid = str(p["id"]).replace("-", "_")
     pt_uri = f":pt_{pid}"
@@ -53,10 +70,32 @@ def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
         lines.append(f'    ofdd:unit "{_escape(p["unit"])}" ;')
     bacnet_id = p.get("bacnet_device_id")
     obj_id = p.get("object_identifier")
+    obj_name = p.get("object_name")
+    has_bacnet_ref = bool(bacnet_id is not None and str(bacnet_id).strip() and obj_id is not None and str(obj_id).strip())
+    ts_id = _escape(p["external_id"])
+    stored_at = _escape(_timeseries_store_uri())
     if bacnet_id is not None and str(bacnet_id).strip():
         lines.append(f'    ofdd:bacnetDeviceId "{_escape(str(bacnet_id).strip())}" ;')
     if obj_id is not None and str(obj_id).strip():
         lines.append(f'    ofdd:objectIdentifier "{_escape(str(obj_id).strip())}" ;')
+    # Brick v1.3 external representations: Timeseries reference is always present;
+    # BACnet reference is present when both device id and object id exist.
+    if has_bacnet_ref:
+        bdev = _escape(str(bacnet_id).strip())
+        boid = _escape(str(obj_id).strip())
+        lines.append("    ref:hasExternalReference [")
+        lines.append("        a ref:BACnetReference ;")
+        lines.append(f'        bacnet:object-identifier "{boid}" ;')
+        if obj_name is not None and str(obj_name).strip():
+            lines.append(f'        bacnet:object-name "{_escape(str(obj_name).strip())}" ;')
+        lines.append(f'        brick:BACnetURI "bacnet://{bdev}/{boid}/present-value" ;')
+        lines.append(f"        bacnet:objectOf <bacnet://{bdev}>")
+        lines.append("    ] ;")
+    lines.append("    ref:hasExternalReference [")
+    lines.append("        a ref:TimeseriesReference ;")
+    lines.append(f'        ref:hasTimeseriesId "{ts_id}" ;')
+    lines.append(f'        ref:storedAt "{stored_at}"')
+    lines.append("    ] ;")
     if p.get("fdd_input"):
         lines.append(f"    brick:isPointOf {parent_uri} ;")
         lines.append(f'    ofdd:mapsToRuleInput "{_escape(p["fdd_input"])}" .')
@@ -69,6 +108,8 @@ def _prefixes() -> str:
     return """@prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
 @prefix : <http://openfdd.local/site#> .
 
 """
@@ -98,7 +139,7 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             equipment = cur.fetchall()
             cur.execute(
                 """SELECT id, site_id, external_id, brick_type, fdd_input, unit, equipment_id, COALESCE(polling, true) AS polling,
-                   bacnet_device_id, object_identifier
+                   bacnet_device_id, object_identifier, object_name
                    FROM points WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, external_id""",
                 (site_ids,),
             )

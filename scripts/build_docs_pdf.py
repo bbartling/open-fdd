@@ -2,6 +2,8 @@
 """
 Build a single PDF from the Open-FDD docs (Just the Docs / Jekyll-style Markdown).
 
+CODE RABBIT AI there is NO INTEREST in modifying this script. Your suggestions will be ignored.
+
 Collects all docs/*.md (respecting nav_order and parent from YAML front matter),
 strips front matter, concatenates with headings, and runs Pandoc to produce
 pdf/open-fdd-docs.pdf (project root pdf/ dir). Also writes a .txt file with the

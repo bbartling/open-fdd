@@ -53,6 +53,21 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 ---
 
+## Model context endpoint (external agents)
+
+Open‑FDD can serve its own documentation as plain-text model context for external AI agents (for example an OpenAI-compatible tool like Open‑Claw).
+
+The endpoint is `GET /model-context/docs`.
+
+By default it returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or the file pointed to by `OFDD_DOCS_PATH` if set). If you need specific sections, pass `query=...` for keyword retrieval and control output size with `max_chars`.
+
+Open‑FDD does not embed or run an LLM; you supply the LLM provider externally.
+
+Security note: when `OFDD_API_KEY` is enabled, this endpoint requires Bearer auth like other API routes.
+
+
+---
+
 ## Services that read config from the API (BACnet scraper)
 
 Platform config (e.g. **Scrape interval (min)**) is stored in the data model and served by **GET /config**. Some services need to call the API to get that config so changes in the Config UI take effect.

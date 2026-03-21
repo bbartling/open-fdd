@@ -3,6 +3,7 @@
 import importlib.metadata
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -21,6 +22,8 @@ from open_fdd.platform.api import (
     entities,
     faults,
     jobs as jobs_router,
+    mcp_bridge,
+    model_context,
     points,
     equipment,
     rules as rules_router,
@@ -202,6 +205,8 @@ app.include_router(jobs_router.router)
 app.include_router(bacnet.router)
 app.include_router(run_fdd.router)
 app.include_router(ws_router)
+app.include_router(model_context.router)
+app.include_router(mcp_bridge.router)
 
 # Legacy config UI at /app/ (optional; removed when using React frontend only)
 _static_dir = Path(__file__).resolve().parent.parent / "static"
@@ -271,6 +276,9 @@ def capabilities():
     """
     Return version and feature flags. Use for discovery and to decide whether to
     use WebSocket (/ws/events), fault state (/faults/active), jobs (/jobs/*), or BACnet write.
+
+    External model context (documentation) is exposed via `/model-context/*`.
+    Built-in Open-Claw AI endpoints are intentionally disabled.
     """
     return CapabilityResponse(
         version=_app_version(),
@@ -280,6 +288,8 @@ def capabilities():
             "jobs": True,
             "bacnet_write": True,
         },
+        ai_available=False,
+        ai_backend="disabled",
     )
 
 

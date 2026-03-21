@@ -52,6 +52,7 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 - **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules.
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.
+Open-FDD also emits Brick v1.3 external references (`ref:hasExternalReference`) so points can be resolved to BACnet and timeseries systems. See [External representations](external_representations).
 
 ### BACnet addressing
 
