@@ -62,14 +62,6 @@ pytest -v
 ---
 
 
-## AI and data modeling
-
-- **Overview AI assistant (read-only):** On the **Overview** page you can ask questions like “How is the HVAC running?” or “What faults are configured?”. The backend attaches live data and a docs excerpt, then calls OpenAI with your key (never stored) to produce a read‑only summary with charts/tables. See the **Overview AI** section in the docs for full behavior and API details.
-- **Data model export / AI-assisted tagging:** On the **Data model** page you can export the RDF model to JSON, enhance it either manually or with an LLM (Brick types, feeds/fed_by, rule inputs), and re‑import it. The in‑app “OpenAI API Assist” uses a canonical prompt and the same import API as manual workflows.
-
-For end‑to‑end examples, SPARQL validation patterns, and the canonical prompts/templates, see the modeling docs under `docs/modeling/` and the API appendix.
-
-
 ## The open-fdd Pyramid
 
 
@@ -81,7 +73,9 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 
 ## Online Documentation
 
-[📖 Docs](https://bbartling.github.io/open-fdd/) — For a copy-paste guide to run Open-FDD on Linux hardware.
+- 📖 [**Docs**](https://bbartling.github.io/open-fdd/) — GitHub Pages (Linux quick start, stack, reference).
+- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline / print-friendly bundle.
+- ✨ [**LLM prompt (AI-assisted tagging)**](https://github.com/bbartling/open-fdd/blob/master/pdf/canonical_llm_prompt.txt) — canonical copy-paste text; same template on [**LLM workflow**](https://bbartling.github.io/open-fdd/modeling/llm_workflow/) (docs site).
 
 ---
 

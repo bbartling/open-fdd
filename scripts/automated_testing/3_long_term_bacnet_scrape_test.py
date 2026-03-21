@@ -458,6 +458,7 @@ def verify_plots_fault_plot_via_frontend(
         return False, "Plots page requires a site; site selector did not apply."
 
     # Select a fault when available for this device (skip if Faults select is disabled — no faults for device)
+    selected_fault_id = None  # fault_id string when user picked a fault from the dropdown
     try:
         fault_select_els = driver.find_elements(
             By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select"
@@ -468,7 +469,9 @@ def verify_plots_fault_plot_via_frontend(
             if not disabled:
                 fault_opts = sel.find_elements(By.TAG_NAME, "option")
                 if fault_opts:
-                    fault_opts[0].click()
+                    opt0 = fault_opts[0]
+                    selected_fault_id = (opt0.get_attribute("value") or opt0.text or "").strip()
+                    opt0.click()
     except Exception as e:
         return False, f"Could not select fault option: {e}"
 
@@ -477,9 +480,17 @@ def verify_plots_fault_plot_via_frontend(
             driver, By.XPATH, "//button[contains(., 'Load Data from Database')]", timeout_sec
         )
         load_btn.click()
-        time.sleep(1.0)
     except Exception as e:
         return False, f"Could not click Load Data from Database: {e}"
+
+    try:
+        WebDriverWait(driver, timeout_sec).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "[data-testid=plots-chart-container] .js-plotly-plot")
+            )
+        )
+    except Exception as e:
+        return False, f"Plots: Plotly chart did not render within {timeout_sec}s after load: {e}"
 
     container = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container]")
     if not container:
@@ -487,6 +498,13 @@ def verify_plots_fault_plot_via_frontend(
     text = (container[0].text or "") + " " + (driver.page_source or "")
     if "Select a BACnet device" in text:
         return False, "Plots still waiting for device/point selection."
+    if selected_fault_id:
+        trace_label = f"fault:{selected_fault_id}"
+        if trace_label not in text:
+            return (
+                False,
+                f"Plots: expected fault trace {trace_label!r} in chart/legend after load; not found.",
+            )
     return True, "Plots load path OK (chart container rendered after loading data)."
 
 
@@ -499,6 +517,7 @@ def verify_plots_axis_by_unit_via_frontend(
     Returns (ok, message). Uses e2e_frontend_selenium helpers.
     """
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
     mod = _ensure_e2e_module()
@@ -553,13 +572,31 @@ def verify_plots_axis_by_unit_via_frontend(
             driver, By.XPATH, "//button[contains(., 'Load Data from Database')]", timeout_sec
         )
         load_btn.click()
-        time.sleep(1.0)
     except Exception as e:
         return False, f"Plots axis-by-unit: could not click Load Data from Database: {e}"
+    try:
+        WebDriverWait(driver, timeout_sec).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "[data-testid=plots-chart-container] .js-plotly-plot")
+            )
+        )
+    except Exception:
+        return False, "Plots axis-by-unit: Plotly chart did not render after selecting points."
     chart = driver.find_elements(By.CSS_SELECTOR, "[data-testid=plots-chart-container] .js-plotly-plot")
-    if chart:
-        return True, "Plots axis-by-unit path OK (Plotly chart rendered with multi-series selection)."
-    return False, "Plots axis-by-unit: Plotly chart did not render after selecting points."
+    if not chart:
+        return False, "Plots axis-by-unit: Plotly chart did not render after selecting points."
+    has_y2 = driver.execute_script(
+        """
+        var gd = arguments[0];
+        if (!gd) return false;
+        var layout = gd._fullLayout || gd.layout;
+        return !!(layout && layout.yaxis2);
+        """,
+        chart[0],
+    )
+    if not has_y2:
+        return False, "Plots axis-by-unit: Plotly chart missing secondary Y-axis (yaxis2)."
+    return True, "Plots axis-by-unit path OK (Plotly chart with yaxis2 after multi-series selection)."
 
 
 def _parse_frontend_args():

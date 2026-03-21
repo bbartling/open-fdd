@@ -42,7 +42,8 @@ Graph-DB sync (default on): Compares CRUD counts to SPARQL graph counts. GET /si
 allows graph >= DB (synthetic equipment for orphan points). Use --skip-graph-db-sync to skip.
 
 Environment (optional):
-  BASE_URL — default API base if ``--api-url`` is omitted (default http://localhost:8000).
+  BASE_URL — default API base if ``--api-url`` is omitted (default http://localhost:8000). On a **remote**
+  PC, set ``--api-url`` explicitly to the **Linux host** (``localhost`` here means the machine running Python).
   OFDD_API_KEY — sent as ``Authorization: Bearer …`` on API requests if set. Wrong key → 403;
   missing header when the server requires a key → 401. HTTP 4xx lines include the API ``error.message``
   when present (e.g. ``SPARQL error: …``, ``Invalid TTL: …``).
@@ -71,19 +72,34 @@ CLI flags (machine-friendly):
 Exit: 0 if all checks pass, 1 if any failed (API, parity, sync, BACnet check, HVAC summary, etc.).
 
 Usage:
-  python 2_sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-parity
-  python 2_sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --frontend-url http://192.168.204.16 --frontend-parity --headed
 
-  python 2_sparql_crud_and_frontend_test.py --api-url http://host:8000 --http-timeout 300   # slow SPARQL / large graphs
+  **Remote Windows → Open FDD on Linux:** use the **server** host for both flags. ``localhost`` / ``127.0.0.1``
+  would target your Windows box, not the stack.
 
-  python 2_sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --generate-expected   # write sparql/expected/*.json from API
-  python 2_sparql_crud_and_frontend_test.py --api-url http://localhost:8000 --skip-graph-db-sync # skip graph vs DB count assertion
+  - ``--frontend-url`` — web UI origin (e.g. ``http://192.168.204.16`` if Caddy/nginx is on port 80).
+  - ``--api-url`` — FastAPI base, usually ``http://<same-host>:8000`` (match whatever the server exposes).
 
-  python 2_sparql_crud_and_frontend_test.py --api-url http://192.168.204.16:8000 --show-bacnet-addresses   # AHU/VAV BACnet device + object id rows
+  From **repo root** (paths with ``/`` work in PowerShell):
 
-  python 2_sparql_crud_and_frontend_test.py --api-url http://host:8000 --frontend-url http://host --frontend-parity --save-report
-  python 2_sparql_crud_and_frontend_test.py --api-url http://host:8000 --frontend-url http://host --frontend-parity --save-report my_run.json
-  python 2_sparql_crud_and_frontend_test.py --api-url http://host:8000 --frontend-url http://host --frontend-parity --predefined-buttons-only --headed --save-report
+    python scripts/automated_testing/2_sparql_crud_and_frontend_test.py \\
+      --api-url http://192.168.204.16:8000 \\
+      --frontend-url http://192.168.204.16 \\
+      --frontend-parity --save-report
+
+  Often run after E2E against the same host (example BACnet instances are optional):
+
+    python scripts/automated_testing/1_e2e_frontend_selenium.py \\
+      --frontend-url http://192.168.204.16 \\
+      --bacnet-device-instance 3456789 3456790 --headed
+    python scripts/automated_testing/2_sparql_crud_and_frontend_test.py \\
+      --api-url http://192.168.204.16:8000 \\
+      --frontend-url http://192.168.204.16 \\
+      --frontend-parity --save-report
+
+  **Script on same machine as the stack:** then ``http://127.0.0.1:8000`` and ``http://127.0.0.1`` (or
+  ``localhost``) are correct.
+
+  Bash line continuation: backslash at end of line. PowerShell: backtick at end of line instead.
 
 Requires: httpx. For --frontend-parity: selenium, webdriver-manager. For --expected-from-ttl: rdflib.
 
@@ -103,6 +119,7 @@ manual API checks—PowerShell’s ``curl`` alias is not curl.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -112,6 +129,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+_log = logging.getLogger(__name__)
 REPO_ROOT = SCRIPT_DIR.parent.parent
 SPARQL_DIR = SCRIPT_DIR / "sparql"
 EXPECTED_DIR = SPARQL_DIR / "expected"
@@ -246,7 +264,9 @@ def _run_graph_db_sync_check(api_url: str, skip: bool) -> int:
         print("  Graph-DB sync: skip (09_graph_db_sync_counts.sparql not found)")
         return 0
     query = sync_sparql.read_text(encoding="utf-8-sig").strip()
-    query = "\n".join([l for l in query.splitlines() if not l.strip().startswith("#")]).strip()
+    query = "\n".join(
+        [line for line in query.splitlines() if not line.strip().startswith("#")]
+    ).strip()
     if not query:
         return 0
 
@@ -565,7 +585,7 @@ def _sparql_ui_error_message(driver) -> str:
             if msg:
                 return msg
     except Exception:
-        pass
+        _log.exception("could not read data-testid=sparql-error from DOM")
     return ""
 
 
@@ -915,7 +935,7 @@ def _run_bacnet_address_backend_checks(api_url: str) -> int:
         return 0
     query = q_path.read_text(encoding="utf-8-sig").strip()
     query = "\n".join(
-        [l for l in query.splitlines() if not l.strip().startswith("#")]
+        [line for line in query.splitlines() if not line.strip().startswith("#")]
     ).strip()
     ok, bindings, err = _run_sparql_api(api_url, query)
     if not ok:
@@ -1146,6 +1166,30 @@ ORDER BY ?equipment_label ?point_label
     return 0, payload
 
 
+def _append_sparql_file_report(
+    report_data: dict | None,
+    path: Path,
+    name: str,
+    rec_status: str,
+    rec_err: str | None,
+    rec_rows: int | None,
+    t0: float,
+) -> None:
+    """Append one row to report_data['sparql_file_results'] (no-op if report disabled)."""
+    if report_data is None:
+        return
+    report_data["sparql_file_results"].append(
+        {
+            "file": str(path),
+            "name": name,
+            "status": rec_status,
+            "error": rec_err,
+            "row_count": rec_rows,
+            "elapsed_sec": round(time.perf_counter() - t0, 4),
+        }
+    )
+
+
 def main() -> int:
     global _HTTP_TIMEOUT_SEC
     (
@@ -1224,6 +1268,18 @@ def main() -> int:
             "predefined_button_results": [],
             "hvac_summary": None,
         }
+        # Default filename timestamp is chosen when the file is written (end of run).
+        if save_report_path == "":
+            print(
+                "JSON report (--save-report): at end of run writes "
+                f"sparql_crud_report_<UTC>.json under {SCRIPT_DIR.resolve()} "
+                "(timestamp in filename; look for 'Wrote JSON report: …' below)."
+            )
+        else:
+            _rp = Path(save_report_path)
+            if not _rp.is_absolute():
+                _rp = (SCRIPT_DIR / _rp).resolve()
+            print(f"JSON report (--save-report): will write {_rp} at end of run.")
 
     if generate_expected:
         EXPECTED_DIR.mkdir(parents=True, exist_ok=True)
@@ -1240,7 +1296,11 @@ def main() -> int:
         first_path = sparql_files[0]
         first_query = first_path.read_text(encoding="utf-8-sig").strip()
         first_query = "\n".join(
-            [l for l in first_query.splitlines() if not l.strip().startswith("#")]
+            [
+                line
+                for line in first_query.splitlines()
+                if not line.strip().startswith("#")
+            ]
         ).strip()
         if first_query:
             ok_up, bindings_up, err_up = _run_sparql_upload_api(api_url, first_path)
@@ -1249,7 +1309,7 @@ def main() -> int:
                 print(f"  Upload endpoint FAIL — {err_up}")
                 failed += 1
             elif not ok_raw:
-                print(f"  Upload endpoint: raw POST failed")
+                print("  Upload endpoint: raw POST failed")
                 failed += 1
             else:
                 keys_up = {k.lower() for k in set().union(*(r.keys() for r in bindings_up))}
@@ -1262,7 +1322,7 @@ def main() -> int:
                         f"  Upload endpoint (POST /data-model/sparql/upload): OK — {first_path.name}"
                     )
                 else:
-                    print(f"  Upload endpoint: bindings differ from POST /data-model/sparql")
+                    print("  Upload endpoint: bindings differ from POST /data-model/sparql")
                     failed += 1
 
     # Graph vs DB sync: assert GET /sites, /equipment, /points counts match SPARQL (09_graph_db_sync_counts.sparql)
@@ -1308,27 +1368,15 @@ def main() -> int:
         rec_err: str | None = None
         rec_rows: int | None = None
 
-        def _append_sparql_file_report() -> None:
-            if report_data is None:
-                return
-            report_data["sparql_file_results"].append(
-                {
-                    "file": str(path),
-                    "name": name,
-                    "status": rec_status,
-                    "error": rec_err,
-                    "row_count": rec_rows,
-                    "elapsed_sec": round(time.perf_counter() - t0, 4),
-                }
-            )
-
         query = path.read_text(encoding="utf-8-sig").strip()
         # Strip leading comment-only lines (files start with # Recipe ...)
-        lines = [l for l in query.splitlines() if not l.strip().startswith("#")]
+        lines = [line for line in query.splitlines() if not line.strip().startswith("#")]
         query = "\n".join(lines).strip()
         if not query:
             print(f"  {name}: skip (no query after stripping comments)")
-            _append_sparql_file_report()
+            _append_sparql_file_report(
+                report_data, path, name, rec_status, rec_err, rec_rows, t0
+            )
             continue
 
         # Resolve expected: from TTL (config/data_model.ttl), or from sparql/expected/<stem>.json
@@ -1340,7 +1388,9 @@ def main() -> int:
                 failed += 1
                 rec_status = "error"
                 rec_err = f"expected-from-ttl: could not run query against {DATA_MODEL_TTL}"
-                _append_sparql_file_report()
+                _append_sparql_file_report(
+                    report_data, path, name, rec_status, rec_err, rec_rows, t0
+                )
                 continue
         if expected is None and EXPECTED_DIR.is_dir():
             expected = _load_expected_json(EXPECTED_DIR / f"{path.stem}.json")
@@ -1352,7 +1402,9 @@ def main() -> int:
             failed += 1
             rec_status = "api_error"
             rec_err = str(err) if err else "API request failed"
-            _append_sparql_file_report()
+            _append_sparql_file_report(
+                report_data, path, name, rec_status, rec_err, rec_rows, t0
+            )
             continue
 
         rec_rows = len(api_bindings)
@@ -1398,7 +1450,9 @@ def main() -> int:
                 if errs:
                     console_errors.append((name, errs))
             rec_status = "generated_expected"
-            _append_sparql_file_report()
+            _append_sparql_file_report(
+                report_data, path, name, rec_status, rec_err, rec_rows, t0
+            )
             continue
 
         print(f"  {name}: API OK — {len(api_bindings)} row(s)")
@@ -1413,7 +1467,9 @@ def main() -> int:
                 failed += 1
                 rec_status = "expected_mismatch"
                 rec_err = "API bindings differ from expected (TTL or JSON)"
-                _append_sparql_file_report()
+                _append_sparql_file_report(
+                    report_data, path, name, rec_status, rec_err, rec_rows, t0
+                )
                 continue
             print(f"         API matches expected (data_model.ttl)" if use_ttl_expected else f"         API matches expected ({path.stem}.json)")
 
@@ -1428,7 +1484,9 @@ def main() -> int:
                 failed += 1
                 rec_status = "frontend_upload_error"
                 rec_err = str(err_f_file) if err_f_file else "frontend file upload failed"
-                _append_sparql_file_report()
+                _append_sparql_file_report(
+                    report_data, path, name, rec_status, rec_err, rec_rows, t0
+                )
                 continue
             ref_fe_file = _api_bindings_fresh_after_ui(
                 api_url, query, ref, "Frontend (file upload)"
@@ -1448,7 +1506,9 @@ def main() -> int:
                 failed += 1
                 rec_status = "frontend_textarea_error"
                 rec_err = str(err_f) if err_f else "frontend textarea run failed"
-                _append_sparql_file_report()
+                _append_sparql_file_report(
+                    report_data, path, name, rec_status, rec_err, rec_rows, t0
+                )
                 continue
             ref_fe_ta = _api_bindings_fresh_after_ui(
                 api_url, query, ref, "Frontend (textarea)"
@@ -1457,14 +1517,18 @@ def main() -> int:
                 failed += 1
                 rec_status = "frontend_parity_mismatch"
                 rec_err = "Frontend (textarea) bindings differ from API"
-                _append_sparql_file_report()
+                _append_sparql_file_report(
+                    report_data, path, name, rec_status, rec_err, rec_rows, t0
+                )
                 continue
             print(f"         Frontend (textarea) OK")
         if driver and (frontend_parity and frontend_url):
             errs = _get_console_errors(driver)
             if errs:
                 console_errors.append((name, errs))
-        _append_sparql_file_report()
+        _append_sparql_file_report(
+            report_data, path, name, rec_status, rec_err, rec_rows, t0
+        )
 
     if driver:
         if frontend_parity and frontend_url and not no_predefined_buttons:

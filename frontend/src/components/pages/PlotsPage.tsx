@@ -174,13 +174,14 @@ export function PlotsPage() {
   }, [faultState, selectedDeviceEquipmentIds]);
 
   const pointIdsForExport = selectedPointIds.length > 0 ? selectedPointIds : pointsForDevice.map((p) => p.id);
+  const pointSelectionKey = useMemo(() => {
+    const ids = selectedPointIds.length > 0 ? selectedPointIds : pointsForDevice.map((p) => p.id);
+    return [...ids].sort().join("\0");
+  }, [selectedPointIds, pointsForDevice]);
   const faultBucket = pickFaultBucket(start, end);
-  const { data: faultData } = useFaultTimeseries(
-    selectedSiteId && selectedFaultId ? selectedSiteId : undefined,
-    start,
-    end,
-    faultBucket,
-  );
+  const { data: faultData } = useFaultTimeseries(selectedSiteId ?? undefined, start, end, faultBucket, {
+    enabled: !!(selectedSiteId && selectedFaultId && start && end),
+  });
 
   const onCsvLoaded = useCallback((text: string) => {
     const parsed = parseCsvText(text);
@@ -189,6 +190,12 @@ export function PlotsPage() {
     setYColumns(inferYColumns(parsed, x));
     setError(null);
   }, []);
+
+  /** Drop loaded CSV when load inputs change so we never join fault data onto a stale export. */
+  useEffect(() => {
+    setParsedCsv(null);
+    setYColumns([]);
+  }, [selectedSiteId, selectedDeviceId, start, end, pointSelectionKey]);
 
   const loadOpenFddCsv = useCallback(async () => {
     if (!selectedSiteId) return;

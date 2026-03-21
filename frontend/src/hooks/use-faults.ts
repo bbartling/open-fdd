@@ -101,7 +101,11 @@ export function useFaultTimeseries(
   startDate: string,
   endDate: string,
   bucket: "hour" | "day" = "hour",
+  options?: { enabled?: boolean },
 ) {
+  const datesOk = !!startDate && !!endDate;
+  const enabled =
+    options?.enabled !== undefined ? options.enabled && datesOk : datesOk;
   return useQuery<FaultTimeseriesResponse>({
     queryKey: ["faults", "timeseries", siteId ?? "all", startDate, endDate, bucket],
     queryFn: () =>
@@ -113,7 +117,7 @@ export function useFaultTimeseries(
           bucket,
         })}`,
       ),
-    enabled: !!startDate && !!endDate,
+    enabled,
     staleTime: 60 * 1000,
   });
 }

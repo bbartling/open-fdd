@@ -3,4 +3,5 @@ selenium>=4.0
 webdriver-manager>=4.0
 httpx
 # Optional: for sparql_crud_and_frontend_test.py --expected-from-ttl (run queries against config/data_model.ttl)
-rdflib>=7.0
+rdflib>=7.0,<8
+pyparsing>=2.1.0,<3.2

@@ -46,7 +46,11 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## LLM prompt and agent guidelines
 
-The **canonical prompt** lives in a single file: **`config/canonical_llm_prompt.txt`** (see [README](https://github.com/bbartling/open-fdd#ai-assisted-data-modeling)). The backend loads it when present (fallback: built-in prompt in code); you can edit the file at any time. The prompt is generic and works for **any site**: single building, campus, or tenant. The only input that changes is the export JSON (from GET /data-model/export, optionally with `?site_id=YourSiteName`). The LLM must preserve all fields, add brick_type, rule_input, **unit** (when known), and polling, and use equipment by name and site_id from the export. The same file can be used as **model context** (e.g. in `pdf/open-fdd-docs.txt` or when building custom doc bundles for an LLM).
+**Where this is documented:** the tagging rules and agent flow are described **on this page** (you are in the right place) and summarized under **[LLM tagging workflow](../appendix/technical_reference#llm-tagging-workflow)** in the Technical reference. The [README](https://github.com/bbartling/open-fdd#ai-and-data-modeling) points here under **AI and data modeling**.
+
+**File `pdf/canonical_llm_prompt.txt`:** The **full** copy-paste system prompt (points + equipment rules, strict JSON output) lives next to other doc bundles under **`pdf/canonical_llm_prompt.txt`** and is duplicated in the docs under **[LLM workflow — Copy/paste prompt template](llm_workflow#copy-paste-prompt-template-recommended)**. Edit either place and keep them in sync when you change instructions. The running API does **not** auto-inject this file into chat UIs; load it yourself or point agents at it. For **HTTP model context**, use **`GET /model-context/docs`**, which serves **`pdf/open-fdd-docs.txt`** (or **`OFDD_DOCS_PATH`**)—regenerate that bundle after doc changes so agents see updates.
+
+**What the prompt must cover:** It should be generic for **any site** (single building, campus, or tenant). The only input that changes per run is the export JSON from **GET /data-model/export** (optionally `?site_id=YourSiteName`). The LLM must preserve all fields, add **brick_type**, **rule_input**, **unit** (when known), and **polling**, and use equipment by name and **site_id** from the export.
 
 For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
@@ -86,7 +90,7 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 The agent is typically **not** a long-lived process; your external loop exports the model, tags it, validates the output, and retries when needed:
 
 1. **Export** — Call `GET /data-model/export` (optionally filtered by site) and send the export JSON to your agent.
-2. **System prompt** — Use the canonical prompt from `config/canonical_llm_prompt.txt` (or wrap it in your Open‑Claw/OpenAI-compatible system prompt). Provide it as the LLM system prompt.
+2. **System prompt** — Use the full tagging instructions (this page + Technical reference, or your local `pdf/canonical_llm_prompt.txt` if you maintain one) as the Open‑Claw/OpenAI-compatible **system** prompt.
 3. **User message** — Send the export JSON as the user message. Optionally prepend any engineer description of feeds/fed_by topology and assumptions so the LLM can choose correct Brick types and relationships.
 4. **LLM call** — Call your Open‑Claw/OpenAI-compatible LLM once (for typical payloads). For very large exports, your agent may split into chunks and merge results. Request JSON output (for example with `response_format={"type": "json_object"}`).
 5. **Validation** — The response is parsed as JSON and validated with **DataModelImportBody** (same schema as import). If validation fails:
@@ -138,7 +142,7 @@ A future **Data Model Testing** page could offer a second AI assist (same chat s
 - **Input:** Current data model context (e.g. TTL snippet or SPARQL “Summarize your HVAC” result) plus the engineer’s message (e.g. “Add feeds/fed-by between AHU-1 and VAV-1”, “Fix the brick_type for SA-T”).
 - **Output:** Same schema as the tagging flow — valid **points** and **equipment** import JSON only — so the same **PUT /data-model/import** and validation path apply. The engineer reviews, applies, then re-runs SPARQL or predefined tests and passes/fails.
 
-That way: **Setup** = tag from export (canonical prompt in `config/canonical_llm_prompt.txt`); **Testing** = revise from current model + chat (optional prompt e.g. `config/canonical_llm_prompt_testing.txt`). Both use the same API and retry/prompt-chaining behavior; only the system prompt and user message differ.
+That way: **Setup** = tag from export (same instructions as above, optionally stored in `pdf/canonical_llm_prompt.txt`); **Testing** = revise from current model + chat (optional second file e.g. `pdf/canonical_llm_prompt_testing.txt`). Both use the same API and retry/prompt-chaining behavior; only the system prompt and user message differ.
 
 ---
 

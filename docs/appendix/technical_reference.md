@@ -33,7 +33,7 @@ open-fdd/
 ├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy
 │   ├── sql/               # 001_init … 015_fault_state_and_audit (migrations; see Developer guide — Database schema)
 │   ├── grafana/           # provisioning/datasources, optional dashboards
-│   └── caddy/             # Caddyfile (optional reverse proxy)
+│   └── caddy/             # Caddy only: [`stack/caddy/Caddyfile`](../../stack/caddy/Caddyfile) (minimal rev proxy; hardening TBD — [Security](../security))
 ├── config/                # data_model.ttl (Brick + BACnet + platform config)
 ├── scripts/               # bootstrap.sh, fake_*_faults.py
 ├── tools/
