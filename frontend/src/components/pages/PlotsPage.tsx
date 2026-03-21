@@ -179,8 +179,20 @@ export function PlotsPage() {
     return [...ids].sort().join("\0");
   }, [selectedPointIds, pointsForDevice]);
   const faultBucket = pickFaultBucket(start, end);
+  /** Equipment rows tied to the selected BACnet device — backend must filter fault_results, not only site + fault_id. */
+  const equipmentIdsForFaultOverlay = useMemo(
+    () => Array.from(selectedDeviceEquipmentIds).sort(),
+    [selectedDeviceEquipmentIds],
+  );
   const { data: faultData } = useFaultTimeseries(selectedSiteId ?? undefined, start, end, faultBucket, {
-    enabled: !!(selectedSiteId && selectedFaultId && start && end),
+    enabled: !!(
+      selectedSiteId &&
+      selectedFaultId &&
+      start &&
+      end &&
+      equipmentIdsForFaultOverlay.length > 0
+    ),
+    equipmentIds: equipmentIdsForFaultOverlay,
   });
 
   const onCsvLoaded = useCallback((text: string) => {

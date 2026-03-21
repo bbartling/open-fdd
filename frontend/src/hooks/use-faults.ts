@@ -101,22 +101,26 @@ export function useFaultTimeseries(
   startDate: string,
   endDate: string,
   bucket: "hour" | "day" = "hour",
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; equipmentIds?: string[] },
 ) {
   const datesOk = !!startDate && !!endDate;
   const enabled =
     options?.enabled !== undefined ? options.enabled && datesOk : datesOk;
+  const equipKey = (options?.equipmentIds ?? []).slice().sort().join(",");
   return useQuery<FaultTimeseriesResponse>({
-    queryKey: ["faults", "timeseries", siteId ?? "all", startDate, endDate, bucket],
-    queryFn: () =>
-      apiFetch<FaultTimeseriesResponse>(
-        `/analytics/fault-timeseries${buildSearchParams({
-          site_id: siteId ?? undefined,
-          start_date: startDate.slice(0, 10),
-          end_date: endDate.slice(0, 10),
-          bucket,
-        })}`,
-      ),
+    queryKey: ["faults", "timeseries", siteId ?? "all", startDate, endDate, bucket, equipKey],
+    queryFn: () => {
+      const sp = new URLSearchParams();
+      if (siteId) sp.set("site_id", siteId);
+      sp.set("start_date", startDate.slice(0, 10));
+      sp.set("end_date", endDate.slice(0, 10));
+      sp.set("bucket", bucket);
+      for (const id of options?.equipmentIds ?? []) {
+        sp.append("equipment_ids", id);
+      }
+      const q = sp.toString();
+      return apiFetch<FaultTimeseriesResponse>(`/analytics/fault-timeseries?${q}`);
+    },
     enabled,
     staleTime: 60 * 1000,
   });
