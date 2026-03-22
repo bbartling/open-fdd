@@ -151,6 +151,15 @@ Documentation lives in the `docs/` directory and is published at [bbartling.gith
 
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
+**After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages builds extensionless URLs like `/modeling/llm_workflow`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
+
+```bash
+BASE=https://bbartling.github.io/open-fdd
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow"    # expect 200
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow/"   # often 404 — avoid trailing slash in external links
+curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"  # expect 302 or 200
+```
+
 ---
 
 ## Styleguides

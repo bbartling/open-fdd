@@ -95,6 +95,45 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
   return response.text();
 }
 
+/** Read a streaming text/plain (or chunked) response; calls onChunk for each decoded piece. */
+export async function apiStreamText(
+  path: string,
+  onChunk: (text: string) => void,
+  signal: AbortSignal,
+  init?: Omit<RequestInit, "signal">,
+): Promise<void> {
+  const response = await fetch(buildUrl(path), {
+    ...init,
+    headers: buildHeaders(init?.headers),
+    signal,
+  });
+
+  if (!response.ok) {
+    const message = await readErrorMessage(response);
+    throw new Error(`${response.status} ${message}`.trim());
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error("No response body");
+  }
+
+  const decoder = new TextDecoder();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value?.length) {
+        onChunk(decoder.decode(value, { stream: true }));
+      }
+    }
+    const tail = decoder.decode();
+    if (tail) onChunk(tail);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Blob> {
   const response = await fetch(buildUrl(path), {
     ...init,

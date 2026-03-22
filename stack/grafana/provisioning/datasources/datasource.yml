@@ -5,14 +5,10 @@ datasources:
     uid: openfdd_timescale
     access: proxy
     url: db:5432
+    database: openfdd
     user: postgres
-    isDefault: true
-    version: 1
-    editable: false
     secureJsonData:
       password: postgres
     jsonData:
-      database: openfdd
       sslmode: disable
-      postgresVersion: 1600
       timescaledb: true

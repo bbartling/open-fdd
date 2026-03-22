@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -33,7 +33,10 @@ import {
   useSystemDisk,
 } from "@/hooks/use-system";
 import { TutorialPopover } from "@/components/ui/tutorial-popover";
-import { HardDrive, Server, Activity } from "lucide-react";
+import { HardDrive, Server, Activity, ScrollText } from "lucide-react";
+import { apiStreamText } from "@/lib/api";
+
+const LOG_BUFFER_CAP = 400_000;
 
 function primaryDisk(
   disks: { hostname: string; mount_path: string; used_gb: number; free_gb: number; total_gb: number; used_pct: number }[],
@@ -73,6 +76,12 @@ function pivotHostSeries(
 
 export function SystemResourcesPage() {
   const [range] = useState(last6hIso);
+  const [logContainer, setLogContainer] = useState<string>("");
+  const [logText, setLogText] = useState<string>("");
+  const [logStreaming, setLogStreaming] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
+  const logAbortRef = useRef<AbortController | null>(null);
+  const logPreRef = useRef<HTMLPreElement | null>(null);
   const { data: hostData, isLoading: hostLoading } = useSystemHost();
   const { data: hostSeriesData, isLoading: hostSeriesLoading } = useSystemHostSeries(
     range.from,
@@ -155,6 +164,63 @@ export function SystemResourcesPage() {
     containersSeriesData?.series?.forEach((s) => set.add(s.metric));
     return Array.from(set);
   }, [containersSeriesData]);
+
+  /** Names from latest metrics row per container plus any seen in chart series (same Docker name as `docker ps`). */
+  const logContainerOptions = useMemo(() => {
+    const set = new Set<string>();
+    containers.forEach((c) => {
+      if (c.container_name) set.add(c.container_name);
+    });
+    containerNames.forEach((n) => set.add(n));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [containers, containerNames]);
+
+  const stopLogStream = useCallback(() => {
+    logAbortRef.current?.abort();
+    logAbortRef.current = null;
+    setLogStreaming(false);
+  }, []);
+
+  const startLogStream = useCallback(async () => {
+    if (!logContainer) return;
+    stopLogStream();
+    setLogError(null);
+    setLogText("");
+    const ac = new AbortController();
+    logAbortRef.current = ac;
+    setLogStreaming(true);
+    const path = `/analytics/system/containers/${encodeURIComponent(logContainer)}/logs?tail=500&follow=true`;
+    try {
+      await apiStreamText(
+        path,
+        (chunk) => {
+          setLogText((prev) => {
+            const next = prev + chunk;
+            return next.length > LOG_BUFFER_CAP ? next.slice(-LOG_BUFFER_CAP) : next;
+          });
+        },
+        ac.signal,
+      );
+    } catch (e) {
+      const err = e as Error;
+      if (err.name !== "AbortError") {
+        setLogError(err.message || String(e));
+      }
+    } finally {
+      setLogStreaming(false);
+      logAbortRef.current = null;
+    }
+  }, [logContainer, stopLogStream]);
+
+  useEffect(() => {
+    return () => stopLogStream();
+  }, [stopLogStream]);
+
+  useEffect(() => {
+    const el = logPreRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logText]);
 
   const containerChartConfig: ChartConfig = useMemo(() => {
     const colors = [
@@ -615,8 +681,79 @@ export function SystemResourcesPage() {
       )}
 
       {containersLoading && containers.length === 0 && !host && (
-        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="mb-8 h-48 w-full rounded-xl" />
       )}
+
+      {/* Docker container logs — API needs /var/run/docker.sock (see stack docker-compose api service) */}
+      <div className="mt-10 border-t border-border/60 pt-8">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <ScrollText className="h-4 w-4" />
+          Container logs
+        </h2>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Stream stdout/stderr from a container on the Docker host (same names as <code className="text-[11px]">docker ps</code> — from host-stats metrics: latest table and chart series). Containers must still exist when you stream.
+        </p>
+        <Card>
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[12rem] flex-1">
+                <label
+                  htmlFor="system-resources-container-logs-select"
+                  className="mb-1 block text-xs font-medium text-muted-foreground"
+                >
+                  Container
+                </label>
+                <select
+                  id="system-resources-container-logs-select"
+                  value={logContainer}
+                  onChange={(e) => {
+                    setLogContainer(e.target.value);
+                    setLogError(null);
+                  }}
+                  disabled={logContainerOptions.length === 0}
+                  className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm"
+                >
+                  <option value="">
+                    {logContainerOptions.length === 0 ? "No containers in metrics" : "Select container…"}
+                  </option>
+                  {logContainerOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                disabled={!logContainer || logStreaming}
+                onClick={() => void startLogStream()}
+                className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {logStreaming ? "Streaming…" : "Stream logs"}
+              </button>
+              <button
+                type="button"
+                disabled={!logStreaming}
+                onClick={stopLogStream}
+                className="h-9 rounded-lg border border-border/60 bg-background px-4 text-sm font-medium disabled:opacity-50"
+              >
+                Stop
+              </button>
+            </div>
+            {logError && (
+              <p className="text-sm text-destructive" role="alert">
+                {logError}
+              </p>
+            )}
+            <pre
+              ref={logPreRef}
+              className="max-h-96 min-h-[12rem] overflow-auto rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-foreground"
+            >
+              {logText || (logStreaming ? "…" : "Output appears here while streaming.")}
+            </pre>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
