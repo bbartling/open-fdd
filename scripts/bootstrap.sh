@@ -338,13 +338,20 @@ write_edge_env() {
 
   # BACnet2MQTT: append defaults when --with-mqtt-bridge and keys not already in stack/.env
   if $WITH_MQTT_BRIDGE; then
-    for entry in "BACNET2MQTT_ENABLED=true" "MQTT_BROKER_URL=mqtt://127.0.0.1:1883" "HA_DISCOVERY_ENABLED=true"; do
-      key="${entry%%=*}"
-      if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
-        echo "$entry" >> "$env_file"
-      fi
-    done
+    ensure_mqtt_bridge_env_defaults "$env_file"
   fi
+}
+
+ensure_mqtt_bridge_env_defaults() {
+  local env_file="$1"
+  [[ -f "$env_file" ]] || touch "$env_file"
+
+  for entry in "BACNET2MQTT_ENABLED=true" "MQTT_BROKER_URL=mqtt://127.0.0.1:1883" "HA_DISCOVERY_ENABLED=true"; do
+    local key="${entry%%=*}"
+    if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
+      echo "$entry" >> "$env_file"
+    fi
+  done
 }
 
 ensure_diy_bacnet_sibling() {
@@ -906,13 +913,7 @@ fi
 # -----------------------------
 # Ensure bridge env vars are in stack/.env so bacnet-server gets them (server_hello will show mqtt_bridge)
 if $WITH_MQTT_BRIDGE; then
-  env_file="$STACK_DIR/.env"
-  for entry in "BACNET2MQTT_ENABLED=true" "MQTT_BROKER_URL=mqtt://127.0.0.1:1883" "HA_DISCOVERY_ENABLED=true"; do
-    key="${entry%%=*}"
-    if ! grep -qE "^${key}=" "$env_file" 2>/dev/null; then
-      echo "$entry" >> "$env_file"
-    fi
-  done
+  ensure_mqtt_bridge_env_defaults "$STACK_DIR/.env"
 fi
 
 cd "$STACK_DIR"

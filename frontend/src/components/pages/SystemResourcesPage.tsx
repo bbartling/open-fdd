@@ -93,7 +93,8 @@ export function SystemResourcesPage() {
   const { data: diskData, isLoading: diskLoading } = useSystemDisk();
 
   const host = hostData?.hosts?.[0];
-  const containers = containersData?.containers ?? [];
+  const rawContainers = containersData?.containers;
+  const containers = useMemo(() => rawContainers ?? [], [rawContainers]);
   const disks = diskData?.disks ?? [];
   const disk = disks.length ? primaryDisk(disks) : null;
 
@@ -194,6 +195,7 @@ export function SystemResourcesPage() {
       await apiStreamText(
         path,
         (chunk) => {
+          if (logAbortRef.current !== ac) return;
           setLogText((prev) => {
             const next = prev + chunk;
             return next.length > LOG_BUFFER_CAP ? next.slice(-LOG_BUFFER_CAP) : next;
@@ -203,12 +205,15 @@ export function SystemResourcesPage() {
       );
     } catch (e) {
       const err = e as Error;
+      if (logAbortRef.current !== ac) return;
       if (err.name !== "AbortError") {
         setLogError(err.message || String(e));
       }
     } finally {
-      setLogStreaming(false);
-      logAbortRef.current = null;
+      if (logAbortRef.current === ac) {
+        setLogStreaming(false);
+        logAbortRef.current = null;
+      }
     }
   }, [logContainer, stopLogStream]);
 
