@@ -13,7 +13,7 @@ One-page cheat sheet for Open-FDD. Details live in [Verification](howto/verifica
 
 ## What it is
 
-Open-FDD is an open-source **edge analytics platform for smart buildings** that ingests BACnet and other OT telemetry, stores it in TimescaleDB, and runs rule-based fault detection and diagnostics locally with Grafana dashboards and APIs. As the open alternative to proprietary tools like SkyFoundry’s SkySpark, it gives operators full control, lower cost, and cloud-agnostic deployment, and already powers real-world HVAC optimization and commissioning workflows.
+Open-FDD is an open-source **edge analytics platform for smart buildings** that ingests BACnet and other OT telemetry, stores it in TimescaleDB, and runs rule-based fault detection and diagnostics locally with APIs and an optional Grafana path. As the open alternative to proprietary tools like SkyFoundry’s SkySpark, it gives operators full control, lower cost, and cloud-agnostic deployment, and already powers real-world HVAC optimization and commissioning workflows.
 
 ---
 
@@ -22,11 +22,11 @@ Open-FDD is an open-source **edge analytics platform for smart buildings** that 
 | Service | URL | Default credentials |
 |---------|-----|---------------------|
 | **DB (TimescaleDB)** | `localhost:5432/openfdd` | postgres / postgres |
-| **Grafana** | http://localhost:3000 | admin / admin |
+| **Grafana** | http://localhost:3000 | Optional (`--with-grafana`); admin / admin |
 | **Frontend (React)** | http://localhost:5173 | Dashboard, Config, Points, Data model, Faults, Plots. Via Caddy: http://localhost:80. |
 | **API (Swagger)** | http://localhost:8000/docs | REST API; Bearer auth when `OFDD_API_KEY` set. |
 | **BACnet Swagger** | http://localhost:8080/docs | diy-bacnet-server JSON-RPC. |
-| **MQTT broker** | localhost:1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge`. For BACnet2MQTT and HA. |
+| **MQTT broker** | localhost:1883 | Optional / experimental: `./scripts/bootstrap.sh --with-mqtt-bridge`. Mosquitto + BACnet2MQTT wiring for **future** remote/MQTT use—not core Open-FDD; not a Home Assistant product integration. |
 
 On another host, replace `localhost` with the server IP (e.g. `http://192.168.204.16:8000`). For bootstrap options run `./scripts/bootstrap.sh --help`.
 
@@ -45,9 +45,9 @@ curl -s -X POST http://localhost:8000/bacnet/server_hello -H "Content-Type: appl
 DB:       localhost:5432/openfdd  (postgres/postgres)
 Frontend: http://localhost:5173   (or :80 via Caddy)
 API:      http://localhost:8000   (docs: /docs)
-Grafana:  http://localhost:3000   (admin/admin; use --with-grafana)
+Grafana:  http://localhost:3000   (optional; --with-grafana; admin/admin)
 BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
-MQTT:     localhost:1883          (optional; use --with-mqtt-bridge)
+MQTT:     localhost:1883          (optional / experimental; --with-mqtt-bridge)
 ```
 
 ---

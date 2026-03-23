@@ -4,18 +4,88 @@ If the data model has no fan/VFD point for motor runtime, returns NO DATA.
 For MSI/cloud integrators and Grafana (via JSON datasource or downstream ETL).
 """
 
+import logging
+import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 from uuid import UUID
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response, StreamingResponse
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.site_resolver import resolve_site_uuid
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+_log = logging.getLogger("open_fdd.analytics.docker_logs")
+
+# Docker name / id: no slashes or control chars (path segment safe)
+_CONTAINER_REF_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,253}$")
+
+
+def _validate_container_ref(ref: str) -> str:
+    ref = (ref or "").strip()
+    if not _CONTAINER_REF_RE.match(ref):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid container name or id",
+        )
+    return ref
+
+
+def _docker_client():
+    """Return docker.Docker client or None if unavailable."""
+    try:
+        import docker
+    except ImportError:
+        return None
+    try:
+        return docker.from_env()
+    except Exception as e:
+        _log.warning("Docker client init failed: %s", e)
+        return None
+
+
+def _container_logs_text_chunks(
+    container_ref: str, *, tail: int, follow: bool
+) -> Iterator[str]:
+    client = _docker_client()
+    if client is None:
+        yield "[open-fdd] Docker is not available (install docker package and mount /var/run/docker.sock on the API container).\n"
+        return
+    try:
+        import docker as docker_mod
+    except ImportError:
+        yield "[open-fdd] docker Python package is not installed on the API image.\n"
+        return
+    try:
+        c = client.containers.get(container_ref)
+    except docker_mod.errors.NotFound:
+        yield f"[open-fdd] Container not found: {container_ref}\n"
+        return
+    except docker_mod.errors.APIError as e:
+        yield f"[open-fdd] Docker API error: {e}\n"
+        return
+    except Exception as e:
+        yield f"[open-fdd] Error resolving container: {e}\n"
+        return
+    try:
+        stream = c.logs(
+            stream=True,
+            follow=follow,
+            tail=tail,
+            timestamps=True,
+        )
+        for chunk in stream:
+            if isinstance(chunk, bytes):
+                yield chunk.decode("utf-8", errors="replace")
+            else:
+                yield str(chunk)
+    except Exception as e:
+        yield f"\n[open-fdd] Log stream ended: {e}\n"
 
 # Brick types that indicate fan/VFD for motor runtime (data-model driven)
 MOTOR_BRICK_PATTERNS = (
@@ -882,3 +952,56 @@ def get_system_disk():
             for r in rows
         ]
     }
+
+
+@router.get(
+    "/system/containers/{container_ref}/logs",
+    summary="Docker container logs (plain text; follow=1 streams until disconnect)",
+    response_class=Response,
+)
+def get_container_logs(
+    container_ref: str,
+    tail: int = Query(
+        300,
+        ge=1,
+        le=50_000,
+        description="Number of log lines to include before streaming (Docker tail)",
+    ),
+    follow: bool = Query(
+        True,
+        description="Stream new lines; if false, returns a single text/plain snapshot",
+    ),
+):
+    """
+    Requires the Docker socket on the API process (see stack docker-compose api service).
+    `container_ref` is a container name (e.g. openfdd_api) or id; must match metrics names from host-stats.
+    """
+    ref = _validate_container_ref(container_ref)
+    if not follow:
+        client = _docker_client()
+        if client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Docker not available (socket not mounted or docker package missing)",
+            )
+
+        try:
+            c = client.containers.get(ref)
+            data = c.logs(stream=False, tail=tail, timestamps=True)
+        except Exception as e:
+            mod = getattr(e.__class__, "__module__", "")
+            if "docker" in mod and e.__class__.__name__ == "NotFound":
+                raise HTTPException(status_code=404, detail=f"Container not found: {ref}")
+            if "docker" in mod and e.__class__.__name__ == "APIError":
+                raise HTTPException(status_code=502, detail=str(e))
+            raise HTTPException(status_code=502, detail=str(e))
+        body = data if isinstance(data, bytes) else bytes(data or b"")
+        return Response(content=body, media_type="text/plain; charset=utf-8")
+
+    def gen() -> Iterator[str]:
+        yield from _container_logs_text_chunks(ref, tail=tail, follow=True)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/plain; charset=utf-8",
+    )

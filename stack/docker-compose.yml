@@ -1,4 +1,5 @@
-# Open-FDD platform stack: TimescaleDB, Grafana, diy-bacnet-server, bacnet-scraper, API.
+# Open-FDD platform stack: TimescaleDB, diy-bacnet-server, bacnet-scraper, API.
+# Optional (profiles): Grafana (--with-grafana), Mosquitto MQTT (--with-mqtt-bridge) for future BACnet2MQTT / remote collection.
 # Run: docker compose -f stack/docker-compose.yml up -d
 # Or: ./scripts/bootstrap.sh
 #
@@ -17,7 +18,7 @@ x-log-opts: &log-opts
 
 services:
   # BACnet/IP gateway — always-on server, JSON-RPC on 8080.
-  # BACnet2MQTT bridge: set BACNET2MQTT_ENABLED, MQTT_BROKER_URL, HA_DISCOVERY_ENABLED in stack/.env (or use bootstrap --with-mqtt-bridge).
+  # Optional BACnet2MQTT: set env in stack/.env or bootstrap with --with-mqtt-bridge (broker + bridge wiring).
   bacnet-server:
     build:
       context: ../../diy-bacnet-server
@@ -29,6 +30,7 @@ services:
       BACNET2MQTT_ENABLED: "${BACNET2MQTT_ENABLED:-}"
       MQTT_BROKER_URL: "${MQTT_BROKER_URL:-}"
       HA_DISCOVERY_ENABLED: "${HA_DISCOVERY_ENABLED:-}"
+      # Default topic prefix from diy-bacnet-server (MQTT discovery); not an Open-FDD ↔ Home Assistant product tie-in.
       HA_DISCOVERY_TOPIC: "${HA_DISCOVERY_TOPIC:-homeassistant}"
       MQTT_BASE_TOPIC: "${MQTT_BASE_TOPIC:-bacnet2mqtt}"
       MQTT_POLL_INTERVAL_SEC: "${MQTT_POLL_INTERVAL_SEC:-30}"
@@ -226,6 +228,8 @@ services:
     volumes:
       - ../stack/rules:/app/stack/rules
       - ../config:/app/config
+      # Optional: stream container logs from System resources UI (same daemon host-stats uses)
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
@@ -280,8 +284,7 @@ services:
       driver: json-file
       options: *log-opts
 
-  # MQTT broker for BACnet2MQTT bridge (profile mqtt). Start with: docker compose --profile mqtt up -d
-  # BACnet server (host network) connects to mqtt://127.0.0.1:1883; HA on same box uses MQTT integration → localhost:1883.
+  # MQTT broker (profile mqtt). Optional: ./scripts/bootstrap.sh --with-mqtt-bridge — for future BACnet2MQTT / remote collection (not required for core Open-FDD).
   mosquitto:
     profiles:
       - mqtt
