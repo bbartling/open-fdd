@@ -134,3 +134,44 @@ def test_system_disk_empty_when_no_table():
         r = client.get("/analytics/system/disk")
     assert r.status_code == 200
     assert r.json()["disks"] == []
+
+
+def test_container_logs_invalid_ref_rejected():
+    r = client.get("/analytics/system/containers/bad!name/logs?follow=false")
+    assert r.status_code == 400
+
+
+def test_container_logs_snapshot_when_docker_mocked():
+    fake_container = MagicMock()
+    fake_container.logs.return_value = b"2025-01-01T00:00:00 line one\n"
+    fake_client = MagicMock()
+    fake_client.containers.get.return_value = fake_container
+    with patch(
+        "open_fdd.platform.api.analytics._docker_client", return_value=fake_client
+    ):
+        r = client.get("/analytics/system/containers/openfdd_api/logs?follow=false&tail=50")
+    assert r.status_code == 200
+    assert r.text == "2025-01-01T00:00:00 line one\n"
+    fake_client.containers.get.assert_called_once_with("openfdd_api")
+    fake_container.logs.assert_called_once_with(
+        stream=False, tail=50, timestamps=True
+    )
+
+
+def test_container_logs_snapshot_404_when_not_found():
+    DockerNotFound = type("NotFound", (Exception,), {})
+    DockerNotFound.__module__ = "docker.errors"
+
+    fake_client = MagicMock()
+    fake_client.containers.get.side_effect = DockerNotFound("nope")
+    with patch(
+        "open_fdd.platform.api.analytics._docker_client", return_value=fake_client
+    ):
+        r = client.get("/analytics/system/containers/missing/logs?follow=false")
+    assert r.status_code == 404
+
+
+def test_container_logs_snapshot_503_when_no_docker():
+    with patch("open_fdd.platform.api.analytics._docker_client", return_value=None):
+        r = client.get("/analytics/system/containers/foo/logs?follow=false")
+    assert r.status_code == 503

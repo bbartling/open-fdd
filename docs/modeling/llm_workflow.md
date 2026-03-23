@@ -14,7 +14,7 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 
 ## What you upload to the LLM
 
-1. **The canonical prompt** — Use **[AI-assisted data modeling](ai_assisted_tagging)** (section *LLM prompt and agent guidelines*), the inline template **below** on this page (“Copy/paste prompt template”), or the [Technical reference — LLM tagging workflow](../appendix/technical_reference#llm-tagging-workflow). Optionally maintain the same text in **`pdf/canonical_llm_prompt.txt`** for copy/paste. The prompt must tell the LLM to return only `{"points": [...], "equipment": [...]}` with Brick types, rule_input slugs, equipment_name, feeds/fed_by, polling, and units.
+1. **The canonical prompt** — Use **[AI-assisted data modeling](ai_assisted_tagging)** (section *LLM prompt and agent guidelines*), the inline template **below** on this page (“Copy/paste prompt template”), or the [Technical reference — LLM tagging workflow](../appendix/technical_reference#llm-tagging-workflow). You can copy from this page or keep an optional local mirror (e.g. `pdf/canonical_llm_prompt.txt`) for agents. The prompt must tell the LLM to return only `{"points": [...], "equipment": [...]}` with Brick types, rule_input slugs, equipment_name, feeds/fed_by, polling, and units.
 
 2. **The export JSON** — From **GET /data-model/export** (optionally `?site_id=YourSiteName`). Example shape: one array of objects with `point_id`, `bacnet_device_id`, `object_identifier`, `object_name`, `external_id`, `site_id`, `site_name`, `equipment_id`, `equipment_name`, `brick_type`, `rule_input`, `unit`, `polling`. Unimported rows have `point_id: null` and null tagging fields; the LLM fills those and can set `site_id` if you pre-create the site.
 
@@ -28,7 +28,7 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 
 ## Copy/paste prompt template (recommended) {#copy-paste-prompt-template-recommended}
 
-Use this as your LLM **system** or **developer** prompt when transforming `GET /data-model/export` into import JSON. This is the **canonical** copy-paste text; the same file is committed at **`pdf/canonical_llm_prompt.txt`** for agents and runbooks.
+Use this as your LLM **system** or **developer** prompt when transforming `GET /data-model/export` into import JSON. This is the **canonical** copy-paste text for the published docs (save to a local file such as `pdf/canonical_llm_prompt.txt` if you want a path for agents or runbooks).
 
 ```text
 You are transforming Open-FDD export JSON into Open-FDD import JSON.
@@ -233,7 +233,7 @@ To avoid that:
 
 1. **Create site** (and optionally equipment) via API or UI; note **site_id**.
 2. **Export** — GET /data-model/export?site_id=YourSiteName (or no filter for full dump).
-3. **Upload to LLM** — Paste (a) the [canonical template above](#copy-paste-prompt-template-recommended) (or load **`pdf/canonical_llm_prompt.txt`** from the repo), (b) export JSON, (c) optional rules (cookbook link or YAML snippets). Optionally include the import JSON Schema so the LLM returns valid payload.
+3. **Upload to LLM** — Paste (a) the [canonical template above](#copy-paste-prompt-template-recommended) (or your saved copy of the same text), (b) export JSON, (c) optional rules (cookbook link or YAML snippets). Optionally include the import JSON Schema so the LLM returns valid payload.
    - **UUID reminder:** Never replace `points[].site_id` with a human-readable site name; keep the UUID from the export (see **Validate before import** below).
 4. **Validate** — Run schema validation or Pydantic validation on the LLM reply so you know it will parse on the backend.
 5. **Import** — PUT /data-model/import with the validated JSON.
@@ -244,5 +244,5 @@ To avoid that:
 ## See also
 
 - [AI-assisted data modeling](ai_assisted_tagging) — Export → tag → import and API contract.
-- [Technical reference](../appendix/technical_reference) — PyPI vs repo, LLM tagging workflow; full prompt also in **`pdf/canonical_llm_prompt.txt`** and above on this page.
+- [Technical reference](../appendix/technical_reference) — PyPI vs repo, LLM tagging workflow; full prompt is above on this page.
 - [Fault rules overview](../rules/overview) and [Expression Rule Cookbook](../rules/expression_rule_cookbook) — Rules and rule_input reference.

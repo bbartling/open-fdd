@@ -1,6 +1,8 @@
 title: "Open-FDD"
 description: "Open-source edge analytics for smart buildings — BACnet, TimescaleDB, Grafana, rule-based FDD"
 baseurl: "/open-fdd"
+# Jekyll emits e.g. modeling/llm_workflow.html. GitHub Pages serves extensionless /open-fdd/modeling/llm_workflow
+# but /open-fdd/modeling/llm_workflow/ often 404s (no page/index.html). Prefer extensionless or .html in README links.
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
 

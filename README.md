@@ -36,7 +36,7 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-This will start the full AFDD edge stack locally. The stack includes Grafana, TimescaleDB, and a Python rules engine built on pandas for time-series analytics; the default protocol is **BACnet** for commercial building automation data. Future releases will add other data sources such as REST/API and Modbus.
+This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. Future releases may add other data sources such as REST/API and Modbus.
 
 
 ### Development: branches and tests
@@ -75,7 +75,7 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 
 - 📖 [**Docs**](https://bbartling.github.io/open-fdd/) — GitHub Pages (Linux quick start, stack, reference).
 - 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline / print-friendly bundle.
-- ✨ [**LLM prompt (AI-assisted tagging)**](https://github.com/bbartling/open-fdd/blob/master/pdf/canonical_llm_prompt.txt) — canonical copy-paste text; same template on [**LLM workflow**](https://bbartling.github.io/open-fdd/modeling/llm_workflow/) (docs site).
+- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — canonical text on the docs site (same section as [**LLM workflow**](https://bbartling.github.io/open-fdd/modeling/llm_workflow)); GitHub Pages serves this path **without** a trailing slash.
 
 ---
 

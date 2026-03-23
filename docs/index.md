@@ -98,7 +98,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | **Grafana** | 3000 | **Optional** dashboards (`--with-grafana`); React frontend has equivalent views |
 | **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); POST server_hello returns `mqtt_bridge` when BACnet2MQTT enabled |
 | **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
-| **Mosquitto (MQTT)** | 1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for BACnet2MQTT |
+| **Mosquitto (MQTT)** | 1883 | **Optional / experimental:** `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for future BACnet2MQTT / remote collection (not required for core Open-FDD) |
 
 ---
 
