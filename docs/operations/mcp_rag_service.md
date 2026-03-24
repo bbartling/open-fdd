@@ -25,6 +25,12 @@ Run:
 
 This flow builds docs text when needed, builds retrieval index, and starts the MCP RAG service profile.
 
+For module-focused operations, combine with bootstrap mode:
+
+```bash
+./scripts/bootstrap.sh --mode model --with-mcp-rag
+```
+
 ## Service endpoints
 
 - `GET /health`

@@ -50,6 +50,8 @@ STACK_DIR="$REPO_ROOT/stack"
 VERIFY_ONLY=false
 VERIFY_CODE=false
 MINIMAL=false
+MODE="full"
+MODE_EXPLICIT=false
 RESET_GRAFANA=false
 RESET_DATA=false
 WITH_GRAFANA=false
@@ -92,6 +94,15 @@ while [[ $i -lt ${#args[@]} ]]; do
     --verify) VERIFY_ONLY=true ;;
     --test) VERIFY_CODE=true ;;
     --minimal) MINIMAL=true ;;
+    --mode)
+      i=$(( i + 1 ))
+      if [[ $i -ge ${#args[@]} ]]; then
+        echo "--mode requires one of: full, collector, model, engine"
+        exit 1
+      fi
+      MODE="${args[$i]}"
+      MODE_EXPLICIT=true
+      ;;
     --reset-grafana) RESET_GRAFANA=true ;;
     --with-grafana) WITH_GRAFANA=true ;;
     --with-mqtt-bridge) WITH_MQTT_BRIDGE=true ;;
@@ -123,6 +134,7 @@ Usage: $0 [options]
 Core:
   (no args)                 Build + start full stack (ALL services; Grafana/MQTT off unless flags below)
   --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; add --with-grafana for Grafana)
+  --mode MODE              Partial deployment mode: full, collector, model, engine (default: full)
   --with-grafana            Include Grafana (http://localhost:3000; optional SQL dashboards)
   --with-mqtt-bridge        Start Mosquitto + wire BACnet2MQTT env (experimental; future remote/MQTT use—not core product yet)
   --with-mcp-rag            Include MCP RAG service (http://localhost:8090; retrieval over docs/text + optional guarded API tools)
@@ -167,6 +179,14 @@ EOF
   esac
   i=$(( i + 1 ))
 done
+
+if [[ "$MODE" != "full" && "$MODE" != "collector" && "$MODE" != "model" && "$MODE" != "engine" ]]; then
+  echo "Invalid --mode '$MODE'. Use: full, collector, model, engine."
+  exit 1
+fi
+if $MINIMAL; then
+  MODE="collector"
+fi
 
 # -----------------------------
 # Helpers
@@ -471,12 +491,15 @@ verify() {
 }
 
 ensure_docs_text_and_rag_index() {
-  local py="python3"
+  local py
   if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
     py="$REPO_ROOT/.venv/bin/python"
-  fi
-  if ! have_cmd "$py"; then
+  else
     py="python3"
+    if ! have_cmd "$py"; then
+      echo "python3 not found; skipping MCP docs/index build."
+      return 0
+    fi
   fi
 
   if [[ ! -f "$REPO_ROOT/pdf/open-fdd-docs.txt" ]]; then
@@ -493,11 +516,11 @@ ensure_docs_text_and_rag_index() {
 # Backend runs with OFDD_API_KEY unset so tests use no-auth app.
 verify_code() {
   local failed=0
-  echo "=== Tests: frontend (lint + typecheck + vitest), backend (pytest), Caddy ==="
+  echo "=== Tests for mode '$MODE': frontend (lint + typecheck + vitest), backend (pytest), Caddy ==="
   echo ""
 
-  # Frontend: lint + tsc + vitest. Prefer frontend container so host does not need npm.
-  if [[ -d "$REPO_ROOT/frontend" ]]; then
+  # Frontend checks are only required for full/model modes.
+  if [[ -d "$REPO_ROOT/frontend" ]] && [[ "$MODE" == "full" || "$MODE" == "model" ]]; then
     echo "--- Frontend (lint + typecheck + unit tests) ---"
     local frontend_ok=true
     local frontend_running=false
@@ -544,7 +567,7 @@ verify_code() {
     echo ""
   fi
 
-  # Backend: pytest (use .venv if present). Unset OFDD_API_KEY so test client gets no-auth app.
+  # Backend tests vary by module mode (full = full suite).
   echo "--- Backend (pytest) ---"
   local py=
   if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
@@ -552,15 +575,25 @@ verify_code() {
   else
     py="python3"
   fi
-  if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest open_fdd/tests/ -v --tb=short); then
+  local pytest_target="open_fdd/tests/"
+  if [[ "$MODE" == "collector" ]]; then
+    pytest_target="open_fdd/tests/platform/test_bacnet_driver.py open_fdd/tests/platform/test_bacnet_api.py"
+  elif [[ "$MODE" == "model" ]]; then
+    pytest_target="open_fdd/tests/platform/test_data_model_api.py open_fdd/tests/platform/test_data_model_ttl.py open_fdd/tests/platform_api/test_model_context.py"
+  elif [[ "$MODE" == "engine" ]]; then
+    pytest_target="open_fdd/tests/engine/"
+  fi
+
+  if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest $pytest_target -v --tb=short); then
     echo "Backend: OK"
   else
-    echo "Backend: FAIL or skipped (install: pip install -e \".[dev]\" then run: unset OFDD_API_KEY && pytest open_fdd/tests/ -v)"
+    echo "Backend: FAIL or skipped (install: pip install -e \".[dev]\" then run: unset OFDD_API_KEY && pytest $pytest_target -v)"
     failed=1
   fi
   echo ""
 
-  # Caddy: validate Caddyfile
+  # Caddy is validated only when interface layer is expected.
+  if [[ "$MODE" != "collector" && "$MODE" != "engine" ]]; then
   echo "--- Caddy (validate Caddyfile) ---"
   if docker run --rm -v "$STACK_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile; then
     echo "Caddy: OK"
@@ -569,6 +602,7 @@ verify_code() {
     failed=1
   fi
   echo ""
+  fi
 
   if [[ $failed -eq 0 ]]; then
     echo "All checks passed."
@@ -576,6 +610,16 @@ verify_code() {
     echo "Some checks failed."
     return 1
   fi
+}
+
+verify_code_for_mode() {
+  local selected_mode="$1"
+  local prev_mode="$MODE"
+  MODE="$selected_mode"
+  verify_code
+  local rc=$?
+  MODE="$prev_mode"
+  return $rc
 }
 
 wait_for_api() {
@@ -782,7 +826,20 @@ fi
 
 if $VERIFY_CODE; then
   check_prereqs
-  verify_code || exit 1
+  if ! $MODE_EXPLICIT && [[ "$MODE" == "full" ]]; then
+    echo "=== Running modular test matrix (collector, model, engine, full) ==="
+    matrix_failed=0
+    for m in collector model engine full; do
+      echo ""
+      echo ">>> MODE: $m"
+      if ! verify_code_for_mode "$m"; then
+        matrix_failed=1
+      fi
+    done
+    [[ $matrix_failed -eq 0 ]] || exit 1
+  else
+    verify_code || exit 1
+  fi
   exit 0
 fi
 
@@ -953,13 +1010,17 @@ fi
 
 cd "$STACK_DIR"
 
-if $MINIMAL; then
-  echo "=== Starting minimal stack (DB + BACnet server + scraper) ==="
-  if $WITH_GRAFANA; then
-    $dc "${DC_PROFILE[@]}" up -d --build db bacnet-server bacnet-scraper grafana
-  else
-    $dc "${DC_PROFILE[@]}" up -d --build db bacnet-server bacnet-scraper
-  fi
+if [[ "$MODE" == "collector" ]]; then
+  echo "=== Starting collector mode (DB + BACnet server + scraper) ==="
+  svc="db bacnet-server bacnet-scraper"
+  $WITH_GRAFANA && svc="$svc grafana"
+  $dc "${DC_PROFILE[@]}" up -d --build $svc
+elif [[ "$MODE" == "model" ]]; then
+  echo "=== Starting model mode (DB + API + frontend + caddy) ==="
+  $dc "${DC_PROFILE[@]}" up -d --build db api frontend caddy
+elif [[ "$MODE" == "engine" ]]; then
+  echo "=== Starting engine mode (DB + FDD + weather loop) ==="
+  $dc "${DC_PROFILE[@]}" up -d --build db fdd-loop weather-scraper
 else
   echo "=== Building and starting full stack ==="
   $dc "${DC_PROFILE[@]}" up -d --build
@@ -975,7 +1036,7 @@ cd "$REPO_ROOT"
 wait_for_postgres_or_die
 apply_migrations_best_effort
 
-if ! $MINIMAL; then
+if [[ "$MODE" == "full" || "$MODE" == "model" ]]; then
   echo ""
   seed_config_via_api || true
 fi
@@ -997,9 +1058,15 @@ fi
 if $WITH_MCP_RAG; then
   echo "  MCP RAG:  http://localhost:8090 (manifest: /manifest; health: /health)"
 fi
-if $MINIMAL; then
+if [[ "$MODE" == "collector" ]]; then
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
-  echo "  (Minimal: raw BACnet data only. No FDD, no weather, no API. Add Grafana with --with-grafana.)"
+  echo "  (Collector mode: raw BACnet data path. No API/FDD unless explicitly started.)"
+elif [[ "$MODE" == "model" ]]; then
+  echo "  API:      http://localhost:8000   (docs: /docs)"
+  echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
+  echo "  (Model mode: knowledge graph and CRUD workflows.)"
+elif [[ "$MODE" == "engine" ]]; then
+  echo "  (Engine mode: FDD and weather loops with DB. No API/frontend by default.)"
 else
   echo "  API:      http://localhost:8000   (docs: /docs)"
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"

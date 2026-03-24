@@ -40,3 +40,10 @@ jobs:
         env:
           OFDD_API_KEY: ""
           OFDD_CADDY_INTERNAL_SECRET: ""
+
+      - name: Build engine package (dry run)
+        working-directory: packages/openfdd-engine
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*

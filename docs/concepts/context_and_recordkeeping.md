@@ -22,6 +22,6 @@ If context affects repeatable operations, store it in versioned docs instead of 
 ## Context anti-patterns
 
 - One-machine-only tribal notes with no repo trace.
-- Secrets in markdown.
+- Secrets in Markdown.
 - Raw transcript dumps without distillation.
 

@@ -110,7 +110,7 @@ Documentation = "https://bbartling.github.io/open-fdd/"
 Repository = "https://github.com/bbartling/open-fdd"
 
 [tool.setuptools.packages.find]
-include = ["open_fdd*"]
+include = ["open_fdd*", "openfdd_engine*"]
 
 [tool.setuptools.package-data]
 open_fdd = ["rules/*.yaml", "platform/static/*"]

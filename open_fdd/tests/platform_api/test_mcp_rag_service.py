@@ -32,7 +32,8 @@ def _write_index(tmp_path: Path) -> Path:
     return p
 
 
-def test_manifest_includes_core_tools():
+def test_manifest_includes_core_tools(monkeypatch):
+    monkeypatch.setattr(mcp_app, "_idx", None)
     client = TestClient(mcp_app.app)
     res = client.get("/manifest")
     assert res.status_code == 200

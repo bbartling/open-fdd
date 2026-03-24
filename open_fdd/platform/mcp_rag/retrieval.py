@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 import json
-import re
 from collections import Counter
 from dataclasses import dataclass
 from math import sqrt
 from pathlib import Path
 from typing import Any
 
-TOKEN_RE = re.compile(r"[a-zA-Z0-9_./:-]{2,}")
-
-
-def tokenize(text: str) -> list[str]:
-    return [t.lower() for t in TOKEN_RE.findall(text)]
+from .text_utils import tokenize
 
 
 @dataclass
@@ -57,6 +52,9 @@ class RagIndex:
             for chunk_id, tf in postings.items():
                 d_w = float(tf) * idf
                 scores[chunk_id] = scores.get(chunk_id, 0.0) + (q_w * d_w)
+                # d_norms here only accumulates squared weights for terms in q_vec,
+                # which is a query-term norm approximation (good for ranking) rather
+                # than the full document-vector norm used in exact cosine similarity.
                 d_norms[chunk_id] = d_norms.get(chunk_id, 0.0) + (d_w * d_w)
 
         out: list[SearchResult] = []

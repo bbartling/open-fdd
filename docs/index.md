@@ -71,6 +71,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 | Section | Description |
 |---------|--------------|
 | [System Overview](overview) | Architecture, services, data flow |
+| [Modular Architecture](modular_architecture) | Collector/Model/Engine/Interface boundaries and mode-based bootstrap matrix. |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
 | [Using the React dashboard](frontend) | Overview, Config, Points, Data model, Faults, Plots, Web weather, System resources |
 | [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |

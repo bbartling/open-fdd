@@ -15,12 +15,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from math import log
 from pathlib import Path
 from typing import Any
+
+from open_fdd.platform.mcp_rag.text_utils import TOKEN_RE, tokenize
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -29,7 +30,6 @@ DEFAULT_DOCS_DIR = REPO_ROOT / "docs"
 DEFAULT_DOCS_TXT = REPO_ROOT / "pdf" / "open-fdd-docs.txt"
 DEFAULT_OUTPUT = REPO_ROOT / "stack" / "mcp-rag" / "index" / "rag_index.json"
 
-TOKEN_RE = re.compile(r"[a-zA-Z0-9_./:-]{2,}")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 
 
@@ -41,10 +41,6 @@ class Chunk:
     content: str
     tags: list[str]
     endpoint_refs: list[str]
-
-
-def tokenize(text: str) -> list[str]:
-    return [t.lower() for t in TOKEN_RE.findall(text)]
 
 
 def extract_endpoints(text: str) -> list[str]:
@@ -133,7 +129,7 @@ def read_text_chunks(path: Path, chunk_size: int) -> list[Chunk]:
 def read_openapi_chunks(path: Path) -> list[Chunk]:
     try:
         spec = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return []
     chunks: list[Chunk] = []
     paths = spec.get("paths", {}) if isinstance(spec, dict) else {}

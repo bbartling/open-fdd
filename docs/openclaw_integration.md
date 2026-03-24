@@ -64,6 +64,19 @@ This sidecar provides retrieval-focused tools over derived index artifacts from 
 
 ---
 
+## 1d) Mode-aware orchestration with bootstrap
+
+OpenClaw can orchestrate partial deployments through bootstrap modes:
+
+- `./scripts/bootstrap.sh --mode full` (default)
+- `./scripts/bootstrap.sh --mode collector`
+- `./scripts/bootstrap.sh --mode model`
+- `./scripts/bootstrap.sh --mode engine`
+
+This enables targeted runs (for example model-only SPARQL work or engine-only rule validation) without always launching the full stack.
+
+---
+
 ## 2) Automated Brick tagging loop
 
 For automated tagging, use the same underlying workflow as manual export/import:

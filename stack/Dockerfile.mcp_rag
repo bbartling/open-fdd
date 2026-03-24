@@ -2,6 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN groupadd --system appuser && useradd --system --gid appuser --home-dir /app appuser
+
 COPY pyproject.toml README.md /app/
 COPY open_fdd /app/open_fdd
 COPY scripts /app/scripts
@@ -9,7 +11,9 @@ COPY docs /app/docs
 COPY pdf /app/pdf
 COPY stack /app/stack
 
-RUN pip install --no-cache-dir -e ".[platform]"
+RUN pip install --no-cache-dir ".[platform]" && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8090
 

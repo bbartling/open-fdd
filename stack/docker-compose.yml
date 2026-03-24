@@ -260,7 +260,7 @@ services:
       api:
         condition: service_started
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8090/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).read()"]
       interval: 10s
       timeout: 5s
       retries: 5

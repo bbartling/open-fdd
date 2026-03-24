@@ -15,7 +15,11 @@ INDEX_PATH = Path(os.getenv("OFDD_MCP_RAG_INDEX_PATH", "/app/stack/mcp-rag/index
 OFDD_API_URL = os.getenv("OFDD_MCP_OFDD_API_URL", "http://api:8000").rstrip("/")
 OFDD_API_KEY = os.getenv("OFDD_MCP_OFDD_API_KEY", "")
 ENABLE_ACTION_TOOLS = os.getenv("OFDD_MCP_ENABLE_ACTION_TOOLS", "false").lower() == "true"
-TIMEOUT = float(os.getenv("OFDD_MCP_HTTP_TIMEOUT_SEC", "20"))
+_timeout_value = os.getenv("OFDD_MCP_HTTP_TIMEOUT_SEC")
+try:
+    TIMEOUT = float(_timeout_value) if _timeout_value is not None else 20.0
+except ValueError:
+    TIMEOUT = 20.0
 
 app = FastAPI(title="Open-FDD MCP RAG Service", version="1.0.0")
 _idx: RagIndex | None = None
@@ -64,6 +68,25 @@ def _require_action_tools() -> None:
         raise HTTPException(status_code=403, detail="Action tools disabled.")
 
 
+def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:
+    return {
+        "query": query,
+        "count": len(rows),
+        "results": [
+            {
+                "chunk_id": r.chunk_id,
+                "score": round(r.score, 5),
+                "source": r.source,
+                "section": r.section,
+                "content": r.content,
+                "endpoint_refs": r.endpoint_refs,
+                "tags": r.tags,
+            }
+            for r in rows
+        ],
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {
@@ -96,22 +119,7 @@ def manifest() -> dict[str, Any]:
 def search_docs(req: SearchDocsRequest) -> dict[str, Any]:
     idx = _load_index()
     rows = idx.search(req.query, top_k=req.top_k, tags=req.tags)
-    return {
-        "query": req.query,
-        "count": len(rows),
-        "results": [
-            {
-                "chunk_id": r.chunk_id,
-                "score": round(r.score, 5),
-                "source": r.source,
-                "section": r.section,
-                "content": r.content,
-                "endpoint_refs": r.endpoint_refs,
-                "tags": r.tags,
-            }
-            for r in rows
-        ],
-    }
+    return _serialize_results(req.query, rows)
 
 
 @app.post("/tools/get_doc_section")
@@ -127,22 +135,7 @@ def get_doc_section(req: GetSectionRequest) -> dict[str, Any]:
 def search_api_capabilities(req: SearchDocsRequest) -> dict[str, Any]:
     idx = _load_index()
     rows = idx.search(req.query, top_k=req.top_k, tags=["api"])
-    return {
-        "query": req.query,
-        "count": len(rows),
-        "results": [
-            {
-                "chunk_id": r.chunk_id,
-                "score": round(r.score, 5),
-                "source": r.source,
-                "section": r.section,
-                "content": r.content,
-                "endpoint_refs": r.endpoint_refs,
-                "tags": r.tags,
-            }
-            for r in rows
-        ],
-    }
+    return _serialize_results(req.query, rows)
 
 
 @app.post("/tools/get_operator_playbook")
@@ -160,7 +153,12 @@ def get_operator_playbook(req: PlaybookRequest) -> dict[str, Any]:
 @app.post("/tools/export_data_model")
 def export_data_model() -> dict[str, Any]:
     _require_action_tools()
-    resp = requests.get(f"{OFDD_API_URL}/data-model/export", headers=_headers(), timeout=TIMEOUT)
+    try:
+        resp = requests.get(
+            f"{OFDD_API_URL}/data-model/export", headers=_headers(), timeout=TIMEOUT
+        )
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json()
@@ -169,12 +167,15 @@ def export_data_model() -> dict[str, Any]:
 @app.post("/tools/import_data_model")
 def import_data_model(req: ImportRequest) -> dict[str, Any]:
     _require_action_tools()
-    resp = requests.put(
-        f"{OFDD_API_URL}/data-model/import",
-        headers={**_headers(), "Content-Type": "application/json"},
-        json=req.payload,
-        timeout=TIMEOUT,
-    )
+    try:
+        resp = requests.put(
+            f"{OFDD_API_URL}/data-model/import",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json=req.payload,
+            timeout=TIMEOUT,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json() if resp.text else {"ok": True}
@@ -183,12 +184,15 @@ def import_data_model(req: ImportRequest) -> dict[str, Any]:
 @app.post("/tools/rules_sync_definitions")
 def rules_sync_definitions() -> dict[str, Any]:
     _require_action_tools()
-    resp = requests.post(
-        f"{OFDD_API_URL}/rules/sync-definitions",
-        headers={**_headers(), "Content-Type": "application/json"},
-        json={},
-        timeout=TIMEOUT,
-    )
+    try:
+        resp = requests.post(
+            f"{OFDD_API_URL}/rules/sync-definitions",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json={},
+            timeout=TIMEOUT,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json() if resp.text else {"ok": True}
@@ -197,12 +201,15 @@ def rules_sync_definitions() -> dict[str, Any]:
 @app.post("/tools/sparql_validate")
 def sparql_validate(req: SparqlRequest) -> dict[str, Any]:
     _require_action_tools()
-    resp = requests.post(
-        f"{OFDD_API_URL}/data-model/sparql",
-        headers={**_headers(), "Content-Type": "application/json"},
-        json={"query": req.query},
-        timeout=TIMEOUT,
-    )
+    try:
+        resp = requests.post(
+            f"{OFDD_API_URL}/data-model/sparql",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json={"query": req.query},
+            timeout=TIMEOUT,
+        )
+    except requests.exceptions.RequestException as exc:
+        raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json()
