@@ -21,7 +21,8 @@ These are **workflow labels**, not separate Docker products. Pick commands to ma
 | [`bench/scripts/`](bench/scripts/) | Small helpers (e.g. fault schedule monitor). |
 | [`bench/e2e/`](bench/e2e/) | Optional Selenium / long-run Python suites (`requirements-e2e.txt`). |
 | [`bench/fixtures/`](bench/fixtures/) | Sample LLM/import JSON payloads for testing. |
-| [`bench/rules_lab/README.md`](bench/rules_lab/README.md) | Points to **canonical** FDD rule YAML in the stack—no duplicate rule tree. |
+| [`bench/rules_lab/README.md`](bench/rules_lab/README.md) | Canonical live rules live under **`stack/rules/`** (not duplicated here). |
+| [`bench/rules_reference/`](bench/rules_reference/) | Reference YAML (AHU FC, chillers, weather, …) for docs and lab; see [Test bench rule catalog](../docs/rules/test_bench_rule_catalog.md). |
 | [`windows/`](windows/) | Example `.cmd` wrappers (edit URLs/paths for your host). |
 | [`dashboard/`](dashboard/) | Static operator progress UI; `progress.json` is gitignored. |
 | [`reports/`](reports/) | Templates + README; dated summaries gitignored by default. |

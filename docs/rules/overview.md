@@ -23,6 +23,8 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 
 Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
 
+**Reference rule library (not loaded by default):** Additional AHU, chiller, heat-pump, and weather YAML examples used for lab automation and docs live under **`openclaw/bench/rules_reference/`** in the repo. See the [Test bench rule catalog](test_bench_rule_catalog) for a table of every file with GitHub links.
+
 ---
 
 ## Hot reload (edit → run → view)

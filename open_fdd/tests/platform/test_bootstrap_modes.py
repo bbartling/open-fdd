@@ -9,6 +9,7 @@ def test_bootstrap_help_lists_mode_flag():
         check=False,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert res.returncode == 0
     assert "--mode MODE" in res.stdout
@@ -25,7 +26,9 @@ def test_bootstrap_rejects_invalid_mode():
         check=False,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert res.returncode == 1
-    assert "Invalid --mode" in res.stdout
+    out = (res.stdout or "") + (res.stderr or "")
+    assert "Invalid --mode" in out
 

@@ -1,0 +1,64 @@
+# Sensor bounds check — fault if value outside valid range for sensor type
+# Pass params={"units": "metric"} to run() for metric bounds
+# BRICK: column_map keys use Brick class names for Brick model resolution
+name: bad_sensor_check
+description: Returns fault if sensor is out of range
+type: bounds
+flag: bad_sensor_flag
+
+params:
+  units: imperial   # override at runtime: params={"units": "metric"}
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 150]    # degF
+      metric: [4, 66]        # degC
+  Zone_Temperature_Sensor:
+    brick: Zone_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 100]
+      metric: [4, 38]
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    bounds:
+      imperial: [-40, 120]
+      metric: [-40, 49]
+  Humidity_Sensor:
+    brick: Humidity_Sensor
+    bounds: [0, 100]   # same for both
+  Chilled_Water_Supply_Temperature_Sensor:
+    brick: Chilled_Water_Supply_Temperature_Sensor
+    bounds:
+      imperial: [35, 100]    # degF
+      metric: [2, 38]        # degC
+  Hot_Water_Supply_Temperature_Sensor:
+    brick: Hot_Water_Supply_Temperature_Sensor
+    bounds:
+      imperial: [50, 212]
+      metric: [10, 100]
+  Condenser_Water_Temperature_Sensor:
+    brick: Condenser_Water_Temperature_Sensor
+    bounds:
+      imperial: [50, 110]
+      metric: [10, 43]
+  CO2_Sensor:
+    brick: CO2_Sensor
+    bounds: [400, 2000]   # same for both
+  # Air pressure (inH2O vs Pa) — use column that matches your data
+  Discharge_Air_Static_Pressure_Sensor:
+    brick: Discharge_Air_Static_Pressure_Sensor
+    bounds:
+      imperial: [-5, 10]    # inH2O
+      metric: [-1244, 2488] # Pa

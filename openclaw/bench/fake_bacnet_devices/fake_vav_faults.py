@@ -100,7 +100,7 @@ class FakeVAVApplication:
         # Scheduled fault: hold last value for flatline (ZoneTemp only, polled)
         self._zt_flatline_value: float | None = None
 
-        asyncio.create_task(self.update_values())
+        self._update_task = asyncio.create_task(self.update_values())
 
     def _scheduled_zone_temp(self, normal_value: float, zt_obj: AnalogInputObject) -> tuple[float, str]:
         """
@@ -122,9 +122,7 @@ class FakeVAVApplication:
         while True:
             await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
             print("=" * 60)
-            print(
-                "Fake VAV – updating sensor/loop values (scheduled faults on ZoneTemp)"
-            )
+            print("Fake VAV - updating sensor/loop values (scheduled faults on ZoneTemp)")
 
             zt = self.points["ZoneTemp"]
             zsp = self.points["ZoneCoolingSpt"]
@@ -169,14 +167,26 @@ class FakeVAVApplication:
             print(f"VAVFlowSpt:     {vfsp.presentValue:.1f} cfm")
             print(f"VAVDamperCmd:   {damper.presentValue:.1f} %")
 
+    async def stop(self) -> None:
+        t = getattr(self, "_update_task", None)
+        if t is not None and not t.done():
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+
 
 async def main():
     logging.basicConfig(level=logging.INFO)
     args = SimpleArgumentParser().parse_args()
     logging.info("args: %r", args)
 
-    FakeVAVApplication(args)
-    await asyncio.Future()  # run forever
+    app = FakeVAVApplication(args)
+    try:
+        await asyncio.Future()  # run forever
+    finally:
+        await app.stop()
 
 
 if __name__ == "__main__":

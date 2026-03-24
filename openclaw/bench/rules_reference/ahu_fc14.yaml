@@ -1,0 +1,27 @@
+# Rule L — Cooling coil delta-T when inactive (GL36-inspired)
+# Requires cooling coil entering/leaving temp sensors (not all AHUs have these)
+name: cooling_coil_drop_when_inactive
+description: Temperature drop across inactive cooling coil in heating/economizer modes
+type: expression
+flag: rule_l_flag
+equipment_type: [AHU, VAV_AHU]  # requires Cooling_Coil_Entering/Leaving_Air_Temperature_Sensor
+
+inputs:
+  Cooling_Coil_Entering_Air_Temperature_Sensor:
+    brick: Cooling_Coil_Entering_Air_Temperature_Sensor
+  Cooling_Coil_Leaving_Air_Temperature_Sensor:
+    brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
+  Heating_Valve_Command:
+    brick: Valve_Command
+  Cooling_Valve_Command:
+    brick: Valve_Command
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+
+params:
+  coil_enter_err_thres: 1.0
+  coil_leave_err_thres: 1.0
+  ahu_min_oa_dpr: 0.1
+
+expression: |
+  ((Cooling_Coil_Entering_Air_Temperature_Sensor - Cooling_Coil_Leaving_Air_Temperature_Sensor) > np.sqrt(coil_enter_err_thres**2 + coil_leave_err_thres**2)) & (((Heating_Valve_Command > 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command <= ahu_min_oa_dpr)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > ahu_min_oa_dpr)))

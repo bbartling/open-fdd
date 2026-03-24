@@ -577,7 +577,7 @@ def bacnet_add_to_model_via_ui(
         print(f"  BACnet discovery: device {device_instance} added to graph (Data Model page).")
         log_browser_console(driver, f"bacnet-add-to-model-{device_instance}")
         return True
-    print(f"  BACnet discovery: Add to data model failed (check BACnet gateway / OFDD_BACNET_SERVER_URL).")
+    print("  BACnet discovery: Add to data model failed (check BACnet gateway / OFDD_BACNET_SERVER_URL).")
     log_browser_console(driver, f"bacnet-add-to-model-{device_instance}")
     return False
 
@@ -1238,11 +1238,13 @@ def validate_plots_chart_has_data(
             print("  Plots: chart has data (path d length > 20).")
         else:
             print("  Plots: chart rendered (path present).")
-    except Exception:
+    except Exception as e:
         if "No point data" in (driver.page_source or "") or "Select points" in (driver.page_source or ""):
             print("  Plots: chart area rendered (no timeseries data in range yet).")
         else:
-            raise AssertionError("Plots page: no chart curve/path and no 'no data' message found.")
+            raise AssertionError(
+                "Plots page: no chart curve/path and no 'no data' message found."
+            ) from e
     # Units from data model must appear on Plots (legend shows "label unit", e.g. SA-T degF)
     page_src = driver.page_source or ""
     if "degF" not in page_src and "percent" not in page_src and "cfm" not in page_src:
@@ -1277,134 +1279,6 @@ def validate_plots_chart_has_data(
     if api_url and site_id:
         # Print DB sensor + fault data that the Plots tab should be using, so we can
         # see both together in the Python console for this site.
-        print_sample_timeseries_and_faults(api_url, site_id)
-    log_browser_console(driver, "plots")
-
-
-# Re-define Plots selectors for the Plotly + device/points/faults dropdown UI.
-def select_known_point(
-    driver: webdriver.Chrome,
-    preference: list[str],
-    timeout: float = ELEMENT_WAIT,
-) -> str | None:
-    wait = WebDriverWait(driver, timeout)
-    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
-    for name in preference:
-        opts = driver.find_elements(
-            By.XPATH,
-            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
-        )
-        if opts:
-            opts[0].click()
-            print(f"  Plots: selected point {name!r}.")
-            return name
-    point_options = driver.find_elements(
-        By.XPATH,
-        "//label[contains(., 'Points')]/following-sibling::select/option",
-    )
-    if point_options:
-        point_options[0].click()
-        print("  Plots: selected first available point (fallback).")
-        return "first_available"
-    return None
-
-
-def select_second_point_different_unit(
-    driver: webdriver.Chrome,
-    preference: tuple[str, ...] = SECOND_POINT_DIFFERENT_UNIT,
-    timeout: float = ELEMENT_WAIT,
-) -> bool:
-    wait = WebDriverWait(driver, timeout)
-    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
-    for name in preference:
-        opts = driver.find_elements(
-            By.XPATH,
-            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
-        )
-        if opts:
-            opts[0].click()
-            time.sleep(0.3)
-            print(f"  Plots: added second point {name!r}.")
-            return True
-    return False
-
-
-def select_fault_on_plots(
-    driver: webdriver.Chrome,
-    preference: tuple[str, ...] = EXPECTED_FAULT_IDS,
-    timeout: float = ELEMENT_WAIT,
-) -> bool:
-    try:
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Faults')]"))
-        )
-        all_opts = driver.find_elements(
-            By.XPATH, "//label[contains(., 'Faults')]/following-sibling::select/option"
-        )
-        if not all_opts:
-            return False
-        for fault_id in preference:
-            opts = driver.find_elements(
-                By.XPATH,
-                f"//label[contains(., 'Faults')]/following-sibling::select/option[contains(., '{fault_id}')]",
-            )
-            if opts:
-                opts[0].click()
-                print(f"  Plots: selected fault {fault_id!r}.")
-                return True
-        all_opts[0].click()
-        print("  Plots: selected first available fault (fallback).")
-        return True
-    except Exception:
-        return False
-
-
-def validate_plots_chart_has_data(
-    driver: webdriver.Chrome,
-    base_url: str,
-    site_name: str,
-    api_url: str | None = None,
-    site_id: str | None = None,
-) -> None:
-    if api_url:
-        run_faults_db_check(api_url)
-    driver.get(f"{base_url}/plots")
-    if "Select a site" in (driver.page_source or ""):
-        select_site_in_topbar(driver, site_name)
-    else:
-        select_site_in_topbar(driver, site_name)
-
-    wait_for_element(
-        driver,
-        By.XPATH,
-        "//*[contains(text(), 'Load Data from Database')]",
-        timeout=ELEMENT_WAIT,
-    )
-    preference = list(EXPECTED_POINT_NAMES) + list(FALLBACK_POINT_NAMES)
-    first = select_known_point(driver, preference)
-    if not first:
-        raise AssertionError("Plots page: no selectable point found for device.")
-    second_point_added = select_second_point_different_unit(driver)
-    fault_selected = select_fault_on_plots(driver)
-    safe_click(driver, By.XPATH, "//button[contains(., 'Load Data from Database')]")
-    time.sleep(1.0)
-
-    wait_chart = WebDriverWait(driver, CHART_DATA_WAIT)
-    wait_chart.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, ".js-plotly-plot, [data-testid='plots-chart-container']")
-        )
-    )
-    page_src = driver.page_source or ""
-    if "degF" not in page_src and "percent" not in page_src and "cfm" not in page_src:
-        raise AssertionError("Plots: expected at least one unit to appear (degF/percent/cfm).")
-    if second_point_added:
-        print("  Plots: second point selected (multi-series check).")
-    if fault_selected:
-        print("  Frontend showing faults in Plots: yes (fault selected).")
-    else:
-        print("  Frontend showing faults in Plots: no (no fault options for device).")
-    if api_url and site_id:
         print_sample_timeseries_and_faults(api_url, site_id)
     log_browser_console(driver, "plots")
 

@@ -38,7 +38,6 @@ import requests
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FAKE_DIR = REPO_ROOT / "fake_bacnet_devices"
 DEFAULT_BACNET_URL = "http://192.168.204.16:8080"
-OUT_OF_BOUNDS_VALUE = 180.0
 
 
 @dataclass(frozen=True)
@@ -83,15 +82,36 @@ def rpc_read_property(base_url: str, device_instance: int, object_identifier: st
     }
     r = requests.post(f"{base_url.rstrip('/')}/client_read_property", json=payload, timeout=20)
     r.raise_for_status()
-    body: dict[str, Any] = r.json()
-    return float(body["result"]["present-value"])
+    try:
+        body = r.json()
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"BACnet RPC returned non-JSON (HTTP {r.status_code}): {r.text[:300]!r}"
+        ) from e
+    if not isinstance(body, dict):
+        raise ValueError(f"BACnet RPC JSON root must be object, got {type(body).__name__}")
+    res = body.get("result")
+    if not isinstance(res, dict) or "present-value" not in res:
+        raise ValueError(
+            f"BACnet RPC missing result.present-value (HTTP {r.status_code}): {body!r}"
+        )
+    try:
+        return float(res["present-value"])
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"present-value not numeric: {res.get('present-value')!r}") from e
 
 
-def judge_value(point: PointSpec, mode: str, current: float, previous: float | None) -> tuple[str, str]:
+def judge_value(
+    point: PointSpec,
+    mode: str,
+    current: float,
+    previous: float | None,
+    out_of_bounds_value: float,
+) -> tuple[str, str]:
     if mode == "bounds":
-        if abs(current - OUT_OF_BOUNDS_VALUE) < 0.001:
-            return "PASS", f"matches scheduled bounds value {OUT_OF_BOUNDS_VALUE:.1f} F"
-        return "FAIL", f"expected scheduled bounds value {OUT_OF_BOUNDS_VALUE:.1f} F but saw {current:.3f}"
+        if abs(current - out_of_bounds_value) < 0.001:
+            return "PASS", f"matches scheduled bounds value {out_of_bounds_value:.1f} F"
+        return "FAIL", f"expected scheduled bounds value {out_of_bounds_value:.1f} F but saw {current:.3f}"
 
     if mode == "flatline":
         if previous is None:
@@ -104,7 +124,7 @@ def judge_value(point: PointSpec, mode: str, current: float, previous: float | N
     if point.expected_normal_min is not None and point.expected_normal_max is not None:
         if point.expected_normal_min <= current <= point.expected_normal_max:
             return "PASS", f"within rough normal bench band {point.expected_normal_min:.1f}-{point.expected_normal_max:.1f}"
-        if abs(current - OUT_OF_BOUNDS_VALUE) < 0.001:
+        if abs(current - out_of_bounds_value) < 0.001:
             return "WARN", "still at out-of-bounds marker outside scheduled bounds window"
         return "WARN", f"outside rough normal bench band {point.expected_normal_min:.1f}-{point.expected_normal_max:.1f}"
     return "INFO", "no normal range heuristic defined"
@@ -118,6 +138,7 @@ def main() -> int:
     args = parser.parse_args()
 
     sched = _load_fault_schedule_module()
+    oob = float(sched.OUT_OF_BOUNDS_VALUE)
     now_utc = datetime.now(timezone.utc)
     minute = now_utc.minute
     mode = sched.scheduled_mode(minute)
@@ -129,7 +150,13 @@ def main() -> int:
         if mode == "flatline":
             time.sleep(args.second_sample_delay)
             second = rpc_read_property(args.bacnet_url, point.device_instance, point.object_identifier)
-        status, note = judge_value(point, mode, second if second is not None else first, first if second is not None else None)
+        status, note = judge_value(
+            point,
+            mode,
+            second if second is not None else first,
+            first if second is not None else None,
+            oob,
+        )
         rows.append(
             {
                 "point": point.label,
@@ -176,4 +203,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except KeyboardInterrupt:
         print("Interrupted", file=sys.stderr)
-        raise SystemExit(130)
+        raise SystemExit(130) from None

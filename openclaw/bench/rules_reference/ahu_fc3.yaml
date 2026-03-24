@@ -1,0 +1,25 @@
+# Rule C — Blended air temp above expected band (GL36-inspired)
+# MAT should be between OAT and RAT; fault if MAT > max(OAT, RAT)
+name: mix_temp_too_high
+description: Mix temperature too high; should be between outside and return air
+type: expression
+flag: rule_c_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+
+params:
+  mix_err_thres: 1.0
+  return_err_thres: 1.0
+  outdoor_err_thres: 1.0
+
+expression: |
+  (Mixed_Air_Temperature_Sensor - mix_err_thres > np.maximum(Return_Air_Temperature_Sensor + return_err_thres, Outside_Air_Temperature_Sensor + outdoor_err_thres)) & (Supply_Fan_Speed_Command > 0.01)

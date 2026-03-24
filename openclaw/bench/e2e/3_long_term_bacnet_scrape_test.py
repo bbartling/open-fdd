@@ -32,6 +32,7 @@ Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytes
 
 import csv
 import io
+import logging
 import os
 import sys
 import time
@@ -199,7 +200,7 @@ def _request(method: str, path: str, json_body: dict | None = None):
 
 def put_config_interval(interval_min: int) -> bool:
     """PUT /config with bacnet_scrape_interval_min. Returns True if 200."""
-    code, body = _request("PUT", "/config", json_body={"bacnet_scrape_interval_min": interval_min})
+    code, _ = _request("PUT", "/config", json_body={"bacnet_scrape_interval_min": interval_min})
     return code == 200
 
 
@@ -360,7 +361,8 @@ def _check_expected_faults_for_phase(phase_end_utc: datetime, site_identifier: s
                         fault_ts.append(datetime.fromisoformat(ts.replace("Z", "+00:00")))
                     else:
                         fault_ts.append(datetime.fromisoformat(ts).replace(tzinfo=timezone.utc))
-                except Exception:
+                except Exception as exc:
+                    logging.warning("skip malformed fault ts=%r: %s", ts, exc)
                     continue
             else:
                 fault_ts.append(ts)
@@ -765,7 +767,6 @@ def main() -> int:
         except Exception:
             api_url = None
     if api_url:
-        global _API_BASE_OVERRIDE
         _API_BASE_OVERRIDE = api_url
 
     if (config_via_frontend or check_faults_via_frontend) and not frontend_url:
@@ -798,7 +799,7 @@ def main() -> int:
         # Startup: require API reachable and auth if key is set
         api_base = _API_BASE_OVERRIDE if _API_BASE_OVERRIDE is not None else BASE_URL
         try:
-            code, body = _request("GET", "/config")
+            code, _ = _request("GET", "/config")
         except Exception as e:
             err = str(e).lower()
             if "refused" in err or "connection" in err or "10061" in err:
@@ -843,9 +844,9 @@ def main() -> int:
         cycle = 0
         while True:
             cycle += 1
-            print(f"\n=======================")
+            print("\n=======================")
             print(f"=== Cycle {cycle} ===")
-            print(f"=======================\n")
+            print("=======================\n")
 
             for interval_min, duration_sec, min_ts, max_ts in selected_phases:
                 print(f"--- Phase: {interval_min} min interval ---")

@@ -195,7 +195,7 @@ class FakeAHUApplication:
         # Scheduled fault state: hold last value for flatline (per polled point)
         self._flatline_value: dict[str, float] = {}  # point_name -> stuck value
 
-        asyncio.create_task(self.update_values())
+        self._update_task = asyncio.create_task(self.update_values())
 
     def _scheduled_sensor_value(
         self, point_name: str, normal_value: float, obj: AnalogInputObject
@@ -224,7 +224,7 @@ class FakeAHUApplication:
         while True:
             await asyncio.sleep(UPDATE_INTERVAL_SECONDS)
             print("=" * 60)
-            print("Fake AHU – updating sensor values (scheduled faults on SA-T, RA-T, MA-T)")
+            print("Fake AHU - updating sensor values (scheduled faults on SA-T, RA-T, MA-T)")
 
             for name, obj in self.points.items():
                 if isinstance(obj, AnalogInputObject):
@@ -264,14 +264,26 @@ class FakeAHUApplication:
                         pv = "<no presentValue>"
                     print(f"CMD {name}: {pv}")
 
+    async def stop(self) -> None:
+        t = getattr(self, "_update_task", None)
+        if t is not None and not t.done():
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+
 
 async def main():
     logging.basicConfig(level=logging.INFO)
     args = SimpleArgumentParser().parse_args()
     logging.info("args: %r", args)
 
-    FakeAHUApplication(args)
-    await asyncio.Future()  # run forever
+    app = FakeAHUApplication(args)
+    try:
+        await asyncio.Future()  # run forever
+    finally:
+        await app.stop()
 
 
 if __name__ == "__main__":

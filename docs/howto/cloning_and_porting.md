@@ -47,7 +47,7 @@ That means the repo carries the reusable process, while the live Open-FDD model 
    - BACnet devices
    - representative outdoor / plant / air / zone points
 4. Let the model decide what should be checked at that site.
-5. Keep repo docs generic; put site-specific truth into the Open-FDD model instead of hard-coding it into markdown.
+5. Keep repo docs generic; put site-specific truth into the Open-FDD model instead of hard-coding it into Markdown.
 
 ## Recommended first-pass deployment flow for a new building
 

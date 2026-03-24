@@ -9,7 +9,7 @@ from typing import Annotated, Any
 import requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .retrieval import RagIndex
 
@@ -32,6 +32,15 @@ class SearchDocsRequest(BaseModel):
     query: str
     top_k: int = Field(default=6, ge=1, le=25)
     tags: list[str] | None = None
+
+
+class SearchApiCapabilitiesRequest(BaseModel):
+    """Query/top_k only; tags are always forced to ['api'] for this endpoint."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    query: str
+    top_k: int = Field(default=6, ge=1, le=25)
 
 
 class GetSectionRequest(BaseModel):
@@ -162,7 +171,8 @@ def get_doc_section(req: GetSectionRequest) -> dict[str, Any]:
 
 
 @app.post("/tools/search_api_capabilities")
-def search_api_capabilities(req: SearchDocsRequest) -> dict[str, Any]:
+def search_api_capabilities(req: SearchApiCapabilitiesRequest) -> dict[str, Any]:
+    """Search indexed API/OpenAPI chunks only (tags fixed to api)."""
     idx = _load_index()
     rows = idx.search(req.query, top_k=req.top_k, tags=["api"])
     return _serialize_results(req.query, rows)
@@ -190,6 +200,8 @@ def export_data_model() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    if not (resp.text or "").strip():
+        return {"ok": True}
     return resp.json()
 
 
@@ -238,5 +250,7 @@ def sparql_validate(req: SparqlRequest) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    if not (resp.text or "").strip():
+        return {"ok": True}
     return resp.json()
 

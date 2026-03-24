@@ -15,7 +15,7 @@ Minute-of-hour (UTC) 0-59:
   - 55-59: normal
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 Mode = Literal["normal", "flatline", "bounds"]
@@ -59,8 +59,6 @@ def expected_fault_windows_utc(start_dt: datetime, end_dt: datetime) -> dict[str
     bounds_windows: list[tuple[datetime, datetime]] = []
 
     # Walk hour by hour in range; for each hour, add 10-49 as flatline and 50-54 as bounds
-    from datetime import timedelta
-
     t = start_dt.replace(minute=0, second=0, microsecond=0)
     while t < end_dt:
         hour_end = t + timedelta(hours=1)

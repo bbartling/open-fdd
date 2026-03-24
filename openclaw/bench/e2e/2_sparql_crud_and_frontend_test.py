@@ -162,8 +162,12 @@ def _load_stack_env() -> None:
         repo_root / "stack" / ".env",
         Path(os.getcwd()) / ".env",
         SCRIPT_DIR / ".env",
-        Path(r"C:\Users\ben\.openclaw\workspace\open-fdd\stack\.env"),
     ]
+    extra = os.environ.get("OPENCLAW_STACK_ENV", "").strip()
+    if extra:
+        candidate_envs.append(Path(extra))
+    home_stack = Path.home() / ".openclaw" / "workspace" / "open-fdd" / "stack" / ".env"
+    candidate_envs.append(home_stack)
     for env_path in candidate_envs:
         _load_env_file(str(env_path))
 
@@ -172,8 +176,8 @@ _load_stack_env()
 
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 
-# Overridden in main() from --http-timeout (SPARQL on large graphs can exceed 30s).
-_HTTP_TIMEOUT_SEC = 120.0
+# Mutable container so main() can set timeout without `global` (SPARQL on large graphs can exceed 30s).
+_HTTP_TIMEOUT_SEC: dict[str, float] = {"sec": 120.0}
 
 
 def _format_api_error(body: dict | list | None, fallback_text: str = "") -> str:
@@ -217,7 +221,7 @@ def _request(
             url,
             json=json_body,
             headers=headers or None,
-            timeout=_HTTP_TIMEOUT_SEC,
+            timeout=_HTTP_TIMEOUT_SEC["sec"],
             # Avoid Windows proxy/env SSL quirks and long hangs loading CA store (e.g. Python 3.14).
             trust_env=False,
         )
@@ -346,7 +350,7 @@ def _run_sparql_upload_api(api_url: str, path: Path) -> tuple[bool, list[dict], 
                 url,
                 files=files,
                 headers=headers or None,
-                timeout=_HTTP_TIMEOUT_SEC,
+                timeout=_HTTP_TIMEOUT_SEC["sec"],
                 trust_env=False,
             )
         except httpx.RequestError as e:
@@ -1175,7 +1179,6 @@ def _append_sparql_file_report(
 
 
 def main() -> int:
-    global _HTTP_TIMEOUT_SEC
     (
         api_url,
         frontend_url,
@@ -1209,13 +1212,13 @@ def main() -> int:
     if frontend_parity and not frontend_url:
         print("--frontend-parity requires --frontend-url", file=sys.stderr)
         return 1
-    _HTTP_TIMEOUT_SEC = http_timeout_sec
+    _HTTP_TIMEOUT_SEC["sec"] = http_timeout_sec
     if not api_url:
         api_url = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
         print(f"Using API URL: {api_url} (set --api-url or BASE_URL to override)")
     else:
         print(f"API URL: {api_url}")
-    print(f"HTTP timeout: {_HTTP_TIMEOUT_SEC}s (override with --http-timeout)")
+    print(f"HTTP timeout: {_HTTP_TIMEOUT_SEC['sec']}s (override with --http-timeout)")
 
     if predefined_buttons_only:
         sparql_files: list[Path] = []
@@ -1401,7 +1404,7 @@ def main() -> int:
                         failed += 1
                         print("         (running textarea path anyway)")
                     else:
-                        print(f"         Frontend (file upload) OK")
+                        print("         Frontend (file upload) OK")
                 ok_f, fe_bindings, err_f = _run_with_single_retry(
                     _run_sparql_via_frontend, driver, frontend_url, query
                 )
@@ -1415,7 +1418,7 @@ def main() -> int:
                     if not _assert_bindings_match(ref_fe_ta, fe_bindings, "Frontend (textarea)"):
                         failed += 1
                     else:
-                        print(f"         Frontend (textarea) OK")
+                        print("         Frontend (textarea) OK")
             if driver and (frontend_parity and frontend_url):
                 errs = _get_console_errors(driver)
                 if errs:
@@ -1465,7 +1468,7 @@ def main() -> int:
                 failed += 1
                 print("         (running textarea path anyway)")
             else:
-                print(f"         Frontend (file upload) OK")
+                print("         Frontend (file upload) OK")
 
             # 2) Via textarea (like a human typing/pasting SPARQL into the form)
             ok_f, fe_bindings, err_f = _run_with_single_retry(
@@ -1491,7 +1494,7 @@ def main() -> int:
                     report_data, path, name, rec_status, rec_err, rec_rows, t0
                 )
                 continue
-            print(f"         Frontend (textarea) OK")
+            print("         Frontend (textarea) OK")
         if driver and (frontend_parity and frontend_url):
             errs = _get_console_errors(driver)
             if errs:

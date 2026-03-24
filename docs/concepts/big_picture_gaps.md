@@ -34,7 +34,7 @@ Suggested improvement:
 - clarify this distinction more aggressively in UI/docs
 - keep repeating that full empty-state requires deleting all sites via CRUD first
 
-### 3. Rule-aware minimal polling is a big value lever
+### 3. Rule-aware minimal polling is a high-impact lever
 
 The testing/modeling flow should emphasize that only points needed by active rules should be polled.
 

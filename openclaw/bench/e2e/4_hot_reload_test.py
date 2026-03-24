@@ -80,8 +80,13 @@ def _request(api_url: str, method: str, path: str, json_body: dict | None = None
     r = httpx.request(method, url, json=json_body, headers=headers or None, timeout=30.0)
     try:
         body = r.json()
-    except Exception:
-        body = {}
+    except Exception as e:
+        raw = (r.text or "")[:500]
+        body = {
+            "_json_error": str(e),
+            "_raw_preview": raw,
+            "_status_code": r.status_code,
+        }
     return r.status_code, body
 
 
