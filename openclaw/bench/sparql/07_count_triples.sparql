@@ -1,0 +1,3 @@
+# Recipe 7: Count triples (graph size)
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
+SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }

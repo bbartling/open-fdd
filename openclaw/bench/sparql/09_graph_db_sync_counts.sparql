@@ -1,0 +1,8 @@
+# Recipe 9: Aggregate counts for graph-vs-DB sync assertion (sites, equipment, points from Brick)
+# Used by sparql_crud_and_frontend_test.py --graph-db-sync to assert SPARQL counts match GET /sites, /equipment, /points
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?site_count ?equipment_count ?point_count WHERE {
+  { SELECT (COUNT(DISTINCT ?s) AS ?site_count) WHERE { ?s a brick:Site . } }
+  { SELECT (COUNT(DISTINCT ?e) AS ?equipment_count) WHERE { ?e brick:isPartOf ?site . ?site a brick:Site . } }
+  { SELECT (COUNT(DISTINCT ?p) AS ?point_count) WHERE { ?p brick:isPointOf ?e . ?e brick:isPartOf ?site . ?site a brick:Site . } }
+}

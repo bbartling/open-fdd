@@ -44,6 +44,6 @@ jobs:
       - name: Build engine package (dry run)
         working-directory: packages/openfdd-engine
         run: |
-          pip install build twine
+          python -m pip install build==1.2.2 twine==6.1.0
           python -m build
           twine check dist/*

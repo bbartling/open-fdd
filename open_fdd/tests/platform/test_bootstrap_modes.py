@@ -15,6 +15,7 @@ def test_bootstrap_help_lists_mode_flag():
     assert "collector" in res.stdout
     assert "model" in res.stdout
     assert "engine" in res.stdout
+    assert "full" in res.stdout
 
 
 def test_bootstrap_rejects_invalid_mode():

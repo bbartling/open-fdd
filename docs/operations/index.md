@@ -16,4 +16,7 @@ Operational playbooks for recurring Open-FDD verification, OpenClaw context dura
 | [Operator framework](operator_framework) | Canonical operator reasoning contract and source-of-truth order. |
 | [MCP RAG service](mcp_rag_service) | Derived AI retrieval service from canonical docs + generated docs text. |
 | [Mode-aware runbooks](mode_aware_runbooks) | Collector/model/engine/full orchestration flows for humans and OpenClaw. |
+| [Testing plan](testing_plan) | Engineering plan for bench testing, auth/SPARQL checks, and overnight evidence. |
+| [Continuous context backup loop](continuous_context_backup) | What to commit to the repo vs keep local (no secrets). |
+| [Usage budget and throttling](usage_budget_and_throttling) | Throttle ladder when model/API budget is tight. |
 

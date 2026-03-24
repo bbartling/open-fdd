@@ -1,0 +1,29 @@
+{
+  "points": [
+    {
+      "point_id": null,
+      "bacnet_device_id": "3456789",
+      "object_identifier": "analog-input,2",
+      "object_name": "SA-T",
+      "site_id": null,
+      "site_name": null,
+      "equipment_id": null,
+      "equipment_name": "AHU-1",
+      "external_id": "SA-T",
+      "brick_type": "Supply_Air_Temperature_Sensor",
+      "rule_input": "ahu_sat",
+      "unit": "degF",
+      "polling": true
+    }
+  ],
+  "equipment": [
+    {
+      "equipment_name": "AHU-1",
+      "site_id": null,
+      "feeds": [
+        "VAV-1"
+      ]
+    }
+  ]
+}
+

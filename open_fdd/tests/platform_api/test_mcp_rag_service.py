@@ -62,3 +62,50 @@ def test_action_tool_blocked_when_disabled():
     assert res.status_code == 403
     assert "disabled" in res.json()["detail"].lower()
 
+
+def test_health_ok_when_index_loads(tmp_path: Path, monkeypatch):
+    idx_path = _write_index(tmp_path)
+    monkeypatch.setattr(mcp_app, "INDEX_PATH", idx_path)
+    monkeypatch.setattr(mcp_app, "_idx", None)
+    client = TestClient(mcp_app.app)
+    res = client.get("/health")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ok"] is True
+    assert data["index_exists"] is True
+
+
+def test_health_503_when_index_missing(tmp_path: Path, monkeypatch):
+    missing = tmp_path / "nope.json"
+    monkeypatch.setattr(mcp_app, "INDEX_PATH", missing)
+    monkeypatch.setattr(mcp_app, "_idx", None)
+    client = TestClient(mcp_app.app)
+    res = client.get("/health")
+    assert res.status_code == 503
+    data = res.json()
+    assert data["ok"] is False
+    assert "missing" in data["error"].lower()
+
+
+def test_action_tool_requires_bearer_when_enabled(monkeypatch):
+    monkeypatch.setattr(mcp_app, "ENABLE_ACTION_TOOLS", True)
+    monkeypatch.setattr(mcp_app, "OFDD_API_KEY", "secret-key")
+    monkeypatch.setattr(mcp_app, "_idx", None)
+    client = TestClient(mcp_app.app)
+    res = client.post("/tools/export_data_model")
+    assert res.status_code == 403
+    assert "authorization" in res.json()["detail"].lower()
+
+
+def test_action_tool_rejects_wrong_bearer_when_enabled(monkeypatch):
+    monkeypatch.setattr(mcp_app, "ENABLE_ACTION_TOOLS", True)
+    monkeypatch.setattr(mcp_app, "OFDD_API_KEY", "secret-key")
+    monkeypatch.setattr(mcp_app, "_idx", None)
+    client = TestClient(mcp_app.app)
+    res = client.post(
+        "/tools/export_data_model",
+        headers={"Authorization": "Bearer wrong"},
+    )
+    assert res.status_code == 403
+    assert "invalid" in res.json()["detail"].lower()
+

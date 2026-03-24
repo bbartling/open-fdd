@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from math import log
@@ -51,9 +52,15 @@ def extract_endpoints(text: str) -> list[str]:
     return sorted(out)
 
 
-def read_markdown_chunks(path: Path, chunk_size: int) -> list[Chunk]:
+def read_markdown_chunks(
+    path: Path,
+    chunk_size: int,
+    *,
+    chunk_tags: list[str] | None = None,
+) -> list[Chunk]:
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
+    tags_base = chunk_tags if chunk_tags is not None else ["docs", "markdown"]
     chunks: list[Chunk] = []
     current_section = path.stem
     buf: list[str] = []
@@ -83,7 +90,7 @@ def read_markdown_chunks(path: Path, chunk_size: int) -> list[Chunk]:
                         source=path.as_posix(),
                         section=current_section,
                         content=content,
-                        tags=["docs", "markdown"],
+                        tags=list(tags_base),
                         endpoint_refs=extract_endpoints(content),
                     )
                 )
@@ -97,6 +104,7 @@ def read_markdown_chunks(path: Path, chunk_size: int) -> list[Chunk]:
             flush()
             section_idx += 1
             current_section = match.group(2).strip()
+            buf.append(line)
             continue
         buf.append(line)
     flush()
@@ -208,7 +216,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--openapi-json", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--chunk-size", type=int, default=220)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.chunk_size < 1:
+        parser.error("--chunk-size must be an integer >= 1")
+    return args
 
 
 def main() -> int:
@@ -220,6 +231,24 @@ def main() -> int:
             if "_build" in md.parts or md.name == "404.md":
                 continue
             chunks.extend(read_markdown_chunks(md, args.chunk_size))
+
+    openclaw_root = REPO_ROOT / "openclaw"
+    if openclaw_root.is_dir():
+        for md in sorted(openclaw_root.rglob("*.md")):
+            rel_parts = md.relative_to(openclaw_root).parts
+            if rel_parts and rel_parts[0] == "reports":
+                if md.name not in (
+                    "README.md",
+                    "overnight-bacnet-verification-template.md",
+                ):
+                    continue
+            chunks.extend(
+                read_markdown_chunks(
+                    md,
+                    args.chunk_size,
+                    chunk_tags=["docs", "markdown", "openclaw_lab"],
+                )
+            )
 
     if args.docs_txt.exists():
         chunks.extend(read_text_chunks(args.docs_txt, args.chunk_size))

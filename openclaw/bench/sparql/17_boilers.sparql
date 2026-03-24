@@ -1,0 +1,5 @@
+# Data Model Testing → Boilers button
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?b) AS ?count) WHERE {
+  ?b a brick:Boiler .
+}

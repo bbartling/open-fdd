@@ -24,7 +24,7 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 ---
 
 
-## Quick Start — Open-FDD AFDD Platform
+## Quick Start — Open-FDD AFDD Platform Manually by the Human
 
 Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (tested on Ubuntu Server and Linux Mint, x86; should work on ARM but is untested). Windows is not supported.
 
@@ -38,6 +38,22 @@ cd open-fdd
 
 This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. Future releases may add other data sources such as REST/API and Modbus.
 
+## Quick Start — OpenClaw (agent)
+
+Give the agent **terminal access** to a cloned repo and the **repo root** as the working directory (`cd open-fdd`). OpenClaw does not replace Docker; it runs the same entrypoints a human would:
+
+1. **Bring the stack up:** `./scripts/bootstrap.sh` (full stack by default). **Partial stack:** `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. **Optional RAG sidecar:** add `--with-mcp-rag` (service on **8090** after index build; see [Getting Started](docs/getting_started.md)).
+2. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate).
+
+**Where to “MCP” / discover tools (HTTP, not stdio):** after services are up, the platform lists tool-shaped HTTP mappings at **`http://localhost:8000/mcp/manifest`** (Bearer **`OFDD_API_KEY`** from **`stack/.env`** when auth is enabled). If you started MCP RAG, use **`http://localhost:8090/manifest`** for that sidecar’s routes. Long-form guide: [Open‑Claw integration](docs/openclaw_integration.md).
+
+**What to paste for OpenClaw (one line):** *Working directory: this repo root; run `./scripts/bootstrap.sh` then `./scripts/bootstrap.sh --test` when asked; discover HTTP tools from `http://localhost:8000/mcp/manifest` and, if `--with-mcp-rag` was used, `http://localhost:8090/manifest`; send `Authorization: Bearer <OFDD_API_KEY>` using the value in `stack/.env`.*
+
+**One-liner — humans:** Clone the repo, `cd` into it, run `./scripts/bootstrap.sh` for the **full** stack or `./scripts/bootstrap.sh --mode collector|model|engine` for a **modular** slice, optionally add `--with-mcp-rag`, and run `./scripts/bootstrap.sh --test` to exercise the automated checks.
+
+**One-liner — OpenClaw:** From the repo root, execute `./scripts/bootstrap.sh [--mode full|collector|model|engine] [--with-mcp-rag]` to match the desired footprint, then `./scripts/bootstrap.sh --test` to validate, and wire tool discovery to `http://localhost:8000/mcp/manifest` (and `http://localhost:8090/manifest` if RAG is running) with Bearer auth from `stack/.env`.
+
+**OpenClaw lab (bench):** optional fake BACnet harness, SPARQL fixtures, and heavier E2E scripts live under [`openclaw/README.md`](openclaw/README.md).
 
 ### Development: branches and tests
 

@@ -1,0 +1,26 @@
+# BACnet point telemetry list (same logic as scraper: polling=true + Brick type; BACnet when present)
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
+# Always returns polling Brick points; device_instance, device_address, object_identifier
+# are filled when the graph has BACnet discovery data (matching object-name to point label).
+PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?point_label ?brick_class ?unit ?device_instance ?device_address ?object_identifier
+WHERE {
+  ?point ofdd:polling true ;
+         rdfs:label ?point_label ;
+         a ?brick_type .
+  FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+  BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
+  OPTIONAL { ?point ofdd:unit ?unit . }
+  OPTIONAL {
+    ?bacnet_obj bacnet:object-name ?point_label ;
+                bacnet:object-identifier ?object_identifier .
+    ?device bacnet:contains ?bacnet_obj ;
+            bacnet:device-instance ?device_instance ;
+            bacnet:device-address ?device_address .
+  }
+}
+ORDER BY ?device_instance ?object_identifier ?point_label

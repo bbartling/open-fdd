@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
+import secrets
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .retrieval import RagIndex
@@ -52,7 +55,13 @@ def _load_index() -> RagIndex:
     if _idx is None:
         if not INDEX_PATH.exists():
             raise HTTPException(status_code=503, detail=f"RAG index missing: {INDEX_PATH}")
-        _idx = RagIndex.from_path(INDEX_PATH)
+        try:
+            _idx = RagIndex.from_path(INDEX_PATH)
+        except (OSError, json.JSONDecodeError) as err:
+            raise HTTPException(
+                status_code=503,
+                detail=f"RAG index unreadable: {INDEX_PATH} - {err}",
+            ) from err
     return _idx
 
 
@@ -63,9 +72,22 @@ def _headers() -> dict[str, str]:
     return h
 
 
-def _require_action_tools() -> None:
+def require_action_tools_auth(
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
     if not ENABLE_ACTION_TOOLS:
         raise HTTPException(status_code=403, detail="Action tools disabled.")
+    expected = OFDD_API_KEY.strip()
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Action tools enabled but OFDD_MCP_OFDD_API_KEY is empty; refusing unauthenticated proxy.",
+        )
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=403, detail="Authorization Bearer token required for action tools.")
+    token = authorization.split(None, 1)[1].strip() if len(authorization.split(None, 1)) > 1 else ""
+    if not secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=403, detail="Invalid API key for action tools.")
 
 
 def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:
@@ -87,14 +109,22 @@ def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:
     }
 
 
-@app.get("/health")
-def health() -> dict[str, Any]:
-    return {
-        "ok": True,
+@app.get("/health", response_model=None)
+def health() -> dict[str, Any] | JSONResponse:
+    body: dict[str, Any] = {
         "index_exists": INDEX_PATH.exists(),
         "index_path": str(INDEX_PATH),
         "action_tools_enabled": ENABLE_ACTION_TOOLS,
     }
+    try:
+        _load_index()
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"ok": False, **body, "error": detail},
+        )
+    return {"ok": True, **body}
 
 
 @app.get("/manifest")
@@ -150,9 +180,8 @@ def get_operator_playbook(req: PlaybookRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/tools/export_data_model")
+@app.post("/tools/export_data_model", dependencies=[Depends(require_action_tools_auth)])
 def export_data_model() -> dict[str, Any]:
-    _require_action_tools()
     try:
         resp = requests.get(
             f"{OFDD_API_URL}/data-model/export", headers=_headers(), timeout=TIMEOUT
@@ -164,9 +193,8 @@ def export_data_model() -> dict[str, Any]:
     return resp.json()
 
 
-@app.post("/tools/import_data_model")
+@app.post("/tools/import_data_model", dependencies=[Depends(require_action_tools_auth)])
 def import_data_model(req: ImportRequest) -> dict[str, Any]:
-    _require_action_tools()
     try:
         resp = requests.put(
             f"{OFDD_API_URL}/data-model/import",
@@ -181,9 +209,8 @@ def import_data_model(req: ImportRequest) -> dict[str, Any]:
     return resp.json() if resp.text else {"ok": True}
 
 
-@app.post("/tools/rules_sync_definitions")
+@app.post("/tools/rules_sync_definitions", dependencies=[Depends(require_action_tools_auth)])
 def rules_sync_definitions() -> dict[str, Any]:
-    _require_action_tools()
     try:
         resp = requests.post(
             f"{OFDD_API_URL}/rules/sync-definitions",
@@ -198,9 +225,8 @@ def rules_sync_definitions() -> dict[str, Any]:
     return resp.json() if resp.text else {"ok": True}
 
 
-@app.post("/tools/sparql_validate")
+@app.post("/tools/sparql_validate", dependencies=[Depends(require_action_tools_auth)])
 def sparql_validate(req: SparqlRequest) -> dict[str, Any]:
-    _require_action_tools()
     try:
         resp = requests.post(
             f"{OFDD_API_URL}/data-model/sparql",

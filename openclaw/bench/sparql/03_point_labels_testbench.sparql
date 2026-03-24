@@ -1,0 +1,10 @@
+# Recipe 3: Point labels for test-bench site (E2E creates site then imports demo_site_llm_payload.json)
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL. Site label = TestBenchSite by default.
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?pt_label WHERE {
+  ?pt brick:isPointOf ?eq .
+  ?eq brick:isPartOf ?site .
+  ?site rdfs:label "TestBenchSite" .
+  ?pt rdfs:label ?pt_label .
+}

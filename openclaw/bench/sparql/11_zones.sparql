@@ -1,0 +1,5 @@
+# Data Model Testing → Zones button (count HVAC zones)
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?z) AS ?count) WHERE {
+  ?z a brick:HVAC_Zone .
+}
