@@ -45,6 +45,14 @@ Manual Data Model export/import (JSON) always works without any AI.
 
 See [Open‑Claw integration](openclaw_integration) and [API Reference](appendix/api_reference) for endpoint details.
 
+Optional MCP RAG profile:
+
+```bash
+./scripts/bootstrap.sh --with-mcp-rag
+```
+
+This starts an MCP-style retrieval sidecar at `http://localhost:8090` using derived index artifacts from canonical docs.
+
 ---
 
 ## Prerequisites
@@ -85,10 +93,11 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | *(none)* | Build and start full stack (DB, API, frontend, Caddy, BACnet server, scrapers, FDD loop). Prints API key if generated. Grafana and MQTT broker **not** started by default. |
 | `--with-grafana` | **Optional:** include Grafana at http://localhost:3000 (admin/admin). Add a `/grafana` route in Caddy when you extend the Caddyfile (see [Security](security)). |
 | `--with-mqtt-bridge` | **Optional / experimental:** start Mosquitto (`:1883`) and BACnet2MQTT-related env for diy-bacnet-server. For future remote/MQTT work—not required for core Open-FDD; not a Home Assistant integration. |
+| `--with-mcp-rag` | **Optional:** include MCP RAG service at http://localhost:8090 (derived from canonical docs and generated docs text). |
 | `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
 | `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
 | `--test` | Run tests (frontend lint + typecheck, backend pytest, Caddy validate); then exit. |
-| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
+| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mcp-rag`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
 | `--build-all` | Rebuild and restart all services; then exit. |
 | `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |
 | `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |

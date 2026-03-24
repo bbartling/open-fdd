@@ -10,6 +10,7 @@
 # Optional add-ons:
 #   --with-grafana       TimescaleDB charts at http://localhost:3000 (see docs)
 #   --with-mqtt-bridge   Mosquitto on :1883 + BACnet2MQTT env (experimental / future remote collection—not required for core Open-FDD)
+#   --with-mcp-rag       Optional MCP RAG service on :8090 (derived docs retrieval + optional guarded API tools)
 #
 # Optional (single-purpose):
 #   ./scripts/bootstrap.sh --install-docker     # attempt Docker install (Linux) then run
@@ -53,6 +54,7 @@ RESET_GRAFANA=false
 RESET_DATA=false
 WITH_GRAFANA=false
 WITH_MQTT_BRIDGE=false
+WITH_MCP_RAG=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
 MAINTENANCE_ONLY=false
@@ -93,6 +95,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --reset-grafana) RESET_GRAFANA=true ;;
     --with-grafana) WITH_GRAFANA=true ;;
     --with-mqtt-bridge) WITH_MQTT_BRIDGE=true ;;
+    --with-mcp-rag) WITH_MCP_RAG=true ;;
     --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
@@ -122,6 +125,7 @@ Core:
   --minimal                 Start minimal stack (db, bacnet-server, bacnet-scraper; add --with-grafana for Grafana)
   --with-grafana            Include Grafana (http://localhost:3000; optional SQL dashboards)
   --with-mqtt-bridge        Start Mosquitto + wire BACnet2MQTT env (experimental; future remote/MQTT use—not core product yet)
+  --with-mcp-rag            Include MCP RAG service (http://localhost:8090; retrieval over docs/text + optional guarded API tools)
   --verify                  Show running services + health checks (exits before starting stack)
   --verify --test           Verify services then run tests; then exit
   --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit (no E2E/Selenium)
@@ -132,7 +136,7 @@ Core:
 
 Build controls:
   --build SERVICE ...       Rebuild + restart only these services, then exit
-                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana, host-stats, mosquitto, weather-scraper
+                           Services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana, host-stats, mcp-rag, mosquitto, weather-scraper
   --build-all               Rebuild + restart all services, then exit
   --frontend                Before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up; use after package.json changes)
 
@@ -340,6 +344,11 @@ write_edge_env() {
   if $WITH_MQTT_BRIDGE; then
     ensure_mqtt_bridge_env_defaults "$env_file"
   fi
+
+  # MCP RAG action tools are off by default (retrieval remains enabled).
+  if ! grep -qE '^OFDD_MCP_ENABLE_ACTION_TOOLS=' "$env_file" 2>/dev/null; then
+    echo "OFDD_MCP_ENABLE_ACTION_TOOLS=false" >> "$env_file"
+  fi
 }
 
 ensure_mqtt_bridge_env_defaults() {
@@ -419,6 +428,10 @@ verify() {
     echo "MQTT: BACnet2MQTT enabled in .env but broker not running — start with: ./scripts/bootstrap.sh --with-mqtt-bridge"
   fi
 
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_mcp_rag; then
+    echo "MCP RAG: running — http://localhost:8090 (manifest: /manifest)"
+  fi
+
   echo ""
   echo "=== Feature checks (BACnet + API, up to 5 tries / 10s apart) ==="
   if curl_retry 5 10 -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" \
@@ -455,6 +468,24 @@ verify() {
     echo "Weather: skip (scripts/curl_weather_data.sh not executable)."
   fi
   echo ""
+}
+
+ensure_docs_text_and_rag_index() {
+  local py="python3"
+  if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+    py="$REPO_ROOT/.venv/bin/python"
+  fi
+  if ! have_cmd "$py"; then
+    py="python3"
+  fi
+
+  if [[ ! -f "$REPO_ROOT/pdf/open-fdd-docs.txt" ]]; then
+    echo "=== Building docs text for MCP RAG ==="
+    (cd "$REPO_ROOT" && "$py" scripts/build_docs_pdf.py --no-pdf) || true
+  fi
+
+  echo "=== Building MCP RAG index ==="
+  (cd "$REPO_ROOT" && "$py" scripts/build_mcp_rag_index.py) || true
 }
 
 # --test scope: frontend lint + typecheck + vitest (unit); backend pytest (open_fdd/tests/); Caddy validate.
@@ -773,6 +804,7 @@ dc="$(docker_compose_cmd)"
 DC_PROFILE=()
 $WITH_GRAFANA && DC_PROFILE+=(--profile grafana)
 $WITH_MQTT_BRIDGE && DC_PROFILE+=(--profile mqtt)
+$WITH_MCP_RAG && DC_PROFILE+=(--profile mcp-rag)
 
 # -----------------------------
 # --frontend: stop frontend, remove node_modules volume (fresh npm install on next up)
@@ -915,6 +947,9 @@ fi
 if $WITH_MQTT_BRIDGE; then
   ensure_mqtt_bridge_env_defaults "$STACK_DIR/.env"
 fi
+if $WITH_MCP_RAG; then
+  ensure_docs_text_and_rag_index
+fi
 
 cd "$STACK_DIR"
 
@@ -958,6 +993,9 @@ if $WITH_GRAFANA; then
 fi
 if $WITH_MQTT_BRIDGE || grep -qE '^BACNET2MQTT_ENABLED=true' "$STACK_DIR/.env" 2>/dev/null; then
   echo "  MQTT:     localhost:1883 (experimental; BACnet2MQTT for future remote collection—not core Open-FDD yet)"
+fi
+if $WITH_MCP_RAG; then
+  echo "  MCP RAG:  http://localhost:8090 (manifest: /manifest; health: /health)"
 fi
 if $MINIMAL; then
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
