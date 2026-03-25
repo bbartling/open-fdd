@@ -94,7 +94,8 @@ def require_action_tools_auth(
         )
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=403, detail="Authorization Bearer token required for action tools.")
-    token = authorization.split(None, 1)[1].strip() if len(authorization.split(None, 1)) > 1 else ""
+    _scheme, _sep, rest = authorization.partition(" ")
+    token = rest.strip() if rest else ""
     if not secrets.compare_digest(token, expected):
         raise HTTPException(status_code=403, detail="Invalid API key for action tools.")
 
@@ -218,7 +219,9 @@ def import_data_model(req: ImportRequest) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    return resp.json() if resp.text else {"ok": True}
+    if not (resp.text or "").strip():
+        return {"ok": True}
+    return resp.json()
 
 
 @app.post("/tools/rules_sync_definitions", dependencies=[Depends(require_action_tools_auth)])
@@ -234,7 +237,9 @@ def rules_sync_definitions() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"Upstream request failed: {exc}") from exc
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    return resp.json() if resp.text else {"ok": True}
+    if not (resp.text or "").strip():
+        return {"ok": True}
+    return resp.json()
 
 
 @app.post("/tools/sparql_validate", dependencies=[Depends(require_action_tools_auth)])

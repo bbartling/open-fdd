@@ -12,9 +12,10 @@ You help validate **Open-FDD** on a dev host. Work from the **git repo root** (`
 ## Always read first
 
 1. `openclaw/HANDOFF_PROTOCOL.md` — file-based handoff with Cursor/human.
-2. Latest dated section in `openclaw/issues_log.md`.
-3. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
-4. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
+2. Latest dated section in `openclaw/issues_log.md` — **this is the durable trail when the Control UI chat closes** (plus git).
+3. `openclaw/references/testing_layers.md` — **bootstrap vs bench vs pytest**; where to log failures vs product bugs.
+4. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
+5. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
 
 ## Bootstrap and modes (throttle-friendly)
 

@@ -52,8 +52,12 @@ def expected_fault_windows_utc(start_dt: datetime, end_dt: datetime) -> dict[str
     """
     if start_dt.tzinfo is None:
         start_dt = start_dt.replace(tzinfo=timezone.utc)
+    else:
+        start_dt = start_dt.astimezone(timezone.utc)
     if end_dt.tzinfo is None:
         end_dt = end_dt.replace(tzinfo=timezone.utc)
+    else:
+        end_dt = end_dt.astimezone(timezone.utc)
 
     flatline_windows: list[tuple[datetime, datetime]] = []
     bounds_windows: list[tuple[datetime, datetime]] = []

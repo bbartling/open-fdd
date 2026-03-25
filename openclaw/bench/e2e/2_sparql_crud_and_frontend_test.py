@@ -1444,7 +1444,7 @@ def main() -> int:
                     report_data, path, name, rec_status, rec_err, rec_rows, t0
                 )
                 continue
-            print(f"         API matches expected (data_model.ttl)" if use_ttl_expected else f"         API matches expected ({path.stem}.json)")
+            print("         API matches expected (data_model.ttl)" if use_ttl_expected else f"         API matches expected ({path.stem}.json)")
 
         if frontend_parity and frontend_url and driver:
             ref = reference if reference is not None else api_bindings

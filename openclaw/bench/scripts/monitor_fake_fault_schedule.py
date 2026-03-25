@@ -144,12 +144,22 @@ def main() -> int:
     mode = sched.scheduled_mode(minute)
 
     rows: list[dict[str, Any]] = []
+    first_by_point: list[float] = []
     for point in POINTS:
-        first = rpc_read_property(args.bacnet_url, point.device_instance, point.object_identifier)
-        second = None
-        if mode == "flatline":
-            time.sleep(args.second_sample_delay)
-            second = rpc_read_property(args.bacnet_url, point.device_instance, point.object_identifier)
+        first_by_point.append(
+            rpc_read_property(args.bacnet_url, point.device_instance, point.object_identifier)
+        )
+    second_by_point: list[float | None] = [None] * len(POINTS)
+    if mode == "flatline":
+        time.sleep(args.second_sample_delay)
+        for i, point in enumerate(POINTS):
+            second_by_point[i] = rpc_read_property(
+                args.bacnet_url, point.device_instance, point.object_identifier
+            )
+
+    for i, point in enumerate(POINTS):
+        first = first_by_point[i]
+        second = second_by_point[i]
         status, note = judge_value(
             point,
             mode,

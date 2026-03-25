@@ -17,3 +17,7 @@
     - name: Report result
       ansible.builtin.debug:
         msg: "{{ inventory_hostname }}: dpkg {{ 'ok' if dpkg_configure.rc == 0 else 'had errors' }}, apt -f {{ 'ok' if apt_fix.rc == 0 else 'had errors' }}"
+    - name: Fail if dpkg/apt repair did not succeed
+      ansible.builtin.fail:
+        msg: "dpkg/apt repair failed: dpkg rc={{ dpkg_configure.rc }} apt rc={{ apt_fix.rc }}"
+      when: dpkg_configure.rc != 0 or apt_fix.rc != 0

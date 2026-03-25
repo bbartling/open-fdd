@@ -142,13 +142,11 @@ def _load_stack_env() -> None:
     _load_env_file(str(SCRIPT_DIR / ".env"))
 
 
-_load_stack_env()
-
-# Defaults
-DEFAULT_FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+# Defaults (stack/.env loaded in main() before argparse — see _load_stack_env)
+_FALLBACK_FRONTEND_URL = "http://localhost:5173"
 # Site name created in [2]; payload is demo_site_llm_payload.json (equipment: AHU-1, VAV-1, Weather-Station, Open-Meteo; points: SA-T, ZoneTemp, etc.)
 TESTBENCH_SITE_NAME = os.environ.get("TESTBENCH_SITE_NAME", "TestBenchSite")
-API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
+API_KEY: str = os.environ.get("OFDD_API_KEY", "").strip()
 
 # From demo_site_llm_payload.json: equipment and points we assert in the UI
 # From demo_site_llm_payload.json (equipment + points); first two equipment and two points used for assertions
@@ -1314,12 +1312,12 @@ def validate_weather_charts_not_blank(driver: webdriver.Chrome, base_url: str) -
                 print("  Weather: chart(s) rendered (paths present).")
         else:
             print("  Weather: page loaded (chart container or heading present).")
-    except Exception:
+    except Exception as e:
         page_src = driver.page_source or ""
         if "No weather points" in page_src or "Weather data" in page_src or "Select a site" in page_src:
             print("  Weather: page loaded (no chart element; acceptable).")
         else:
-            raise AssertionError("Weather page: no chart element and no acceptable message found.")
+            raise AssertionError("Weather page: no chart element and no acceptable message found.") from e
     log_browser_console(driver, "weather")
 
 
@@ -1340,6 +1338,9 @@ _UTC_Z_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
 def _api_request(api_base: str, method: str, path: str, api_key: str) -> tuple[int, str]:
     """GET or POST API; returns (status_code, body_text). Uses urllib (no httpx dependency)."""
     url = f"{api_base.rstrip('/')}{path}"
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise AssertionError(f"unsupported URL scheme: {parsed.scheme!r}")
     req = urllib.request.Request(url, method=method)
     if api_key:
         req.add_header("Authorization", f"Bearer {api_key}")
@@ -1360,7 +1361,7 @@ def run_backend_timezone_checks(api_url: str, site_id: str) -> None:
     (e.g. 9:02 AM CDT not 8:02 AM after spring-forward). Same auth/env as long_term_bacnet_scrape_test.
     """
     print("\n[Backend / timezone] GET /config and GET /download/csv (UTC Z timestamps)...")
-    code, body = _api_request(api_url, "GET", "/config", API_KEY)
+    code, _ = _api_request(api_url, "GET", "/config", API_KEY)
     if code == 401:
         print("  API returned 401 (auth required). Set OFDD_API_KEY to match server stack/.env.")
         raise AssertionError("GET /config returned 401; set OFDD_API_KEY for backend checks.")
@@ -1615,13 +1616,17 @@ def run_full_flow(
 
 
 def main() -> None:
+    global API_KEY
+    _load_stack_env()
+    API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
+    fe_default = os.environ.get("FRONTEND_URL", _FALLBACK_FRONTEND_URL).rstrip("/")
     parser = argparse.ArgumentParser(
         description="Open-FDD frontend E2E tests (Selenium). All actions via UI."
     )
     parser.add_argument(
         "--frontend-url",
-        default=DEFAULT_FRONTEND_URL,
-        help=f"Frontend base URL (default: {DEFAULT_FRONTEND_URL})",
+        default=fe_default,
+        help=f"Frontend base URL (default: {fe_default})",
     )
     parser.add_argument(
         "--headed",

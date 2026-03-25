@@ -65,7 +65,7 @@ Use this order on a fresh site:
 If OpenClaw is cloned onto another machine for the **same current test bench**, the new clone should read these first:
 
 1. Root [`README.md`](../../README.md)
-2. [`openclaw/README.md`](../../openclaw/)
+2. [`openclaw/README.md`](../../openclaw/README.md)
 3. [OpenClaw context bootstrap](../operations/openclaw_context_bootstrap)
 4. [Open-FDD integrity sweep](../operations/openfdd_integrity_sweep)
 5. [BACnet-to-fault verification](../bacnet/fault_verification)
@@ -84,9 +84,9 @@ And it should know these durable facts immediately:
 
 A clone of this repo should make it easy for another engineer to answer:
 
-- Is Open-FDD healthy here?
-- Is BACnet scraping working here?
-- Is the building model usable here?
+- Check whether Open-FDD is healthy.
+- Confirm BACnet scraping is working.
+- Verify the building model is usable.
 - Are faults being computed here?
 - Are regressions visible here before they affect a real deployment?
 
