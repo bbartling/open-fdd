@@ -8,7 +8,7 @@
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version) — *PyPI package is legacy (FD equations only; no AFDD framework) and is no longer supported. Use this repo.*
+![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version) — *`pip install open-fdd` ships the **pandas/YAML engine** (`open_fdd.engine`) and optional extras; the **full edge stack** (Docker, BACnet, API) is built from **this repo**. Very old PyPI releases were equations-only — use **2.x** or install from source. See [PyPI how-to](docs/howto/openfdd_engine_pypi.md).*
 
 
 <div align="center">

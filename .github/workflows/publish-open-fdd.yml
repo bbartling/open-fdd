@@ -1,0 +1,37 @@
+name: Publish open-fdd
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "open-fdd-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build==1.2.2 twine==6.1.0
+          python -m build
+          twine check dist/*
+
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/open-fdd-v')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_OPENFDD_TOKEN }}
+        run: |
+          twine upload dist/*

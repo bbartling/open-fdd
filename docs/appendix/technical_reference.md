@@ -171,11 +171,13 @@ Schema is defined in **`stack/sql/`** (migrations **001–015**). Idempotent; bo
 
 ## PyPI and this repo
 
-**Legacy PyPI:** The package [open-fdd on PyPI](https://pypi.org/project/open-fdd/) is an **old, unsupported release**. It contains FD (fault detection) equations only and **no AFDD framework**—no FastAPI platform, BACnet, or data model. That work evolved into the [Expression Rule Cookbook](../expression_rule_cookbook) and the full FastAPI AFDD platform in this repo. Do not use the PyPI version; use this repository instead.
+**Current `open-fdd` on PyPI (2.x):** [open-fdd](https://pypi.org/project/open-fdd/) publishes the **`open_fdd` Python package**, including **`open_fdd.engine`** — the same **YAML + pandas** `RuleRunner` as the platform. Base install depends on **pandas** and **PyYAML**; optional extras (`[dev]`, `[platform]`, …) add FastAPI, tests, Brick, etc. **IoT / notebook use:** `pip install open-fdd` and point `RuleRunner` at rule YAML; see [Engine-only deployment and external IoT pipelines](../howto/engine_only_iot).
 
-**Current platform:** Open-FDD is developed and run **from this repo** (or from Docker images built from it). The stack installs open-fdd **locally** at build time (`pip install -e ".[platform,brick]"` from the copied repo); nothing in the project depends on the PyPI `open-fdd` package.
+**Very old PyPI releases (0.x / pre–2.x):** Historical “equations only” artifacts may still appear in version history. Prefer **2.x** or **`pip install -e .`** from this repo.
 
-**If you publish to PyPI again:** Options are (a) publish the **full current package** (FastAPI API, rules engine, data model) as a new major version so `pip install open-fdd` gives the platform, or (b) publish a small **integration-helpers** library for third-party or cloud integrations. Until then, install from source: `pip install -e ".[dev]"` or use the Docker stack.
+**Edge platform:** BACnet, Docker Compose, and day-two operations are **repo-first** (`./scripts/bootstrap.sh`, stack images). The stack typically uses **`pip install -e ".[platform,brick]"`** inside build contexts; PyPI is not required to run the full edge deployment.
+
+**Publishing:** Maintainer checklist and tags: [PyPI releases (open-fdd + openfdd-engine)](../howto/openfdd_engine_pypi). **`openfdd-engine`** is a small companion package that re-exports the engine API and depends on **`open-fdd`**.
 
 ---
 
