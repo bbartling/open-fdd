@@ -22,10 +22,16 @@ Read first (in order):
 
 Source of truth: repo + issues_log + logs under openclaw/logs/. Do not rely on Control UI chat history.
 
-Work queue — execute in order, one step at a time, append openclaw/issues_log.md after EACH step with: runner openclaw, branch, command, log path, result pass|fail|blocked, first_error_line, next for senior if needed. Use mkdir -p openclaw/logs and tee/nohup with ts=$(date +%F_%H-%M-%S). Activate .venv inside subshells when using nohup.
+Work queue — execute in order, one step at a time, append openclaw/issues_log.md after EACH step with: runner openclaw, branch, command, log path, result pass|fail|blocked, first_error_line, next for senior if needed.
 
-1) If stack is already up: ./scripts/bootstrap.sh --verify — log it.
-2) Mode slices (separate runs, verify between if heavy): ./scripts/bootstrap.sh --mode collector then --mode model then --mode engine — log each.
+**Logging (do not hand-roll `ts=` inside `nohup bash -lc '...'` — it often mangles).** From **open-fdd** repo root use either:
+- `./openclaw/scripts/capture_bootstrap_log.sh --verify`  (or any other `./scripts/bootstrap.sh` args as trailing args), or
+- `./openclaw/scripts/verify_with_log.sh`  (verify only).
+
+Those scripts set `ts`, `tee`, and `.venv` activation internally. For background: `nohup ./openclaw/scripts/verify_with_log.sh >openclaw/logs/nohup-verify.out 2>&1 &` (log file path is still printed inside the script’s main log).
+
+1) If stack is already up: **`./openclaw/scripts/verify_with_log.sh`** (or `capture_bootstrap_log.sh --verify`) — then append `issues_log`.
+2) Mode slices (separate runs): **`./openclaw/scripts/capture_bootstrap_log.sh --mode collector`** then model, then engine — log each.
 3) React smoke: confirm frontend URL from live bootstrap output; note main routes in issues_log (or run 1_e2e if headed/Selenium available — if not, blocked + what human runs).
 4) MCP: curl http://localhost:8000/mcp/manifest with Bearer from stack/.env if auth on — log status + first line of body (no secrets in log).
 5) Docs: spot-check published doc links from README; note 404s in issues_log.
