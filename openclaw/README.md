@@ -5,7 +5,7 @@
 **Agent skill (OpenClaw):** [`SKILL.md`](SKILL.md) with [`references/`](references/) (install: [`references/skill_installation.md`](references/skill_installation.md), **testing map:** [`references/testing_layers.md`](references/testing_layers.md), **long runs:** [`references/long_run_lab_pass.md`](references/long_run_lab_pass.md)), [`scripts/`](scripts/), [`assets/`](assets/).
 
 
-This directory is the **lab workspace** for OpenClaw and humans: optional E2E/BACnet bench harness, SPARQL fixtures, Windows runners, report templates, and issue-tracking notes. It **supersedes** the experimental repo **bbartling/open-fdd-automated-testing**—use this tree inside **open-fdd** only.
+This directory is the **lab workspace** for OpenClaw and humans: optional E2E/BACnet bench harness, SPARQL fixtures, Windows runners, report templates, and issue-tracking notes. It **supersedes** the experimental repo **bbartling/open-fdd-automated-testing**—use this tree inside **open-fdd** only. **Full old→new path map** and a copy-paste deprecation banner for the legacy README: [`references/legacy_automated_testing.md`](references/legacy_automated_testing.md).
 
 Product docs and canonical operator guidance remain in [`docs/`](../docs/), especially [`docs/openclaw_integration.md`](../docs/openclaw_integration.md), [`docs/operations/`](../docs/operations/), and [`config/ai/operator_framework.yaml`](../config/ai/operator_framework.yaml).
 

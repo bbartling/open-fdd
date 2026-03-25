@@ -1,6 +1,6 @@
 # Installing `open-fdd-lab` skill for OpenClaw
 
-Canonical skill file: **`openclaw/SKILL.md`** (this tree).
+Canonical skill file: **`openclaw/SKILL.md`** (this tree). If you are migrating from the old **open-fdd-automated-testing** repo, read **`legacy_automated_testing.md`** first so paths and expectations stay aligned.
 
 OpenClaw resolves skills from:
 

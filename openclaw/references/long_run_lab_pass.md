@@ -15,6 +15,7 @@ Long-run lab pass (file-backed — do not ask me to repeat repo context).
 
 Read first (in order):
 - openclaw/HANDOFF_PROTOCOL.md
+- openclaw/references/legacy_automated_testing.md (skip if no links to open-fdd-automated-testing)
 - openclaw/references/testing_layers.md
 - openclaw/references/api_throttle.md
 - openclaw/SKILL.md

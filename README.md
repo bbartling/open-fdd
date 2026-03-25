@@ -42,6 +42,8 @@ This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BA
 
 Give the agent **terminal access** to a cloned repo and the **repo root** as the working directory (`cd open-fdd`). OpenClaw does not replace Docker; it runs the same entrypoints a human would:
 
+**First session on a fresh clone:** read **`openclaw/HANDOFF_PROTOCOL.md`**, **`openclaw/SKILL.md`**, and **`openclaw/references/testing_layers.md`** so the agent follows the in-repo lab playbook (not a separate testing repo). The old **`bbartling/open-fdd-automated-testing`** tree is **deprecated** — see **`openclaw/references/legacy_automated_testing.md`** for the path map and a README snippet to freeze that repo.
+
 1. **Bring the stack up:** `./scripts/bootstrap.sh` (full stack by default). **Partial stack:** `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. **Optional RAG sidecar:** add `--with-mcp-rag` (service on **8090** after index build; see [Getting Started](docs/getting_started.md)).
 2. **Host Python for `--test`:** backend pytest runs on the **host**; create a venv and `pip install -e ".[dev]"` first (see [Development: branches and tests](#development-branches-and-tests)). `bootstrap.sh` uses `.venv/bin/python` when it exists.
 3. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate).

@@ -9,14 +9,19 @@ user-invocable: true
 
 You help validate **Open-FDD** on a dev host. Work from the **git repo root** (`open-fdd/`), not the parent OpenClaw workspace root, unless reading `AGENTS.md` / `SOUL.md` / `USER.md`.
 
+## What “skill” means in OpenClaw
+
+OpenClaw loads **[AgentSkills](https://agentskills.io)-compatible** folders: each skill is a **directory** whose entry is **`SKILL.md`** (YAML frontmatter + body). Extra material lives beside it (e.g. `references/`, `scripts/`). **Predefined skills** ship **inside the OpenClaw install** (npm bundle or app). **This** skill is **repo-local** under `open-fdd/openclaw/`; wire it into OpenClaw via `workspace/skills/…`, `~/.openclaw/skills`, or `skills.load.extraDirs` (see install section below and OpenClaw’s skills docs). Same shape as Cursor’s create-skill flow—only the **load path** differs.
+
 ## Always read first
 
 1. `openclaw/HANDOFF_PROTOCOL.md` — file-based handoff with Cursor/human.
-2. Latest dated section in `openclaw/issues_log.md` — **this is the durable trail when the Control UI chat closes** (plus git).
-3. `openclaw/references/testing_layers.md` — **bootstrap vs bench vs pytest**; where to log failures vs product bugs.
-4. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
-5. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
-6. **`openclaw/references/long_run_lab_pass.md`** — **multi-hour / multi-session queue**, paste-ready prompt, and explicit limits (not infinite autopilot). **Backed up on GitHub** with this repo.
+2. `openclaw/references/legacy_automated_testing.md` — **if the task or links mention `open-fdd-automated-testing`**, use this map; canonical lab is **this** repo only.
+3. Latest dated section in `openclaw/issues_log.md` — **this is the durable trail when the Control UI chat closes** (plus git).
+4. `openclaw/references/testing_layers.md` — **bootstrap vs bench vs pytest**; where to log failures vs product bugs.
+5. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
+6. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
+7. **`openclaw/references/long_run_lab_pass.md`** — **multi-hour / multi-session queue**, paste-ready prompt, and explicit limits (not infinite autopilot). **Backed up on GitHub** with this repo.
 
 ## Long sessions (“hours” of work)
 
@@ -49,7 +54,11 @@ Follow `openclaw/references/security_testing_scope.md`. **No** destructive or un
 
 ## AI-assisted data modeling
 
-With **model** or **full** stack: follow `docs/openclaw_integration.md`, SPARQL examples under `openclaw/bench/sparql/`, and operator config `config/ai/operator_framework.yaml`. Log ontology/import quirks in `issues_log.md` (area: model).
+With **model** or **full** stack: follow `docs/openclaw_integration.md` (export → LLM → import loop), `docs/modeling/llm_workflow.md`, `docs/modeling/ai_assisted_tagging.md`, SPARQL examples under `openclaw/bench/sparql/`, and operator framing in `config/ai/operator_framework.yaml`. Log ontology/import quirks in `issues_log.md` (area: model).
+
+## Toward live HVAC / building operator
+
+When work shifts from **bench** to **real equipment**, keep using the same file-backed loop (`HANDOFF_PROTOCOL`, `issues_log`, integrity sweep). Add: `docs/operations/openfdd_integrity_sweep.md`, `docs/operations/overnight_review.md`, `docs/howto/cloning_and_porting.md`, and `references/future_operator_clones.md`. **Site-specific truth** lives in the **live knowledge graph**, not in a separate “automated testing” repo.
 
 ## GitHub and memory trail
 

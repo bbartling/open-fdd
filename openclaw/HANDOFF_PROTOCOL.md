@@ -6,6 +6,8 @@ OpenClaw (dashboard at your LAN gateway) and Cursor (this IDE chat) **do not tal
 - `openclaw/logs/bootstrap-test-*.txt` — full command transcripts.
 - Optional: `memory/YYYY-MM-DD.md` at **workspace** root for human-facing notes.
 
+**Canonical lab:** **`open-fdd/openclaw/`** supersedes the old standalone repo **bbartling/open-fdd-automated-testing** — path map and deprecation copy: **`openclaw/references/legacy_automated_testing.md`**.
+
 ## File-only loop (no HTTP between Cursor and OpenClaw)
 
 You do **not** need any HTTP (or other network API) **between** Cursor and OpenClaw. Both can read/write the **same files on disk** (your workspace under `~/.openclaw/workspace/`). That is the feedback channel.
