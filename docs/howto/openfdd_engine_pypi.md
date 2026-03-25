@@ -23,21 +23,45 @@ Two distributions are relevant for **contractors / pandas + YAML** workflows:
    - Root **`pyproject.toml`** → `[project] version` for **`open-fdd`** (e.g. `2.0.8`).
    - **`packages/openfdd-engine/pyproject.toml`** → `version` and `dependencies` → `open-fdd>=X.Y.Z` aligned with what you just published (or still satisfied by `>=`).
 2. **Changelog / tag message** — note engine-only docs, IoT `RuleRunner` usage, etc., if applicable.
-3. **PyPI tokens** (GitHub → repo → **Settings → Secrets**):
-   - **`PYPI_OPENFDD_TOKEN`** — API token for the **`open-fdd`** project on PyPI.
-   - **`PYPI_OPENFDD_ENGINE_TOKEN`** — API token for the **`openfdd-engine`** project on PyPI.  
-   (Use [trusted publishing](https://docs.pypi.org/trusted-publishers/) later if you prefer OIDC over long-lived tokens.)
 
-4. **Same secret name for both packages will not work** — each PyPI project needs its **own** API token (or one user token with scope for **both** projects, pasted into **both** secrets if you accept that coupling). **`PYPI_OPENFDD_TOKEN`** must authorize uploads to **`open-fdd`**; **`PYPI_OPENFDD_ENGINE_TOKEN`** must authorize uploads to **`openfdd-engine`**.
+### PyPI upload auth (required once per project)
 
-### If CI shows `HTTPError: 403 Forbidden` on `twine upload`
+CI uses **[PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)** (OpenID Connect from GitHub). **No `TWINE_PASSWORD` / repo secrets** are required if this is configured.
 
-That is **not** caused by the Python version used in Actions (3.12 vs 3.14). Typical causes:
+For **each** PyPI project (`open-fdd` and `openfdd-engine`):
 
-- **Secret missing or wrong name** — In the job log, `TWINE_PASSWORD:` appears blank when the secret is unset or the workflow can’t read it. Confirm **Settings → Secrets and variables → Actions** on **`bbartling/open-fdd`** (not only a fork) and that the secret names match the workflow exactly.
-- **Token scope** — PyPI “API token” must be tied to the **correct project** (`open-fdd` vs `openfdd-engine`) or be an account token with upload rights to that project.
-- **You are not a maintainer** of the PyPI project — 403 until [ownership](https://pypi.org/help/#project-name) is fixed.
-- **Re-upload** — PyPI rejects replacing the same version; bump **`pyproject.toml`** version and use a **new tag** if `0.1.1` already partially uploaded (rare for failed uploads).
+1. Log in to [pypi.org](https://pypi.org), open the project → **Manage project** → **Publishing**.
+2. Under **Manage publishers**, add a **GitHub** publisher:
+   - **Owner:** `bbartling` (your GitHub org or user)
+   - **Repository name:** `open-fdd`
+   - **Workflow name:** must match the file name exactly:
+     - for **`open-fdd`** uploads → **`publish-open-fdd.yml`**
+     - for **`openfdd-engine`** uploads → **`publish-openfdd-engine.yml`**
+3. Save. PyPI may show a **pending** publisher until the first successful run.
+
+Workflows use **`pypa/gh-action-pypi-publish@release/v1`** with **`permissions: id-token: write`**. Official guide: [Publishing package distribution releases using GitHub Actions CI/CD workflows](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+
+**After changing workflows:** Git tag builds use the workflow YAML from the **tagged commit**. Merge the updated workflows to **`master`**, then either **delete and recreate** the release tags on the new commit or cut a **patch version** (e.g. `2.0.9`) and new tags so Actions picks up OIDC.
+
+### Fallback: API token instead of OIDC
+
+If you cannot use trusted publishing, edit the **Publish to PyPI** step in the workflow to pass a secret, for example:
+
+```yaml
+uses: pypa/gh-action-pypi-publish@release/v1
+with:
+  packages-dir: dist/
+  password: ${{ secrets.PYPI_OPENFDD_TOKEN }}
+```
+
+Use a **project-scoped** PyPI token for the matching project. Empty or wrong secret still yields **403**.
+
+### If CI shows `HTTPError: 403 Forbidden`
+
+- **OIDC not configured** on the PyPI project for that **exact** workflow filename, or publisher still **pending**.
+- **Wrong workflow name** in PyPI (typo vs `publish-open-fdd.yml` / `publish-openfdd-engine.yml`).
+- **Tag points to an old commit** that used `twine` + missing secrets — merge OIDC workflows and re-tag.
+- **Version already exists** on PyPI — bump version and use a new tag.
 
 ---
 
