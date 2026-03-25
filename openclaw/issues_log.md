@@ -57,5 +57,5 @@ Suggested fields for each entry:
 ## 2026-03-27 — Session continuity (browser / Control UI)
 
 - **Durable history:** OpenClaw **Control UI chat is not** the long-term record. After closing the browser, rely on **`openclaw/issues_log.md`**, **`openclaw/HANDOFF_PROTOCOL.md`**, **`openclaw/SKILL.md`**, **`openclaw/references/testing_layers.md`**, git history, and workspace **`memory/YYYY-MM-DD.md`** (optional).
-- **Git (OpenClaw attempted):** Local commit `feat(openclaw): open-fdd-lab SKILL.md, references, scripts, assets` may exist **ahead of `origin`** if `git push` did not finish; run `git status` and `git push origin develop/v2.0.7` from `open-fdd/`. Subsequent Cursor edits (CodeRabbit batch, `testing_layers.md`) need a **separate commit** before push.
+- **Git:** OpenClaw had started add/commit/push; repo was **ahead of `origin`** until Cursor pushed **`develop/v2.0.7`** (`b4fc266` feat openclaw lab bundle, then `963e31c` CodeRabbit fixes + `testing_layers.md` + issues_log session notes). Re-pull on other clones if needed.
 - **Testing map for humans:** `openclaw/references/testing_layers.md` — documents `scripts/bootstrap.sh` vs `openclaw/bench/*` vs `open_fdd/tests/` and how to classify failures in `issues_log.md` vs GitHub Issues.
