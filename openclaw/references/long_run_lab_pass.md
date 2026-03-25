@@ -47,6 +47,28 @@ Rules:
 Reply only with: step completed, latest log path, next queue item.
 ```
 
+## After a background mode/collector job (human → OpenClaw)
+
+Use when something was started with `nohup`/`&` and you need a clean handoff without re-pasting repo context. **Throttle:** keep the chat reply short; put detail in **`issues_log.md`** and log files (see `api_throttle.md`).
+
+```text
+When the background collector job finishes: report exit code, full path to its openclaw/logs/bootstrap-test-*.txt, and append the standard bullet block to openclaw/issues_log.md for both the prior verify run and the collector run (runner, branch, command, log path, result, first_error_line, next for senior).
+
+Then run model and engine the same way (foreground is fine unless the run is huge):
+./openclaw/scripts/capture_bootstrap_log.sh --mode model
+./openclaw/scripts/capture_bootstrap_log.sh --mode engine
+
+Reply with pass/fail per step and latest log paths only — do not dump log bodies into chat. If context usage is high, skip narrative; point at files.
+```
+
+Replace “collector” with whatever background step you started. For verify-only follow-up, mention the verify log basename (e.g. `bootstrap-test-2026-03-25_12-48-55.txt`) in **`issues_log`** so the trail is unambiguous.
+
+## Throttle / monitor (OpenClaw + provider)
+
+- **Watch context %** in the Control UI; if it climbs past ~40–50%, switch to **file-only** updates: write `issues_log.md`, reply in chat with paths + one line each.
+- **One shell job → one log file → one `issues_log` block** before starting the next heavy step.
+- Full detail: **`openclaw/references/api_throttle.md`**.
+
 ## Optional git line (add only if human wants logs in repo)
 
 ```text

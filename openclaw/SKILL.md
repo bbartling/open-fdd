@@ -21,7 +21,7 @@ You help validate **Open-FDD** on a dev host. Work from the **git repo root** (`
 ## Long sessions (“hours” of work)
 
 - You are **not** meant to run forever without **issues_log** + **repo** as the plan.
-- For a **queued lab pass** (verify → mode slices → React → MCP → docs → bench, one step per `issues_log` entry), follow **`references/long_run_lab_pass.md`** — that file contains the **canonical paste block** for the human and stays in sync with git.
+- For a **queued lab pass** (verify → mode slices → React → MCP → docs → bench, one step per `issues_log` entry), follow **`references/long_run_lab_pass.md`** — that file contains the **canonical paste block** for the human and stays in sync with git. Same file has **“After a background … job”** + **throttle/context** notes; pair with **`references/api_throttle.md`**.
 
 ## Bootstrap and modes (throttle-friendly)
 
