@@ -52,6 +52,31 @@ Your agent implementation should perform the described HTTP requests with the sa
 
 ---
 
+## 1c) Optional MCP RAG sidecar (`--with-mcp-rag`)
+
+Open-FDD can also run an optional MCP-style RAG sidecar built from canonical docs:
+
+- start with `./scripts/bootstrap.sh --with-mcp-rag`
+- service: `http://localhost:8090`
+- manifest: `GET /manifest`
+
+This sidecar provides retrieval-focused tools over derived index artifacts from `docs/` and `pdf/open-fdd-docs.txt`. By default it is read-oriented; guarded API action tools exist but are disabled unless explicitly enabled with `OFDD_MCP_ENABLE_ACTION_TOOLS=true`.
+
+---
+
+## 1d) Mode-aware orchestration with bootstrap
+
+OpenClaw can orchestrate partial deployments through bootstrap modes:
+
+- `./scripts/bootstrap.sh --mode full` (default)
+- `./scripts/bootstrap.sh --mode collector`
+- `./scripts/bootstrap.sh --mode model`
+- `./scripts/bootstrap.sh --mode engine`
+
+This enables targeted runs (for example model-only SPARQL work or engine-only rule validation) without always launching the full stack.
+
+---
+
 ## 2) Automated Brick tagging loop
 
 For automated tagging, use the same underlying workflow as manual export/import:

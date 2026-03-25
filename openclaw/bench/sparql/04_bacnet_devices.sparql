@@ -1,0 +1,4 @@
+# Recipe 4: All BACnet devices (after point_discovery_to_graph)
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
+PREFIX bacnet: <http://data.ashrae.org/bacnet/2020#>
+SELECT ?dev WHERE { ?dev a bacnet:Device }

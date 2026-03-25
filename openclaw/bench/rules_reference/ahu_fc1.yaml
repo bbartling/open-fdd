@@ -1,0 +1,24 @@
+# Rule A — Duct static below setpoint at full fan speed (GL36-inspired)
+# VAV only (constant volume has no duct static pressure control)
+# BRICK: Supply_Air_Static_Pressure_Sensor, Supply_Air_Static_Pressure_Setpoint, Supply_Fan_Speed_Command
+name: low_duct_static_at_max_fan
+description: Duct static pressure too low with supply fan at max speed
+type: expression
+flag: rule_a_flag
+equipment_type: [VAV_AHU]
+
+inputs:
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+  Supply_Air_Static_Pressure_Setpoint:
+    brick: Supply_Air_Static_Pressure_Setpoint
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+
+params:
+  static_err_thres: 0.1      # inches H2O
+  vfd_max: 0.95              # 95% max
+  vfd_err_thres: 0.05
+
+expression: |
+  (Supply_Air_Static_Pressure_Sensor < Supply_Air_Static_Pressure_Setpoint - static_err_thres) & (Supply_Fan_Speed_Command >= vfd_max - vfd_err_thres)

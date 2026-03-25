@@ -1,0 +1,15 @@
+# Recipe 5: Brick class → label → rule input (FDD rule mapping)
+# Run via POST /data-model/sparql or Data Model Testing → Run SPARQL
+PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX ofdd: <http://openfdd.local/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?brick_class ?label ?rule_input WHERE {
+  ?point a ?brick_type .
+  FILTER(STRSTARTS(STR(?brick_type), STR(brick:)))
+  BIND(REPLACE(STR(?brick_type), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
+  ?point rdfs:label ?label .
+  OPTIONAL { ?point ofdd:mapsToRuleInput ?rule_input . }
+}
+ORDER BY ?brick_class ?rule_input
+LIMIT 50

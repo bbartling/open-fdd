@@ -1,0 +1,15 @@
+# Weather: Temperature sensor stuck (minimal change over window)
+# Fault when rolling spread (max - min) in window < tolerance
+name: weather_temp_stuck
+description: Temperature sensor stuck at near-constant value
+type: flatline
+flag: fault_temp_stuck
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+
+params:
+  tolerance: 0.2    # degF max spread in window
+  window: 6          # samples for flatline check (e.g. 6 hours for hourly data)
+  rolling_window: 6 # consecutive True samples required before flagging

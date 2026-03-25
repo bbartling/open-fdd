@@ -1,0 +1,15 @@
+# Recipe 23: Orphan external references (ref-schema hygiene)
+# Finds BACnet/Timeseries external reference blank nodes that are not linked
+# from any point via ref:hasExternalReference.
+PREFIX ref: <https://brickschema.org/schema/Brick/ref#>
+
+SELECT ?ref_type (COUNT(?ref_node) AS ?orphan_count) WHERE {
+  VALUES ?ref_type { ref:BACnetReference ref:TimeseriesReference }
+  ?ref_node a ?ref_type .
+  FILTER NOT EXISTS {
+    ?point ref:hasExternalReference ?ref_node .
+  }
+}
+GROUP BY ?ref_type
+ORDER BY ?ref_type
+

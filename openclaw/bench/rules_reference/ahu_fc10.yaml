@@ -1,0 +1,23 @@
+# Rule H — Ambient vs blended mismatch (econ+mech) (GL36-inspired)
+name: oat_mat_mismatch_econ_mech
+description: OAT and MAT should be approx equal in economizer + mechanical cooling mode
+type: expression
+flag: rule_h_flag
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+  Valve_Command:
+    brick: Valve_Command
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+
+params:
+  outdoor_err_thres: 1.0
+  mix_err_thres: 1.0
+
+expression: |
+  (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > np.sqrt(mix_err_thres**2 + outdoor_err_thres**2)) & (Valve_Command > 0.01) & (Damper_Position_Command > 0.9)

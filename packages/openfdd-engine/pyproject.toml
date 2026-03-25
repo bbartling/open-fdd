@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openfdd-engine"
+version = "0.1.1"
+description = "Standalone Open-FDD Pandas/YAML fault detection engine"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Open-FDD Contributors" }]
+requires-python = ">=3.9"
+dependencies = [
+  "open-fdd>=2.0.8",
+  "pandas",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+brick = [
+  "rdflib>=7.5.0,<8",
+  "pyparsing>=2.1.0,<3.2",
+]
+dev = [
+  "pytest",
+  "rdflib>=7.5.0,<8",
+  "pyparsing>=2.1.0,<3.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/bbartling/open-fdd"
+Documentation = "https://bbartling.github.io/open-fdd/"
+Repository = "https://github.com/bbartling/open-fdd"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openfdd_engine*"]
+

@@ -1,0 +1,6 @@
+# Minimal deps for e2e_frontend_selenium.py, long_term_bacnet_scrape_test.py, sparql_crud_and_frontend_test.py
+selenium>=4.0
+webdriver-manager>=4.0
+httpx
+# Optional: for sparql_crud_and_frontend_test.py --expected-from-ttl (run queries against config/data_model.ttl)
+rdflib>=7.0

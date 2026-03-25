@@ -238,6 +238,38 @@ services:
       driver: json-file
       options: *log-opts
 
+  # Optional MCP RAG service (profile mcp-rag) derived from canonical docs/text.
+  mcp-rag:
+    profiles:
+      - mcp-rag
+    build:
+      context: ..
+      dockerfile: stack/Dockerfile.mcp_rag
+    container_name: openfdd_mcp_rag
+    ports:
+      - "8090:8090"
+    environment:
+      OFDD_MCP_RAG_INDEX_PATH: /app/stack/mcp-rag/index/rag_index.json
+      OFDD_MCP_OFDD_API_URL: http://api:8000
+      OFDD_MCP_OFDD_API_KEY: ${OFDD_API_KEY:-}
+      # Read-only retrieval by default; set true only when action tools are intended.
+      OFDD_MCP_ENABLE_ACTION_TOOLS: "${OFDD_MCP_ENABLE_ACTION_TOOLS:-false}"
+    volumes:
+      - ../stack/mcp-rag/index:/app/stack/mcp-rag/index
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: *log-opts
+
   # React dashboard — Vite dev server with hot reload, source mounted from host
   frontend:
     image: node:22-alpine
