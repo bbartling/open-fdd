@@ -1,29 +1,31 @@
-# Reports
+# OpenClaw reports
 
-This directory is for durable overnight and review artifacts.
+This directory stores reusable testing reports for the Open-FDD bench.
 
 ## Purpose
 
-Reports here should make it easy for a human or future agent to understand:
+Use reports to summarize runs for:
+- full-stack validation
+- knowledge-graph-only validation
+- data-ingestion-only validation
+- BACnet bench runs
+- docs and parity checks
 
-- what the overnight process checked
-- what evidence was collected
-- what passed, failed, or was inconclusive
-- what follow-up is needed
+## Suggested report types
 
-## Intended report types
+- startup report
+- smoke-test report
+- graph-parity report
+- BACnet soak report
+- regression report
 
-- BACnet-to-fault verification reports
-- overnight regression summaries
-- docs/link review summaries
-- PR review summaries when the findings are important enough to preserve
+## Workflow
 
-## Naming guidance
+1. Run the relevant bench mode.
+2. Capture the checks performed and the result.
+3. Save the summary here or in `reports/drafts/`.
+4. Promote the useful bits into upstream docs later.
 
-Suggested names:
+## Notes
 
-- `overnight-bacnet-verification-YYYY-MM-DD.md`
-- `overnight-summary-YYYY-MM-DD.md`
-- `docs-link-review-YYYY-MM-DD.md`
-
-Keep reports human-readable first. JSON sidecars can be added later if needed.
+Keep the reports readable and boringly repeatable. That makes them easier to upstream.

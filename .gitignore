@@ -179,3 +179,5 @@ openclaw/dashboard/progress.json
 openclaw/reports/*.md
 !openclaw/reports/README.md
 !openclaw/reports/overnight-bacnet-verification-template.md
+openclaw/.skill-workspace-marker
+openclaw/logs/*.pid

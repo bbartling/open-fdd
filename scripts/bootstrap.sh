@@ -587,7 +587,11 @@ verify_code() {
   if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest $pytest_target -v --tb=short); then
     echo "Backend: OK"
   else
-    echo "Backend: FAIL or skipped (install: pip install -e \".[dev]\" then run: unset OFDD_API_KEY && pytest $pytest_target -v)"
+    echo "Backend: FAIL or skipped."
+    echo "  Fix: from repo root create a venv and install dev deps (pytest is in [project.optional-dependencies].dev):"
+    echo "    python3 -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e \".[dev]\""
+    echo "  This script uses .venv/bin/python when present; otherwise it falls back to python3 (often missing pytest)."
+    echo "  Manual rerun: cd \"$REPO_ROOT\" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest $pytest_target -v --tb=short"
     failed=1
   fi
   echo ""

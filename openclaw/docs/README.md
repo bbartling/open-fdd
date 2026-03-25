@@ -1,5 +1,11 @@
-# Lab-only Markdown (optional)
+# OpenClaw bench docs
 
-Most OpenClaw / operator documentation is published from the main [`docs/`](../docs/) tree (GitHub Pages).
+This folder holds lab-only notes for Open-FDD test-bench work.
 
-Use this folder for **bench-only** notes you do **not** want on the docs site. If a page is useful to humans generally, add it under `docs/` with Jekyll front matter instead.
+Use it for:
+- operator run notes
+- mode-specific checklists
+- bench procedures
+- validation findings
+
+Keep canonical product guidance in the main repo `docs/` tree.

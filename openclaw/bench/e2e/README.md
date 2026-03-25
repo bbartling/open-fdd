@@ -1,35 +1,67 @@
-# Optional E2E and long-run bench
+# OpenClaw bench E2E test modes
 
-These scripts are **not** run by `./scripts/bootstrap.sh --test`. They target a **live** Open-FDD deployment (API + frontend + optional BACnet devices) and may require Selenium, long runtime, and secrets.
+This folder defines the **bench-oriented test modes** for Open-FDD.
 
-## Install
+Use these modes when you want to validate a test-bench deployment without guessing which services should be running.
 
-From repo root (with a venv):
+## Modes
+
+- **full-stack** — DB + API + frontend + Caddy + BACnet server + BACnet scraper + weather + FDD loop
+- **knowledge-graph-only** — DB + API + frontend + Caddy
+- **data-ingestion-only** — DB + BACnet server + BACnet scraper
+- **engine-only** — DB + FDD loop + weather scraper
+- **bench-bacnet** — fake BACnet devices + collector path + graph sync checks
+
+## Canonical commands
+
+From repo root:
 
 ```bash
-pip install -r openclaw/bench/e2e/requirements-e2e.txt
+./scripts/bootstrap.sh                    # full-stack
+./scripts/bootstrap.sh --mode model       # knowledge-graph-only
+./scripts/bootstrap.sh --mode collector   # data-ingestion-only
+./scripts/bootstrap.sh --mode engine      # engine-only
+./scripts/bootstrap.sh --with-mcp-rag     # full-stack plus doc retrieval sidecar
+./scripts/bootstrap.sh --test             # CI-style checks
 ```
 
-## Orchestrator
+## What to test in each mode
 
-[`automated_suite.py`](automated_suite.py) runs steps in sequence. Example (adjust URLs):
+- **full-stack**
+  - service startup
+  - API health
+  - BACnet reachability
+  - graph sync
+  - frontend smoke checks
+  - docs/context endpoint
 
-```bash
-python openclaw/bench/e2e/automated_suite.py \
-  --api-url http://127.0.0.1:8000 \
-  --frontend-url http://127.0.0.1:5173 \
-  --daytime-smoke
-```
+- **knowledge-graph-only**
+  - RDF config seed
+  - `/mcp/manifest`
+  - `/model-context/docs`
+  - export/import endpoints
+  - SPARQL queries
 
-Use `--skip e2e` (etc.) to run a subset. See `--help` for flags.
+- **data-ingestion-only**
+  - BACnet server startup
+  - fake device discovery
+  - point scrape ingestion
+  - telemetry persistence
 
-## Individual scripts
+- **engine-only**
+  - rule execution
+  - weather feed
+  - fault generation/observation
+  - long-run stability
 
-| Script | Role |
-|--------|------|
-| `1_e2e_frontend_selenium.py` | Browser E2E against the React app |
-| `2_sparql_crud_and_frontend_test.py` | SPARQL/API/UI parity |
-| `3_long_term_bacnet_scrape_test.py` | Long BACnet scrape / fault checks |
-| `4_hot_reload_test.py` | Rule hot-reload / faults UI smoke |
+## Helper files
 
-Set `OFDD_API_KEY` in the environment when the API requires Bearer auth.
+- `1_e2e_frontend_selenium.py` — UI smoke path
+- `2_sparql_crud_and_frontend_test.py` — graph + CRUD + UI
+- `3_long_term_bacnet_scrape_test.py` — persistence / soak test
+- `4_hot_reload_test.py` — dev ergonomics regression
+- `automated_suite.py` — orchestrator
+
+## Contributing back upstream
+
+Keep any new tools in this folder or under `bench/` so they can be reviewed, documented, and upstreamed cleanly into Open-FDD later.

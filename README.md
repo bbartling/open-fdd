@@ -43,11 +43,12 @@ This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BA
 Give the agent **terminal access** to a cloned repo and the **repo root** as the working directory (`cd open-fdd`). OpenClaw does not replace Docker; it runs the same entrypoints a human would:
 
 1. **Bring the stack up:** `./scripts/bootstrap.sh` (full stack by default). **Partial stack:** `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. **Optional RAG sidecar:** add `--with-mcp-rag` (service on **8090** after index build; see [Getting Started](docs/getting_started.md)).
-2. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate).
+2. **Host Python for `--test`:** backend pytest runs on the **host**; create a venv and `pip install -e ".[dev]"` first (see [Development: branches and tests](#development-branches-and-tests)). `bootstrap.sh` uses `.venv/bin/python` when it exists.
+3. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate).
 
 **Where to “MCP” / discover tools (HTTP, not stdio):** after services are up, the platform lists tool-shaped HTTP mappings at **`http://localhost:8000/mcp/manifest`** (Bearer **`OFDD_API_KEY`** from **`stack/.env`** when auth is enabled). If you started MCP RAG, use **`http://localhost:8090/manifest`** for that sidecar’s routes. Long-form guide: [Open‑Claw integration](docs/openclaw_integration.md).
 
-**What to paste for OpenClaw (one line):** *Working directory: this repo root; run `./scripts/bootstrap.sh` then `./scripts/bootstrap.sh --test` when asked; discover HTTP tools from `http://localhost:8000/mcp/manifest` and, if `--with-mcp-rag` was used, `http://localhost:8090/manifest`; send `Authorization: Bearer <OFDD_API_KEY>` using the value in `stack/.env`.*
+**What to paste for OpenClaw (one line):** *Working directory: this repo root; create `.venv` and `pip install -e ".[dev]"` before `--test` if host pytest is missing; run `./scripts/bootstrap.sh` then `./scripts/bootstrap.sh --test` when asked; discover HTTP tools from `http://localhost:8000/mcp/manifest` and, if `--with-mcp-rag` was used, `http://localhost:8090/manifest`; send `Authorization: Bearer <OFDD_API_KEY>` using the value in `stack/.env`. Lab notes: `openclaw/README.md`, logs under `openclaw/logs/`.*
 
 **One-liner — humans:** Clone the repo, `cd` into it, run `./scripts/bootstrap.sh` for the **full** stack or `./scripts/bootstrap.sh --mode collector|model|engine` for a **modular** slice, optionally add `--with-mcp-rag`, and run `./scripts/bootstrap.sh --test` to exercise the automated checks.
 
