@@ -2,6 +2,10 @@
 
 OpenClaw agents burn **context and rate limits** on long transcripts and tight loops.
 
+## Five-bullet session status (no log dumps)
+
+When the human asks for a **lab snapshot** (often together with **`issues_log.md`** + **`long_run_lab_pass.md`** + this file), reply with **exactly five bullets**: **what finished**, **what’s running**, **latest log paths**, **pass/fail**, **what’s next** — **no pasted log bodies**. Checklists and the canonical human prompt: **`session_status_summary.md`**.
+
 ## Practices
 
 1. **Batch work:** one bootstrap + one test log per “round”; avoid re-explaining the whole repo each message.

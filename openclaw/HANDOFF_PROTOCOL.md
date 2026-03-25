@@ -8,6 +8,8 @@ OpenClaw (dashboard at your LAN gateway) and Cursor (this IDE chat) **do not tal
 
 **Canonical lab:** **`open-fdd/openclaw/`** supersedes the old standalone repo **bbartling/open-fdd-automated-testing** — path map and deprecation copy: **`openclaw/references/legacy_automated_testing.md`**.
 
+**Status-only ping:** if the human asks to read **`issues_log`** + **`long_run_lab_pass`** + **`api_throttle`** and summarize, the agent must return the **5-bullet** shape in **`openclaw/references/session_status_summary.md`** (no log file dumps in chat).
+
 ## File-only loop (no HTTP between Cursor and OpenClaw)
 
 You do **not** need any HTTP (or other network API) **between** Cursor and OpenClaw. Both can read/write the **same files on disk** (your workspace under `~/.openclaw/workspace/`). That is the feedback channel.

@@ -34,13 +34,14 @@ Same tools, any building: repo stores reusable process, while site-specific trut
 2. `openclaw/SKILL.md` — agent behavior, bootstrap modes, MCP, security scope.
 3. `openclaw/references/testing_layers.md` — where pytest vs bench vs `bootstrap.sh` live.
 4. `openclaw/references/legacy_automated_testing.md` — redirect from deprecated **open-fdd-automated-testing** if anything still points there.
+5. `openclaw/references/session_status_summary.md` — **5-bullet** lab snapshot format when agents must not dump logs into provider chat.
 
 **Product and operations (published docs paths):**
 
-5. [OpenClaw integration](../openclaw_integration)
-6. [Open-FDD integrity sweep](openfdd_integrity_sweep)
-7. [Operator framework](operator_framework)
-8. [AI PR review playbook](../appendix/ai_pr_review_playbook)
+6. [OpenClaw integration](../openclaw_integration)
+7. [Open-FDD integrity sweep](openfdd_integrity_sweep)
+8. [Operator framework](operator_framework)
+9. [AI PR review playbook](../appendix/ai_pr_review_playbook)
 
 **AI data modeling (when the stack includes model/API):** [LLM workflow](../modeling/llm_workflow), [AI-assisted tagging](../modeling/ai_assisted_tagging), plus `GET /data-model/export` and `PUT /data-model/import` as in OpenClaw integration.
 

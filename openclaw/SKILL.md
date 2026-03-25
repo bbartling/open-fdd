@@ -22,6 +22,18 @@ OpenClaw loads **[AgentSkills](https://agentskills.io)-compatible** folders: eac
 5. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
 6. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
 7. **`openclaw/references/long_run_lab_pass.md`** — **multi-hour / multi-session queue**, paste-ready prompt, and explicit limits (not infinite autopilot). **Backed up on GitHub** with this repo.
+8. **`openclaw/references/session_status_summary.md`** — when the human asks for a **read-only lab snapshot**, follow the **5-bullet** contract (**no log bodies**).
+
+## Session status (5 bullets — required shape)
+
+If the human says to read **`issues_log`**, **`long_run_lab_pass`**, and **`api_throttle`** (or any paraphrase: “where are we?”, “summarize the lab”), you **must**:
+
+1. Read **`openclaw/issues_log.md`** starting at the **newest `##` section** (work backward as needed).
+2. Re-skim **`openclaw/references/long_run_lab_pass.md`** and **`openclaw/references/api_throttle.md`** for queue + throttle rules.
+3. Reply with **exactly five bullets**, titled: **What finished** · **What’s running** · **Latest log paths** · **Pass / fail / blocked** · **What’s next**.
+4. **Never** paste **contents** of log files or long command output — only **paths**, **PIDs** (if stated in `issues_log`), and **one-line** outcomes.
+
+Full checklists and a **copy-paste human prompt** live in **`references/session_status_summary.md`**.
 
 ## Long sessions (“hours” of work)
 
@@ -72,7 +84,7 @@ Brick graph + equipment type differ per building. Best practices for “clone an
 
 ## Supporting files
 
-- `references/` — protocols, throttle, security scope, frontend notes, clone roadmap, **`long_run_lab_pass.md`** (multi-session queue).
+- `references/` — protocols, throttle, security scope, frontend notes, clone roadmap, **`long_run_lab_pass.md`** (multi-session queue), **`session_status_summary.md`** (5-bullet status, no log dumps).
 - `scripts/` — small shell helpers (log capture, etc.).
 - `assets/` — screenshots, fixtures (git only when small and non-secret).
 

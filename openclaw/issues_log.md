@@ -8,6 +8,7 @@ Rules:
 - Keep notes concise enough for another agent to pick up fast.
 - Prefer one bullet per issue.
 - Mention whether it is already tracked in GitHub Issues if known.
+- When a human asks OpenClaw for a **session status** read (`issues_log` + `long_run_lab_pass` + `api_throttle`), agents summarize in **5 bullets** per **`openclaw/references/session_status_summary.md`** — **log paths only**, not log bodies in chat.
 
 Suggested fields for each entry:
 - date
@@ -64,3 +65,4 @@ Suggested fields for each entry:
 - **Long-run OpenClaw prompt (in repo):** `openclaw/references/long_run_lab_pass.md` — canonical multi-session lab queue + paste-ready Control UI prompt; linked from `SKILL.md` and `README.md`. Pull `develop/v2.0.7` to sync; not stored only in chat.
 - **2026-03-27 verify + logging fix (Cursor):** OpenClaw `--verify` failed when `ts=$(date …)` was embedded in `nohup bash -lc '…'` (mangled path). **Use from `open-fdd` root:** `./openclaw/scripts/verify_with_log.sh` or `./openclaw/scripts/capture_bootstrap_log.sh --verify` — scripts own timestamp + tee + optional `.venv`. Updated `references/long_run_lab_pass.md` + `openclaw/scripts/README.md`; added `verify_with_log.sh`.
 - **Legacy automated-testing repo:** canonical lab + path map lives in **`openclaw/references/legacy_automated_testing.md`** (supersedes **bbartling/open-fdd-automated-testing**); add deprecation banner to old README when maintaining that remote.
+- **2026-03-27 session status contract (Cursor):** Added **`openclaw/references/session_status_summary.md`** — mandatory **5-bullet** reply (finished / running / log paths / pass-fail / next) when human asks to read `issues_log` + `long_run_lab_pass` + `api_throttle`; **no log bodies** in chat. Wired into **`SKILL.md`**, **`HANDOFF_PROTOCOL.md`**, **`long_run_lab_pass.md`**, **`api_throttle.md`**, and this file’s rules header.

@@ -48,6 +48,18 @@ Rules:
 Reply only with: step completed, latest log path, next queue item.
 ```
 
+## Session status only (read files — no new commands)
+
+When the human wants **state**, not execution, use **`references/session_status_summary.md`**. **Canonical paste prompt:**
+
+```text
+Read openclaw/issues_log.md (latest ## sections), openclaw/references/long_run_lab_pass.md, and openclaw/references/api_throttle.md.
+
+Summarize in 5 bullets: what finished, what’s running, latest log paths, pass/fail, what’s next. Don’t paste log bodies.
+```
+
+**Agent obligations:** same **five bullet titles** every time; **no** multi-line excerpts from `openclaw/logs/*.txt`; put detail in **`issues_log.md`** if something new was discovered while reading.
+
 ## After a background mode/collector job (human → OpenClaw)
 
 Use when something was started with `nohup`/`&` and you need a clean handoff without re-pasting repo context. **Throttle:** keep the chat reply short; put detail in **`issues_log.md`** and log files (see `api_throttle.md`).
@@ -84,5 +96,6 @@ git add openclaw/logs/bootstrap-test-<file>.txt when green; commit/push only if 
 | `openclaw/references/long_run_lab_pass.md` | **This** runbook + paste block. |
 | `openclaw/issues_log.md` | Per-step results after each command. |
 | `openclaw/HANDOFF_PROTOCOL.md` | Cursor ↔ OpenClaw file loop. |
+| `openclaw/references/session_status_summary.md` | **5-bullet** snapshot contract + checklists. |
 
 Pull **`develop/v2.0.7`** (or your branch) on any clone to get updates.
