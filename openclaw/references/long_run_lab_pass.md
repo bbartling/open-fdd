@@ -85,7 +85,7 @@ Replace “collector” with whatever background step you started. For verify-on
 ## Optional git line (add only if human wants logs in repo)
 
 ```text
-git add openclaw/logs/bootstrap-test-<file>.txt when green; commit/push only if I said to push develop/v2.0.7.
+git add openclaw/logs/bootstrap-test-<file>.txt when green; commit/push only if I said to push (named branch).
 ```
 
 ## Where this lives in the bundle
@@ -98,4 +98,4 @@ git add openclaw/logs/bootstrap-test-<file>.txt when green; commit/push only if 
 | `openclaw/HANDOFF_PROTOCOL.md` | Cursor ↔ OpenClaw file loop. |
 | `openclaw/references/session_status_summary.md` | **5-bullet** snapshot contract + checklists. |
 
-Pull **`develop/v2.0.7`** (or your branch) on any clone to get updates.
+Pull **your working branch** on any clone to get updates.

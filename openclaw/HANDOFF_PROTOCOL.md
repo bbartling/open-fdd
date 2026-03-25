@@ -95,7 +95,7 @@ cd open-fdd
 git remote rename origin upstream   # optional; only if you already cloned upstream
 git remote add origin https://github.com/YOUR_USER/open-fdd.git
 git fetch origin
-git push -u origin develop/v2.0.7   # or your working branch name
+git push -u origin <your-branch>
 ```
 
 On the new machine:
@@ -103,7 +103,7 @@ On the new machine:
 ```bash
 git clone https://github.com/YOUR_USER/open-fdd.git
 cd open-fdd
-git checkout develop/v2.0.7   # or whatever branch you pushed
+git checkout <your-branch>
 python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
 ```
 
