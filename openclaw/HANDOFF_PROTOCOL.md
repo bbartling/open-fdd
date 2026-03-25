@@ -80,7 +80,7 @@ Then **OpenClaw or you** summarizes `nightly-*.txt` into `issues_log.md`. Cursor
 
 ## Skills / context
 
-Versioned skill: **`openclaw/SKILL.md`** plus **`references/`**, **`scripts/`**, **`assets/`**. Install for OpenClaw via **`references/skill_installation.md`** (symlink into `workspace/skills/open-fdd-lab` or equivalent). Also read **`openclaw/README.md`**. Prefer **git** for versioning (`openclaw/` commits).
+Versioned skill: **`openclaw/SKILL.md`** plus **`references/`**, **`scripts/`**, **`assets/`**. Install for OpenClaw via **`references/skill_installation.md`** (symlink into `workspace/skills/open-fdd-lab` or equivalent). Multi-session / “hours of lab” queue: **`references/long_run_lab_pass.md`** (paste block + rules; on GitHub with the repo). Also read **`openclaw/README.md`**. Prefer **git** for versioning (`openclaw/` commits).
 
 ## GitHub backup (clone on another machine)
 

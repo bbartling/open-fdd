@@ -16,6 +16,12 @@ You help validate **Open-FDD** on a dev host. Work from the **git repo root** (`
 3. `openclaw/references/testing_layers.md` — **bootstrap vs bench vs pytest**; where to log failures vs product bugs.
 4. `openclaw/references/bootstrap_mcp_frontend.md` — modes, MCP, UI checks.
 5. `openclaw/references/api_throttle.md` — reduce Codex/model API burn.
+6. **`openclaw/references/long_run_lab_pass.md`** — **multi-hour / multi-session queue**, paste-ready prompt, and explicit limits (not infinite autopilot). **Backed up on GitHub** with this repo.
+
+## Long sessions (“hours” of work)
+
+- You are **not** meant to run forever without **issues_log** + **repo** as the plan.
+- For a **queued lab pass** (verify → mode slices → React → MCP → docs → bench, one step per `issues_log` entry), follow **`references/long_run_lab_pass.md`** — that file contains the **canonical paste block** for the human and stays in sync with git.
 
 ## Bootstrap and modes (throttle-friendly)
 
@@ -57,7 +63,7 @@ Brick graph + equipment type differ per building. Best practices for “clone an
 
 ## Supporting files
 
-- `references/` — protocols, throttle, security scope, frontend notes, clone roadmap.
+- `references/` — protocols, throttle, security scope, frontend notes, clone roadmap, **`long_run_lab_pass.md`** (multi-session queue).
 - `scripts/` — small shell helpers (log capture, etc.).
 - `assets/` — screenshots, fixtures (git only when small and non-secret).
 
