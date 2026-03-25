@@ -28,6 +28,17 @@ Two distributions are relevant for **contractors / pandas + YAML** workflows:
    - **`PYPI_OPENFDD_ENGINE_TOKEN`** — API token for the **`openfdd-engine`** project on PyPI.  
    (Use [trusted publishing](https://docs.pypi.org/trusted-publishers/) later if you prefer OIDC over long-lived tokens.)
 
+4. **Same secret name for both packages will not work** — each PyPI project needs its **own** API token (or one user token with scope for **both** projects, pasted into **both** secrets if you accept that coupling). **`PYPI_OPENFDD_TOKEN`** must authorize uploads to **`open-fdd`**; **`PYPI_OPENFDD_ENGINE_TOKEN`** must authorize uploads to **`openfdd-engine`**.
+
+### If CI shows `HTTPError: 403 Forbidden` on `twine upload`
+
+That is **not** caused by the Python version used in Actions (3.12 vs 3.14). Typical causes:
+
+- **Secret missing or wrong name** — In the job log, `TWINE_PASSWORD:` appears blank when the secret is unset or the workflow can’t read it. Confirm **Settings → Secrets and variables → Actions** on **`bbartling/open-fdd`** (not only a fork) and that the secret names match the workflow exactly.
+- **Token scope** — PyPI “API token” must be tied to the **correct project** (`open-fdd` vs `openfdd-engine`) or be an account token with upload rights to that project.
+- **You are not a maintainer** of the PyPI project — 403 until [ownership](https://pypi.org/help/#project-name) is fixed.
+- **Re-upload** — PyPI rejects replacing the same version; bump **`pyproject.toml`** version and use a **new tag** if `0.1.1` already partially uploaded (rare for failed uploads).
+
 ---
 
 ## 2) Publish `open-fdd` (main package)
