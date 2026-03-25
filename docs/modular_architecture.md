@@ -47,3 +47,7 @@ Optional overlays still apply (`--with-grafana`, `--with-mcp-rag`, `--with-mqtt-
 
 The repository remains a single integrated codebase while contracts and modes are formalized. This avoids a hard split now and enables later package/repo extraction with fewer regressions.
 
+## External IoT / “we already have collection + modeling”
+
+If another system owns **ingestion** and **semantic modeling**, you can still use Open-FDD rules in two ways: **Docker `--mode engine`** (DB + `fdd-loop` + weather) or **library-only** `RuleRunner` on **pandas** with the **same YAML** as the platform. See [Engine-only deployment and external IoT pipelines](howto/engine_only_iot).
+

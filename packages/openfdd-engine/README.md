@@ -23,4 +23,5 @@ pip install "openfdd-engine[brick]"
 
 Rule authoring guidance remains in the Open-FDD docs:
 - `docs/expression_rule_cookbook.md`
+- [Engine-only deployment and external IoT pipelines](https://github.com/bbartling/open-fdd/blob/develop/docs/howto/engine_only_iot.md) — when to use Docker **engine** mode vs **library-only** `RuleRunner` for external data pipelines.
 
