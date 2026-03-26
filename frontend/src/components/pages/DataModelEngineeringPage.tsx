@@ -147,8 +147,11 @@ export function DataModelEngineeringPage() {
           <CardTitle className="text-lg">Overview</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <label className="block text-xs">Selected equipment</label>
+          <label className="block text-xs" htmlFor="selected-equipment">
+            Selected equipment
+          </label>
           <select
+            id="selected-equipment"
             className="h-9 w-full max-w-lg rounded-lg border border-border/60 bg-background px-3 text-sm"
             value={selectedEquipment?.id ?? ""}
             onChange={(e) => setSelectedEquipmentId(e.target.value)}
@@ -291,16 +294,20 @@ function EngineeringEditor({
         <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {Object.entries(data).map(([key, value]) => (
-          <label key={key} className="text-sm">
-            <span className="mb-1 block text-xs text-muted-foreground">{key}</span>
-            <input
-              value={value}
-              onChange={(e) => setData({ ...data, [key]: e.target.value })}
-              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </label>
-        ))}
+        {Object.entries(data).map(([key, value]) => {
+          const inputId = `${title.replace(/\s+/g, "-").toLowerCase()}-${key}-input`;
+          return (
+            <label key={key} className="text-sm" htmlFor={inputId}>
+              <span className="mb-1 block text-xs text-muted-foreground">{key}</span>
+              <input
+                id={inputId}
+                value={value}
+                onChange={(e) => setData({ ...data, [key]: e.target.value })}
+                className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -323,6 +330,7 @@ function EngineeringEditor({
           <textarea
             value={topologyJson}
             onChange={(e) => setTopologyJson(e.target.value)}
+            aria-label="Topology JSON"
             className="h-48 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm"
             spellCheck={false}
           />
@@ -340,6 +348,7 @@ function EngineeringEditor({
           <textarea
             value={extensionsJson}
             onChange={(e) => setExtensionsJson(e.target.value)}
+            aria-label="Extensions JSON"
             className="h-32 w-full rounded-lg border border-border/60 bg-card px-3 py-2 font-mono text-sm"
             spellCheck={false}
           />

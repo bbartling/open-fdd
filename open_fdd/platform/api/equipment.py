@@ -102,7 +102,9 @@ def get_equipment(equipment_id: UUID):
 @router.patch("/{equipment_id}", response_model=EquipmentRead)
 def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
     """Update equipment."""
-    updates, params = [], []
+    updates: list[str] = []
+    params: list[str] = []
+    metadata_param_index: int | None = None
     if body.name is not None:
         updates.append("name = %s")
         params.append(body.name)
@@ -113,19 +115,10 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
         updates.append("equipment_type = %s")
         params.append(body.equipment_type)
     if body.metadata_ is not None:
-        existing_metadata: dict = {}
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT metadata FROM equipment WHERE id = %s",
-                    (str(equipment_id),),
-                )
-                row = cur.fetchone()
-                if row and isinstance(row.get("metadata"), dict):
-                    existing_metadata = row["metadata"]
-        merged_metadata = _deep_merge_dict(existing_metadata, body.metadata_)
         updates.append("metadata = %s::jsonb")
-        params.append(json.dumps(merged_metadata))
+        metadata_param_index = len(params)
+        # Placeholder; replaced after reading current metadata in the transaction.
+        params.append(json.dumps(body.metadata_ or {}))
     if body.feeds_equipment_id is not None:
         updates.append("feeds_equipment_id = %s::uuid")
         params.append(str(body.feeds_equipment_id))
@@ -159,6 +152,17 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
     params.append(str(equipment_id))
     with get_conn() as conn:
         with conn.cursor() as cur:
+            if metadata_param_index is not None:
+                cur.execute(
+                    "SELECT metadata FROM equipment WHERE id = %s",
+                    (str(equipment_id),),
+                )
+                row_meta = cur.fetchone()
+                existing_metadata: dict = {}
+                if row_meta and isinstance(row_meta.get("metadata"), dict):
+                    existing_metadata = row_meta["metadata"]
+                merged_metadata = _deep_merge_dict(existing_metadata, body.metadata_)
+                params[metadata_param_index] = json.dumps(merged_metadata)
             cur.execute(
                 f"UPDATE equipment SET {', '.join(updates)} WHERE id = %s RETURNING id, site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id, created_at",
                 params,
@@ -189,6 +193,6 @@ def delete_equipment(equipment_id: UUID):
     try:
         sync_ttl_to_file()
     except Exception:
-        pass
+        logger.warning("sync_ttl_to_file failed after equipment delete", exc_info=True)
     emit(TOPIC_CRUD_EQUIPMENT + ".deleted", {"id": str(equipment_id)})
     return {"status": "deleted"}

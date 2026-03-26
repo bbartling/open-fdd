@@ -295,7 +295,7 @@ def test_equipment_patch_metadata_deep_merges_nested_keys():
     }
     cursor = MagicMock()
     cursor.execute.return_value = None
-    # 1) SELECT metadata, 2) UPDATE ... RETURNING
+    # 1) SELECT metadata for merge, 2) UPDATE ... RETURNING for PATCH response
     cursor.fetchone.side_effect = [
         {"metadata": {"engineering": {"controls": {"control_vendor": "Acme"}}}},
         updated_row,
