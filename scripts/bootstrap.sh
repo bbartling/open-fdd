@@ -541,11 +541,19 @@ verify_code() {
     fi
     if $frontend_running; then
       # Ensure new frontend deps are present when package.json changed.
-      if docker exec openfdd_frontend sh -c "cd /app && npm install && npm run lint && npx tsc -b --noEmit && npm run test"; then
+      # Use explicit workdir to avoid OCI cwd-namespace issues on some hosts.
+      if (cd / && docker exec -w /app openfdd_frontend sh -lc "npm install && npm run lint && npx tsc -b --noEmit && npm run test"); then
         echo "Frontend: OK (via container)"
       else
-        echo "Frontend: FAIL (container: docker exec openfdd_frontend sh -c 'cd /app && npm install && npm run lint && npx tsc -b --noEmit && npm run test')"
-        frontend_ok=false
+        echo "Frontend container test path failed; attempting host npm fallback..."
+        if have_cmd npm && (cd "$REPO_ROOT/frontend" && npm run lint && npx tsc -b --noEmit && npm run test); then
+          echo "Frontend: OK (via host npm fallback)"
+        else
+          echo "Frontend: FAIL (container and host fallback failed)"
+          echo "  Container cmd: docker exec -w /app openfdd_frontend sh -lc 'npm install && npm run lint && npx tsc -b --noEmit && npm run test'"
+          echo "  Host cmd:      cd frontend && npm run lint && npx tsc -b --noEmit && npm run test"
+          frontend_ok=false
+        fi
       fi
     elif (cd "$REPO_ROOT/frontend" && npm run lint 2>/dev/null && npx tsc -b --noEmit 2>/dev/null && npm run test 2>/dev/null); then
       echo "Frontend: OK (via host npm)"

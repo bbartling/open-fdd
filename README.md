@@ -42,11 +42,13 @@ This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BA
 
 Give the agent **terminal access** to a cloned repo and the **repo root** as the working directory (`cd open-fdd`). OpenClaw does not replace Docker; it runs the same entrypoints a human would:
 
+**Split machines:** OpenClaw can run on your **Windows** (or other) PC while Open‑FDD runs on a **Linux edge host** — use **SSH** (or a remote workspace) for shell commands, and point HTTP tool calls at the edge box’s **API URL** (not `localhost` unless you tunnel). For Bearer auth, use **`OFDD_API_KEY`** from the server’s **`stack/.env`** (you only need that secret on the OpenClaw side, not the whole file). Details: [Open‑Claw integration — split setup](docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
+
 **First session on a fresh clone:** read **`openclaw/HANDOFF_PROTOCOL.md`**, **`openclaw/SKILL.md`**, and **`openclaw/references/testing_layers.md`** so the agent follows the in-repo lab playbook (not a separate testing repo). The old **`bbartling/open-fdd-automated-testing`** tree is **deprecated** — see **`openclaw/references/legacy_automated_testing.md`** for the path map and a README snippet to freeze that repo.
 
 1. **Bring the stack up:** `./scripts/bootstrap.sh` (full stack by default). **Partial stack:** `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. **Optional RAG sidecar:** add `--with-mcp-rag` (service on **8090** after index build; see [Getting Started](docs/getting_started.md)).
-2. **Host Python for `--test`:** backend pytest runs on the **host**; create a venv and `pip install -e ".[dev]"` first (see [Development: branches and tests](#development-branches-and-tests)). `bootstrap.sh` uses `.venv/bin/python` when it exists.
-3. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate).
+2. **Host Python for `--test`:** backend pytest runs on the **host**; create a venv with `python3 -m venv .venv` and `pip install -e ".[dev]"` first (see [Development: branches and tests](#development-branches-and-tests)). `bootstrap.sh` uses `.venv/bin/python` when it exists.
+3. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate). Frontend checks try the `openfdd_frontend` container first, then fall back to host `npm` if container exec is restricted.
 
 **Where to “MCP” / discover tools (HTTP, not stdio):** after services are up, the platform lists tool-shaped HTTP mappings at **`http://localhost:8000/mcp/manifest`** (Bearer **`OFDD_API_KEY`** from **`stack/.env`** when auth is enabled). If you started MCP RAG, use **`http://localhost:8090/manifest`** for that sidecar’s routes. Long-form guide: [Open‑Claw integration](docs/openclaw_integration.md).
 
@@ -70,7 +72,7 @@ pytest -v
 ```
 
 - **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
-- **`./scripts/bootstrap.sh --test`** runs frontend checks + pytest + Caddy validate; pytest includes **`test_rdflib_sparql_stack.py`**, which runs the same SPARQL path as `POST /data-model/sparql` so a broken **rdflib + pyparsing** install fails CI before you deploy.
+- **`./scripts/bootstrap.sh --test`** runs frontend checks + pytest + Caddy validate; frontend checks try container-first and fall back to host `npm` when needed. Pytest includes **`test_rdflib_sparql_stack.py`**, which runs the same SPARQL path as `POST /data-model/sparql` so a broken **rdflib + pyparsing** install fails CI before you deploy.
 - Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
 - Style and workflow: [docs/contributing.md](docs/contributing.md).
 

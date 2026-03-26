@@ -1,6 +1,6 @@
 # OpenClaw lab (bench + operator context)
 
-**Cursor + OpenClaw collaboration:** see [`HANDOFF_PROTOCOL.md`](HANDOFF_PROTOCOL.md) (shared `issues_log.md` + logs; no live agent-to-agent chat).
+**Cursor + OpenClaw collaboration:** see [`HANDOFF_PROTOCOL.md`](HANDOFF_PROTOCOL.md) (shared `issues_log.md` + logs; no live agent-to-agent chat). OpenClaw may run **off the edge host** (e.g. Windows) while the stack stays on Linux — use SSH/git for files and configure API URL + **`OFDD_API_KEY`** for HTTP; see [`docs/openclaw_integration.md`](../docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
 
 **Agent skill (OpenClaw):** [`SKILL.md`](SKILL.md) with [`references/`](references/) (install: [`references/skill_installation.md`](references/skill_installation.md), **testing map:** [`references/testing_layers.md`](references/testing_layers.md), **long runs:** [`references/long_run_lab_pass.md`](references/long_run_lab_pass.md), **5-bullet status (no log dumps):** [`references/session_status_summary.md`](references/session_status_summary.md)), [`scripts/`](scripts/), [`assets/`](assets/).
 

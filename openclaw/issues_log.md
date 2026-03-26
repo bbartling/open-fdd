@@ -67,3 +67,8 @@ Suggested fields for each entry:
 - **Legacy automated-testing repo:** canonical lab + path map lives in **`openclaw/references/legacy_automated_testing.md`** (supersedes **bbartling/open-fdd-automated-testing**); add deprecation banner to old README when maintaining that remote.
 - **2026-03-27 release 2.0.8 (Cursor):** Bumped **`open-fdd`** to **2.0.8** in root **`pyproject.toml`**, **`frontend/package.json`**, and **`frontend/package-lock.json`**. Bumped **`openfdd-engine`** to **0.1.1** with dependency **`open-fdd>=2.0.8`** in **`packages/openfdd-engine/pyproject.toml`**. PyPI tags when ready: **`open-fdd-v2.0.8`**, **`openfdd-engine-v0.1.1`**.
 - **2026-03-27 session status contract (Cursor):** Added **`openclaw/references/session_status_summary.md`** — mandatory **5-bullet** reply (finished / running / log paths / pass-fail / next) when human asks to read `issues_log` + `long_run_lab_pass` + `api_throttle`; **no log bodies** in chat. Wired into **`SKILL.md`**, **`HANDOFF_PROTOCOL.md`**, **`long_run_lab_pass.md`**, **`api_throttle.md`**, and this file’s rules header.
+
+## 2026-03-28 — develop/v2.0.8 branch + version pins
+
+- **Git:** After **`develop/v2.0.7`** merged to **`master`** and the old branch was deleted on GitHub, day-to-day work continues on **`develop/v2.0.8`** (create from updated **`master`**, then push `-u origin`).
+- **Version matrix (2.0.8 line):** **`pyproject.toml`** → `open-fdd` **2.0.8**; **`frontend/package.json`** + **`frontend/package-lock.json`** (root package) → **2.0.8**; **`packages/openfdd-engine/pyproject.toml`** → **0.1.1** with **`open-fdd>=2.0.8`**. No extra hardcoded UI version — React reads API **`capabilities.version`**.
