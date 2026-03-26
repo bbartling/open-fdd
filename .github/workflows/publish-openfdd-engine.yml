@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   build-and-publish:
@@ -19,7 +20,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Build package
         working-directory: packages/openfdd-engine
@@ -31,10 +32,6 @@ jobs:
 
       - name: Publish to PyPI
         if: startsWith(github.ref, 'refs/tags/openfdd-engine-v')
-        working-directory: packages/openfdd-engine
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_OPENFDD_ENGINE_TOKEN }}
-        run: |
-          twine upload dist/*
-
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/openfdd-engine/dist/

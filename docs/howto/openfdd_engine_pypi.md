@@ -23,10 +23,45 @@ Two distributions are relevant for **contractors / pandas + YAML** workflows:
    - Root **`pyproject.toml`** → `[project] version` for **`open-fdd`** (e.g. `2.0.8`).
    - **`packages/openfdd-engine/pyproject.toml`** → `version` and `dependencies` → `open-fdd>=X.Y.Z` aligned with what you just published (or still satisfied by `>=`).
 2. **Changelog / tag message** — note engine-only docs, IoT `RuleRunner` usage, etc., if applicable.
-3. **PyPI tokens** (GitHub → repo → **Settings → Secrets**):
-   - **`PYPI_OPENFDD_TOKEN`** — API token for the **`open-fdd`** project on PyPI.
-   - **`PYPI_OPENFDD_ENGINE_TOKEN`** — API token for the **`openfdd-engine`** project on PyPI.  
-   (Use [trusted publishing](https://docs.pypi.org/trusted-publishers/) later if you prefer OIDC over long-lived tokens.)
+
+### PyPI upload auth (required once per project)
+
+CI uses **[PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)** (OpenID Connect from GitHub). **No `TWINE_PASSWORD` / repo secrets** are required if this is configured.
+
+For **each** PyPI project (`open-fdd` and `openfdd-engine`):
+
+1. Log in to [pypi.org](https://pypi.org), open the project → **Manage project** → **Publishing**.
+2. Under **Manage publishers**, add a **GitHub** publisher:
+   - **Owner:** `bbartling` (your GitHub org or user)
+   - **Repository name:** `open-fdd`
+   - **Workflow name:** must match the file name exactly:
+     - for **`open-fdd`** uploads → **`publish-open-fdd.yml`**
+     - for **`openfdd-engine`** uploads → **`publish-openfdd-engine.yml`**
+3. Save. PyPI may show a **pending** publisher until the first successful run.
+
+Workflows use **`pypa/gh-action-pypi-publish@release/v1`** with **`permissions: id-token: write`**. Official guide: [Publishing package distribution releases using GitHub Actions CI/CD workflows](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
+
+**After changing workflows:** Git tag builds use the workflow YAML from the **tagged commit**. Merge the updated workflows to **`master`**, then either **delete and recreate** the release tags on the new commit or cut a **patch version** (e.g. `2.0.9`) and new tags so Actions picks up OIDC.
+
+### Fallback: API token instead of OIDC
+
+If you cannot use trusted publishing, edit the **Publish to PyPI** step in the workflow to pass a secret, for example:
+
+```yaml
+uses: pypa/gh-action-pypi-publish@release/v1
+with:
+  packages-dir: dist/
+  password: ${{ secrets.PYPI_OPENFDD_TOKEN }}
+```
+
+Use a **project-scoped** PyPI token for the matching project. Empty or wrong secret still yields **403**.
+
+### If CI shows `HTTPError: 403 Forbidden`
+
+- **OIDC not configured** on the PyPI project for that **exact** workflow filename, or publisher still **pending**.
+- **Wrong workflow name** in PyPI (typo vs `publish-open-fdd.yml` / `publish-openfdd-engine.yml`).
+- **Tag points to an old commit** that used `twine` + missing secrets — merge OIDC workflows and re-tag.
+- **Version already exists** on PyPI — bump version and use a new tag.
 
 ---
 
@@ -64,7 +99,7 @@ git push origin open-fdd-v2.0.8
 - Package path: **`packages/openfdd-engine`**
 - Workflow: **`.github/workflows/publish-openfdd-engine.yml`**
 - Tag pattern: **`openfdd-engine-v*`** (e.g. `openfdd-engine-v0.1.1`)
-- Secret: **`PYPI_OPENFDD_ENGINE_TOKEN`**
+- **CI upload:** same **Trusted Publishing** setup as above (workflow **`publish-openfdd-engine.yml`** on this repo). Optional **token fallback** is documented in §1.
 
 Local build:
 
