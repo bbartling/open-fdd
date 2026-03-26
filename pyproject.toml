@@ -54,6 +54,7 @@ dev = [
     "openai>=1.0",
     "nbformat",
     "nbclient",
+    "ipykernel",
     "matplotlib",
 ]
 # Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
@@ -74,6 +75,7 @@ test = [
     "openai>=1.0",
     "nbformat",
     "nbclient",
+    "ipykernel",
     "matplotlib",
 ]
 # E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)

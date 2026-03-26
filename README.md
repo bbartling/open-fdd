@@ -28,6 +28,18 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (tested on Ubuntu Server and Linux Mint, x86; should work on ARM but is untested). Windows is not supported.
 
+### Engine-only (rules engine, no Docker)
+
+If you only want the Python rules engine (no full platform stack):
+
+```bash
+pip install open-fdd
+```
+
+Then run the standalone examples from:
+
+- https://github.com/bbartling/open-fdd/tree/master/examples
+
 ### 🚀 Platform Deployment (Docker)
 
 ```bash
