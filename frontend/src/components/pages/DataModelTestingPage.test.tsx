@@ -38,8 +38,17 @@ describe("DataModelTestingPage PREDEFINED_QUERIES", () => {
   it("all queries use Brick namespace", () => {
     const brickNs = "https://brickschema.org/schema/Brick#";
     for (const q of PREDEFINED_QUERIES) {
-      expect(q.query).toContain(brickNs);
+      if ((q.category ?? "hvac") === "hvac") {
+        expect(q.query).toContain(brickNs);
+      }
     }
+  });
+
+  it("engineering category queries exist", () => {
+    const engineeringCount = PREDEFINED_QUERIES.filter(
+      (q) => (q.category ?? "hvac") === "engineering",
+    ).length;
+    expect(engineeringCount).toBeGreaterThan(0);
   });
 
   it("when queryWithBacnet is present it selects BACnet refs (ofdd)", () => {

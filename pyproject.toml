@@ -52,6 +52,9 @@ dev = [
     "rdflib>=7.5.0,<8",
     "pyparsing>=2.1.0,<3.2",
     "openai>=1.0",
+    "nbformat",
+    "nbclient",
+    "matplotlib",
 ]
 # Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
 test = [
@@ -69,6 +72,9 @@ test = [
     "rdflib>=7.5.0,<8",
     "pyparsing>=2.1.0,<3.2",
     "openai>=1.0",
+    "nbformat",
+    "nbclient",
+    "matplotlib",
 ]
 # E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)
 e2e = [

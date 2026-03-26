@@ -212,3 +212,46 @@ def test_build_ttl_one_subject_per_entity_no_duplicate_uris():
     s2_ref = f":site_{str(site_id2).replace('-', '_')}"
     assert ttl.count(s1_ref) >= 1
     assert ttl.count(s2_ref) >= 1
+
+
+def test_build_ttl_includes_engineering_extension_and_s223_topology():
+    site_id = uuid4()
+    eq_id = uuid4()
+    sites = [{"id": site_id, "name": "EngSite"}]
+    equipment = [
+        {
+            "id": eq_id,
+            "site_id": site_id,
+            "name": "AHU-1",
+            "equipment_type": "Air_Handling_Unit",
+            "metadata": {
+                "engineering": {
+                    "controls": {"control_vendor": "Acme"},
+                    "mechanical": {"design_cfm": 5000},
+                    "topology": {
+                        "connection_points": [
+                            {"id": "inlet-1", "name": "Inlet", "type": "inlet", "medium": "air"}
+                        ],
+                        "connections": [
+                            {
+                                "conduit_type": "duct",
+                                "from": "inlet-1",
+                                "to": "downstream-1",
+                                "medium": "air",
+                            }
+                        ],
+                    },
+                }
+            },
+        }
+    ]
+    points = []
+    cursor = _mock_cursor(sites, equipment, points)
+    conn = _mock_conn(cursor)
+    with patch("open_fdd.platform.data_model_ttl.get_conn", return_value=conn):
+        ttl = build_ttl_from_db()
+    assert "@prefix s223:" in ttl
+    assert "ofdd:controlVendor" in ttl
+    assert "ofdd:designCFM" in ttl
+    assert "s223:hasConnectionPoint" in ttl
+    assert "s223:Duct" in ttl

@@ -24,7 +24,8 @@ import { timeAgo } from "@/lib/utils";
 const NAV_ITEMS = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/config", label: "OpenFDD Config", icon: Settings, end: false },
-  { to: "/data-model", label: "Data Model Setup", icon: Database, end: false },
+  { to: "/data-model", label: "Data Model Protocols", icon: Database, end: false },
+  { to: "/data-model-engineering", label: "Data Model Engineering", icon: Search, end: false },
   { to: "/data-model-testing", label: "Data Model Testing", icon: Search, end: false },
   { to: "/points", label: "Points", icon: CircleDot, end: false },
   { to: "/faults", label: "Faults", icon: AlertTriangle, end: false },

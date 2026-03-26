@@ -9,6 +9,7 @@ and BACnet bindings stay valid. Single source of truth = DB; TTL = DB + in-memor
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Optional
@@ -128,6 +129,14 @@ class UnifiedExportRow(BaseModel):
     site_name: str | None = None
     equipment_id: str | None = None
     equipment_name: str | None = None
+    equipment_metadata: dict | None = Field(
+        None,
+        description="Raw equipment metadata JSON from CRUD (contains engineering payload when present).",
+    )
+    engineering: dict | None = Field(
+        None,
+        description="Convenience mirror of equipment_metadata.engineering for LLM workflows.",
+    )
     external_id: str | None = Field(
         None,
         description="Time-series key; required on import for new points.",
@@ -171,7 +180,7 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT p.id, p.site_id, s.name AS site_name, p.equipment_id, e.name AS equipment_name,
+                    SELECT p.id, p.site_id, s.name AS site_name, p.equipment_id, e.name AS equipment_name, e.metadata AS equipment_metadata,
                            p.external_id, p.brick_type, p.fdd_input, p.unit,
                            p.bacnet_device_id, p.object_identifier, p.object_name,
                            COALESCE(p.polling, true) AS polling
@@ -214,6 +223,12 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                                 else None
                             ),
                             equipment_name=row.get("equipment_name"),
+                            equipment_metadata=row.get("equipment_metadata"),
+                            engineering=(
+                                (row.get("equipment_metadata") or {}).get("engineering")
+                                if isinstance(row.get("equipment_metadata"), dict)
+                                else None
+                            ),
                             external_id=row.get("external_id"),
                             brick_type=row.get("brick_type"),
                             rule_input=row.get("fdd_input"),
@@ -232,6 +247,8 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                             site_name=default_site_name,
                             equipment_id=None,
                             equipment_name=None,
+                            equipment_metadata=None,
+                            engineering=None,
                             external_id=oname or oid.replace(",", "_"),
                             brick_type=None,
                             rule_input=None,
@@ -247,7 +264,7 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                 cur.execute(
                     """
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
-                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
+                           p.equipment_id, e.name AS equipment_name, e.metadata AS equipment_metadata, p.brick_type, p.fdd_input, p.unit,
                            p.bacnet_device_id, p.object_identifier, p.object_name,
                            COALESCE(p.polling, true) AS polling
                     FROM points p
@@ -261,7 +278,7 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
             else:
                 cur.execute("""
                     SELECT p.id, p.site_id, s.name AS site_name, p.external_id,
-                           p.equipment_id, e.name AS equipment_name, p.brick_type, p.fdd_input, p.unit,
+                           p.equipment_id, e.name AS equipment_name, e.metadata AS equipment_metadata, p.brick_type, p.fdd_input, p.unit,
                            p.bacnet_device_id, p.object_identifier, p.object_name,
                            COALESCE(p.polling, true) AS polling
                     FROM points p
@@ -285,6 +302,12 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                             str(r["equipment_id"]) if r.get("equipment_id") else None
                         ),
                         equipment_name=r.get("equipment_name"),
+                        equipment_metadata=r.get("equipment_metadata"),
+                        engineering=(
+                            (r.get("equipment_metadata") or {}).get("engineering")
+                            if isinstance(r.get("equipment_metadata"), dict)
+                            else None
+                        ),
                         external_id=r["external_id"],
                         brick_type=r.get("brick_type"),
                         rule_input=r.get("fdd_input"),
@@ -437,6 +460,14 @@ class EquipmentImportRow(BaseModel):
         None,
         description="Alias: list of equipment that feed this one (first element used). Use fed_by_equipment_id or fed_by.",
     )
+    metadata: dict | None = Field(
+        None,
+        description="Optional full equipment metadata JSON (unknown keys preserved).",
+    )
+    engineering: dict | None = Field(
+        None,
+        description="Optional engineering metadata merged into metadata.engineering.",
+    )
 
 
 class DataModelImportBody(BaseModel):
@@ -570,6 +601,41 @@ def _get_equipment_id_by_name(cur: Any, site_id: UUID, name: str) -> str | None:
     return str(row["id"]) if row else None
 
 
+def _deep_merge_dict(base: dict | None, overlay: dict | None) -> dict:
+    """Recursively merge overlay into base (overlay wins; unknown keys preserved)."""
+    out = dict(base or {})
+    for k, v in (overlay or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge_dict(out.get(k), v)
+        else:
+            out[k] = v
+    return out
+
+
+def _upsert_equipment_metadata(
+    cur: Any,
+    equipment_id: str,
+    metadata: dict | None = None,
+    engineering: dict | None = None,
+) -> None:
+    """Merge metadata onto equipment row, preserving unknown keys."""
+    if metadata is None and engineering is None:
+        return
+    cur.execute("SELECT metadata FROM equipment WHERE id = %s", (equipment_id,))
+    row = cur.fetchone()
+    current = row.get("metadata") if row and isinstance(row, dict) else None
+    merged = _deep_merge_dict(current if isinstance(current, dict) else {}, metadata or {})
+    if engineering is not None:
+        merged["engineering"] = _deep_merge_dict(
+            merged.get("engineering") if isinstance(merged.get("engineering"), dict) else {},
+            engineering if isinstance(engineering, dict) else {},
+        )
+    cur.execute(
+        "UPDATE equipment SET metadata = %s::jsonb WHERE id = %s",
+        (json.dumps(merged), equipment_id),
+    )
+
+
 @router.put(
     "/import",
     summary="Import Brick mapping (create or update points; preserves BACnet refs)",
@@ -614,30 +680,52 @@ def import_data_model(body: DataModelImportBody):
                     "The tagged JSON references site IDs that are not in your database — the LLM may have invented them. "
                     "Add the site in Step 2 (Sites) and try again, or use « Tag selected site only » and re-tag so the export (and the AI) use your real site ID.",
                 )
+            # If payload mixes explicit site_id rows with many null site_id rows, infer one payload
+            # default when exactly one unique site_id is present in the payload.
+            payload_site_ids: set[str] = set()
             for row in body.points:
-                def _create_or_upsert_without_point_id() -> tuple[str, str | None]:
+                if row.site_id and str(row.site_id).strip():
+                    try:
+                        payload_site_ids.add(str(UUID(str(row.site_id).strip())))
+                    except (ValueError, TypeError):
+                        pass
+            for eq in body.equipment:
+                if eq.site_id and str(eq.site_id).strip():
+                    try:
+                        payload_site_ids.add(str(UUID(str(eq.site_id).strip())))
+                    except (ValueError, TypeError):
+                        pass
+            inferred_payload_site_id: str | None = (
+                next(iter(payload_site_ids)) if len(payload_site_ids) == 1 else None
+            )
+            for row in body.points:
+                def _create_or_upsert_without_point_id(
+                    point_row: PointImportRow,
+                ) -> tuple[str, str | None]:
                     """Create/update point by identity fields when point_id is absent or stale.
 
                     Returns: (result, warning_message)
                     result in {"created", "updated", "skipped"}.
                     """
                     effective_site_id = (
-                        row.site_id
-                        if (row.site_id and str(row.site_id).strip())
-                        else default_site_id_str
+                        point_row.site_id
+                        if (point_row.site_id and str(point_row.site_id).strip())
+                        else (inferred_payload_site_id or default_site_id_str)
                     )
                     if (
                         effective_site_id is None
-                        and getattr(row, "site_name", None)
-                        and str(row.site_name).strip()
+                        and getattr(point_row, "site_name", None)
+                        and str(point_row.site_name).strip()
                     ):
-                        effective_site_id = _resolve_site_id_by_name(cur, row.site_name)
+                        effective_site_id = _resolve_site_id_by_name(
+                            cur, point_row.site_name
+                        )
                     if not all(
                         [
                             effective_site_id,
-                            row.external_id,
-                            row.bacnet_device_id,
-                            row.object_identifier,
+                            point_row.external_id,
+                            point_row.bacnet_device_id,
+                            point_row.object_identifier,
                         ]
                     ):
                         return (
@@ -649,35 +737,43 @@ def import_data_model(body: DataModelImportBody):
                         "site_id",
                         "from GET /sites or use GET /data-model/export?site_id=YourSite to pre-fill",
                     )
-                    if row.equipment_id:
+                    if point_row.equipment_id:
                         equip_uuid_str = str(
                             _parse_uuid_or_400(
-                                row.equipment_id, "equipment_id", "from GET /equipment"
+                                point_row.equipment_id,
+                                "equipment_id",
+                                "from GET /equipment",
                             )
                         )
-                    elif row.equipment_name:
+                    elif point_row.equipment_name:
                         equip_uuid_str = _ensure_equipment(
                             cur,
                             site_uuid,
-                            row.equipment_name,
-                            row.equipment_type or "Equipment",
+                            point_row.equipment_name,
+                            point_row.equipment_type or "Equipment",
                         )
                     else:
                         equip_uuid_str = None
-                    _polling = row.polling if row.polling is not None else True
-                    _brick = _normalize_brick_type(row.brick_type)
-                    _fdd = row.rule_input if row.rule_input is not None else row.fdd_input
+                    _polling = (
+                        point_row.polling if point_row.polling is not None else True
+                    )
+                    _brick = _normalize_brick_type(point_row.brick_type)
+                    _fdd = (
+                        point_row.rule_input
+                        if point_row.rule_input is not None
+                        else point_row.fdd_input
+                    )
                     insert_params = (
                         str(site_uuid),
-                        row.external_id,
-                        row.bacnet_device_id,
-                        row.object_identifier,
-                        row.object_name,
+                        point_row.external_id,
+                        point_row.bacnet_device_id,
+                        point_row.object_identifier,
+                        point_row.object_name,
                         equip_uuid_str,
                         _brick,
                         _fdd,
-                        row.unit,
-                        row.description,
+                        point_row.unit,
+                        point_row.description,
                         _polling,
                     )
                     try:
@@ -698,17 +794,17 @@ def import_data_model(body: DataModelImportBody):
                             """UPDATE points SET bacnet_device_id = %s, object_identifier = %s, object_name = %s, equipment_id = %s, brick_type = %s, fdd_input = %s, unit = %s, description = %s, polling = %s
                                WHERE site_id = %s AND external_id = %s""",
                             (
-                                row.bacnet_device_id,
-                                row.object_identifier,
-                                row.object_name,
+                                point_row.bacnet_device_id,
+                                point_row.object_identifier,
+                                point_row.object_name,
                                 equip_uuid_str,
                                 _brick,
                                 _fdd,
-                                row.unit,
-                                row.description,
+                                point_row.unit,
+                                point_row.description,
                                 _polling,
                                 str(site_uuid),
-                                row.external_id,
+                                point_row.external_id,
                             ),
                         )
                         if cur.rowcount:
@@ -774,7 +870,7 @@ def import_data_model(body: DataModelImportBody):
                         else:
                             # Retargeted payloads can carry stale point_ids.
                             # Fall back to create/upsert by identity fields when possible.
-                            result, warn_msg = _create_or_upsert_without_point_id()
+                            result, warn_msg = _create_or_upsert_without_point_id(row)
                             if result == "created":
                                 created += 1
                                 warnings.append(
@@ -796,7 +892,7 @@ def import_data_model(body: DataModelImportBody):
                                     {"point_id": row.point_id, "reason": warn_msg}
                                 )
                 else:
-                    result, warn_msg = _create_or_upsert_without_point_id()
+                    result, warn_msg = _create_or_upsert_without_point_id(row)
                     if result == "created":
                         created += 1
                     elif result == "updated":
@@ -812,7 +908,7 @@ def import_data_model(body: DataModelImportBody):
                 effective_eq_site_id = (
                     eq.site_id
                     if (eq.site_id and str(eq.site_id).strip())
-                    else default_site_id_str
+                    else (inferred_payload_site_id or default_site_id_str)
                 )
                 eq_type = (eq.equipment_type or "Equipment").strip() or "Equipment"
                 if eq.equipment_id:
@@ -913,6 +1009,14 @@ def import_data_model(body: DataModelImportBody):
                         f"""UPDATE equipment SET {", ".join(updates)} WHERE id = %s""",
                         params,
                     )
+                _upsert_equipment_metadata(
+                    cur,
+                    eq_id,
+                    metadata=eq.metadata if isinstance(eq.metadata, dict) else None,
+                    engineering=(
+                        eq.engineering if isinstance(eq.engineering, dict) else None
+                    ),
+                )
         conn.commit()
     try:
         sync_ttl_to_file()

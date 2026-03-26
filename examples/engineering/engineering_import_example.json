@@ -1,0 +1,56 @@
+{
+  "points": [],
+  "equipment": [
+    {
+      "equipment_name": "AHU-1",
+      "site_id": "11111111-1111-1111-1111-111111111111",
+      "equipment_type": "Air_Handling_Unit",
+      "engineering": {
+        "controls": {
+          "control_vendor": "Example Controls",
+          "control_system_type": "BAS",
+          "front_end_platform": "Open-FDD",
+          "panel_name": "MDF-1",
+          "ip_address": "10.10.10.42",
+          "bacnet_network_number": "1001",
+          "install_date": "2026-03-01",
+          "as_built_date": "2026-03-15"
+        },
+        "mechanical": {
+          "manufacturer": "Example HVAC",
+          "model_number": "AHU-7X",
+          "serial_number": "SN-12345",
+          "design_cfm": "5000",
+          "cooling_capacity_tons": "25",
+          "heating_capacity_mbh": "400"
+        },
+        "electrical": {
+          "electrical_system_voltage": "480",
+          "fla": "32",
+          "mca": "40",
+          "mocp": "50",
+          "feeder_panel": "MDP-1",
+          "feeder_breaker": "3P-50A"
+        },
+        "topology": {
+          "connection_points": [
+            { "id": "ahu1-inlet", "name": "AHU-1 Inlet", "type": "inlet", "medium": "air" },
+            { "id": "ahu1-outlet", "name": "AHU-1 Outlet", "type": "outlet", "medium": "air" }
+          ],
+          "connections": [
+            { "conduit_type": "duct", "from": "ahu1-outlet", "to": "vav1-inlet", "medium": "air" }
+          ],
+          "mediums": ["air"]
+        },
+        "documents": {
+          "source_document_name": "M-401.pdf",
+          "source_sheet": "M-401",
+          "verified_by_human": "true"
+        },
+        "extensions": {
+          "commissioning_status": "pre-functional complete"
+        }
+      }
+    }
+  ]
+}

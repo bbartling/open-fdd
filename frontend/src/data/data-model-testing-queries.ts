@@ -28,6 +28,7 @@ export const PREDEFINED_QUERIES: {
   shortLabel: string;
   query: string;
   icon: typeof Wind;
+  category?: "hvac" | "engineering";
   queryWithBacnet?: string;
 }[] = [
   {
@@ -332,6 +333,135 @@ SELECT ?point ?point_label ?type ?bacnet_device_id ?object_identifier WHERE {
 }
 ORDER BY ?type ?point
 LIMIT 500`,
+  },
+  {
+    id: "engineering_ahu_design_cfm",
+    label: "AHUs and design CFM (engineering)",
+    shortLabel: "AHU design CFM",
+    icon: Wind,
+    category: "engineering",
+    query: `PREFIX brick: <${BRICK}>
+PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?ahu ?ahu_label ?design_cfm WHERE {
+  ?ahu a brick:Air_Handling_Unit .
+  OPTIONAL { ?ahu rdfs:label ?ahu_label . }
+  OPTIONAL { ?ahu ofdd:designCFM ?design_cfm . }
+}
+ORDER BY ?ahu_label`,
+  },
+  {
+    id: "engineering_by_panel",
+    label: "Equipment electrically served by panel",
+    shortLabel: "By panel",
+    icon: Gauge,
+    category: "engineering",
+    query: `PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?equipment ?equipment_label ?panel ?breaker WHERE {
+  ?equipment ofdd:feederPanel ?panel .
+  OPTIONAL { ?equipment rdfs:label ?equipment_label . }
+  OPTIONAL { ?equipment ofdd:feederBreaker ?breaker . }
+}
+ORDER BY ?panel ?equipment_label`,
+  },
+  {
+    id: "engineering_control_vendor",
+    label: "AHUs with control vendor metadata",
+    shortLabel: "AHU vendor",
+    icon: Code,
+    category: "engineering",
+    query: `PREFIX brick: <${BRICK}>
+PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?ahu ?ahu_label ?vendor WHERE {
+  ?ahu a brick:Air_Handling_Unit .
+  OPTIONAL { ?ahu rdfs:label ?ahu_label . }
+  ?ahu ofdd:controlVendor ?vendor .
+}
+ORDER BY ?ahu_label`,
+  },
+  {
+    id: "engineering_capacity_missing_bacnet_points",
+    label: "Design capacity but missing BACnet refs",
+    shortLabel: "Cap no BACnet",
+    icon: Layers,
+    category: "engineering",
+    query: `PREFIX brick: <${BRICK}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?equipment ?capacity WHERE {
+  ?equipment a brick:Equipment .
+  { ?equipment ofdd:coolingCapacityTons ?capacity . }
+  UNION
+  { ?equipment ofdd:heatingCapacityMBH ?capacity . }
+  FILTER NOT EXISTS {
+    ?point brick:isPointOf ?equipment .
+    ?point ofdd:bacnetDeviceId ?dev .
+    ?point ofdd:objectIdentifier ?oid .
+  }
+}
+ORDER BY ?equipment`,
+  },
+  {
+    id: "engineering_source_sheet",
+    label: "Engineering values sourced from PDF sheet",
+    shortLabel: "Source sheet",
+    icon: Building2,
+    category: "engineering",
+    query: `PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?equipment ?equipment_label ?doc ?sheet WHERE {
+  ?equipment ofdd:sourceDocumentName ?doc .
+  ?equipment ofdd:sourceSheet ?sheet .
+  OPTIONAL { ?equipment rdfs:label ?equipment_label . }
+}
+ORDER BY ?doc ?sheet ?equipment_label`,
+  },
+  {
+    id: "engineering_pumps_head_flow",
+    label: "Pumps with head and flow",
+    shortLabel: "Pump head/flow",
+    icon: Network,
+    category: "engineering",
+    query: `PREFIX brick: <${BRICK}>
+PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?pump ?pump_label ?flow ?head WHERE {
+  ?pump a brick:Water_Pump .
+  OPTIONAL { ?pump rdfs:label ?pump_label . }
+  OPTIONAL { ?pump ofdd:pumpFlowGPM ?flow . }
+  OPTIONAL { ?pump ofdd:pumpHeadFT ?head . }
+}
+ORDER BY ?pump_label`,
+  },
+  {
+    id: "engineering_voltage_fla",
+    label: "Equipment with electrical voltage and FLA",
+    shortLabel: "Voltage/FLA",
+    icon: ThermometerSun,
+    category: "engineering",
+    query: `PREFIX rdfs: <${RDFS}>
+PREFIX ofdd: <${OFDD}>
+SELECT ?equipment ?equipment_label ?voltage ?fla WHERE {
+  ?equipment ofdd:electricalSystemVoltage ?voltage .
+  OPTIONAL { ?equipment ofdd:fla ?fla . }
+  OPTIONAL { ?equipment rdfs:label ?equipment_label . }
+}
+ORDER BY ?equipment_label`,
+  },
+  {
+    id: "engineering_s223_topology",
+    label: "s223 connection points and conduits",
+    shortLabel: "s223 topology",
+    icon: GitBranch,
+    category: "engineering",
+    query: `PREFIX rdfs: <${RDFS}>
+PREFIX s223: <http://data.ashrae.org/standard223#>
+SELECT ?equipment ?cp ?cnx WHERE {
+  ?equipment s223:hasConnectionPoint ?cp .
+  OPTIONAL { ?equipment s223:cnx ?cnx . }
+}
+ORDER BY ?equipment ?cp`,
   },
 ];
 

@@ -112,18 +112,13 @@ Run Brick-driven fault detection and **zoom in on fault events** in an IPython n
 
 ---
 
-## Engine IoT playground
+## Engine + engineering examples
 
-Engine-only CSV + YAML walkthrough inside the repo:
+Current in-repo examples:
 
-- Folder: `examples/engine_iot_playground/`
-- Script: `examples/engine_iot_playground/run_demo.py`
-- Notebook: `examples/engine_iot_playground/RTU11_engine_tutorial.ipynb`
-- Data/rules: `examples/engine_iot_playground/data/RTU11.csv`, `examples/engine_iot_playground/rules/*.yaml`
-
-Run quickly:
-
-```bash
-cd examples/engine_iot_playground
-python run_demo.py
-```
+- RTU11 tutorial: `examples/RTU11/RTU11_engine_tutorial.ipynb`
+- AHU7 tutorial: `examples/AHU7/run_and_viz_faults.ipynb`
+- ML PoC tutorial: `examples/ML/ml_regression_fault_poc.ipynb`
+- Engineering JSON import sample: `examples/engineering/engineering_import_example.json`
+- Engineering TTL sample: `examples/engineering/engineering_topology_example.ttl`
+- Engineering SPARQL snippets: `examples/engineering/sparql_engineering_examples.md`

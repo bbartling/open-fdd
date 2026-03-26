@@ -225,6 +225,7 @@ def test_equipment_create():
         "name": "AHU-1",
         "description": None,
         "equipment_type": "Air_Handling_Unit",
+        "metadata": {"engineering": {"controls": {"control_vendor": "Acme"}}},
         "created_at": "2024-01-01T00:00:00",
     }
     # First fetchone: duplicate check (no existing equipment); second: INSERT RETURNING
@@ -241,6 +242,7 @@ def test_equipment_create():
         )
     assert r.status_code == 200
     assert r.json()["name"] == "AHU-1"
+    assert r.json()["metadata"]["engineering"]["controls"]["control_vendor"] == "Acme"
 
 
 def test_equipment_get_404():

@@ -107,6 +107,7 @@ class EquipmentRead(BaseModel):
     name: str
     description: Optional[str] = None
     equipment_type: Optional[str] = None
+    metadata: Optional[dict] = None
     feeds_equipment_id: Optional[UUID] = None
     fed_by_equipment_id: Optional[UUID] = None
     created_at: datetime

@@ -18,7 +18,7 @@ def list_equipment(site_id: UUID | None = None):
     """List equipment, optionally filtered by site."""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cols = "id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at"
+            cols = "id, site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id, created_at"
             if site_id:
                 cur.execute(
                     f"SELECT {cols} FROM equipment WHERE site_id = %s ORDER BY name",
@@ -47,7 +47,7 @@ def create_equipment(body: EquipmentCreate):
             cur.execute(
                 """INSERT INTO equipment (site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id)
                    VALUES (%s, %s, %s, %s, %s::jsonb, %s::uuid, %s::uuid)
-                   RETURNING id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at""",
+                   RETURNING id, site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id, created_at""",
                 (
                     str(body.site_id),
                     body.name,
@@ -77,7 +77,7 @@ def get_equipment(equipment_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at FROM equipment WHERE id = %s",
+                "SELECT id, site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id, created_at FROM equipment WHERE id = %s",
                 (str(equipment_id),),
             )
             row = cur.fetchone()
@@ -136,7 +136,7 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"UPDATE equipment SET {', '.join(updates)} WHERE id = %s RETURNING id, site_id, name, description, equipment_type, feeds_equipment_id, fed_by_equipment_id, created_at",
+                f"UPDATE equipment SET {', '.join(updates)} WHERE id = %s RETURNING id, site_id, name, description, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id, created_at",
                 params,
             )
             row = cur.fetchone()

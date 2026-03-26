@@ -34,6 +34,7 @@ export interface Equipment {
   name: string;
   description: string | null;
   equipment_type: string | null;
+  metadata?: Record<string, unknown> | null;
   feeds_equipment_id: string | null;
   fed_by_equipment_id: string | null;
   created_at: string;
@@ -135,6 +136,8 @@ export interface DataModelExportRow {
   site_name?: string | null;
   equipment_id?: string | null;
   equipment_name?: string | null;
+  equipment_metadata?: Record<string, unknown> | null;
+  engineering?: Record<string, unknown> | null;
   external_id?: string | null;
   brick_type?: string | null;
   rule_input?: string | null;

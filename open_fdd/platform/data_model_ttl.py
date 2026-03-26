@@ -31,6 +31,7 @@ _sync_timer_lock = threading.Lock()
 
 BRICK = "https://brickschema.org/schema/Brick#"
 OFDD = "http://openfdd.local/ontology#"
+S223 = "http://data.ashrae.org/standard223#"
 RDFS = "http://www.w3.org/2000/01/rdf-schema#"
 BASE = "http://openfdd.local/site#"
 
@@ -78,7 +79,7 @@ def _append_point(lines: list[str], p: dict[str, Any], parent_uri: str) -> None:
         lines.append(f'    ofdd:bacnetDeviceId "{_escape(str(bacnet_id).strip())}" ;')
     if obj_id is not None and str(obj_id).strip():
         lines.append(f'    ofdd:objectIdentifier "{_escape(str(obj_id).strip())}" ;')
-    # Brick v1.3 external representations: Timeseries reference is always present;
+    # Brick v1.4 external representations: Timeseries reference is always present;
     # BACnet reference is present when both device id and object id exist.
     if has_bacnet_ref:
         bdev = _escape(str(bacnet_id).strip())
@@ -108,6 +109,7 @@ def _prefixes() -> str:
     return """@prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix s223: <http://data.ashrae.org/standard223#> .
 @prefix ref: <https://brickschema.org/schema/Brick/ref#> .
 @prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
 @prefix : <http://openfdd.local/site#> .
@@ -132,7 +134,7 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
 
             site_ids = [str(s["id"]) for s in sites]
             cur.execute(
-                """SELECT id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id FROM equipment
+                """SELECT id, site_id, name, equipment_type, metadata, feeds_equipment_id, fed_by_equipment_id FROM equipment
                    WHERE site_id = ANY(%s::uuid[]) ORDER BY site_id, name""",
                 (site_ids,),
             )
@@ -192,6 +194,7 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             else:
                 lines.append(" .")
             lines.append("")
+            _append_equipment_engineering(lines, e, eref)
             for p in pts_by_eq.get(eid, []):
                 _append_point(lines, p, eref)
             lines.append("")
@@ -209,6 +212,103 @@ def build_ttl_from_db(site_id: UUID | None = None) -> str:
             lines.append("")
 
     return "\n".join(lines)
+
+
+def _append_equipment_engineering(
+    lines: list[str], equipment_row: dict[str, Any], equipment_ref: str
+) -> None:
+    """Emit engineering metadata as RDF (ofdd extension + s223 topology patterns)."""
+    metadata = equipment_row.get("metadata")
+    if not isinstance(metadata, dict):
+        return
+    engineering = metadata.get("engineering")
+    if not isinstance(engineering, dict):
+        return
+
+    field_to_pred = {
+        "control_system_type": "ofdd:controlSystemType",
+        "control_vendor": "ofdd:controlVendor",
+        "front_end_platform": "ofdd:frontEndPlatform",
+        "panel_name": "ofdd:panelName",
+        "ip_address": "ofdd:ipAddress",
+        "bacnet_network_number": "ofdd:bacnetNetworkNumber",
+        "install_date": "ofdd:installDate",
+        "as_built_date": "ofdd:asBuiltDate",
+        "manufacturer": "ofdd:manufacturer",
+        "model_number": "ofdd:modelNumber",
+        "serial_number": "ofdd:serialNumber",
+        "design_cfm": "ofdd:designCFM",
+        "cooling_capacity_tons": "ofdd:coolingCapacityTons",
+        "heating_capacity_mbh": "ofdd:heatingCapacityMBH",
+        "pump_flow_gpm": "ofdd:pumpFlowGPM",
+        "pump_head_ft": "ofdd:pumpHeadFT",
+        "electrical_system_voltage": "ofdd:electricalSystemVoltage",
+        "fla": "ofdd:fla",
+        "mca": "ofdd:mca",
+        "mocp": "ofdd:mocp",
+        "feeder_panel": "ofdd:feederPanel",
+        "feeder_breaker": "ofdd:feederBreaker",
+        "source_document_name": "ofdd:sourceDocumentName",
+        "source_sheet": "ofdd:sourceSheet",
+    }
+    for section in ("controls", "mechanical", "electrical", "documents"):
+        payload = engineering.get(section)
+        if not isinstance(payload, dict):
+            continue
+        for key, pred in field_to_pred.items():
+            val = payload.get(key)
+            if val is None or val == "":
+                continue
+            lines.append(f'{equipment_ref} {pred} "{_escape(str(val))}" .')
+
+    topology = engineering.get("topology")
+    if not isinstance(topology, dict):
+        return
+
+    eq_id = str(equipment_row.get("id", "")).replace("-", "_")
+    connection_points = topology.get("connection_points")
+    if isinstance(connection_points, list):
+        for idx, cp in enumerate(connection_points):
+            if not isinstance(cp, dict):
+                continue
+            cp_ref = f":cp_{eq_id}_{idx}"
+            cp_kind = str(cp.get("type") or "").strip().lower()
+            cp_class = "s223:ConnectionPoint"
+            if cp_kind == "inlet":
+                cp_class = "s223:InletConnectionPoint"
+            elif cp_kind == "outlet":
+                cp_class = "s223:OutletConnectionPoint"
+            lines.append(f"{cp_ref} a {cp_class} .")
+            lines.append(f"{equipment_ref} s223:hasConnectionPoint {cp_ref} .")
+            if cp.get("name"):
+                lines.append(f'{cp_ref} rdfs:label "{_escape(str(cp["name"]))}" .')
+            if cp.get("id"):
+                lines.append(f'{cp_ref} ofdd:connectionPointId "{_escape(str(cp["id"]))}" .')
+            if cp.get("medium"):
+                lines.append(f'{cp_ref} ofdd:connectionMedium "{_escape(str(cp["medium"]))}" .')
+
+    connections = topology.get("connections")
+    if isinstance(connections, list):
+        for idx, cn in enumerate(connections):
+            if not isinstance(cn, dict):
+                continue
+            cn_ref = f":cnx_{eq_id}_{idx}"
+            ctype = str(cn.get("conduit_type") or "").strip().lower()
+            cn_class = "ofdd:EngineeringConnection"
+            if ctype == "duct":
+                cn_class = "s223:Duct"
+            elif ctype == "pipe":
+                cn_class = "s223:Pipe"
+            elif ctype in {"wire", "feeder"}:
+                cn_class = "s223:Wire"
+            lines.append(f"{cn_ref} a {cn_class} .")
+            lines.append(f"{equipment_ref} s223:cnx {cn_ref} .")
+            if cn.get("from"):
+                lines.append(f'{cn_ref} ofdd:connectsFromRef "{_escape(str(cn["from"]))}" .')
+            if cn.get("to"):
+                lines.append(f'{cn_ref} ofdd:connectsToRef "{_escape(str(cn["to"]))}" .')
+            if cn.get("medium"):
+                lines.append(f'{cn_ref} ofdd:connectionMedium "{_escape(str(cn["medium"]))}" .')
 
 
 def _get_unified_ttl_path() -> Path:

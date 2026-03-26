@@ -200,7 +200,7 @@ export function DataModelPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Setup</h1>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Protocols</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Build your Brick + BACnet data model step by step below. Export JSON for AI tagging, paste tagged JSON back to import, and run
         SPARQL queries to validate.

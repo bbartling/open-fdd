@@ -160,6 +160,49 @@ def test_data_model_export_includes_bacnet_refs():
     assert data[0]["point_id"] == str(point_id)
 
 
+def test_data_model_export_includes_equipment_engineering_metadata():
+    site_id = uuid4()
+    point_id = uuid4()
+    equipment_id = uuid4()
+    rows = [
+        {
+            "id": point_id,
+            "site_id": site_id,
+            "site_name": "Office",
+            "external_id": "SA-T",
+            "equipment_id": equipment_id,
+            "equipment_name": "AHU-1",
+            "equipment_metadata": {
+                "engineering": {"mechanical": {"design_cfm": 5000}},
+                "unknown_custom": {"x": 1},
+            },
+            "brick_type": "Supply_Air_Temperature_Sensor",
+            "fdd_input": "sat",
+            "unit": "degF",
+            "bacnet_device_id": "3456789",
+            "object_identifier": "analog-input,1",
+            "object_name": "Supply Air Temp",
+            "polling": True,
+        }
+    ]
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value="@prefix brick: <https://brickschema.org/schema/Brick#> .\n",
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=lambda: _mock_conn_with_cursor(rows),
+        ),
+    ):
+        r = client.get("/data-model/export")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["engineering"]["mechanical"]["design_cfm"] == 5000
+    assert data[0]["equipment_metadata"]["unknown_custom"]["x"] == 1
+
+
 def test_data_model_ttl_generated_from_db():
     site_id = uuid4()
     sites = [{"id": site_id, "name": "Default"}]
@@ -384,6 +427,109 @@ def test_data_model_import_missing_site_returns_400():
     detail = (r.json().get("error") or {}).get("message", "") or str(r.json())
     assert "Missing site" in detail
     assert "add the site" in detail.lower() or "try again" in detail.lower()
+
+
+def test_data_model_import_infers_payload_site_for_null_rows():
+    """When payload has one explicit site_id, rows with null site_id should use that site."""
+    inferred_site_id = uuid4()
+    cursor = MagicMock()
+
+    def _execute(sql, params=None):
+        if "INSERT INTO points" in sql:
+            cursor.rowcount = 1
+        else:
+            cursor.rowcount = 1
+        return None
+
+    cursor.execute.side_effect = _execute
+    cursor.fetchall.return_value = [{"id": inferred_site_id}]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    body = {
+        "points": [
+            {
+                # Explicit site_id in one row lets import infer payload-level default.
+                "site_id": str(inferred_site_id),
+                "external_id": "existing-row",
+                "bacnet_device_id": "1",
+                "object_identifier": "ai,1",
+                "object_name": "existing-row",
+            },
+            {
+                # Null site_id still gets imported via inferred payload site.
+                "site_id": None,
+                "external_id": "SA-T",
+                "bacnet_device_id": "3456789",
+                "object_identifier": "analog-input,2",
+                "object_name": "SA-T",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+                "rule_input": "sat",
+            },
+        ]
+    }
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["created"] >= 1
+    assert data["total"] == 2
+
+
+def test_data_model_import_equipment_engineering_metadata_is_merged():
+    site_id = uuid4()
+    equipment_id = uuid4()
+    cursor = MagicMock()
+
+    def _execute(sql, params=None):
+        if "SELECT metadata FROM equipment" in sql:
+            cursor.fetchone.return_value = {"metadata": {"existing": 1}}
+            cursor.rowcount = 1
+            return None
+        cursor.rowcount = 1
+        return None
+
+    cursor.execute.side_effect = _execute
+    cursor.fetchall.return_value = [{"id": site_id}]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    body = {
+        "points": [],
+        "equipment": [
+            {
+                "equipment_id": str(equipment_id),
+                "site_id": str(site_id),
+                "engineering": {"controls": {"control_vendor": "Acme"}},
+                "metadata": {"custom_key": {"foo": "bar"}},
+            }
+        ],
+    }
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 200
+    # Ensure we wrote metadata JSON containing merged existing/custom/engineering keys.
+    execute_calls = cursor.execute.call_args_list
+    metadata_updates = [
+        c
+        for c in execute_calls
+        if "UPDATE equipment SET metadata = %s::jsonb" in (c.args[0] if c.args else "")
+    ]
+    assert metadata_updates
+    payload = metadata_updates[-1].args[1][0]
+    assert '"existing": 1' in payload
+    assert '"custom_key"' in payload
+    assert '"engineering"' in payload
 
 
 def _sample_object_names_from_point_discovery_response(

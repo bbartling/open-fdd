@@ -18,6 +18,7 @@ export function DataModelTestingPage() {
   const [sparqlQuery, setSparqlQuery] = useState(DEFAULT_SPARQL);
   const [sparqlError, setSparqlError] = useState<string | null>(null);
   const [includeBacnetRefs, setIncludeBacnetRefs] = useState(false);
+  const [queryCategory, setQueryCategory] = useState<"hvac" | "engineering">("hvac");
   /** Incremented on every SPARQL mutation settle (success or error); used by E2E to avoid reading stale tables. */
   const [sparqlFinishedGen, setSparqlFinishedGen] = useState(0);
   const sparqlFileInputRef = useRef<HTMLInputElement>(null);
@@ -82,7 +83,25 @@ export function DataModelTestingPage() {
             <span>Include BACnet device and point IDs (for telemetry and algorithms)</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            {PREDEFINED_QUERIES.map(({ id, label, shortLabel, query, queryWithBacnet, icon: Icon }) => (
+            <button
+              type="button"
+              onClick={() => setQueryCategory("hvac")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                queryCategory === "hvac" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              HVAC
+            </button>
+            <button
+              type="button"
+              onClick={() => setQueryCategory("engineering")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                queryCategory === "engineering" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              Engineering
+            </button>
+            {(PREDEFINED_QUERIES.filter((q) => (q.category ?? "hvac") === queryCategory)).map(({ id, label, shortLabel, query, queryWithBacnet, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
