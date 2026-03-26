@@ -114,6 +114,7 @@ export function DataModelEngineeringPage() {
   const { data: allEquipment = [] } = useAllEquipment();
   const { data: siteEquipment = [] } = useEquipment(selectedSiteId ?? undefined);
   const equipment = selectedSiteId ? siteEquipment : allEquipment;
+  const hasEquipment = equipment.length > 0;
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string>("");
   const selectedEquipment = useMemo(() => {
     if (!equipment.length) return undefined;
@@ -175,16 +176,23 @@ export function DataModelEngineeringPage() {
         </CardContent>
       </Card>
 
-      {selectedEquipment && (
-        <EngineeringEditor
-          key={selectedEquipment.id}
-          selectedEquipment={selectedEquipment}
-          onSaved={(msg) => {
-            setSaveMsg(msg);
-            queryClient.invalidateQueries({ queryKey: ["equipment"] });
-            queryClient.invalidateQueries({ queryKey: ["data-model"] });
-          }}
-        />
+      {!hasEquipment ? (
+        <p className="mt-4 text-sm text-muted-foreground">
+          No equipment found for this site. Add equipment in the Data Model Protocols tab before editing engineering
+          metadata.
+        </p>
+      ) : (
+        selectedEquipment && (
+          <EngineeringEditor
+            key={selectedEquipment.id}
+            selectedEquipment={selectedEquipment}
+            onSaved={(msg) => {
+              setSaveMsg(msg);
+              queryClient.invalidateQueries({ queryKey: ["equipment"] });
+              queryClient.invalidateQueries({ queryKey: ["data-model"] });
+            }}
+          />
+        )
       )}
       {saveMsg && <p className="mt-3 text-sm text-muted-foreground">{saveMsg}</p>}
     </div>

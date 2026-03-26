@@ -1,6 +1,7 @@
 """Equipment CRUD API."""
 
 import json
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -11,6 +12,7 @@ from open_fdd.platform.api.models import EquipmentCreate, EquipmentRead, Equipme
 from open_fdd.platform.realtime import emit, TOPIC_CRUD_EQUIPMENT
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
+logger = logging.getLogger(__name__)
 
 
 def _deep_merge_dict(base: dict | None, overlay: dict | None) -> dict:
@@ -74,7 +76,7 @@ def create_equipment(body: EquipmentCreate):
     try:
         sync_ttl_to_file()
     except Exception:
-        pass
+        logger.warning("sync_ttl_to_file failed after equipment create", exc_info=True)
     emit(
         TOPIC_CRUD_EQUIPMENT + ".created",
         {"id": str(row["id"]), "site_id": str(row["site_id"]), "name": row["name"]},
@@ -168,7 +170,7 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
     try:
         sync_ttl_to_file()
     except Exception:
-        pass
+        logger.warning("sync_ttl_to_file failed after equipment update", exc_info=True)
     emit(TOPIC_CRUD_EQUIPMENT + ".updated", {"id": str(equipment_id)})
     return EquipmentRead.model_validate(dict(row))
 

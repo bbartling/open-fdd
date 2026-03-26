@@ -623,7 +623,10 @@ def _upsert_equipment_metadata(
         return
     cur.execute("SELECT metadata FROM equipment WHERE id = %s", (equipment_id,))
     row = cur.fetchone()
-    current = row.get("metadata") if row and isinstance(row, dict) else None
+    if not row or not isinstance(row, dict):
+        # Equipment row missing; nothing to update.
+        return
+    current = row.get("metadata") if isinstance(row.get("metadata"), dict) else None
     merged = _deep_merge_dict(current if isinstance(current, dict) else {}, metadata or {})
     if engineering is not None:
         merged["engineering"] = _deep_merge_dict(
