@@ -8,7 +8,7 @@
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-![PyPI](https://img.shields.io/pypi/v/open-fdd?color=blue&label=pypi%20version) — *`pip install open-fdd` ships the **pandas/YAML engine** (`open_fdd.engine`) and optional extras; the **full edge stack** (Docker, BACnet, API) is built from **this repo**. Very old PyPI releases were equations-only — use **2.x** or install from source. See [PyPI how-to](docs/howto/openfdd_engine_pypi.md).*
+[PyPI: open-fdd](https://pypi.org/project/open-fdd/)
 
 
 <div align="center">
@@ -38,27 +38,11 @@ cd open-fdd
 
 This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. Future releases may add other data sources such as REST/API and Modbus.
 
+Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
+
 ## Quick Start — OpenClaw (agent)
 
-Give the agent **terminal access** to a cloned repo and the **repo root** as the working directory (`cd open-fdd`). OpenClaw does not replace Docker; it runs the same entrypoints a human would:
-
-**Split machines:** OpenClaw can run on your **Windows** (or other) PC while Open‑FDD runs on a **Linux edge host** — use **SSH** (or a remote workspace) for shell commands, and point HTTP tool calls at the edge box’s **API URL** (not `localhost` unless you tunnel). For Bearer auth, use **`OFDD_API_KEY`** from the server’s **`stack/.env`** (you only need that secret on the OpenClaw side, not the whole file). Details: [Open‑Claw integration — split setup](docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
-
-**First session on a fresh clone:** read **`openclaw/HANDOFF_PROTOCOL.md`**, **`openclaw/SKILL.md`**, and **`openclaw/references/testing_layers.md`** so the agent follows the in-repo lab playbook (not a separate testing repo). The old **`bbartling/open-fdd-automated-testing`** tree is **deprecated** — see **`openclaw/references/legacy_automated_testing.md`** for the path map and a README snippet to freeze that repo.
-
-1. **Bring the stack up:** `./scripts/bootstrap.sh` (full stack by default). **Partial stack:** `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. **Optional RAG sidecar:** add `--with-mcp-rag` (service on **8090** after index build; see [Getting Started](docs/getting_started.md)).
-2. **Host Python for `--test`:** backend pytest runs on the **host**; create a venv with `python3 -m venv .venv` and `pip install -e ".[dev]"` first (see [Development: branches and tests](#development-branches-and-tests)). `bootstrap.sh` uses `.venv/bin/python` when it exists.
-3. **Run the project test matrix:** `./scripts/bootstrap.sh --test` (frontend + backend pytest + Caddy validate). Frontend checks try the `openfdd_frontend` container first, then fall back to host `npm` if container exec is restricted.
-
-**Where to “MCP” / discover tools (HTTP, not stdio):** after services are up, the platform lists tool-shaped HTTP mappings at **`http://localhost:8000/mcp/manifest`** (Bearer **`OFDD_API_KEY`** from **`stack/.env`** when auth is enabled). If you started MCP RAG, use **`http://localhost:8090/manifest`** for that sidecar’s routes. Long-form guide: [Open‑Claw integration](docs/openclaw_integration.md).
-
-**What to paste for OpenClaw (one line):** *Working directory: this repo root; create `.venv` and `pip install -e ".[dev]"` before `--test` if host pytest is missing; run `./scripts/bootstrap.sh` then `./scripts/bootstrap.sh --test` when asked; discover HTTP tools from `http://localhost:8000/mcp/manifest` and, if `--with-mcp-rag` was used, `http://localhost:8090/manifest`; send `Authorization: Bearer <OFDD_API_KEY>` using the value in `stack/.env`. Lab notes: `openclaw/README.md`, logs under `openclaw/logs/`.*
-
-**One-liner — humans:** Clone the repo, `cd` into it, run `./scripts/bootstrap.sh` for the **full** stack or `./scripts/bootstrap.sh --mode collector|model|engine` for a **modular** slice, optionally add `--with-mcp-rag`, and run `./scripts/bootstrap.sh --test` to exercise the automated checks.
-
-**One-liner — OpenClaw:** From the repo root, execute `./scripts/bootstrap.sh [--mode full|collector|model|engine] [--with-mcp-rag]` to match the desired footprint, then `./scripts/bootstrap.sh --test` to validate, and wire tool discovery to `http://localhost:8000/mcp/manifest` (and `http://localhost:8090/manifest` if RAG is running) with Bearer auth from `stack/.env`.
-
-**OpenClaw lab (bench):** optional fake BACnet harness, SPARQL fixtures, and heavier E2E scripts live under [`openclaw/README.md`](openclaw/README.md).
+OpenClaw agents should use the in-repo skill/docs only—start at [`openclaw/SKILL.md`](openclaw/SKILL.md), [`openclaw/README.md`](openclaw/README.md), and [`openclaw/HANDOFF_PROTOCOL.md`](openclaw/HANDOFF_PROTOCOL.md)—defaulting to web-app/testing workflows (plus `./scripts/bootstrap.sh --test`) and using AI data-modeling or virtual-operator modes only when explicitly requested, with HTTP tool discovery at `http://localhost:8000/mcp/manifest` (and optional RAG `http://localhost:8090/manifest`) using Bearer `OFDD_API_KEY` from `stack/.env` (split-machine setup: [OpenClaw integration](docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup)).
 
 ### Development: branches and tests
 

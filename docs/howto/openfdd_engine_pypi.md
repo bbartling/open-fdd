@@ -17,13 +17,13 @@ Two distributions are relevant for **contractors / pandas + YAML** workflows:
 
 ---
 
-## Current public state (PyPI)
+## Release baseline (PyPI)
 
-- Legacy **`open-fdd`** on PyPI is currently **`0.1.9`** (equations-era package line).
-- The repo release line is now **`2.x`** and should be published as the modern package.
-- If `openfdd-engine` is not visible yet on PyPI, the first successful publish creates it.
+- The legacy **`open-fdd`** line on PyPI is currently **`0.1.9`** (equations-era package line).
+- The repository release line is **`2.x`** and should be published as the current package line.
+- If `openfdd-engine` is not visible yet on PyPI, the first successful publish creates the project entry.
 
-Quick check commands:
+Version check commands:
 
 ```bash
 curl -s https://pypi.org/pypi/open-fdd/json | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])"
@@ -39,14 +39,14 @@ curl -s https://pypi.org/pypi/openfdd-engine/json | python3 -c "import sys, json
    - **`packages/openfdd-engine/pyproject.toml`** → `version` and `dependencies` → `open-fdd>=X.Y.Z` aligned with what you just published (or still satisfied by `>=`).
 2. **Changelog / tag message** — note engine-only docs, IoT `RuleRunner` usage, etc., if applicable.
 
-### Prep checklist for legacy -> 2.x transition
+### Transition checklist (legacy -> 2.x)
 
-1. Confirm **`open-fdd`** local version is set to your target 2.x in root `pyproject.toml`.
-2. Confirm **`packages/openfdd-engine/pyproject.toml`** version and dependency `open-fdd>=X.Y.Z`.
+1. Confirm root `pyproject.toml` sets **`open-fdd`** to the intended `2.x` release version.
+2. Confirm `packages/openfdd-engine/pyproject.toml` sets the intended engine version and dependency `open-fdd>=X.Y.Z`.
 3. Merge/push release commits to `master` (or your designated release branch).
 4. Tag and publish **`open-fdd`** first.
 5. Tag and publish **`openfdd-engine`** second.
-6. Re-check live PyPI pages so users see 2.x for `open-fdd` and the engine package entry.
+6. Re-check live PyPI pages to confirm `open-fdd` shows `2.x` and `openfdd-engine` is visible (if published).
 
 ### PyPI upload auth (required once per project)
 
@@ -141,4 +141,4 @@ twine check dist/*
 - **PyPI** is for the **installable Python packages** (engine + optional extras), not Docker images.
 - **Full edge stack** (BACnet, Compose, bootstrap) stays **repo + Docker** as today.
 
-See also: [Engine-only deployment and external IoT pipelines](engine_only_iot).
+See also: [Engine-only deployment and external IoT pipelines](engine_only_iot.md).

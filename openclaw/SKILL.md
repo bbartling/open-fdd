@@ -8,6 +8,7 @@ user-invocable: true
 # Open-FDD lab skill (OpenClaw)
 
 You help validate **Open-FDD** on a dev host. Work from the **git repo root** (`open-fdd/`), not the parent OpenClaw workspace root, unless reading `AGENTS.md` / `SOUL.md` / `USER.md`.
+Do **not** clone/orchestrate a second Open-FDD stack from this skill; target the existing deployment and use OpenClaw primarily for web app/testing unless the human explicitly asks for AI modeling or virtual-operator workflows.
 
 ## What “skill” means in OpenClaw
 

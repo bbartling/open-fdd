@@ -61,7 +61,7 @@ Rules with `equipment_type: [VAV_AHU]` (or `[AHU, VAV_AHU]`) only run when the B
 
 ## Cloud export example
 
-Pull fault and timeseries data from the Open-FDD API. Use as a **starting point** for cloud or MSI integration. See [Concepts — Cloud export](concepts/cloud_export).
+Pull fault and timeseries data from the Open-FDD API. Use as a **starting point** for cloud or MSI integration. See [Concepts — Cloud export](concepts/cloud_export.md).
 
 ### Run locally
 
@@ -109,3 +109,21 @@ Run Brick-driven fault detection and **zoom in on fault events** in an IPython n
 - Extracts **fault events** (contiguous runs of True in each flag column)
 - **Randomly samples** events and plots a zoomed time window around each
 - Shows signals (SAT, MAT, OAT, RAT, duct static, damper, valves) with fault region shaded
+
+---
+
+## Engine IoT playground
+
+Engine-only CSV + YAML walkthrough inside the repo:
+
+- Folder: `examples/engine_iot_playground/`
+- Script: `examples/engine_iot_playground/run_demo.py`
+- Notebook: `examples/engine_iot_playground/RTU11_engine_tutorial.ipynb`
+- Data/rules: `examples/engine_iot_playground/data/RTU11.csv`, `examples/engine_iot_playground/rules/*.yaml`
+
+Run quickly:
+
+```bash
+cd examples/engine_iot_playground
+python run_demo.py
+```
