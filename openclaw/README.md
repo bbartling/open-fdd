@@ -1,112 +1,108 @@
-# OpenClaw lab (bench + operator context)
+# OpenClaw lab (external bench first)
 
-**Cursor + OpenClaw collaboration:** see [`HANDOFF_PROTOCOL.md`](HANDOFF_PROTOCOL.md) (shared `issues_log.md` + logs; no live agent-to-agent chat). OpenClaw may run **off the edge host** (e.g. Windows) while the stack stays on Linux — use SSH/git for files and configure API URL + **`OFDD_API_KEY`** for HTTP; see [`docs/openclaw_integration.md`](../docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
+OpenClaw’s default Open-FDD posture is **external system testing**, not clone-first repo work.
 
-**Agent skill (OpenClaw):** [`SKILL.md`](SKILL.md) with [`references/`](references/) (install: [`references/skill_installation.md`](references/skill_installation.md), **testing map:** [`references/testing_layers.md`](references/testing_layers.md), **long runs:** [`references/long_run_lab_pass.md`](references/long_run_lab_pass.md), **5-bullet status (no log dumps):** [`references/session_status_summary.md`](references/session_status_summary.md)), [`scripts/`](scripts/), [`assets/`](assets/).
+Use OpenClaw as a commissioning-minded tester for a running Open-FDD bench/deployment:
+- web app regression testing
+- frontend/API parity checks
+- BRICK/RDF model validation
+- BACnet add-to-model and live read verification
+- overnight scrape/FDD/hot-reload review
+- bug confirmation and issue filing
 
+Repo-local source edits are optional and only when explicitly requested by the human.
 
-This directory is the **lab workspace** for OpenClaw and humans: optional E2E/BACnet bench harness, SPARQL fixtures, Windows runners, report templates, and issue-tracking notes. It **supersedes** the experimental repo **bbartling/open-fdd-automated-testing**—use this tree inside **open-fdd** only. **Full old→new path map** and a copy-paste deprecation banner for the legacy README: [`references/legacy_automated_testing.md`](references/legacy_automated_testing.md).
+## System under test
 
-Product docs and canonical operator guidance remain in [`docs/`](../docs/), especially [`docs/openclaw_integration.md`](../docs/openclaw_integration.md), [`docs/operations/`](../docs/operations/), and [`config/ai/operator_framework.yaml`](../config/ai/operator_framework.yaml).
+Open-FDD is usually treated as an externally running bench or deployment. OpenClaw should test the live frontend, backend API, SPARQL/data-model behavior, BACnet gateway behavior, and overnight logs directly. Repo-local source inspection is supporting context, not the default source of truth.
 
-## What this bench is for
+OpenClaw may run on a different machine than Open-FDD. For split setup details see [`docs/openclaw_integration.md`](../docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
 
-This is a **test-bench only** workspace. Use it to validate:
-- full-stack startup and stability
-- knowledge-graph-only behavior
-- data-ingestion/BACnet scrape behavior
-- fault calculation against fake BACnet devices
-- AI-assisted Brick/data modeling flows
-- frontend widget smoke tests
-- bootstrap script health and logs
-- issue-driven regression coverage
+## Current bench reality (keep this straight)
 
-## Three modes (how to work)
+- Bench/frontend/backend/BACnet reachability can be healthy while auth context is still wrong.
+- Current direct authenticated check has failed with `FORBIDDEN: Invalid API key`.
+- Treat this as **launcher/env/runtime-context drift** unless proven otherwise.
+- **Do not delete or bury issue `#92`**; keep it as likely real product parity tracking once auth is healthy.
+- Do not frame auth-context drift itself as a confirmed product bug without clean repro under known-good auth.
 
-These are **workflow labels**, not separate Docker products. Pick commands to match intent.
-Default for normal development in this repo: **Software dev / web app testing**; only switch to AI data modeling or virtual-operator mode when the human explicitly asks.
-Do **not** create or manage a second cloned stack for OpenClaw; use the existing Open-FDD deployment/workspace and run tests against that target.
+## Testing layers
 
-1. **Software dev / app testing** — From repo root: `./scripts/bootstrap.sh --test` (frontend + pytest + Caddy). For heavier, environment-specific checks (Selenium, long BACnet runs), see [`bench/e2e/README.md`](bench/e2e/README.md) and [`docs/operations/testing_plan.md`](../docs/operations/testing_plan.md).
-2. **AI data modeling** — Bring up a model-capable stack: `./scripts/bootstrap.sh --mode model` (or `--mode full` when you need the whole graph + API). Use SPARQL examples in [`bench/sparql/`](bench/sparql/) and the export/import loop in [`docs/openclaw_integration.md`](../docs/openclaw_integration.md).
-3. **AI virtual building operator / assistant** — Full stack: `./scripts/bootstrap.sh` (default **full**). Optional retrieval sidecar: `./scripts/bootstrap.sh --with-mcp-rag` → RAG service at `http://localhost:8090`. Discover HTTP tool mappings at `http://localhost:8000/mcp/manifest` (Bearer `OFDD_API_KEY` from `stack/.env` when auth is on). Operator runbooks: [`docs/operations/mode_aware_runbooks.md`](../docs/operations/mode_aware_runbooks.md).
+1. Frontend / web app
+   - Selenium workflow validation
+   - UI state, error handling, console failures
+   - Data Model Testing UI parity
+2. Backend / API
+   - auth preflight
+   - config and data-model endpoints
+   - SPARQL query correctness
+   - graph integrity checks
+3. BACnet integration
+   - add-to-model flows
+   - address/reference integrity
+   - live property reads via gateway
+4. Overnight stability
+   - long-run scrape review
+   - FDD pass/fail review
+   - hot-reload verification
+   - issue triage
+5. Future field mode
+   - live HVAC sanity checks
+   - operator-style monitoring
 
-## Modes to test explicitly
+## Failure classification
 
-- `./scripts/bootstrap.sh --test`
-- `./scripts/bootstrap.sh --mode collector`
-- `./scripts/bootstrap.sh --mode model`
-- `./scripts/bootstrap.sh --mode engine`
-- `./scripts/bootstrap.sh --with-mcp-rag`
-- `./scripts/bootstrap.sh --verify`
+- Auth / launcher / env drift
+- Bench limitation
+- Frontend/API parity bug
+- Graph hygiene / model drift bug
+- BACnet integration bug
+- Likely real Open-FDD product defect
 
-## Layout
+File GitHub issues for confirmed product defects by default. Track harness/env failures in `openclaw/issues_log.md` unless Ben explicitly asks to file harness issues too.
+
+## Security phases
+
+Track security work as deliberate hardening:
+- auth and token handling
+- Caddy/reverse-proxy boundaries
+- secrets handling
+- attack-surface reduction
+- phased hardening roadmap items
+
+Do not mix security hardening work casually into unrelated defect triage.
+
+## Near-term vs future role
+
+- Near-term default: test-bench validation and defect confirmation.
+- Future live HVAC mode: operator-style checks using time/season/weather/BRICK/live BACnet telemetry.
+- In both modes, keep strong web-app bug-hunting skepticism and parity checks.
+
+## Layout (bench-focused)
 
 | Path | Purpose |
 |------|---------|
-| [`bench/fake_bacnet_devices/`](bench/fake_bacnet_devices/) | Ansible + Python fake BACnet devices for end-to-end FDD validation. |
-| [`bench/sparql/`](bench/sparql/) | Example `.sparql` files for graph / operator checks. |
-| [`bench/scripts/`](bench/scripts/) | Small helpers (e.g. fault schedule monitor). |
-| [`bench/e2e/`](bench/e2e/) | Optional Selenium / long-run Python suites (`requirements-e2e.txt`). |
-| [`bench/fixtures/`](bench/fixtures/) | Sample LLM/import JSON payloads for testing. |
-| [`bench/rules_lab/README.md`](bench/rules_lab/README.md) | Canonical live rules live under **`stack/rules/`** (not duplicated here). |
-| [`bench/rules_reference/`](bench/rules_reference/) | Reference YAML (AHU FC, chillers, weather, …) for docs and lab; see [Test bench rule catalog](../docs/rules/test_bench_rule_catalog.md). |
-| [`windows/`](windows/) | Example `.cmd` wrappers (edit URLs/paths for your host). |
-| [`dashboard/`](dashboard/) | Static operator progress UI; `progress.json` is gitignored. |
-| [`reports/`](reports/) | Templates + README; dated summaries gitignored by default. |
-| [`reports/drafts/`](reports/drafts/) | Issue-draft artifacts moved from the old repo. |
-| [`docs/`](docs/) | Optional lab-only notes not published on GitHub Pages (most docs live under repo `docs/`). |
-| [`issues_log.md`](issues_log.md) | Rolling diagnosis log for bugs, regressions, and follow-up items. |
+| [`bench/e2e/`](bench/e2e/) | Frontend regression, Selenium, long-run suites. |
+| [`bench/sparql/`](bench/sparql/) | SPARQL parity and graph checks. |
+| [`bench/fake_bacnet_devices/`](bench/fake_bacnet_devices/) | BACnet fixture devices and validation runs. |
+| [`bench/rules_reference/`](bench/rules_reference/) | Reference rules for testing/cookbooks (not auto-live). |
+| [`references/`](references/) | Stable protocol/checklist references for agents. |
+| [`reports/`](reports/) | Templates and summarized outputs (avoid duplicated policy docs). |
+| [`issues_log.md`](issues_log.md) | Ongoing classification trail and evidence index. |
 
-## Testing coverage goals
+## Standing constraints
 
-The bench should stay focused on:
-- BACnet raw-read vs calculated-fault comparisons
-- rules engine verification
-- SPARQL and graph sync checks
-- frontend widget and data-model workflow smoke tests
-- bootstrap and service health monitoring
-- issue-driven regression notes
+- Do not assume clone-first or repo-first workflow.
+- Do not assume OpenClaw’s main job is coding changes.
+- Start from runtime evidence: UI behavior, API responses, SPARQL, BACnet reads, logs.
+- Use repo docs/reference only as support unless local edits are explicitly requested.
 
-## Issue hygiene
-
-Keep a local diagnosis trail in `openclaw/issues_log.md` while testing. If a real regression is found, note:
-- what failed
-- which mode reproduced it
-- what endpoint/script was used
-- any logs or evidence worth preserving
-- whether it maps to a GitHub issue
-
-## Quick commands (repo root)
+## Quick commands (when running from this repo)
 
 ```bash
-./scripts/bootstrap.sh                    # full stack
-./scripts/bootstrap.sh --mode collector   # collector slice
-./scripts/bootstrap.sh --mode model       # model slice
-./scripts/bootstrap.sh --mode engine      # engine slice
-./scripts/bootstrap.sh --test             # CI-style matrix
-./scripts/bootstrap.sh --with-mcp-rag     # add MCP RAG :8090
+./scripts/bootstrap.sh --verify
+./scripts/bootstrap.sh --test
+./scripts/bootstrap.sh --mode collector
+./scripts/bootstrap.sh --mode model
+./scripts/bootstrap.sh --mode engine
 ```
-
-## Host prerequisites for `./scripts/bootstrap.sh --test`
-
-Backend checks use **`pytest` on the host** (not inside the API container). `scripts/bootstrap.sh` picks **`.venv/bin/python`** when that file exists and is executable; otherwise it uses **`python3`**, which often has **no `pytest`** → you see `No module named pytest`.
-
-**One-time setup from repo root** (matches [root README](../README.md#development-branches-and-tests)):
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate   # or: . .venv/bin/activate
-pip install -U pip
-pip install -e ".[dev]"
-```
-
-Then run `./scripts/bootstrap.sh --test` again. Frontend + Caddy parts of the matrix use Docker/containers; backend pytest is the usual first failure without this venv.
-
-**Logs:** capture long runs under `openclaw/logs/` (e.g. `bootstrap-test-YYYY-MM-DD_HH-MM-SS.txt` with `stdout`+`stderr`).
-
-## Copy-paste for an agent
-
-*Path discipline: workspace root may contain `AGENTS.md` / `SOUL.md`; all `./scripts/*` run from **open-fdd** repo root after `cd open-fdd`. Logs under `openclaw/logs/`.*
-
-*Before `./scripts/bootstrap.sh --test`, ensure host dev deps: `python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"` (pytest comes from `[dev]`). Then `./scripts/bootstrap.sh` (if stack needed) and `./scripts/bootstrap.sh --test`. Discover tools from `http://localhost:8000/mcp/manifest` and, if MCP RAG is up, `http://localhost:8090/manifest`. Read `stack/.env` for `OFDD_API_KEY`. Use `openclaw/issues_log.md` for diagnosis notes.*

@@ -48,3 +48,4 @@ Each bullet should help **you** and **Cursor** the next day:
 
 - Regressions in **product** behavior, security notes, doc bugs worth tracking.
 - Keep **`issues_log.md`** as the **fast lab trail**; promote stable items to Issues.
+- For frontend/API SPARQL parity drafts, follow **`openclaw/references/parity_issue_checklist.md`** first so auth drift and graph-churn drift do not get mislabeled as product bugs.

@@ -10,6 +10,26 @@ OpenClaw (dashboard at your LAN gateway) and Cursor (this IDE chat) **do not tal
 
 **Status-only ping:** if the human asks to read **`issues_log`** + **`long_run_lab_pass`** + **`api_throttle`** and summarize, the agent must return the **5-bullet** shape in **`openclaw/references/session_status_summary.md`** (no log file dumps in chat).
 
+## Default mission posture
+
+OpenClaw is testing-first for Open-FDD:
+- external web app and API verification
+- BRICK/SPARQL/data-model parity checks
+- BACnet add-to-model and live-read validation
+- overnight scrape/FDD/hot-reload review
+- issue filing for confirmed product defects
+
+Repo-local source editing is optional and only when explicitly requested.
+
+Do not treat clone-first local development as the baseline OpenClaw workflow.
+
+## Current bench truth (do not lose this context)
+
+- Bench services can all be reachable while auth context is still wrong.
+- Current direct authenticated backend failure (`FORBIDDEN: Invalid API key`) is treated as launcher/env/runtime-context drift unless proven otherwise.
+- Do not declare auth drift as confirmed product bug by default.
+- Keep issue `#92` intact for likely frontend/API parity bug tracking once auth context is healthy.
+
 ## File-only loop (no HTTP between Cursor and OpenClaw)
 
 You do **not** need any HTTP (or other network API) **between** Cursor and OpenClaw. Both can read/write the **same files on disk** (your workspace under `~/.openclaw/workspace/`). That is the feedback channel.
@@ -34,6 +54,18 @@ So the loop is **mailbox-style**: `issues_log.md` is the inbox/outbox; log files
 | **You (human)** | Run gateway, paste prompts, commit/push, decide when to escalate |
 | **Cursor / “senior”** | Architecture, code fixes, script changes, doc structure, triage of hard failures |
 | **OpenClaw / “junior”** | Execute repeatable commands, capture logs, file issues, small safe edits you allow |
+
+## Failure classification required in handoffs
+
+When appending to `openclaw/issues_log.md`, classify each fail/block as:
+- auth/launcher/env drift
+- bench limitation
+- frontend/API parity bug
+- graph hygiene/model drift bug
+- BACnet integration bug
+- likely real Open-FDD product defect
+
+Only product defects should be filed as GitHub issues by default. Keep harness/runtime drift in `issues_log.md` unless explicitly told otherwise.
 
 ## Issues log format (for fast pickup)
 
@@ -81,6 +113,16 @@ echo $! > "openclaw/logs/nightly-$ts.pid"
 ```
 
 Then **OpenClaw or you** summarizes `nightly-*.txt` into `issues_log.md`. Cursor picks up the next morning on **files**, not live coupling.
+
+## Security phase tracking
+
+Treat security as phased hardening work and track it deliberately in issue/roadmap form:
+- auth hardening
+- reverse proxy/Caddy hardening
+- secrets hygiene
+- attack-surface reduction
+
+Do not bury security observations inside unrelated bug write-ups.
 
 ## Skills / context
 

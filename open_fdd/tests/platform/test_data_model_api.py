@@ -282,6 +282,54 @@ def test_data_model_import_accepts_fdd_input_deprecated():
     assert r.status_code == 200
 
 
+def test_data_model_import_stale_point_id_falls_back_to_create():
+    """If point_id does not exist, import should create by identity fields instead of silent no-op."""
+    site_id = uuid4()
+    cursor = MagicMock()
+    # First update-by-point_id misses (rowcount 0), then insert succeeds (rowcount 1).
+    def _execute(sql, params=None):
+        if "UPDATE points SET" in sql and "WHERE id = %s" in sql:
+            cursor.rowcount = 0
+        elif "INSERT INTO points" in sql:
+            cursor.rowcount = 1
+        else:
+            cursor.rowcount = 1
+        return None
+
+    cursor.execute.side_effect = _execute
+    cursor.fetchall.return_value = [{"id": site_id}]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    body = {
+        "points": [
+            {
+                "point_id": str(uuid4()),
+                "site_id": str(site_id),
+                "external_id": "SA-T",
+                "bacnet_device_id": "3456789",
+                "object_identifier": "analog-input,2",
+                "object_name": "SA-T",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+                "rule_input": "sat",
+            }
+        ]
+    }
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["created"] == 1
+    assert data["updated"] == 0
+    reasons = [w.get("reason", "") for w in data.get("warnings", [])]
+    assert any("point_id not found; created by identity fields" in s for s in reasons)
+
+
 def test_data_model_import_rejects_placeholder_site_id():
     """Import returns 400 when site_id is a placeholder (e.g. SITE_UUID) instead of a real UUID."""
     body = {

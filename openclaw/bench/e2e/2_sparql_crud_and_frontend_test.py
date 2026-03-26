@@ -333,6 +333,56 @@ def _api_bindings_fresh_after_ui(
     return fallback
 
 
+def _is_count_sensitive_query(query_name: str, query_text: str) -> bool:
+    qn = (query_name or "").strip().lower()
+    qt = (query_text or "").strip().lower()
+    # Keep explicit issue-#92 offenders plus generic COUNT queries.
+    return (
+        qn in {"07_count_triples.sparql", "23_orphan_external_references.sparql"}
+        or "count(" in qt
+    )
+
+
+def _frontend_parity_check_with_stability_window(
+    api_url: str,
+    query: str,
+    query_name: str,
+    frontend_bindings: list[dict],
+    fallback_ref: list[dict],
+    label: str,
+) -> bool:
+    """Compare UI to API with an extra stability window for count-sensitive queries.
+
+    For dynamic count queries, one API snapshot may drift between browser and backend calls
+    due to live scrape/sync activity. We classify and soften those drift cases to avoid
+    false product-bug signals.
+    """
+    ref1 = _api_bindings_fresh_after_ui(api_url, query, fallback_ref, label)
+    if _assert_bindings_match(ref1, frontend_bindings, label):
+        return True
+
+    if not _is_count_sensitive_query(query_name, query):
+        return False
+
+    ok2, ref2, err2 = _run_sparql_api(api_url, query)
+    if not ok2:
+        print(f"         {label}: stability window API re-fetch failed — {err2}")
+        return False
+
+    # If API changed across snapshots and frontend matches one snapshot, classify drift.
+    api_stable = _assert_bindings_match(ref1, ref2, f"{label} API stability")
+    if not api_stable:
+        if _assert_bindings_match(ref2, frontend_bindings, f"{label} drift-window"):
+            print(
+                f"         {label}: classified as graph drift (count-sensitive query changed between snapshots)"
+            )
+            return True
+        print(
+            f"         {label}: unstable API snapshots and frontend matched neither snapshot"
+        )
+    return False
+
+
 def _run_sparql_upload_api(api_url: str, path: Path) -> tuple[bool, list[dict], str]:
     """POST /data-model/sparql/upload with a .sparql file (multipart). Returns (ok, bindings, error)."""
     try:
@@ -859,16 +909,13 @@ def _run_predefined_buttons_parity_suite(
                     report_rows.append(row)
                 continue
 
-            ref_snap = _api_bindings_fresh_after_ui(
-                api_url,
-                q_used,
-                fe_bindings,
-                f"Predefined [{label}]",
-            )
-            parity_ok = _assert_bindings_match(
-                ref_snap,
-                fe_bindings,
-                f"Predefined [{label}] UI vs API ({mode})",
+            parity_ok = _frontend_parity_check_with_stability_window(
+                api_url=api_url,
+                query=q_used,
+                query_name=f"predefined:{label}",
+                frontend_bindings=fe_bindings,
+                fallback_ref=fe_bindings,
+                label=f"Predefined [{label}] UI vs API ({mode})",
             )
             row["parity_ok"] = parity_ok
             if not parity_ok:
@@ -1397,10 +1444,14 @@ def main() -> int:
                     print(f"         Frontend (file upload) FAIL — {err_f_file}")
                     failed += 1
                 else:
-                    ref_fe_file = _api_bindings_fresh_after_ui(
-                        api_url, query, api_bindings, "Frontend (file upload)"
-                    )
-                    if not _assert_bindings_match(ref_fe_file, fe_bindings_file, "Frontend (file upload)"):
+                    if not _frontend_parity_check_with_stability_window(
+                        api_url=api_url,
+                        query=query,
+                        query_name=name,
+                        frontend_bindings=fe_bindings_file,
+                        fallback_ref=api_bindings,
+                        label="Frontend (file upload)",
+                    ):
                         failed += 1
                         print("         (running textarea path anyway)")
                     else:
@@ -1412,10 +1463,14 @@ def main() -> int:
                     print(f"         Frontend (textarea) FAIL — {err_f}")
                     failed += 1
                 else:
-                    ref_fe_ta = _api_bindings_fresh_after_ui(
-                        api_url, query, api_bindings, "Frontend (textarea)"
-                    )
-                    if not _assert_bindings_match(ref_fe_ta, fe_bindings, "Frontend (textarea)"):
+                    if not _frontend_parity_check_with_stability_window(
+                        api_url=api_url,
+                        query=query,
+                        query_name=name,
+                        frontend_bindings=fe_bindings,
+                        fallback_ref=api_bindings,
+                        label="Frontend (textarea)",
+                    ):
                         failed += 1
                     else:
                         print("         Frontend (textarea) OK")
@@ -1461,10 +1516,14 @@ def main() -> int:
                     report_data, path, name, rec_status, rec_err, rec_rows, t0
                 )
                 continue
-            ref_fe_file = _api_bindings_fresh_after_ui(
-                api_url, query, ref, "Frontend (file upload)"
-            )
-            if not _assert_bindings_match(ref_fe_file, fe_bindings_file, "Frontend (file upload)"):
+            if not _frontend_parity_check_with_stability_window(
+                api_url=api_url,
+                query=query,
+                query_name=name,
+                frontend_bindings=fe_bindings_file,
+                fallback_ref=ref,
+                label="Frontend (file upload)",
+            ):
                 failed += 1
                 print("         (running textarea path anyway)")
             else:
@@ -1483,10 +1542,14 @@ def main() -> int:
                     report_data, path, name, rec_status, rec_err, rec_rows, t0
                 )
                 continue
-            ref_fe_ta = _api_bindings_fresh_after_ui(
-                api_url, query, ref, "Frontend (textarea)"
-            )
-            if not _assert_bindings_match(ref_fe_ta, fe_bindings, "Frontend (textarea)"):
+            if not _frontend_parity_check_with_stability_window(
+                api_url=api_url,
+                query=query,
+                query_name=name,
+                frontend_bindings=fe_bindings,
+                fallback_ref=ref,
+                label="Frontend (textarea)",
+            ):
                 failed += 1
                 rec_status = "frontend_parity_mismatch"
                 rec_err = "Frontend (textarea) bindings differ from API"

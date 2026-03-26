@@ -1,19 +1,19 @@
 # Open-FDD
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/Ta48yQF8fC)
-![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)
+[![CI](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/bbartling/open-fdd/actions/workflows/ci.yml)
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Development Status](https://img.shields.io/badge/status-3%20--%20Alpha-orange)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)
 ![BACnet](https://img.shields.io/badge/Protocol-BACnet-003366)
 ![TimescaleDB](https://img.shields.io/badge/TimescaleDB-compatible-FDB515?logo=timescale&logoColor=black)
 ![Grafana](https://img.shields.io/badge/Grafana-supported-F46800?logo=grafana&logoColor=white)
-[PyPI: open-fdd](https://pypi.org/project/open-fdd/)
+[![PyPI](https://img.shields.io/pypi/v/open-fdd?label=PyPI)](https://pypi.org/project/open-fdd/)
 
 
 <div align="center">
 
-![open-fdd logo](image.png)
+![open-fdd logo](https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png)
 
 </div>
 

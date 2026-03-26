@@ -485,7 +485,7 @@ verify() {
       echo "Weather: no Open-Meteo points yet (run FDD or weather scraper; Config → open_meteo_site_id = your site name)."
     fi
   else
-    echo "Weather: skip (scripts/curl_weather_data.sh not executable)."
+    echo "Weather: skip (scripts/curl_weather_data.sh missing or not executable)."
   fi
   echo ""
 }
