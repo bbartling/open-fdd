@@ -546,12 +546,12 @@ verify_code() {
         echo "Frontend: OK (via container)"
       else
         echo "Frontend container test path failed; attempting host npm fallback..."
-        if have_cmd npm && (cd "$REPO_ROOT/frontend" && npm run lint && npx tsc -b --noEmit && npm run test); then
+        if have_cmd npm && (cd "$REPO_ROOT/frontend" && npm install && npm run lint && npx tsc -b --noEmit && npm run test); then
           echo "Frontend: OK (via host npm fallback)"
         else
           echo "Frontend: FAIL (container and host fallback failed)"
           echo "  Container cmd: docker exec -w /app openfdd_frontend sh -lc 'npm install && npm run lint && npx tsc -b --noEmit && npm run test'"
-          echo "  Host cmd:      cd frontend && npm run lint && npx tsc -b --noEmit && npm run test"
+          echo "  Host cmd:      cd frontend && npm install && npm run lint && npx tsc -b --noEmit && npm run test"
           frontend_ok=false
         fi
       fi
