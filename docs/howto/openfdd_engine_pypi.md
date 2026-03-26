@@ -17,12 +17,36 @@ Two distributions are relevant for **contractors / pandas + YAML** workflows:
 
 ---
 
+## Current public state (PyPI)
+
+- Legacy **`open-fdd`** on PyPI is currently **`0.1.9`** (equations-era package line).
+- The repo release line is now **`2.x`** and should be published as the modern package.
+- If `openfdd-engine` is not visible yet on PyPI, the first successful publish creates it.
+
+Quick check commands:
+
+```bash
+curl -s https://pypi.org/pypi/open-fdd/json | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])"
+curl -s https://pypi.org/pypi/openfdd-engine/json | python3 -c "import sys, json; print(json.load(sys.stdin)['info']['version'])"
+```
+
+---
+
 ## 1) Before any release
 
 1. **Choose versions**
    - Root **`pyproject.toml`** → `[project] version` for **`open-fdd`** (e.g. `2.0.8`).
    - **`packages/openfdd-engine/pyproject.toml`** → `version` and `dependencies` → `open-fdd>=X.Y.Z` aligned with what you just published (or still satisfied by `>=`).
 2. **Changelog / tag message** — note engine-only docs, IoT `RuleRunner` usage, etc., if applicable.
+
+### Prep checklist for legacy -> 2.x transition
+
+1. Confirm **`open-fdd`** local version is set to your target 2.x in root `pyproject.toml`.
+2. Confirm **`packages/openfdd-engine/pyproject.toml`** version and dependency `open-fdd>=X.Y.Z`.
+3. Merge/push release commits to `master` (or your designated release branch).
+4. Tag and publish **`open-fdd`** first.
+5. Tag and publish **`openfdd-engine`** second.
+6. Re-check live PyPI pages so users see 2.x for `open-fdd` and the engine package entry.
 
 ### PyPI upload auth (required once per project)
 

@@ -32,3 +32,9 @@ def test_bootstrap_rejects_invalid_mode():
     out = (res.stdout or "") + (res.stderr or "")
     assert "Invalid --mode" in out
 
+
+def test_bootstrap_frontend_test_path_has_host_fallback_docs():
+    script_text = Path("scripts/bootstrap.sh").read_text(encoding="utf-8")
+    assert "Frontend container test path failed; attempting host npm fallback" in script_text
+    assert "Frontend: OK (via host npm fallback)" in script_text
+
