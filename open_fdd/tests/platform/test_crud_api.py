@@ -274,6 +274,50 @@ def test_equipment_patch_409_duplicate_name_same_site():
     assert r.status_code == 409
 
 
+def test_equipment_patch_metadata_deep_merges_nested_keys():
+    eq_id = uuid4()
+    site_id = uuid4()
+    updated_row = {
+        "id": str(eq_id),
+        "site_id": str(site_id),
+        "name": "AHU-1",
+        "description": None,
+        "equipment_type": "Air_Handling_Unit",
+        "metadata": {
+            "engineering": {
+                "controls": {"control_vendor": "Acme", "panel_name": "P1"},
+                "mechanical": {"design_cfm": "5000"},
+            }
+        },
+        "feeds_equipment_id": None,
+        "fed_by_equipment_id": None,
+        "created_at": "2024-01-01T00:00:00",
+    }
+    cursor = MagicMock()
+    cursor.execute.return_value = None
+    # 1) SELECT metadata, 2) UPDATE ... RETURNING
+    cursor.fetchone.side_effect = [
+        {"metadata": {"engineering": {"controls": {"control_vendor": "Acme"}}}},
+        updated_row,
+    ]
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    conn.commit = MagicMock()
+
+    with _patch_db(conn), patch("open_fdd.platform.api.equipment.sync_ttl_to_file"):
+        r = client.patch(
+            f"/equipment/{eq_id}",
+            json={"metadata": {"engineering": {"controls": {"panel_name": "P1"}}}},
+        )
+    assert r.status_code == 200
+    # Merge preserves existing nested keys and applies incoming updates.
+    assert r.json()["metadata"]["engineering"]["controls"]["control_vendor"] == "Acme"
+    assert r.json()["metadata"]["engineering"]["controls"]["panel_name"] == "P1"
+
+
 def test_equipment_delete():
     conn = _mock_conn(fetchone={"id": uuid4()})
     with _patch_db(conn), patch("open_fdd.platform.api.equipment.sync_ttl_to_file"):

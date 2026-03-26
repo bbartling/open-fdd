@@ -636,6 +636,117 @@ def _upsert_equipment_metadata(
     )
 
 
+def _create_or_upsert_without_point_id(
+    cur: Any,
+    point_row: PointImportRow,
+    inferred_payload_site_id: str | None,
+    default_site_id_str: str | None,
+) -> tuple[str, str | None]:
+    """Create/update point by identity fields when point_id is absent or stale.
+
+    Returns: (result, warning_message)
+    result in {"created", "updated", "skipped"}.
+    """
+    effective_site_id = (
+        point_row.site_id
+        if (point_row.site_id and str(point_row.site_id).strip())
+        else (inferred_payload_site_id or default_site_id_str)
+    )
+    if (
+        effective_site_id is None
+        and getattr(point_row, "site_name", None)
+        and str(point_row.site_name).strip()
+    ):
+        effective_site_id = _resolve_site_id_by_name(cur, point_row.site_name)
+    if not all(
+        [
+            effective_site_id,
+            point_row.external_id,
+            point_row.bacnet_device_id,
+            point_row.object_identifier,
+        ]
+    ):
+        return (
+            "skipped",
+            "point_id not found and create fields incomplete (need site_id/site_name, external_id, bacnet_device_id, object_identifier)",
+        )
+    site_uuid = _parse_uuid_or_400(
+        effective_site_id,
+        "site_id",
+        "from GET /sites or use GET /data-model/export?site_id=YourSite to pre-fill",
+    )
+    if point_row.equipment_id:
+        equip_uuid_str = str(
+            _parse_uuid_or_400(
+                point_row.equipment_id,
+                "equipment_id",
+                "from GET /equipment",
+            )
+        )
+    elif point_row.equipment_name:
+        equip_uuid_str = _ensure_equipment(
+            cur,
+            site_uuid,
+            point_row.equipment_name,
+            point_row.equipment_type or "Equipment",
+        )
+    else:
+        equip_uuid_str = None
+    _polling = point_row.polling if point_row.polling is not None else True
+    _brick = _normalize_brick_type(point_row.brick_type)
+    _fdd = point_row.rule_input if point_row.rule_input is not None else point_row.fdd_input
+    insert_params = (
+        str(site_uuid),
+        point_row.external_id,
+        point_row.bacnet_device_id,
+        point_row.object_identifier,
+        point_row.object_name,
+        equip_uuid_str,
+        _brick,
+        _fdd,
+        point_row.unit,
+        point_row.description,
+        _polling,
+    )
+    try:
+        cur.execute("SAVEPOINT point_import_insert")
+        cur.execute(
+            """INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name, equipment_id, brick_type, fdd_input, unit, description, polling)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            insert_params,
+        )
+        if cur.rowcount:
+            return ("created", None)
+    except psycopg2.IntegrityError as e:
+        if e.pgcode != "23505":
+            raise
+        # UniqueViolation (site_id, external_id): roll back failed INSERT then update existing row.
+        cur.execute("ROLLBACK TO SAVEPOINT point_import_insert")
+        cur.execute(
+            """UPDATE points SET bacnet_device_id = %s, object_identifier = %s, object_name = %s, equipment_id = %s, brick_type = %s, fdd_input = %s, unit = %s, description = %s, polling = %s
+               WHERE site_id = %s AND external_id = %s""",
+            (
+                point_row.bacnet_device_id,
+                point_row.object_identifier,
+                point_row.object_name,
+                equip_uuid_str,
+                _brick,
+                _fdd,
+                point_row.unit,
+                point_row.description,
+                _polling,
+                str(site_uuid),
+                point_row.external_id,
+            ),
+        )
+        if cur.rowcount:
+            return (
+                "updated",
+                "duplicate in payload; existing point updated (last wins)",
+            )
+    return ("skipped", "point create/upsert did not affect any row")
+
+
 @router.put(
     "/import",
     summary="Import Brick mapping (create or update points; preserves BACnet refs)",
@@ -699,121 +810,6 @@ def import_data_model(body: DataModelImportBody):
                 next(iter(payload_site_ids)) if len(payload_site_ids) == 1 else None
             )
             for row in body.points:
-                def _create_or_upsert_without_point_id(
-                    point_row: PointImportRow,
-                ) -> tuple[str, str | None]:
-                    """Create/update point by identity fields when point_id is absent or stale.
-
-                    Returns: (result, warning_message)
-                    result in {"created", "updated", "skipped"}.
-                    """
-                    effective_site_id = (
-                        point_row.site_id
-                        if (point_row.site_id and str(point_row.site_id).strip())
-                        else (inferred_payload_site_id or default_site_id_str)
-                    )
-                    if (
-                        effective_site_id is None
-                        and getattr(point_row, "site_name", None)
-                        and str(point_row.site_name).strip()
-                    ):
-                        effective_site_id = _resolve_site_id_by_name(
-                            cur, point_row.site_name
-                        )
-                    if not all(
-                        [
-                            effective_site_id,
-                            point_row.external_id,
-                            point_row.bacnet_device_id,
-                            point_row.object_identifier,
-                        ]
-                    ):
-                        return (
-                            "skipped",
-                            "point_id not found and create fields incomplete (need site_id/site_name, external_id, bacnet_device_id, object_identifier)",
-                        )
-                    site_uuid = _parse_uuid_or_400(
-                        effective_site_id,
-                        "site_id",
-                        "from GET /sites or use GET /data-model/export?site_id=YourSite to pre-fill",
-                    )
-                    if point_row.equipment_id:
-                        equip_uuid_str = str(
-                            _parse_uuid_or_400(
-                                point_row.equipment_id,
-                                "equipment_id",
-                                "from GET /equipment",
-                            )
-                        )
-                    elif point_row.equipment_name:
-                        equip_uuid_str = _ensure_equipment(
-                            cur,
-                            site_uuid,
-                            point_row.equipment_name,
-                            point_row.equipment_type or "Equipment",
-                        )
-                    else:
-                        equip_uuid_str = None
-                    _polling = (
-                        point_row.polling if point_row.polling is not None else True
-                    )
-                    _brick = _normalize_brick_type(point_row.brick_type)
-                    _fdd = (
-                        point_row.rule_input
-                        if point_row.rule_input is not None
-                        else point_row.fdd_input
-                    )
-                    insert_params = (
-                        str(site_uuid),
-                        point_row.external_id,
-                        point_row.bacnet_device_id,
-                        point_row.object_identifier,
-                        point_row.object_name,
-                        equip_uuid_str,
-                        _brick,
-                        _fdd,
-                        point_row.unit,
-                        point_row.description,
-                        _polling,
-                    )
-                    try:
-                        cur.execute("SAVEPOINT point_import_insert")
-                        cur.execute(
-                            """INSERT INTO points (site_id, external_id, bacnet_device_id, object_identifier, object_name, equipment_id, brick_type, fdd_input, unit, description, polling)
-                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            insert_params,
-                        )
-                        if cur.rowcount:
-                            return ("created", None)
-                    except psycopg2.IntegrityError as e:
-                        if e.pgcode != "23505":
-                            raise
-                        # UniqueViolation (site_id, external_id): roll back failed INSERT then update existing row.
-                        cur.execute("ROLLBACK TO SAVEPOINT point_import_insert")
-                        cur.execute(
-                            """UPDATE points SET bacnet_device_id = %s, object_identifier = %s, object_name = %s, equipment_id = %s, brick_type = %s, fdd_input = %s, unit = %s, description = %s, polling = %s
-                               WHERE site_id = %s AND external_id = %s""",
-                            (
-                                point_row.bacnet_device_id,
-                                point_row.object_identifier,
-                                point_row.object_name,
-                                equip_uuid_str,
-                                _brick,
-                                _fdd,
-                                point_row.unit,
-                                point_row.description,
-                                _polling,
-                                str(site_uuid),
-                                point_row.external_id,
-                            ),
-                        )
-                        if cur.rowcount:
-                            return (
-                                "updated",
-                                "duplicate in payload; existing point updated (last wins)",
-                            )
-                    return ("skipped", "point create/upsert did not affect any row")
-
                 if row.point_id:
                     # Update existing point
                     updates, params = [], []
@@ -870,7 +866,12 @@ def import_data_model(body: DataModelImportBody):
                         else:
                             # Retargeted payloads can carry stale point_ids.
                             # Fall back to create/upsert by identity fields when possible.
-                            result, warn_msg = _create_or_upsert_without_point_id(row)
+                            result, warn_msg = _create_or_upsert_without_point_id(
+                                cur,
+                                row,
+                                inferred_payload_site_id,
+                                default_site_id_str,
+                            )
                             if result == "created":
                                 created += 1
                                 warnings.append(
@@ -892,7 +893,12 @@ def import_data_model(body: DataModelImportBody):
                                     {"point_id": row.point_id, "reason": warn_msg}
                                 )
                 else:
-                    result, warn_msg = _create_or_upsert_without_point_id(row)
+                    result, warn_msg = _create_or_upsert_without_point_id(
+                        cur,
+                        row,
+                        inferred_payload_site_id,
+                        default_site_id_str,
+                    )
                     if result == "created":
                         created += 1
                     elif result == "updated":

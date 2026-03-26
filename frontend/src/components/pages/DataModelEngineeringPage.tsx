@@ -239,8 +239,20 @@ function EngineeringEditor({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const topology = JSON.parse(topologyJson);
-      const extensions = JSON.parse(extensionsJson);
+      let topology: unknown;
+      try {
+        topology = JSON.parse(topologyJson);
+      } catch (err) {
+        const detail = err instanceof Error ? ` (${err.message})` : "";
+        throw new Error(`Invalid JSON in topology${detail}`);
+      }
+      let extensions: unknown;
+      try {
+        extensions = JSON.parse(extensionsJson);
+      } catch (err) {
+        const detail = err instanceof Error ? ` (${err.message})` : "";
+        throw new Error(`Invalid JSON in extensions${detail}`);
+      }
       const baseMetadata = ((selectedEquipment.metadata as Record<string, unknown> | undefined) ?? {}) as Record<
         string,
         unknown

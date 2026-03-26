@@ -86,6 +86,7 @@ export function DataModelTestingPage() {
             <button
               type="button"
               onClick={() => setQueryCategory("hvac")}
+              aria-pressed={queryCategory === "hvac"}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                 queryCategory === "hvac" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
               }`}
@@ -95,6 +96,7 @@ export function DataModelTestingPage() {
             <button
               type="button"
               onClick={() => setQueryCategory("engineering")}
+              aria-pressed={queryCategory === "engineering"}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
                 queryCategory === "engineering" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
               }`}

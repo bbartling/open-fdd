@@ -13,6 +13,17 @@ from open_fdd.platform.realtime import emit, TOPIC_CRUD_EQUIPMENT
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 
+def _deep_merge_dict(base: dict | None, overlay: dict | None) -> dict:
+    """Recursively merge overlay into base (overlay wins; unknown keys preserved)."""
+    out = dict(base or {})
+    for key, value in (overlay or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge_dict(out.get(key), value)
+        else:
+            out[key] = value
+    return out
+
+
 @router.get("", response_model=list[EquipmentRead])
 def list_equipment(site_id: UUID | None = None):
     """List equipment, optionally filtered by site."""
@@ -100,8 +111,19 @@ def update_equipment(equipment_id: UUID, body: EquipmentUpdate):
         updates.append("equipment_type = %s")
         params.append(body.equipment_type)
     if body.metadata_ is not None:
+        existing_metadata: dict = {}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT metadata FROM equipment WHERE id = %s",
+                    (str(equipment_id),),
+                )
+                row = cur.fetchone()
+                if row and isinstance(row.get("metadata"), dict):
+                    existing_metadata = row["metadata"]
+        merged_metadata = _deep_merge_dict(existing_metadata, body.metadata_)
         updates.append("metadata = %s::jsonb")
-        params.append(json.dumps(body.metadata_))
+        params.append(json.dumps(merged_metadata))
     if body.feeds_equipment_id is not None:
         updates.append("feeds_equipment_id = %s::uuid")
         params.append(str(body.feeds_equipment_id))

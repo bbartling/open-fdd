@@ -13,6 +13,7 @@ section after BACNET_SECTION_MARKER. CRUD and point_discovery_to_graph update th
 from __future__ import annotations
 
 import atexit
+import logging
 import threading
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ OFDD = "http://openfdd.local/ontology#"
 S223 = "http://data.ashrae.org/standard223#"
 RDFS = "http://www.w3.org/2000/01/rdf-schema#"
 BASE = "http://openfdd.local/site#"
+logger = logging.getLogger(__name__)
 
 
 def _escape(s: str) -> str:
@@ -265,7 +267,14 @@ def _append_equipment_engineering(
     if not isinstance(topology, dict):
         return
 
-    eq_id = str(equipment_row.get("id", "")).replace("-", "_")
+    raw_eq_id = equipment_row.get("id")
+    if not raw_eq_id:
+        logger.warning(
+            "Skipping engineering RDF for equipment row with empty id: %s",
+            equipment_row,
+        )
+        return
+    eq_id = str(raw_eq_id).replace("-", "_")
     connection_points = topology.get("connection_points")
     if isinstance(connection_points, list):
         for idx, cp in enumerate(connection_points):
