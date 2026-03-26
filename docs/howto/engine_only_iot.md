@@ -16,7 +16,7 @@ From the repo root:
 ./scripts/bootstrap.sh --mode engine
 ```
 
-This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default.
+This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture.md) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default.
 
 **When it fits**
 
@@ -31,7 +31,7 @@ This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scrap
 
 The rule runner is **`open_fdd.engine.runner.RuleRunner`**. It loads the **same** `.yaml` rule files as the platform (`type: bounds|flatline|expression|hunting|oa_fraction|erv_efficiency`, `inputs`, `params`, etc.). Authoring references:
 
-- [Expression rule cookbook](../expression_rule_cookbook)
+- [Expression rule cookbook](../expression_rule_cookbook.md)
 - Examples under `examples/my_rules/` in the repo
 
 **Minimal integration pattern**
@@ -54,9 +54,9 @@ The **`openfdd-engine`** PyPI package is a **small re-export** of the same API (
 
 ## Standalone playground (optional)
 
-A **non-repo** example folder (CSV + YAML + script) is easy to keep on a laptop for workshops:
+An **in-repo** example folder is included for workshops and quick starts:
 
-- See a sibling layout such as `~/engine-iot-playground/` with `README.md`, `rules/*.yaml`, `data/*.csv`, and `run_demo.py` calling `RuleRunner`.
+- `examples/engine_iot_playground/` with `README.md`, `rules/*.yaml`, `data/RTU11.csv`, `run_demo.py`, and `RTU11_engine_tutorial.ipynb`.
 
 That pattern is **not** a second engine — it is the **same** code path as production rules, without Docker.
 
@@ -68,4 +68,4 @@ That pattern is **not** a second engine — it is the **same** code path as prod
 | **`RuleRunner` in Python** | DataFrame + YAML directory | Identical rule YAML semantics on pandas |
 | **Full stack** | BACnet / UI needs | Collector + model + engine together |
 
-For mode overview and service list, start at [Modular architecture](../modular_architecture).
+For mode overview and service list, start at [Modular architecture](../modular_architecture.md).

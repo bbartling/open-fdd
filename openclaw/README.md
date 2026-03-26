@@ -24,6 +24,8 @@ This is a **test-bench only** workspace. Use it to validate:
 ## Three modes (how to work)
 
 These are **workflow labels**, not separate Docker products. Pick commands to match intent.
+Default for normal development in this repo: **Software dev / web app testing**; only switch to AI data modeling or virtual-operator mode when the human explicitly asks.
+Do **not** create or manage a second cloned stack for OpenClaw; use the existing Open-FDD deployment/workspace and run tests against that target.
 
 1. **Software dev / app testing** — From repo root: `./scripts/bootstrap.sh --test` (frontend + pytest + Caddy). For heavier, environment-specific checks (Selenium, long BACnet runs), see [`bench/e2e/README.md`](bench/e2e/README.md) and [`docs/operations/testing_plan.md`](../docs/operations/testing_plan.md).
 2. **AI data modeling** — Bring up a model-capable stack: `./scripts/bootstrap.sh --mode model` (or `--mode full` when you need the whole graph + API). Use SPARQL examples in [`bench/sparql/`](bench/sparql/) and the export/import loop in [`docs/openclaw_integration.md`](../docs/openclaw_integration.md).
