@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openfdd-engine"
-version = "0.1.1"
+version = "0.1.2"
 description = "Standalone Open-FDD Pandas/YAML fault detection engine"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Open-FDD Contributors" }]
 requires-python = ">=3.9"
 dependencies = [
-  "open-fdd>=2.0.8",
+  "open-fdd>=2.0.10",
   "pandas",
   "pyyaml",
 ]
