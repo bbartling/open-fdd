@@ -71,6 +71,7 @@ The bench scripts now fail fast on missing/invalid auth instead of flooding the 
 - `2_sparql_crud_and_frontend_test.py` — graph + CRUD + UI
 - `3_long_term_bacnet_scrape_test.py` — persistence / soak test
 - `4_hot_reload_test.py` — dev ergonomics regression
+- `5_ai_data_model_payload_test.py` — AI/data-model regression: malformed payloads, partial payloads, engineering metadata, Standard 223 / `s223` topology JSON, and export/import parity on fresh sites
 - `automated_suite.py` — orchestrator
 
 ## Contributing back upstream
