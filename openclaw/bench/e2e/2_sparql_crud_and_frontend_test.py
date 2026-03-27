@@ -313,6 +313,15 @@ def _run_sparql_api(api_url: str, query: str) -> tuple[bool, list[dict], str]:
     if code == 0:
         return False, [], req_err
     if code != 200:
+        if code in (401, 403):
+            return (
+                False,
+                [],
+                (
+                    f"POST /data-model/sparql -> {code} — {req_err} "
+                    "(classified: auth/runtime-context drift)"
+                ),
+            )
         return False, [], f"POST /data-model/sparql -> {code} — {req_err}"
     if "bindings" not in body:
         return False, [], "Response missing bindings"
@@ -1111,6 +1120,82 @@ def _parse_args():
     )
 
 
+def _auth_preflight(api_url: str) -> tuple[bool, dict]:
+    """Fail fast when the harness auth/runtime context is unhealthy.
+
+    Returns (ok, context_dict) where context_dict is JSON-safe and can be embedded in reports.
+    """
+    ctx: dict = {
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "api_url": api_url,
+        "api_key_present": bool(API_KEY),
+        "health_status_code": None,
+        "health_error": "",
+        "auth_probe_path": "/data-model/check",
+        "auth_probe_status_code": None,
+        "auth_probe_error": "",
+        "classification": "unknown",
+    }
+    code_h, _body_h, err_h = _request(api_url, "GET", "/health")
+    ctx["health_status_code"] = code_h
+    ctx["health_error"] = err_h
+    if code_h == 0:
+        ctx["classification"] = "bench/runtime unreachable"
+        return False, ctx
+    if code_h != 200:
+        ctx["classification"] = "bench/runtime unhealthy"
+        return False, ctx
+
+    code_a, _body_a, err_a = _request(api_url, "GET", "/data-model/check")
+    ctx["auth_probe_status_code"] = code_a
+    ctx["auth_probe_error"] = err_a
+    if code_a == 200:
+        ctx["classification"] = "auth preflight healthy"
+        return True, ctx
+    if code_a in (401, 403):
+        ctx["classification"] = "auth/runtime-context drift"
+        return False, ctx
+    if code_a == 0:
+        ctx["classification"] = "bench/runtime unreachable"
+        return False, ctx
+    ctx["classification"] = "backend preflight failed"
+    return False, ctx
+
+
+def _print_issue_payload_hint(
+    *,
+    query_name: str,
+    query_text: str,
+    mode: str,
+    api_rows: int,
+    frontend_rows: int,
+    api_url: str,
+    frontend_url: str | None,
+    auth_preflight: dict | None,
+) -> None:
+    ts = datetime.now(timezone.utc).isoformat()
+    print("         --- issue payload hint (candidate product defect) ---")
+    print(f"         timestamp_utc: {ts}")
+    print(f"         query_file: {query_name}")
+    q_preview = _normalized_query_text(query_text)
+    q_preview = q_preview[:280] + ("…" if len(q_preview) > 280 else "")
+    print(f"         query_preview: {q_preview}")
+    print(f"         mode: {mode}")
+    print(f"         expected_vs_actual: API rows={api_rows}, frontend rows={frontend_rows}")
+    print(f"         api_url: {api_url}")
+    if frontend_url:
+        print(f"         frontend_url: {frontend_url}")
+    if auth_preflight:
+        print(
+            "         auth_preflight: "
+            f"{auth_preflight.get('classification')} "
+            f"(health={auth_preflight.get('health_status_code')}, "
+            f"probe={auth_preflight.get('auth_probe_status_code')})"
+        )
+    print("         bench_state: capture log path + branch/commit + whether BACnet/weather loops were active")
+    print("         ------------------------------------------------------")
+
+
 def _hvac_summary_payload(api_url: str, *, echo: bool) -> tuple[int, dict | None]:
     """Run HVAC/BACnet summary queries; optionally print. Returns (failure_count, json-able dict)."""
     ahu_count_q = """
@@ -1267,6 +1352,24 @@ def main() -> int:
         print(f"API URL: {api_url}")
     print(f"HTTP timeout: {_HTTP_TIMEOUT_SEC['sec']}s (override with --http-timeout)")
 
+    preflight_ok, preflight_ctx = _auth_preflight(api_url)
+    print(
+        "Auth preflight:",
+        preflight_ctx.get("classification"),
+        f"(health={preflight_ctx.get('health_status_code')}, probe={preflight_ctx.get('auth_probe_status_code')})",
+    )
+    if not preflight_ok:
+        print(
+            "Auth preflight failed. Stop here to avoid filing noisy downstream 401/403 parity failures."
+        )
+        print(
+            "Classification:",
+            preflight_ctx.get("classification"),
+            "| detail:",
+            preflight_ctx.get("auth_probe_error") or preflight_ctx.get("health_error") or "n/a",
+        )
+        return 1
+
     if predefined_buttons_only:
         sparql_files: list[Path] = []
     elif not SPARQL_DIR.is_dir():
@@ -1298,6 +1401,7 @@ def main() -> int:
                 "predefined_buttons_only": predefined_buttons_only,
                 "no_predefined_buttons": no_predefined_buttons,
             },
+            "auth_preflight": preflight_ctx,
             "sparql_file_results": [],
             "predefined_button_results": [],
             "hvac_summary": None,
@@ -1453,6 +1557,16 @@ def main() -> int:
                         label="Frontend (file upload)",
                     ):
                         failed += 1
+                        _print_issue_payload_hint(
+                            query_name=name,
+                            query_text=query,
+                            mode="frontend file upload parity",
+                            api_rows=len(api_bindings),
+                            frontend_rows=len(fe_bindings_file),
+                            api_url=api_url,
+                            frontend_url=frontend_url,
+                            auth_preflight=preflight_ctx,
+                        )
                         print("         (running textarea path anyway)")
                     else:
                         print("         Frontend (file upload) OK")
@@ -1472,6 +1586,16 @@ def main() -> int:
                         label="Frontend (textarea)",
                     ):
                         failed += 1
+                        _print_issue_payload_hint(
+                            query_name=name,
+                            query_text=query,
+                            mode="frontend textarea parity",
+                            api_rows=len(api_bindings),
+                            frontend_rows=len(fe_bindings),
+                            api_url=api_url,
+                            frontend_url=frontend_url,
+                            auth_preflight=preflight_ctx,
+                        )
                     else:
                         print("         Frontend (textarea) OK")
             if driver and (frontend_parity and frontend_url):
@@ -1525,6 +1649,16 @@ def main() -> int:
                 label="Frontend (file upload)",
             ):
                 failed += 1
+                _print_issue_payload_hint(
+                    query_name=name,
+                    query_text=query,
+                    mode="frontend file upload parity",
+                    api_rows=len(ref),
+                    frontend_rows=len(fe_bindings_file),
+                    api_url=api_url,
+                    frontend_url=frontend_url,
+                    auth_preflight=preflight_ctx,
+                )
                 print("         (running textarea path anyway)")
             else:
                 print("         Frontend (file upload) OK")
@@ -1551,6 +1685,16 @@ def main() -> int:
                 label="Frontend (textarea)",
             ):
                 failed += 1
+                _print_issue_payload_hint(
+                    query_name=name,
+                    query_text=query,
+                    mode="frontend textarea parity",
+                    api_rows=len(ref),
+                    frontend_rows=len(fe_bindings),
+                    api_url=api_url,
+                    frontend_url=frontend_url,
+                    auth_preflight=preflight_ctx,
+                )
                 rec_status = "frontend_parity_mismatch"
                 rec_err = "Frontend (textarea) bindings differ from API"
                 _append_sparql_file_report(

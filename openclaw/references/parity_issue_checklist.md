@@ -40,10 +40,23 @@ Separate real product defects from auth drift and runtime graph churn.
 
 - one minimal repro path
 - exact failing query name(s)
+- exact query text (or committed query file path + commit SHA)
 - expected vs actual
+- auth status at test time (preflight result + 401/403 absence)
+- timestamp(s) in UTC for failing run and evidence snippets
+- bench state snapshot (API URL, frontend URL, branch/commit, BACnet/weather activity)
 - why auth drift was ruled out
 - evidence pointers (log file + timestamp)
 - explicit non-goal statement (what this issue is not about)
+
+## Minimum payload gate (before filing)
+
+Do not file parity/product issues unless all are present:
+1. query identifier + exact query text/path
+2. expected vs actual (row count and representative binding diff)
+3. UTC timestamp and log path
+4. auth preflight state (`healthy` vs classified drift)
+5. bench context (URLs + branch/commit + active background loops)
 
 ## Keep #92 semantics
 

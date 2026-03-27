@@ -19,6 +19,8 @@ Suggested fields for each entry:
 - logs/evidence
 - suspected cause
 - GitHub issue link / follow-up
+- classification (auth/runtime drift, bench limitation, parity bug, graph/model drift, BACnet bug, product defect)
+- auth preflight state (healthy vs drift) when API/model testing is involved
 
 ## 2026-03-21
 
