@@ -138,7 +138,7 @@ export function DataModelEngineeringPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Engineering</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Preserve Brick operations while adding engineering metadata and 223P-style topology that stays
+        Preserve Brick operations while adding engineering metadata and ASHRAE Standard 223 (`s223`) topology that stays
         exportable for LLM workflows and queryable via SPARQL.
       </p>
 
@@ -167,7 +167,7 @@ export function DataModelEngineeringPage() {
             <p>BACnet reference: {hasBacnet ? "yes" : "no"}</p>
             <p>Time-series reference: {hasTimeseries ? "yes" : "no"}</p>
             <p>
-              223P topology block:{" "}
+              Standard 223 (`s223`) topology block:{" "}
               {(
                 (selectedEquipment?.metadata as Record<string, unknown> | undefined)
                   ?.engineering as Record<string, unknown> | undefined
@@ -325,7 +325,7 @@ function EngineeringEditor({
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Use JSON for connection points/connections/mediums (s223-style concepts: Duct/Pipe/Wire, hasConnectionPoint, connectsFrom/connectsTo).
+            Use JSON for connection points/connections/mediums (ASHRAE Standard 223 / `s223` concepts: Duct/Pipe/Wire, hasConnectionPoint, connectsFrom/connectsTo).
           </p>
           <textarea
             value={topologyJson}
