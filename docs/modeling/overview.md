@@ -28,7 +28,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   RuleRunner
 ```
 
-**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/data_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](howto/danger_zone#crud-deletes--cascade-behavior).
+**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/data_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](../howto/danger_zone#crud-deletes--cascade-behavior).
 
 ---
 
@@ -56,7 +56,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
 ## Data modeling process (discover → tag → import → validate)
 
 1. **Discover** — BACnet discovery and/or manual entry populate **sites**, **equipment**, and **points** in the DB.
-2. **Export** — Use **GET /data-model/export** (or the Export card on the Data Model Setup page) to get JSON for tagging.
+2. **Export** — Use **GET /data-model/export** (or the Export card on the Data Model Protocols page) to get JSON for tagging.
 3. **Tag** — Either **manual**: copy JSON → use an external LLM or human → paste back (or automate with an external agent like Open‑Claw). If your agent needs platform documentation as context, fetch it from `GET /model-context/docs`.
 4. **Import** — **PUT /data-model/import** (or the Import card / auto-import from the agent) writes tagged points and optional equipment relationships into the DB and reserializes the Brick TTL.
 5. **Validate** — Use the **Data Model Testing** page (SPARQL, “Summarize your HVAC”) to confirm the model; treat the result as pass or fail.

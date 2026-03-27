@@ -38,4 +38,4 @@ Site
 - `GET /equipment/{id}` — Get one
 - `POST /equipment` — Create
 - `PATCH /equipment/{id}` — Update
-- `DELETE /equipment/{id}` — Delete (cascades to points and their timeseries; see [Danger zone](howto/danger_zone))
+- `DELETE /equipment/{id}` — Delete (cascades to points and their timeseries; see [Danger zone](../howto/danger_zone))

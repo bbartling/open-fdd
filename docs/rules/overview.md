@@ -21,7 +21,7 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 | **React frontend (Faults page)** | Upload new YAML, download existing files, delete files, and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. Preferred when you have UI access. |
 | **Files on disk** | Edit or add files directly under the configured path (e.g. `stack/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
 
-Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
+Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](../expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
 
 **Reference rule library (not loaded by default):** Additional AHU, chiller, heat-pump, and weather YAML examples used for lab automation and docs live under **`openclaw/bench/rules_reference/`** in the repo. See the [Test bench rule catalog](test_bench_rule_catalog) for a table of every file with GitHub links.
 
@@ -35,7 +35,7 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 
 1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `stack/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
 2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
-3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
+3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](../howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
 
 ---
 
@@ -91,4 +91,4 @@ params:
 
 ## Cookbook
 
-See [Expression Rule Cookbook](expression_rule_cookbook) for AHU, chiller, weather, and advanced recipes.
+See [Expression Rule Cookbook](../expression_rule_cookbook) for AHU, chiller, weather, and advanced recipes.

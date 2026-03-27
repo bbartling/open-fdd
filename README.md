@@ -48,7 +48,7 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. The frontend now separates **Data Model Protocols** (ingestion/connectivity) and **Data Model Engineering** (223P-style topology and engineering metadata), keeping Brick as the operational core.
+This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. The frontend now separates **Data Model Protocols** (ingestion/connectivity) and **Data Model Engineering** (ASHRAE Standard 223 / `s223` topology and engineering metadata), keeping Brick as the operational core.
 
 Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
 

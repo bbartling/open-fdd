@@ -29,7 +29,7 @@ When you delete via the API (Swagger, CRUD UI, or scripts):
 | **Equipment** | Points (with that equipment_id), **timeseries_readings** for those points |
 | **Point** | **timeseries_readings** for that point |
 
-So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/data_model.ttl`) is regenerated and written to disk. See [Data modeling](modeling/overview).
+So deleting a site removes all its points and **all their timeseries data from the database**. The DB uses `ON DELETE CASCADE`: site → equipment & points → timeseries_readings. So when the data model reference is removed (site/equipment/point), the corresponding timeseries rows are **physically deleted**—no SQL or container access needed. There are no orphan rows left that a user could not see or clean up via the CRUD (or a future React UI). `DELETE /sites/{id}`, `DELETE /equipment/{id}`, and `DELETE /points/{id}` are **permanent**. A future front end can add confirmation prompts (e.g. “This will permanently delete all timeseries for this site. Continue?”) before calling these endpoints. After each delete, the **Brick TTL** (`config/data_model.ttl`) is regenerated and written to disk. See [Data modeling](../modeling/overview).
 
 **Full reset script:** `python tools/delete_all_sites_and_reset.py` uses only the API (GET /sites, DELETE /sites/{id} for each, then POST /data-model/reset). It does not run SQL inside containers—the same flow a future UI would use.
 
@@ -39,7 +39,7 @@ So deleting a site removes all its points and **all their timeseries data from t
 
 Bootstrap applies TimescaleDB retention (default **365 days**): chunks older than the configured interval are dropped from `timeseries_readings`, `fault_results`, `host_metrics`, `container_metrics`. This is automatic; no manual action.
 
-To set retention: run bootstrap with `--retention-days N` or set `OFDD_RETENTION_DAYS` in `stack/.env` before bootstrap. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
+To set retention: run bootstrap with `--retention-days N` or set `OFDD_RETENTION_DAYS` in `stack/.env` before bootstrap. See [Configuration — Edge / resource limits](../configuration#edge--resource-limits).
 
 ---
 

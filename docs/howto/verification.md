@@ -140,7 +140,7 @@ The fault overlay on Plots is driven by `GET /analytics/fault-timeseries`: one r
 
 ## Logs
 
-**Access:** All containers use log rotation (100 MB × 3 files per container). See [Configuration → Edge limits](configuration#edge--resource-limits).
+**Access:** All containers use log rotation (100 MB × 3 files per container). See [Configuration → Edge limits](../configuration#edge--resource-limits).
 
 All containers (last 50 lines):
 
@@ -239,4 +239,4 @@ docker logs openfdd_fdd_loop --tail 50
 
 ## Database retention
 
-Data retention is set at bootstrap (default 365 days). TimescaleDB drops chunks older than the configured interval. To change: use `--retention-days N` when running bootstrap or set `OFDD_RETENTION_DAYS` in `stack/.env`. See [Configuration — Edge / resource limits](configuration#edge--resource-limits).
+Data retention is set at bootstrap (default 365 days). TimescaleDB drops chunks older than the configured interval. To change: use `--retention-days N` when running bootstrap or set `OFDD_RETENTION_DAYS` in `stack/.env`. See [Configuration — Edge / resource limits](../configuration#edge--resource-limits).

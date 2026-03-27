@@ -10,16 +10,16 @@ Open-FDD keeps one **knowledge graph** (Brick + BACnet + platform config) in `co
 
 ---
 
-## Data Model Setup vs Data Model Testing
+## Data Model Protocols vs Data Model Testing
 
 The frontend has two tabs:
 
 | Tab | Route | Purpose |
 |-----|--------|---------|
-| **Data Model Setup** | `/data-model` | Sites, equipment, import/export JSON, view TTL. Build or edit the data model (sites, equipment, points) and paste AI-tagged JSON to import. |
+| **Data Model Protocols** | `/data-model` | Sites, equipment, import/export JSON, view TTL. Build or edit the data model (sites, equipment, points) and paste AI-tagged JSON to import. |
 | **Data Model Testing** | `/data-model-testing` | **Summarize your HVAC** (one-click SPARQL buttons: Sites, AHUs, Zones, Building, VAV boxes, etc.) and **Custom SPARQL** (textarea, Run, upload .sparql file). Same queries as this cookbook. |
 
-Use **Data Model Testing** to run SPARQL in the browser. Use **Data Model Setup** to manage sites, equipment, and import.
+Use **Data Model Testing** to run SPARQL in the browser. Use **Data Model Protocols** to manage sites, equipment, and import.
 
 ---
 
@@ -147,7 +147,7 @@ In the **Data Model Testing** UI, the **Feed topology** button runs a graph-wide
 
 ---
 
-## Recipe 3b: External references (Brick v1.3)
+## Recipe 3b: External references (Brick v1.4)
 
 List point-to-reference relationships:
 
@@ -264,7 +264,7 @@ WHERE {
 ORDER BY ?point_label
 ```
 
-**Data Model Setup: Equipment table vs "View full data model (TTL)"** — The **Equipment** table on **Data Model Setup** comes from the **database** (REST API: sites, equipment, points). **Data Model Testing** (SPARQL) and **"View full data model (TTL)"** on Setup use the **in-memory graph**, which is synced from the DB (Brick) plus BACnet discovery. If you see a full TTL with equipment but "No equipment configured" in the table, the DB may be empty or out of sync: the graph can be loaded from `config/data_model.ttl` on startup, but the UI list is always from the API/DB. Use the site selector in the top bar ("All sites" vs a specific site); ensure sites and equipment exist in the DB (e.g. create via the UI or import).
+**Data Model Protocols: Equipment table vs "View full data model (TTL)"** — The **Equipment** table on **Data Model Protocols** comes from the **database** (REST API: sites, equipment, points). **Data Model Testing** (SPARQL) and **"View full data model (TTL)"** on Protocols use the **in-memory graph**, which is synced from the DB (Brick) plus BACnet discovery. If you see a full TTL with equipment but "No equipment configured" in the table, the DB may be empty or out of sync: the graph can be loaded from `config/data_model.ttl` on startup, but the UI list is always from the API/DB. Use the site selector in the top bar ("All sites" vs a specific site); ensure sites and equipment exist in the DB (e.g. create via the UI or import).
 
 ---
 
