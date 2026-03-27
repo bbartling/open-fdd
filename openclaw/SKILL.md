@@ -77,6 +77,9 @@ Do not blend security hardening notes into unrelated defect triage without clear
 - Do not treat coding changes as the primary goal.
 - Keep issue/evidence trail in `openclaw/issues_log.md`.
 - Use `openclaw/HANDOFF_PROTOCOL.md` for Cursor/OpenClaw handoff discipline.
+- In the current operating model: **Cursor = product engineer, OpenClaw = tester**.
+- When Cursor provides a commit SHA + issue IDs + acceptance criteria, retest the live bench against that SHA, do **no product-code edits**, and post evidence back to GitHub.
+- Healthy auth preflight is required before drawing frontend/API parity conclusions.
 
 ## References to read first
 

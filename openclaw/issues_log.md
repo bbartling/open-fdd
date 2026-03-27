@@ -85,3 +85,25 @@ Suggested fields for each entry:
   - `bench/e2e/4_hot_reload_test.py` now does the same auth preflight before rule/hot-reload work.
   - `openclaw/README.md` and `openclaw/bench/e2e/README.md` now document `OPENCLAW_STACK_ENV` / `OFDD_API_KEY` loading expectations for split setups.
 - Morning evidence split remains: stale wording/guidance = real product issue; missing auth in the harness = runtime/tooling drift unless repro persists under a known-good key.
+
+## 2026-03-27 - GitHub contract + issue-state durability update
+
+- Operating contract locked in:
+  - **Cursor agents = expert software engineer / product fixer**
+  - **OpenClaw = expert tester / live bench validator**
+  - GitHub issues + PRs + commit SHAs are the handoff surface.
+- OpenClaw tester-only evidence loop for commit **`cf343ca`** completed:
+  - **#95** retest passed on live bench; close recommended.
+  - **#93** retest passed for the original symptom; close recommended.
+  - **#92** tighter retest showed `07_count_triples.sparql` is currently dominated by **graph/runtime churn**, not a stable frontend-only parity defect on the live bench.
+- GitHub evidence comments posted:
+  - `#95` comment: `https://github.com/bbartling/open-fdd/issues/95#issuecomment-4143074983`
+  - `#93` comment: `https://github.com/bbartling/open-fdd/issues/93#issuecomment-4143078830`
+  - `#92` initial comment: `https://github.com/bbartling/open-fdd/issues/92#issuecomment-4143074989`
+  - `#92` tighter repro follow-up: `https://github.com/bbartling/open-fdd/issues/92#issuecomment-4143131321`
+- Bench integrity drift remains an active follow-up topic outside #95/#93/#92:
+  - auth healthy from `C:\Users\ben\Downloads\.env`
+  - raw BACnet reads healthy
+  - graph state has swung between severe churn and partially recovered states
+  - recurring symptoms: orphan blank nodes, fluctuating `triple_count`, duplicate partial BACnet refs, and temporarily inconsistent `bacnet_devices` materialization.
+- Durable instruction for next session: before opening new product bugs from parity failures, require healthy auth preflight and check whether the graph is currently moving too fast for the query to be a stable parity oracle.

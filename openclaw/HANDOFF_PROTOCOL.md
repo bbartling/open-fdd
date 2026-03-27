@@ -52,8 +52,17 @@ So the loop is **mailbox-style**: `issues_log.md` is the inbox/outbox; log files
 | Who | Role |
 |-----|------|
 | **You (human)** | Run gateway, paste prompts, commit/push, decide when to escalate |
-| **Cursor / “senior”** | Architecture, code fixes, script changes, doc structure, triage of hard failures |
-| **OpenClaw / “junior”** | Execute repeatable commands, capture logs, file issues, small safe edits you allow |
+| **Cursor / “senior”** | Architecture, Open-FDD product fixes, code-path hardening, commit SHAs for retest |
+| **OpenClaw / tester** | Execute repeatable bench checks, capture logs, file/comment on issues, maintain OpenClaw-side tooling/context |
+
+## Current GitHub contract (2026-03-27)
+
+Use GitHub as the handoff surface.
+
+- **Cursor agents** provide: commit SHA + issue IDs + explicit acceptance criteria.
+- **OpenClaw** responds with: pass/fail, exact query/payload, expected vs actual, UTC timestamps, bench URLs/context, and harness-drift vs product-defect classification.
+- **OpenClaw does not edit product code** during this loop unless the human explicitly changes that rule.
+- **Cursor does not assume parity failures are product bugs** until OpenClaw confirms healthy auth preflight and bench context.
 
 ## Failure classification required in handoffs
 
