@@ -25,6 +25,17 @@ From repo root:
 ./scripts/bootstrap.sh --test             # CI-style checks
 ```
 
+## Auth preflight (do this first)
+
+Most model / parity / hot-reload checks need authenticated backend access when Open-FDD auth is enabled.
+
+Recommended order:
+- load the active `stack/.env` into the shell, or set `OFDD_API_KEY`
+- for split setups, point `OPENCLAW_STACK_ENV` at the active `.env`
+- treat `401` / `403` during preflight as **auth/runtime-context drift**, not immediate product failure
+
+The bench scripts now fail fast on missing/invalid auth instead of flooding the console with downstream 401 noise.
+
 ## What to test in each mode
 
 - **full-stack**

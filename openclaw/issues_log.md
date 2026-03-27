@@ -72,3 +72,16 @@ Suggested fields for each entry:
 
 - **Git:** After **`develop/v2.0.7`** merged to **`master`** and the old branch was deleted on GitHub, day-to-day work continues on **`develop/v2.0.8`** (create from updated **`master`**, then push `-u origin`).
 - **Version matrix (2.0.8 line):** **`pyproject.toml`** → `open-fdd` **2.0.8**; **`frontend/package.json`** + **`frontend/package-lock.json`** (root package) → **2.0.8**; **`packages/openfdd-engine/pyproject.toml`** → **0.1.1** with **`open-fdd>=2.0.8`**. No extra hardcoded UI version — React reads API **`capabilities.version`**.
+
+## 2026-03-27 - LAN bench auth recovery + issue filing (v2.0.10 scout)
+
+- Found active bench auth file at `C:\Users\ben\Downloads\.env`; `OFDD_API_KEY` present there and usable for direct backend checks.
+- Confirmed authenticated SPARQL works on the LAN bench again (`POST /data-model/sparql` returned bindings instead of 401 once the downloaded `.env` was loaded into process env).
+- Reverted local product-code wording edits on branch `chore/pr2-wording-parity`; current instruction from Ben is **issue bugs, do not locally fix app code**.
+- Filed **GitHub issue #95**: stale Data Model / Data Model Engineering user-facing guidance and ambiguous `223P` vs `s223` wording are still live on the running bench.
+- Filed **GitHub issue #96**: OpenClaw bench auth-sensitive scripts should fail fast on missing `OFDD_API_KEY` instead of producing noisy downstream 401/parity cascades.
+- Updated OpenClaw tooling/docs (repo-local `openclaw/` only):
+  - `bench/e2e/2_sparql_crud_and_frontend_test.py` now runs an auth preflight against `/sites` and exits early with explicit runtime/auth-context messaging.
+  - `bench/e2e/4_hot_reload_test.py` now does the same auth preflight before rule/hot-reload work.
+  - `openclaw/README.md` and `openclaw/bench/e2e/README.md` now document `OPENCLAW_STACK_ENV` / `OFDD_API_KEY` loading expectations for split setups.
+- Morning evidence split remains: stale wording/guidance = real product issue; missing auth in the harness = runtime/tooling drift unless repro persists under a known-good key.

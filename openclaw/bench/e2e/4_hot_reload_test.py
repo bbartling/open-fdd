@@ -57,6 +57,9 @@ def _load_env_file(path: str) -> None:
 
 
 def _load_stack_env() -> None:
+    extra = os.environ.get("OPENCLAW_STACK_ENV", "").strip()
+    if extra:
+        _load_env_file(extra)
     _load_env_file(str(REPO_ROOT / "stack" / ".env"))
     _load_env_file(os.path.join(os.getcwd(), ".env"))
     _load_env_file(str(SCRIPT_DIR / ".env"))
@@ -65,6 +68,38 @@ def _load_stack_env() -> None:
 _load_stack_env()
 
 API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
+
+
+def _auth_preflight(api_url: str) -> tuple[bool, str | None]:
+    code, body = _request(api_url, "GET", "/sites")
+    if code == 200:
+        if API_KEY:
+            print("Auth preflight: OK (authenticated backend access available).")
+        else:
+            print("Auth preflight: OK (backend accepted anonymous access).")
+        return True, None
+    detail = ""
+    if isinstance(body, dict):
+        detail = str(body.get("detail") or body.get("message") or "").strip()
+    if code == 401:
+        if API_KEY:
+            return (
+                False,
+                "Auth preflight FAIL — backend rejected OFDD_API_KEY (401 Unauthorized). "
+                "Treat this as auth/runtime-context drift before triaging product bugs.",
+            )
+        return (
+            False,
+            "Auth preflight FAIL — backend requires OFDD_API_KEY but none was loaded. "
+            "Load stack/.env or set OFDD_API_KEY (for split setups you can point OPENCLAW_STACK_ENV at the active .env).",
+        )
+    if code == 403:
+        return (
+            False,
+            "Auth preflight FAIL — backend rejected OFDD_API_KEY (403 Forbidden). "
+            "Treat this as auth/runtime-context drift before triaging product bugs.",
+        )
+    return False, f"Auth preflight FAIL — GET /sites -> {code}{f' — {detail}' if detail else ''}"
 
 
 def _request(api_url: str, method: str, path: str, json_body: dict | None = None) -> tuple[int, dict | list]:
@@ -318,6 +353,11 @@ def main() -> int:
         print(f"Using API URL: {api_url} (set --api-url or BASE_URL to override)")
     else:
         print(f"API URL: {api_url}")
+
+    auth_ok, auth_err = _auth_preflight(api_url)
+    if not auth_ok:
+        print(auth_err, file=sys.stderr)
+        return 1
 
     site_id_for_faults = None
     if verify_faults:
