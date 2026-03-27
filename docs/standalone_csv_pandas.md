@@ -13,7 +13,7 @@ nav_exclude: true
 Typical uses:
 
 - **One-off and scripted FDD** — Exported CSVs, heat pump dumps, ad‑hoc rule tuning.
-- **Vendor / cloud pipelines** — `pip install open-fdd` (or **`openfdd-engine`**) in a job that already produces DataFrames.
+- **Vendor / cloud pipelines** — `pip install open-fdd` in a job that already produces DataFrames.
 
 The **edge platform** (TimescaleDB, Grafana, BACnet, API) remains **repo + Docker**; PyPI is the **library** slice.
 

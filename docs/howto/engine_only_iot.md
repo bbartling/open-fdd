@@ -50,7 +50,7 @@ pip install -e ".[dev]"   # from open-fdd clone, or
 pip install open-fdd      # when using a published version that includes the engine
 ```
 
-The **`openfdd-engine`** PyPI package is a **small re-export** of the same API (`RuleRunner`, `load_rule`, …) for dependents that want an explicit engine package name; it still relies on the **`open-fdd`** distribution for implementation.
+The repo also contains an optional **`openfdd-engine`** tree (`packages/openfdd-engine/`) that re-exports the same API; **`pip install open-fdd`** is the supported public install — use **`open_fdd.engine`** after install.
 
 ## Standalone playground (optional)
 
