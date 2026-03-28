@@ -12,6 +12,8 @@ Use OpenClaw as a commissioning-minded tester for a running Open-FDD bench/deplo
 
 Repo-local source edits are optional and only when explicitly requested by the human.
 
+**Agent entry:** [`SKILL.md`](SKILL.md) (operating contract for agents/tools) · [`HANDOFF_PROTOCOL.md`](HANDOFF_PROTOCOL.md) (evidence / handoff format).
+
 ## System under test
 
 Open-FDD is usually treated as an externally running bench or deployment. OpenClaw should test the live frontend, backend API, SPARQL/data-model behavior, BACnet gateway behavior, and overnight logs directly. Repo-local source inspection is supporting context, not the default source of truth.

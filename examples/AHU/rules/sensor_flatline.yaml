@@ -1,0 +1,25 @@
+
+name: sensor_flatline
+type: flatline
+flag: flatline_flag
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+
+params:
+  tolerance: 0.000001
+  window: 8
+  rolling_window: 10

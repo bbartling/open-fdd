@@ -1,0 +1,34 @@
+
+name: sensor_bounds
+type: bounds
+flag: bad_sensor_flag
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    bounds:
+      imperial: [-10, 90]
+
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    bounds:
+      imperial: [50, 90]
+
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 90]
+
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+    bounds:
+      imperial: [40, 90]
+
+  Supply_Air_Static_Pressure_Sensor:
+    brick: Supply_Air_Static_Pressure_Sensor
+    bounds:
+      imperial: [0.0, 3.0]
+
+params:
+  units: imperial
+  rolling_window: 2
