@@ -815,6 +815,17 @@ def _run_predefined_button_via_frontend(
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
+    def _visible_button_labels() -> list[str]:
+        labels: list[str] = []
+        for el in driver.find_elements(By.TAG_NAME, "button"):
+            try:
+                txt = (el.text or "").strip()
+            except Exception:
+                txt = ""
+            if txt:
+                labels.append(txt)
+        return labels
+
     wait = WebDriverWait(driver, timeout_sec)
     if navigate:
         base = frontend_url.rstrip("/")
@@ -831,11 +842,40 @@ def _run_predefined_button_via_frontend(
             checkbox.click()
             time.sleep(0.12)
 
-    btn = wait.until(
-        EC.element_to_be_clickable((By.XPATH, f"//button[normalize-space()='{button_text}']"))
-    )
+    btn_xpath = f"//button[normalize-space()='{button_text}']"
+    try:
+        btn = wait.until(EC.presence_of_element_located((By.XPATH, btn_xpath)))
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+            time.sleep(0.1)
+        except Exception:
+            pass
+        btn = wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
+    except Exception as e:
+        labels = _visible_button_labels()
+        preview = ", ".join(labels[:25]) if labels else "<no visible buttons>"
+        return (
+            False,
+            [],
+            f"Predefined button not clickable ({button_text}; bacnet_refs={include_bacnet_refs}): {e}. Visible buttons: {preview}",
+            "",
+        )
+
     before = _sparql_finished_generation(driver)
-    btn.click()
+    try:
+        btn.click()
+    except Exception:
+        try:
+            driver.execute_script("arguments[0].click();", btn)
+        except Exception as e:
+            labels = _visible_button_labels()
+            preview = ", ".join(labels[:25]) if labels else "<no visible buttons>"
+            return (
+                False,
+                [],
+                f"Predefined button click failed ({button_text}; bacnet_refs={include_bacnet_refs}): {e}. Visible buttons: {preview}",
+                "",
+            )
 
     try:
         _wait_for_sparql_generation_increment(driver, timeout_sec, before)
