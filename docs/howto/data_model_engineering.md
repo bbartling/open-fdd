@@ -13,7 +13,7 @@ Open-FDD keeps **Brick** as the operational model and adds an **Engineering** la
 - Frontend page: **Data Model Engineering**
 - Equipment engineering metadata persisted in **`equipment.metadata.engineering`** (PostgreSQL JSON)
 - Round-trip via **`PUT /data-model/import`** and **`GET /data-model/export`**
-- RDF emission on the unified model:
+- RDF emission on the unified model (same TTL build as Brick points—see **`open_fdd/platform/data_model_ttl.py`**, **`_append_equipment_engineering`**):
   - **`ofdd:*`** extension predicates for practical fields (design CFM, cooling tons, heating MBH, electrical, feeder panel, source documents, etc.)
   - **`s223:*`** topology patterns for connection points and conduits (inlet/outlet, duct segments, mediums)
 - **Data Model Testing** — SPARQL presets and copy-paste examples for engineering + topology
@@ -49,7 +49,7 @@ So: **yes**, the **data model, knowledge graph, and DB** are wired so you can **
 1. **SPARQL** equipment for **`ofdd:coolingCapacityTons`**, **`ofdd:heatingCapacityMBH`**, **`ofdd:designCFM`**, and topology (**`brick:feeds`** / **`brick:isFedBy`**).
 2. **Resolve points** on that equipment via **`brick:isPointOf`** and **`ref:TimeseriesReference`** → `external_id` / DB table.
 3. **Correlate** with fault episodes from the **fault results** tables (or exported CSV) over a time window.
-4. Apply a **simple model** (e.g. design capacity × estimated duty fraction × hours × crude kW/ton)—see the teaching stub in `examples/engineering/energy_penalty_sandbox.md`.
+4. Apply a **simple model** (e.g. design capacity × estimated duty fraction × hours × crude kW/ton)—see the teaching stub in `examples/223P_engineering/energy_penalty_sandbox.md`.
 
 That path is appropriate for **notebooks**, **downstream analytics services**, or future product features—not a promise that the FDD binary computes kWh for every fault out of the box.
 
@@ -61,18 +61,18 @@ That path is appropriate for **notebooks**, **downstream analytics services**, o
 
 ## JSON pattern
 
-Use `equipment[].engineering` in import payloads. Example: `examples/engineering/engineering_import_example.json`.
+Use `equipment[].engineering` in import payloads. Example: `examples/223P_engineering/engineering_import_example.json`.
 
 ## RDF pattern
 
 Examples (offline or diff against live export):
 
-- `examples/engineering/engineering_topology_example.ttl` — `s223` connection points + `ofdd` engineering
-- `examples/engineering/engineering_graph_mini.ttl` — adds **`brick:feeds`** / **`brick:isFedBy`**, plus a point with **`ref:BACnetReference`** + **`ref:TimeseriesReference`**
+- `examples/223P_engineering/engineering_topology_example.ttl` — `s223` connection points + `ofdd` engineering
+- `examples/223P_engineering/engineering_graph_mini.ttl` — adds **`brick:feeds`** / **`brick:isFedBy`**, plus a point with **`ref:BACnetReference`** + **`ref:TimeseriesReference`**
 
 ## Query examples
 
-- `examples/engineering/sparql_engineering_examples.md`
+- `examples/223P_engineering/sparql_engineering_examples.md`
 - Broader SPARQL patterns: [SPARQL cookbook](../modeling/sparql_cookbook), [External representations](../modeling/external_representations)
 
 ## Related docs

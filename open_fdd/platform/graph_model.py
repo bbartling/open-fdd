@@ -277,9 +277,11 @@ def _purge_dangling_blank_nodes(g: Any) -> None:
     while True:
         object_bnodes = {o for _, _, o in g if isinstance(o, BNode)}
         dangling_subjects = tuple(
-            s
-            for s, _, _ in g
-            if isinstance(s, BNode) and s not in object_bnodes
+            {
+                s
+                for s, _, _ in g
+                if isinstance(s, BNode) and s not in object_bnodes
+            }
         )
         if not dangling_subjects:
             break
