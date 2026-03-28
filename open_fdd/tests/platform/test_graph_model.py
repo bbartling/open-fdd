@@ -4,11 +4,15 @@ from unittest.mock import patch
 
 import pytest
 
+import open_fdd.platform.graph_model as graph_model_mod
+
 from open_fdd.platform.graph_model import (
     bacnet_ttl_from_point_discovery,
     get_config_from_graph,
     reset_graph_to_db_only,
     set_config_in_graph,
+    sync_brick_from_db,
+    _purge_dangling_blank_nodes,
 )
 
 
@@ -88,6 +92,75 @@ def test_reset_graph_to_db_only_seeds_default_config_when_graph_empty():
     assert (
         cfg.get("open_meteo_timezone") == DEFAULT_PLATFORM_CONFIG["open_meteo_timezone"]
     )
+
+
+def _orphan_blank_node_count(g) -> int:
+    from rdflib import BNode
+
+    bnode_as_subject = {s for s, _, _ in g if isinstance(s, BNode)}
+    bnode_as_object = {o for _, _, o in g if isinstance(o, BNode)}
+    return len(bnode_as_subject - bnode_as_object)
+
+
+def test_purge_dangling_blank_nodes_after_removing_site_subjects():
+    """Regression #99: ref: blank blobs must not linger after site# triples are removed."""
+    from rdflib import Graph, URIRef
+
+    from open_fdd.platform.graph_model import SITE_NS
+
+    ttl = """@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix : <http://openfdd.local/site#> .
+
+:pt1 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "SA-T" ;
+  ref:hasExternalReference [ a ref:TimeseriesReference ;
+      ref:hasTimeseriesId "SA-T" ;
+      ref:storedAt "postgresql://x" ] .
+"""
+    g = Graph()
+    g.parse(data=ttl, format="turtle")
+    site_subjects = {s for s in g.subjects() if isinstance(s, URIRef) and str(s).startswith(SITE_NS)}
+    assert site_subjects
+    for s in site_subjects:
+        for t in list(g.triples((s, None, None))):
+            g.remove(t)
+    assert _orphan_blank_node_count(g) > 0
+    _purge_dangling_blank_nodes(g)
+    assert _orphan_blank_node_count(g) == 0
+
+
+def test_sync_brick_from_db_twice_does_not_accumulate_orphan_blank_nodes():
+    """Each sync replaces Brick; orphan count must stay ~0 (issue #99)."""
+    from rdflib import Graph
+    from unittest.mock import patch
+
+    brick_ttl = """@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix : <http://openfdd.local/site#> .
+
+:pt1 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "SA-T" ;
+  ref:hasExternalReference [ a ref:TimeseriesReference ;
+      ref:hasTimeseriesId "SA-T" ;
+      ref:storedAt "postgresql://x" ] .
+"""
+    saved = graph_model_mod._graph
+    try:
+        graph_model_mod._graph = Graph()
+        with patch.object(
+            graph_model_mod, "build_brick_ttl_from_db", return_value=brick_ttl
+        ):
+            sync_brick_from_db()
+            n1 = _orphan_blank_node_count(graph_model_mod._graph)
+            sync_brick_from_db()
+            n2 = _orphan_blank_node_count(graph_model_mod._graph)
+        assert n1 == 0
+        assert n2 == 0
+    finally:
+        graph_model_mod._graph = saved
 
 
 def test_reset_graph_to_db_only_preserves_existing_config():

@@ -121,4 +121,6 @@ Current in-repo examples:
 - ML PoC tutorial: `examples/ML/ml_regression_fault_poc.ipynb`
 - Engineering JSON import sample: `examples/engineering/engineering_import_example.json`
 - Engineering TTL sample: `examples/engineering/engineering_topology_example.ttl`
+- Engineering TTL (feeds/fedBy + BACnet + timeseries ref on a point): `examples/engineering/engineering_graph_mini.ttl`
 - Engineering SPARQL snippets: `examples/engineering/sparql_engineering_examples.md`
+- Energy penalty sandbox (sketch using design tons + fault window): `examples/engineering/energy_penalty_sandbox.md`

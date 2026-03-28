@@ -48,33 +48,11 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-This will start the full AFDD edge stack locally: TimescaleDB, API, React UI, BACnet gateway/scraper, weather and FDD loops, and more. **Grafana** and an **MQTT** broker are **optional** (`./scripts/bootstrap.sh --with-grafana`, `--with-mqtt-bridge`); see [Getting Started](docs/getting_started.md). The default protocol is **BACnet** for commercial building automation data. The frontend now separates **Data Model Protocols** (ingestion/connectivity) and **Data Model Engineering** (ASHRAE Standard 223 / `s223` topology and engineering metadata), keeping Brick as the operational core.
-
 Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
 
 ## Quick Start — OpenClaw (agent)
 
-OpenClaw agents should use the in-repo skill/docs only—start at [`openclaw/SKILL.md`](openclaw/SKILL.md), [`openclaw/README.md`](openclaw/README.md), and [`openclaw/HANDOFF_PROTOCOL.md`](openclaw/HANDOFF_PROTOCOL.md)—defaulting to web-app/testing workflows (plus `./scripts/bootstrap.sh --test`) and using AI data-modeling or virtual-operator modes only when explicitly requested, with HTTP tool discovery at `http://localhost:8000/mcp/manifest` (and optional RAG `http://localhost:8090/manifest`) using Bearer `OFDD_API_KEY` from `stack/.env` (split-machine setup: [OpenClaw integration](docs/openclaw_integration.md#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup)).
-
-### Development: branches and tests
-
-Work off the **`develop`** branch for day-to-day development; open feature branches from `develop` and merge back to `develop`. Releases are cut from `master`. No Docker needed for the test suite. From the repo root:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest -v
-```
-
-- **`.[dev]`** installs pytest, black, aiohttp, and platform deps so the full suite (open_fdd + HA integration tests) runs.
-- **`./scripts/bootstrap.sh --test`** runs frontend checks + pytest + Caddy validate; frontend checks try container-first and fall back to host `npm` when needed. Pytest includes **`test_rdflib_sparql_stack.py`**, which runs the same SPARQL path as `POST /data-model/sparql` so a broken **rdflib + pyparsing** install fails CI before you deploy.
-- Test paths are set in `pyproject.toml` (`open_fdd/tests`, `stack/ha_integration/tests`). Run `pytest` with no path to use them.
-- Style and workflow: [docs/contributing.md](docs/contributing.md).
-
-
-> **Note:** If a `develop` branch does not exist, please request one in the `#dev-chat` channel on Discord.
-
+All OpenClaw work starts from **[`openclaw/README.md`](openclaw/README.md)** — that page is the single entry (mission, skills, bench tests, MCP/auth, and links to product integration docs).
 
 ---
 
@@ -107,31 +85,27 @@ Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](h
 
 ## Contributing
 
-Contributions welcome — Please use the **`develop`** branch for integration. Open pull requests **into `develop`**, not `master`. Branch from `develop` for your work; `master` is reserved for releases and is protected. PR's to the `master` branch will be rejected.
+Open PRs against the **current integration branch** (e.g. **`develop`** or **`develop/vX.Y.Z`**), not **`master`** — **`master`** is release-only and protected.
 
-### Syncing your fork with upstream
-
-To bring your fork up to date with the latest `develop` from this repo:
+**Tests:** `./scripts/bootstrap.sh --test` (frontend + pytest + Caddy; frontend tries Docker then host `npm`), or from repo root:
 
 ```bash
-# Add the upstream repo once (replace with this repo’s URL if you forked from another fork)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -v
+```
+
+**`.[dev]`** pulls in the full Python test deps; `pyproject.toml` sets default test paths. More detail: [docs/contributing.md](docs/contributing.md). Ask in **`#dev-chat`** on Discord if the active integration branch is unclear.
+
+**Fork sync** (once add `upstream`, then as needed):
+
+```bash
 git remote add upstream https://github.com/bbartling/open-fdd.git
-
-# Fetch upstream and update your local develop
-git fetch upstream
-git checkout develop
-git merge upstream/develop
-git push origin develop
+git fetch upstream && git checkout develop && git merge upstream/develop && git push origin develop
 ```
 
-Then rebase or merge `develop` into your feature branch as needed. Use `git pull --rebase upstream develop` on your branch if you prefer a linear history.
-
-### Run unit tests before pushing to GitHub
-
-```bash
-~/open-fdd$ bash scripts/bootstrap.sh --test
-```
-
+(Use your real integration branch name instead of `develop` if the project is on a versioned line.)
 
 ---
 

@@ -1,38 +1,34 @@
 # openfdd-engine
 
-Thin installable wrapper around **[open-fdd](https://pypi.org/project/open-fdd/)** on PyPI: same **pandas + YAML** fault-detection engine (`RuleRunner`, bounds/flatline/expression rules) without pulling in the full Docker AFDD stack.
-
-| | |
-|--|--|
-| **Engine (this metapackage)** | [openfdd-engine on PyPI](https://pypi.org/project/openfdd-engine/) |
-| **Core library** | [open-fdd on PyPI](https://pypi.org/project/open-fdd/) — `pip install open-fdd` also works for library-only use |
-| **Full platform** | Clone the repo and run `./scripts/bootstrap.sh` for API, UI, TimescaleDB, BACnet, etc. |
-| **Docs** | [open-fdd documentation](https://bbartling.github.io/open-fdd/) |
-
-## Install
+**Install the rules engine from PyPI with the main package name:**
 
 ```bash
-pip install openfdd-engine
+pip install open-fdd
 ```
 
-For optional Brick TTL / SPARQL helpers used with rules:
+Use **`open_fdd.engine`** (`RuleRunner`, `load_rule`, …). See [open-fdd on PyPI](https://pypi.org/project/open-fdd/) and the [engine-only how-to](https://github.com/bbartling/open-fdd/blob/master/docs/howto/engine_only_iot.md).
+
+---
+
+This directory builds an **optional** distribution **`openfdd-engine`** (import **`openfdd_engine`**) — a thin re-export that **depends on `open-fdd`**. It is **not** the primary release artifact; maintainers may publish it as a **second PyPI project** only if they create that project and wire CI. For most users and for social posts: **`pip install open-fdd`** is the correct one-liner.
+
+## Optional local / editable install
+
+From the repository:
 
 ```bash
-pip install "openfdd-engine[brick]"
+cd packages/openfdd-engine
+pip install -e .
 ```
 
-## API
+For Brick TTL helpers:
 
-- `RuleRunner` — run YAML rules on a DataFrame
-- `load_rule()` / `load_rules_from_dir()`
-- `bounds_map_from_rule()`
-- `resolve_from_ttl()` — Brick column maps when using TTL
+```bash
+pip install -e ".[brick]"
+```
 
-Rule authoring and patterns live in the main repo:
+## API (same surface as `open_fdd.engine`)
 
-- [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)
-- [Engine-only deployment and external IoT pipelines](https://github.com/bbartling/open-fdd/blob/master/docs/howto/engine_only_iot.md) — `RuleRunner` vs Docker `--mode engine`
+- `RuleRunner`, `load_rule()`, `bounds_map_from_rule()`, `resolve_from_ttl()`
 
-## Release alignment
-
-`openfdd-engine` versions track the thin packaging layer; **`open-fdd`** carries the engine implementation version (see `pyproject.toml` in the repo root). Use `pip install -U open-fdd openfdd-engine` to refresh both.
+Rule authoring: [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)

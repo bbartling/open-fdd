@@ -206,7 +206,7 @@ export function DataModelPage() {
         SPARQL queries to validate.
       </p>
 
-      {/* Step-by-step guide — matches Open-FDD README workflow */}
+      {/* Step-by-step guide — AI context via /model-context/docs + /mcp/manifest */}
       <Card className="mb-8 border-primary/20 bg-primary/5">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">

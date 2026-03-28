@@ -89,6 +89,20 @@ params:
 
 ---
 
+## Engineering metadata (223P-style) and energy-style analytics
+
+FDD rules consume **time-series columns** built from the Brick graph (`ref:TimeseriesReference` + `ofdd:mapsToRuleInput`). **Engineering** data (design CFM, cooling tons, heating MBH, `s223:*` connection topology) lives on **equipment** in the DB and in the **same TTL** after import.
+
+That split is intentional: the RuleRunner stays fast and pandas-centric. **Downstream**, you can combine:
+
+- **Fault results** (which equipment, which fault, when), and
+- **SPARQL** (or export TTL) for **rated capacity** and **topology** on that equipment, and
+- **SQL** on `timeseries_readings` for duty estimates over the fault window
+
+…to approximate **energy penalties** or rank impact (see `examples/engineering/energy_penalty_sandbox.md` and [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering)).
+
+---
+
 ## Cookbook
 
 See [Expression Rule Cookbook](../expression_rule_cookbook) for AHU, chiller, weather, and advanced recipes.
