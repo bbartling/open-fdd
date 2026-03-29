@@ -5,7 +5,7 @@
 @prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
 @prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix ofdd: <http://openfdd.local/ontology#> .
-@prefix rdfs: <http://www.w3.org/2000/rdf-schema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ref: <https://brickschema.org/schema/Brick/ref#> .
 @prefix s223: <http://data.ashrae.org/standard223#> .
 

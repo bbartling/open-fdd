@@ -49,7 +49,7 @@ So: **yes**, the **data model, knowledge graph, and DB** are wired so you can **
 1. **SPARQL** equipment for **`ofdd:coolingCapacityTons`**, **`ofdd:heatingCapacityMBH`**, **`ofdd:designCFM`**, and topology (**`brick:feeds`** / **`brick:isFedBy`**).
 2. **Resolve points** on that equipment via **`brick:isPointOf`** and **`ref:TimeseriesReference`** → `external_id` / DB table.
 3. **Correlate** with fault episodes from the **fault results** tables (or exported CSV) over a time window.
-4. Apply a **simple model** (e.g. design capacity × estimated duty fraction × hours × crude kW/ton)—see the teaching stub in `examples/223P_engineering/energy_penalty_sandbox.md`.
+4. Apply a **simple model** (e.g. design capacity × estimated duty fraction × hours × crude kW/ton)—see §5 in `examples/223P_engineering/README.md`.
 
 That path is appropriate for **notebooks**, **downstream analytics services**, or future product features—not a promise that the FDD binary computes kWh for every fault out of the box.
 
@@ -72,7 +72,7 @@ Examples (offline or diff against live export):
 
 ## Query examples
 
-- `examples/223P_engineering/sparql_engineering_examples.md`
+- `examples/223P_engineering/README.md` — §4 SPARQL (copy-paste)
 - Broader SPARQL patterns: [SPARQL cookbook](../modeling/sparql_cookbook), [External representations](../modeling/external_representations)
 
 ## Related docs

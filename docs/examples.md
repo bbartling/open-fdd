@@ -118,8 +118,5 @@ Current in-repo examples:
 
 - AHU / RTU notebooks (engine-style tutorials): `examples/AHU/RTU11_standardized_refactored.ipynb`, `examples/AHU/RTU7_standardized_refactored.ipynb`
 - ML PoC tutorial: `examples/ML/ml_regression_fault_poc.ipynb`
-- Engineering JSON import sample: `examples/223P_engineering/engineering_import_example.json`
-- Engineering TTL sample: `examples/223P_engineering/engineering_topology_example.ttl`
-- Engineering TTL (feeds/fedBy + BACnet + timeseries ref on a point): `examples/223P_engineering/engineering_graph_mini.ttl`
-- Engineering SPARQL snippets: `examples/223P_engineering/sparql_engineering_examples.md`
-- Energy penalty sandbox (sketch using design tons + fault window): `examples/223P_engineering/energy_penalty_sandbox.md`
+- **223P / engineering tutorial (JSON + embedded TTL + SPARQL + penalty sketch):** `examples/223P_engineering/README.md`
+- On-disk companions: `examples/223P_engineering/engineering_import_example.json`, `engineering_topology_example.ttl`, `engineering_graph_mini.ttl`

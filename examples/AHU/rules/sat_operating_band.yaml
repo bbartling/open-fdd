@@ -1,0 +1,17 @@
+name: sat_operating_band_when_fan_on
+description: SAT should stay in a tighter band when the supply fan is running
+type: expression
+flag: sat_operating_band_flag
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+
+params:
+  sat_low: 55.0
+  sat_high: 75.0
+  fan_min: 5.0
+
+expression: "(Supply_Fan_Speed_Command > fan_min) & ((Supply_Air_Temperature_Sensor < sat_low) | (Supply_Air_Temperature_Sensor > sat_high))"
