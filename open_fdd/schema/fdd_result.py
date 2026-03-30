@@ -78,6 +78,8 @@ def results_from_runner_output(
     One result per (ts, equipment, fault_id) where flag=1.
     """
     results = []
+    # RuleRunner names flag columns rule["flag"], conventionally *…*_flag; must end with _flag
+    # to be persisted (see openclaw/bench/e2e/4_hot_reload_test.py).
     flag_cols = [c for c in df.columns if c.endswith("_flag")]
     ts_series = df[timestamp_col]
     if len(df) == 0:

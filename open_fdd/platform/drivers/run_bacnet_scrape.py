@@ -27,8 +27,16 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import TypedDict
 import urllib.error
 import urllib.request
+
+
+class _PlatformConfigCache(TypedDict):
+    """In-process cache for GET /config; values match _fetch_platform_config_cached."""
+
+    ts: float
+    cfg: dict | None
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -64,7 +72,7 @@ def _fetch_platform_config(log: logging.Logger) -> dict | None:
         return None
 
 
-_CONFIG_CACHE: dict[str, object] = {"ts": 0.0, "cfg": None}
+_CONFIG_CACHE: _PlatformConfigCache = {"ts": 0.0, "cfg": None}
 
 
 def _fetch_platform_config_cached(

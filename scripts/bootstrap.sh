@@ -654,16 +654,25 @@ verify_code_for_mode() {
 }
 
 # Pytest suite shipped with diy-bacnet-server (container has /app/tests after COPY).
+# Checks the container image, not the host venv (Open-FDD pytest uses .venv on the host separately).
 run_diy_bacnet_tests() {
   echo "--- DIY BACnet server container (pytest tests/) ---"
   if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_bacnet_server; then
     echo "DIY BACnet tests: skip (openfdd_bacnet_server not running)."
     return 0
   fi
+  if ! docker exec openfdd_bacnet_server sh -lc 'test -d /app/tests'; then
+    echo "DIY BACnet tests: FAIL — /app/tests not found in openfdd_bacnet_server (rebuild bacnet-server from diy-bacnet-server context)."
+    return 1
+  fi
+  if ! docker exec openfdd_bacnet_server sh -lc 'python3 -c "import pytest" 2>/dev/null'; then
+    echo "DIY BACnet tests: FAIL — pytest not importable in openfdd_bacnet_server (pip install dev/test deps in the DIY image)."
+    return 1
+  fi
   if docker exec openfdd_bacnet_server sh -lc "cd /app && python3 -m pytest tests/ -q --tb=short"; then
     echo "DIY BACnet container tests: OK"
   else
-    echo "DIY BACnet container tests: FAIL"
+    echo "DIY BACnet container tests: FAIL (pytest ran; see output above)."
     echo "  Manual: docker exec -w /app openfdd_bacnet_server python3 -m pytest tests/ -v --tb=short"
     return 1
   fi
