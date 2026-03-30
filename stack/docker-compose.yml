@@ -49,7 +49,7 @@ services:
 
   # BACnet scraper — reads points via RPC, writes to TimescaleDB.
   # Single gateway: OFDD_BACNET_SERVER_URL + OFDD_BACNET_SITE_ID (site tag for central DB).
-  # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id, config_csv}.
+  # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id} (KG drives object list).
   # Central-only (no local BACnet): omit bacnet-server and bacnet-scraper; remote gateways push via OFDD_DB_DSN + OFDD_BACNET_SITE_ID.
   # When OFDD_API_KEY is set, the scraper calls GET /config (CRUD API) so scrape interval comes from the data model / Config UI; otherwise it uses OFDD_BACNET_SCRAPE_INTERVAL_MIN env.
   bacnet-scraper:

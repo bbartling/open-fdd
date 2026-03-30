@@ -8,9 +8,12 @@ Operators tune rules in YAML, spot-check in Grafana, no restart needed.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+_log = logging.getLogger(__name__)
 
 import pandas as pd
 from psycopg2.extras import execute_values
@@ -324,7 +327,7 @@ def run_fdd_loop(
                     skip_missing_columns=True,
                 )
                 results = results_from_runner_output(
-                    res, site_name, eq_name, timestamp_col="timestamp"
+                    res, sid, eq_name, timestamp_col="timestamp"
                 )
                 all_results.extend(results)
             # Fallback: site-level run when no equipment had enough data
@@ -341,7 +344,7 @@ def run_fdd_loop(
                         skip_missing_columns=True,
                     )
                     results = results_from_runner_output(
-                        res, site_name, site_name, timestamp_col="timestamp"
+                        res, sid, site_name, timestamp_col="timestamp"
                     )
                     all_results.extend(results)
             elif ran_equipment:
@@ -355,8 +358,13 @@ def run_fdd_loop(
                 )
 
                 sync_fault_state_from_results(all_results)
-            except Exception:
-                pass  # do not fail FDD run if fault_state sync fails
+            except Exception as e:
+                # fault_results are already committed; state is best-effort for HA/UI
+                _log.warning(
+                    "fault_state sync failed after writing fault_results: %s",
+                    e,
+                    exc_info=_log.isEnabledFor(logging.DEBUG),
+                )
 
         _write_fdd_run_log(
             run_ts=datetime.now(timezone.utc),

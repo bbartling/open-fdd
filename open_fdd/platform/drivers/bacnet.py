@@ -1,20 +1,18 @@
 """
 BACnet driver: RPC-driven scrape via diy-bacnet-server.
 
-Reads present-value from CSV config, writes to timeseries_readings.
+Loads BACnet addressing from the knowledge graph (points with bacnet_device_id +
+object_identifier), writes to timeseries_readings.
 Uses diy-bacnet-server JSON-RPC (client_read_property, client_read_multiple) only.
 
-CSV format: device_id, object_identifier, object_type, object_instance, object_name, present_value, units
 Requires: OFDD_BACNET_SERVER_URL (e.g. http://localhost:8080)
 """
 
 from __future__ import annotations
 
 import asyncio
-import csv
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from open_fdd.platform.database import get_conn
@@ -22,9 +20,6 @@ from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.site_resolver import resolve_site_uuid
 
 logger = logging.getLogger("open_fdd.bacnet")
-
-
-from open_fdd.platform.drivers.bacnet_validate import validate_bacnet_csv
 
 
 def get_bacnet_points_from_data_model(
@@ -111,14 +106,13 @@ def _site_uuid_cache() -> dict[str, str]:
 
 
 async def _scrape_via_rpc(
-    csv_path: Optional[Path],
     site_id: str,
     config_rows: list[tuple[int, dict]],
     by_device: dict[str, list[tuple[int, dict]]],
     server_url: Optional[str] = None,
 ) -> dict:
     """Scrape via diy-bacnet-server JSON-RPC API. server_url overrides settings when set.
-    When csv_path is None, config rows may include site_id and external_id for per-reading site (data-model path).
+    Config rows include site_id and external_id for per-reading site (knowledge graph path).
     """
     import httpx
 
@@ -449,72 +443,12 @@ async def _scrape_via_rpc(
     }
 
 
-async def scrape_bacnet_from_csv(
-    csv_path: Path,
-    site_id: str,
-    equipment_id: str,
-    server_url: Optional[str] = None,
-) -> dict:
-    """
-    Read present-value for each row in CSV, insert into timeseries_readings.
-    Returns {rows_inserted, points_created, errors}.
-    """
-    settings = get_platform_settings()
-    if not settings.bacnet_scrape_enabled:
-        logger.info("BACnet scrape disabled (OFDD_BACNET_SCRAPE_ENABLED=false)")
-        return {"rows_inserted": 0, "points_created": 0, "errors": ["Scrape disabled"]}
-
-    errors = validate_bacnet_csv(csv_path)
-    if errors:
-        for line_num, msg in errors:
-            logger.error("BACnet CSV validation: %s", msg)
-        return {
-            "rows_inserted": 0,
-            "points_created": 0,
-            "errors": [msg for _, msg in errors],
-        }
-
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        config_rows = [(i + 2, r) for i, r in enumerate(reader)]
-
-    if not config_rows:
-        logger.warning("BACnet CSV has no data rows")
-        return {"rows_inserted": 0, "points_created": 0, "errors": []}
-
-    by_device: dict[str, list[tuple[int, dict]]] = {}
-    for line_num, r in config_rows:
-        did = r.get("device_id", "").strip().strip('"')
-        if did not in by_device:
-            by_device[did] = []
-        by_device[did].append((line_num, r))
-
-    # RPC-only: require URL (from arg or settings)
-    server_url = server_url or settings.bacnet_server_url
-    if not server_url:
-        logger.error(
-            "OFDD_BACNET_SERVER_URL required. Start diy-bacnet-server (e.g. docker compose) and set it."
-        )
-        return {
-            "rows_inserted": 0,
-            "points_created": 0,
-            "errors": [
-                "Set OFDD_BACNET_SERVER_URL (e.g. http://localhost:8080) for RPC-driven scrape"
-            ],
-        }
-
-    logger.info("BACnet scrape via RPC: %s (site=%s)", server_url, site_id)
-    return await _scrape_via_rpc(
-        csv_path, site_id, config_rows, by_device, server_url=server_url
-    )
-
-
 async def scrape_bacnet_from_data_model(
     site_id: Optional[str] = None,
     server_url: Optional[str] = None,
 ) -> dict:
     """
-    Scrape BACnet present-values from points loaded from the data model (no CSV).
+    Scrape BACnet present-values from points in the knowledge graph (DB).
     Only points with bacnet_device_id and object_identifier set are read.
     Returns {rows_inserted, points_created, errors}.
     """
@@ -556,19 +490,7 @@ async def scrape_bacnet_from_data_model(
         len(by_device),
     )
     return await _scrape_via_rpc(
-        None, site_id or "default", config_rows, by_device, server_url=url
-    )
-
-
-def run_bacnet_scrape(
-    csv_path: Path,
-    site_id: str = "default",
-    equipment_id: str = "bacnet",
-    server_url: Optional[str] = None,
-) -> dict:
-    """Synchronous wrapper for scrape_bacnet_from_csv. server_url overrides OFDD_BACNET_SERVER_URL when set."""
-    return asyncio.run(
-        scrape_bacnet_from_csv(csv_path, site_id, equipment_id, server_url=server_url)
+        site_id or "default", config_rows, by_device, server_url=url
     )
 
 
@@ -576,7 +498,7 @@ def run_bacnet_scrape_data_model(
     site_id: Optional[str] = None,
     server_url: Optional[str] = None,
 ) -> dict:
-    """Synchronous wrapper for scrape_bacnet_from_data_model. Prefer over CSV when points have BACnet addressing."""
+    """Synchronous wrapper for scrape_bacnet_from_data_model."""
     return asyncio.run(
         scrape_bacnet_from_data_model(site_id=site_id, server_url=server_url)
     )

@@ -23,7 +23,7 @@ open-fdd/
 │   ├── schema/            # FDD result/event (canonical)
 │   ├── platform/          # FastAPI, DB, drivers, loop
 │   │   ├── api/           # CRUD (sites, points, equipment), config, bacnet, data_model, download, analytics, run_fdd
-│   │   ├── drivers/       # open_meteo, bacnet (RPC + data-model scrape), bacnet_validate
+│   │   ├── drivers/       # open_meteo, bacnet (RPC + knowledge-graph scrape)
 │   │   ├── bacnet_brick.py # BACnet object_type → BRICK class mapping
 │   │   ├── config.py, database.py, data_model_ttl.py, graph_model.py, site_resolver.py
 │   │   ├── loop.py, rules_loader.py
@@ -37,8 +37,8 @@ open-fdd/
 ├── config/                # data_model.ttl (Brick + BACnet + platform config)
 ├── scripts/               # bootstrap.sh, fake_*_faults.py
 ├── tools/
-│   ├── discover_bacnet.py # Optional: BACnet discovery → CSV (bacpypes3); not used by default stack scrape
-│   ├── run_bacnet_scrape.py, run_weather_fetch.py, run_rule_loop.py, run_host_stats.py
+│   ├── discover_bacnet.py # Optional: BACnet discovery helper (bacpypes3); stack scrape is KG-driven
+│   ├── run_weather_fetch.py, run_rule_loop.py, run_host_stats.py  # BACnet: python -m open_fdd.platform.drivers.run_bacnet_scrape
 │   ├── graph_and_crud_test.py # Full CRUD + RDF + SPARQL e2e (see SPARQL cookbook)
 │   ├── bacnet_crud_smoke_test.py # Simple BACnet instance range + CRUD smoke test
 │   ├── trigger_fdd_run.py
@@ -90,7 +90,6 @@ Used to build the PUT /config body at bootstrap; thereafter config is in the gra
 | `OFDD_BACNET_GATEWAYS` | — | JSON array for central aggregator. |
 | `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
 | `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). |
-| `OFDD_BACNET_USE_DATA_MODEL` | true | Use data-model scrape (default). When false, `run_bacnet_scrape.py` may use a CSV path; the bundled **bacnet-scraper** container expects the data model. |
 | `OFDD_OPEN_METEO_*` | (see Configuration) | enabled, interval_hours, latitude, longitude, timezone, days_back, site_id. |
 | `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Graph sync interval (also in graph). |
 
@@ -112,8 +111,8 @@ Tests live under `open_fdd/tests/`. Run: `pytest open_fdd/tests/ -v`. All use in
 
 With DB and diy-bacnet-server reachable:
 
-- **One shot:** `OFDD_BACNET_SERVER_URL=http://localhost:8080 python tools/run_bacnet_scrape.py --data-model`
-- **Loop:** same with `--loop` (uses `OFDD_BACNET_SCRAPE_INTERVAL_MIN`).
+- **One shot:** `OFDD_BACNET_SERVER_URL=http://localhost:8080 python -m open_fdd.platform.drivers.run_bacnet_scrape`
+- **Loop:** add `--loop` (uses `OFDD_BACNET_SCRAPE_INTERVAL_MIN` or GET /config).
 
 **Confirm scraping:** Docker logs `openfdd_bacnet_scraper`; DB `timeseries_readings`; [Grafana SQL cookbook](../howto/grafana_cookbook); API `GET /download/csv`.
 

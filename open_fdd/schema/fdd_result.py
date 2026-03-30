@@ -79,11 +79,16 @@ def results_from_runner_output(
     """
     results = []
     flag_cols = [c for c in df.columns if c.endswith("_flag")]
-    ts = df[timestamp_col]
-    if hasattr(ts.iloc[0], "to_pydatetime"):
-        ts = ts.dt.tz_localize(None) if ts.dt.tz else ts
-    for i, row in df.iterrows():
-        t = ts.iloc[i]
+    ts_series = df[timestamp_col]
+    if len(df) == 0:
+        return results
+    if hasattr(ts_series.iloc[0], "to_pydatetime"):
+        ts_series = (
+            ts_series.dt.tz_localize(None) if ts_series.dt.tz else ts_series
+        )
+    for pos in range(len(df)):
+        row = df.iloc[pos]
+        t = ts_series.iloc[pos]
         if hasattr(t, "to_pydatetime"):
             t = t.to_pydatetime()
         for col in flag_cols:

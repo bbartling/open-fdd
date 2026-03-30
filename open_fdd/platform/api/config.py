@@ -54,7 +54,10 @@ class ConfigBody(BaseModel):
     bacnet_site_id: str | None = Field(
         None, description="Default site for BACnet scrape"
     )
-    bacnet_gateways: str | None = Field(None, description="JSON array of gateways")
+    bacnet_gateways: str | None = Field(
+        None,
+        description='JSON array of {"url","site_id"} for multi-gateway; BACnet addresses come from the data model',
+    )
     open_meteo_enabled: bool | None = Field(None, description="Enable Open-Meteo fetch")
     open_meteo_interval_hours: int | None = Field(
         None, description="Weather fetch interval (hours)"
