@@ -1,4 +1,4 @@
-# Sensor bounds — resolved from Brick TTL (brick_type + rdfs:label)
+# Sensor bounds — point columns resolved from Brick TTL via `brick` (Brick class IRIs / labels).
 name: test_sensor_bounds_1774812747
 description: Returns fault if sensor is out of range
 type: bounds

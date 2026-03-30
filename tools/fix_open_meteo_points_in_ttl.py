@@ -14,6 +14,7 @@ Writes in place; pass --dry-run to print diff only.
 from __future__ import annotations
 
 import argparse
+import difflib
 import sys
 from pathlib import Path
 
@@ -162,7 +163,14 @@ def main() -> int:
         print("No changes applied.", file=sys.stderr)
         return 1
     if args.dry_run:
-        print(f"Would update {path} ({len(orig)} -> {len(text)} chars)")
+        print(f"Would update {path} ({len(orig)} -> {len(text)} chars)", file=sys.stderr)
+        diff = difflib.unified_diff(
+            orig.splitlines(keepends=True),
+            text.splitlines(keepends=True),
+            fromfile=f"{path}.orig",
+            tofile=str(path),
+        )
+        sys.stdout.writelines(diff)
         return 0
     path.write_text(text, encoding="utf-8")
     print(f"Updated {path}")

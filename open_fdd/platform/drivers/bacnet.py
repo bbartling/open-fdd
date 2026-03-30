@@ -14,6 +14,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import UUID
 
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.config import get_platform_settings
@@ -106,7 +107,7 @@ def _site_uuid_cache() -> dict[str, str]:
 
 
 async def _scrape_via_rpc(
-    site_id: str,
+    site_id: Optional[str],
     config_rows: list[tuple[int, dict]],
     by_device: dict[str, list[tuple[int, dict]]],
     server_url: Optional[str] = None,
@@ -139,10 +140,19 @@ async def _scrape_via_rpc(
             site_uuid_cache[sid] = resolve_site_uuid(sid)
         return site_uuid_cache[sid]
 
-    site_uuid: Optional[str] = None
+    site_uuid: UUID | None = None
     if not any(r.get("site_id") for _, r in config_rows):
         try:
-            site_uuid = resolve_site_uuid(site_id)
+            if site_id:
+                site_uuid = resolve_site_uuid(site_id)
+            else:
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT id FROM sites ORDER BY created_at LIMIT 1"
+                        )
+                        row = cur.fetchone()
+                        site_uuid = row["id"] if row else None
             if site_uuid is None:
                 logger.error("No site found and cannot create")
                 return {
@@ -177,9 +187,6 @@ async def _scrape_via_rpc(
             try:
                 device_instance = int(device_id_str.split(",")[-1].strip())
             except ValueError:
-                errors.append(f"Invalid device_id: {device_id_str}")
-                continue
-            except IndexError:
                 errors.append(f"Invalid device_id: {device_id_str}")
                 continue
 
@@ -404,7 +411,7 @@ async def _scrape_via_rpc(
                               bacnet_device_id = EXCLUDED.bacnet_device_id,
                               object_identifier = EXCLUDED.object_identifier,
                               object_name = EXCLUDED.object_name
-                            RETURNING id
+                            RETURNING id, (xmax = 0) AS inserted
                             """,
                             (
                                 sid,
@@ -414,7 +421,10 @@ async def _scrape_via_rpc(
                                 ext_id,
                             ),
                         )
-                        pid = cur.fetchone()["id"]
+                        row = cur.fetchone()
+                        pid = row["id"]
+                        if row.get("inserted"):
+                            points_created += 1
                     cur.execute(
                         """
                         INSERT INTO timeseries_readings (ts, site_id, point_id, value)
@@ -423,7 +433,6 @@ async def _scrape_via_rpc(
                         (ts_r, sid, pid, val),
                     )
                     rows_inserted += 1
-                points_created = len(set(r[2] for r in readings))
                 conn.commit()
 
     if errors:
@@ -489,9 +498,7 @@ async def scrape_bacnet_from_data_model(
         len(points_list),
         len(by_device),
     )
-    return await _scrape_via_rpc(
-        site_id or "default", config_rows, by_device, server_url=url
-    )
+    return await _scrape_via_rpc(site_id, config_rows, by_device, server_url=url)
 
 
 def run_bacnet_scrape_data_model(

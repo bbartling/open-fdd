@@ -79,3 +79,39 @@ def test_faults_active_site_filter_matches_uuid_or_stored_name():
         in select_q
     )
     assert select_params == (site_key, site_key)
+
+
+def test_faults_state_site_filter_matches_uuid_or_stored_name():
+    """GET /faults/state?site_id= uses same dual-key site filter as /faults/active."""
+    site_key = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    execute_calls: list[tuple[str, tuple | list | None]] = []
+
+    def capture_execute(query, params=None):
+        execute_calls.append((query, params))
+
+    cursor = MagicMock()
+    cursor.execute = MagicMock(side_effect=capture_execute)
+    cursor.fetchall.return_value = []
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+
+    with (
+        patch(
+            "open_fdd.platform.api.faults._fault_state_table_exists", return_value=True
+        ),
+        patch("open_fdd.platform.api.faults.get_conn", side_effect=lambda: conn),
+    ):
+        r = client.get(f"/faults/state?site_id={site_key}")
+
+    assert r.status_code == 200
+    assert r.json() == []
+    assert len(execute_calls) >= 1
+    select_q, select_params = execute_calls[-1]
+    assert (
+        "fs.site_id = %s OR fs.site_id IN (SELECT name FROM sites WHERE id::text = %s)"
+        in select_q
+    )
+    assert select_params == (site_key, site_key)

@@ -66,6 +66,8 @@ services:
       # 1 = every minute (for tests); override via stack/.env or Config UI (scraper reads GET /config when OFDD_API_KEY set)
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
+      # Optional JSON array of {url, site_id} for central multi-gateway (see compose comments above).
+      OFDD_BACNET_GATEWAYS: "${OFDD_BACNET_GATEWAYS:-}"
       # Use service name 'api' so DNS resolves to current API container after restarts.
       OFDD_API_URL: http://api:8000
       OFDD_API_KEY: ${OFDD_API_KEY:-}

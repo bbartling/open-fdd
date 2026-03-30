@@ -86,6 +86,24 @@ def setup_logging(verbose: bool = False) -> None:
     logging.basicConfig(level=level, format=fmt, datefmt="%Y-%m-%d %H:%M:%S")
 
 
+def _resolve_bacnet_gateways_json(log: logging.Logger) -> str | None:
+    """
+    Multi-gateway JSON: prefer GET /config (RDF/UI) so PUT /config applies without
+    scraper restart; fall back to OFDD_BACNET_GATEWAYS / overlay env.
+    """
+    cfg = _fetch_platform_config(log)
+    if cfg:
+        raw = cfg.get("bacnet_gateways")
+        if raw is not None:
+            s = str(raw).strip()
+            if s and s.lower() not in ("null", "string", "{}"):
+                return s
+    from open_fdd.platform.config import get_platform_settings
+
+    g = (get_platform_settings().bacnet_gateways or "").strip()
+    return g or None
+
+
 def _current_interval_min(log: logging.Logger) -> int:
     from open_fdd.platform.config import get_platform_settings
 
@@ -139,14 +157,15 @@ def main() -> int:
 
     settings = get_platform_settings()
 
-    if settings.bacnet_gateways:
+    gateways_json = _resolve_bacnet_gateways_json(log)
+    if gateways_json:
         try:
-            gateways = json.loads(settings.bacnet_gateways)
+            gateways = json.loads(gateways_json)
         except (json.JSONDecodeError, TypeError) as e:
-            log.error("OFDD_BACNET_GATEWAYS invalid JSON: %s", e)
+            log.error("bacnet_gateways invalid JSON: %s", e)
             return 1
         if not isinstance(gateways, list) or not gateways:
-            log.error("OFDD_BACNET_GATEWAYS must be a non-empty JSON array")
+            log.error("bacnet_gateways must be a non-empty JSON array")
             return 1
         if not settings.bacnet_scrape_enabled:
             log.warning("BACnet scrape disabled.")
@@ -164,23 +183,35 @@ def main() -> int:
                 )
             prev_interval_min = interval_min
 
+            # Re-read gateways each cycle so PUT /config can add/remove gateways.
+            fresh_json = _resolve_bacnet_gateways_json(log)
+            if fresh_json:
+                try:
+                    gateways = json.loads(fresh_json)
+                except (json.JSONDecodeError, TypeError):
+                    log.warning("bacnet_gateways JSON invalid this cycle; keeping prior list")
+
             total_rows, total_points, total_errors = 0, 0, 0
             for gw in gateways:
                 if not isinstance(gw, dict):
                     log.warning("Gateway entry must be an object: %s", gw)
                     continue
                 url = (gw.get("url") or gw.get("server_url") or "").strip()
-                site_id = (gw.get("site_id") or "default").strip()
+                raw_site = (gw.get("site_id") or "").strip()
+                site_label = raw_site or "unscoped"
+                data_model_site = (
+                    None if not raw_site or raw_site.lower() == "default" else raw_site
+                )
                 if not url:
                     log.warning('Gateway missing "url" or "server_url": %s', gw)
                     continue
 
                 try:
                     result = run_bacnet_scrape_data_model(
-                        site_id=site_id, server_url=url
+                        site_id=data_model_site, server_url=url
                     )
                 except Exception:
-                    log.exception("Gateway %s failed", site_id)
+                    log.exception("Gateway %s failed", site_label)
                     continue
 
                 total_rows += result.get("rows_inserted", 0)
@@ -188,13 +219,15 @@ def main() -> int:
                 total_errors += len(result.get("errors", []))
                 log.info(
                     "Gateway %s (%s): %d rows, %d points",
-                    site_id,
+                    site_label,
                     url,
                     result.get("rows_inserted", 0),
                     result.get("points_created", 0),
                 )
 
             if not args.loop:
+                if total_rows == 0 and total_points == 0:
+                    return 1
                 return 0
 
             log.info(
