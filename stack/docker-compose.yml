@@ -143,8 +143,9 @@ services:
         condition: service_healthy
     environment:
       GF_SERVER_HTTP_ADDR: "0.0.0.0"
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Override in stack/.env for non-dev (defaults keep local/profile parity).
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/"
       GF_DASHBOARDS_DEFAULT_HOME: "Open-FDD"
@@ -233,7 +234,7 @@ services:
       OFDD_TRUST_FORWARDED_PROTO: ${OFDD_TRUST_FORWARDED_PROTO:-false}
       # External LLMs use Open-FDD endpoints directly (see docs/model-context endpoints).
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
-      OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
+      OFDD_CADDY_INTERNAL_SECRET: ${OFDD_CADDY_INTERNAL_SECRET:-openfdd-internal}
       # Enable POST/DELETE /rules/test-inject for hot-reload automation (e.g. 4_hot_reload_test.py). Set in stack/.env.
       OFDD_ALLOW_TEST_RULES: ${OFDD_ALLOW_TEST_RULES:-}
     volumes:
