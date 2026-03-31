@@ -35,7 +35,14 @@ class RefreshResponse(BaseModel):
 
 
 def _cookie_secure(request: Request) -> bool:
-    return request.url.scheme == "https"
+    if request.url.scheme == "https":
+        return True
+    settings = get_platform_settings()
+    if getattr(settings, "trust_forwarded_proto", False):
+        proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        if proto == "https":
+            return True
+    return False
 
 
 def _set_refresh_cookie(response: Response, token: str, request: Request) -> None:
@@ -78,13 +85,14 @@ def login(body: LoginRequest, request: Request, response: Response):
                 "message": "App user is not configured. Run bootstrap with --user and --password.",
             },
         )
-    if not verify_user_password(body.username, body.password):
+    normalized_username = body.username.strip()
+    if not verify_user_password(normalized_username, body.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "UNAUTHORIZED", "message": "Invalid username or password"},
         )
-    access_token, expires_in = create_access_token(body.username)
-    refresh_token = issue_refresh_token(body.username)
+    access_token, expires_in = create_access_token(normalized_username)
+    refresh_token = issue_refresh_token(normalized_username)
     _set_refresh_cookie(response, refresh_token, request)
     response.headers["Cache-Control"] = _CACHE_CONTROL_AUTH
     return LoginResponse(access_token=access_token, expires_in=expires_in)

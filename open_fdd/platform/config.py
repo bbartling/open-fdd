@@ -79,10 +79,12 @@ class PlatformSettings(BaseSettings):
     # Single-user Phase-1 auth (bootstrap-managed); hash should be argon2id.
     app_user: Optional[str] = None
     app_user_hash: Optional[str] = None
-    # Access-token signing secret; falls back to OFDD_API_KEY if unset.
+    # Access-token signing secret (required when Phase 1 app user is enabled).
     jwt_secret: Optional[str] = None
     access_token_minutes: int = 60
     refresh_token_days: int = 7
+    # When true, treat X-Forwarded-Proto: https as HTTPS for Secure cookies (TLS at reverse proxy only).
+    trust_forwarded_proto: bool = False
     # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.
     caddy_internal_secret: Optional[str] = None
 

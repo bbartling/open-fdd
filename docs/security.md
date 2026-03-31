@@ -15,7 +15,7 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 ## Architecture: frontend, API, and Caddy
 
 - **React frontend** runs in its own container (production build on **5173**; Caddy’s **`/*`** routes there). **Phase 1 app auth:** users sign in at **`/login`**; the API returns a short-lived **JWT access token** (browser **sessionStorage**) and an **HttpOnly** refresh cookie (`/auth/*`). REST uses **`Authorization: Bearer <access_token>`**; the WebSocket uses **`/ws/events?token=<access_token>`** (or the API-key token path in [the table above](#frontend-and-api-authentication-phase-1)).
-- **API** (FastAPI) requires auth when **`OFDD_API_KEY`** and/or **Phase 1 app-user** config is set (`OFDD_APP_USER`, `OFDD_APP_USER_HASH`, **`OFDD_JWT_SECRET`** — all three together). Valid credentials are **`Bearer`** matching **`OFDD_API_KEY`** or a valid **access JWT**. Exempt paths include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app` (and `/app/*`), and **`/auth/*`**. Partial app-user configuration returns **500** (`AUTH_CONFIG_ERROR`), not a silent fallback.
+- **API** (FastAPI) requires auth when **`OFDD_API_KEY`** and/or **Phase 1 app-user** config is set (`OFDD_APP_USER`, `OFDD_APP_USER_HASH`, **`OFDD_JWT_SECRET`** — all three together). Valid credentials are **`Bearer`** matching **`OFDD_API_KEY`** or a valid **access JWT**. Exempt paths include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app` (and `/app/*`), and **`/auth/*`**. Partial app-user configuration is rejected explicitly: **`/auth/login`** and related routes return **503** (`AUTH_CONFIG_ERROR` / `AUTH_NOT_CONFIGURED`), while the global API middleware returns **500** with `AUTH_CONFIG_ERROR` for other protected paths—never a silent fallback.
 - **Machine clients** (scrapers, curl, **Open Claw** on a Windows bench) should rely on **`OFDD_API_KEY`** and **`Authorization: Bearer`**, not the browser cookie flow — see [Open‑Claw integration](openclaw_integration#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
 - **Caddy** can be extended with **basic auth** + **`X-Caddy-Auth`** / **`OFDD_CADDY_INTERNAL_SECRET`** (optional); see [Caddyfile for protecting the entire API](#caddyfile-for-protecting-the-entire-api). **Best practice:** keep the frontend in its own container; use a reverse proxy as the operator entry point.
 
@@ -33,6 +33,8 @@ Configure Phase 1 app login with **`./scripts/bootstrap.sh --user NAME`** and a 
 **`VITE_API_BASE`:** In Docker Compose the frontend defaults to **`/api`** so same-origin requests work behind Caddy. Override with a full URL (e.g. `http://api-host:8000`) only if you deploy without path-based routing; see the [README](../README.md#platform-deployment-docker) note.
 
 Older docs referred to baking **`VITE_OFDD_API_KEY`** into the frontend at build time; the supported operator path is now **login + JWT** (or unauthenticated local dev with auth disabled). A static API key in the bundle is discouraged for production.
+
+**HTTPS behind a reverse proxy:** The API sees plain HTTP from the proxy. Set **`OFDD_TRUST_FORWARDED_PROTO=true`** on the API container when the edge proxy terminates TLS and sends **`X-Forwarded-Proto: https`**, so refresh cookies get the **`Secure`** flag. Leave **`false`** (default) for HTTP-only lab stacks so cookies stay usable over HTTP.
 
 ---
 

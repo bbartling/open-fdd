@@ -228,6 +228,8 @@ services:
       OFDD_JWT_SECRET: ${OFDD_JWT_SECRET:-}
       OFDD_ACCESS_TOKEN_MINUTES: ${OFDD_ACCESS_TOKEN_MINUTES:-60}
       OFDD_REFRESH_TOKEN_DAYS: ${OFDD_REFRESH_TOKEN_DAYS:-7}
+      # Set true when TLS terminates at Caddy/nginx so refresh cookies use Secure (reads X-Forwarded-Proto).
+      OFDD_TRUST_FORWARDED_PROTO: ${OFDD_TRUST_FORWARDED_PROTO:-false}
       # External LLMs use Open-FDD endpoints directly (see docs/model-context endpoints).
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
       OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
@@ -288,6 +290,7 @@ services:
       - sh
       - -c
       - |
+          set -eu
           if [ -z "$$(ls -A node_modules 2>/dev/null)" ]; then npm ci; fi
           if [ -z "$$(ls -A dist 2>/dev/null)" ]; then npm run build; fi
           npx --yes serve -s dist -l 5173
