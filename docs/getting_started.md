@@ -65,7 +65,7 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 
 ## Prerequisites
 
-- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). **Tested on x86;** should work on ARM but is untested. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
+- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test **x86_64**; CI does not run on ARM. **ARM64** (e.g. Raspberry Pi 4/5) has been reported working with Docker—expect to validate image availability and sizing (RAM/CPU) yourself. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
