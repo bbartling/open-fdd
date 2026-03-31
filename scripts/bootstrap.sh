@@ -35,7 +35,7 @@
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 #
-# printf '%s' 'super-secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin
+# printf '%s' 'secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
