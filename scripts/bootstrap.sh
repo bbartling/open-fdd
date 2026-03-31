@@ -35,7 +35,16 @@
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 # Same, plus Phase-1 app user from stdin and frontend node_modules volume reset (fresh npm ci on next up):
-#   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend
+#
+# Example Hack Goto:
+#   printf '%s' 'secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend --caddy-self-signed
+#
+#
+#
+
+# Optional self-signed HTTPS on Caddy (regenerates cert, sets stack/.env for Caddyfile.selfsigned + OFDD_TRUST_FORWARDED_PROTO):
+#   ./scripts/bootstrap.sh --caddy-self-signed [--caddy-tls-cn my.lab.local]
+# Revert to plain HTTP entry on :80: ./scripts/bootstrap.sh --caddy-http-only
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
@@ -76,6 +85,9 @@ APP_PASSWORD="${OFDD_APP_PASSWORD:-}"
 APP_PASSWORD_FILE=""
 APP_PASSWORD_STDIN=false
 FRONTEND_RESET=false
+CADDY_SELF_SIGNED=false
+CADDY_HTTP_ONLY=false
+CADDY_TLS_CN="${CADDY_TLS_CN:-openfdd.local}"
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
 LOG_MAX_FILES=3
@@ -152,6 +164,16 @@ while [[ $i -lt ${#args[@]} ]]; do
     --password-file) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_PASSWORD_FILE="${args[$i]}" ;;
     --password-stdin) APP_PASSWORD_STDIN=true ;;
     --frontend) FRONTEND_RESET=true ;;
+    --caddy-self-signed) CADDY_SELF_SIGNED=true ;;
+    --caddy-http-only) CADDY_HTTP_ONLY=true ;;
+    --caddy-tls-cn)
+      i=$(( i + 1 ))
+      if [[ $i -ge ${#args[@]} ]]; then
+        echo "--caddy-tls-cn requires a hostname (e.g. openfdd.lab)."
+        exit 1
+      fi
+      CADDY_TLS_CN="${args[$i]}"
+      ;;
     -h|--help)
       cat <<EOF
 Usage: $0 [options]
@@ -194,6 +216,9 @@ Docker install:
 
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
+  --caddy-self-signed       Self-signed TLS for Caddy (:443, :80→HTTPS); writes certs under stack/caddy/certs/ and stack/.env (OPENFDD_CADDYFILE, OFDD_TRUST_FORWARDED_PROTO=true)
+  --caddy-tls-cn HOST       With --caddy-self-signed: certificate CN/SAN (default: openfdd.local)
+  --caddy-http-only         Turn off self-signed Caddy mode (default HTTP Caddyfile on :80 only; OFDD_TRUST_FORWARDED_PROTO=false)
   --user NAME               Configure Phase-1 app login user (writes hash config into stack/.env).
   --password-file PATH      Read Phase-1 app password from file (first line).
   --password-stdin          Read Phase-1 app password from stdin.
@@ -512,6 +537,69 @@ ensure_mqtt_bridge_env_defaults() {
   done
 }
 
+env_file_set_kv() {
+  local env_file="$1" key="$2" val="$3"
+  [[ -f "$env_file" ]] || touch "$env_file"
+  local sed_i=(-i)
+  if sed --version >/dev/null 2>&1; then
+    sed_i=(-i)
+  else
+    sed_i=(-i "")
+  fi
+  if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+    sed "${sed_i[@]}" "s|^${key}=.*|${key}=${val}|" "$env_file"
+  else
+    echo "${key}=${val}" >> "$env_file"
+  fi
+}
+
+disable_caddy_self_signed_config() {
+  local env_file="$STACK_DIR/.env"
+  [[ -f "$env_file" ]] || return 0
+  local sed_i=(-i)
+  if sed --version >/dev/null 2>&1; then
+    sed_i=(-i)
+  else
+    sed_i=(-i "")
+  fi
+  sed "${sed_i[@]}" "/^OPENFDD_CADDYFILE=/d" "$env_file" 2>/dev/null || true
+  env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "false"
+  echo "Caddy: reverted to default HTTP-only entry (removed OPENFDD_CADDYFILE; OFDD_TRUST_FORWARDED_PROTO=false)."
+}
+
+ensure_caddy_self_signed_tls() {
+  local env_file="$STACK_DIR/.env"
+  local cert_dir="$STACK_DIR/caddy/certs"
+  if ! have_cmd openssl; then
+    echo "openssl not found; install it to use --caddy-self-signed."
+    exit 1
+  fi
+  mkdir -p "$cert_dir"
+  local cn="${CADDY_TLS_CN:-openfdd.local}"
+  echo "=== Self-signed TLS for Caddy (CN/SAN: $cn) → $cert_dir ==="
+  if openssl req -x509 -newkey rsa:4096 \
+    -keyout "$cert_dir/key.pem" \
+    -out "$cert_dir/cert.pem" \
+    -days 365 -nodes \
+    -subj "/CN=${cn}" \
+    -addext "subjectAltName=DNS:${cn},DNS:localhost,IP:127.0.0.1" 2>/dev/null; then
+    :
+  else
+    echo "(openssl -addext unsupported; generating cert without explicit SAN extension)"
+    openssl req -x509 -newkey rsa:4096 \
+      -keyout "$cert_dir/key.pem" \
+      -out "$cert_dir/cert.pem" \
+      -days 365 -nodes \
+      -subj "/CN=${cn}"
+  fi
+  chmod 600 "$cert_dir/key.pem" 2>/dev/null || true
+  env_file_set_kv "$env_file" "OPENFDD_CADDYFILE" "./caddy/Caddyfile.selfsigned"
+  env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "true"
+  chmod 600 "$env_file" 2>/dev/null || true
+  echo "stack/.env: OPENFDD_CADDYFILE=./caddy/Caddyfile.selfsigned, OFDD_TRUST_FORWARDED_PROTO=true"
+  echo "Use https://localhost/ (browser warns). :80 redirects to HTTPS."
+}
+
 ensure_diy_bacnet_sibling() {
   local parent_dir sibling
   parent_dir="$(cd "$REPO_ROOT/.." && pwd)"
@@ -615,6 +703,15 @@ verify() {
     fi
   else
     echo "Weather: skip (scripts/curl_weather_data.sh missing or not executable)."
+  fi
+
+  if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
+    echo "=== Caddy (self-signed HTTPS) ==="
+    if curl_retry 3 5 -k -sf "https://localhost/" >/dev/null 2>&1; then
+      echo "Caddy: https://localhost/ (OK — use -k with curl; browser will show cert warning)"
+    else
+      echo "Caddy: https://localhost/ not responding yet (stack still starting or port 443 blocked)"
+    fi
   fi
   echo ""
 }
@@ -737,10 +834,29 @@ verify_code() {
   if [[ "$MODE" != "collector" && "$MODE" != "engine" ]]; then
   echo "--- Caddy (validate Caddyfile) ---"
   if docker run --rm -v "$STACK_DIR/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2 caddy validate --config /etc/caddy/Caddyfile; then
-    echo "Caddy: OK"
+    echo "Caddy: OK (default Caddyfile)"
   else
     echo "Caddy: FAIL (Caddyfile invalid or docker unavailable)"
     failed=1
+  fi
+  if [[ -f "$STACK_DIR/caddy/Caddyfile.selfsigned" ]] && have_cmd openssl; then
+    local tmpc
+    tmpc="$(mktemp -d)"
+    if openssl req -x509 -newkey rsa:2048 -keyout "$tmpc/key.pem" -out "$tmpc/cert.pem" -days 1 -nodes \
+      -subj "/CN=validate.local" -addext "subjectAltName=DNS:localhost" 2>/dev/null \
+      || openssl req -x509 -newkey rsa:2048 -keyout "$tmpc/key.pem" -out "$tmpc/cert.pem" -days 1 -nodes \
+        -subj "/CN=validate.local"; then
+      if docker run --rm \
+        -v "$STACK_DIR/caddy/Caddyfile.selfsigned:/etc/caddy/Caddyfile:ro" \
+        -v "$tmpc:/etc/caddy/certs:ro" \
+        caddy:2 caddy validate --config /etc/caddy/Caddyfile; then
+        echo "Caddy: OK (Caddyfile.selfsigned + dummy certs)"
+      else
+        echo "Caddy: FAIL (Caddyfile.selfsigned invalid or docker unavailable)"
+        failed=1
+      fi
+    fi
+    rm -rf "$tmpc"
   fi
   echo ""
   fi
@@ -1028,6 +1144,17 @@ fi
 
 # From here on, we run stack operations (default/no args = FULL stack)
 write_edge_env
+
+if $CADDY_SELF_SIGNED && $CADDY_HTTP_ONLY; then
+  echo "Choose at most one of --caddy-self-signed and --caddy-http-only."
+  exit 1
+fi
+if $CADDY_HTTP_ONLY; then
+  disable_caddy_self_signed_config
+elif $CADDY_SELF_SIGNED; then
+  ensure_caddy_self_signed_tls
+fi
+
 # Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
 if [[ -f "$STACK_DIR/.env" ]]; then
   set +e

@@ -326,8 +326,11 @@ services:
     container_name: openfdd_caddy
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # OPENFDD_CADDYFILE set by bootstrap --caddy-self-signed → ./caddy/Caddyfile.selfsigned
+      - ${OPENFDD_CADDYFILE:-./caddy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ./caddy/certs:/etc/caddy/certs:ro
     depends_on:
       api:
         condition: service_started
