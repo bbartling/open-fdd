@@ -302,7 +302,7 @@ When access is through Caddy with Basic auth, the browser may not send credentia
 
 ## Security scanning (Trivy) — Phase 3
 
-During development, use **Trivy** to scan container images and the repo for vulnerabilities and misconfigurations. Run it after building images, when changing Dockerfiles or dependencies, and optionally in CI. See **[How-to: Trivy security scanning](howto/trivy)** for install, when to run, image and filesystem scan commands, and keeping docs up to date. High-level roadmap: [NOTES.md](../NOTES.md) (Phase 2: stack/DB/Caddy; Phase 3: Trivy in the loop).
+During development, use **Trivy** to scan container images and the repo for vulnerabilities and misconfigurations. Run it after building images, when changing Dockerfiles or dependencies, and optionally in CI. See **[How-to: Trivy security scanning](howto/trivy)** for install, when to run, image and filesystem scan commands, and keeping docs up to date.
 
 ---
 

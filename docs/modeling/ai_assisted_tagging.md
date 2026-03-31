@@ -61,7 +61,7 @@ For exact schema details and import body (points + equipment only), see the [Tec
 To have the LLM align **rule_input** and Brick types with your FDD rules, you can include:
 
 - **[Fault rules overview](../rules/overview)** — FDD rule types and YAML format.
-- **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** — AHU, chiller, weather, and advanced recipes; **rule_input** examples (e.g. sat, rat, zone_temp, sf_status).
+- **[Expression Rule Cookbook](../expression_rule_cookbook)** — AHU, chiller, weather, and advanced recipes; **rule_input** examples (e.g. sat, rat, zone_temp, sf_status).
 - Your project’s **YAML rule files** (e.g. from `stack/rules/`) — Paste snippets so the LLM uses the same input names.
 
 See [LLM workflow (export + rules + validate → import)](llm_workflow) for the full one-shot flow and validating LLM output so it parses on the backend.
@@ -137,7 +137,7 @@ include the import error text in your next LLM attempt so it can correct UUIDs/r
 
 ## Possible extension: AI assist on Data Model Testing
 
-A future **Data Model Testing** page could offer a second AI assist (same chat style as on Data Model Setup): the engineer describes what they see (e.g. SPARQL summary, missing relationships, or test failure), and the model suggests **changes as import JSON** (points/equipment) so the engineer can apply and re-test. Under the hood this would use a **separate prompt** from the tagging prompt:
+A future **Data Model Testing** page could offer a second AI assist (same chat style as on Data Model Protocols): the engineer describes what they see (e.g. SPARQL summary, missing relationships, or test failure), and the model suggests **changes as import JSON** (points/equipment) so the engineer can apply and re-test. Under the hood this would use a **separate prompt** from the tagging prompt:
 
 - **Input:** Current data model context (e.g. TTL snippet or SPARQL “Summarize your HVAC” result) plus the engineer’s message (e.g. “Add feeds/fed-by between AHU-1 and VAV-1”, “Fix the brick_type for SA-T”).
 - **Output:** Same schema as the tagging flow — valid **points** and **equipment** import JSON only — so the same **PUT /data-model/import** and validation path apply. The engineer reviews, applies, then re-runs SPARQL or predefined tests and passes/fails.

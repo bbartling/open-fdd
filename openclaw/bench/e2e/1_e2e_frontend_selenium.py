@@ -101,7 +101,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
@@ -1043,27 +1043,74 @@ def select_known_point(
     """
     Open the Plots point picker and select the first available point from the preference list
     (e.g. SA-T, then ZoneTemp, then MA-T). Returns the name selected or None.
-    Uses robust waits; point picker dropdown uses labels with span (object_name or external_id).
+
+    The frontend now uses the custom PointPicker dropdown/button rather than the old
+    label+select control, so this helper must drive the listbox-style picker.
     """
     wait = WebDriverWait(driver, timeout)
-    wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(., 'Points')]")))
+    picker_btn = wait.until(
+        EC.presence_of_element_located(
+            (
+                By.XPATH,
+                "//button[@aria-haspopup='listbox' and (contains(., 'Select points') or contains(., 'series'))]",
+            )
+        )
+    )
+    picker_btn.click()
+    try:
+        wait.until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//input[contains(@placeholder, 'external_id') or contains(@placeholder, 'Search by name')]")
+            )
+        )
+    except Exception:
+        try:
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']")))
+        except Exception:
+            try:
+                driver.find_element(By.TAG_NAME, "body").click()
+            except Exception:
+                pass
+            return None
+    time.sleep(0.4)
     for name in preference:
         opts = driver.find_elements(
             By.XPATH,
-            f"//label[contains(., 'Points')]/following-sibling::select/option[contains(., '{name}')]",
+            "//div[contains(@class,'rounded-xl') or contains(@class,'rounded-lg')]//label[.//span[contains(normalize-space(), '" + name + "')]]",
         )
+        if not opts:
+            opts = driver.find_elements(
+                By.XPATH,
+                "//div[contains(@class,'rounded-xl') or contains(@class,'rounded-lg')]//*[contains(normalize-space(), '" + name + "') and (self::span or self::button)]",
+            )
         if opts:
             opts[0].click()
+            time.sleep(0.3)
+            try:
+                driver.find_element(By.TAG_NAME, "body").click()
+            except Exception:
+                pass
             print(f"  Plots: selected point {name!r}.")
             return name
-    point_options = driver.find_elements(
+
+    fallback = driver.find_elements(
         By.XPATH,
-        "//label[contains(., 'Points')]/following-sibling::select/option",
+        "//div[contains(@class,'rounded-xl') or contains(@class,'rounded-lg')]//label[.//input[@type='checkbox']]",
     )
-    if point_options:
-        point_options[0].click()
+    if fallback:
+        fallback[0].click()
+        time.sleep(0.3)
+        try:
+            driver.find_element(By.TAG_NAME, "body").click()
+        except Exception:
+            pass
         print("  Plots: selected first available point (fallback).")
         return "first_available"
+
+    try:
+        driver.find_element(By.TAG_NAME, "body").click()
+    except Exception:
+        pass
     return None
 
 
@@ -1192,38 +1239,110 @@ def validate_plots_chart_has_data(
     api_url: str | None = None,
     site_id: str | None = None,
 ) -> None:
-    """Go to Plots, select site and points (two units to trigger axis-by-unit), then assert chart and axes.
-    Verifies: (1) data-model units (degF, percent, cfm) in legend; (2) axis-by-unit: multiple Y-axes when
-    multiple units (e.g. degF left, cfm right2); (3) faults as Bool 0/1 in legend on right axis.
-    When api_url is set, logs fault counts from DB (GET /faults/active, /faults/definitions) and
-    prints whether the frontend is showing faults in Plots."""
+    """Validate the Plots page against the current frontend contract.
+
+    Supports both the older trending-style Recharts UI and the newer plots workflow
+    that uses BACnet device / points selects plus a "Load Data from Database" button.
+    """
     if api_url:
         run_faults_db_check(api_url)
     driver.get(f"{base_url}/plots")
     if "Select a site" in (driver.page_source or ""):
         select_site_in_topbar(driver, site_name)
-        WebDriverWait(driver, ELEMENT_WAIT).until(
-            lambda d: "Select a site" not in (d.page_source or "") or "Select points" in (d.page_source or "")
-        )
     else:
         select_site_in_topbar(driver, site_name)
-    wait_for_element(
-        driver,
-        By.XPATH,
-        "//*[contains(text(), 'Select points') or contains(@class, 'recharts')]",
-        timeout=ELEMENT_WAIT,
+
+    wait = WebDriverWait(driver, ELEMENT_WAIT)
+    wait.until(
+        lambda d: bool(d.find_elements(By.CSS_SELECTOR, "[data-testid='plots-chart-container'], h1"))
+        or bool(
+            d.find_elements(
+                By.XPATH,
+                "//button[@aria-haspopup='listbox' and (contains(., 'Select points') or contains(., 'series') or contains(., 'Add faults'))]",
+            )
+        )
+        or "Select a BACnet device, choose points, then load data to plot." in (d.page_source or "")
+        or "Select points to view trending data" in (d.page_source or "")
+        or "No data for the selected points in this date range" in (d.page_source or "")
+        or "Failed to load trending data" in (d.page_source or "")
+        or "recharts" in (d.page_source or "").lower()
     )
+
+    page_src = driver.page_source or ""
+    # Prefer the current PlotsPage contract if its controls appear shortly after route load.
+    try:
+        WebDriverWait(driver, 12).until(
+            lambda d: bool(d.find_elements(By.CSS_SELECTOR, "#plots-device-select, #plots-points-select"))
+            or "BACnet device instance ID" in (d.page_source or "")
+            or "Load Data from Database" in (d.page_source or "")
+        )
+    except Exception:
+        pass
+
+    # New Plots UI: BACnet device select + point multi-select + load button + Plotly chart/placeholder.
+    if driver.find_elements(By.CSS_SELECTOR, "#plots-device-select") or "BACnet device instance ID" in (driver.page_source or ""):
+        device_select = wait_for_element(driver, By.CSS_SELECTOR, "#plots-device-select", timeout=ELEMENT_WAIT)
+        options = device_select.find_elements(By.TAG_NAME, "option")
+        if not options:
+            raise AssertionError("Plots: no BACnet device options available on the current site.")
+        Select(device_select).select_by_index(0)
+        time.sleep(0.8)
+
+        points_select = wait_for_element(driver, By.CSS_SELECTOR, "#plots-points-select", timeout=ELEMENT_WAIT)
+        point_options = points_select.find_elements(By.TAG_NAME, "option")
+        if not point_options:
+            raise AssertionError("Plots: no point options available for the selected BACnet device.")
+        for opt in point_options[: min(3, len(point_options))]:
+            if not opt.is_selected():
+                opt.click()
+        print(f"  Plots: selected {min(3, len(point_options))} point(s) for the current BACnet device.")
+
+        load_btn = wait_for_clickable(driver, By.XPATH, "//button[contains(., 'Load Data from Database')]", timeout=ELEMENT_WAIT)
+        load_btn.click()
+        wait_chart = WebDriverWait(driver, CHART_DATA_WAIT)
+        wait_chart.until(
+            lambda d: "Loaded " in (d.page_source or "")
+            or "No data available for the selected range." in (d.page_source or "")
+            or "Failed to load CSV from Open-FDD." in (d.page_source or "")
+            or bool(d.find_elements(By.CSS_SELECTOR, ".js-plotly-plot, .plot-container, [data-testid='plots-chart-container'] svg"))
+        )
+        page_src = driver.page_source or ""
+        if "Failed to load CSV from Open-FDD." in page_src:
+            raise AssertionError("Plots: frontend could not load CSV from Open-FDD.")
+        if "No data available for the selected range." in page_src:
+            print("  Plots: page loaded but selected range returned no CSV data.")
+        elif "Loaded " in page_src:
+            print("  Plots: CSV loaded into the current Plotly-based workflow.")
+        else:
+            print("  Plots: chart container rendered in the current Plotly-based workflow.")
+
+        if driver.find_elements(By.CSS_SELECTOR, "#plots-faults-select option"):
+            fault_select = driver.find_elements(By.CSS_SELECTOR, "#plots-faults-select")[0]
+            fault_opts = fault_select.find_elements(By.TAG_NAME, "option")
+            if fault_opts and any((o.get_attribute('value') or '').strip() for o in fault_opts):
+                print("  Frontend showing faults in Plots: fault options available for selected device.")
+            else:
+                print("  Frontend showing faults in Plots: no device-scoped fault options available.")
+        else:
+            print("  Frontend showing faults in Plots: no device-scoped fault options available.")
+
+        if api_url and site_id:
+            print_sample_timeseries_and_faults(api_url, site_id)
+        log_browser_console(driver, "plots")
+        return
+
+    # Older trending-style UI fallback.
     preference = list(EXPECTED_POINT_NAMES) + list(FALLBACK_POINT_NAMES)
-    select_known_point(driver, preference)
-    time.sleep(0.6)  # let point picker dropdown close and chart update before reopening
-    # Add second point with different unit (e.g. SA-FLOW cfm) so chart uses two Y-axes (axis-by-unit)
+    selected_point = select_known_point(driver, preference)
+    if not selected_point:
+        raise AssertionError("Plots: could not open point picker or select any point.")
+    time.sleep(0.6)
     second_point_added = select_second_point_different_unit(driver)
     if second_point_added:
         time.sleep(0.5)
-    # Optionally add a fault so we can verify fault series show as Bool 0/1 in legend on right axis
     fault_selected = select_fault_on_plots(driver)
     if fault_selected:
-        time.sleep(0.5)  # allow fault picker to close and chart to update
+        time.sleep(0.5)
     wait_chart = WebDriverWait(driver, CHART_DATA_WAIT)
     try:
         path_el = wait_chart.until(
@@ -1243,7 +1362,6 @@ def validate_plots_chart_has_data(
             raise AssertionError(
                 "Plots page: no chart curve/path and no 'no data' message found."
             ) from e
-    # Units from data model must appear on Plots (legend shows "label unit", e.g. SA-T degF)
     page_src = driver.page_source or ""
     if "degF" not in page_src and "percent" not in page_src and "cfm" not in page_src:
         raise AssertionError(
@@ -1251,7 +1369,6 @@ def validate_plots_chart_has_data(
             "units must flow from data model to frontend."
         )
     print("  Plots: data-model units visible in chart (legend/axis).")
-    # Axis-by-unit: when two points with different units are selected, chart must have at least 2 Y-axes
     if second_point_added:
         y_axes = driver.find_elements(By.CSS_SELECTOR, "[class*='recharts-yAxis']")
         if len(y_axes) < 2:
@@ -1260,7 +1377,6 @@ def validate_plots_chart_has_data(
                 f"got {len(y_axes)}."
             )
         print("  Plots: axis-by-unit OK (multiple Y-axes for different units).")
-    # When a fault is selected, legend must show Bool unit 0/1 and faults plot on right Y-axis
     if fault_selected:
         if FAULT_LEGEND_UNIT not in page_src:
             raise AssertionError(
@@ -1275,8 +1391,6 @@ def validate_plots_chart_has_data(
             "Faults in DB can be checked with --api-url; see docs/howto/grafana_cookbook.md for historical Grafana fault plotting."
         )
     if api_url and site_id:
-        # Print DB sensor + fault data that the Plots tab should be using, so we can
-        # see both together in the Python console for this site.
         print_sample_timeseries_and_faults(api_url, site_id)
     log_browser_console(driver, "plots")
 

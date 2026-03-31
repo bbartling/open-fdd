@@ -6,7 +6,7 @@ nav_order: 1
 
 # Data model flow
 
-Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), BACnet discovery RDF (from bacpypes3 in diy-bacnet-server), platform config, and—as the project evolves—other ontologies such as ASHRAE 223P. CRUD and discovery both update this graph; **all backend queries are SPARQL-driven** (rdflib Graph parse + SPARQL; no grep or text search on the TTL). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL.
+Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), BACnet discovery RDF (from bacpypes3 in diy-bacnet-server), platform config, and **engineering / 223-style topology** (`ofdd:*` schedule fields and `s223:*` connection patterns from **Data Model Engineering**). CRUD, discovery, and engineering import all feed this graph; **all backend queries are SPARQL-driven** (rdflib Graph parse + SPARQL; no grep or text search on the TTL). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL. See [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering) for how that layer ties to FDD, PostgreSQL, and optional **energy-penalty-style** analytics.
 
 ---
 
@@ -14,12 +14,13 @@ Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites
 
 ```
 Sites + Equipment + Points (DB)  ← single source of truth
+  └─ equipment.metadata.engineering (optional JSON → ofdd/s223 in TTL)
          │
          ▼
   Data-model export / CRUD
          │
          ▼
-  Brick TTL (config/data_model.ttl)  ← Brick section reserialized on every create/update/delete; same file can include a BACnet discovery section (one file for SPARQL)
+  Brick TTL (config/data_model.ttl)  ← Brick section reserialized on every create/update/delete; same file can include BACnet discovery + engineering RDF (one file for SPARQL)
          │
          ▼
   FDD column_map (external_id → rule_input)
@@ -28,7 +29,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   RuleRunner
 ```
 
-**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/data_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](howto/danger_zone#crud-deletes--cascade-behavior).
+**CRUD and Brick TTL sync:** The database is the single source of truth. Every **create**, **update**, or **delete** on **sites**, **equipment**, or **points** (via API or data-model import) triggers a reserialize: the Brick TTL file (`config/data_model.ttl`, or `OFDD_BRICK_TTL_PATH`) is regenerated from the current DB and written to disk. So the Brick model is always in sync with CRUD. Deleting a site, device (equipment), or point also cascades to dependent data (timeseries, fault results, etc.) as in a typical CRUD app; see [Danger zone — CRUD deletes](../howto/danger_zone#crud-deletes--cascade-behavior).
 
 ---
 
@@ -56,7 +57,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
 ## Data modeling process (discover → tag → import → validate)
 
 1. **Discover** — BACnet discovery and/or manual entry populate **sites**, **equipment**, and **points** in the DB.
-2. **Export** — Use **GET /data-model/export** (or the Export card on the Data Model Setup page) to get JSON for tagging.
+2. **Export** — Use **GET /data-model/export** (or the Export card on the Data Model Protocols page) to get JSON for tagging.
 3. **Tag** — Either **manual**: copy JSON → use an external LLM or human → paste back (or automate with an external agent like Open‑Claw). If your agent needs platform documentation as context, fetch it from `GET /model-context/docs`.
 4. **Import** — **PUT /data-model/import** (or the Import card / auto-import from the agent) writes tagged points and optional equipment relationships into the DB and reserializes the Brick TTL.
 5. **Validate** — Use the **Data Model Testing** page (SPARQL, “Summarize your HVAC”) to confirm the model; treat the result as pass or fail.

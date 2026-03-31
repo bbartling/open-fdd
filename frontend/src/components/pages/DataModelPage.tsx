@@ -206,7 +206,7 @@ export function DataModelPage() {
         SPARQL queries to validate.
       </p>
 
-      {/* Step-by-step guide — matches Open-FDD README workflow */}
+      {/* Step-by-step guide — AI context via /model-context/docs + /mcp/manifest */}
       <Card className="mb-8 border-primary/20 bg-primary/5">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -214,7 +214,7 @@ export function DataModelPage() {
             How to build your data model
           </CardTitle>
           <p className="text-sm font-normal text-muted-foreground">
-            Follow these steps in order. Check the Open-FDD README in the git repo for the latest LLM prompt.
+            Follow these steps in order. Use in-product context endpoints for AI workflow guidance.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -229,7 +229,10 @@ export function DataModelPage() {
               <strong>Add a site (Step 2)</strong> — In the Sites section below BACnet discover and add to model, create a site if you don’t have one. Assign points to it when you import.
             </li>
             <li>
-              <strong>Export JSON and open your LLM</strong> — Download the export (Export section below), then open your LLM chat. Get the prompt from the Open-FDD README in the git repo and paste it into the LLM. Upload your <strong>fault rule YAML files</strong> (from the Faults page) so the LLM knows which points your rules need.
+              <strong>Export JSON and open your LLM</strong> — Download the export (Export section below), then open your LLM chat. Pull prompt/context from{" "}
+              <code className="rounded bg-muted px-1 text-xs">GET /model-context/docs</code> and tool mappings from{" "}
+              <code className="rounded bg-muted px-1 text-xs">GET /mcp/manifest</code>. Upload your{" "}
+              <strong>fault rule YAML files</strong> (from the Faults page) so the LLM knows which points your rules need.
             </li>
             <li>
               <strong>Chat with the LLM</strong> — Paste the exported JSON into the LLM. Confirm with the LLM that Brick types, feeds/fed-by, and rule_input are correct before asking for the final JSON.

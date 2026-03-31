@@ -52,11 +52,11 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 - **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules.
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.
-Open-FDD also emits Brick v1.3 external references (`ref:hasExternalReference`) so points can be resolved to BACnet and timeseries systems. See [External representations](external_representations).
+Open-FDD also emits Brick v1.4 external references (`ref:hasExternalReference`) so points can be resolved to BACnet and timeseries systems. See [External representations](external_representations).
 
 ### BACnet addressing
 
-Points with `bacnet_device_id` and `object_identifier` set are used by the BACnet scraper (data-model path). Add them via CRUD or after point_discovery_to_graph and data-model export/import. See [BACnet overview](bacnet/overview#discovery-and-getting-points-into-the-data-model).
+Points with `bacnet_device_id` and `object_identifier` set are used by the BACnet scraper (data-model path). Add them via CRUD or after point_discovery_to_graph and data-model export/import. See [BACnet overview](../bacnet/overview#discovery-and-getting-points-into-the-data-model).
 
 ---
 
@@ -66,7 +66,7 @@ Points with `bacnet_device_id` and `object_identifier` set are used by the BACne
 - `GET /points/{id}` — Get one
 - `POST /points` — Create
 - `PATCH /points/{id}` — Update
-- `DELETE /points/{id}` — Delete (cascades to timeseries_readings; see [Danger zone](howto/danger_zone))
+- `DELETE /points/{id}` — Delete (cascades to timeseries_readings; see [Danger zone](../howto/danger_zone))
 
 ---
 

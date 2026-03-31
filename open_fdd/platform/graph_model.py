@@ -264,6 +264,32 @@ def load_from_file() -> None:
         set_config_in_graph(dict(DEFAULT_PLATFORM_CONFIG))
 
 
+def _purge_dangling_blank_nodes(g: Any) -> None:
+    """
+    Remove triples whose subject is a blank node that never appears as an RDF object.
+    Repeat until stable so chains of blank nodes (e.g. ref:hasExternalReference blobs) left
+    behind after removing site# subjects are fully cleared.
+
+    Caller must hold _graph_lock. Does not remove BACnet or ofdd: subjects.
+    """
+    from rdflib import BNode
+
+    while True:
+        object_bnodes = {o for _, _, o in g if isinstance(o, BNode)}
+        dangling_subjects = tuple(
+            {
+                s
+                for s, _, _ in g
+                if isinstance(s, BNode) and s not in object_bnodes
+            }
+        )
+        if not dangling_subjects:
+            break
+        for s in dangling_subjects:
+            for t in list(g.triples((s, None, None))):
+                g.remove(t)
+
+
 def sync_brick_from_db() -> None:
     """Replace Brick triples in the graph with current DB state (sites, equipment, points)."""
     from rdflib import Namespace, URIRef
@@ -279,6 +305,10 @@ def sync_brick_from_db() -> None:
         ]
         for t in to_remove:
             g.remove(t)
+        # Removing site# triples drops (point, ref:hasExternalReference, _:b) but leaves
+        # _:b's own triples; re-parsing Brick would add new bnodes and accumulate orphans
+        # (issue #99 / graph_integrity_check growth on every sync).
+        _purge_dangling_blank_nodes(g)
         brick_ttl = build_brick_ttl_from_db(site_id=None)
         if brick_ttl.strip():
             g.parse(data=brick_ttl, format="turtle")

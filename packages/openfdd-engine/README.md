@@ -1,27 +1,34 @@
 # openfdd-engine
 
-Standalone Pandas/YAML FDD engine extracted from Open-FDD.
-
-## Install
+**Install the rules engine from PyPI with the main package name:**
 
 ```bash
-pip install openfdd-engine
+pip install open-fdd
 ```
 
-For Brick TTL mapping support:
+Use **`open_fdd.engine`** (`RuleRunner`, `load_rule`, …). See [open-fdd on PyPI](https://pypi.org/project/open-fdd/) and the [engine-only how-to](https://github.com/bbartling/open-fdd/blob/master/docs/howto/engine_only_iot.md).
+
+---
+
+This directory builds an **optional** distribution **`openfdd-engine`** (import **`openfdd_engine`**) — a thin re-export that **depends on `open-fdd`**. It is **not** the primary release artifact; maintainers may publish it as a **second PyPI project** only if they create that project and wire CI. For most users and for social posts: **`pip install open-fdd`** is the correct one-liner.
+
+## Optional local / editable install
+
+From the repository:
 
 ```bash
-pip install "openfdd-engine[brick]"
+cd packages/openfdd-engine
+pip install -e .
 ```
 
-## API
+For Brick TTL helpers:
 
-- `RuleRunner`
-- `load_rule()`
-- `bounds_map_from_rule()`
-- `resolve_from_ttl()`
+```bash
+pip install -e ".[brick]"
+```
 
-Rule authoring guidance remains in the Open-FDD docs:
-- `docs/expression_rule_cookbook.md`
-- [Engine-only deployment and external IoT pipelines](https://github.com/bbartling/open-fdd/blob/develop/docs/howto/engine_only_iot.md) — when to use Docker **engine** mode vs **library-only** `RuleRunner` for external data pipelines.
+## API (same surface as `open_fdd.engine`)
 
+- `RuleRunner`, `load_rule()`, `bounds_map_from_rule()`, `resolve_from_ttl()`
+
+Rule authoring: [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)

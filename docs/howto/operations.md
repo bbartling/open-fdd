@@ -39,7 +39,7 @@ Or: `docker compose -f stack/docker-compose.yml up -d` from repo root. Reboot: c
 | **BACnet from config UI** | API container must reach diy-bacnet-server: `OFDD_BACNET_SERVER_URL` is set in docker-compose to `http://host.docker.internal:8080` (bacnet-server on host). Restart API after changing. |
 | **All containers** (full rebuild and restart) | `./scripts/bootstrap.sh --build-all` — no DB wait or migrations; exits after `docker compose build && docker compose up -d`. |
 | **FDD loop, BACnet scraper code** | `docker compose build bacnet-scraper fdd-loop` (or `--build`); fdd-loop also mounts `open_fdd` from host, so host code changes apply on restart. |
-| **Config UI scrape interval ignored by BACnet scraper** | When the API has Bearer auth (`OFDD_API_KEY`), the scraper must have the same key to call GET /config. Ensure `OFDD_API_KEY` is in `stack/.env` and passed to the bacnet-scraper service in docker-compose; then `./scripts/bootstrap.sh --build bacnet-scraper` so the scraper restarts with the key. See [Configuration → Services that read config from the API](configuration#services-that-read-config-from-the-api-bacnet-scraper). |
+| **Config UI scrape interval ignored by BACnet scraper** | When the API has Bearer auth (`OFDD_API_KEY`), the scraper must have the same key to call GET /config. Ensure `OFDD_API_KEY` is in `stack/.env` and passed to the bacnet-scraper service in docker-compose; then `./scripts/bootstrap.sh --build bacnet-scraper` so the scraper restarts with the key. See [Configuration → Services that read config from the API](../configuration#services-that-read-config-from-the-api-bacnet-scraper). |
 | **Grafana datasource missing or wrong** | `./scripts/bootstrap.sh --reset-grafana` |
 
 ---

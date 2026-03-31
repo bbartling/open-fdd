@@ -1,10 +1,10 @@
 ---
-title: External representations (Brick v1.3)
+title: External representations (Brick v1.4)
 parent: Data modeling
 nav_order: 6
 ---
 
-# External representations (Brick v1.3)
+# External representations (Brick v1.4)
 
 Open-FDD models Brick points with Brick's **ref schema** so software can discover how each point maps to external systems (BACnet and timeseries storage) using:
 

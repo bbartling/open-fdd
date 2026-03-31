@@ -3,7 +3,7 @@
 These `.sparql` files match the [SPARQL cookbook](../../../docs/modeling/sparql_cookbook.md) and mirror the **Data Model Testing** tab predefined buttons (Summarize your HVAC). Run them via:
 
 - **API:** `POST /data-model/sparql` with body `{"query": "<contents>"}` (or use **POST /data-model/sparql/upload** with the file).
-- **Frontend:** **Data Model Testing** tab (`/data-model-testing`) → click a predefined button (Sites, AHUs, Zones, …) or use Custom SPARQL → **Upload .sparql file** or paste query → Run SPARQL. **Data Model Setup** (`/data-model`) has sites, equipment, import, and **View full data model (TTL)**.
+- **Frontend:** **Data Model Testing** tab (`/data-model-testing`) → click a predefined button (Sites, AHUs, Zones, …) or use Custom SPARQL → **Upload .sparql file** or paste query → Run SPARQL. **Data Model Protocols** (`/data-model`) has sites, equipment, import, and **View full data model (TTL)**.
 
 The script **`openclaw/bench/e2e/2_sparql_crud_and_frontend_test.py`**:
 

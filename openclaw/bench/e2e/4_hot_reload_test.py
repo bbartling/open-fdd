@@ -2,7 +2,7 @@
 """
 Rules API test: upload a few YAML rule files via the frontend API, verify server accepts and parses.
 
-Loads each of a small set of .yaml files from scripts/automated_testing/rules/ and:
+Loads each of a small set of .yaml files from stack/rules/ and:
 
   Backend:
     - POST /rules with {filename, content} (same API the React Faults page uses).
@@ -138,11 +138,19 @@ def _get_text(api_url: str, path: str) -> tuple[int, str]:
     return r.status_code, r.text or ""
 
 
-def _content_with_unique_name_flag(content: str, unique_flag: str) -> str:
-    """Set name and flag to unique_flag so fault_definitions has a distinct fault_id."""
-    out = re.sub(r"^name:\s*\S+", f"name: {unique_flag}", content, count=1, flags=re.MULTILINE)
-    out = re.sub(r"^flag:\s*\S+", f"flag: {unique_flag}", out, count=1, flags=re.MULTILINE)
-    return out
+def _content_with_unique_name_flag(content: str, unique_base: str) -> tuple[str, str]:
+    """
+    Set a distinct rule name and fault_id for this upload.
+
+    Open-FDD's results_from_runner_output only records columns whose names end with
+    ``_flag``; the RuleRunner uses rule['flag'] as the column name. So the YAML
+    ``flag:`` value must end with ``_flag`` or FDD runs will never write matching
+    fault_results / fault_state rows (bench would always time out).
+    """
+    fault_id = unique_base if unique_base.endswith("_flag") else f"{unique_base}_flag"
+    out = re.sub(r"^name:\s*\S+", f"name: {unique_base}", content, count=1, flags=re.MULTILINE)
+    out = re.sub(r"^flag:\s*\S+", f"flag: {fault_id}", out, count=1, flags=re.MULTILINE)
+    return out, fault_id
 
 
 def _delete_rule_file(api_url: str, filename: str) -> str | None:
@@ -234,7 +242,7 @@ def _test_one_yaml(
 ) -> str | None:
     """Upload, verify list/get/sync/definitions, delete. Returns None on success, else error message."""
     content = path.read_text(encoding="utf-8")
-    content = _content_with_unique_name_flag(content, fault_id)
+    content, fault_id = _content_with_unique_name_flag(content, fault_id)
     created = False
 
     def cleanup_with_message(message: str | None) -> str | None:
@@ -380,8 +388,9 @@ def main() -> int:
             print(f"  {name}: skip (not found)")
             continue
         test_filename = f"test_{path.stem}_{suffix}.yaml"
-        fault_id = f"test_{path.stem}_{suffix}"
-        err = _test_one_yaml(api_url, path, test_filename, fault_id, verify_faults, site_id_for_faults)
+        # Base id for YAML name:; flag: becomes {base}_flag so engine output columns match results_from_runner_output.
+        fault_base = f"test_{path.stem}_{suffix}"
+        err = _test_one_yaml(api_url, path, test_filename, fault_base, verify_faults, site_id_for_faults)
         if err:
             print(f"  {name}: FAIL — {err}")
             failed += 1

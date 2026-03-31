@@ -71,10 +71,8 @@ class PlatformSettings(BaseSettings):
     bacnet_server_url: Optional[str] = None
     # Site to tag when scraping (single gateway or remote gateway pushing to central)
     bacnet_site_id: str = "default"
-    # Optional: multiple gateways (central aggregator). JSON array of {"url", "site_id", "config_csv"}
+    # Optional: multiple gateways (central aggregator). JSON array of {"url", "site_id", ...}; scrape uses KG points per site.
     bacnet_gateways: Optional[str] = None
-    # Prefer data-model scrape over CSV when points have BACnet addressing (fall back to CSV if no points)
-    bacnet_use_data_model: bool = True
 
     # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /docs, /redoc, /openapi.json, /app
     api_key: Optional[str] = None

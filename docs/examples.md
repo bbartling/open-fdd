@@ -99,7 +99,7 @@ Run Brick-driven fault detection and **zoom in on fault events** in an IPython n
 
 ### Quick start
 
-1. From project root: `jupyter notebook examples/brick_fault_viz/run_and_viz_faults.ipynb`
+1. From project root: `jupyter notebook examples/AHU/RTU11_standardized_refactored.ipynb` (or `examples/ML/ml_regression_fault_poc.ipynb`)
 2. Run all cells
 3. Inspect the random fault-event zooms
 
@@ -116,9 +116,7 @@ Run Brick-driven fault detection and **zoom in on fault events** in an IPython n
 
 Current in-repo examples:
 
-- RTU11 tutorial: `examples/RTU11/RTU11_engine_tutorial.ipynb`
-- AHU7 tutorial: `examples/AHU7/run_and_viz_faults.ipynb`
+- AHU / RTU notebooks (engine-style tutorials): `examples/AHU/RTU11_standardized_refactored.ipynb`, `examples/AHU/RTU7_standardized_refactored.ipynb`
 - ML PoC tutorial: `examples/ML/ml_regression_fault_poc.ipynb`
-- Engineering JSON import sample: `examples/engineering/engineering_import_example.json`
-- Engineering TTL sample: `examples/engineering/engineering_topology_example.ttl`
-- Engineering SPARQL snippets: `examples/engineering/sparql_engineering_examples.md`
+- **223P / engineering tutorial (JSON + embedded TTL + SPARQL + penalty sketch):** `examples/223P_engineering/README.md`
+- On-disk companions: `examples/223P_engineering/engineering_import_example.json`, `engineering_topology_example.ttl`, `engineering_graph_mini.ttl`

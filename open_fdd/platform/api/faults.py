@@ -92,16 +92,19 @@ def list_active_faults(
                        AND (p.site_id::text = fs.site_id OR (SELECT s.name FROM sites s WHERE s.id = p.site_id) = fs.site_id)
                      LIMIT 1)
                 """
+                site_clause = (
+                    "(fs.site_id = %s OR fs.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+                )
                 if equipment_id and site_id:
                     cur.execute(
                         f"""
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
-                        WHERE fs.site_id = %s AND fs.equipment_id = %s AND fs.active = true
+                        WHERE {site_clause} AND fs.equipment_id = %s AND fs.active = true
                         ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """,
-                        (site_id, equipment_id),
+                        (site_id, site_id, equipment_id),
                     )
                 elif site_id:
                     cur.execute(
@@ -109,10 +112,10 @@ def list_active_faults(
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
-                        WHERE fs.site_id = %s AND fs.active = true
+                        WHERE {site_clause} AND fs.active = true
                         ORDER BY fs.site_id, fs.equipment_id, fs.fault_id
                         """,
-                        (site_id,),
+                        (site_id, site_id),
                     )
                 else:
                     cur.execute(f"""
@@ -147,16 +150,19 @@ def list_fault_state(
                        AND (p.site_id::text = fs.site_id OR (SELECT s.name FROM sites s WHERE s.id = p.site_id) = fs.site_id)
                      LIMIT 1)
                 """
+                site_clause = (
+                    "(fs.site_id = %s OR fs.site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+                )
                 if equipment_id and site_id:
                     cur.execute(
                         f"""
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
-                        WHERE fs.site_id = %s AND fs.equipment_id = %s
+                        WHERE {site_clause} AND fs.equipment_id = %s
                         ORDER BY fs.fault_id
                         """,
-                        (site_id, equipment_id),
+                        (site_id, site_id, equipment_id),
                     )
                 elif site_id:
                     cur.execute(
@@ -164,10 +170,10 @@ def list_fault_state(
                         SELECT fs.id::text, fs.site_id, fs.equipment_id, fs.fault_id, fs.active,
                                fs.last_changed_ts, fs.last_evaluated_ts, fs.context, {bacnet_subquery} AS bacnet_device_id
                         FROM fault_state fs
-                        WHERE fs.site_id = %s
+                        WHERE {site_clause}
                         ORDER BY fs.equipment_id, fs.fault_id
                         """,
-                        (site_id,),
+                        (site_id, site_id),
                     )
                 else:
                     cur.execute(f"""

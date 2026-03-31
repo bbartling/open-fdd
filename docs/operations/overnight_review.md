@@ -23,6 +23,7 @@ Overnight review is the deeper process window for quality and drift detection. I
 - Environment mode and mode basis.
 - High-signal changes in BACnet behavior, graph behavior, and fault outputs.
 - Candidate docs/playbook updates when operating process improves.
+- If durable bench/operator lessons emerge, capture them in versioned notes under `openclaw/references/` so they can later be curated into broader docs.
 
 ## Alerting discipline
 

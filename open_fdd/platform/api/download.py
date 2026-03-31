@@ -227,8 +227,11 @@ def get_download_faults(
     if site_id:
         if resolve_site_uuid(site_id, create_if_empty=False) is None:
             raise HTTPException(404, f"No site found for: {site_id!r}")
-        conditions.append("site_id = %s")
-        params.append(site_id)  # match as stored (name or uuid string)
+        # Match fault_results.site_id whether stored as site UUID text or display name (same as analytics queries).
+        conditions.append(
+            "(site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s))"
+        )
+        params.extend([site_id, site_id])
 
     with get_conn() as conn:
         with conn.cursor() as cur:

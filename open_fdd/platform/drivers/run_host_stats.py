@@ -134,7 +134,14 @@ def _get_container_metrics() -> list[dict]:
             if nets:
                 net_rx = sum(n.get("rx_bytes", 0) for n in nets.values())
                 net_tx = sum(n.get("tx_bytes", 0) for n in nets.values())
-            blk = s.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
+            # Docker may return io_service_bytes_recursive: null — do not iterate None
+            _blkio = s.get("blkio_stats") or {}
+            _io_rec = (
+                _blkio.get("io_service_bytes_recursive")
+                if isinstance(_blkio, dict)
+                else None
+            )
+            blk = _io_rec if isinstance(_io_rec, list) else []
             for e in blk:
                 if e.get("op") == "read":
                     block_read = (block_read or 0) + e.get("value", 0)

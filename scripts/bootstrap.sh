@@ -30,12 +30,18 @@
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
+#   --verify here is HTTP health only (BACnet server_hello, API /health), not pytest.
+#   Pull latest PyPI deps for diy-bacnet-server (e.g. bacpypes3): add --force-rebuild so Docker
+#   rebuilds images even when git HEAD did not change.
+# Full maintenance + pytest + optional DIY server tests in container:
+#   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 #
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
 # Verify only	./scripts/bootstrap.sh --verify
 # Tests only	./scripts/bootstrap.sh --test
+# Update then tests (same run): ./scripts/bootstrap.sh --update --test
 #
 #
 set -euo pipefail
@@ -59,7 +65,9 @@ WITH_MQTT_BRIDGE=false
 WITH_MCP_RAG=false
 BUILD_ALL=false
 UPDATE_PULL_REBUILD=false
+UPDATE_FORCE_REBUILD=false
 MAINTENANCE_ONLY=false
+DIY_BACNET_TESTS=false
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
@@ -110,7 +118,9 @@ while [[ $i -lt ${#args[@]} ]]; do
     --reset-data) RESET_DATA=true ;;
     --build-all) BUILD_ALL=true ;;
     --update) UPDATE_PULL_REBUILD=true ;;
+    --force-rebuild) UPDATE_FORCE_REBUILD=true ;;
     --maintenance) MAINTENANCE_ONLY=true ;;
+    --diy-bacnet-tests) DIY_BACNET_TESTS=true ;;
     --install-docker) INSTALL_DOCKER=true ;;
     --skip-docker-install) SKIP_DOCKER_INSTALL=true ;;
     --build)
@@ -142,7 +152,9 @@ Core:
   --verify --test           Verify services then run tests; then exit
   --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit (no E2E/Selenium)
   --update                  Git pull open-fdd + diy-bacnet-server (sibling), rebuild, restart (keeps DB)
+  --force-rebuild           With --update: always docker compose build (refreshes unpinned pip deps e.g. bacpypes3 even if git unchanged)
   --maintenance             Safe Docker prune only (NO volumes)
+  --diy-bacnet-tests        With --test (or after --update --test): run pytest in openfdd_bacnet_server against /app/tests
 
   Site maintenance:  $0 --maintenance --update --verify
 
@@ -186,6 +198,13 @@ if [[ "$MODE" != "full" && "$MODE" != "collector" && "$MODE" != "model" && "$MOD
 fi
 if $MINIMAL; then
   MODE="collector"
+fi
+
+# --update --test: defer pytest to after pull/rebuild (otherwise the early --test handler exits before --update runs).
+RUN_TESTS_AFTER_UPDATE=false
+if $UPDATE_PULL_REBUILD && $VERIFY_CODE; then
+  RUN_TESTS_AFTER_UPDATE=true
+  VERIFY_CODE=false
 fi
 
 # -----------------------------
@@ -634,6 +653,54 @@ verify_code_for_mode() {
   return $rc
 }
 
+# Pytest suite shipped with diy-bacnet-server (container has /app/tests after COPY).
+# Checks the container image, not the host venv (Open-FDD pytest uses .venv on the host separately).
+run_diy_bacnet_tests() {
+  echo "--- DIY BACnet server container (pytest tests/) ---"
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx openfdd_bacnet_server; then
+    echo "DIY BACnet tests: skip (openfdd_bacnet_server not running)."
+    return 0
+  fi
+  if ! docker exec openfdd_bacnet_server sh -lc 'test -d /app/tests'; then
+    echo "DIY BACnet tests: FAIL — /app/tests not found in openfdd_bacnet_server (rebuild bacnet-server from diy-bacnet-server context)."
+    return 1
+  fi
+  if ! docker exec openfdd_bacnet_server sh -lc 'python3 -c "import pytest" 2>/dev/null'; then
+    echo "DIY BACnet tests: FAIL — pytest not importable in openfdd_bacnet_server (pip install dev/test deps in the DIY image)."
+    return 1
+  fi
+  if docker exec openfdd_bacnet_server sh -lc "cd /app && python3 -m pytest tests/ -q --tb=short"; then
+    echo "DIY BACnet container tests: OK"
+  else
+    echo "DIY BACnet container tests: FAIL (pytest ran; see output above)."
+    echo "  Manual: docker exec -w /app openfdd_bacnet_server python3 -m pytest tests/ -v --tb=short"
+    return 1
+  fi
+}
+
+run_optional_diy_bacnet_tests() {
+  $DIY_BACNET_TESTS || return 0
+  run_diy_bacnet_tests || return 1
+}
+
+run_verify_code_matrix_or_single() {
+  if ! $MODE_EXPLICIT && [[ "$MODE" == "full" ]]; then
+    echo "=== Running modular test matrix (collector, model, engine, full) ==="
+    local matrix_failed=0
+    for m in collector model engine full; do
+      echo ""
+      echo ">>> MODE: $m"
+      if ! verify_code_for_mode "$m"; then
+        matrix_failed=1
+      fi
+    done
+    [[ $matrix_failed -eq 0 ]] || return 1
+  else
+    verify_code || return 1
+  fi
+  return 0
+}
+
 wait_for_api() {
   API_BASE="${OFDD_API_URL:-http://localhost:8000}"
   API_BASE="${API_BASE%/}"
@@ -838,20 +905,8 @@ fi
 
 if $VERIFY_CODE; then
   check_prereqs
-  if ! $MODE_EXPLICIT && [[ "$MODE" == "full" ]]; then
-    echo "=== Running modular test matrix (collector, model, engine, full) ==="
-    matrix_failed=0
-    for m in collector model engine full; do
-      echo ""
-      echo ">>> MODE: $m"
-      if ! verify_code_for_mode "$m"; then
-        matrix_failed=1
-      fi
-    done
-    [[ $matrix_failed -eq 0 ]] || exit 1
-  else
-    verify_code || exit 1
-  fi
+  run_verify_code_matrix_or_single || exit 1
+  run_optional_diy_bacnet_tests || exit 1
   exit 0
 fi
 
@@ -922,9 +977,11 @@ if $UPDATE_PULL_REBUILD; then
   [[ -d "$DIY_BACNET/.git" ]] && POST_BACNET=$(cd "$DIY_BACNET" && git rev-parse HEAD 2>/dev/null) || true
 
   SKIP_BUILD=false
-  if [[ -n "$PRE_OPENFDD" && -n "$POST_OPENFDD" && "$PRE_OPENFDD" == "$POST_OPENFDD" ]] && \
-     [[ -n "$PRE_BACNET" && -n "$POST_BACNET" && "$PRE_BACNET" == "$POST_BACNET" ]]; then
-    SKIP_BUILD=true
+  if ! $UPDATE_FORCE_REBUILD; then
+    if [[ -n "$PRE_OPENFDD" && -n "$POST_OPENFDD" && "$PRE_OPENFDD" == "$POST_OPENFDD" ]] && \
+       [[ -n "$PRE_BACNET" && -n "$POST_BACNET" && "$PRE_BACNET" == "$POST_BACNET" ]]; then
+      SKIP_BUILD=true
+    fi
   fi
 
   if $MAINTENANCE_ONLY; then
@@ -955,7 +1012,14 @@ if $UPDATE_PULL_REBUILD; then
   if $VERIFY_ONLY; then
     echo ""
     verify
-  else
+  fi
+  if $RUN_TESTS_AFTER_UPDATE; then
+    echo ""
+    echo "=== Post-update tests (--test) ==="
+    run_verify_code_matrix_or_single || exit 1
+    run_optional_diy_bacnet_tests || exit 1
+  fi
+  if ! $VERIFY_ONLY && ! $RUN_TESTS_AFTER_UPDATE; then
     echo "  Verify: ./scripts/bootstrap.sh --verify"
   fi
   exit 0

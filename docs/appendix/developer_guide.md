@@ -77,6 +77,7 @@ The **single source of truth** for the schema is the migration files in **`stack
 | `013_seed_fault_definitions.sql` | Seed rows for fault_definitions |
 | `014_drop_legacy_weather_tables.sql` | Drop legacy weather tables (weather data in timeseries_readings) |
 | `015_fault_state_and_audit.sql` | fault_state (current active fault per site/equipment/fault_id for HA), bacnet_write_audit |
+| `016_equipment_unique_site_name.sql` | Dedupe equipment per (site_id, name); unique constraint `equipment_site_id_name_key` |
 
 ### Tables and purpose (quick reference)
 
@@ -108,7 +109,7 @@ So deleting a site removes all its equipment, points, and their timeseries. See 
 
 ### Adding or changing schema
 
-1. Add a new migration file in `stack/sql/` with the next number (e.g. `016_my_feature.sql`).
+1. Add a new migration file in `stack/sql/` with the next number (e.g. `017_my_feature.sql`).
 2. Use `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and `SELECT create_hypertable(..., if_not_exists => TRUE)` so the migration is idempotent.
 3. Document the table in this section and in the [Technical reference](technical_reference#database-schema-timescaledb) table.
 4. Re-run bootstrap or apply migrations (bootstrap runs all `stack/sql/*.sql` in order).

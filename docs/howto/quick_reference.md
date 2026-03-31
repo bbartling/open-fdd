@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Quick reference
 
-One-page cheat sheet for Open-FDD. Details live in [Verification](howto/verification), [Operations](howto/operations), and [Configuration](configuration).
+One-page cheat sheet for Open-FDD. Details live in [Verification](verification), [Operations](operations), and [Configuration](../configuration).
 
 ---
 
@@ -168,4 +168,4 @@ python3 scripts/build_docs_pdf.py
 
 ---
 
-For full procedures (migrations, run FDD now, danger zone, etc.) see [Operations](howto/operations) and [Verification](howto/verification).
+For full procedures (migrations, run FDD now, danger zone, etc.) see [Operations](operations) and [Verification](verification).

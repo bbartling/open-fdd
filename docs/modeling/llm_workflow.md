@@ -19,7 +19,7 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 2. **The export JSON** — From **GET /data-model/export** (optionally `?site_id=YourSiteName`). Example shape: one array of objects with `point_id`, `bacnet_device_id`, `object_identifier`, `object_name`, `external_id`, `site_id`, `site_name`, `equipment_id`, `equipment_name`, `brick_type`, `rule_input`, `unit`, `polling`. Unimported rows have `point_id: null` and null tagging fields; the LLM fills those and can set `site_id` if you pre-create the site.
 
 3. **Rules for this project (optional)** — So the LLM knows which **rule_input** slugs and Brick types your FDD rules expect. You can:
-   - Point the LLM at the **[Fault rules overview](../rules/overview)** and **[Expression Rule Cookbook](../rules/expression_rule_cookbook)** (AHU, chiller, weather, advanced recipes). The cookbook is the main reference for rule_input names and expression patterns.
+   - Point the LLM at the **[Fault rules overview](../rules/overview)** and **[Expression Rule Cookbook](../expression_rule_cookbook)** (AHU, chiller, weather, advanced recipes). The cookbook is the main reference for rule_input names and expression patterns.
    - Or paste **YAML** from your project’s rules (e.g. from `stack/rules/` or your own rule files). The LLM can align `rule_input` with the inputs those rules use (e.g. `sat`, `rat`, `zone_temp`, `sf_status`).
 
 > For best polling decisions, include your actual rule YAMLs. Otherwise many BACnet points may be correctly tagged but still unnecessary for FDD/trending and should remain `polling: false`.
@@ -135,6 +135,38 @@ If uncertain:
 - polling = false
 
 --------------------------------------------------
+REAL-JOB / CONSERVATIVE MODE (not optional for production buildings)
+--------------------------------------------------
+
+Bench and demo setups can be forgiving; **on a real live HVAC job** the model must not drift from discoverable truth.
+
+**Do not invent or guess:**
+
+- Extra BACnet devices, synthetic weather stations, or integration “placeholder” equipment
+- Equipment rows or feeds/fed_by topology that are not in the export, the user’s brief, or an attached as-built
+- Point rows that were not in the export (no hallucinated objects)
+
+**Preserve identity exactly** (character-for-character when the export provides them):
+
+- `bacnet_device_id`, `object_identifier`, `object_name`, `external_id`, `point_id`, `site_id`, `site_name`, `equipment_id`
+
+**When unsure, prefer the safer default:**
+
+- `null` for unknown Brick type or unit — not a best guess
+- `polling: false` unless the point is clearly needed for FDD/trending the user asked for
+- Omit `feeds` / `fed_by` rather than inferring ductwork relationships
+- Saying (in a side channel) “cannot determine X from export” is better than fabricating X in JSON
+
+**Demo vs live:** Test-bench convenience (e.g. minimal equipment names) must not override the rules above on a production import.
+
+**Operator review before import (short checklist):**
+
+1. Compare row count and key BACnet fields to the latest `GET /data-model/export` — no mystery devices.
+2. Confirm every non-null `site_id` is still a UUID from `GET /sites`.
+3. `PUT dry-run` is not currently supported by the Open-FDD API for `PUT /data-model/import`; use schema/Pydantic validation first, and if you need a no-risk rehearsal, run the same `PUT` against a staging instance while comparing inputs from `GET /data-model/export` and site UUIDs from `GET /sites`.
+4. After import, verify a handful of BACnet reads match the gateway for the same object ids.
+
+--------------------------------------------------
 EQUIPMENT RULES
 --------------------------------------------------
 
@@ -190,7 +222,7 @@ After the final line, paste the **export JSON** (or send it as the next user mes
 | What | Where |
 |------|--------|
 | **Fault rules overview** | [docs/rules/overview](../rules/overview) — FDD rule types, YAML format, Brick-driven inputs. |
-| **Expression Rule Cookbook** | [docs/rules/expression_rule_cookbook](../rules/expression_rule_cookbook) — AHU, chiller, weather, and advanced recipes; **rule_input** examples and expression patterns. |
+| **Expression Rule Cookbook** | [docs/expression_rule_cookbook](../expression_rule_cookbook) — AHU, chiller, weather, and advanced recipes; **rule_input** examples and expression patterns. |
 | **Actual YAML rule files** | `stack/rules/` in the repo (or your `rules_dir`). The ME can upload or paste snippets so the LLM uses the same input names. |
 
 The cookbook is **not** a fault rule file itself; it’s documentation. The **rules you want to use** are the YAML files in `stack/rules/` (or your project’s rules). For the LLM, you can either paste that YAML or say “use rule_input slugs from the Expression Rule Cookbook (sat, rat, zone_temp, …).”
@@ -245,4 +277,4 @@ To avoid that:
 
 - [AI-assisted data modeling](ai_assisted_tagging) — Export → tag → import and API contract.
 - [Technical reference](../appendix/technical_reference) — PyPI vs repo, LLM tagging workflow; full prompt is above on this page.
-- [Fault rules overview](../rules/overview) and [Expression Rule Cookbook](../rules/expression_rule_cookbook) — Rules and rule_input reference.
+- [Fault rules overview](../rules/overview) and [Expression Rule Cookbook](../expression_rule_cookbook) — Rules and rule_input reference.
