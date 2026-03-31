@@ -32,8 +32,8 @@ keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "
 dependencies = [
     "pandas",
     "pyyaml",
-    "PyJWT",
-    "argon2-cffi",
+    "PyJWT>=2.0",
+    "argon2-cffi>=21.0",
 ]
 
 [project.optional-dependencies]

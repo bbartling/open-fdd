@@ -3,8 +3,6 @@ from fastapi.testclient import TestClient
 
 from open_fdd.platform.api.main import app
 
-client = TestClient(app)
-
 
 def _set_phase1_env(monkeypatch):
     ph = PasswordHasher()
@@ -17,6 +15,7 @@ def _set_phase1_env(monkeypatch):
 
 def test_login_and_access_token_flow(monkeypatch):
     _set_phase1_env(monkeypatch)
+    client = TestClient(app)
     r0 = client.get("/capabilities")
     assert r0.status_code == 401
 
@@ -25,7 +24,7 @@ def test_login_and_access_token_flow(monkeypatch):
     )
     assert login.status_code == 200
     body = login.json()
-    assert "access_token" in body and "refresh_token" in body
+    assert "access_token" in body
 
     r1 = client.get(
         "/capabilities",
@@ -36,11 +35,11 @@ def test_login_and_access_token_flow(monkeypatch):
 
 def test_refresh_issues_new_access_token(monkeypatch):
     _set_phase1_env(monkeypatch)
+    client = TestClient(app)
     login = client.post(
         "/auth/login", json={"username": "openfdd", "password": "pass1234"}
     )
-    refresh_token = login.json()["refresh_token"]
-    refresh = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    refresh = client.post("/auth/refresh")
     assert refresh.status_code == 200
     assert refresh.json().get("access_token")
 

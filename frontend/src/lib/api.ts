@@ -1,7 +1,6 @@
 import {
   clearAuthTokens,
   getAccessToken,
-  getRefreshToken,
   setAccessToken,
 } from "@/lib/auth";
 
@@ -77,16 +76,12 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const run = () =>
+  const response = await fetchWithAuthRetry(() =>
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-    });
-  let response = await run();
-  if (response.status === 401 && getRefreshToken()) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) response = await run();
-  }
+    }),
+  );
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -101,16 +96,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
-  const run = () =>
+  const response = await fetchWithAuthRetry(() =>
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-    });
-  let response = await run();
-  if (response.status === 401 && getRefreshToken()) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) response = await run();
-  }
+    }),
+  );
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -127,11 +118,13 @@ export async function apiStreamText(
   signal: AbortSignal,
   init?: Omit<RequestInit, "signal">,
 ): Promise<void> {
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    headers: buildHeaders(init?.headers),
-    signal,
-  });
+  const response = await fetchWithAuthRetry(() =>
+    fetch(buildUrl(path), {
+      ...init,
+      headers: buildHeaders(init?.headers),
+      signal,
+    }),
+  );
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -160,16 +153,12 @@ export async function apiStreamText(
 }
 
 export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Blob> {
-  const run = () =>
+  const response = await fetchWithAuthRetry(() =>
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-    });
-  let response = await run();
-  if (response.status === 401 && getRefreshToken()) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) response = await run();
-  }
+    }),
+  );
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -180,15 +169,12 @@ export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Bl
 }
 
 async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
       const resp = await fetch(buildUrl("/auth/refresh"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: "include",
       });
       if (!resp.ok) {
         clearAuthTokens();
@@ -209,4 +195,17 @@ async function refreshAccessToken(): Promise<string | null> {
     }
   })();
   return refreshPromise;
+}
+
+async function fetchWithAuthRetry(run: () => Promise<Response>): Promise<Response> {
+  let response = await run();
+  if (response.status !== 401 || !getAccessToken()) {
+    return response;
+  }
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) {
+    return response;
+  }
+  response = await run();
+  return response;
 }

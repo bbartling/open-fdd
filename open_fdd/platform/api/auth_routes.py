@@ -1,17 +1,20 @@
 """Auth endpoints for Phase 1 login + refresh."""
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from open_fdd.platform.api.auth import (
+    auth_user_config_status,
     create_access_token,
     issue_refresh_token,
-    verify_refresh_token,
+    revoke_refresh_token,
+    rotate_refresh_token,
     verify_user_password,
 )
 from open_fdd.platform.config import get_platform_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+_REFRESH_COOKIE = "ofdd_refresh_token"
 
 
 class LoginRequest(BaseModel):
@@ -21,12 +24,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
-    refresh_token: str
     expires_in: int
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=8, max_length=512)
 
 
 class RefreshResponse(BaseModel):
@@ -34,12 +32,43 @@ class RefreshResponse(BaseModel):
     expires_in: int
 
 
-@router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest):
+def _cookie_secure(request: Request) -> bool:
+    return request.url.scheme == "https"
+
+
+def _set_refresh_cookie(response: Response, token: str, request: Request) -> None:
     settings = get_platform_settings()
-    if not getattr(settings, "app_user", None) or not getattr(
-        settings, "app_user_hash", None
-    ):
+    max_age = int(getattr(settings, "refresh_token_days", 7) or 7) * 24 * 60 * 60
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=token,
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        path="/",
+        max_age=max_age,
+    )
+
+
+def _clear_refresh_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=_REFRESH_COOKIE,
+        httponly=True,
+        secure=_cookie_secure(request),
+        samesite="lax",
+        path="/",
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+def login(body: LoginRequest, request: Request, response: Response):
+    app_user_auth_enabled, app_user_auth_error = auth_user_config_status()
+    if app_user_auth_error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "AUTH_CONFIG_ERROR", "message": app_user_auth_error},
+        )
+    if not app_user_auth_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
@@ -54,18 +83,33 @@ def login(body: LoginRequest):
         )
     access_token, expires_in = create_access_token(body.username)
     refresh_token = issue_refresh_token(body.username)
-    return LoginResponse(
-        access_token=access_token, refresh_token=refresh_token, expires_in=expires_in
-    )
+    _set_refresh_cookie(response, refresh_token, request)
+    return LoginResponse(access_token=access_token, expires_in=expires_in)
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-def refresh(body: RefreshRequest):
-    sub = verify_refresh_token(body.refresh_token)
-    if not sub:
+def refresh(request: Request, response: Response):
+    refresh_cookie = request.cookies.get(_REFRESH_COOKIE)
+    if not refresh_cookie:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "UNAUTHORIZED", "message": "Invalid or expired refresh token"},
         )
+    rotated = rotate_refresh_token(refresh_cookie)
+    if not rotated:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "UNAUTHORIZED", "message": "Invalid or expired refresh token"},
+        )
+    sub, new_refresh_token = rotated
+    _set_refresh_cookie(response, new_refresh_token, request)
     access_token, expires_in = create_access_token(sub)
     return RefreshResponse(access_token=access_token, expires_in=expires_in)
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response):
+    refresh_cookie = request.cookies.get(_REFRESH_COOKIE)
+    revoke_refresh_token(refresh_cookie)
+    _clear_refresh_cookie(response, request)
+    return {"ok": True}

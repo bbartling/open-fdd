@@ -48,6 +48,8 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
+For reverse-proxy deployments, frontend API calls default to `VITE_API_BASE=/api` and Caddy maps `/api`, `/auth`, and `/ws` to the API service. If you deploy without Caddy, override `VITE_API_BASE` in a compose override file (example: `VITE_API_BASE=http://your-api-host:8000`).
+
 Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
 
 ## Quick Start — OpenClaw (agent)

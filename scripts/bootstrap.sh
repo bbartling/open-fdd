@@ -35,7 +35,7 @@
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 #
-# ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password ben123!
+# printf '%s' 'super-secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
@@ -73,6 +73,8 @@ SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
 APP_USER="${OFDD_APP_USER:-}"
 APP_PASSWORD="${OFDD_APP_PASSWORD:-}"
+APP_PASSWORD_FILE=""
+APP_PASSWORD_STDIN=false
 FRONTEND_RESET=false
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -147,7 +149,8 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     --no-auth) NO_AUTH=true ;;
     --user) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_USER="${args[$i]}" ;;
-    --password) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_PASSWORD="${args[$i]}" ;;
+    --password-file) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_PASSWORD_FILE="${args[$i]}" ;;
+    --password-stdin) APP_PASSWORD_STDIN=true ;;
     --frontend) FRONTEND_RESET=true ;;
     -h|--help)
       cat <<EOF
@@ -192,7 +195,9 @@ Docker install:
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
   --user NAME               Configure Phase-1 app login user (writes hash config into stack/.env).
-  --password VALUE          Configure Phase-1 app login password hash (argon2id) into stack/.env.
+  --password-file PATH      Read Phase-1 app password from file (first line).
+  --password-stdin          Read Phase-1 app password from stdin.
+                            (Alternative: set OFDD_APP_PASSWORD env var.)
 
 EOF
       exit 0
@@ -409,11 +414,42 @@ write_edge_env() {
 
 write_auth_env_if_requested() {
   local auth_file="$STACK_DIR/.env"
-  if [[ -z "${APP_USER:-}" && -z "${APP_PASSWORD:-}" ]]; then
+  # If --no-auth is requested, remove all auth entries and stop.
+  if $NO_AUTH; then
+    local sed_i=(-i)
+    if sed --version >/dev/null 2>&1; then
+      sed_i=(-i)
+    else
+      sed_i=(-i "")
+    fi
+    for key in OFDD_APP_USER OFDD_APP_USER_HASH OFDD_JWT_SECRET OFDD_ACCESS_TOKEN_MINUTES OFDD_REFRESH_TOKEN_DAYS OFDD_API_KEY; do
+      sed "${sed_i[@]}" "/^${key}=/d" "$auth_file" 2>/dev/null || true
+    done
     return 0
   fi
-  if [[ -z "${APP_USER:-}" || -z "${APP_PASSWORD:-}" ]]; then
-    echo "Both --user and --password are required to configure app login auth."
+  if [[ -z "${APP_USER:-}" && -z "${APP_PASSWORD:-}" && -z "${APP_PASSWORD_FILE:-}" ]] && ! $APP_PASSWORD_STDIN; then
+    return 0
+  fi
+  if [[ -z "${APP_USER:-}" ]]; then
+    echo "--user is required when configuring app login auth."
+    exit 1
+  fi
+  if [[ -z "${APP_PASSWORD:-}" ]]; then
+    if [[ -n "${APP_PASSWORD_FILE:-}" ]]; then
+      if [[ ! -f "$APP_PASSWORD_FILE" ]]; then
+        echo "--password-file not found: $APP_PASSWORD_FILE"
+        exit 1
+      fi
+      IFS= read -r APP_PASSWORD < "$APP_PASSWORD_FILE" || true
+    elif $APP_PASSWORD_STDIN; then
+      IFS= read -r APP_PASSWORD || true
+    else
+      read -sr -p "Password for user '$APP_USER': " APP_PASSWORD
+      echo ""
+    fi
+  fi
+  if [[ -z "${APP_PASSWORD:-}" ]]; then
+    echo "Password is empty; refusing to write auth config."
     exit 1
   fi
   local py="${REPO_ROOT}/.venv/bin/python"
@@ -432,6 +468,15 @@ write_auth_env_if_requested() {
   fi
   jwt_secret="$($py -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)"
   [[ -n "$jwt_secret" ]] || jwt_secret="openfdd-change-me-$(date +%s)"
+  shell_quote() {
+    local raw="$1"
+    raw="${raw//\'/\'\"\'\"\'}"
+    printf "'%s'" "$raw"
+  }
+  local q_user q_hash q_jwt
+  q_user="$(shell_quote "$APP_USER")"
+  q_hash="$(shell_quote "$hash")"
+  q_jwt="$(shell_quote "$jwt_secret")"
   local sed_i=(-i)
   if sed --version >/dev/null 2>&1; then
     sed_i=(-i)
@@ -439,9 +484,9 @@ write_auth_env_if_requested() {
     sed_i=(-i "")
   fi
   for kv in \
-    "OFDD_APP_USER='$APP_USER'" \
-    "OFDD_APP_USER_HASH='$hash'" \
-    "OFDD_JWT_SECRET='$jwt_secret'" \
+    "OFDD_APP_USER=${q_user}" \
+    "OFDD_APP_USER_HASH=${q_hash}" \
+    "OFDD_JWT_SECRET=${q_jwt}" \
     "OFDD_ACCESS_TOKEN_MINUTES=60" \
     "OFDD_REFRESH_TOKEN_DAYS=7"; do
     local key="${kv%%=*}"

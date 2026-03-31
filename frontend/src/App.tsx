@@ -38,13 +38,12 @@ function LoginPage() {
     try {
       const body = await apiFetch<{
         access_token: string;
-        refresh_token: string;
       }>("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      setAuthTokens(body.access_token, body.refresh_token);
+      setAuthTokens(body.access_token);
       window.location.assign("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -101,7 +100,6 @@ const queryClient = new QueryClient({
 
 function AppRoutes() {
   useWebSocket();
-  const hasToken = Boolean(getAccessToken());
 
   return (
     <SiteProvider>
@@ -130,7 +128,7 @@ function AppRoutes() {
         </Route>
         <Route
           path="*"
-          element={<Navigate to={hasToken ? "/" : "/login"} replace />}
+          element={<Navigate to={(getAccessToken() ? "/" : "/login")} replace />}
         />
       </Routes>
     </SiteProvider>
@@ -139,8 +137,10 @@ function AppRoutes() {
 
 function LogoutPage() {
   useEffect(() => {
-    clearAuthTokens();
-    window.location.assign("/login");
+    apiFetch<{ ok: boolean }>("/auth/logout", { method: "POST" }).finally(() => {
+      clearAuthTokens();
+      window.location.assign("/login");
+    });
   }, []);
   return null;
 }

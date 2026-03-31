@@ -48,10 +48,33 @@ def _bearer_token(request: Request) -> str | None:
 
 def _jwt_secret() -> str:
     settings = get_platform_settings()
-    secret = getattr(settings, "jwt_secret", None) or getattr(settings, "api_key", None)
-    if secret:
-        return str(secret)
-    return "openfdd-dev-secret-change-me"
+    secret = (getattr(settings, "jwt_secret", None) or "").strip()
+    if not secret:
+        raise RuntimeError(
+            "JWT secret missing: set OFDD_JWT_SECRET when app-user auth is enabled."
+        )
+    return secret
+
+
+def auth_user_config_status() -> tuple[bool, str | None]:
+    """Return (enabled, error_message).
+
+    App-user auth is enabled only when all three are configured:
+    OFDD_APP_USER, OFDD_APP_USER_HASH, OFDD_JWT_SECRET.
+    """
+    settings = get_platform_settings()
+    app_user = (getattr(settings, "app_user", None) or "").strip()
+    app_hash = (getattr(settings, "app_user_hash", None) or "").strip()
+    jwt_secret = (getattr(settings, "jwt_secret", None) or "").strip()
+    configured = [bool(app_user), bool(app_hash), bool(jwt_secret)]
+    if all(configured):
+        return True, None
+    if any(configured):
+        return (
+            False,
+            "Invalid auth configuration: OFDD_APP_USER, OFDD_APP_USER_HASH, and OFDD_JWT_SECRET must all be set together.",
+        )
+    return False, None
 
 
 def _token_subject(token: str) -> str | None:
@@ -109,10 +132,7 @@ def issue_refresh_token(username: str) -> str:
     token = secrets.token_urlsafe(48)
     now = dt.datetime.now(dt.timezone.utc)
     with _refresh_lock:
-        _refresh_store[token] = {
-            "sub": username,
-            "exp": now + dt.timedelta(days=ttl_days),
-        }
+        _refresh_store[token] = {"sub": username, "exp": now + dt.timedelta(days=ttl_days)}
     return token
 
 
@@ -129,6 +149,32 @@ def verify_refresh_token(refresh_token: str) -> str | None:
     if now >= entry["exp"]:
         return None
     return str(entry["sub"])
+
+
+def rotate_refresh_token(refresh_token: str) -> tuple[str, str] | None:
+    """Consume old refresh token and atomically issue a new one."""
+    settings = get_platform_settings()
+    ttl_days = int(getattr(settings, "refresh_token_days", 7) or 7)
+    now = dt.datetime.now(dt.timezone.utc)
+    with _refresh_lock:
+        entry = _refresh_store.get(refresh_token)
+        stale = [k for k, v in _refresh_store.items() if now >= v["exp"]]
+        for k in stale:
+            _refresh_store.pop(k, None)
+        if not entry or now >= entry["exp"]:
+            return None
+        username = str(entry["sub"])
+        _refresh_store.pop(refresh_token, None)
+        new_token = secrets.token_urlsafe(48)
+        _refresh_store[new_token] = {"sub": username, "exp": now + dt.timedelta(days=ttl_days)}
+        return username, new_token
+
+
+def revoke_refresh_token(refresh_token: str | None) -> None:
+    if not refresh_token:
+        return
+    with _refresh_lock:
+        _refresh_store.pop(refresh_token, None)
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -150,9 +196,14 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         if caddy_secret and x_caddy == caddy_secret:
             return await call_next(request)
         api_key = getattr(settings, "api_key", None)
-        app_user = getattr(settings, "app_user", None)
-        app_hash = getattr(settings, "app_user_hash", None)
-        auth_required = bool(api_key or (app_user and app_hash))
+        app_user_auth_enabled, app_user_auth_error = auth_user_config_status()
+        if app_user_auth_error:
+            return Response(
+                content=f'{{"error":{{"code":"AUTH_CONFIG_ERROR","message":"{app_user_auth_error}","details":null}}}}',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                media_type="application/json",
+            )
+        auth_required = bool(api_key or app_user_auth_enabled)
         if not auth_required:
             return await call_next(request)
         token = _bearer_token(request)

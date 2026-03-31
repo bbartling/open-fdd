@@ -222,6 +222,12 @@ services:
       OFDD_BRICK_TTL_PATH: /app/config/data_model.ttl
       # Optional Bearer auth; bootstrap generates and writes to stack/.env unless --no-auth
       OFDD_API_KEY: ${OFDD_API_KEY:-}
+      # Phase-1 UI auth (single bootstrap-managed app user)
+      OFDD_APP_USER: ${OFDD_APP_USER:-}
+      OFDD_APP_USER_HASH: ${OFDD_APP_USER_HASH:-}
+      OFDD_JWT_SECRET: ${OFDD_JWT_SECRET:-}
+      OFDD_ACCESS_TOKEN_MINUTES: ${OFDD_ACCESS_TOKEN_MINUTES:-60}
+      OFDD_REFRESH_TOKEN_DAYS: ${OFDD_REFRESH_TOKEN_DAYS:-7}
       # External LLMs use Open-FDD endpoints directly (see docs/model-context endpoints).
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
       OFDD_CADDY_INTERNAL_SECRET: "openfdd-internal"
@@ -277,13 +283,13 @@ services:
     image: node:22-alpine
     container_name: openfdd_frontend
     working_dir: /app
-    command: ["sh", "-c", "npm ci && npm run build && npx --yes serve -s dist -l 5173"]
+    command: ["sh", "-c", "if [ ! -d node_modules ]; then npm ci; fi; if [ ! -d dist ]; then npm run build; fi; npx --yes serve -s dist -l 5173"]
     ports:
       - "5173:5173"
     environment:
       VITE_OFDD_API_KEY: ${OFDD_API_KEY:-}
-      # Built frontend talks directly to host API (no Vite dev proxy in production serve mode).
-      VITE_API_BASE: http://localhost:8000
+      # Deploy-friendly default behind reverse proxy (Caddy routes /api and /auth).
+      VITE_API_BASE: ${VITE_API_BASE:-/api}
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules

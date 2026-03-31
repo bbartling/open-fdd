@@ -1,5 +1,5 @@
 const ACCESS_KEY = "ofdd_access_token";
-const REFRESH_KEY = "ofdd_refresh_token";
+let accessTokenMemory: string | null = null;
 
 type AuthListener = () => void;
 const listeners = new Set<AuthListener>();
@@ -14,27 +14,27 @@ export function subscribeAuth(listener: AuthListener): () => void {
 }
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY);
+  if (accessTokenMemory) return accessTokenMemory;
+  const persisted = sessionStorage.getItem(ACCESS_KEY);
+  if (persisted) accessTokenMemory = persisted;
+  return accessTokenMemory;
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
-export function setAuthTokens(accessToken: string, refreshToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
-  localStorage.setItem(REFRESH_KEY, refreshToken);
+export function setAuthTokens(accessToken: string): void {
+  accessTokenMemory = accessToken;
+  sessionStorage.setItem(ACCESS_KEY, accessToken);
   notify();
 }
 
 export function setAccessToken(accessToken: string): void {
-  localStorage.setItem(ACCESS_KEY, accessToken);
+  accessTokenMemory = accessToken;
+  sessionStorage.setItem(ACCESS_KEY, accessToken);
   notify();
 }
 
 export function clearAuthTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  accessTokenMemory = null;
+  sessionStorage.removeItem(ACCESS_KEY);
   notify();
 }
 

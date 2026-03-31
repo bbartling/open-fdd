@@ -5,6 +5,16 @@
 	handle /ai* {
 		reverse_proxy api:8000
 	}
+	handle /api* {
+		uri strip_prefix /api
+		reverse_proxy api:8000
+	}
+	handle /auth* {
+		reverse_proxy api:8000
+	}
+	handle /ws* {
+		reverse_proxy api:8000
+	}
 	handle /* {
 		reverse_proxy frontend:5173
 	}

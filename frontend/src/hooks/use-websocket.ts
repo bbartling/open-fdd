@@ -21,15 +21,18 @@ export function useWebSocket() {
 
     let protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     let host = window.location.host;
+    let basePath = "";
     if (apiBase && /^https?:\/\//.test(apiBase)) {
       const parsed = new URL(apiBase);
       protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
       host = parsed.host;
+      basePath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "");
     }
     const accessToken = getAccessToken();
     if (!accessToken) return;
     const tokenParam = `?token=${encodeURIComponent(accessToken)}`;
-    const url = `${protocol}//${host}/ws/events${tokenParam}`;
+    const wsPath = `${basePath}/ws/events`.replace(/\/{2,}/g, "/");
+    const url = `${protocol}//${host}${wsPath}${tokenParam}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
