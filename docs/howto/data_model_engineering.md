@@ -25,6 +25,7 @@ Open-FDD keeps **Brick** as the operational model and adds an **Engineering** la
 Open-FDD’s MVP is intentionally narrow:
 
 - It **stores** structured engineering and topology in the DB and **emits** them into RDF using **`s223:`**-namespaced types (e.g. connection points, ducts) plus **`ofdd:`** for non-223 schedule fields.
+- Connection endpoint linkage is currently represented with **`ofdd:connectsFromRef`** / **`ofdd:connectsToRef`** string references (MVP), not full RDF object links via `s223:connectsFrom` / `s223:connectsTo`.
 - It does **not** claim full Standard 223 validation, certification, or a complete 223 product data model. The value here is **one graph**: Brick + BACnet + timeseries refs + engineering + topology, all queryable with **SPARQL** and aligned with how integrators already think about **connections** and **submittal data**.
 
 ## How this connects to FDD, PostgreSQL, and the knowledge graph

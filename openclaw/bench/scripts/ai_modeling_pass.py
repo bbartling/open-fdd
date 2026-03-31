@@ -24,6 +24,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 BENCH_DIR = SCRIPT_DIR.parent
@@ -67,7 +68,7 @@ def _fetch_export(api_url: str, site_id: str | None) -> tuple[int, object]:
     base = api_url.rstrip("/")
     path = "/data-model/export"
     if site_id:
-        path = f"{path}?site_id={site_id}"
+        path = f"{path}?{urlencode({'site_id': site_id})}"
     headers = {}
     key = os.environ.get("OFDD_API_KEY", "").strip()
     if key:
@@ -75,7 +76,7 @@ def _fetch_export(api_url: str, site_id: str | None) -> tuple[int, object]:
     r = httpx.get(f"{base}{path}", headers=headers or None, timeout=60.0)
     try:
         body = r.json()
-    except Exception:
+    except ValueError:
         body = {"_raw": (r.text or "")[:2000]}
     return r.status_code, body
 
@@ -94,7 +95,7 @@ def main() -> int:
     out_path = report_dir / f"ai-modeling-pass-{stamp}.md"
 
     lines = [
-        f"# AI modeling pass report",
+        "# AI modeling pass report",
         "",
         f"- Generated: {datetime.now(timezone.utc).isoformat()}",
         f"- Report dir: `{report_dir}` (override: `AI_MODELING_REPORT_DIR` or `OPENCLAW_BENCH_REPORT_DIR`)",

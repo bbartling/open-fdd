@@ -27,7 +27,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import TypedDict
+from typing import Optional, TypedDict
 import urllib.error
 import urllib.request
 
@@ -36,7 +36,7 @@ class _PlatformConfigCache(TypedDict):
     """In-process cache for GET /config; values match _fetch_platform_config_cached."""
 
     ts: float
-    cfg: dict | None
+    cfg: Optional[dict]
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -155,6 +155,11 @@ def main() -> int:
         action="store_true",
         help="Debug logging",
     )
+    parser.add_argument(
+        "--exit-nonzero-on-empty",
+        action="store_true",
+        help="In one-shot multi-gateway mode, return 1 when total rows and points are both zero",
+    )
     args = parser.parse_args()
 
     setup_logging(args.verbose)
@@ -195,7 +200,19 @@ def main() -> int:
             fresh_json = _resolve_bacnet_gateways_json(log)
             if fresh_json:
                 try:
-                    gateways = json.loads(fresh_json)
+                    fresh_gateways = json.loads(fresh_json)
+                    if isinstance(fresh_gateways, list) and fresh_gateways:
+                        if fresh_gateways != gateways:
+                            log.info(
+                                "bacnet_gateways changed: %d -> %d entries",
+                                len(gateways),
+                                len(fresh_gateways),
+                            )
+                        gateways = fresh_gateways
+                    else:
+                        log.warning(
+                            "bacnet_gateways JSON resolved to empty/non-list this cycle; keeping prior list"
+                        )
                 except (json.JSONDecodeError, TypeError):
                     log.warning("bacnet_gateways JSON invalid this cycle; keeping prior list")
 
@@ -234,7 +251,11 @@ def main() -> int:
                 )
 
             if not args.loop:
-                if total_rows == 0 and total_points == 0:
+                if (
+                    args.exit_nonzero_on_empty
+                    and total_rows == 0
+                    and total_points == 0
+                ):
                     return 1
                 return 0
 

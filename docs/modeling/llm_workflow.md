@@ -163,7 +163,7 @@ Bench and demo setups can be forgiving; **on a real live HVAC job** the model mu
 
 1. Compare row count and key BACnet fields to the latest `GET /data-model/export` — no mystery devices.
 2. Confirm every non-null `site_id` is still a UUID from `GET /sites`.
-3. Run validation / `PUT` dry-run or schema check if your tooling supports it.
+3. `PUT dry-run` is not currently supported by the Open-FDD API for `PUT /data-model/import`; use schema/Pydantic validation first, and if you need a no-risk rehearsal, run the same `PUT` against a staging instance while comparing inputs from `GET /data-model/export` and site UUIDs from `GET /sites`.
 4. After import, verify a handful of BACnet reads match the gateway for the same object ids.
 
 --------------------------------------------------
