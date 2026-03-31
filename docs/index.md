@@ -39,30 +39,30 @@ cd open-fdd
 |------|-----|--------|
 | **Frontend (React)** | http://localhost:5173 | Main UI: dashboard, sites, points, config, faults, plots. Use this for day-to-day workflows. |
 | **API (REST)** | http://localhost:8000/docs | Swagger UI for integration and scripts. High-level reference: [Appendix: API Reference](appendix/api_reference). |
-| **Caddy (reverse proxy)** | http://localhost:80 | Default `stack/caddy/Caddyfile` proxies to frontend only. See [Protecting the entire API with Caddy](#protecting-the-entire-api-with-caddy) below. |
+| **Caddy (reverse proxy)** | http://localhost:80 | Default `stack/caddy/Caddyfile` proxies **`/api*`**, **`/auth*`**, **`/ws*`**, **`/ai*`** to the API (with `/api` prefix stripped) and **`/*`** to the frontend. See [Security and Caddy](security). Optional hardening (basic auth, TLS) is covered below. |
 | **TimescaleDB** | 127.0.0.1:5432 | Database `openfdd` (user `postgres`); host port is loopback-only in compose ([Phase 2](security#phase-2--stack-hardening-db-caddy-secrets)). |
 | **BACnet (diy-bacnet-server)** | http://localhost:8080/docs | JSON-RPC API; UDP 47808 for BACnet/IP. |
 | **Grafana** | http://localhost:3000 | **Optional:** `./scripts/bootstrap.sh --with-grafana` (admin/admin). React frontend provides equivalent views. |
 
-**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React frontend connects with `?token=<API_KEY>` when `VITE_OFDD_API_KEY` is set; Bearer auth is used for REST. See [Security & Caddy](security).
+**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React app sends the current **access JWT** or **`OFDD_API_KEY`** as **`?token=`** when connecting; REST uses **`Authorization: Bearer`**. See [Security & Caddy](security).
 
 ---
 
-### Protecting the entire API with Caddy
+### Optional: extra Caddy hardening (basic auth, full route list, TLS)
 
-The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no auth, API not behind Caddy). To protect the **entire** stack behind one entry point (basic auth, API + WebSocket + frontend, optional Grafana):
+The **committed** **`stack/caddy/Caddyfile`** already puts the **API and WebSocket** behind the same **:80** entry as the UI (no **basic auth** in the repo file). To add a **second perimeter** (one browser basic login before the app’s own Phase 1 login), **TLS**, or **many more explicit API paths**, use a custom Caddyfile pattern:
 
 1. **Use a Caddyfile that:**
-   - Listens on one port (e.g. `:80` or `:8088`).
-   - Enables **basic_auth** for all routes (one login for the browser).
-   - Proxies **`/api/*`**, **`/ws/*`**, **`/docs`**, **`/redoc`**, **`/openapi.json`**, **`/health`**, and other API paths to **`api:8000`**.
+   - Listens on one port (e.g. `:80`, `:443`, or `:8088`).
+   - Optionally enables **basic_auth** for all routes (browser gate in front of the app).
+   - Keeps or extends **`/api*`**, **`/auth*`**, **`/ws*`**, **`/ai*`** → **`api:8000`** (strip **`/api`** when using that prefix pattern).
    - Proxies **`/grafana`** to **`grafana:3000`** if you use `--with-grafana`.
    - Proxies **`/*`** to the **frontend** (e.g. `frontend:5173`).
-   - When proxying to the API, adds **`header_up X-Caddy-Auth <secret>`** so the API accepts requests that passed basic auth (set `OFDD_CADDY_INTERNAL_SECRET` in the API container to the same value).
+   - When using Caddy basic auth, add **`header_up X-Caddy-Auth <secret>`** on API routes so the API accepts requests that passed Caddy (set **`OFDD_CADDY_INTERNAL_SECRET`** in the API container to the same value).
 
-2. **Full steps:** See [Security and Caddy](security) — Quick bootstrap with Caddy and basic auth, default password change, and troubleshooting (401s, WebSocket behind Caddy).
+2. **Full steps:** See [Security and Caddy](security) — Quick bootstrap, TLS / Phase 2 notes, default password change, and troubleshooting (401s, WebSocket behind Caddy).
 
-3. **Caddyfile location:** `stack/caddy/Caddyfile`. A full example (basic auth, API, WebSocket, frontend) is in [Security — Caddyfile for protecting the entire API](security#caddyfile-for-protecting-the-entire-api).
+3. **Caddyfile location:** `stack/caddy/Caddyfile`. An extended **example** (many paths + basic auth) is in [Security — Caddyfile for protecting the entire API](security#caddyfile-for-protecting-the-entire-api); **HTTPS** starter: [`stack/caddy/Caddyfile.https.example`](../stack/caddy/Caddyfile.https.example).
 
 ---
 
@@ -93,7 +93,7 @@ The default **`stack/caddy/Caddyfile`** only routes **port 80 → frontend** (no
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| **Caddy** | 80 | Reverse proxy (default: frontend only; see [Security](security) to protect API + WebSocket + frontend) |
+| **Caddy** | 80 | Reverse proxy: API/auth/WebSocket/AI routes + frontend (see [Security](security); optional basic auth / TLS) |
 | **API** | 8000 | REST API, Swagger `/docs`, WebSocket `/ws/events` |
 | **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
 | **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
