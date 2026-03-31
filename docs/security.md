@@ -4,9 +4,9 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 ## Reverse proxy: current file vs future hardening
 
-- **Canonical config in the repo:** [`stack/caddy/Caddyfile`](../stack/caddy/Caddyfile) — this is the **only** checked-in Caddy config today. It provides a **minimal** reverse proxy (e.g. port **80** → frontend, with `/ai*` routed to the API so Overview AI works through one entry point). It does **not** yet implement full API coverage, basic auth, or TLS.
-- **Status:** Treat the bundled reverse-proxy path as **still needing test coverage and operational validation**. Prefer direct service ports (frontend, API) when debugging until you have confirmed Caddy behavior in your environment.
-- **Later phases:** Stronger Open-FDD perimeter security—**basic auth**, routing the **full** API and WebSocket through Caddy, **TLS**, rate limiting, and tighter defaults—will be rolled out as part of **future security-hardening work**, not all of which is reflected in the committed `Caddyfile` yet.
+- **Canonical config in the repo:** [`stack/caddy/Caddyfile`](../stack/caddy/Caddyfile) — checked-in Caddy config for a **single HTTP entry point** on port **80**: `handle /api*` (with `uri strip_prefix /api`), `/auth*`, `/ws*`, and `/ai*` are proxied to the API; `handle /*` serves the React frontend. This matches the frontend’s default **`VITE_API_BASE=/api`** in Docker Compose: browser calls go to same-origin paths under `/api`, `/auth`, and `/ws`.
+- **Status:** Use **`http://localhost`** (or `http://<lan-host>`) as the main URL when Caddy is up; use **http://localhost:8000** (API) and **http://localhost:5173** (frontend direct) when debugging without the proxy.
+- **Later phases:** Optional Caddy **basic auth**, **TLS**, rate limiting, and stricter perimeter defaults are documented below as **targets**; they are not all enabled in the committed file.
 
 **What is Caddy?** A small web server in front of the API and the **React frontend**. The **committed** `stack/caddy/Caddyfile` is a lightweight starting point; this page also documents **target** patterns (basic auth, `X-Caddy-Auth`, full API routes) for when those hardening phases land. Optional **Grafana** (when started with `--with-grafana`) can be exposed via Caddy (e.g. `/grafana`) once the proxy config is extended. Bootstrap starts the Caddy service with the compose file under `stack/`; see [Quick bootstrap with Caddy](#quick-bootstrap-with-caddy).
 
@@ -14,15 +14,25 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 ## Architecture: frontend, API, and Caddy
 
-- **React frontend** runs in its own container (port 5173 in dev; built and served via Caddy in production-style setups). It uses **Bearer token** auth against the Open-FDD API when `OFDD_API_KEY` is set: all requests (and the WebSocket at `/ws/events`) send `Authorization: Bearer <key>`. See [Frontend API key (Bearer)](#frontend-api-key-bearer) below for where the key is sent.
-- **API** (FastAPI) serves REST and WebSocket; when `OFDD_API_KEY` is set, it requires Bearer auth on all endpoints except `/health`, `/`, `/docs`, `/redoc`, `/openapi.json`, and `/app` (legacy static config UI).
-- **Caddy** (when configured for hardening) can sit in front of both: **basic auth** (one browser login), then proxy to the API and frontend. With **`header_up X-Caddy-Auth`** in the Caddyfile and **`OFDD_CADDY_INTERNAL_SECRET`** on the API, the backend can trust requests that passed Caddy without requiring a Bearer token on every call. Until that layout is validated end-to-end, the **checked-in** `stack/caddy/Caddyfile` is simpler; the API may still be reached directly on port 8000. **Best practice:** keep the frontend in its own container; do not serve the compiled React app from FastAPI as static files. Use Caddy (or another reverse proxy) as the single entry point once your hardened config is tested.
+- **React frontend** runs in its own container (production build on **5173**; Caddy’s **`/*`** routes there). **Phase 1 app auth:** users sign in at **`/login`**; the API returns a short-lived **JWT access token** (browser **sessionStorage**) and an **HttpOnly** refresh cookie (`/auth/*`). REST uses **`Authorization: Bearer <access_token>`**; the WebSocket uses **`/ws/events?token=<access_token>`** (or the API-key token path in [the table above](#frontend-and-api-authentication-phase-1)).
+- **API** (FastAPI) requires auth when **`OFDD_API_KEY`** and/or **Phase 1 app-user** config is set (`OFDD_APP_USER`, `OFDD_APP_USER_HASH`, **`OFDD_JWT_SECRET`** — all three together). Valid credentials are **`Bearer`** matching **`OFDD_API_KEY`** or a valid **access JWT**. Exempt paths include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app` (and `/app/*`), and **`/auth/*`**. Partial app-user configuration returns **500** (`AUTH_CONFIG_ERROR`), not a silent fallback.
+- **Machine clients** (scrapers, curl, **Open Claw** on a Windows bench) should rely on **`OFDD_API_KEY`** and **`Authorization: Bearer`**, not the browser cookie flow — see [Open‑Claw integration](openclaw_integration#1e-openclaw-on-a-different-machine-than-open-fdd-split-setup).
+- **Caddy** can be extended with **basic auth** + **`X-Caddy-Auth`** / **`OFDD_CADDY_INTERNAL_SECRET`** (optional); see [Caddyfile for protecting the entire API](#caddyfile-for-protecting-the-entire-api). **Best practice:** keep the frontend in its own container; use a reverse proxy as the operator entry point.
 
 ---
 
-## Frontend API key (Bearer)
+## Frontend and API authentication (Phase 1)
 
-When `VITE_OFDD_API_KEY` is set (at frontend build time), the frontend sends it everywhere it talks to the backend: `apiFetch()` in `frontend/src/lib/api.ts` adds `Authorization: Bearer <key>` to all REST calls (sites, equipment, points, faults, config, FDD status, data model, etc.), `fetchCsv()` in `frontend/src/lib/csv.ts` adds the same header for CSV downloads, and the WebSocket in `frontend/src/hooks/use-websocket.ts` connects to `/ws/events?token=<key>`, which the backend accepts for WebSocket auth when an API key is configured.
+| Mode | Typical use | How it works |
+|------|-------------|--------------|
+| **Dashboard login** | Human operators via browser | `POST /auth/login` → access JWT in session + HttpOnly refresh cookie; `apiFetch` attaches `Bearer` access token; WebSocket uses access token in query string. |
+| **`OFDD_API_KEY`** | Scrapers, scripts, agents, LAN test bench | `Authorization: Bearer <OFDD_API_KEY>` on REST; WebSocket may use `?token=<key>` when no JWT is in use. |
+
+Configure Phase 1 app login with **`./scripts/bootstrap.sh --user NAME`** and a **secret password source** (`--password-file`, `--password-stdin`, **`OFDD_APP_PASSWORD`**, or interactive prompt — see `bootstrap.sh --help`). **`--no-auth`** removes **`OFDD_API_KEY`** and Phase 1 app keys from `stack/.env` as applicable.
+
+**`VITE_API_BASE`:** In Docker Compose the frontend defaults to **`/api`** so same-origin requests work behind Caddy. Override with a full URL (e.g. `http://api-host:8000`) only if you deploy without path-based routing; see the [README](../README.md#platform-deployment-docker) note.
+
+Older docs referred to baking **`VITE_OFDD_API_KEY`** into the frontend at build time; the supported operator path is now **login + JWT** (or unauthenticated local dev with auth disabled). A static API key in the bundle is discouraged for production.
 
 ---
 
@@ -34,9 +44,9 @@ When `VITE_OFDD_API_KEY` is set (at frontend build time), the frontend sends it 
    ```
    This starts DB, API (8000), frontend (5173), BACnet server (8080), scrapers, FDD loop, and **Caddy** (see `stack/docker-compose.yml`). Caddy publishes **host port 80** → container port 80 using **`stack/caddy/Caddyfile`**. **Grafana is not started by default**; use `./scripts/bootstrap.sh --with-grafana` to include it (then use http://localhost:3000, or add a `/grafana` route when you extend the Caddyfile).
 
-2. **Access through the committed Caddyfile** (minimal reverse proxy — **no basic auth** in the repo file today):
+2. **Access through the committed Caddyfile** (**no basic auth** in the repo file today):
    - **URL:** `http://localhost` (port **80**)
-   - The checked-in config proxies **`/ai*`** to the API and **`/*`** to the **React dev server** (frontend container). Other API paths and `/ws/*` are **not** defined in that file; use **http://localhost:5173** (frontend) and **http://localhost:8000** (API) for full access while the single-entry-point layout is still being validated.
+   - **`/api*`** → API (prefix stripped), **`/auth*`** → API, **`/ws*`** → API, **`/ai*`** → API, **`/*`** → frontend (static build). From another machine on the LAN, use **`http://<server-ip>/`** the same way.
 
 3. **Hardened entry point (future / manual):** To put the **entire** UI and API behind one login and optional TLS, follow [Caddyfile for protecting the entire API](#caddyfile-for-protecting-the-entire-api) below and test thoroughly. Example credentials like `openfdd` / `xyz` apply only after you add **basic_auth** to your Caddyfile—not in the default committed file.
 
@@ -308,7 +318,8 @@ During development, use **Trivy** to scan container images and the repo for vuln
 
 ## Summary
 
-- **Bootstrap:** Start the stack; the committed Caddyfile listens on **`http://localhost`** (port **80**) with **no** basic auth. Use **5173** / **8000** for full app access until a hardened Caddyfile is tested. After adding basic auth, use the credentials you configured (not any example defaults in production).
+- **Bootstrap:** Start the stack; the committed Caddyfile listens on **`http://localhost`** (port **80**) with **no** basic auth, and routes **`/api`**, **`/auth`**, **`/ws`**, and **`/ai`** to the API. Use **8000** / **5173** for direct debugging.
+- **Phase 1:** Optional dashboard login (JWT + HttpOnly refresh cookie) and/or **`OFDD_API_KEY`** for machine clients; both can be configured together.
 - **Passwords:** Change default by running `caddy hash-password` and updating the Caddyfile; use strong passwords for Grafana and Postgres.
 - **Unencrypted by default:** API, Grafana, TimescaleDB, and BACnet API are plain HTTP/TCP; protect them with network isolation and Caddy (and optional TLS).
 - **Hardening:** Strong passwords, expose only Caddy, keep DB and internal services off the public internet, keep software updated.

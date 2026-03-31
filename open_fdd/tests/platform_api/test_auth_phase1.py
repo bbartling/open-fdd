@@ -23,6 +23,7 @@ def test_login_and_access_token_flow(monkeypatch):
         "/auth/login", json={"username": "openfdd", "password": "pass1234"}
     )
     assert login.status_code == 200
+    assert "no-store" in (login.headers.get("cache-control") or "").lower()
     body = login.json()
     assert "access_token" in body
 
@@ -41,5 +42,6 @@ def test_refresh_issues_new_access_token(monkeypatch):
     )
     refresh = client.post("/auth/refresh")
     assert refresh.status_code == 200
+    assert "no-store" in (refresh.headers.get("cache-control") or "").lower()
     assert refresh.json().get("access_token")
 

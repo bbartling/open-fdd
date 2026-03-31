@@ -283,7 +283,14 @@ services:
     image: node:22-alpine
     container_name: openfdd_frontend
     working_dir: /app
-    command: ["sh", "-c", "if [ ! -d node_modules ]; then npm ci; fi; if [ ! -d dist ]; then npm run build; fi; npx --yes serve -s dist -l 5173"]
+    # Named volumes mount as empty dirs: test emptiness so npm ci/build are not skipped on first start.
+    command:
+      - sh
+      - -c
+      - |
+          if [ -z "$$(ls -A node_modules 2>/dev/null)" ]; then npm ci; fi
+          if [ -z "$$(ls -A dist 2>/dev/null)" ]; then npm run build; fi
+          npx --yes serve -s dist -l 5173
     ports:
       - "5173:5173"
     environment:

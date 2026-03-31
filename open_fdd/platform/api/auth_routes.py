@@ -15,6 +15,8 @@ from open_fdd.platform.config import get_platform_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _REFRESH_COOKIE = "ofdd_refresh_token"
+# Do not let browsers or intermediaries cache responses that contain access tokens.
+_CACHE_CONTROL_AUTH = "no-store, no-cache, must-revalidate, private"
 
 
 class LoginRequest(BaseModel):
@@ -84,6 +86,7 @@ def login(body: LoginRequest, request: Request, response: Response):
     access_token, expires_in = create_access_token(body.username)
     refresh_token = issue_refresh_token(body.username)
     _set_refresh_cookie(response, refresh_token, request)
+    response.headers["Cache-Control"] = _CACHE_CONTROL_AUTH
     return LoginResponse(access_token=access_token, expires_in=expires_in)
 
 
@@ -104,6 +107,7 @@ def refresh(request: Request, response: Response):
     sub, new_refresh_token = rotated
     _set_refresh_cookie(response, new_refresh_token, request)
     access_token, expires_in = create_access_token(sub)
+    response.headers["Cache-Control"] = _CACHE_CONTROL_AUTH
     return RefreshResponse(access_token=access_token, expires_in=expires_in)
 
 
@@ -112,4 +116,5 @@ def logout(request: Request, response: Response):
     refresh_cookie = request.cookies.get(_REFRESH_COOKIE)
     revoke_refresh_token(refresh_cookie)
     _clear_refresh_cookie(response, request)
+    response.headers["Cache-Control"] = _CACHE_CONTROL_AUTH
     return {"ok": True}

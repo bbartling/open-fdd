@@ -5,7 +5,7 @@ nav_order: 4
 
 # Using the React dashboard
 
-The Open-FDD **React frontend** (http://localhost:5173 or via Caddy) is the main UI for sites, points, data model, faults, and timeseries. Use it after [Getting started](getting_started); ensure the API is running and (if auth is enabled) the frontend is built with `VITE_OFDD_API_KEY` or you access through Caddy with basic auth.
+The Open-FDD **React frontend** is available at **http://localhost:5173** (direct) or **http://localhost/** when **Caddy** is the entry point (see [Security](security)). Use it after [Getting started](getting_started). When auth is enabled, sign in at **`/login`** (Phase 1: JWT in the browser session + HttpOnly refresh cookie; see [Security — Phase 1](security.md#frontend-and-api-authentication-phase-1)). Docker Compose defaults to **`VITE_API_BASE=/api`** so the UI talks to the API through Caddy on the same host/port.
 
 ---
 

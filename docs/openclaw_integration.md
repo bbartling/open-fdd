@@ -15,7 +15,7 @@ This page shows how to:
 3. Automate Brick tagging (`GET /data-model/export` → LLM → `PUT /data-model/import`)
 4. Tune FDD faults by updating rule YAML files (`/rules/*`) and syncing definitions
 
-Security note: when `OFDD_API_KEY` is enabled, all API routes (including `GET /model-context/docs`) require Bearer auth.
+Security note: when **auth is required** (`OFDD_API_KEY` and/or Phase 1 app-user login), API routes (including `GET /model-context/docs`) accept **`Authorization: Bearer`** with either the **API key** or a **JWT access token** issued from **`POST /auth/login`**. External HTTP agents normally use the **API key**; browsers use login + JWT. `/auth/*` is exempt from the middleware so login/refresh/logout work.
 
 ---
 
@@ -79,14 +79,21 @@ This enables targeted runs (for example model-only SPARQL work or engine-only ru
 
 ## 1e) OpenClaw on a different machine than Open-FDD (split setup)
 
-OpenClaw does **not** have to run on the same host as Docker / the git clone. A common pattern is **Open‑FDD on a Linux edge box** and **OpenClaw Control UI on a Windows (or other) workstation** that orchestrates over the network.
+OpenClaw does **not** have to run on the same host as Docker / the git clone. A common pattern is **Open‑FDD on a Linux server** and **OpenClaw on a Windows (or other) workstation** on the same **test bench LAN**.
+
+**How OpenClaw-style tests talk to Open‑FDD (HTTP)**
+
+Bench and helper scripts treat Open‑FDD like any other REST client: they read **`OFDD_API_KEY`** from the environment (often after loading a copy of **`stack/.env`** from the Linux host) and send **`Authorization: Bearer <OFDD_API_KEY>`** on each request. They do **not** open a browser, call **`/auth/login`**, or manage HttpOnly cookies — that flow is for the React dashboard only. If the stack has **Phase 1 app-user** auth enabled **without** an **`OFDD_API_KEY`**, those scripts would need a JWT instead (cookie + login); **for automation, keep `OFDD_API_KEY` in `stack/.env` and mirror it into the Windows environment** (or a small `.env` you load before running Python). Product details of the bench live under **`openclaw/`** in the repo; this page only describes how that pattern fits Open‑FDD.
 
 **What the external agent needs**
 
-1. **Shell access to the edge host** (SSH) if it will run `./scripts/bootstrap.sh`, `pytest`, or edit files in the clone — point OpenClaw’s workspace or “working directory” at that remote path, or use an SSH-mounted checkout. If the agent only drives **HTTP tools**, a local clone is optional.
-2. **Reachable API base URL** — from the OpenClaw machine, `http://localhost:8000` only works if you **port-forward** or **SSH tunnel**; otherwise use the edge host’s LAN hostname/IP and port (e.g. `http://hvac-edge-01:8000`). Same idea for MCP RAG on **8090** if you use it.
-3. **Bearer auth** — when `OFDD_API_KEY` is set on the stack, every tool/manifest/docs call needs **`Authorization: Bearer <key>`**. The key is the value of **`OFDD_API_KEY`** in **`stack/.env` on the Open‑FDD host**. You do **not** need to copy the entire `.env` to Windows: copy **only** that secret (or an equivalent) into whatever OpenClaw / your agent uses for env vars. Keep DB passwords and other stack secrets on the server.
-4. **Browser / React (optional)** — if you open the UI from your PC against a dev server on the edge box, the frontend needs the same key at **build** time as **`VITE_OFDD_API_KEY`** (see [Security — Frontend API key](security.md#frontend-api-key-bearer)) and often **`VITE_API_TARGET`** pointing at the API. That is separate from the API Bearer header OpenClaw uses for REST.
+1. **Shell access to the Linux host** (SSH) if it will run `./scripts/bootstrap.sh`, `pytest`, or edit files in the clone — point OpenClaw’s workspace at that path or mount it. If the agent only drives **HTTP tools**, a full clone on Windows is optional.
+2. **Reachable base URL** — from the Windows machine, **`http://localhost:8000` does not reach the Linux server.** Use the host’s **LAN IP or DNS name**:
+   - **Direct API:** `http://<open-fdd-host>:8000/...` (paths as in Swagger, e.g. `/sites`, `/data-model/sparql`).
+   - **Through Caddy (port 80):** `http://<open-fdd-host>/api/...` for REST paths the UI uses (Caddy strips the `/api` prefix before proxying). Auth endpoints: `http://<open-fdd-host>/auth/...`.
+   Bench scripts are usually simplest against **`:8000`** so paths match `/sites` with no prefix. Use **port-forward** or **SSH tunnel** only if you deliberately map remote 8000 to local `localhost`.
+3. **Bearer token for REST** — set **`OFDD_API_KEY`** on the bench to the same value as in **`stack/.env` on the Open‑FDD host** (see [Security — Phase 1 auth modes](security.md#frontend-and-api-authentication-phase-1)). Do not commit that file; copy the key out of band. DB passwords and other secrets can stay on the server.
+4. **Browser UI from Windows (optional)** — open **`http://<open-fdd-host>/`** (Caddy) or **`http://<open-fdd-host>:5173`** (direct frontend). Sign in at **`/login`** when Phase 1 user auth is configured; the app uses **`VITE_API_BASE=/api`** behind Caddy so API calls stay same-origin. This is **independent** of the Bearer header OpenClaw uses for REST.
 
 **File handoff (`openclaw/issues_log.md`)** — [`HANDOFF_PROTOCOL.md`](../openclaw/HANDOFF_PROTOCOL.md) assumes both Cursor and OpenClaw can read the **same repo tree**. With a split setup, use **git push/pull** (or SSH to one canonical clone) so the lab trail stays in sync.
 

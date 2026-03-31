@@ -12,7 +12,7 @@ REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, 
 **Base URL:** `http://localhost:8000`  
 **Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
 
-**Authentication:** When `OFDD_API_KEY` is set, the API requires `Authorization: Bearer <key>` on all endpoints except `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, and `/app`. The React frontend sends the key when built with `VITE_OFDD_API_KEY`: REST via `apiFetch`, CSV downloads via `fetchCsv`, and WebSocket via `?token=<key>` on `/ws/events`. See [Security and Caddy — Frontend API key (Bearer)](../security#frontend-api-key-bearer) for the full sentence.
+**Authentication:** When **`OFDD_API_KEY`** and/or **Phase 1 app-user** config is active, the API requires `Authorization: Bearer <token>` on protected routes: `<token>` is either **`OFDD_API_KEY`** or a **JWT access token** from **`POST /auth/login`**. Exemptions include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app`, and **`/auth/*`**. The React app uses **login + JWT** (and HttpOnly refresh cookies) for REST and WebSocket; see [Security — Phase 1](../security#frontend-and-api-authentication-phase-1).
 
 ---
 

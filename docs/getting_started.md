@@ -118,7 +118,11 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
-| `--no-auth` | Do not generate or set `OFDD_API_KEY`; API will not require Bearer auth. |
+| `--no-auth` | Remove/disable stack auth keys in `stack/.env` (`OFDD_API_KEY` and Phase 1 app-user keys); API will not require Bearer/JWT auth. |
+| `--user NAME` | Phase 1 dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `stack/.env` (requires a password — next rows). |
+| `--password-file PATH` | Read the Phase 1 password from a file (first line); avoids putting the password on the command line. |
+| `--password-stdin` | Read the Phase 1 password from stdin (pipe or redirect into bootstrap; see `bootstrap.sh --help` example comment). |
+| *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the Phase 1 password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
 ---
