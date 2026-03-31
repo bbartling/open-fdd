@@ -21,7 +21,7 @@ Open-FDD is an open-source **edge analytics platform for smart buildings** that 
 
 | Service | URL | Default credentials |
 |---------|-----|---------------------|
-| **DB (TimescaleDB)** | `localhost:5432/openfdd` | postgres / postgres |
+| **DB (TimescaleDB)** | `127.0.0.1:5432/openfdd` (loopback) | postgres / postgres |
 | **Grafana** | http://localhost:3000 | Optional (`--with-grafana`); admin / admin |
 | **Frontend (React)** | http://localhost:5173 | Dashboard, Config, Points, Data model, Faults, Plots. Via Caddy: http://localhost:80. |
 | **API (Swagger)** | http://localhost:8000/docs | REST API; Bearer auth when `OFDD_API_KEY` set. |
@@ -42,7 +42,7 @@ curl -s -X POST http://localhost:8000/bacnet/server_hello -H "Content-Type: appl
 ## Bootstrap output (after `./scripts/bootstrap.sh`)
 
 ```
-DB:       localhost:5432/openfdd  (postgres/postgres)
+DB:       127.0.0.1:5432/openfdd  (postgres/postgres; loopback bind)
 Frontend: http://localhost:5173   (or :80 via Caddy)
 API:      http://localhost:8000   (docs: /docs)
 Grafana:  http://localhost:3000   (optional; --with-grafana; admin/admin)

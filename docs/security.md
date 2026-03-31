@@ -38,6 +38,23 @@ Older docs referred to baking **`VITE_OFDD_API_KEY`** into the frontend at build
 
 ---
 
+## Phase 2 — stack hardening (DB, Caddy, secrets)
+
+Tracks **[Phase 2 – Stack Security Hardening](https://github.com/bbartling/open-fdd/issues/73)** on top of Phase 1 auth ([issue #72](https://github.com/bbartling/open-fdd/issues/72)).
+
+**Architecture rule:** **Frontend → API → database.** The React app must not talk to Postgres; only the API uses `OFDD_DB_DSN` on the Docker network (`db:5432`).
+
+| Area | Repo default / guidance |
+|------|-------------------------|
+| **Postgres publish** | `docker-compose.yml` binds the DB port to **`127.0.0.1:5432`** only — tools on the **host** can use `psql` locally; **remote machines cannot** reach the DB via that mapping. For stricter production, **remove** the `ports:` block under `db` so only containers on the compose network can connect (admin via `docker exec` or a throwaway `psql` container). |
+| **Edge TLS** | The committed Caddyfile serves **HTTP on :80** with security headers. For **HTTPS**, use a public DNS name and either Caddy automatic TLS or mounted certs; start with [`stack/caddy/Caddyfile.https.example`](../stack/caddy/Caddyfile.https.example) and set **`OFDD_TRUST_FORWARDED_PROTO=true`** on the API. **Do not** send `Strict-Transport-Security` on plain HTTP; the example adds HSTS only on the HTTPS site block. |
+| **Caddy headers** | The bundled **`stack/caddy/Caddyfile`** sets `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`. Optional: **CSP**, **rate limiting**, Caddy **basic auth** as a second layer — see [Caddyfile for protecting the entire API](#caddyfile-for-protecting-the-entire-api). |
+| **Secrets** | **`stack/.env`** is **gitignored** (and listed in `.gitignore`). Bootstrap creates or updates it; store **Argon2 hash**, **JWT secret**, and optional **`OFDD_API_KEY`** (machine-only — not for the browser UI) there. Never commit secrets. |
+
+**WebSocket:** Same auth model as HTTP (access JWT or API key); no DB access from browser WebSocket code.
+
+---
+
 ## Quick bootstrap with Caddy
 
 1. **Start the stack** (from repo root):
@@ -184,7 +201,7 @@ The **default committed** `stack/caddy/Caddyfile` does **not** include **basic a
 | **API**            | 8000  | No (HTTP)              | Put behind Caddy; do not expose directly. Bearer auth when `OFDD_API_KEY` is set. |
 | **Frontend**       | 5173  | No (HTTP)              | React app; use Caddy to serve and protect. Sends Bearer token to API. |
 | **Grafana**        | 3000  | No (HTTP)              | Optional (--with-grafana); use Caddy at /grafana or Grafana's own auth. |
-| **TimescaleDB**   | 5432  | No (plain PostgreSQL)  | Not TLS by default. Keep on internal network only. |
+| **TimescaleDB**   | 5432  | No (plain PostgreSQL)  | Compose maps **`127.0.0.1:5432`** to the container so the host can use `psql` locally; remote clients do not get a LAN-wide DB port. Remove `ports` under `db` for internal-only DB. |
 | **BACnet server** | 8080  | No (HTTP API)          | Host network; protect with firewall or Caddy on host. |
 
 - **Recommendation:** When hardened, expose only Caddy (compose defaults to **port 80**; use **443** or another port with TLS in later phases) to the building/remote network. Do not expose 5432, 8000, 5173, 3000, or 8080 to the internet. Plan for Caddy **basic auth** and **TLS** as security hardening matures; keep the database and BACnet server behind the firewall. The React frontend runs in its own container and is served by Caddy (or another reverse proxy), not as static files from the FastAPI process.

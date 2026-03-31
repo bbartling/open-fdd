@@ -40,7 +40,7 @@ cd open-fdd
 | **Frontend (React)** | http://localhost:5173 | Main UI: dashboard, sites, points, config, faults, plots. Use this for day-to-day workflows. |
 | **API (REST)** | http://localhost:8000/docs | Swagger UI for integration and scripts. High-level reference: [Appendix: API Reference](appendix/api_reference). |
 | **Caddy (reverse proxy)** | http://localhost:80 | Default `stack/caddy/Caddyfile` proxies to frontend only. See [Protecting the entire API with Caddy](#protecting-the-entire-api-with-caddy) below. |
-| **TimescaleDB** | localhost:5432 | Database `openfdd` (user `postgres`); keep internal. |
+| **TimescaleDB** | 127.0.0.1:5432 | Database `openfdd` (user `postgres`); host port is loopback-only in compose ([Phase 2](security#phase-2--stack-hardening-db-caddy-secrets)). |
 | **BACnet (diy-bacnet-server)** | http://localhost:8080/docs | JSON-RPC API; UDP 47808 for BACnet/IP. |
 | **Grafana** | http://localhost:3000 | **Optional:** `./scripts/bootstrap.sh --with-grafana` (admin/admin). React frontend provides equivalent views. |
 

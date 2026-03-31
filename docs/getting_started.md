@@ -33,7 +33,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    - **API:** http://localhost:8000/docs  
    - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
    - **BACnet Swagger:** http://localhost:8080/docs  
-   - **DB:** localhost:5432/openfdd (postgres/postgres)  
+   - **DB:** `127.0.0.1:5432`/openfdd (postgres/postgres) — bound to loopback only; not exposed on the LAN.  
    - **Grafana (optional):** not started by default. Run `./scripts/bootstrap.sh --with-grafana`, then http://localhost:3000 (admin/admin). The React UI covers timeseries, faults, and system resources for most workflows.
    - **MQTT broker (optional, experimental):** not started by default. `./scripts/bootstrap.sh --with-mqtt-bridge` starts Mosquitto on port 1883 and wires **BACnet2MQTT** env for diy-bacnet-server. This path is **not required** for core Open-FDD; it is reserved for **future** remote collection / MQTT experiments. Open-FDD does **not** ship or require Home Assistant.
 

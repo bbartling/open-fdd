@@ -124,8 +124,9 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# Environments (includes stack/.env — bootstrap secrets; never commit)
 .env
+stack/.env
 .venv
 .venv-ansible
 env/

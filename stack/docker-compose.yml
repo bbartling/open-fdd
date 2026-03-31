@@ -121,8 +121,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
       POSTGRES_DB: openfdd
+    # Phase 2: bind to loopback only — not reachable from the LAN/internet; use docker exec or a temp publish for remote admin.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - openfdd_db:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d
