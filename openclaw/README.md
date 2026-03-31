@@ -23,8 +23,8 @@ OpenClaw may run on a different machine than Open-FDD. For split setup details s
 ## Current bench reality (keep this straight)
 
 - Bench/frontend/backend/BACnet reachability can be healthy while auth context is still wrong.
-- Current direct authenticated check has failed with `FORBIDDEN: Invalid API key`.
-- Treat this as **launcher/env/runtime-context drift** unless proven otherwise.
+- Missing or invalid `OFDD_API_KEY` should be treated as **launcher/env/runtime-context drift** unless proven otherwise.
+- If Open-FDD is running on another machine, load the active `.env` into the shell or point `OPENCLAW_STACK_ENV` at it before calling auth-sensitive APIs.
 - **Do not delete or bury issue `#92`**; keep it as likely real product parity tracking once auth is healthy.
 - Do not frame auth-context drift itself as a confirmed product bug without clean repro under known-good auth.
 

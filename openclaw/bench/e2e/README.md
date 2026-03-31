@@ -25,6 +25,17 @@ From repo root:
 ./scripts/bootstrap.sh --test             # CI-style checks
 ```
 
+## Auth preflight (do this first)
+
+Most model / parity / hot-reload checks need authenticated backend access when Open-FDD auth is enabled.
+
+Recommended order:
+- load the active `stack/.env` into the shell, or set `OFDD_API_KEY`
+- for split setups, point `OPENCLAW_STACK_ENV` at the active `.env`
+- treat `401` / `403` during preflight as **auth/runtime-context drift**, not immediate product failure
+
+The bench scripts now fail fast on missing/invalid auth instead of flooding the console with downstream 401 noise.
+
 ## What to test in each mode
 
 - **full-stack**
@@ -60,6 +71,7 @@ From repo root:
 - `2_sparql_crud_and_frontend_test.py` — graph + CRUD + UI
 - `3_long_term_bacnet_scrape_test.py` — persistence / soak test
 - `4_hot_reload_test.py` — dev ergonomics regression
+- `5_ai_data_model_payload_test.py` — AI/data-model regression: malformed payloads, partial payloads, engineering metadata, Standard 223 / `s223` topology JSON, and export/import parity on fresh sites
 - `automated_suite.py` — orchestrator
 
 ## Contributing back upstream

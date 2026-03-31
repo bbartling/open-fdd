@@ -158,14 +158,17 @@ def _load_env_file(path: str) -> None:
 
 def _load_stack_env() -> None:
     repo_root = SCRIPT_DIR.parent.parent.parent
-    candidate_envs = [
-        repo_root / "stack" / ".env",
-        Path(os.getcwd()) / ".env",
-        SCRIPT_DIR / ".env",
-    ]
     extra = os.environ.get("OPENCLAW_STACK_ENV", "").strip()
+    candidate_envs: list[Path] = []
     if extra:
         candidate_envs.append(Path(extra))
+    candidate_envs.extend(
+        [
+            repo_root / "stack" / ".env",
+            Path(os.getcwd()) / ".env",
+            SCRIPT_DIR / ".env",
+        ]
+    )
     home_stack = Path.home() / ".openclaw" / "workspace" / "open-fdd" / "stack" / ".env"
     candidate_envs.append(home_stack)
     for env_path in candidate_envs:
@@ -178,6 +181,37 @@ API_KEY = os.environ.get("OFDD_API_KEY", "").strip()
 
 # Mutable container so main() can set timeout without `global` (SPARQL on large graphs can exceed 30s).
 _HTTP_TIMEOUT_SEC: dict[str, float] = {"sec": 120.0}
+
+def _auth_preflight(api_url: str) -> tuple[bool, str | None]:
+    """Fail fast when backend auth is enabled but the harness has no usable key."""
+    code, _, err = _request(api_url, "GET", "/sites")
+    if code == 200:
+        if API_KEY:
+            print("Auth preflight: OK (authenticated backend access available).")
+        else:
+            print("Auth preflight: OK (backend accepted anonymous access).")
+        return True, None
+    if code == 401:
+        if API_KEY:
+            return (
+                False,
+                "Auth preflight FAIL — backend rejected OFDD_API_KEY (401 Unauthorized). "
+                "Treat this as auth/runtime-context drift before triaging product bugs.",
+            )
+        return (
+            False,
+            "Auth preflight FAIL — backend requires OFDD_API_KEY but none was loaded. "
+            "Load stack/.env or set OFDD_API_KEY (for split setups you can point OPENCLAW_STACK_ENV at the active .env).",
+        )
+    if code == 403:
+        return (
+            False,
+            "Auth preflight FAIL — backend rejected OFDD_API_KEY (403 Forbidden). "
+            "Treat this as auth/runtime-context drift before triaging product bugs.",
+        )
+    if code == 0:
+        return False, f"Auth preflight FAIL — transport error while checking /sites: {err}"
+    return False, f"Auth preflight FAIL — GET /sites -> {code}{f' — {err}' if err else ''}"
 
 
 def _format_api_error(body: dict | list | None, fallback_text: str = "") -> str:

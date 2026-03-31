@@ -49,3 +49,10 @@ Each bullet should help **you** and **Cursor** the next day:
 - Regressions in **product** behavior, security notes, doc bugs worth tracking.
 - Keep **`issues_log.md`** as the **fast lab trail**; promote stable items to Issues.
 - For frontend/API SPARQL parity drafts, follow **`openclaw/references/parity_issue_checklist.md`** first so auth drift and graph-churn drift do not get mislabeled as product bugs.
+
+## Current known issue state (2026-03-27)
+
+- **#95** UI wording/guidance: OpenClaw retest against `cf343ca` passed on the live bench; close recommended.
+- **#93** import/materialization: original symptom no longer reproduces on `cf343ca`; close recommended.
+- **#92** count-sensitive parity: tighter retest showed `07_count_triples.sparql` is currently **graph-churn-sensitive** on the live bench; keep open, but re-scope around parity under unstable graph state.
+- Separate from the above, the bench has shown **graph hygiene/runtime drift**: rising orphan blank nodes, fluctuating triple counts, and duplicate partial BACnet references even while auth and raw BACnet reads remain healthy.
