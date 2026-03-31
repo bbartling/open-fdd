@@ -197,9 +197,39 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+/**
+ * API middleware returns 401 only when the Authorization header is missing.
+ * Expired or otherwise invalid JWTs still send Bearer ... but fail validation → 403 "Invalid auth token".
+ * Without handling 403, the UI never calls /auth/refresh and BACnet (and other) calls look stuck on 403.
+ */
+async function responseIndicatesAuthRetryable(response: Response): Promise<boolean> {
+  if (response.status === 401) {
+    return true;
+  }
+  if (response.status !== 403) {
+    return false;
+  }
+  const ct = response.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    return false;
+  }
+  try {
+    const payload = (await response.clone().json()) as {
+      error?: { message?: string; code?: string };
+    };
+    const msg = String(payload.error?.message ?? "").trim();
+    return msg === "Invalid auth token";
+  } catch {
+    return false;
+  }
+}
+
 async function fetchWithAuthRetry(run: () => Promise<Response>): Promise<Response> {
   let response = await run();
-  if (response.status !== 401 || !getAccessToken()) {
+  if (!getAccessToken()) {
+    return response;
+  }
+  if (!(await responseIndicatesAuthRetryable(response))) {
     return response;
   }
   const refreshed = await refreshAccessToken();
