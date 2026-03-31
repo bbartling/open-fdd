@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.api import (
     analytics,
+    auth_routes,
     bacnet,
     config as config_router,
     data_model,
@@ -191,6 +192,7 @@ def _unified_error_handler(request: Request, exc: Exception):
 
 
 app.include_router(config_router.router)
+app.include_router(auth_routes.router)
 app.include_router(sites.router)
 app.include_router(points.router)
 app.include_router(equipment.router)

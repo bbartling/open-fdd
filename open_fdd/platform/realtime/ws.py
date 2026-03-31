@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from open_fdd.platform.api.auth import validate_access_token
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.realtime.hub import get_hub
 
@@ -24,9 +25,14 @@ def _ws_auth_ok(token: str | None, headers: Any = None) -> bool:
         if headers.get("x-caddy-auth") == settings.caddy_internal_secret:
             return True
     api_key = getattr(settings, "api_key", None)
-    if not api_key:
+    app_user = getattr(settings, "app_user", None)
+    app_hash = getattr(settings, "app_user_hash", None)
+    auth_required = bool(api_key or (app_user and app_hash))
+    if not auth_required:
         return True
-    return bool(token and token.strip() == api_key)
+    if token and api_key and token.strip() == api_key:
+        return True
+    return validate_access_token(token)
 
 
 @router.websocket("/ws/events")

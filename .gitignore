@@ -183,3 +183,6 @@ openclaw/reports/*.md
 openclaw/bench/reports/*.md
 openclaw/.skill-workspace-marker
 openclaw/logs/*.pid
+
+# Local auth bootstrap output (single-user credentials + jwt secret)
+stack/auth.env

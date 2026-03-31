@@ -272,18 +272,18 @@ services:
       driver: json-file
       options: *log-opts
 
-  # React dashboard — Vite dev server with hot reload, source mounted from host
+  # React dashboard — production build served as static assets (no Vite dev/HMR in stack mode)
   frontend:
     image: node:22-alpine
     container_name: openfdd_frontend
     working_dir: /app
-    command: ["sh", "-c", "npm install && npm run dev"]
+    command: ["sh", "-c", "npm ci && npm run build && npx --yes serve -s dist -l 5173"]
     ports:
       - "5173:5173"
     environment:
       VITE_OFDD_API_KEY: ${OFDD_API_KEY:-}
-      # Use service name 'api' so Docker Compose DNS resolves to current API container after restarts (avoids ECONNREFUSED / EAI_AGAIN).
-      VITE_API_TARGET: http://api:8000
+      # Built frontend talks directly to host API (no Vite dev proxy in production serve mode).
+      VITE_API_BASE: http://localhost:8000
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules

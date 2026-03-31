@@ -1,10 +1,12 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { WsEvent } from "@/types/api";
+import { getAccessToken, subscribeAuth } from "@/lib/auth";
 
 const RECONNECT_DELAY = 3000;
 const RECONNECT_DELAY_AFTER_FAILURES = 60000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
 
 export function useWebSocket() {
   const queryClient = useQueryClient();
@@ -17,10 +19,17 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const apiKey = import.meta.env.VITE_OFDD_API_KEY as string | undefined;
-    const tokenParam = apiKey ? `?token=${encodeURIComponent(apiKey)}` : "";
-    const url = `${protocol}//${window.location.host}/ws/events${tokenParam}`;
+    let protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    let host = window.location.host;
+    if (apiBase && /^https?:\/\//.test(apiBase)) {
+      const parsed = new URL(apiBase);
+      protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+      host = parsed.host;
+    }
+    const accessToken = getAccessToken();
+    if (!accessToken) return;
+    const tokenParam = `?token=${encodeURIComponent(accessToken)}`;
+    const url = `${protocol}//${host}/ws/events${tokenParam}`;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -82,8 +91,20 @@ export function useWebSocket() {
   useEffect(() => {
     mountedRef.current = true;
     connect();
+    const unsubAuth = subscribeAuth(() => {
+      clearTimeout(reconnectTimer.current);
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch {
+          // ignore
+        }
+      }
+      connectRef.current();
+    });
     return () => {
       mountedRef.current = false;
+      unsubAuth();
       clearTimeout(reconnectTimer.current);
       const ws = wsRef.current;
       if (ws) {

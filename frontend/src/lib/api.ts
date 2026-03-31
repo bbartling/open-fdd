@@ -1,16 +1,29 @@
-const apiKey = import.meta.env.VITE_OFDD_API_KEY as string | undefined;
+import {
+  clearAuthTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+} from "@/lib/auth";
+
+let refreshPromise: Promise<string | null> | null = null;
+const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
+  /\/$/,
+  "",
+);
 
 function buildHeaders(init?: HeadersInit): Headers {
   const headers = new Headers(init ?? {});
-  if (apiKey && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${apiKey}`);
+  const accessToken = getAccessToken();
+  if (accessToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
   return headers;
 }
 
 function buildUrl(path: string): string {
   if (/^https?:\/\//.test(path)) return path;
-  return path.startsWith("/") ? path : `/${path}`;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return apiBase ? `${apiBase}${normalized}` : normalized;
 }
 
 function stringifyUnknown(value: unknown): string {
@@ -64,10 +77,16 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    headers: buildHeaders(init?.headers),
-  });
+  const run = () =>
+    fetch(buildUrl(path), {
+      ...init,
+      headers: buildHeaders(init?.headers),
+    });
+  let response = await run();
+  if (response.status === 401 && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await run();
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -82,10 +101,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 }
 
 export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    headers: buildHeaders(init?.headers),
-  });
+  const run = () =>
+    fetch(buildUrl(path), {
+      ...init,
+      headers: buildHeaders(init?.headers),
+    });
+  let response = await run();
+  if (response.status === 401 && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await run();
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -135,10 +160,16 @@ export async function apiStreamText(
 }
 
 export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Blob> {
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    headers: buildHeaders(init?.headers),
-  });
+  const run = () =>
+    fetch(buildUrl(path), {
+      ...init,
+      headers: buildHeaders(init?.headers),
+    });
+  let response = await run();
+  if (response.status === 401 && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await run();
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response);
@@ -146,4 +177,36 @@ export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Bl
   }
 
   return response.blob();
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const resp = await fetch(buildUrl("/auth/refresh"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!resp.ok) {
+        clearAuthTokens();
+        return null;
+      }
+      const body = (await resp.json()) as { access_token?: string };
+      if (!body.access_token) {
+        clearAuthTokens();
+        return null;
+      }
+      setAccessToken(body.access_token);
+      return body.access_token;
+    } catch {
+      clearAuthTokens();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
 }

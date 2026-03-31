@@ -76,6 +76,13 @@ class PlatformSettings(BaseSettings):
 
     # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /docs, /redoc, /openapi.json, /app
     api_key: Optional[str] = None
+    # Single-user Phase-1 auth (bootstrap-managed); hash should be argon2id.
+    app_user: Optional[str] = None
+    app_user_hash: Optional[str] = None
+    # Access-token signing secret; falls back to OFDD_API_KEY if unset.
+    jwt_secret: Optional[str] = None
+    access_token_minutes: int = 60
+    refresh_token_days: int = 7
     # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.
     caddy_internal_secret: Optional[str] = None
 

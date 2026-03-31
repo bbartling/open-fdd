@@ -23,10 +23,9 @@
 #   (Available services: api, bacnet-server, bacnet-scraper, caddy, db, fdd-loop, frontend, grafana [--with-grafana], host-stats, mosquitto [--with-mqtt-bridge], weather-scraper)
 #   ./scripts/bootstrap.sh --frontend          # before start: stop frontend, remove frontend node_modules volume (fresh npm install on next up)
 #
-# When to re-bootstrap for frontend:
-#   Frontend code (React/TS) changes are picked up by hot reload (npm run dev in container); no re-bootstrap needed.
-#   Use --frontend only if you changed package.json and need a fresh npm install in the container.
-#   Use --build frontend if you need the container image rebuilt with latest code (e.g. no hot reload).
+# Frontend serving mode:
+#   Stack frontend runs a production build (npm run build + static serve), not Vite dev/HMR.
+#   Re-run bootstrap or --build frontend after UI changes so the built bundle is refreshed.
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -36,6 +35,7 @@
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 #
+# ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password ben123!
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
@@ -71,6 +71,8 @@ DIY_BACNET_TESTS=false
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
+APP_USER="${OFDD_APP_USER:-}"
+APP_PASSWORD="${OFDD_APP_PASSWORD:-}"
 FRONTEND_RESET=false
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
@@ -79,7 +81,15 @@ LOG_MAX_FILES=3
 # Allow env overrides from stack/.env (if present)
 if [[ -f "$STACK_DIR/.env" ]]; then
   # shellcheck source=/dev/null
-  set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
+  set +e
+  set -a
+  source "$STACK_DIR/.env" 2>/dev/null
+  env_source_rc=$?
+  set +a
+  set -e
+  if [[ $env_source_rc -ne 0 ]]; then
+    echo "Warning: could not fully parse $STACK_DIR/.env; continuing with defaults/CLI flags."
+  fi
   [[ -n "${OFDD_RETENTION_DAYS:-}" ]] && RETENTION_DAYS="${OFDD_RETENTION_DAYS}"
   [[ -n "${OFDD_LOG_MAX_SIZE:-}" ]] && LOG_MAX_SIZE="${OFDD_LOG_MAX_SIZE}"
   [[ -n "${OFDD_LOG_MAX_FILES:-}" ]] && LOG_MAX_FILES="${OFDD_LOG_MAX_FILES}"
@@ -136,6 +146,8 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     --no-auth) NO_AUTH=true ;;
+    --user) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_USER="${args[$i]}" ;;
+    --password) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_PASSWORD="${args[$i]}" ;;
     --frontend) FRONTEND_RESET=true ;;
     -h|--help)
       cat <<EOF
@@ -179,6 +191,8 @@ Docker install:
 
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
+  --user NAME               Configure Phase-1 app login user (writes hash config into stack/.env).
+  --password VALUE          Configure Phase-1 app login password hash (argon2id) into stack/.env.
 
 EOF
       exit 0
@@ -388,6 +402,57 @@ write_edge_env() {
   if ! grep -qE '^OFDD_MCP_ENABLE_ACTION_TOOLS=' "$env_file" 2>/dev/null; then
     echo "OFDD_MCP_ENABLE_ACTION_TOOLS=false" >> "$env_file"
   fi
+
+  # Optional Phase-1 app user auth file.
+  write_auth_env_if_requested
+}
+
+write_auth_env_if_requested() {
+  local auth_file="$STACK_DIR/.env"
+  if [[ -z "${APP_USER:-}" && -z "${APP_PASSWORD:-}" ]]; then
+    return 0
+  fi
+  if [[ -z "${APP_USER:-}" || -z "${APP_PASSWORD:-}" ]]; then
+    echo "Both --user and --password are required to configure app login auth."
+    exit 1
+  fi
+  local py="${REPO_ROOT}/.venv/bin/python"
+  [[ -x "$py" ]] || py="python3"
+  if ! have_cmd "$py"; then
+    echo "python3 not found; cannot generate password hash for auth env."
+    exit 1
+  fi
+  local hash jwt_secret
+  hash="$(
+    OFDD_TMP_PASSWORD="$APP_PASSWORD" "$py" -c "from argon2 import PasswordHasher; import os; print(PasswordHasher().hash(os.environ['OFDD_TMP_PASSWORD']))" 2>/dev/null
+  )"
+  if [[ -z "${hash:-}" ]]; then
+    echo "Could not generate argon2 password hash (install argon2-cffi in this python env)."
+    exit 1
+  fi
+  jwt_secret="$($py -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)"
+  [[ -n "$jwt_secret" ]] || jwt_secret="openfdd-change-me-$(date +%s)"
+  local sed_i=(-i)
+  if sed --version >/dev/null 2>&1; then
+    sed_i=(-i)
+  else
+    sed_i=(-i "")
+  fi
+  for kv in \
+    "OFDD_APP_USER='$APP_USER'" \
+    "OFDD_APP_USER_HASH='$hash'" \
+    "OFDD_JWT_SECRET='$jwt_secret'" \
+    "OFDD_ACCESS_TOKEN_MINUTES=60" \
+    "OFDD_REFRESH_TOKEN_DAYS=7"; do
+    local key="${kv%%=*}"
+    if grep -q "^${key}=" "$auth_file" 2>/dev/null; then
+      sed "${sed_i[@]}" "s|^${key}=.*|${kv}|" "$auth_file"
+    else
+      echo "$kv" >> "$auth_file"
+    fi
+  done
+  chmod 600 "$auth_file" 2>/dev/null || true
+  echo "Wrote Phase-1 auth config keys in: $auth_file (user: $APP_USER)"
 }
 
 ensure_mqtt_bridge_env_defaults() {
@@ -611,7 +676,7 @@ verify_code() {
     pytest_target="open_fdd/tests/engine/"
   fi
 
-  if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET && $py -m pytest $pytest_target -v --tb=short); then
+  if (cd "$REPO_ROOT" && unset OFDD_API_KEY OFDD_CADDY_INTERNAL_SECRET OFDD_APP_USER OFDD_APP_USER_HASH OFDD_JWT_SECRET OFDD_ACCESS_TOKEN_MINUTES OFDD_REFRESH_TOKEN_DAYS && $py -m pytest $pytest_target -v --tb=short); then
     echo "Backend: OK"
   else
     echo "Backend: FAIL or skipped."
@@ -919,7 +984,17 @@ fi
 # From here on, we run stack operations (default/no args = FULL stack)
 write_edge_env
 # Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
-[[ -f "$STACK_DIR/.env" ]] && set -a && source "$STACK_DIR/.env" 2>/dev/null; set +a
+if [[ -f "$STACK_DIR/.env" ]]; then
+  set +e
+  set -a
+  source "$STACK_DIR/.env" 2>/dev/null
+  env_source_rc=$?
+  set +a
+  set -e
+  if [[ $env_source_rc -ne 0 ]]; then
+    echo "Warning: could not fully parse $STACK_DIR/.env after write_edge_env."
+  fi
+fi
 
 check_prereqs
 ensure_diy_bacnet_sibling
