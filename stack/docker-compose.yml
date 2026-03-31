@@ -49,7 +49,7 @@ services:
 
   # BACnet scraper — reads points via RPC, writes to TimescaleDB.
   # Single gateway: OFDD_BACNET_SERVER_URL + OFDD_BACNET_SITE_ID (site tag for central DB).
-  # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id, config_csv}.
+  # Multi-gateway (central aggregator): set OFDD_BACNET_GATEWAYS to JSON array of {url, site_id} (KG drives object list).
   # Central-only (no local BACnet): omit bacnet-server and bacnet-scraper; remote gateways push via OFDD_DB_DSN + OFDD_BACNET_SITE_ID.
   # When OFDD_API_KEY is set, the scraper calls GET /config (CRUD API) so scrape interval comes from the data model / Config UI; otherwise it uses OFDD_BACNET_SCRAPE_INTERVAL_MIN env.
   bacnet-scraper:
@@ -66,6 +66,8 @@ services:
       # 1 = every minute (for tests); override via stack/.env or Config UI (scraper reads GET /config when OFDD_API_KEY set)
       OFDD_BACNET_SCRAPE_INTERVAL_MIN: "${OFDD_BACNET_SCRAPE_INTERVAL_MIN:-5}"
       OFDD_BACNET_SITE_ID: "default"
+      # Optional JSON array of {url, site_id} for central multi-gateway (see compose comments above).
+      OFDD_BACNET_GATEWAYS: "${OFDD_BACNET_GATEWAYS:-}"
       # Use service name 'api' so DNS resolves to current API container after restarts.
       OFDD_API_URL: http://api:8000
       OFDD_API_KEY: ${OFDD_API_KEY:-}

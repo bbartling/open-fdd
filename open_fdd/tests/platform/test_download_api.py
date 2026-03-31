@@ -1,5 +1,6 @@
 """Unit tests for download API."""
 
+from datetime import date
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -192,6 +193,60 @@ def test_download_faults_404_site_not_found():
     assert r.status_code == 404
     msg = (r.json().get("error") or {}).get("message", "") or r.json().get("detail", "")
     assert "No site found" in msg
+
+
+def test_download_faults_site_filter_matches_uuid_or_stored_name():
+    """
+    Regression: clients (e.g. OpenClaw bench) pass GET /sites UUID while fault_results
+    may store site_id as the display name. The WHERE clause must use the same dual-key
+    pattern as analytics, not bare site_id = %s.
+    """
+    site_uuid = uuid4()
+    uuid_str = str(site_uuid)
+    rows = [
+        {
+            "ts": "2024-01-15 10:00:00",
+            "site_id": "TestBenchSite",
+            "equipment_id": "ahu-1",
+            "fault_id": "flatline_flag",
+            "flag_value": 1,
+            "evidence": None,
+        },
+    ]
+    execute_calls: list[tuple[str, tuple | list | None]] = []
+
+    def capture_execute(query, params=None):
+        execute_calls.append((query, params))
+
+    cursor = MagicMock()
+    cursor.execute = MagicMock(side_effect=capture_execute)
+    cursor.fetchall.return_value = rows
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+
+    with (
+        patch(
+            "open_fdd.platform.api.download.resolve_site_uuid", return_value=site_uuid
+        ),
+        patch("open_fdd.platform.api.download.get_conn", side_effect=lambda: conn),
+    ):
+        r = client.get(
+            f"/download/faults?site_id={uuid_str}"
+            "&start_date=2024-01-01&end_date=2024-01-31&format=json"
+        )
+
+    assert r.status_code == 200
+    assert r.json()["count"] == 1
+    assert len(execute_calls) == 1
+    q, params = execute_calls[0]
+    assert "site_id = %s OR site_id IN (SELECT name FROM sites WHERE id::text = %s)" in q
+    assert params is not None
+    # date range, then the same site key twice for (direct match OR subquery match)
+    assert list(params)[0:2] == [date(2024, 1, 1), date(2024, 1, 31)]
+    assert list(params)[2] == uuid_str and list(params)[3] == uuid_str
 
 
 def test_download_faults_200_csv():

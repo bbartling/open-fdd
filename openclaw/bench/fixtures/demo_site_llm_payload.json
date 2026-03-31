@@ -2,8 +2,8 @@
   "points": [
     {
       "point_id": null,
-      "bacnet_device_id": "34567",
-      "object_identifier": "analog-value,1",
+      "bacnet_device_id": null,
+      "object_identifier": null,
       "object_name": "web-weather-drybulb-temp",
       "site_id": null,
       "site_name": null,
@@ -14,12 +14,12 @@
       "brick_type": "Outside_Air_Temperature_Sensor",
       "rule_input": "oat",
       "unit": "degF",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
-      "bacnet_device_id": "34567",
-      "object_identifier": "analog-value,2",
+      "bacnet_device_id": null,
+      "object_identifier": null,
       "object_name": "web-weather-dewpoint-temp",
       "site_id": null,
       "site_name": null,
@@ -30,12 +30,12 @@
       "brick_type": "Outside_Air_Dewpoint_Sensor",
       "rule_input": "dewpoint",
       "unit": "degF",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
-      "bacnet_device_id": "34567",
-      "object_identifier": "analog-value,3",
+      "bacnet_device_id": null,
+      "object_identifier": null,
       "object_name": "web-weather-relative-humidity",
       "site_id": null,
       "site_name": null,
@@ -46,12 +46,12 @@
       "brick_type": "Outside_Air_Humidity_Sensor",
       "rule_input": "humidity",
       "unit": "%",
-      "polling": true
+      "polling": false
     },
     {
       "point_id": null,
-      "bacnet_device_id": "34567",
-      "object_identifier": "binary-value,1",
+      "bacnet_device_id": null,
+      "object_identifier": null,
       "object_name": "web-weather-fetch-ok",
       "site_id": null,
       "site_name": null,
@@ -66,8 +66,8 @@
     },
     {
       "point_id": null,
-      "bacnet_device_id": "34567",
-      "object_identifier": "network-port,1",
+      "bacnet_device_id": null,
+      "object_identifier": null,
       "object_name": "NetworkPort-1",
       "site_id": null,
       "site_name": null,

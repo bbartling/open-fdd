@@ -138,8 +138,8 @@ export function DataModelEngineeringPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Engineering</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Preserve Brick operations while adding engineering metadata and ASHRAE Standard 223 (`s223`) topology that stays
-        exportable for LLM workflows and queryable via SPARQL.
+        Preserve Brick operations while adding engineering metadata and a partial ASHRAE Standard 223 (`s223`) topology
+        representation that stays exportable for LLM workflows and queryable via SPARQL.
       </p>
 
       <Card>
@@ -325,7 +325,9 @@ function EngineeringEditor({
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Use JSON for connection points/connections/mediums (ASHRAE Standard 223 / `s223` concepts: Duct/Pipe/Wire, hasConnectionPoint, connectsFrom/connectsTo).
+            Use JSON for connection points/connections/mediums (ASHRAE Standard 223 / `s223` concepts: Duct/Pipe/Wire,
+            `hasConnectionPoint`). Current endpoint linkage is stored as Open-FDD string refs (`ofdd:connectsFromRef`,
+            `ofdd:connectsToRef`) rather than full RDF object links via `s223:connectsFrom/connectsTo`.
           </p>
           <textarea
             value={topologyJson}
@@ -344,6 +346,7 @@ function EngineeringEditor({
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>- `ofdd:*` extension predicates are emitted for key engineering fields.</p>
           <p>- `s223:*` triples are emitted for topology connection points and conduits.</p>
+          <p>- Connection endpoints currently serialize as `ofdd:connectsFromRef` / `ofdd:connectsToRef` string references.</p>
           <p>- Query in Data Model Testing for `ofdd:controlVendor`, `ofdd:designCFM`, `s223:hasConnectionPoint`.</p>
           <textarea
             value={extensionsJson}
