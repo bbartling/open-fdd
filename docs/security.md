@@ -30,6 +30,18 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 Configure Phase 1 app login with **`./scripts/bootstrap.sh --user NAME`** and a **secret password source** (`--password-file`, `--password-stdin`, **`OFDD_APP_PASSWORD`**, or interactive prompt — see `bootstrap.sh --help`). **`--no-auth`** removes **`OFDD_API_KEY`** and Phase 1 app keys from `stack/.env` as applicable.
 
+**Examples (password not on the argv):**
+
+```bash
+# Set or rotate dashboard user + hash + JWT secret in stack/.env, then start/restart stack as usual:
+printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user ops --password-stdin
+
+# Same pattern on a full maintenance run (pull, rebuild, verify, tests, fresh frontend node_modules):
+printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --user ops --password-stdin --frontend
+```
+
+After **`OFDD_JWT_SECRET`** or the app user changes, sign in again in the browser so tokens match the new secret; use **Sign out** (or `/logout`) if the UI still holds an old session.
+
 **`VITE_API_BASE`:** In Docker Compose the frontend defaults to **`/api`** so same-origin requests work behind Caddy. Override with a full URL (e.g. `http://api-host:8000`) only if you deploy without path-based routing; see the [README](../README.md#platform-deployment-docker) note.
 
 Older docs referred to baking **`VITE_OFDD_API_KEY`** into the frontend at build time; the supported operator path is now **login + JWT** (or unauthenticated local dev with auth disabled). A static API key in the bundle is discouraged for production.

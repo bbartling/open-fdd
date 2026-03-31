@@ -25,7 +25,7 @@
 #
 # Frontend serving mode:
 #   Stack frontend runs a production build (npm run build + static serve), not Vite dev/HMR.
-#   Re-run bootstrap or --build frontend after UI changes so the built bundle is refreshed.
+#   Each frontend container start runs npm run build (dist is on the bind-mounted repo).
 #
 # Site maintenance (pull both repos, prune, rebuild, verify):
 #   ./scripts/bootstrap.sh --maintenance --update --verify
@@ -34,8 +34,8 @@
 #   rebuilds images even when git HEAD did not change.
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
-#
-# printf '%s' 'secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin
+# Same, plus Phase-1 app user from stdin and frontend node_modules volume reset (fresh npm ci on next up):
+#   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test

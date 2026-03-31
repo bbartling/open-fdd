@@ -294,7 +294,9 @@ services:
       - |
           set -eu
           if [ -z "$$(ls -A node_modules 2>/dev/null)" ]; then npm ci; fi
-          if [ -z "$$(ls -A dist 2>/dev/null)" ]; then npm run build; fi
+          # Always rebuild: dist lives on the bind-mounted host ../frontend; an existing dist
+          # would skip npm run build forever, so UI changes (and VITE_* env) never shipped.
+          npm run build
           npx --yes serve -s dist -l 5173
     ports:
       - "5173:5173"

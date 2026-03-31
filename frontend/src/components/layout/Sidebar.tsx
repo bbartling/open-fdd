@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useSearchParams } from "react-router-dom";
 import {
   LayoutDashboard,
   Settings,
@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   ChevronUp,
+  LogOut,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCapabilities, useHealth } from "@/hooks/use-fdd-status";
@@ -113,6 +114,16 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="border-t border-border/60 px-3 py-2">
+        <Link
+          to="/logout"
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted/40 hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          <span>Sign out</span>
+        </Link>
+      </div>
 
       {/* Theme selector */}
       <div className="border-t border-border/60 px-5 py-3">

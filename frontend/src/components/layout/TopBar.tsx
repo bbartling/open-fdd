@@ -1,4 +1,5 @@
-import { Sun, Moon, Cloud } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Sun, Moon, Cloud, LogOut } from "lucide-react";
 import { SiteSelector } from "./SiteSelector";
 import { useFddStatus } from "@/hooks/use-fdd-status";
 import { useConfig } from "@/hooks/use-config";
@@ -75,6 +76,14 @@ export function TopBar() {
             </span>
           </TutorialPopover>
         )}
+        <Link
+          to="/logout"
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="Sign out and return to the login page"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Sign out</span>
+        </Link>
         <TutorialPopover
           title={isDark ? "Light mode" : "Dark mode"}
           meaning="Toggle between light and dark theme for the UI. Your preference is stored in the browser."

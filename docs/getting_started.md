@@ -108,7 +108,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--test` | Run tests and exit. With explicit `--mode`, runs that mode only. Without explicit `--mode` (default full), runs matrix: `collector`, `model`, `engine`, `full`. |
 | `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mcp-rag`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
 | `--build-all` | Rebuild and restart all services; then exit. |
-| `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm install`. Use after changing `frontend/package.json`. |
+| `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm ci`. Use after changing `frontend/package.json`; the frontend service also runs `npm run build` on every start. |
 | `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |
 | `--maintenance` | Safe Docker prune only (no volume prune). |
 | `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. DB and other data retained. |
@@ -121,8 +121,11 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--no-auth` | Remove/disable stack auth keys in `stack/.env` (`OFDD_API_KEY` and Phase 1 app-user keys); API will not require Bearer/JWT auth. |
 | `--user NAME` | Phase 1 dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `stack/.env` (requires a password — next rows). |
 | `--password-file PATH` | Read the Phase 1 password from a file (first line); avoids putting the password on the command line. |
-| `--password-stdin` | Read the Phase 1 password from stdin (pipe or redirect into bootstrap; see `bootstrap.sh --help` example comment). |
+| `--password-stdin` | Read the Phase 1 password from stdin (pipe or redirect into bootstrap; see [Security — Phase 1 examples](security#frontend-and-api-authentication-phase-1) and `bootstrap.sh` header comments). |
 | *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the Phase 1 password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
+
+Dashboard login and piping passwords into `--user` are covered in more detail (including maintenance one-liners) under **[Security — Phase 1](security#frontend-and-api-authentication-phase-1)**.
+
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 
 ---

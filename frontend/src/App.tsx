@@ -54,8 +54,11 @@ function LoginPage() {
 
   return (
     <div className="mx-auto mt-20 w-full max-w-sm rounded-lg border border-border bg-card p-6">
-      <h1 className="mb-4 text-xl font-semibold">Open-FDD Login</h1>
-      <form onSubmit={submit} className="space-y-3">
+      <h1 className="text-xl font-semibold">Open-FDD</h1>
+      <p className="mb-4 mt-1 text-sm text-muted-foreground">
+        Sign in with your app user (same username/password as configured for the API).
+      </p>
+      <form onSubmit={submit} className="space-y-3" aria-label="Sign in">
         <input
           className="h-9 w-full rounded border border-border/60 bg-background px-3 text-sm"
           value={username}
@@ -142,7 +145,11 @@ function LogoutPage() {
       window.location.assign("/login");
     });
   }, []);
-  return null;
+  return (
+    <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+      Signing out…
+    </div>
+  );
 }
 
 function App() {

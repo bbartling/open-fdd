@@ -5,6 +5,16 @@ import {
 } from "@/lib/auth";
 
 let refreshPromise: Promise<string | null> | null = null;
+/** Avoid dozens of parallel 403s each scheduling a full page navigation. */
+let loginRedirectScheduled = false;
+
+function scheduleLoginRedirect(): void {
+  if (typeof window === "undefined" || loginRedirectScheduled) return;
+  const path = window.location.pathname;
+  if (path === "/login" || path === "/logout") return;
+  loginRedirectScheduled = true;
+  window.location.assign("/login");
+}
 const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(
   /\/$/,
   "",
@@ -234,6 +244,9 @@ async function fetchWithAuthRetry(run: () => Promise<Response>): Promise<Respons
   }
   const refreshed = await refreshAccessToken();
   if (!refreshed) {
+    // Refresh failed (e.g. API restarted → in-memory refresh store empty). Tokens were cleared;
+    // force navigation so we are not stuck inside RequireAuth with a blank shell of errors.
+    scheduleLoginRedirect();
     return response;
   }
   response = await run();
