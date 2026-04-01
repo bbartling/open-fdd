@@ -51,8 +51,16 @@ def test_bacnet_read_property_proxy(mock_post, monkeypatch):
     }
 
 
-def test_bacnet_read_property_rejects_non_allowlisted_url():
+@patch("open_fdd.platform.api.bacnet._get_gateways_list")
+def test_bacnet_read_property_rejects_non_allowlisted_url(mock_gateways):
     """Caller-supplied gateway URL must match configured gateways (no bearer exfiltration)."""
+    mock_gateways.return_value = [
+        {
+            "id": "default",
+            "url": "http://127.0.0.1:18080",
+            "description": "test default",
+        },
+    ]
     r = client.post(
         "/bacnet/read_property",
         json={

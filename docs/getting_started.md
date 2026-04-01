@@ -36,7 +36,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
    That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
 
-   - **API:** http://localhost:8000 (interactive `/docs` disabled; use the React app and [API reference](appendix/api_reference)).  
+   - **API:** http://localhost:8000 (interactive OpenAPI/Swagger at `/docs` is **disabled** in the shipped API; use the React app and [API reference](appendix/api_reference)).  
    - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
    - **DB:** `127.0.0.1:5432`/openfdd (postgres/postgres) — bound to loopback only; not exposed on the LAN.  
 
@@ -66,7 +66,7 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 
 ## Prerequisites
 
-- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test **x86_64**; and the project has been tested successful on ARM with a **ARM64** (e.g. Raspberry Pi 4/5) has been reported working with Docker—expect to validate image availability and sizing (RAM/CPU) yourself. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
+- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test on **x86_64** (e.g. Ubuntu Server). Community reports indicate **ARM64** (e.g. Raspberry Pi 4/5) can work with Docker, but you must validate image availability and resource sizing (RAM/CPU) for your environment. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
@@ -92,12 +92,15 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
 
 
-**Full stack (default):** 
-* TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop,  **CADDY** reverse proxy with self signed certs on TLS run:
+**Default full stack:** `./scripts/bootstrap.sh` (no flags) starts TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop, and **Caddy** reverse proxy (HTTP on `:80` unless you add TLS flags below). Same service set as the optional one-liner in [Do this to bootstrap](#do-this-to-bootstrap).
+
+**Full stack with self-signed Caddy TLS:** `./scripts/bootstrap.sh --caddy-self-signed` — same services with Caddy using **self-signed** certificates for HTTPS (browser warning until you trust the cert). 
+
+**Non-default invocation (self-signed TLS + Phase‑1 dashboard login):**
+
 ```bash
 printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
 ```
-
 
 **Bootstrap options:** Run `./scripts/bootstrap.sh --help` for the full list. Summary:
 
@@ -160,6 +163,6 @@ To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `.
 - **[How-to Guides](howto/index)** — Grafana dashboards (optional) and SQL cookbook.
 - **[Configuration](configuration)** — Platform config, rule YAML, services that read config from the API.
 - **[Security & Caddy](security)** — Basic auth, throttling, TLS.
-- **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance; Swagger at http://localhost:8000/docs.
+- **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance. Interactive Swagger/OpenAPI (`/docs`) is **disabled** in the default API build; use the React app, this appendix, or export OpenAPI from a dev configuration if you need a schema browser.
 
 For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.

@@ -268,6 +268,48 @@ def test_data_model_sparql_returns_bindings():
         assert "s" in data["bindings"][0]
 
 
+def test_data_model_import_update_by_point_id_applies_equipment_name():
+    """LLM-tagged export rows have point_id; equipment_name must still create/link equipment."""
+    site_id = uuid4()
+    point_id = uuid4()
+    vav_equipment_id = str(uuid4())
+    cursor = MagicMock()
+    cursor.rowcount = 1
+    cursor.execute.return_value = None
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=None)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=None)
+    cursor.fetchall.return_value = [{"id": site_id}]
+    body = {
+        "points": [
+            {
+                "point_id": str(point_id),
+                "site_id": str(site_id),
+                "equipment_name": "VAV-1",
+            }
+        ]
+    }
+    with (
+        patch("open_fdd.platform.api.data_model.get_conn", side_effect=lambda: conn),
+        patch(
+            "open_fdd.platform.api.data_model._ensure_equipment",
+            return_value=vav_equipment_id,
+        ) as mock_ensure,
+        patch("open_fdd.platform.api.data_model.sync_ttl_to_file"),
+    ):
+        r = client.put("/data-model/import", json=body)
+    assert r.status_code == 200
+    mock_ensure.assert_called_once()
+    update_sqls = [
+        c.args[0]
+        for c in cursor.execute.call_args_list
+        if c.args and isinstance(c.args[0], str) and "UPDATE points SET" in c.args[0]
+    ]
+    assert any("equipment_id = %s" in s for s in update_sqls)
+
+
 def test_data_model_import_updates_points():
     cursor = MagicMock()
     cursor.rowcount = 1

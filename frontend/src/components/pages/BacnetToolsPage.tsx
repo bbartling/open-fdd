@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Network, Loader2, Wrench, Plus, Trash2 } from "lucide-react";
@@ -89,9 +89,23 @@ export function BacnetToolsPage() {
   const [paObj, setPaObj] = useState("analog-output,1");
   const [paRes, setPaRes] = useState<BacnetProxyResult | null>(null);
 
+  /** Gateway id that produced each result — hide stale panes when the select changes (no setState-in-effect). */
+  const [readResGateway, setReadResGateway] = useState<string | null>(null);
+  const [rmResGateway, setRmResGateway] = useState<string | null>(null);
+  const [wResGateway, setWResGateway] = useState<string | null>(null);
+  const [supResGateway, setSupResGateway] = useState<string | null>(null);
+  const [paResGateway, setPaResGateway] = useState<string | null>(null);
+
+  const readMutationGwRef = useRef("");
+  const rmMutationGwRef = useRef("");
+  const wMutationGwRef = useRef("");
+  const supMutationGwRef = useRef("");
+  const paMutationGwRef = useRef("");
+
   const readMut = useMutation({
-    mutationFn: () =>
-      bacnetReadProperty(
+    mutationFn: () => {
+      readMutationGwRef.current = gateway;
+      return bacnetReadProperty(
         {
           request: {
             device_instance: readDev,
@@ -100,15 +114,25 @@ export function BacnetToolsPage() {
           },
         },
         gateway,
-      ),
-    onMutate: () => setReadRes(null),
-    onSuccess: (d) => setReadRes(d as BacnetProxyResult),
-    onError: (e: Error) =>
-      setReadRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+      );
+    },
+    onMutate: () => {
+      setReadRes(null);
+      setReadResGateway(null);
+    },
+    onSuccess: (d) => {
+      setReadRes(d as BacnetProxyResult);
+      setReadResGateway(readMutationGwRef.current);
+    },
+    onError: (e: Error) => {
+      setReadRes({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setReadResGateway(readMutationGwRef.current);
+    },
   });
 
   const rmMut = useMutation({
     mutationFn: () => {
+      rmMutationGwRef.current = gateway;
       const requests = rmRows
         .map((r) => ({
           object_identifier: r.object_identifier.trim(),
@@ -120,14 +144,23 @@ export function BacnetToolsPage() {
       }
       return bacnetReadMultiple({ request: { device_instance: rmDev, requests } }, gateway);
     },
-    onMutate: () => setRmRes(null),
-    onSuccess: (d) => setRmRes(d as BacnetProxyResult),
-    onError: (e: Error) =>
-      setRmRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+    onMutate: () => {
+      setRmRes(null);
+      setRmResGateway(null);
+    },
+    onSuccess: (d) => {
+      setRmRes(d as BacnetProxyResult);
+      setRmResGateway(rmMutationGwRef.current);
+    },
+    onError: (e: Error) => {
+      setRmRes({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setRmResGateway(rmMutationGwRef.current);
+    },
   });
 
   const writeMut = useMutation({
     mutationFn: () => {
+      wMutationGwRef.current = gateway;
       const pr = Number(wPri);
       if (!Number.isFinite(pr) || pr < 1 || pr > 16) {
         return Promise.reject(new Error("Priority must be 1–16 for every write or release."));
@@ -159,24 +192,43 @@ export function BacnetToolsPage() {
         gateway,
       );
     },
-    onMutate: () => setWRes(null),
-    onSuccess: (d) => setWRes(d as BacnetProxyResult),
-    onError: (e: Error) =>
-      setWRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+    onMutate: () => {
+      setWRes(null);
+      setWResGateway(null);
+    },
+    onSuccess: (d) => {
+      setWRes(d as BacnetProxyResult);
+      setWResGateway(wMutationGwRef.current);
+    },
+    onError: (e: Error) => {
+      setWRes({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setWResGateway(wMutationGwRef.current);
+    },
   });
 
   const supMut = useMutation({
-    mutationFn: () =>
-      bacnetSupervisoryLogicChecks({ instance: { device_instance: supDev } }, gateway),
-    onMutate: () => setSupRes(null),
-    onSuccess: (d) => setSupRes(d as BacnetProxyResult),
-    onError: (e: Error) =>
-      setSupRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+    mutationFn: () => {
+      supMutationGwRef.current = gateway;
+      return bacnetSupervisoryLogicChecks({ instance: { device_instance: supDev } }, gateway);
+    },
+    onMutate: () => {
+      setSupRes(null);
+      setSupResGateway(null);
+    },
+    onSuccess: (d) => {
+      setSupRes(d as BacnetProxyResult);
+      setSupResGateway(supMutationGwRef.current);
+    },
+    onError: (e: Error) => {
+      setSupRes({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setSupResGateway(supMutationGwRef.current);
+    },
   });
 
   const paMut = useMutation({
-    mutationFn: () =>
-      bacnetReadPointPriorityArray(
+    mutationFn: () => {
+      paMutationGwRef.current = gateway;
+      return bacnetReadPointPriorityArray(
         {
           request: {
             device_instance: paDev,
@@ -184,11 +236,20 @@ export function BacnetToolsPage() {
           },
         },
         gateway,
-      ),
-    onMutate: () => setPaRes(null),
-    onSuccess: (d) => setPaRes(d as BacnetProxyResult),
-    onError: (e: Error) =>
-      setPaRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
+      );
+    },
+    onMutate: () => {
+      setPaRes(null);
+      setPaResGateway(null);
+    },
+    onSuccess: (d) => {
+      setPaRes(d as BacnetProxyResult);
+      setPaResGateway(paMutationGwRef.current);
+    },
+    onError: (e: Error) => {
+      setPaRes({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      setPaResGateway(paMutationGwRef.current);
+    },
   });
 
   return (
@@ -268,7 +329,10 @@ export function BacnetToolsPage() {
               Run
             </button>
           </div>
-          <BacnetProxyResultView label="read_property" data={readRes} />
+          <BacnetProxyResultView
+            label="read_property"
+            data={readResGateway === gateway ? readRes : null}
+          />
         </CardContent>
       </Card>
 
@@ -378,7 +442,10 @@ export function BacnetToolsPage() {
             </div>
           </div>
 
-          <BacnetProxyResultView label="read_multiple" data={rmRes} />
+          <BacnetProxyResultView
+            label="read_multiple"
+            data={rmResGateway === gateway ? rmRes : null}
+          />
         </CardContent>
       </Card>
 
@@ -476,7 +543,10 @@ export function BacnetToolsPage() {
             {writeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Run
           </button>
-          <BacnetProxyResultView label="write_property" data={wRes} />
+          <BacnetProxyResultView
+            label="write_property"
+            data={wResGateway === gateway ? wRes : null}
+          />
         </CardContent>
       </Card>
 
@@ -512,7 +582,10 @@ export function BacnetToolsPage() {
               Run
             </button>
           </div>
-          <BacnetProxyResultView label="supervisory_logic_checks" data={supRes} />
+          <BacnetProxyResultView
+            label="supervisory_logic_checks"
+            data={supResGateway === gateway ? supRes : null}
+          />
         </CardContent>
       </Card>
 
@@ -557,7 +630,10 @@ export function BacnetToolsPage() {
               Run
             </button>
           </div>
-          <BacnetProxyResultView label="read_point_priority_array" data={paRes} />
+          <BacnetProxyResultView
+            label="read_point_priority_array"
+            data={paResGateway === gateway ? paRes : null}
+          />
         </CardContent>
       </Card>
     </div>

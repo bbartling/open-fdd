@@ -310,6 +310,18 @@ def _bacnet_url(body: dict, override_url: str | None = None) -> str:
     return url
 
 
+def _bacnet_proxy_url_or_error(
+    body: dict, gateway: str | None
+) -> tuple[str | None, str | None]:
+    """Resolve URL for BACnet proxy routes. If ``gateway`` is a non-empty unknown id, return (None, error)."""
+    resolved = _resolve_gateway_url(gateway)
+    if gateway is not None:
+        gid = str(gateway).strip()
+        if gid and resolved is None:
+            return None, "Unknown gateway id"
+    return _bacnet_url(body, override_url=resolved), None
+
+
 def _normalized_gateway_allowlist() -> frozenset[str]:
     """URLs that may receive OFDD_BACNET_SERVER_API_KEY (from GET /bacnet/gateways)."""
     return frozenset(
@@ -431,7 +443,9 @@ def bacnet_whois_range(
     Use **gateway** dropdown or GET /bacnet/gateways to pick a configured gateway. Omit url in body to use config.
     """
     params = _body_to_dict(body)
-    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -458,7 +472,9 @@ def bacnet_point_discovery(
     Use **gateway** dropdown or omit to use config default.
     """
     params = _body_to_dict(body)
-    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -486,7 +502,9 @@ def bacnet_point_discovery_to_graph(
     BACnet RDF is visible at GET /data-model/ttl. Use **gateway** dropdown or omit to use config default.
     """
     params = _body_to_dict(body)
-    url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -542,7 +560,9 @@ def bacnet_read_property(
 ):
     """Operator/BACnet Tools UI: read present-value (or any property) via the gateway; no diy Swagger required."""
     params_d = body.model_dump(exclude_none=True)
-    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params_d, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -562,7 +582,9 @@ def bacnet_read_multiple(
     ),
 ):
     params_d = body.model_dump(exclude_none=True)
-    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params_d, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -586,7 +608,9 @@ def bacnet_write_property(
 ):
     """Write present-value or release at priority (value null or string 'null' per gateway)."""
     params_d = body.model_dump(exclude_none=True)
-    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params_d, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -610,7 +634,9 @@ def bacnet_supervisory_logic_checks(
     ),
 ):
     params_d = body.model_dump(exclude_none=True)
-    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params_d, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -633,7 +659,9 @@ def bacnet_read_point_priority_array(
     ),
 ):
     params_d = body.model_dump(exclude_none=True)
-    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    url, gw_err = _bacnet_proxy_url_or_error(params_d, gateway)
+    if gw_err:
+        return {"ok": False, "error": gw_err}
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
     url = _require_allowlisted_gateway_url(url)
@@ -722,11 +750,36 @@ def bacnet_write_point(
             "audit": {"success": False, "reason": "point_not_bacnet_addressed"},
         }
 
-    url = _effective_bacnet_server_url()
-    if gateway:
-        u = _resolve_gateway_url(gateway)
-        if u:
-            url = u
+    resolved_gw = _resolve_gateway_url(gateway) if gateway is not None else None
+    if gateway is not None:
+        gid = str(gateway).strip()
+        if gid and resolved_gw is None:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO bacnet_write_audit (point_id, value, source, ts, success, reason)
+                        VALUES (%s, %s, %s, now(), false, %s)
+                        """,
+                        (
+                            str(body.point_id),
+                            body.value,
+                            body.source or "",
+                            "unknown_gateway_id",
+                        ),
+                    )
+                    conn.commit()
+            emit(
+                TOPIC_BACNET_WRITE + ".failed",
+                {"point_id": str(body.point_id), "reason": "unknown_gateway_id"},
+            )
+            return {
+                "ok": False,
+                "error": "Unknown gateway id",
+                "audit": {"success": False, "reason": "unknown_gateway_id"},
+            }
+
+    url = resolved_gw if resolved_gw else _effective_bacnet_server_url()
     if not url.startswith("http"):
         with get_conn() as conn:
             with conn.cursor() as cur:

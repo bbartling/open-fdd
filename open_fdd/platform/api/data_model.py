@@ -367,7 +367,7 @@ class PointImportRow(BaseModel):
     )
     equipment_name: str | None = Field(
         None,
-        description="Equipment name (e.g. AHU-1, VAV-1). When site_id is set and equipment_id is omitted, import creates this equipment under the site and assigns the point to it.",
+        description="Equipment name (e.g. AHU-1, VAV-1). When equipment_id is omitted, import finds or creates this equipment and assigns the point (on create and on update by point_id).",
     )
     equipment_type: str | None = Field(
         None,
@@ -815,6 +815,9 @@ def import_data_model(body: DataModelImportBody):
             for row in body.points:
                 if row.point_id:
                     # Update existing point
+                    point_uuid = _parse_uuid_or_400(
+                        row.point_id, "point_id", "from GET /data-model/export"
+                    )
                     updates, params = [], []
                     if row.site_id is not None:
                         updates.append("site_id = %s")
@@ -836,6 +839,54 @@ def import_data_model(body: DataModelImportBody):
                                 )
                             )
                         )
+                    elif row.equipment_name is not None:
+                        # Create/link equipment by name on update (same as create path). Without this,
+                        # export rows with point_id never run _ensure_equipment, so equipment[] feeds/fed_by
+                        # name resolution fails (e.g. VAV-1 not found when AHU lists feeds: VAV-1).
+                        _eq_name = (row.equipment_name or "").strip()
+                        if _eq_name:
+                            _eff_site = (
+                                row.site_id
+                                if (row.site_id and str(row.site_id).strip())
+                                else (inferred_payload_site_id or default_site_id_str)
+                            )
+                            if (
+                                not _eff_site
+                                and getattr(row, "site_name", None)
+                                and str(row.site_name).strip()
+                            ):
+                                _eff_site = _resolve_site_id_by_name(cur, row.site_name)
+                            if not _eff_site:
+                                cur.execute(
+                                    "SELECT site_id FROM points WHERE id = %s",
+                                    (str(point_uuid),),
+                                )
+                                _srow = cur.fetchone()
+                                if _srow:
+                                    _eff_site = str(_srow["site_id"])
+                            if not _eff_site:
+                                warnings.append(
+                                    {
+                                        "point_id": row.point_id,
+                                        "reason": "equipment_name set but site_id could not be resolved (include site_id, site_name, or a single site in the payload)",
+                                    }
+                                )
+                            else:
+                                _site_u = _parse_uuid_or_400(
+                                    _eff_site,
+                                    "site_id",
+                                    "from GET /sites",
+                                )
+                                _eq_t = (
+                                    (row.equipment_type or "Equipment").strip()
+                                    or "Equipment"
+                                )
+                                updates.append("equipment_id = %s")
+                                params.append(
+                                    _ensure_equipment(
+                                        cur, _site_u, _eq_name, _eq_t
+                                    )
+                                )
                     if row.external_id is not None:
                         updates.append("external_id = %s")
                         params.append(row.external_id)
@@ -856,9 +907,6 @@ def import_data_model(body: DataModelImportBody):
                         updates.append("polling = %s")
                         params.append(row.polling)
                     if updates:
-                        point_uuid = _parse_uuid_or_400(
-                            row.point_id, "point_id", "from GET /data-model/export"
-                        )
                         params.append(str(point_uuid))
                         cur.execute(
                             f"""UPDATE points SET {", ".join(updates)} WHERE id = %s""",
