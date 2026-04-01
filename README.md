@@ -26,7 +26,7 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 ## Quick Start — Open-FDD AFDD Platform Manually by the Human
 
-Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (maintainers primarily test Ubuntu Server and Linux Mint on **x86_64**; CI is x86_64). **ARM64** (e.g. Raspberry Pi 4/5) is not covered by CI but is used in the community—verify upstream images and allow enough RAM/CPU for Postgres + services. Windows is not supported.
+Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (maintainers primarily test Ubuntu Server and Linux Mint on **x86_64**; CI is x86_64). **ARM64** (e.g. Raspberry Pi 4/5) is not covered by CI but is used in the community—validate image availability and sizing (RAM/CPU) for Postgres + services. Windows is not supported.
 
 ### Engine-only (rules engine, no Docker)
 

@@ -98,9 +98,9 @@ The **committed** **`stack/caddy/Caddyfile`** already puts the **API and WebSock
 | **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
 | **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
 | **Grafana** | 3000 | **Optional** dashboards (`--with-grafana`); React frontend has equivalent views |
-| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); POST server_hello returns `mqtt_bridge` when BACnet2MQTT enabled |
+| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); optional BACnet2MQTT + experimental MQTT RPC gateway when env vars set ([MQTT how-to](howto/mqtt_integration)) |
 | **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
-| **Mosquitto (MQTT)** | 1883 | **Optional / experimental:** `./scripts/bootstrap.sh --with-mqtt-bridge` — broker for future BACnet2MQTT / remote collection (not required for core Open-FDD) |
+| **Mosquitto (MQTT)** | 1883 | **Optional / experimental:** `./scripts/bootstrap.sh --with-mqtt-bridge` — generic broker for BACnet2MQTT and/or MQTT RPC cmd/ack ([MQTT how-to](howto/mqtt_integration)) |
 
 ---
 

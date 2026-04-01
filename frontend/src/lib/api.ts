@@ -85,11 +85,15 @@ async function readErrorMessage(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
+/** Same-origin + refresh cookie: always send credentials (required for some browsers / proxy setups). */
+const cred: RequestCredentials = "include";
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithAuthRetry(() =>
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
+      credentials: cred,
     }),
   );
 
@@ -110,6 +114,7 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
+      credentials: cred,
     }),
   );
 
@@ -133,6 +138,7 @@ export async function apiStreamText(
       ...init,
       headers: buildHeaders(init?.headers),
       signal,
+      credentials: cred,
     }),
   );
 
@@ -167,6 +173,7 @@ export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Bl
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
+      credentials: cred,
     }),
   );
 
@@ -184,7 +191,7 @@ async function refreshAccessToken(): Promise<string | null> {
     try {
       const resp = await fetch(buildUrl("/auth/refresh"), {
         method: "POST",
-        credentials: "include",
+        credentials: cred,
       });
       if (!resp.ok) {
         clearAuthTokens();

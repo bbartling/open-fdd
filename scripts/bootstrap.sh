@@ -34,17 +34,16 @@
 #   rebuilds images even when git HEAD did not change.
 # Full maintenance + pytest + optional DIY server tests in container:
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
-# Same, plus Phase-1 app user from stdin and frontend node_modules volume reset (fresh npm ci on next up):
+# Heavy ops example (pull, rebuild, verify, tests, app user, frontend volume reset, self-signed Caddy):
+#   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend --caddy-self-signed
 #
-# Example Hack Goto:
-#   printf '%s' 'secret' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend --caddy-self-signed
+# Day 1 after git clone (full stack + self-signed HTTPS on Caddy; no tests, no --frontend, no git pull):
+#   ./scripts/bootstrap.sh --caddy-self-signed
+# Same with Phase-1 UI login (password on stdin):
+#   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
 #
-#
-#
-
-# Optional self-signed HTTPS on Caddy (regenerates cert, sets stack/.env for Caddyfile.selfsigned + OFDD_TRUST_FORWARDED_PROTO):
-#   ./scripts/bootstrap.sh --caddy-self-signed [--caddy-tls-cn my.lab.local]
-# Revert to plain HTTP entry on :80: ./scripts/bootstrap.sh --caddy-http-only
+# Optional hostname for cert CN/SAN: add --caddy-tls-cn my.machine.local
+# Revert Caddy to HTTP-only on :80: ./scripts/bootstrap.sh --caddy-http-only
 # Notes:
 # First MQTT enable: ./scripts/bootstrap.sh --with-mqtt-bridge   (then verify / test as needed)
 # Verify + tests	./scripts/bootstrap.sh --verify --test
@@ -216,7 +215,7 @@ Docker install:
 
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
-  --caddy-self-signed       Self-signed TLS for Caddy (:443, :80→HTTPS); writes certs under stack/caddy/certs/ and stack/.env (OPENFDD_CADDYFILE, OFDD_TRUST_FORWARDED_PROTO=true)
+  --caddy-self-signed       Self-signed TLS for Caddy (:443, :80→HTTPS); writes certs; stack/.env: OPENFDD_CADDYFILE, OFDD_TRUST_FORWARDED_PROTO=true, BACNET_SWAGGER_SERVERS_URL=/bacnet (HTTPS gateway UI at https://HOST/bacnet/docs)
   --caddy-tls-cn HOST       With --caddy-self-signed: certificate CN/SAN (default: openfdd.local)
   --caddy-http-only         Turn off self-signed Caddy mode (default HTTP Caddyfile on :80 only; OFDD_TRUST_FORWARDED_PROTO=false)
   --user NAME               Configure Phase-1 app login user (writes hash config into stack/.env).
@@ -421,6 +420,27 @@ write_edge_env() {
         echo ""
       fi
     fi
+    # diy-bacnet-server RPC Bearer (BACNET_RPC_API_KEY in compose); Open-FDD uses this on outbound RPC.
+    if ! grep -qE '^OFDD_BACNET_SERVER_API_KEY=.+' "$env_file" 2>/dev/null; then
+      local bac_key=""
+      if have_cmd openssl; then
+        bac_key=$(openssl rand -hex 32 2>/dev/null)
+      fi
+      if [[ -z "$bac_key" ]] && have_cmd python3; then
+        bac_key=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)
+      fi
+      if [[ -n "$bac_key" ]]; then
+        if grep -q "^OFDD_BACNET_SERVER_API_KEY=" "$env_file" 2>/dev/null; then
+          sed "${sed_i[@]}" "s|^OFDD_BACNET_SERVER_API_KEY=.*|OFDD_BACNET_SERVER_API_KEY=${bac_key}|" "$env_file"
+        else
+          echo "OFDD_BACNET_SERVER_API_KEY=${bac_key}" >> "$env_file"
+        fi
+        echo ""
+        echo "Generated OFDD_BACNET_SERVER_API_KEY=${bac_key}"
+        echo "diy-bacnet-server expects this as Bearer (BACNET_RPC_API_KEY in compose). Gateway Swagger: Authorize → paste this token."
+        echo ""
+      fi
+    fi
   fi
 
   # BACnet2MQTT: append defaults when --with-mqtt-bridge and keys not already in stack/.env
@@ -447,7 +467,7 @@ write_auth_env_if_requested() {
     else
       sed_i=(-i "")
     fi
-    for key in OFDD_APP_USER OFDD_APP_USER_HASH OFDD_JWT_SECRET OFDD_ACCESS_TOKEN_MINUTES OFDD_REFRESH_TOKEN_DAYS OFDD_API_KEY; do
+    for key in OFDD_APP_USER OFDD_APP_USER_HASH OFDD_JWT_SECRET OFDD_ACCESS_TOKEN_MINUTES OFDD_REFRESH_TOKEN_DAYS OFDD_API_KEY OFDD_BACNET_SERVER_API_KEY; do
       sed "${sed_i[@]}" "/^${key}=/d" "$auth_file" 2>/dev/null || true
     done
     return 0
@@ -563,8 +583,9 @@ disable_caddy_self_signed_config() {
     sed_i=(-i "")
   fi
   sed "${sed_i[@]}" "/^OPENFDD_CADDYFILE=/d" "$env_file" 2>/dev/null || true
+  sed "${sed_i[@]}" "/^BACNET_SWAGGER_SERVERS_URL=/d" "$env_file" 2>/dev/null || true
   env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "false"
-  echo "Caddy: reverted to default HTTP-only entry (removed OPENFDD_CADDYFILE; OFDD_TRUST_FORWARDED_PROTO=false)."
+  echo "Caddy: reverted to default HTTP-only entry (removed OPENFDD_CADDYFILE; OFDD_TRUST_FORWARDED_PROTO=false; removed BACNET_SWAGGER_SERVERS_URL if present)."
 }
 
 ensure_caddy_self_signed_tls() {
@@ -595,9 +616,11 @@ ensure_caddy_self_signed_tls() {
   chmod 600 "$cert_dir/key.pem" 2>/dev/null || true
   env_file_set_kv "$env_file" "OPENFDD_CADDYFILE" "./caddy/Caddyfile.selfsigned"
   env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "true"
+  env_file_set_kv "$env_file" "BACNET_SWAGGER_SERVERS_URL" "/bacnet"
   chmod 600 "$env_file" 2>/dev/null || true
-  echo "stack/.env: OPENFDD_CADDYFILE=./caddy/Caddyfile.selfsigned, OFDD_TRUST_FORWARDED_PROTO=true"
+  echo "stack/.env: OPENFDD_CADDYFILE=./caddy/Caddyfile.selfsigned, OFDD_TRUST_FORWARDED_PROTO=true, BACNET_SWAGGER_SERVERS_URL=/bacnet"
   echo "Use https://localhost/ (browser warns). :80 redirects to HTTPS."
+  echo "diy-bacnet-server Swagger (TLS): https://localhost/bacnet/docs (still http://localhost:8080 on host for local tools)."
 }
 
 ensure_diy_bacnet_sibling() {
@@ -639,6 +662,116 @@ curl_retry() {
     try=$(( try + 1 ))
   done
   return 1
+}
+
+# When stack/.env selects Caddyfile.selfsigned: curl HTTPS edge (not raw :8000 / :8080).
+verify_tls_caddy_smoke() {
+  local base="https://127.0.0.1"
+  local tmp h code
+  tmp="$(mktemp)" || return 0
+  echo "=== TLS / Caddy edge smoke (curl -k) ==="
+  echo "UI must load via https://THIS_HOST/ so /api and /auth go through Caddy. http://HOST:5173 alone has no API proxy — login will fail."
+  echo ""
+
+  if curl -sk -o "$tmp" -w "%{http_code}" "$base/api/health" | grep -qx 200; then
+    if grep -q '"status"' "$tmp" 2>/dev/null; then
+      echo "OK   $base/api/health (Open-FDD API over TLS)"
+    else
+      echo "WARN $base/api/health returned 200 but not JSON health (unexpected body)"
+    fi
+  else
+    code="$(curl -sk -o "$tmp" -w "%{http_code}" "$base/api/health" || true)"
+    echo "FAIL $base/api/health (HTTP $code; need Caddy on 443 + api healthy)"
+  fi
+
+  code="$(curl -sk -o "$tmp" -w "%{http_code}" "$base/" || true)"
+  if [[ "$code" == "200" ]] && grep -qE '<div id="root"|</html>' "$tmp" 2>/dev/null; then
+    echo "OK   $base/ (frontend HTML over TLS)"
+  else
+    echo "FAIL $base/ (HTTP $code; expected HTML shell)"
+  fi
+
+  if curl -sk -o "$tmp" -w "%{http_code}" \
+    -X POST "$base/bacnet/server_hello" \
+    -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}' | grep -qx 200; then
+    if grep -q '"result"' "$tmp" 2>/dev/null; then
+      echo "OK   $base/bacnet/server_hello (diy-bacnet over TLS path /bacnet)"
+    else
+      echo "WARN $base/bacnet/server_hello — 200 but unexpected body"
+    fi
+  else
+    code="$(curl -sk -o "$tmp" -w "%{http_code}" \
+      -X POST "$base/bacnet/server_hello" \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}' || true)"
+    echo "FAIL $base/bacnet/server_hello (HTTP $code)"
+  fi
+
+  code="$(curl -sk -o "$tmp" -w "%{http_code}" -X POST "$base/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"username":"__bootstrap_probe__","password":"wrong"}' || true)"
+  if [[ "$code" == "401" ]] && grep -q 'UNAUTHORIZED\|"code"' "$tmp" 2>/dev/null; then
+    echo "OK   $base/api/auth/login wrong password → 401 (route reaches API through Caddy)"
+  elif [[ "$code" == "503" ]]; then
+    echo "WARN $base/api/auth/login → 503 (app user auth not configured? use --user / --password-stdin)"
+  else
+    echo "FAIL $base/api/auth/login (HTTP $code; expected 401 JSON for bad password — if HTML, you are not hitting the API via Caddy)"
+  fi
+
+  local api_key bacnet_key
+  api_key=""
+  bacnet_key=""
+  [[ -f "$STACK_DIR/.env" ]] && api_key="$(grep -E '^OFDD_API_KEY=' "$STACK_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '\r')" || true
+  [[ -f "$STACK_DIR/.env" ]] && bacnet_key="$(grep -E '^OFDD_BACNET_SERVER_API_KEY=' "$STACK_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '\r')" || true
+  api_key="${api_key#\"}"; api_key="${api_key%\"}"
+  bacnet_key="${bacnet_key#\"}"; bacnet_key="${bacnet_key%\"}"
+
+  if [[ -n "$api_key" ]]; then
+    code="$(curl -sk -o /dev/null -w "%{http_code}" "$base/api/sites" || true)"
+    if [[ "$code" == "401" ]]; then
+      echo "OK   GET $base/api/sites without Bearer → 401 (OFDD_API_KEY enforced on edge)"
+    else
+      echo "WARN GET $base/api/sites without Bearer → HTTP $code (expected 401 when OFDD_API_KEY set)"
+    fi
+    code="$(curl -sk -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $api_key" "$base/api/sites" || true)"
+    if [[ "$code" == "200" ]]; then
+      echo "OK   GET $base/api/sites with Bearer (machine API key) → 200"
+    else
+      echo "WARN GET $base/api/sites with Bearer → HTTP $code (expected 200)"
+    fi
+  else
+    echo "SKIP machine Bearer check (OFDD_API_KEY empty in stack/.env)"
+  fi
+
+  if [[ -n "$bacnet_key" ]]; then
+    code="$(curl -sk -o /dev/null -w "%{http_code}" -X POST "$base/bacnet/client_read_property" \
+      -H "Content-Type: application/json" -d '{}' || true)"
+    if [[ "$code" == "401" ]]; then
+      echo "OK   POST $base/bacnet/client_read_property without Bearer → 401 (BACNET_RPC_API_KEY enforced)"
+    else
+      echo "WARN POST .../client_read_property without Bearer → HTTP $code (expected 401 when key set)"
+    fi
+    code="$(curl -sk -o /dev/null -w "%{http_code}" -X POST "$base/bacnet/client_read_property" \
+      -H "Content-Type: application/json" -H "Authorization: Bearer $bacnet_key" -d '{}' || true)"
+    if [[ "$code" != "401" ]] && [[ "$code" != "403" ]]; then
+      echo "OK   POST .../client_read_property with Bearer → HTTP $code (auth accepted; 422/400 expected for empty body)"
+    else
+      echo "WARN POST .../client_read_property with Bearer → HTTP $code (expected not 401/403 when key matches)"
+    fi
+  else
+    echo "SKIP diy BACnet Bearer check (OFDD_BACNET_SERVER_API_KEY empty)"
+  fi
+
+  h="$(curl -skI "$base/api/health" | tr -d '\r' || true)"
+  if echo "$h" | grep -qi '^strict-transport-security:'; then
+    echo "OK   HSTS present on $base/api/health response"
+  else
+    echo "WARN No HSTS header on API response (Caddy may not add it on this path)"
+  fi
+
+  rm -f "$tmp"
+  echo ""
 }
 
 verify() {
@@ -712,6 +845,7 @@ verify() {
     else
       echo "Caddy: https://localhost/ not responding yet (stack still starting or port 443 blocked)"
     fi
+    verify_tls_caddy_smoke
   fi
   echo ""
 }
@@ -1387,6 +1521,9 @@ if [[ "$MODE" == "collector" ]]; then
 elif [[ "$MODE" == "model" ]]; then
   echo "  API:      http://localhost:8000   (docs: /docs)"
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
+  if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
+    echo "  Self-signed TLS: use https://localhost/ for the UI (not :5173 alone); API docs https://localhost/api/docs"
+  fi
   echo "  (Model mode: knowledge graph and CRUD workflows.)"
 elif [[ "$MODE" == "engine" ]]; then
   echo "  (Engine mode: FDD and weather loops with DB. No API/frontend by default.)"
@@ -1394,6 +1531,12 @@ else
   echo "  API:      http://localhost:8000   (docs: /docs)"
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
   echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
+  if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
+    echo ""
+    echo "  Self-signed TLS: open the app at https://localhost/ (or https://THIS_HOST/) — not :5173 alone."
+    echo "  API (TLS):    https://localhost/api/docs   | BACnet Swagger (TLS): https://localhost/bacnet/docs"
+    echo "  Direct ports remain HTTP for automation: :8000 API, :8080 gateway, :5173 static (no /api proxy)."
+  fi
   echo "  (Grafana not started by default. Use --with-grafana to include it.)"
 fi
 echo ""

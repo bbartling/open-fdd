@@ -28,20 +28,22 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./scripts/bootstrap.sh --mode engine
    ```
 
+   **Optional one-liner (HTTPS + login):** Piping your password on stdin lets bootstrap create a Phase 1 dashboard user, generate a self-signed certificate for Caddy (then use `https://localhost/`; the browser will warn until you trust the cert), set `stack/.env` for TLS-aware cookies on the API, and start the same full stack as a plain `./scripts/bootstrap.sh`.
+
+   ```bash
+   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
+   ```
+
    That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
 
    - **API:** http://localhost:8000/docs  
    - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
    - **BACnet Swagger:** http://localhost:8080/docs  
    - **DB:** `127.0.0.1:5432`/openfdd (postgres/postgres) — bound to loopback only; not exposed on the LAN.  
-   - **Grafana (optional):** not started by default. Run `./scripts/bootstrap.sh --with-grafana`, then http://localhost:3000 (admin/admin). The React UI covers timeseries, faults, and system resources for most workflows.
-   - **MQTT broker (optional, experimental):** not started by default. `./scripts/bootstrap.sh --with-mqtt-bridge` starts Mosquitto on port 1883 and wires **BACnet2MQTT** env for diy-bacnet-server. This path is **not required** for core Open-FDD; it is reserved for **future** remote collection / MQTT experiments. Open-FDD does **not** ship or require Home Assistant.
-
-3. **Optional:** Set `OFDD_*` in `stack/.env` before the first run to customize the seeded config (e.g. `OFDD_BACNET_SERVER_URL`, `OFDD_RULE_INTERVAL_HOURS`). See [Configuration](configuration).
 
 ---
 
-## External AI (OpenAI-compatible)
+## External Agentic AI (OpenAI-compatible)
 
 Open‑FDD does not embed an LLM. Instead, external AI agents (for example an OpenAI-compatible tool like Open‑Claw) can take advantage of Open‑FDD by calling its APIs:
 
@@ -65,7 +67,7 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 
 ## Prerequisites
 
-- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test **x86_64**; CI does not run on ARM. **ARM64** (e.g. Raspberry Pi 4/5) has been reported working with Docker—expect to validate image availability and sizing (RAM/CPU) yourself. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
+- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test **x86_64**; and the project has been tested successful on ARM with a **ARM64** (e.g. Raspberry Pi 4/5) has been reported working with Docker—expect to validate image availability and sizing (RAM/CPU) yourself. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
@@ -100,7 +102,7 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 |--------|--------|
 | *(none)* | Build and start full stack (DB, API, frontend, Caddy, BACnet server, scrapers, FDD loop). Prints API key if generated. Grafana and MQTT broker **not** started by default. |
 | `--with-grafana` | **Optional:** include Grafana at http://localhost:3000 (admin/admin). Add a `/grafana` route in Caddy when you extend the Caddyfile (see [Security](security)). |
-| `--with-mqtt-bridge` | **Optional / experimental:** start Mosquitto (`:1883`) and BACnet2MQTT-related env for diy-bacnet-server. For future remote/MQTT work—not required for core Open-FDD; not a Home Assistant integration. |
+| `--with-mqtt-bridge` | **Optional / experimental:** start Mosquitto (`:1883`) for a **generic** broker. Pass **`BACNET2MQTT_*`** / **`MQTT_RPC_*`** env through `stack/.env` to **diy-bacnet-server** for BACnet2MQTT and/or the experimental MQTT RPC gateway ([MQTT integration](howto/mqtt_integration)). |
 | `--with-mcp-rag` | **Optional:** include MCP RAG service at http://localhost:8090 (derived from canonical docs and generated docs text). |
 | `--mode MODE` | Module mode: `full` (default), `collector`, `model`, `engine`. |
 | `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
@@ -118,11 +120,24 @@ It does **not** purge or wipe the database on a normal run; only `--reset-grafan
 | `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
 | `--install-docker` | Attempt Docker install (Linux) then continue. |
 | `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
-| `--no-auth` | Remove/disable stack auth keys in `stack/.env` (`OFDD_API_KEY` and Phase 1 app-user keys); API will not require Bearer/JWT auth. |
+| `--caddy-self-signed` | Self-signed HTTPS for Caddy (`:443`, `:80` → HTTPS): writes certs under `stack/caddy/certs/`, sets `OPENFDD_CADDYFILE` and `OFDD_TRUST_FORWARDED_PROTO=true` in `stack/.env`. |
+| `--caddy-tls-cn HOST` | With `--caddy-self-signed`: certificate CN/SAN (default `openfdd.local`). |
+| `--caddy-http-only` | Revert to the default HTTP-only Caddyfile on `:80`; removes `OPENFDD_CADDYFILE` from `stack/.env` and sets `OFDD_TRUST_FORWARDED_PROTO=false`. |
+| `--no-auth` | Removes auth-related keys from `stack/.env`: **`OFDD_API_KEY`**, Phase 1 keys (**`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`**, token TTLs), and **`OFDD_BACNET_SERVER_API_KEY`**. Open-FDD API then skips Bearer/JWT enforcement; diy-bacnet-server gets an empty **`BACNET_RPC_API_KEY`** so RPC Bearer middleware is off. |
 | `--user NAME` | Phase 1 dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `stack/.env` (requires a password — next rows). |
 | `--password-file PATH` | Read the Phase 1 password from a file (first line); avoids putting the password on the command line. |
 | `--password-stdin` | Read the Phase 1 password from stdin (pipe or redirect into bootstrap; see [Security — Phase 1 examples](security#frontend-and-api-authentication-phase-1) and `bootstrap.sh` header comments). |
 | *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the Phase 1 password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
+
+**Bearer tokens and API keys (`stack/.env`):** With a normal bootstrap (no `--no-auth`), secrets live in **`stack/.env`** (gitignored). They are **not** the same token—each service uses the one that matches its role:
+
+| Variable | Consumed by | Role |
+|----------|-------------|------|
+| **`OFDD_API_KEY`** | **Open-FDD API** | Machine **`Authorization: Bearer`** for REST (Swagger **Authorize**, BACnet scraper → `GET /config`, scripts, agents). |
+| **`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`** (+ TTL keys) | **Open-FDD API** (`/auth/login`, JWT validation) | Dashboard login; the browser keeps a **short-lived JWT** and sends **`Authorization: Bearer`** with that token on API calls—not the dashboard password. |
+| **`OFDD_BACNET_SERVER_API_KEY`** | **Open-FDD API** and **bacnet-scraper** (outbound to the gateway) | **`Authorization: Bearer`** on JSON-RPC to **diy-bacnet-server**. Docker Compose passes the **same value** into the gateway container as **`BACNET_RPC_API_KEY`**. When that env is non-empty, the gateway enforces Bearer on RPC routes except **`POST /server_hello`**; when empty, RPC auth is disabled. |
+
+You normally only edit **`stack/.env`**; do not set **`BACNET_RPC_API_KEY`** separately unless you override compose env. Standalone diy-bacnet-server (outside this stack) uses **`BACNET_RPC_API_KEY`** in **its** environment only—see the [diy-bacnet-server README](https://github.com/bbartling/diy-bacnet-server/blob/master/README.md).
 
 Dashboard login and piping passwords into `--user` are covered in more detail (including maintenance one-liners) under **[Security — Phase 1](security#frontend-and-api-authentication-phase-1)**.
 

@@ -10,6 +10,7 @@ import httpx
 from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel, Field
 
+from open_fdd.platform.bacnet_gateway_auth import bacnet_gateway_request_headers
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.graph_model import (
@@ -271,7 +272,12 @@ def _post_rpc(base_url: str, method: str, params: dict, timeout: float = 10.0) -
     url = base_url.rstrip("/") + "/" + method
     payload = {**_BASE_PAYLOAD, "method": method, "params": params}
     try:
-        r = httpx.post(url, json=payload, timeout=timeout)
+        r = httpx.post(
+            url,
+            json=payload,
+            timeout=timeout,
+            headers=bacnet_gateway_request_headers(),
+        )
         out = {"ok": r.is_success, "status_code": r.status_code}
         try:
             out["body"] = r.json()

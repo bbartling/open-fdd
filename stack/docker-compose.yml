@@ -27,6 +27,10 @@ services:
     container_name: openfdd_bacnet_server
     network_mode: host
     environment:
+      # When set (bootstrap --caddy-self-signed), OpenAPI "servers" uses this so Swagger Try it out hits https://…/bacnet/…
+      BACNET_SWAGGER_SERVERS_URL: "${BACNET_SWAGGER_SERVERS_URL:-}"
+      # Same value as OFDD_BACNET_SERVER_API_KEY in stack/.env (bootstrap generates both).
+      BACNET_RPC_API_KEY: "${OFDD_BACNET_SERVER_API_KEY:-}"
       BACNET2MQTT_ENABLED: "${BACNET2MQTT_ENABLED:-}"
       MQTT_BROKER_URL: "${MQTT_BROKER_URL:-}"
       HA_DISCOVERY_ENABLED: "${HA_DISCOVERY_ENABLED:-}"
@@ -36,6 +40,12 @@ services:
       MQTT_POLL_INTERVAL_SEC: "${MQTT_POLL_INTERVAL_SEC:-30}"
       MQTT_USER: "${MQTT_USER:-}"
       MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
+      # Optional MQTT RPC gateway (cmd/ack/telemetry) — generic broker; see diy-bacnet-server README.
+      MQTT_RPC_GATEWAY_ENABLED: "${MQTT_RPC_GATEWAY_ENABLED:-}"
+      MQTT_RPC_BROKER_URL: "${MQTT_RPC_BROKER_URL:-}"
+      MQTT_RPC_TOPIC_PREFIX: "${MQTT_RPC_TOPIC_PREFIX:-diy-bacnet/gateway}"
+      MQTT_RPC_TELEMETRY_INTERVAL_SEC: "${MQTT_RPC_TELEMETRY_INTERVAL_SEC:-0}"
+      MQTT_RPC_CLIENT_ID: "${MQTT_RPC_CLIENT_ID:-}"
     logging:
       driver: json-file
       options: *log-opts
@@ -71,6 +81,7 @@ services:
       # Use service name 'api' so DNS resolves to current API container after restarts.
       OFDD_API_URL: http://api:8000
       OFDD_API_KEY: ${OFDD_API_KEY:-}
+      OFDD_BACNET_SERVER_API_KEY: ${OFDD_BACNET_SERVER_API_KEY:-}
     volumes:
       - ../config:/app/config:ro
     depends_on:
@@ -232,6 +243,8 @@ services:
       OFDD_REFRESH_TOKEN_DAYS: ${OFDD_REFRESH_TOKEN_DAYS:-7}
       # Set true when TLS terminates at Caddy/nginx so refresh cookies use Secure (reads X-Forwarded-Proto).
       OFDD_TRUST_FORWARDED_PROTO: ${OFDD_TRUST_FORWARDED_PROTO:-false}
+      # Bearer for diy-bacnet-server JSON-RPC (must match BACNET_RPC_API_KEY on bacnet-server).
+      OFDD_BACNET_SERVER_API_KEY: ${OFDD_BACNET_SERVER_API_KEY:-}
       # External LLMs use Open-FDD endpoints directly (see docs/model-context endpoints).
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
       OFDD_CADDY_INTERNAL_SECRET: ${OFDD_CADDY_INTERNAL_SECRET:-openfdd-internal}
@@ -324,6 +337,8 @@ services:
   caddy:
     image: caddy:2
     container_name: openfdd_caddy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
       - "443:443"

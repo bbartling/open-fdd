@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+from open_fdd.platform.bacnet_gateway_auth import bacnet_gateway_request_headers
 from open_fdd.platform.database import get_conn
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.site_resolver import resolve_site_uuid
@@ -164,7 +165,8 @@ async def _scrape_via_rpc(
             logger.error("DB error: %s", db_err)
             return {"rows_inserted": 0, "points_created": 0, "errors": [str(db_err)]}
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    gw_headers = bacnet_gateway_request_headers()
+    async with httpx.AsyncClient(timeout=30.0, headers=gw_headers) as client:
         # Verify diy-bacnet-server is reachable (path = /method for fastapi-jsonrpc)
         try:
             hello = await client.post(

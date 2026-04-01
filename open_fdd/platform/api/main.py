@@ -94,7 +94,7 @@ app = FastAPI(
         },
         {
             "name": "BACnet",
-            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery, point_discovery_to_graph). Backend hits the gateway; use same host or OT LAN URL. point_discovery_to_graph updates the in-memory graph and SPARQL.",
+            "description": "Proxy to diy-bacnet-server (server_hello, whois_range, point_discovery, point_discovery_to_graph). Backend hits the gateway; use same host or OT LAN URL. When the gateway uses BACNET_RPC_API_KEY, set OFDD_BACNET_SERVER_API_KEY in stack/.env (bootstrap generates it with OFDD_API_KEY). point_discovery_to_graph updates the in-memory graph and SPARQL.",
         },
     ],
 )
