@@ -20,7 +20,8 @@ def _mock_httpx_ok(json_body: dict):
 
 
 @patch("open_fdd.platform.api.bacnet.httpx.post")
-def test_bacnet_read_property_proxy(mock_post):
+def test_bacnet_read_property_proxy(mock_post, monkeypatch):
+    monkeypatch.setenv("OFDD_BACNET_SERVER_API_KEY", "test-bacnet-proxy-key")
     mock_post.return_value = _mock_httpx_ok(
         {"jsonrpc": "2.0", "id": "0", "result": {"present-value": 42}}
     )
@@ -39,6 +40,7 @@ def test_bacnet_read_property_proxy(mock_post):
     assert data.get("ok") is True
     mock_post.assert_called_once()
     call_kw = mock_post.call_args.kwargs
+    assert call_kw["headers"].get("Authorization") == "Bearer test-bacnet-proxy-key"
     assert call_kw["json"]["method"] == "client_read_property"
     assert call_kw["json"]["params"] == {
         "request": {
@@ -47,6 +49,22 @@ def test_bacnet_read_property_proxy(mock_post):
             "property_identifier": "present-value",
         }
     }
+
+
+def test_bacnet_read_property_rejects_non_allowlisted_url():
+    """Caller-supplied gateway URL must match configured gateways (no bearer exfiltration)."""
+    r = client.post(
+        "/bacnet/read_property",
+        json={
+            "url": "https://evil.example.com",
+            "request": {
+                "device_instance": 1,
+                "object_identifier": "analog-input,1",
+                "property_identifier": "present-value",
+            },
+        },
+    )
+    assert r.status_code == 403
 
 
 @patch("open_fdd.platform.api.bacnet.httpx.post")

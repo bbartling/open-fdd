@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +46,7 @@ function downloadJson(data: unknown, filename: string) {
 
 export function DataModelPage() {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const { selectedSiteId } = useSiteContext();
   const [importJson, setImportJson] = useState("");
   const [importResult, setImportResult] = useState<DataModelImportResponse | null>(null);
@@ -204,7 +205,10 @@ export function DataModelPage() {
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model BRICK</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         Build your Brick + BACnet data model step by step below. Start BACnet Who-Is and point discovery on the{" "}
-        <Link to="/bacnet-tools" className="font-medium text-primary underline-offset-4 hover:underline">
+        <Link
+          to={{ pathname: "/bacnet-tools", search: location.search }}
+          className="font-medium text-primary underline-offset-4 hover:underline"
+        >
           BACnet tools
         </Link>{" "}
         page, then export JSON for AI tagging, paste tagged JSON back to import, and run SPARQL queries to validate.
@@ -225,7 +229,10 @@ export function DataModelPage() {
           <ol className="list-decimal space-y-3 pl-5 text-sm">
             <li>
               <strong>BACnet Who-Is + point discovery</strong> — On{" "}
-              <Link to="/bacnet-tools" className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link
+                to={{ pathname: "/bacnet-tools", search: location.search }}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
                 BACnet tools
               </Link>
               , run Who-Is, then point discovery and <strong>Add to data model</strong> for each device.

@@ -7,7 +7,7 @@ from uuid import UUID
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from open_fdd.platform.bacnet_gateway_auth import bacnet_gateway_request_headers
@@ -310,6 +310,30 @@ def _bacnet_url(body: dict, override_url: str | None = None) -> str:
     return url
 
 
+def _normalized_gateway_allowlist() -> frozenset[str]:
+    """URLs that may receive OFDD_BACNET_SERVER_API_KEY (from GET /bacnet/gateways)."""
+    return frozenset(
+        str(g["url"]).strip().rstrip("/") for g in _get_gateways_list() if g.get("url")
+    )
+
+
+def _require_allowlisted_gateway_url(url: str) -> str:
+    """
+    Reject caller-supplied gateway URLs that are not configured on the server, so we never
+    forward the BACnet RPC Bearer token to an arbitrary host.
+    """
+    u = url.strip().rstrip("/")
+    if u not in _normalized_gateway_allowlist():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "BACnet gateway URL is not allowlisted. Use GET /bacnet/gateways and "
+                "the ?gateway= query parameter, or omit url in the body."
+            ),
+        )
+    return u
+
+
 # Gateway id enum for Swagger dropdown (built when module loads)
 GATEWAY_ID_ENUM = _gateway_enum()
 
@@ -368,6 +392,7 @@ def bacnet_server_hello(
         url = _bacnet_url(body or {})
         if not url.startswith("http"):
             return {"ok": False, "error": "Invalid URL"}
+        url = _require_allowlisted_gateway_url(url)
         result = _post_rpc(url, "server_hello", {}, timeout=5.0)
         if result.get("ok") and result.get("body"):
             return result
@@ -385,6 +410,8 @@ def bacnet_server_hello(
                 "body": {"result": {"message": "Gateway reachable (whois)"}},
             }
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("bacnet server_hello failed")
         return {"ok": False, "error": str(e)}
@@ -407,6 +434,7 @@ def bacnet_whois_range(
     url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     req = body.request
     request = (
         req.model_dump() if req else {"start_instance": 1, "end_instance": 3456799}
@@ -433,6 +461,7 @@ def bacnet_point_discovery(
     url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     inst = body.instance
     instance = inst.model_dump() if inst else {"device_instance": 3456789}
     result = _post_rpc(url, "client_point_discovery", {"instance": instance})
@@ -460,6 +489,7 @@ def bacnet_point_discovery_to_graph(
     url = _bacnet_url(params, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     inst = body.instance
     instance = inst.model_dump() if inst else {"device_instance": 3456789}
     dev_inst = instance.get("device_instance")
@@ -515,6 +545,7 @@ def bacnet_read_property(
     url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     return _post_rpc(
         url,
         "client_read_property",
@@ -534,6 +565,7 @@ def bacnet_read_multiple(
     url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     return _post_rpc(
         url,
         "client_read_multiple",
@@ -557,6 +589,7 @@ def bacnet_write_property(
     url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     req = body.request.model_dump()
     return _post_rpc(
         url,
@@ -580,6 +613,7 @@ def bacnet_supervisory_logic_checks(
     url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     return _post_rpc(
         url,
         "client_supervisory_logic_checks",
@@ -602,6 +636,7 @@ def bacnet_read_point_priority_array(
     url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
     if not url.startswith("http"):
         return {"ok": False, "error": "Invalid URL"}
+    url = _require_allowlisted_gateway_url(url)
     return _post_rpc(
         url,
         "client_read_point_priority_array",
@@ -717,6 +752,8 @@ def bacnet_write_point(
             "error": "No BACnet gateway URL",
             "audit": {"success": False, "reason": "no_gateway_url"},
         }
+
+    url = _require_allowlisted_gateway_url(url)
 
     # Optional: min/max from point metadata could go here
     dev_inst: int | str = (

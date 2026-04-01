@@ -36,9 +36,8 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
    That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
 
-   - **API:** http://localhost:8000/docs  
+   - **API:** http://localhost:8000 (interactive `/docs` disabled; use the React app and [API reference](appendix/api_reference)).  
    - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
-   - **BACnet Swagger:** http://localhost:8080/docs  
    - **DB:** `127.0.0.1:5432`/openfdd (postgres/postgres) — bound to loopback only; not exposed on the LAN.  
 
 ---

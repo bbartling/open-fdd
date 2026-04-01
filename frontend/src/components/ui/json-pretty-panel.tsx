@@ -13,11 +13,12 @@ type JsonTreeProps = {
   value: unknown;
   depth: number;
   defaultExpandDepth: number;
-  seen: WeakSet<object>;
+  /** Objects/arrays on the path from root (copy per branch so siblings are isolated). */
+  ancestors: Set<object>;
   pathKey: string;
 };
 
-function JsonTree({ value, depth, defaultExpandDepth, seen, pathKey }: JsonTreeProps) {
+function JsonTree({ value, depth, defaultExpandDepth, ancestors, pathKey }: JsonTreeProps) {
   const autoOpen = depth < defaultExpandDepth;
   const [open, setOpen] = useState(autoOpen);
 
@@ -43,17 +44,18 @@ function JsonTree({ value, depth, defaultExpandDepth, seen, pathKey }: JsonTreeP
   }
 
   if (Array.isArray(value)) {
-    if (seen.has(value)) {
+    if (ancestors.has(value)) {
       return <span className="text-amber-700 dark:text-amber-400">[Circular]</span>;
     }
-    seen.add(value);
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(value);
     if (value.length === 0) {
       return <span className="text-muted-foreground">[]</span>;
     }
     const preview = value.length > MAX_ARRAY_PREVIEW ? value.slice(0, MAX_ARRAY_PREVIEW) : value;
     const more = value.length - preview.length;
     return (
-      <span className="inline-flex flex-col gap-0.5 align-top">
+      <div className="inline-flex flex-col gap-0.5 align-top">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -77,7 +79,7 @@ function JsonTree({ value, depth, defaultExpandDepth, seen, pathKey }: JsonTreeP
                   value={item}
                   depth={depth + 1}
                   defaultExpandDepth={defaultExpandDepth}
-                  seen={seen}
+                  ancestors={nextAncestors}
                   pathKey={`${pathKey}.${i}`}
                 />
               </li>
@@ -87,22 +89,23 @@ function JsonTree({ value, depth, defaultExpandDepth, seen, pathKey }: JsonTreeP
             )}
           </ul>
         )}
-      </span>
+      </div>
     );
   }
 
   if (typeof value === "object") {
-    if (seen.has(value)) {
+    if (ancestors.has(value)) {
       return <span className="text-amber-700 dark:text-amber-400">[Circular]</span>;
     }
-    seen.add(value);
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(value);
     const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
     if (entries.length === 0) {
       return <span className="text-muted-foreground">{"{}"}</span>;
     }
     entries.sort(([a], [b]) => a.localeCompare(b));
     return (
-      <span className="inline-flex flex-col gap-0.5 align-top">
+      <div className="inline-flex flex-col gap-0.5 align-top">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -130,14 +133,14 @@ function JsonTree({ value, depth, defaultExpandDepth, seen, pathKey }: JsonTreeP
                   value={v}
                   depth={depth + 1}
                   defaultExpandDepth={defaultExpandDepth}
-                  seen={seen}
+                  ancestors={nextAncestors}
                   pathKey={`${pathKey}.${k}`}
                 />
               </li>
             ))}
           </ul>
         )}
-      </span>
+      </div>
     );
   }
 
@@ -185,7 +188,7 @@ export function JsonPrettyPanel({
     }
   }, [text]);
 
-  const seen = new WeakSet<object>();
+  const ancestors = new Set<object>();
 
   return (
     <div
@@ -213,7 +216,13 @@ export function JsonPrettyPanel({
           maxHeightClass,
         )}
       >
-        <JsonTree value={value} depth={0} defaultExpandDepth={defaultExpandDepth} seen={seen} pathKey="root" />
+        <JsonTree
+          value={value}
+          depth={0}
+          defaultExpandDepth={defaultExpandDepth}
+          ancestors={ancestors}
+          pathKey="root"
+        />
       </div>
     </div>
   );

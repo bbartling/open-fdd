@@ -23,6 +23,8 @@ const bnMono = `${bnField} font-mono text-xs`;
 
 type RpmRow = { object_identifier: string; property_identifier: string };
 
+const GATEWAY_SELECT_ID = "bacnet-tools-gateway-select";
+
 function GatewaySelect({
   gateways,
   value,
@@ -34,8 +36,11 @@ function GatewaySelect({
 }) {
   return (
     <div className="mb-4">
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">Gateway</label>
+      <label htmlFor={GATEWAY_SELECT_ID} className="mb-1 block text-xs font-medium text-muted-foreground">
+        Gateway
+      </label>
       <select
+        id={GATEWAY_SELECT_ID}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`${bnField} max-w-md`}
@@ -96,7 +101,10 @@ export function BacnetToolsPage() {
         },
         gateway,
       ),
+    onMutate: () => setReadRes(null),
     onSuccess: (d) => setReadRes(d as BacnetProxyResult),
+    onError: (e: Error) =>
+      setReadRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   });
 
   const rmMut = useMutation({
@@ -112,8 +120,10 @@ export function BacnetToolsPage() {
       }
       return bacnetReadMultiple({ request: { device_instance: rmDev, requests } }, gateway);
     },
+    onMutate: () => setRmRes(null),
     onSuccess: (d) => setRmRes(d as BacnetProxyResult),
-    onError: (e: Error) => setRmRes({ ok: false, error: e.message }),
+    onError: (e: Error) =>
+      setRmRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   });
 
   const writeMut = useMutation({
@@ -149,14 +159,19 @@ export function BacnetToolsPage() {
         gateway,
       );
     },
+    onMutate: () => setWRes(null),
     onSuccess: (d) => setWRes(d as BacnetProxyResult),
-    onError: (e: Error) => setWRes({ ok: false, error: e.message }),
+    onError: (e: Error) =>
+      setWRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   });
 
   const supMut = useMutation({
     mutationFn: () =>
       bacnetSupervisoryLogicChecks({ instance: { device_instance: supDev } }, gateway),
+    onMutate: () => setSupRes(null),
     onSuccess: (d) => setSupRes(d as BacnetProxyResult),
+    onError: (e: Error) =>
+      setSupRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   });
 
   const paMut = useMutation({
@@ -170,7 +185,10 @@ export function BacnetToolsPage() {
         },
         gateway,
       ),
+    onMutate: () => setPaRes(null),
     onSuccess: (d) => setPaRes(d as BacnetProxyResult),
+    onError: (e: Error) =>
+      setPaRes({ ok: false, error: e instanceof Error ? e.message : String(e) }),
   });
 
   return (
@@ -206,8 +224,11 @@ export function BacnetToolsPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
+              <label htmlFor="bacnet-read-device-instance" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Device instance
+              </label>
               <input
+                id="bacnet-read-device-instance"
                 type="number"
                 className={`${bnField} w-32`}
                 value={readDev}
@@ -215,12 +236,26 @@ export function BacnetToolsPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Object id</label>
-              <input className={`${bnMono} w-44`} value={readObj} onChange={(e) => setReadObj(e.target.value)} />
+              <label htmlFor="bacnet-read-object-id" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Object id
+              </label>
+              <input
+                id="bacnet-read-object-id"
+                className={`${bnMono} w-44`}
+                value={readObj}
+                onChange={(e) => setReadObj(e.target.value)}
+              />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Property</label>
-              <input className={`${bnMono} w-40`} value={readProp} onChange={(e) => setReadProp(e.target.value)} />
+              <label htmlFor="bacnet-read-property" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Property
+              </label>
+              <input
+                id="bacnet-read-property"
+                className={`${bnMono} w-40`}
+                value={readProp}
+                onChange={(e) => setReadProp(e.target.value)}
+              />
             </div>
             <button
               type="button"
@@ -247,8 +282,11 @@ export function BacnetToolsPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
+              <label htmlFor="bacnet-rpm-device-instance" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Device instance
+              </label>
               <input
+                id="bacnet-rpm-device-instance"
                 type="number"
                 min={0}
                 max={4194303}
@@ -269,6 +307,7 @@ export function BacnetToolsPage() {
             </button>
             <button
               type="button"
+              aria-label="Add RPM row"
               onClick={() =>
                 setRmRows((rows) => [
                   ...rows,
@@ -290,8 +329,14 @@ export function BacnetToolsPage() {
               {rmRows.map((row, idx) => (
                 <div key={idx} className="flex flex-wrap items-end gap-2">
                   <div className="min-w-0 flex-1">
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">object_identifier</label>
+                    <label
+                      htmlFor={`bacnet-rpm-oid-${idx}`}
+                      className="mb-1 block text-xs font-medium text-muted-foreground"
+                    >
+                      object_identifier
+                    </label>
                     <input
+                      id={`bacnet-rpm-oid-${idx}`}
                       className={`${bnMono} w-full min-w-[12rem]`}
                       value={row.object_identifier}
                       onChange={(e) => {
@@ -302,8 +347,14 @@ export function BacnetToolsPage() {
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">property_identifier</label>
+                    <label
+                      htmlFor={`bacnet-rpm-prop-${idx}`}
+                      className="mb-1 block text-xs font-medium text-muted-foreground"
+                    >
+                      property_identifier
+                    </label>
                     <input
+                      id={`bacnet-rpm-prop-${idx}`}
                       className={`${bnMono} w-full min-w-[10rem]`}
                       value={row.property_identifier}
                       onChange={(e) => {
@@ -314,6 +365,7 @@ export function BacnetToolsPage() {
                   </div>
                   <button
                     type="button"
+                    aria-label="Remove row"
                     disabled={rmRows.length <= 1}
                     onClick={() => setRmRows((rows) => rows.filter((_, i) => i !== idx))}
                     className="inline-flex h-9 items-center gap-1 rounded-lg border border-border/60 px-2 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
@@ -341,8 +393,11 @@ export function BacnetToolsPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
+              <label htmlFor="bacnet-write-device-instance" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Device instance
+              </label>
               <input
+                id="bacnet-write-device-instance"
                 type="number"
                 className={`${bnField} w-32`}
                 value={wDev}
@@ -350,16 +405,33 @@ export function BacnetToolsPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Object id</label>
-              <input className={`${bnMono} w-44`} value={wObj} onChange={(e) => setWObj(e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Property</label>
-              <input className={`${bnMono} w-40`} value={wProp} onChange={(e) => setWProp(e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Priority (1–16)</label>
+              <label htmlFor="bacnet-write-object-id" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Object id
+              </label>
               <input
+                id="bacnet-write-object-id"
+                className={`${bnMono} w-44`}
+                value={wObj}
+                onChange={(e) => setWObj(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="bacnet-write-property-name" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Property
+              </label>
+              <input
+                id="bacnet-write-property-name"
+                className={`${bnMono} w-40`}
+                value={wProp}
+                onChange={(e) => setWProp(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="bacnet-write-priority" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Priority (1–16)
+              </label>
+              <input
+                id="bacnet-write-priority"
                 type="number"
                 min={1}
                 max={16}
@@ -369,18 +441,24 @@ export function BacnetToolsPage() {
               />
             </div>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <div className="flex items-start gap-2 text-sm">
             <input
+              id="bacnet-write-release-null"
               type="checkbox"
               checked={wReleaseNull}
               onChange={(e) => setWReleaseNull(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
+              className="mt-0.5 h-4 w-4 rounded border-border"
             />
-            <span>Release (null) at this priority — relinquishes the override at the slot above</span>
-          </label>
+            <label htmlFor="bacnet-write-release-null" className="cursor-pointer leading-snug">
+              Release (null) at this priority — relinquishes the override at the slot above
+            </label>
+          </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Value</label>
+            <label htmlFor="bacnet-write-value" className="mb-1 block text-xs font-medium text-muted-foreground">
+              Value
+            </label>
             <input
+              id="bacnet-write-value"
               className={`${bnField} w-48`}
               value={wVal}
               onChange={(e) => setWVal(e.target.value)}
@@ -412,8 +490,11 @@ export function BacnetToolsPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
+              <label htmlFor="bacnet-supervisory-device-instance" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Device instance
+              </label>
               <input
+                id="bacnet-supervisory-device-instance"
                 type="number"
                 className={`${bnField} w-32`}
                 value={supDev}
@@ -443,8 +524,11 @@ export function BacnetToolsPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Device instance</label>
+              <label htmlFor="bacnet-pa-device-instance" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Device instance
+              </label>
               <input
+                id="bacnet-pa-device-instance"
                 type="number"
                 className={`${bnField} w-32`}
                 value={paDev}
@@ -452,8 +536,15 @@ export function BacnetToolsPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Object id</label>
-              <input className={`${bnMono} w-44`} value={paObj} onChange={(e) => setPaObj(e.target.value)} />
+              <label htmlFor="bacnet-pa-object-id" className="mb-1 block text-xs font-medium text-muted-foreground">
+                Object id
+              </label>
+              <input
+                id="bacnet-pa-object-id"
+                className={`${bnMono} w-44`}
+                value={paObj}
+                onChange={(e) => setPaObj(e.target.value)}
+              />
             </div>
             <button
               type="button"
