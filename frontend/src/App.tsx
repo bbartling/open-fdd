@@ -10,6 +10,7 @@ import { ConfigPage } from "@/components/pages/ConfigPage";
 import { PointsPage } from "@/components/pages/PointsPage";
 import { FaultsPage } from "@/components/pages/FaultsPage";
 import { SystemResourcesPage } from "@/components/pages/SystemResourcesPage";
+import { BacnetToolsPage } from "@/components/pages/BacnetToolsPage";
 import { DataModelPage } from "@/components/pages/DataModelPage";
 import { DataModelEngineeringPage } from "@/components/pages/DataModelEngineeringPage";
 import { DataModelTestingPage } from "@/components/pages/DataModelTestingPage";
@@ -118,6 +119,7 @@ function AppRoutes() {
         >
           <Route index element={<OverviewPage />} />
           <Route path="config" element={<ConfigPage />} />
+          <Route path="bacnet-tools" element={<BacnetToolsPage />} />
           <Route path="equipment" element={<Navigate to="/config" replace />} />
           <Route path="points" element={<PointsPage />} />
           <Route path="faults" element={<FaultsPage />} />

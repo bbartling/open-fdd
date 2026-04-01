@@ -1,13 +1,14 @@
 import { useState, useCallback, useMemo, useRef } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { JsonPrettyPanel } from "@/components/ui/json-pretty-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSiteContext } from "@/contexts/site-context";
 import { useAllEquipment, useAllPoints, useEquipment, usePoints, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useSiteFaults } from "@/hooks/use-faults";
 import { EquipmentTable } from "@/components/site/EquipmentTable";
-import { BacnetDiscoveryPanel } from "@/components/site/BacnetDiscoveryPanel";
 import {
   Table,
   TableHeader,
@@ -200,10 +201,13 @@ export function DataModelPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Protocols</h1>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model BRICK</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Build your Brick + BACnet data model step by step below. Export JSON for AI tagging, paste tagged JSON back to import, and run
-        SPARQL queries to validate.
+        Build your Brick + BACnet data model step by step below. Start BACnet Who-Is and point discovery on the{" "}
+        <Link to="/bacnet-tools" className="font-medium text-primary underline-offset-4 hover:underline">
+          BACnet tools
+        </Link>{" "}
+        page, then export JSON for AI tagging, paste tagged JSON back to import, and run SPARQL queries to validate.
       </p>
 
       {/* Step-by-step guide — AI context via /model-context/docs + /mcp/manifest */}
@@ -220,16 +224,17 @@ export function DataModelPage() {
         <CardContent className="space-y-4">
           <ol className="list-decimal space-y-3 pl-5 text-sm">
             <li>
-              <strong>BACnet Who-Is</strong> — Run Who-Is below to find devices on your network (start/end instance range).
+              <strong>BACnet Who-Is + point discovery</strong> — On{" "}
+              <Link to="/bacnet-tools" className="font-medium text-primary underline-offset-4 hover:underline">
+                BACnet tools
+              </Link>
+              , run Who-Is, then point discovery and <strong>Add to data model</strong> for each device.
             </li>
             <li>
-              <strong>Point discovery + Add to RDF</strong> — For each device, enter its instance, run <strong>Point discovery</strong>, then <strong>Add to data model</strong> to merge BACnet into the graph. Repeat device by device.
+              <strong>Add a site (Step 2)</strong> — In the Sites section below, create a site if you don’t have one. Assign points to it when you import.
             </li>
             <li>
-              <strong>Add a site (Step 2)</strong> — In the Sites section below BACnet discover and add to model, create a site if you don’t have one. Assign points to it when you import.
-            </li>
-            <li>
-              <strong>Export JSON and open your LLM</strong> — Download the export (Export section below), then open your LLM chat. Pull prompt/context from{" "}
+              <strong>Export JSON and open your LLM</strong> — Download the export (Export section), then open your LLM chat. Pull prompt/context from{" "}
               <code className="rounded bg-muted px-1 text-xs">GET /model-context/docs</code> and tool mappings from{" "}
               <code className="rounded bg-muted px-1 text-xs">GET /mcp/manifest</code>. Upload your{" "}
               <strong>fault rule YAML files</strong> (from the Faults page) so the LLM knows which points your rules need.
@@ -246,8 +251,6 @@ export function DataModelPage() {
           </ol>
         </CardContent>
       </Card>
-
-      <BacnetDiscoveryPanel />
 
       {/* Step 2: Sites — add a site so you can assign points when you import */}
       <Card className="mt-6">
@@ -339,7 +342,7 @@ export function DataModelPage() {
             </CardContent>
           </Card>
 
-      {/* Data model TTL — view, serialize, check (kept near BACnet workflow) */}
+      {/* Data model TTL — view, serialize, check */}
       <Card className="mt-6">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -390,9 +393,11 @@ export function DataModelPage() {
             </p>
           )}
           {checkResult != null && (
-            <pre className="max-h-40 overflow-auto rounded-lg border border-border/60 bg-muted/30 p-3 text-xs">
-              {JSON.stringify(checkResult, null, 2)}
-            </pre>
+            <JsonPrettyPanel
+              value={checkResult}
+              maxHeightClass="max-h-56"
+              defaultExpandDepth={2}
+            />
           )}
         </CardContent>
       </Card>

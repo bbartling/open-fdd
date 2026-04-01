@@ -10,7 +10,7 @@ BACnet is the **default data driver** for Open-FDD. Discovery, [diy-bacnet-serve
 
 ---
 
-## Setup (do this before the platform scrapes data)
+## Setup (do this before the platform scrapes data) {#setup}
 
 **Recommended: data model**
 

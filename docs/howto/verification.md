@@ -69,7 +69,7 @@ docker compose exec db psql -U postgres -d openfdd -c "SELECT ts, point_id, valu
 
 ---
 
-## Validating scrapers and FDD (API + Grafana)
+## Validating scrapers and FDD (API + Grafana) {#validating-scrapers-and-fdd}
 
 You can confirm that the BACnet scraper, weather scraper, and FDD loop are running and writing data **without running SQL inside containers**.
 

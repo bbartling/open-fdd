@@ -74,7 +74,7 @@ class PlatformSettings(BaseSettings):
     # Optional: multiple gateways (central aggregator). JSON array of {"url", "site_id", ...}; scrape uses KG points per site.
     bacnet_gateways: Optional[str] = None
 
-    # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /docs, /redoc, /openapi.json, /app
+    # API key for REST/WebSocket auth (Bearer). When set, required on all endpoints except /health, /, /app (and /app/*)
     api_key: Optional[str] = None
     # Single-user Phase-1 auth (bootstrap-managed); hash should be argon2id.
     app_user: Optional[str] = None

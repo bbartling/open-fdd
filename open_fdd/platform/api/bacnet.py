@@ -225,6 +225,67 @@ POINT_DISCOVERY_TO_GRAPH_EXAMPLES = {
 }
 
 
+class SingleReadPropertyInner(BaseModel):
+    """Matches diy-bacnet-server SingleReadRequest (JSON-RPC client_read_property)."""
+
+    device_instance: int = Field(..., ge=0, le=4194303)
+    object_identifier: str = Field(..., description="e.g. analog-output,1")
+    property_identifier: str = Field(
+        default="present-value",
+        description="BACnet property name",
+    )
+
+
+class ReadPropertyProxyBody(BaseModel):
+    url: str | None = Field(default=None, description="Omit to use default gateway")
+    request: SingleReadPropertyInner
+
+
+class ReadMultipleItem(BaseModel):
+    object_identifier: str
+    property_identifier: str
+
+
+class ReadMultipleInner(BaseModel):
+    device_instance: int = Field(..., ge=0, le=4194303)
+    requests: list[ReadMultipleItem]
+
+
+class ReadMultipleProxyBody(BaseModel):
+    url: str | None = None
+    request: ReadMultipleInner
+
+
+class WritePropertyInner(BaseModel):
+    """Proxy to diy client_write_property. Priority 1–16 is always required (BACnet write slot)."""
+
+    device_instance: int = Field(..., ge=0, le=4194303)
+    object_identifier: str
+    property_identifier: str = "present-value"
+    value: float | int | str | None
+    priority: int = Field(..., ge=1, le=16, description="BACnet priority slot (required for every write and release)")
+
+
+class WritePropertyProxyBody(BaseModel):
+    url: str | None = None
+    request: WritePropertyInner
+
+
+class SupervisoryProxyBody(BaseModel):
+    url: str | None = None
+    instance: PointDiscoveryInstance
+
+
+class ReadPriorityInner(BaseModel):
+    device_instance: int = Field(..., ge=0, le=4194303)
+    object_identifier: str
+
+
+class ReadPriorityProxyBody(BaseModel):
+    url: str | None = None
+    request: ReadPriorityInner
+
+
 def _body_to_dict(
     body: WhoIsBody | PointDiscoveryBody | PointDiscoveryToGraphBody | dict,
 ) -> dict:
@@ -440,6 +501,115 @@ def bacnet_point_discovery_to_graph(
     return result
 
 
+@router.post("/read_property", summary="Proxy: read one BACnet property (client_read_property)")
+def bacnet_read_property(
+    body: ReadPropertyProxyBody,
+    gateway: str | None = Query(
+        None,
+        description="Gateway id from GET /bacnet/gateways",
+        enum=GATEWAY_ID_ENUM,
+    ),
+):
+    """Operator/BACnet Tools UI: read present-value (or any property) via the gateway; no diy Swagger required."""
+    params_d = body.model_dump(exclude_none=True)
+    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    return _post_rpc(
+        url,
+        "client_read_property",
+        {"request": body.request.model_dump()},
+        timeout=30.0,
+    )
+
+
+@router.post("/read_multiple", summary="Proxy: read multiple properties (client_read_multiple / RPM)")
+def bacnet_read_multiple(
+    body: ReadMultipleProxyBody,
+    gateway: str | None = Query(
+        None, description="Gateway id from GET /bacnet/gateways", enum=GATEWAY_ID_ENUM
+    ),
+):
+    params_d = body.model_dump(exclude_none=True)
+    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    return _post_rpc(
+        url,
+        "client_read_multiple",
+        {"request": body.request.model_dump()},
+        timeout=60.0,
+    )
+
+
+@router.post(
+    "/write_property",
+    summary="Proxy: write or release BACnet property (client_write_property)",
+)
+def bacnet_write_property(
+    body: WritePropertyProxyBody,
+    gateway: str | None = Query(
+        None, description="Gateway id from GET /bacnet/gateways", enum=GATEWAY_ID_ENUM
+    ),
+):
+    """Write present-value or release at priority (value null or string 'null' per gateway)."""
+    params_d = body.model_dump(exclude_none=True)
+    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    req = body.request.model_dump()
+    return _post_rpc(
+        url,
+        "client_write_property",
+        {"request": req},
+        timeout=30.0,
+    )
+
+
+@router.post(
+    "/supervisory_logic_checks",
+    summary="Proxy: supervisory logic summary (client_supervisory_logic_checks)",
+)
+def bacnet_supervisory_logic_checks(
+    body: SupervisoryProxyBody,
+    gateway: str | None = Query(
+        None, description="Gateway id from GET /bacnet/gateways", enum=GATEWAY_ID_ENUM
+    ),
+):
+    params_d = body.model_dump(exclude_none=True)
+    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    return _post_rpc(
+        url,
+        "client_supervisory_logic_checks",
+        {"instance": body.instance.model_dump()},
+        timeout=120.0,
+    )
+
+
+@router.post(
+    "/read_point_priority_array",
+    summary="Proxy: read priority array (client_read_point_priority_array)",
+)
+def bacnet_read_point_priority_array(
+    body: ReadPriorityProxyBody,
+    gateway: str | None = Query(
+        None, description="Gateway id from GET /bacnet/gateways", enum=GATEWAY_ID_ENUM
+    ),
+):
+    params_d = body.model_dump(exclude_none=True)
+    url = _bacnet_url(params_d, override_url=_resolve_gateway_url(gateway))
+    if not url.startswith("http"):
+        return {"ok": False, "error": "Invalid URL"}
+    return _post_rpc(
+        url,
+        "client_read_point_priority_array",
+        {"request": body.request.model_dump()},
+        timeout=30.0,
+    )
+
+
 # --- Write point (HA/Node-RED write via Open-FDD; audit + events) ---
 
 
@@ -549,14 +719,19 @@ def bacnet_write_point(
         }
 
     # Optional: min/max from point metadata could go here
+    dev_inst: int | str = (
+        int(bacnet_device_id)
+        if str(bacnet_device_id).isdigit()
+        else bacnet_device_id
+    )
     params = {
-        "object_identifier": object_identifier,
-        "value": body.value,
-        "device_instance": (
-            int(bacnet_device_id)
-            if str(bacnet_device_id).isdigit()
-            else bacnet_device_id
-        ),
+        "request": {
+            "device_instance": dev_inst,
+            "object_identifier": object_identifier,
+            "property_identifier": "present-value",
+            "value": body.value,
+            "priority": 8,
+        }
     }
     result = _post_rpc(url, "client_write_property", params)
     success = result.get("ok", False)

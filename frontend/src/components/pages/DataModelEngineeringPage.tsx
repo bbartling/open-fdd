@@ -181,7 +181,7 @@ export function DataModelEngineeringPage() {
 
       {!hasEquipment ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          No equipment found for this site. Add equipment in the Data Model Protocols tab before editing engineering
+          No equipment found for this site. Add equipment in the Data Model BRICK tab before editing engineering
           metadata.
         </p>
       ) : (

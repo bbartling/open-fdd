@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Settings, Save, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { JsonPrettyPanel } from "@/components/ui/json-pretty-panel";
 import { getConfig, putConfig } from "@/lib/crud-api";
 import type { PlatformConfig } from "@/types/api";
 
@@ -133,9 +134,9 @@ function ConfigSummary({ config }: { config: PlatformConfig }) {
         </dl>
         <details className="group">
           <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Raw JSON</summary>
-          <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-muted/50 p-3 text-xs font-mono text-muted-foreground">
-            {JSON.stringify(config, null, 2)}
-          </pre>
+          <div className="mt-2">
+            <JsonPrettyPanel value={config} maxHeightClass="max-h-72" defaultExpandDepth={1} />
+          </div>
         </details>
       </CardContent>
     </Card>

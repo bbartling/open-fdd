@@ -14,7 +14,7 @@ Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server
 
 | Component | Purpose |
 |-----------|---------|
-| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP UDP listener + HTTP JSON-RPC API. Discovers devices and objects; exposes present-value reads. Swagger: http://localhost:8080/docs |
+| **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** | BACnet/IP UDP listener + HTTP JSON-RPC API. Discovers devices and objects; exposes present-value reads. Interactive OpenAPI/Swagger is disabled on the gateway; use **BACnet tools** in the React app or JSON-RPC. |
 | **BACnet scraper** | Platform service. Polls diy-bacnet-server on a schedule; **reads points from the data model** (points with `bacnet_device_id` and `object_identifier`) and writes readings to TimescaleDB. |
 | **Data model** | Sites, equipment, and points with BACnet addressing (`bacnet_device_id`, `object_identifier`, `object_name`). Configured via the **React frontend** (Config, Data model, Points) or the API. Single source of truth for what to scrape. |
 
@@ -25,9 +25,15 @@ Open-FDD uses [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server
 | Port | Protocol | Use |
 |------|----------|-----|
 | 47808 | UDP | BACnet/IP |
-| 8080 | HTTP | JSON-RPC API, Swagger docs |
+| 8080 | HTTP | JSON-RPC API (no browser docs in default stack) |
 
 Only **one** process on the host can use port 47808 (BACnet/IP). Run discovery **before** starting diy-bacnet-server so they do not conflict. diy-bacnet-server runs with `network_mode: host` so it binds to the host's network interface.
+
+### Multiple sites / gateways (one Open-FDD, several BACnet bridges)
+
+Use **`OFDD_BACNET_GATEWAYS`** (JSON array of `{ "url", "site_id", … }`) so the scraper and **BACnet tools → Gateway** dropdown can target **remote** diy-bacnet-server instances (one container or VM per site on the OT LAN). Keep **`OFDD_BACNET_SERVER_URL`** as the **default** gateway (often the local site: `http://host.docker.internal:8080` from the API container).
+
+Binding diy-bacnet HTTP to **127.0.0.1 only** on the host is awkward with Docker: Caddy in bridge mode reaches the gateway via **`host.docker.internal`**, which is not the same socket as loopback on Linux. Typical choices: (1) leave the gateway listening on all interfaces on the host (`--public` in compose) and **restrict port 8080 with a host firewall**, or (2) run Caddy with **`network_mode: host`** and `reverse_proxy 127.0.0.1:8080` for `/bacnet/*` if you truly need loopback-only RPC. Remote gateways use their **reachable URL** in `OFDD_BACNET_GATEWAYS` either way.
 
 ---
 

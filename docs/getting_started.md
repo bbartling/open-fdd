@@ -92,9 +92,13 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 5. **Seeds platform config** via PUT /config (waits for API, then sends default or `stack/.env` values into the RDF graph).
 6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
 
-It does **not** purge or wipe the database on a normal run; only `--reset-grafana` wipes the Grafana volume.
 
-**Full stack (default):** TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop. **Grafana** and the **MQTT** broker are **optional** compose profiles: enable with `./scripts/bootstrap.sh --with-grafana` and/or `--with-mqtt-bridge` (MQTT is experimental / future-facing—not part of the default product). For BACnet data use the **data model** (discover via frontend or API → import points); see [BACnet overview](bacnet/overview). Caddy, host-stats, frontend, etc. start with the default bootstrap.
+**Full stack (default):** 
+* TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop,  **CADDY** reverse proxy with self signed certs on TLS run:
+```bash
+printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
+```
+
 
 **Bootstrap options:** Run `./scripts/bootstrap.sh --help` for the full list. Summary:
 

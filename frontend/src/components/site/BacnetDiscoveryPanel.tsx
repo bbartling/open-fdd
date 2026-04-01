@@ -248,7 +248,10 @@ export function BacnetDiscoveryPanel() {
         )}
 
         {toGraphMutation.isSuccess && (
-          <p className="text-sm text-muted-foreground">Device {deviceInstance} added to graph. Refresh points or go to Data model → Export to see.</p>
+          <p className="text-sm text-muted-foreground">
+            Device {deviceInstance} added to graph. Refresh points or open{" "}
+            <strong>Data Model BRICK</strong> → Export to see.
+          </p>
         )}
         {toGraphMutation.isError && (
           <p className="text-sm text-destructive">Add to graph failed: {toGraphMutation.error?.message}</p>

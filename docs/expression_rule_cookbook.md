@@ -139,7 +139,7 @@ expression: |
   (Mixed_Air_Temperature_Sensor - blend_tol > np.maximum(Return_Air_Temperature_Sensor + rat_tol, Outside_Air_Temperature_Sensor + oat_tol)) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-*Hunting/oscillation — see [Hunting Rule]({{ "hunting_rule" | relative_url }}).*
+*Hunting/oscillation — see [rule types (hunting)](rules/overview#rule-types).*
 
 ### Rule D — Discharge air cold when heating commanded
 
@@ -171,7 +171,7 @@ expression: |
   (Supply_Air_Temperature_Sensor + sat_tol <= Mixed_Air_Temperature_Sensor - blend_tol + fan_delta_t) & (Valve_Command > 0.01) & (Supply_Fan_Speed_Command > 0.01)
 ```
 
-*OA fraction — see [OA Fraction Rule]({{ "oa_fraction_rule" | relative_url }}).*
+*OA fraction — see [rule types (oa_fraction)](rules/overview#rule-types).*
 
 ### Rule E — SAT too low with full heating
 
@@ -444,7 +444,7 @@ expression: |
   ((Heating_Coil_Leaving_Air_Temperature_Sensor - Heating_Coil_Entering_Air_Temperature_Sensor) > np.sqrt(enter_tol**2 + leave_tol**2) + fan_delta_t) & (((Heating_Valve_Command == 0) & (Cooling_Valve_Command == 0) & (Damper_Position_Command > econ_min_open)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command > 0.9)) | ((Heating_Valve_Command == 0) & (Cooling_Valve_Command > 0) & (Damper_Position_Command <= econ_min_open)))
 ```
 
-*Heat exchanger effectiveness — see [ERV/Heat Exchanger Rule]({{ "erv_efficiency_rule" | relative_url }}).*
+*Heat exchanger effectiveness — see [rule types (erv_efficiency)](rules/overview#rule-types).*
 
 
 ---
@@ -641,7 +641,7 @@ expression: |
 
 ### Zone and IAQ bounds
 
-For CO2 and zone temperature out-of-range checks, use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) — `co2_bounds` and `zone_temp_bounds` examples.
+For CO2 and zone temperature out-of-range checks, use the [bounds rule type](rules/overview#rule-types) — `co2_bounds` and `zone_temp_bounds` examples.
 
 ---
 
@@ -768,7 +768,7 @@ Expected MAT (from OAT, RAT, damper positions) differs from measured MAT. Indica
 
 ## Weather station
 
-*weather_temp_stuck (flatline) — see [Flatline Rule]({{ "flatline_rule" | relative_url }}).*
+*weather_temp_stuck (flatline) — see [flatline rule type](rules/overview#rule-types).*
 
 ### Unrealistic temperature spike
 
@@ -793,7 +793,7 @@ expression: |
 
 ### RH bounds
 
-For relative humidity out-of-range, use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) — `rh_bounds` example.
+For relative humidity out-of-range, use the [bounds rule type](rules/overview#rule-types) — `rh_bounds` example.
 
 ### Wind gust vs sustained
 
@@ -817,7 +817,7 @@ expression: |
 
 ## Sensor validation (bounds & flatline)
 
-Use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) and [Flatline Rule]({{ "flatline_rule" | relative_url }}) for generic sensor checks. Typical bounds:
+Use the [bounds](rules/overview#rule-types) and [flatline](rules/overview#rule-types) rule types for generic sensor checks. Typical bounds:
 
 | Sensor type        | Min   | Max    |
 |--------------------|-------|--------|
@@ -832,4 +832,4 @@ Use the [Bounds Rule]({{ "bounds_rule" | relative_url }}) and [Flatline Rule]({{
 
 ---
 
-**Next:** [Flat Line Sensor Tutorial]({{ "flat_line_sensor_tutorial" | relative_url }})
+**Next:** [Fake fault schedule / flatline monitoring](howto/fake_fault_schedule_monitoring)

@@ -158,6 +158,96 @@ export function bacnetPointDiscoveryToGraph(body: PointDiscoveryToGraphBody) {
   });
 }
 
+/** GET /bacnet/gateways */
+export type BacnetGatewayRow = { id: string; url: string; description?: string };
+
+export function bacnetGateways() {
+  return apiFetch<BacnetGatewayRow[]>("/bacnet/gateways");
+}
+
+export type BacnetProxyResult = Record<string, unknown>;
+
+function _bacnetGw(gateway: string) {
+  return `?gateway=${encodeURIComponent(gateway)}`;
+}
+
+export type ReadPropertyProxyBody = {
+  url?: string;
+  request: {
+    device_instance: number;
+    object_identifier: string;
+    property_identifier?: string;
+  };
+};
+
+export function bacnetReadProperty(body: ReadPropertyProxyBody, gateway: string) {
+  return apiFetch<BacnetProxyResult>(`/bacnet/read_property${_bacnetGw(gateway)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type ReadMultipleProxyBody = {
+  url?: string;
+  request: {
+    device_instance: number;
+    requests: { object_identifier: string; property_identifier: string }[];
+  };
+};
+
+export function bacnetReadMultiple(body: ReadMultipleProxyBody, gateway: string) {
+  return apiFetch<BacnetProxyResult>(`/bacnet/read_multiple${_bacnetGw(gateway)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type WritePropertyProxyBody = {
+  url?: string;
+  request: {
+    device_instance: number;
+    object_identifier: string;
+    property_identifier?: string;
+    value: number | string | null;
+    priority: number;
+  };
+};
+
+export function bacnetWriteProperty(body: WritePropertyProxyBody, gateway: string) {
+  return apiFetch<BacnetProxyResult>(`/bacnet/write_property${_bacnetGw(gateway)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function bacnetSupervisoryLogicChecks(
+  body: PointDiscoveryBody,
+  gateway: string,
+) {
+  return apiFetch<BacnetProxyResult>(`/bacnet/supervisory_logic_checks${_bacnetGw(gateway)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function bacnetReadPointPriorityArray(
+  body: {
+    url?: string;
+    request: { device_instance: number; object_identifier: string };
+  },
+  gateway: string,
+) {
+  return apiFetch<BacnetProxyResult>(`/bacnet/read_point_priority_array${_bacnetGw(gateway)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 // Rules API (FDD rule YAML: list, upload, delete, sync definitions)
 export function uploadRule(filename: string, content: string) {
   return apiFetch<{ ok: boolean; path?: string; filename?: string }>("/rules", {

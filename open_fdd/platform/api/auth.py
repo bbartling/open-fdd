@@ -23,7 +23,7 @@ from open_fdd.platform.config import get_platform_settings
 
 logger = logging.getLogger(__name__)
 
-_PATHS_NO_AUTH = frozenset(("/", "/health", "/docs", "/redoc", "/openapi.json"))
+_PATHS_NO_AUTH = frozenset(("/", "/health"))
 _ph = PasswordHasher()
 _refresh_store: dict[str, dict[str, dt.datetime | str]] = {}
 _refresh_lock = Lock()
@@ -180,7 +180,7 @@ def revoke_refresh_token(refresh_token: str | None) -> None:
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """
     When OFDD_API_KEY is set, require Authorization: Bearer <key> on all requests
-    except /, /health, /docs, /redoc, /openapi.json, and /app (and /app/*).
+    except /, /health, and /app (and /app/*).
     Returns 401/403 with uniform error schema when auth fails.
     """
 

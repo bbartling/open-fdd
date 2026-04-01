@@ -85,15 +85,23 @@ async function readErrorMessage(response: Response): Promise<string> {
   return response.statusText || `HTTP ${response.status}`;
 }
 
-/** Same-origin + refresh cookie: always send credentials (required for some browsers / proxy setups). */
-const cred: RequestCredentials = "include";
+/**
+ * Default for API fetches. Refresh cookies need to be sent on same-origin requests (e.g. VITE_API_BASE=/api behind Caddy).
+ * Starlette CORSMiddleware with allow_origins=["*"] and allow_credentials=True echoes the request Origin (it does not
+ * send Allow-Origin: * on credentialed responses), so include remains valid for cross-origin setups too.
+ */
+const defaultApiCredentials: RequestCredentials = "include";
+
+function resolveCredentials(init?: RequestInit): RequestCredentials {
+  return init?.credentials ?? defaultApiCredentials;
+}
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithAuthRetry(() =>
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-      credentials: cred,
+      credentials: resolveCredentials(init),
     }),
   );
 
@@ -114,7 +122,7 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-      credentials: cred,
+      credentials: resolveCredentials(init),
     }),
   );
 
@@ -138,7 +146,7 @@ export async function apiStreamText(
       ...init,
       headers: buildHeaders(init?.headers),
       signal,
-      credentials: cred,
+      credentials: resolveCredentials(init),
     }),
   );
 
@@ -173,7 +181,7 @@ export async function apiFetchBlob(path: string, init?: RequestInit): Promise<Bl
     fetch(buildUrl(path), {
       ...init,
       headers: buildHeaders(init?.headers),
-      credentials: cred,
+      credentials: resolveCredentials(init),
     }),
   );
 
@@ -191,7 +199,7 @@ async function refreshAccessToken(): Promise<string | null> {
     try {
       const resp = await fetch(buildUrl("/auth/refresh"), {
         method: "POST",
-        credentials: cred,
+        credentials: defaultApiCredentials,
       });
       if (!resp.ok) {
         clearAuthTokens();

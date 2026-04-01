@@ -15,6 +15,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import { JsonPrettyPanel } from "@/components/ui/json-pretty-panel";
 import { timeAgo, severityVariant } from "@/lib/utils";
 import { useAllEquipment, useEquipment, useSite, useSites } from "@/hooks/use-sites";
 import {
@@ -437,12 +438,8 @@ function FaultDataPreviewSection({
                         <td className="border-r border-border/60 px-3 py-1.5 text-right font-mono tabular-nums">
                           {r.flag_value}
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">
-                          {r.evidence != null
-                            ? typeof r.evidence === "string"
-                              ? r.evidence
-                              : JSON.stringify(r.evidence)
-                            : "—"}
+                        <td className="max-w-[min(28rem,40vw)] align-top px-3 py-1.5 text-muted-foreground">
+                          <FaultEvidenceCell evidence={r.evidence} />
                         </td>
                       </tr>
                     ))}
@@ -486,6 +483,42 @@ function presetRange(preset: DatePreset): { start: string; end: string } {
       start.setDate(start.getDate() - 7);
   }
   return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function FaultEvidenceCell({ evidence }: { evidence: unknown }) {
+  if (evidence == null) return "—";
+  if (typeof evidence === "string") {
+    return <span className="break-all font-mono text-xs text-muted-foreground">{evidence}</span>;
+  }
+  return (
+    <JsonPrettyPanel
+      value={evidence}
+      maxHeightClass="max-h-40"
+      compact
+      showCopy={false}
+      defaultExpandDepth={1}
+    />
+  );
+}
+
+function RuleFileContentPreview({ content }: { content: string }) {
+  const t = content.trim();
+  let parsedJson: unknown | null = null;
+  if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
+    try {
+      parsedJson = JSON.parse(t) as unknown;
+    } catch {
+      parsedJson = null;
+    }
+  }
+  if (parsedJson !== null) {
+    return <JsonPrettyPanel value={parsedJson} maxHeightClass="max-h-96" defaultExpandDepth={2} />;
+  }
+  return (
+    <pre className="max-h-96 overflow-auto rounded-md border border-border/60 bg-muted/50 p-3 font-mono text-xs whitespace-pre-wrap break-all text-foreground">
+      {content}
+    </pre>
+  );
 }
 
 function labelForPreset(preset: DatePreset): string {
@@ -695,9 +728,7 @@ function RuleFilesSection() {
                 <p className="text-sm text-destructive">{fileError}</p>
               )}
               {fileContent != null && !fileLoading && (
-                <pre className="max-h-96 overflow-auto rounded-md border bg-muted/50 p-3 text-xs">
-                  {fileContent}
-                </pre>
+                <RuleFileContentPreview content={fileContent} />
               )}
             </div>
           )}

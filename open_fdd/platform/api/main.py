@@ -70,19 +70,14 @@ def _app_version() -> str:
         return getattr(settings, "app_version", "0.1.0")
 
 
-_SWAGGER_DESCRIPTION = (
-    "When the server has API key auth enabled (OFDD_API_KEY set), **Try it out** will return 401 until you authorize: "
-    "click **Authorize** at the top, paste your API key (e.g. from `stack/.env` → `OFDD_API_KEY`), then click Authorize and Close. "
-    "After that, all requests from Swagger include the Bearer token."
-)
-
 app = FastAPI(
     title=settings.app_title,
     version=_app_version(),
-    description=_SWAGGER_DESCRIPTION,
+    description="Open-FDD REST API. Interactive Swagger/OpenAPI endpoints are disabled; use the React app and /bacnet-tools.",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     openapi_tags=[
         {
             "name": "data-model",
@@ -121,7 +116,7 @@ def _custom_openapi():
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "API Key",
-            "description": "When OFDD_API_KEY is set, use the value from stack/.env. In Swagger: click Authorize, paste the key, then Try it out.",
+            "description": "When OFDD_API_KEY is set, send `Authorization: Bearer <OFDD_API_KEY>` on API requests (browser session JWT for the React app).",
         }
     }
     schema["security"] = [{"BearerAuth": []}]
@@ -227,7 +222,6 @@ def root():
     out = {
         "message": "Open-FDD API",
         "version": _app_version(),
-        "docs": "/docs",
         "bacnet_server_url": getattr(settings, "bacnet_server_url", None) or None,
     }
     if _has_static_ui:

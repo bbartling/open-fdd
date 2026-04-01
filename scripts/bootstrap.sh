@@ -620,7 +620,7 @@ ensure_caddy_self_signed_tls() {
   chmod 600 "$env_file" 2>/dev/null || true
   echo "stack/.env: OPENFDD_CADDYFILE=./caddy/Caddyfile.selfsigned, OFDD_TRUST_FORWARDED_PROTO=true, BACNET_SWAGGER_SERVERS_URL=/bacnet"
   echo "Use https://localhost/ (browser warns). :80 redirects to HTTPS."
-  echo "diy-bacnet-server Swagger (TLS): https://localhost/bacnet/docs (still http://localhost:8080 on host for local tools)."
+  echo "Operators: use https://localhost/ → BACnet tools (no Swagger required). Dev/advanced: https://localhost/bacnet/docs or :8080 on host."
 }
 
 ensure_diy_bacnet_sibling() {
@@ -1516,13 +1516,13 @@ if $WITH_MCP_RAG; then
   echo "  MCP RAG:  http://localhost:8090 (manifest: /manifest; health: /health)"
 fi
 if [[ "$MODE" == "collector" ]]; then
-  echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
+  echo "  BACnet:   http://localhost:8080   (gateway HTTP; integrators / BACnet tools in full stack use Open-FDD UI)"
   echo "  (Collector mode: raw BACnet data path. No API/FDD unless explicitly started.)"
 elif [[ "$MODE" == "model" ]]; then
   echo "  API:      http://localhost:8000   (docs: /docs)"
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
   if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
-    echo "  Self-signed TLS: use https://localhost/ for the UI (not :5173 alone); API docs https://localhost/api/docs"
+    echo "  Self-signed TLS: use https://localhost/ for the UI (not :5173 alone). BACnet + CRUD: web app; optional dev OpenAPI https://localhost/api/docs"
   fi
   echo "  (Model mode: knowledge graph and CRUD workflows.)"
 elif [[ "$MODE" == "engine" ]]; then
@@ -1530,12 +1530,12 @@ elif [[ "$MODE" == "engine" ]]; then
 else
   echo "  API:      http://localhost:8000   (docs: /docs)"
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
-  echo "  BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)"
+  echo "  BACnet:   http://localhost:8080   (gateway; operators use web UI → BACnet tools)"
   if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
     echo ""
     echo "  Self-signed TLS: open the app at https://localhost/ (or https://THIS_HOST/) — not :5173 alone."
-    echo "  API (TLS):    https://localhost/api/docs   | BACnet Swagger (TLS): https://localhost/bacnet/docs"
-    echo "  Direct ports remain HTTP for automation: :8000 API, :8080 gateway, :5173 static (no /api proxy)."
+    echo "  Optional dev OpenAPI (TLS): https://localhost/api/docs  |  gateway https://localhost/bacnet/docs"
+    echo "  Direct ports (HTTP, automation): :8000 API, :8080 gateway, :5173 static (no /api proxy)."
   fi
   echo "  (Grafana not started by default. Use --with-grafana to include it.)"
 fi

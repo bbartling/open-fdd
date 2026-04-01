@@ -49,13 +49,15 @@ services:
     logging:
       driver: json-file
       options: *log-opts
+    # --public: bind HTTP :8080 on all host interfaces so Caddy (host.docker.internal:8080) can proxy /bacnet/*.
+    # Loopback-only for this process would block bridge-mode Caddy on Linux; restrict :8080 with host firewall if needed.
     command: >
       python3 -u -m bacpypes_server.main
       --name OpenFDDGateway
       --instance 3456788
       --public
     restart: unless-stopped
-    # BACnet/IP: UDP 47808. API: http://localhost:8080/docs
+    # BACnet/IP: UDP 47808. JSON-RPC HTTP :8080 (Swagger disabled; use Open-FDD /bacnet-tools).
 
   # BACnet scraper — reads points via RPC, writes to TimescaleDB.
   # Single gateway: OFDD_BACNET_SERVER_URL + OFDD_BACNET_SITE_ID (site tag for central DB).
@@ -223,8 +225,9 @@ services:
       dockerfile: stack/Dockerfile.api
     container_name: openfdd_api
     working_dir: /app
+    # Loopback-only on the host: use Caddy (or docker exec) as the entry point; scrapers use api:8000 on the bridge.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:

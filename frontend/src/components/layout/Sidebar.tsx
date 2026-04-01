@@ -15,6 +15,7 @@ import {
   Moon,
   ChevronUp,
   LogOut,
+  Radio,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCapabilities, useHealth } from "@/hooks/use-fdd-status";
@@ -26,7 +27,8 @@ import { timeAgo } from "@/lib/utils";
 const NAV_ITEMS = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/config", label: "OpenFDD Config", icon: Settings, end: false },
-  { to: "/data-model", label: "Data Model Protocols", icon: Database, end: false },
+  { to: "/bacnet-tools", label: "BACnet tools", icon: Radio, end: false },
+  { to: "/data-model", label: "Data Model BRICK", icon: Database, end: false },
   { to: "/data-model-engineering", label: "Data Model Engineering", icon: Wrench, end: false },
   { to: "/data-model-testing", label: "Data Model Testing", icon: Search, end: false },
   { to: "/points", label: "Points", icon: CircleDot, end: false },
