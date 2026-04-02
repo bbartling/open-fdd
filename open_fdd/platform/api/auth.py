@@ -36,11 +36,11 @@ def _path_exempt(path: str) -> bool:
         return True
     if path.startswith("/auth/"):
         return True
-    if getattr(get_platform_settings(), "enable_openapi_docs", False):
-        if path in ("/docs", "/redoc", "/openapi.json"):
-            return True
-        if path.startswith("/docs/") or path.startswith("/redoc/"):
-            return True
+    # Only resolve settings when the path could be OpenAPI/Swagger (hot path is /api/*).
+    if path in ("/docs", "/redoc", "/openapi.json") or path.startswith("/docs/") or path.startswith(
+        "/redoc/"
+    ):
+        return getattr(get_platform_settings(), "enable_openapi_docs", False)
     return False
 
 
