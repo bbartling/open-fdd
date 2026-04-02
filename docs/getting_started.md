@@ -28,7 +28,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./scripts/bootstrap.sh --mode engine
    ```
 
-   **Optional one-liner (HTTPS + login):** Piping your password on stdin lets bootstrap create a Phase 1 dashboard user, generate a self-signed certificate for Caddy (then use `https://localhost/`; the browser will warn until you trust the cert), set `stack/.env` for TLS-aware cookies on the API, and start the same full stack as a plain `./scripts/bootstrap.sh`.
+   **Optional one-liner (HTTPS + login):** Piping your password on stdin lets bootstrap create a dashboard user, generate a self-signed certificate for Caddy (then use `https://localhost/`; the browser will warn until you trust the cert), set `stack/.env` for TLS-aware cookies on the API, and start the same full stack as a plain `./scripts/bootstrap.sh`.
 
    ```bash
    printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
@@ -94,9 +94,7 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 
 **Default full stack:** `./scripts/bootstrap.sh` (no flags) starts TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop, and **Caddy** reverse proxy (HTTP on `:80` unless you add TLS flags below). Same service set as the optional one-liner in [Do this to bootstrap](#do-this-to-bootstrap).
 
-**Full stack with self-signed Caddy TLS:** `./scripts/bootstrap.sh --caddy-self-signed` — same services with Caddy using **self-signed** certificates for HTTPS (browser warning until you trust the cert). 
-
-**Non-default invocation (self-signed TLS + Phase‑1 dashboard login):**
+**Standard full-stack bootstrap with self-signed TLS (Caddy) and app login:** uses **JWT** and **`Authorization: Bearer`**, not HTTP Basic Auth ([Security — authentication](security#frontend-and-api-authentication)).
 
 ```bash
 printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
@@ -129,11 +127,11 @@ printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-
 | `--caddy-self-signed` | Self-signed HTTPS for Caddy (`:443`, `:80` → HTTPS): writes certs under `stack/caddy/certs/`, sets `OPENFDD_CADDYFILE` and `OFDD_TRUST_FORWARDED_PROTO=true` in `stack/.env`. |
 | `--caddy-tls-cn HOST` | With `--caddy-self-signed`: certificate CN/SAN (default `openfdd.local`). |
 | `--caddy-http-only` | Revert to the default HTTP-only Caddyfile on `:80`; removes `OPENFDD_CADDYFILE` from `stack/.env` and sets `OFDD_TRUST_FORWARDED_PROTO=false`. |
-| `--no-auth` | Removes auth-related keys from `stack/.env`: **`OFDD_API_KEY`**, Phase 1 keys (**`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`**, token TTLs), and **`OFDD_BACNET_SERVER_API_KEY`**. Open-FDD API then skips Bearer/JWT enforcement; diy-bacnet-server gets an empty **`BACNET_RPC_API_KEY`** so RPC Bearer middleware is off. |
-| `--user NAME` | Phase 1 dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `stack/.env` (requires a password — next rows). |
-| `--password-file PATH` | Read the Phase 1 password from a file (first line); avoids putting the password on the command line. |
-| `--password-stdin` | Read the Phase 1 password from stdin (pipe or redirect into bootstrap; see [Security — Phase 1 examples](security#frontend-and-api-authentication-phase-1) and `bootstrap.sh` header comments). |
-| *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the Phase 1 password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
+| `--no-auth` | Removes auth-related keys from `stack/.env`: **`OFDD_API_KEY`**, app-user keys (**`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`**, token TTLs), and **`OFDD_BACNET_SERVER_API_KEY`**. Open-FDD API then skips Bearer/JWT enforcement; diy-bacnet-server gets an empty **`BACNET_RPC_API_KEY`** so RPC Bearer middleware is off. |
+| `--user NAME` | Dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `stack/.env` (requires a password — next rows). |
+| `--password-file PATH` | Read the dashboard password from a file (first line); avoids putting the password on the command line. |
+| `--password-stdin` | Read the dashboard password from stdin (pipe or redirect into bootstrap; see [Security — authentication](security#frontend-and-api-authentication) and `bootstrap.sh` header comments). |
+| *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the dashboard password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
 
 **Bearer tokens and API keys (`stack/.env`):** With a normal bootstrap (no `--no-auth`), secrets live in **`stack/.env`** (gitignored). They are **not** the same token—each service uses the one that matches its role:
 
@@ -145,7 +143,7 @@ printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-
 
 You normally only edit **`stack/.env`**; do not set **`BACNET_RPC_API_KEY`** separately unless you override compose env. Standalone diy-bacnet-server (outside this stack) uses **`BACNET_RPC_API_KEY`** in **its** environment only—see the [diy-bacnet-server README](https://github.com/bbartling/diy-bacnet-server/blob/master/README.md).
 
-Dashboard login and piping passwords into `--user` are covered in more detail (including maintenance one-liners) under **[Security — Phase 1](security#frontend-and-api-authentication-phase-1)**.
+Dashboard login and piping passwords into `--user` are covered in more detail (including maintenance one-liners) under **[Security — authentication](security#frontend-and-api-authentication)**.
 
 To **update** an existing clone: `git pull` then `./scripts/bootstrap.sh`, or `./scripts/bootstrap.sh --update`. Rebuild single services: `./scripts/bootstrap.sh --build api`.
 

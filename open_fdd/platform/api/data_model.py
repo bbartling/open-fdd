@@ -152,8 +152,11 @@ class UnifiedExportRow(BaseModel):
 
 def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
     """Single dump: BACnet discovery (graph) + DB points. Rows with no point_id have polling=False by default.
-    When site_id query is provided, unimported rows are pre-filled with that site_id and site_name so the JSON
-    is closer to ready-to-import (LLM or human only needs to add brick_type, rule_input, equipment_id, polling).
+
+    Unimported (discovery-only) rows get ``site_id`` / ``site_name`` when:
+    - ``?site_id=`` is passed (UUID, site name, or description), or
+    - there is exactly one site in the database (same idea as import's single-site default).
+    Otherwise those fields stay null so multi-site stacks do not guess the wrong site.
     """
     _site_id = _resolve_site_filter(site_id) if (site_id and site_id.strip()) else None
     if site_id and site_id.strip() and _site_id is None:
@@ -166,6 +169,18 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                 cur.execute("SELECT name FROM sites WHERE id = %s", (str(_site_id),))
                 row = cur.fetchone()
                 default_site_name = row["name"] if row else None
+
+    prefill_site_id: UUID | None = _site_id
+    prefill_site_name: str | None = default_site_name
+    if prefill_site_id is None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, name FROM sites ORDER BY name LIMIT 2")
+                srows = cur.fetchall()
+        if len(srows) == 1:
+            sid = srows[0]["id"]
+            prefill_site_id = sid if isinstance(sid, UUID) else UUID(str(sid))
+            prefill_site_name = srows[0]["name"]
 
     out: list[UnifiedExportRow] = []
     emitted_point_ids: set[str] = set()
@@ -243,8 +258,8 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
                             bacnet_device_id=dev_str,
                             object_identifier=oid,
                             object_name=oname,
-                            site_id=str(_site_id) if _site_id else None,
-                            site_name=default_site_name,
+                            site_id=str(prefill_site_id) if prefill_site_id else None,
+                            site_name=prefill_site_name,
                             equipment_id=None,
                             equipment_name=None,
                             equipment_metadata=None,
@@ -327,14 +342,14 @@ def _build_unified_export(site_id: str | None = None) -> list[UnifiedExportRow]:
 def export_points(
     site_id: str | None = Query(
         None,
-        description="Filter by site (UUID, name, or description). When set, unimported rows are pre-filled with this site_id and site_name so the JSON is closer to ready-to-import.",
+        description="Filter by site (UUID, name, or description). When set, unimported discovery rows use this site. When omitted and exactly one site exists, that site is pre-filled on unimported rows; with multiple sites, omitting leaves site_id null (use this param or the site selector in the Data model UI).",
     ),
     bacnet_only: bool = Query(
         False,
         description="If true, return only rows that have bacnet_device_id and object_identifier (discovery from graph). Omit or false for full dump (BACnet + CRUD points).",
     ),
 ):
-    """Single export route: BACnet discovery + CRUD points. Use for LLM Brick tagging (docs/appendix/technical_reference, docs/modeling/ai_assisted_tagging); then PUT /data-model/import. Unimported BACnet rows have polling=false by default. Set bacnet_only=true to get only discovery rows."""
+    """Single export route: BACnet discovery + CRUD points. Use for LLM Brick tagging (docs/modeling/ai_assisted_tagging); then PUT /data-model/import. Unimported BACnet rows have polling=false by default; site_id/site_name are filled from ?site_id= or when only one site exists in the DB. Set bacnet_only=true to get only discovery rows."""
     out = _build_unified_export(site_id)
     if bacnet_only:
         out = [

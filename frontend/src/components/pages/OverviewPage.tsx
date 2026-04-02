@@ -9,38 +9,72 @@ import { useSites, useAllEquipment, useAllPoints, useEquipment, usePoints } from
 import { useActiveFaults, useFaultDefinitions, useSiteFaults } from "@/hooks/use-faults";
 import { useCapabilities } from "@/hooks/use-fdd-status";
 
-/** Static hints for external agents; Open-FDD does not call LLMs from the UI. */
+const DOCS_SITE = "https://bbartling.github.io/open-fdd";
+const DOCS_PDF_ONLINE =
+  "https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf";
+
+/** Help links for external agents; Open-FDD does not call LLMs from the UI. */
 function ModelContextCard() {
   const { data: capabilities } = useCapabilities();
+
+  const linkCls =
+    "text-primary underline-offset-2 hover:underline font-medium break-words";
 
   return (
     <Card className="mt-6">
       <CardContent className="pt-6 space-y-3">
         <div>
           <h2 className="text-sm font-medium text-muted-foreground">
-            External agents &amp; MCP-style discovery
+            External agents &amp; documentation
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Open-FDD serves documentation as plain text at{" "}
-            <code className="rounded bg-muted px-1 text-[11px]">GET /model-context/docs</code> and
-            publishes an HTTP discovery manifest at{" "}
-            <code className="rounded bg-muted px-1 text-[11px]">GET /mcp/manifest</code>{" "}
-            (resource URI <code className="text-[11px]">openfdd://docs</code>). Pair with{" "}
-            <code className="rounded bg-muted px-1 text-[11px]">GET /data-model/export</code> and{" "}
-            <code className="rounded bg-muted px-1 text-[11px]">PUT /data-model/import</code> from your
-            own OpenAI-compatible stack.
+            Use your own OpenAI-compatible stack with the API. Full HTTP details and agent workflows are in the published docs —
+            start here:
           </p>
+          <ul className="mt-2 list-disc pl-4 text-xs text-muted-foreground space-y-1">
+            <li>
+              <a href={DOCS_SITE} className={linkCls} target="_blank" rel="noopener noreferrer">
+                Documentation (GitHub Pages)
+              </a>{" "}
+              — quick start, stack, reference
+            </li>
+            <li>
+              <a href={DOCS_PDF_ONLINE} className={linkCls} target="_blank" rel="noopener noreferrer">
+                Documentation PDF
+              </a>{" "}
+              — offline / print-friendly (in a clone:{" "}
+              <code className="rounded bg-muted px-1 text-[11px]">pdf/open-fdd-docs.pdf</code>)
+            </li>
+            <li>
+              <a
+                href={`${DOCS_SITE}/modeling/llm_workflow#copy-paste-prompt-template-recommended`}
+                className={linkCls}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                LLM prompt (copy/paste template)
+              </a>{" "}
+              — same section as{" "}
+              <a href={`${DOCS_SITE}/modeling/llm_workflow`} className={linkCls} target="_blank" rel="noopener noreferrer">
+                LLM workflow
+              </a>{" "}
+              (no trailing slash on that path)
+            </li>
+            <li>
+              <a href={`${DOCS_SITE}/openclaw_integration`} className={linkCls} target="_blank" rel="noopener noreferrer">
+                Open‑Claw / external agent integration
+              </a>{" "}
+              — model context, MCP manifest, export/import
+            </li>
+          </ul>
         </div>
         {capabilities && (
           <p className="text-xs text-muted-foreground">
             API <span className="font-medium">v{capabilities.version}</span> — built-in{" "}
             <code className="rounded bg-muted px-1">ai_available</code> is{" "}
-            <span className="font-medium">{String(capabilities.ai_available)}</span> (use external tooling).
+            <span className="font-medium">{String(capabilities.ai_available)}</span>; use external tooling and the links above.
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          See <span className="font-medium">docs/openclaw_integration.md</span> in the repo for integration notes.
-        </p>
       </CardContent>
     </Card>
   );

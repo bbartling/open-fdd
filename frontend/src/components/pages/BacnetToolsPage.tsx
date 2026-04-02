@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Network, Loader2, Wrench, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BacnetDiscoveryPanel } from "@/components/site/BacnetDiscoveryPanel";
+import { SitesSetupCard } from "@/components/site/SitesSetupCard";
 import {
   bacnetGateways,
   bacnetReadProperty,
@@ -47,8 +48,10 @@ function GatewaySelect({
         data-testid="bacnet-tools-gateway-select"
       >
         {gateways.map((g) => (
-          <option key={g.id} value={g.id}>
-            {g.id} — {g.description ?? g.url}
+          <option key={g.id} value={g.id} title={g.url}>
+            {g.id === "default"
+              ? "Default"
+              : `${g.id} — ${g.description ?? g.url}`}
           </option>
         ))}
       </select>
@@ -258,21 +261,28 @@ export function BacnetToolsPage() {
         BACnet tools
       </h1>
       <p className="mb-6 max-w-3xl text-sm text-muted-foreground">
-        Run discovery, reads, writes, and diagnostics through Open-FDD (same login as the rest of the app). The gateway API
-        key stays on the server. After you build the graph, continue in{" "}
+        Start with <strong>Step 1 — Sites</strong>, then <strong>Step 2 — BACnet discovery</strong> (Who-Is, point discovery, Add
+        to data model). The gateway API key stays on the server. When you are ready to export JSON, import tagged points, or run
+        SPARQL, use the{" "}
         <Link to="/data-model" className="font-medium text-primary underline-offset-4 hover:underline">
-          Data Model BRICK
-        </Link>
-        .
+          Data model
+        </Link>{" "}
+        page.
       </p>
 
       {gateways.length > 0 && (
         <GatewaySelect gateways={gateways} value={gateway} onChange={setGateway} />
       )}
 
+      <SitesSetupCard className="mb-6" />
       <BacnetDiscoveryPanel />
 
-      <Card className="mt-6">
+      <h2 className="mb-2 mt-10 text-lg font-semibold tracking-tight">Optional BACnet tools</h2>
+      <p className="mb-4 max-w-3xl text-sm text-muted-foreground">
+        Direct read/write RPC and diagnostics. Not required for discovery or the export → import workflow.
+      </p>
+
+      <Card className="mt-2">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Wrench className="h-5 w-5" />

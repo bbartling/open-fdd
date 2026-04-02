@@ -12,7 +12,7 @@ REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, 
 **Base URL:** `http://localhost:8000`  
 **Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
 
-**Authentication:** When **`OFDD_API_KEY`** and/or **Phase 1 app-user** config is active, the API requires `Authorization: Bearer <token>` on protected routes: `<token>` is either **`OFDD_API_KEY`** or a **JWT access token** from **`POST /auth/login`**. Exemptions include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app`, and **`/auth/*`**. The React app uses **login + JWT** (and HttpOnly refresh cookies) for REST and WebSocket; see [Security — Phase 1](../security#frontend-and-api-authentication-phase-1).
+**Authentication:** When **`OFDD_API_KEY`** and/or **app-user** config is active, the API requires `Authorization: Bearer <token>` on protected routes: `<token>` is either **`OFDD_API_KEY`** or a **JWT access token** from **`POST /auth/login`**. Exemptions include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app`, and **`/auth/*`**. The React app uses **login + JWT** (and HttpOnly refresh cookies) for REST and WebSocket; see [Security — authentication](../security#frontend-and-api-authentication).
 
 ---
 

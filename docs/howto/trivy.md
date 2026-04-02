@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Trivy security scanning
 
-**Trivy** is a CLI tool that scans container images, filesystems, config (Dockerfile, Compose), and secrets for vulnerabilities and misconfigurations. No server; run it locally or in CI. This guide covers when and how to use Trivy as part of Open-FDD development (Phase 3 security).
+**Trivy** is a CLI tool that scans container images, filesystems, config (Dockerfile, Compose), and secrets for vulnerabilities and misconfigurations. No server; run it locally or in CI. This guide covers when and how to use Trivy as part of Open-FDD development and security review.
 
 See also: [Security and Caddy](../security) and [Operations testing plan](../operations/testing_plan) for broader hardening and validation context.
 
@@ -108,9 +108,9 @@ done
 
 ---
 
-## Keeping docs up to date (Phase 3)
+## Keeping docs up to date
 
-Phase 3 includes keeping this howto and related docs in sync with the stack:
+Keep this howto and related docs in sync with the stack:
 
 - When you add or rename a service or image in `stack/docker-compose.yml`, update the image list in this doc and in any `trivy-scan` script.
 - When you change security practices (e.g. add CI Trivy, or a `.trivyignore` policy), update [Security](../security) and [Operations testing plan](../operations/testing_plan) if relevant.

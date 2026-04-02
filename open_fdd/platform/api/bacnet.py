@@ -42,7 +42,7 @@ def _get_gateways_list() -> list[dict]:
         {
             "id": "default",
             "url": default_url,
-            "description": "Config default (OFDD_BACNET_SERVER_URL)",
+            "description": "Default gateway (URL from platform config)",
         }
     ]
     if s.bacnet_gateways:

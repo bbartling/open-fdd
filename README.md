@@ -48,13 +48,13 @@ cd open-fdd
 ./scripts/bootstrap.sh
 ```
 
-For reverse-proxy deployments, frontend API calls default to `VITE_API_BASE=/api` and Caddy maps `/api`, `/auth`, and `/ws` to the API service. If you deploy without Caddy, override `VITE_API_BASE` in a compose override file (example: `VITE_API_BASE=http://your-api-host:8000`).
+**Standard full-stack bootstrap with self-signed TLS (Caddy) and app login:** uses **JWT** and **`Authorization: Bearer`**.
+
+```bash
+printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
+```
 
 Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
-
-## Quick Start — OpenClaw (agent)
-
-All OpenClaw work starts from **[`openclaw/README.md`](openclaw/README.md)** — that page is the single entry (mission, skills, bench tests, MCP/auth, and links to product integration docs).
 
 ---
 
@@ -71,8 +71,9 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 ## Online Documentation
 
 - 📖 [**Docs**](https://bbartling.github.io/open-fdd/) — GitHub Pages (Linux quick start, stack, reference).
-- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline / print-friendly bundle.
+- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline / print-friendly bundle (local clone: `pdf/open-fdd-docs.pdf`; build with `python3 scripts/build_docs_pdf.py` if missing).
 - ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — canonical text on the docs site (same section as [**LLM workflow**](https://bbartling.github.io/open-fdd/modeling/llm_workflow)); GitHub Pages serves this path **without** a trailing slash.
+- 🤖 [**Open‑Claw / external agents**](https://bbartling.github.io/open-fdd/openclaw_integration) — `GET /model-context/docs`, `GET /mcp/manifest`, data-model export/import for your own OpenAI-compatible stack.
 
 ---
 

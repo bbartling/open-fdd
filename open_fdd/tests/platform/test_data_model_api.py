@@ -27,6 +27,18 @@ def _mock_conn_with_cursor(fetchall_result):
     return conn
 
 
+def _mock_get_conn_sequence(*fetchall_batches):
+    """Simulate sequential DB connections: each get_conn() uses the next fetchall list."""
+
+    batches = list(fetchall_batches)
+
+    def get_conn():
+        batch = batches.pop(0) if batches else []
+        return _mock_conn_with_cursor(batch)
+
+    return get_conn
+
+
 def test_data_model_export_empty():
     with (
         patch(
@@ -35,7 +47,7 @@ def test_data_model_export_empty():
         ),
         patch(
             "open_fdd.platform.api.data_model.get_conn",
-            side_effect=lambda: _mock_conn_with_cursor([]),
+            side_effect=_mock_get_conn_sequence([], []),
         ),
     ):
         r = client.get("/data-model/export")
@@ -62,7 +74,7 @@ def test_data_model_export_bacnet_only_returns_list():
         ),
         patch(
             "open_fdd.platform.api.data_model.get_conn",
-            side_effect=lambda: _mock_conn_with_cursor([]),
+            side_effect=_mock_get_conn_sequence([], [], []),
         ),
     ):
         r = client.get("/data-model/export?bacnet_only=true")
@@ -106,7 +118,7 @@ def test_data_model_export_returns_point_refs():
         ),
         patch(
             "open_fdd.platform.api.data_model.get_conn",
-            side_effect=lambda: _mock_conn_with_cursor(rows),
+            side_effect=_mock_get_conn_sequence([], rows),
         ),
     ):
         r = client.get("/data-model/export")
@@ -147,7 +159,7 @@ def test_data_model_export_includes_bacnet_refs():
         ),
         patch(
             "open_fdd.platform.api.data_model.get_conn",
-            side_effect=lambda: _mock_conn_with_cursor(rows),
+            side_effect=_mock_get_conn_sequence([], rows),
         ),
     ):
         r = client.get("/data-model/export")
@@ -158,6 +170,42 @@ def test_data_model_export_includes_bacnet_refs():
     assert data[0]["object_identifier"] == "analog-input,1"
     assert data[0]["object_name"] == "Supply Air Temp"
     assert data[0]["point_id"] == str(point_id)
+
+
+def test_data_model_export_unimported_discovery_prefills_site_when_single_site_in_db():
+    """Without ?site_id=, discovery-only rows still get site_id when the DB has exactly one site."""
+    only_site_id = uuid4()
+    minimal_bacnet_ttl = """
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix rdfs: <http://www.w3.org/2000/rdf-schema#> .
+<bacnet://3456789> a bacnet:Device ;
+    rdfs:label "AHU1" ;
+    bacnet:device-instance 3456789 ;
+    bacnet:contains <bacnet://3456789/analog-input,1> .
+<bacnet://3456789/analog-input,1> bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "SA-T" .
+"""
+    with (
+        patch(
+            "open_fdd.platform.api.data_model.serialize_to_ttl",
+            return_value=minimal_bacnet_ttl,
+        ),
+        patch(
+            "open_fdd.platform.api.data_model.get_conn",
+            side_effect=_mock_get_conn_sequence(
+                [{"id": only_site_id, "name": "BenchSite"}],
+                [],
+                [],
+            ),
+        ),
+    ):
+        r = client.get("/data-model/export?bacnet_only=true")
+    assert r.status_code == 200
+    data = r.json()
+    row = next(x for x in data if x.get("object_identifier") == "analog-input,1")
+    assert row["point_id"] is None
+    assert row["site_id"] == str(only_site_id)
+    assert row["site_name"] == "BenchSite"
 
 
 def test_data_model_export_includes_equipment_engineering_metadata():
@@ -192,7 +240,7 @@ def test_data_model_export_includes_equipment_engineering_metadata():
         ),
         patch(
             "open_fdd.platform.api.data_model.get_conn",
-            side_effect=lambda: _mock_conn_with_cursor(rows),
+            side_effect=_mock_get_conn_sequence([], rows),
         ),
     ):
         r = client.get("/data-model/export")

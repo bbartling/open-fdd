@@ -24,7 +24,12 @@ import {
 import { useSites } from "@/hooks/use-sites";
 import type { DataModelExportRow } from "@/types/api";
 
-export function BacnetDiscoveryPanel() {
+type BacnetDiscoveryPanelProps = {
+  /** Shown in the card title (e.g. Step 2). */
+  stepLabel?: string;
+};
+
+export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPanelProps) {
   const queryClient = useQueryClient();
   const { data: sites = [] } = useSites();
   const [whoisStart, setWhoisStart] = useState(1);
@@ -108,8 +113,9 @@ export function BacnetDiscoveryPanel() {
   return (
     <Card className="mb-6">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Network className="h-5 w-5" />
+        <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+          <Network className="h-5 w-5 shrink-0" />
+          <span className="text-base font-medium text-muted-foreground">{stepLabel}</span>
           BACnet discovery
         </CardTitle>
       </CardHeader>
@@ -249,8 +255,8 @@ export function BacnetDiscoveryPanel() {
 
         {toGraphMutation.isSuccess && (
           <p className="text-sm text-muted-foreground">
-            Device {deviceInstance} added to graph. Refresh points or open{" "}
-            <strong>Data Model BRICK</strong> → Export to see.
+            Device {deviceInstance} added to graph. Refresh points or open the{" "}
+            <strong>Data model</strong> page → Export to see.
           </p>
         )}
         {toGraphMutation.isError && (

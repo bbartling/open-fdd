@@ -21,6 +21,7 @@ Platform config lives in the **same RDF graph** as Brick and BACnet (`config/dat
 ---
 
 ## Platform keys (RDF / GET-PUT /config)
+{: #platform-keys-config }
 
 Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
@@ -31,7 +32,7 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 | `rules_dir` | stack/rules | **Single directory for your rules** (hot reload) |
 | `brick_ttl_dir` | — | Optional. Directory containing Brick model TTL (e.g. `config/`); platform uses first `.ttl` or brick_ttl path for FDD column mapping. Optional if using points `brick_type`/fdd_input. See [Data modeling](modeling/overview). |
 | `bacnet_enabled` | true | Enable BACnet scraper |
-| `graph_sync_interval_min` | 5 | Minutes between serializing the in-memory graph to `data_model.ttl` (API background thread). Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. |
+| `graph_sync_interval_min` | 5 | Minutes between serializing the **full** in-memory graph to `data_model.ttl` (API background thread). That write runs `sync_brick_from_db` first, so Brick **`ref:`** external references reflect the DB at serialize time. Env: `OFDD_GRAPH_SYNC_INTERVAL_MIN`. Edit in the React app under **OpenFDD Config** (not Overview). For an immediate refresh after discovery or DB edits, use **Data model → Serialize to TTL** or GET `/data-model/ttl` with save. |
 | `bacnet_scrape_interval_min` | 5 | Poll interval (minutes) |
 | `bacnet_site_id` | default | Site to tag when scraping (use on **remote gateways** so data is attributed to the right building on the central DB) |
 | `bacnet_gateways` | — | Optional. **Central aggregator:** JSON array of `{url, site_id}`; scraper polls each remote diy-bacnet-server in turn. Env: `OFDD_BACNET_GATEWAYS`. |

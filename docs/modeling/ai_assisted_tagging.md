@@ -18,7 +18,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 2. **Sites and equipment** — Create the building/site and equipment (AHUs, VAVs, zones) via **POST /sites** and **POST /equipment**. Keep `site_id` UUIDs from export when present. For equipment assignment on import, you can use `equipment_id` UUIDs or `equipment_name` (resolved/created under `site_id`).
 
-3. **Export** — **GET /data-model/export** (or `?bacnet_only=true` for discovery-only). Returns a single JSON array: BACnet discovery rows plus all DB points. Unimported BACnet rows have `point_id: null`, `polling: false`, and null `site_id`/`equipment_id`/`brick_type`/`rule_input`.
+3. **Export** — **GET /data-model/export** (or `?bacnet_only=true` for discovery-only). Returns a single JSON array: BACnet discovery rows plus all DB points. Unimported BACnet rows have `point_id: null`, `polling: false`, and null `equipment_id`/`brick_type`/`rule_input`. **`site_id` / `site_name` are pre-filled** when you pass **`?site_id=`** (UUID or site name), when the **Data model** UI has a site selected in the top bar, or when the database has **exactly one site** — so LLMs can assign `equipment_name` safely. With **multiple sites** and no `site_id` filter, those fields stay null until you scope the export.
 
 4. **Tag** — Send the export JSON to an LLM or edit manually. For each point set:
    - **site_id**, **external_id** (time-series key)

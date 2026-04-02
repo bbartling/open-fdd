@@ -338,30 +338,35 @@ def save_screenshot_and_context(driver: webdriver.Chrome, prefix: str = "e2e_fai
 # --- Flow steps ---
 
 def _sites_loaded(driver: webdriver.Chrome) -> bool:
-    """True when Data Model page has settled: delete-all section (sites exist), or No sites, or site rows."""
+    """True when Data Model page has settled: delete-all section (sites exist), or empty-state banner."""
     if driver.find_elements(By.CSS_SELECTOR, "[data-testid=delete-all-confirm-input]"):
         return True
-    if "No sites" in (driver.page_source or ""):
+    if driver.find_elements(By.CSS_SELECTOR, "[data-testid=data-model-no-sites-banner]"):
         return True
-    if driver.find_elements(By.CSS_SELECTOR, "tr[data-site-id]"):
+    if "No sites" in (driver.page_source or ""):
         return True
     return False
 
 
 def _wait_data_model_ready(driver: webdriver.Chrome, timeout: float = 25) -> None:
-    """Wait for Data Model page to show shell then the new-site name input (or placeholder fallback)."""
+    """Wait for Data Model page shell and either delete-all (sites exist) or no-sites banner."""
     wait_page = WebDriverWait(driver, timeout)
-    wait_page.until(
-        lambda d: "Data model" in (d.page_source or "") or "Sites" in (d.page_source or "")
-    )
+    wait_page.until(lambda d: "Data Model BRICK" in (d.page_source or ""))
     time.sleep(0.5)
     wait = WebDriverWait(driver, timeout)
-    try:
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid=new-site-name-input]")))
-    except Exception:
-        wait.until(
-            EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Site name']"))
+    wait.until(
+        lambda d: bool(
+            d.find_elements(By.CSS_SELECTOR, "[data-testid=delete-all-confirm-input]")
+            or d.find_elements(By.CSS_SELECTOR, "[data-testid=data-model-no-sites-banner]")
         )
+    )
+
+
+def _wait_bacnet_tools_for_sites(driver: webdriver.Chrome, timeout: float = 25) -> None:
+    """Wait for BACnet tools page and Step 1 — Sites form."""
+    wait = WebDriverWait(driver, timeout)
+    wait.until(lambda d: "BACnet tools" in (d.page_source or ""))
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid=new-site-name-input]")))
 
 
 def delete_all_sites_and_reset_via_ui(driver: webdriver.Chrome, base_url: str) -> None:
@@ -370,12 +375,12 @@ def delete_all_sites_and_reset_via_ui(driver: webdriver.Chrome, base_url: str) -
     the delete-all block is only rendered when the frontend has sites (GET /sites succeeded)."""
     driver.get(f"{base_url}/data-model")
     _wait_data_model_ready(driver, timeout=25)
-    # Scroll so Sites / form is in view (helps on slow or tall pages)
+    # Scroll danger zone into view (sites UI moved to BACnet tools)
     try:
         for by, value in [
-            (By.CSS_SELECTOR, "[data-testid=new-site-name-input]"),
-            (By.XPATH, "//input[@placeholder='Site name']"),
-            (By.XPATH, "//*[contains(text(),'Sites')]"),
+            (By.CSS_SELECTOR, "[data-testid=delete-all-confirm-input]"),
+            (By.CSS_SELECTOR, "[data-testid=data-model-no-sites-banner]"),
+            (By.XPATH, "//*[contains(text(),'Remove all sites from data model')]"),
         ]:
             el = driver.find_elements(by, value)
             if el:
@@ -421,9 +426,9 @@ def delete_all_sites_and_reset_via_ui(driver: webdriver.Chrome, base_url: str) -
 
 
 def create_site_via_ui(driver: webdriver.Chrome, base_url: str, site_name: str) -> str:
-    """Create a site from Data Model page and return its ID (from table row data-site-id)."""
-    driver.get(f"{base_url}/data-model")
-    _wait_data_model_ready(driver, timeout=25)
+    """Create a site from BACnet tools (Step 1 — Sites) and return its ID (from table row data-site-id)."""
+    driver.get(f"{base_url}/bacnet-tools")
+    _wait_bacnet_tools_for_sites(driver, timeout=25)
     try:
         name_input = driver.find_element(By.CSS_SELECTOR, "[data-testid=new-site-name-input]")
     except Exception:

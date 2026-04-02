@@ -112,7 +112,7 @@ But the product/docs should frame those around the real user contexts:
 
 Relevant existing issue on the main Open-FDD repo:
 
-- **#73** — `Phase 2 – Stack Security Hardening (DB, Caddy, Secrets)` — <https://github.com/bbartling/open-fdd/issues/73>
+- **#73** — Stack security hardening (DB, Caddy, secrets) — <https://github.com/bbartling/open-fdd/issues/73>
 
 This should remain in the background context for future deployment and production-readiness work.
 

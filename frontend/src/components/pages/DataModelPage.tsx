@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Plus, Building2, Download, FileText, FileUp } from "lucide-react";
+import { ListOrdered, Database, Upload, Server, Save, RotateCcw, Search, Trash2, Download, FileText, FileUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { JsonPrettyPanel } from "@/components/ui/json-pretty-panel";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,23 +9,13 @@ import { useSiteContext } from "@/contexts/site-context";
 import { useAllEquipment, useAllPoints, useEquipment, usePoints, useSites } from "@/hooks/use-sites";
 import { useActiveFaults, useSiteFaults } from "@/hooks/use-faults";
 import { EquipmentTable } from "@/components/site/EquipmentTable";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
 import { apiFetch, apiFetchText } from "@/lib/api";
 import { writeTtlToPopup } from "@/lib/ttl-popup";
 import {
-  createSite,
   deleteSite,
   dataModelSerialize,
   dataModelReset,
   dataModelCheck,
-  type SiteCreate,
   type DataModelCheckResponse,
 } from "@/lib/crud-api";
 import type {
@@ -51,8 +41,6 @@ export function DataModelPage() {
   const [importJson, setImportJson] = useState("");
   const [importResult, setImportResult] = useState<DataModelImportResponse | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const [newSiteName, setNewSiteName] = useState("");
-  const [newSiteDescription, setNewSiteDescription] = useState("");
   const [checkResult, setCheckResult] = useState<DataModelCheckResponse | null>(null);
   const [resetConfirm, setResetConfirm] = useState("");
   const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
@@ -71,9 +59,15 @@ export function DataModelPage() {
   const faults = selectedSiteId ? faultsSite : faultsAll;
   const equipmentLoading = selectedSiteId ? equipmentSiteLoading : equipmentAllLoading;
   const siteMap = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites]);
+  const exportQueryKey = ["data-model", "export", selectedSiteId ?? "all"] as const;
   const { data: exportData, isLoading: exportLoading } = useQuery<DataModelExportRow[]>({
-    queryKey: ["data-model", "export"],
-    queryFn: () => apiFetch<DataModelExportRow[]>("/data-model/export"),
+    queryKey: exportQueryKey,
+    queryFn: () => {
+      const q = selectedSiteId
+        ? `?site_id=${encodeURIComponent(selectedSiteId)}`
+        : "";
+      return apiFetch<DataModelExportRow[]>(`/data-model/export${q}`);
+    },
     staleTime: 60 * 1000,
   });
 
@@ -119,27 +113,6 @@ export function DataModelPage() {
   const checkMutation = useMutation({
     mutationFn: dataModelCheck,
     onSuccess: (data: DataModelCheckResponse | undefined) => setCheckResult(data ?? null),
-  });
-
-  const createSiteMutation = useMutation({
-    mutationFn: (body: SiteCreate) => createSite(body),
-    onSuccess: () => {
-      setNewSiteName("");
-      setNewSiteDescription("");
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
-      queryClient.invalidateQueries({ queryKey: ["data-model"] });
-    },
-  });
-
-  const deleteSiteMutation = useMutation({
-    mutationFn: (siteId: string) => deleteSite(siteId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
-      queryClient.invalidateQueries({ queryKey: ["equipment"] });
-      queryClient.invalidateQueries({ queryKey: ["points"] });
-      queryClient.invalidateQueries({ queryKey: ["data-model"] });
-      queryClient.invalidateQueries({ queryKey: ["faults"] });
-    },
   });
 
   const exportJson = exportData == null ? "" : JSON.stringify(exportData, null, 2);
@@ -204,15 +177,29 @@ export function DataModelPage() {
     <div>
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model BRICK</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Build your Brick + BACnet data model step by step below. Start BACnet Who-Is and point discovery on the{" "}
+        Build your Brick + BACnet data model from here: export JSON for AI tagging, import tagged points, browse equipment, and
+        run SPARQL. On{" "}
         <Link
           to={{ pathname: "/bacnet-tools", search: location.search }}
           className="font-medium text-primary underline-offset-4 hover:underline"
         >
           BACnet tools
-        </Link>{" "}
-        page, then export JSON for AI tagging, paste tagged JSON back to import, and run SPARQL queries to validate.
+        </Link>
+        , create a <strong>site</strong> (Step 1) and run <strong>discovery</strong> (Step 2) before you rely on export/import.
       </p>
+
+      {sites.length === 0 && (
+        <p className="mb-6 text-sm text-muted-foreground" data-testid="data-model-no-sites-banner">
+          No sites in the model yet. Create one on{" "}
+          <Link
+            to={{ pathname: "/bacnet-tools", search: location.search }}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            BACnet tools
+          </Link>{" "}
+          under <strong>Step 1 — Sites</strong>, then use <strong>Step 2 — BACnet discovery</strong> to add devices to the graph.
+        </p>
+      )}
 
       {/* Step-by-step guide — AI context via /model-context/docs + /mcp/manifest */}
       <Card className="mb-8 border-primary/20 bg-primary/5">
@@ -228,17 +215,16 @@ export function DataModelPage() {
         <CardContent className="space-y-4">
           <ol className="list-decimal space-y-3 pl-5 text-sm">
             <li>
-              <strong>BACnet Who-Is + point discovery</strong> — On{" "}
+              <strong>Sites + BACnet discovery</strong> — On{" "}
               <Link
                 to={{ pathname: "/bacnet-tools", search: location.search }}
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
                 BACnet tools
               </Link>
-              , run Who-Is, then point discovery and <strong>Add to data model</strong> for each device.
-            </li>
-            <li>
-              <strong>Add a site (Step 2)</strong> — In the Sites section below, create a site if you don’t have one. Assign points to it when you import.
+              : <strong>Step 1 — Sites</strong> (create a site if needed), then <strong>Step 2 — BACnet discovery</strong> (Who-Is,
+              point discovery, <strong>Add to data model</strong>). Optional read/write tools on that page are not required for
+              this flow.
             </li>
             <li>
               <strong>Export JSON and open your LLM</strong> — Download the export (Export section), then open your LLM chat. Pull prompt/context from{" "}
@@ -259,96 +245,6 @@ export function DataModelPage() {
         </CardContent>
       </Card>
 
-      {/* Step 2: Sites — add a site so you can assign points when you import */}
-      <Card className="mt-6">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Building2 className="h-5 w-5" />
-                <span className="text-base font-medium text-muted-foreground">Step 2</span>
-                Sites
-              </CardTitle>
-              <p className="text-sm font-normal text-muted-foreground">
-                Create a site if you don’t have one. Assign points to it when you import.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-end gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
-                  <input
-                    type="text"
-                    value={newSiteName}
-                    onChange={(e) => setNewSiteName(e.target.value)}
-                    placeholder="Site name"
-                    className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    data-testid="new-site-name-input"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Description (optional)</label>
-                  <input
-                    type="text"
-                    value={newSiteDescription}
-                    onChange={(e) => setNewSiteDescription(e.target.value)}
-                    placeholder="Optional"
-                    className="h-9 w-48 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!newSiteName.trim()) return;
-                    createSiteMutation.mutate({ name: newSiteName.trim(), description: newSiteDescription.trim() || null });
-                  }}
-                  disabled={createSiteMutation.isPending || !newSiteName.trim()}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  data-testid="add-site-button"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add site
-                </button>
-              </div>
-              {createSiteMutation.isError && (
-                <p className="text-sm text-destructive">{createSiteMutation.error?.message}</p>
-              )}
-              <div className="overflow-x-auto rounded-lg border border-border/60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sites.map((site) => (
-                      <TableRow key={site.id} data-site-id={site.id}>
-                        <TableCell className="font-medium">{site.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{site.description ?? "—"}</TableCell>
-                        <TableCell>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`Delete site "${site.name}"? This removes all equipment, points, timeseries, and faults for this site.`)) {
-                                deleteSiteMutation.mutate(site.id);
-                              }
-                            }}
-                            disabled={deleteSiteMutation.isPending}
-                            className="inline-flex items-center gap-1 rounded border border-border/60 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Delete
-                          </button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              {sites.length === 0 && <p className="text-sm text-muted-foreground">No sites. Add one above.</p>}
-            </CardContent>
-          </Card>
-
       {/* Data model TTL — view, serialize, check */}
       <Card className="mt-6">
         <CardHeader className="pb-2">
@@ -359,6 +255,25 @@ export function DataModelPage() {
           <p className="text-sm font-normal text-muted-foreground">
             View full Brick + BACnet graph as TTL, serialize to file, or run integrity check.
           </p>
+          <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-xs text-muted-foreground leading-relaxed space-y-1.5">
+            <p className="font-medium text-foreground/80">How this fits together</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>
+                <span className="text-foreground/90">Database (Postgres)</span> — source of truth for sites, equipment, and
+                points (including BACnet addressing fields and <code className="rounded bg-muted px-1">external_id</code>, which
+                maps samples in the time-series table). Deleting sites here removes that relational data.
+              </li>
+              <li>
+                <span className="text-foreground/90">In-memory RDF graph</span> — Brick triples are rebuilt from the DB; BACnet
+                discovery adds extra triples for SPARQL and tooling. Import/reset/sync all refresh this merge.
+              </li>
+              <li>
+                <span className="text-foreground/90">TTL file on disk</span> — a persisted snapshot of that graph (default{" "}
+                <code className="rounded bg-muted px-1">config/data_model.ttl</code>). The API also saves periodically in the
+                background; &quot;Serialize to TTL&quot; forces a write without changing graph contents.
+              </li>
+            </ul>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -421,8 +336,11 @@ export function DataModelPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              GET /data-model/export — BACnet discovery + DB points. Download JSON and use it with an{" "}
-              <strong>external</strong> LLM or agent. Agents can pull documentation context from{" "}
+              GET /data-model/export — BACnet discovery + DB points. When a site is selected in the top bar, the export adds{" "}
+              <code className="rounded bg-muted px-1 text-xs">?site_id=…</code> so unimported discovery rows include{" "}
+              <code className="rounded bg-muted px-1 text-xs">site_id</code> / <code className="rounded bg-muted px-1 text-xs">site_name</code>{" "}
+              for LLM equipment tagging; with <strong>All sites</strong>, the API still pre-fills those fields if only one site exists.
+              Download JSON and use it with an <strong>external</strong> LLM or agent. Agents can pull documentation context from{" "}
               <code className="rounded bg-muted px-1 text-xs">GET /model-context/docs</code> and discover HTTP mappings from{" "}
               <code className="rounded bg-muted px-1 text-xs">GET /mcp/manifest</code>, then apply results with PUT /data-model/import below.
             </p>
@@ -556,20 +474,82 @@ export function DataModelPage() {
           </CardContent>
         </Card>
 
-        {/* Remove all / Reset graph — destructive actions at bottom */}
+        {/* Danger zone — lower-risk reset first, nuclear delete-all last */}
         <Card className="border-amber-500/30">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg text-amber-700 dark:text-amber-400">
               <Trash2 className="h-5 w-5" />
-              Remove all sites / Reset graph
+              Danger zone
             </CardTitle>
             <p className="text-sm font-normal text-muted-foreground">
-              Irreversible. Use only when clearing the data model or resetting the in-memory graph to DB-only.
+              <strong>Lower risk</strong> (below): reset the in-memory RDF graph and TTL from the current database — no Postgres
+              deletes. <strong>Maximum risk</strong> (bottom): delete every site in the database (cascade), then the same graph
+              reset. See also{" "}
+              <a
+                href="https://bbartling.github.io/open-fdd/frontend#data-model-danger-zone"
+                className="font-medium text-primary underline-offset-2 hover:underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                docs → React dashboard → Danger zone
+              </a>
+              .
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
+            <div className="rounded-lg border border-border/60 p-4">
+              <p className="mb-1 text-sm font-medium text-amber-800 dark:text-amber-300/90">
+                Lower risk — RDF / TTL reset only
+              </p>
+              <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+                <span className="font-medium text-foreground/80">Danger level: moderate.</span> Calls{" "}
+                <code className="rounded bg-muted px-1">POST /data-model/reset</code> only. Clears the in-memory graph, strips
+                BACnet discovery triples and orphan blanks, rebuilds Brick triples from <strong>whatever is still in the
+                database</strong>, then writes the TTL file. Your sites, points, and{" "}
+                <code className="rounded bg-muted px-1">external_id</code> (time-series column mapping) stay in Postgres. Use this
+                when discovery left stale BACnet RDF but you want to keep DB rows. For orphan warnings, use{" "}
+                <strong>Check integrity</strong> above (this button does not run that check).
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  placeholder="Type reset to confirm"
+                  className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (resetConfirm.trim().toLowerCase() !== "reset") {
+                      alert('Type "reset" to confirm.');
+                      return;
+                    }
+                    resetMutation.mutate();
+                  }}
+                  disabled={resetMutation.isPending || resetConfirm.trim().toLowerCase() !== "reset"}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-600/60 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-400"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset graph to DB-only
+                </button>
+              </div>
+              {resetMutation.isSuccess && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {(resetMutation.data as { message?: string })?.message ?? "Graph reset."}
+                </p>
+              )}
+            </div>
             {sites.length > 0 && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+                <p className="mb-1 text-sm font-medium text-destructive">Maximum risk — empty the database</p>
+                <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+                  <span className="font-medium text-destructive/90">Danger level: nuclear.</span> Calls{" "}
+                  <code className="rounded bg-background/80 px-1">DELETE /sites/…</code> for every site (removes equipment,
+                  points, and related data in the DB), then <code className="rounded bg-background/80 px-1">POST /data-model/reset</code>{" "}
+                  so the RDF graph and TTL match the now-empty model. Time-series history for those points is gone with the site
+                  cascade — not just the graph file.
+                </p>
                 <p className="mb-2 text-sm font-medium text-muted-foreground">Remove all sites from data model</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
@@ -612,40 +592,6 @@ export function DataModelPage() {
                 </div>
               </div>
             )}
-            <div className="rounded-lg border border-border/60 p-4">
-              <p className="mb-3 text-sm text-muted-foreground">
-                Serialize in-memory graph to TTL file; reset graph to DB-only (clears BACnet); run integrity check.
-              </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  type="text"
-                  value={resetConfirm}
-                  onChange={(e) => setResetConfirm(e.target.value)}
-                  placeholder="Type reset to confirm"
-                  className="h-9 w-40 rounded-lg border border-border/60 bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (resetConfirm.trim().toLowerCase() !== "reset") {
-                      alert('Type "reset" to confirm.');
-                      return;
-                    }
-                    resetMutation.mutate();
-                  }}
-                  disabled={resetMutation.isPending || resetConfirm.trim().toLowerCase() !== "reset"}
-                  className="inline-flex items-center gap-2 rounded-lg border border-amber-600/60 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-400"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset graph to DB-only
-                </button>
-              </div>
-              {resetMutation.isSuccess && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {(resetMutation.data as { message?: string })?.message ?? "Graph reset."}
-                </p>
-              )}
-            </div>
           </CardContent>
         </Card>
       </div>
