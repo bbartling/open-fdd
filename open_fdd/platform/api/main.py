@@ -37,6 +37,15 @@ from open_fdd.platform.api.schemas import CapabilityResponse, ErrorResponse, Err
 from open_fdd.platform.realtime.ws import router as ws_router
 
 settings = get_platform_settings()
+_enable_docs = bool(getattr(settings, "enable_openapi_docs", False))
+_docs_url = "/docs" if _enable_docs else None
+_redoc_url = "/redoc" if _enable_docs else None
+_openapi_url = "/openapi.json" if _enable_docs else None
+_api_description = (
+    "Open-FDD REST API. Interactive Swagger is enabled on this deployment (HTTP lab); use Authorize with your Bearer token."
+    if _enable_docs
+    else "Open-FDD REST API. Interactive Swagger/OpenAPI UIs are disabled on this deployment; use the React app."
+)
 
 
 @asynccontextmanager
@@ -73,11 +82,11 @@ def _app_version() -> str:
 app = FastAPI(
     title=settings.app_title,
     version=_app_version(),
-    description="Open-FDD REST API. Interactive Swagger/OpenAPI endpoints are disabled; use the React app and /bacnet-tools.",
+    description=_api_description,
     lifespan=lifespan,
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
     openapi_tags=[
         {
             "name": "data-model",

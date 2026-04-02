@@ -27,6 +27,11 @@ services:
     container_name: openfdd_bacnet_server
     network_mode: host
     environment:
+      # Passed to bacpypes_server.main: OFDD_BACNET_DEVICE_INSTANCE, OFDD_BACNET_ADDRESS (bootstrap --bacnet-*). Name is fixed: open-fdd.
+      OFDD_BACNET_DEVICE_INSTANCE: "${OFDD_BACNET_DEVICE_INSTANCE:-3456788}"
+      OFDD_BACNET_ADDRESS: "${OFDD_BACNET_ADDRESS:-}"
+      # true = /docs on :8080 (HTTP lab); false when self-signed Caddy (bootstrap).
+      OFDD_ENABLE_OPENAPI_DOCS: "${OFDD_ENABLE_OPENAPI_DOCS:-false}"
       # When set (bootstrap --caddy-self-signed), OpenAPI "servers" uses this so Swagger Try it out hits https://…/bacnet/…
       BACNET_SWAGGER_SERVERS_URL: "${BACNET_SWAGGER_SERVERS_URL:-}"
       # Same value as OFDD_BACNET_SERVER_API_KEY in stack/.env (bootstrap generates both).
@@ -50,12 +55,25 @@ services:
       driver: json-file
       options: *log-opts
     # --public: bind HTTP :8080 on all host interfaces so Caddy (host.docker.internal:8080) can proxy /bacnet/*.
-    # Loopback-only for this process would block bridge-mode Caddy on Linux; restrict :8080 with host firewall if needed.
-    command: >
-      python3 -u -m bacpypes_server.main
-      --name OpenFDDGateway
-      --instance 3456788
-      --public
+    # Optional --address binds BACnet/IP (UDP) to a specific NIC (e.g. 192.168.204.11/24:47808); see diy-bacnet-server README.
+    command:
+      - sh
+      - -c
+      - |
+          set -eu
+          # Use $$VAR so Compose does not interpolate shell variables (see https://docs.docker.com/compose/environment-variables/ ).
+          if [ -n "$$OFDD_BACNET_ADDRESS" ]; then
+            exec python3 -u -m bacpypes_server.main \
+              --name open-fdd \
+              --instance "$$OFDD_BACNET_DEVICE_INSTANCE" \
+              --address "$$OFDD_BACNET_ADDRESS" \
+              --public
+          else
+            exec python3 -u -m bacpypes_server.main \
+              --name open-fdd \
+              --instance "$$OFDD_BACNET_DEVICE_INSTANCE" \
+              --public
+          fi
     restart: unless-stopped
     # BACnet/IP: UDP 47808. JSON-RPC HTTP :8080 (Swagger disabled; use Open-FDD /bacnet-tools).
 
@@ -225,9 +243,9 @@ services:
       dockerfile: stack/Dockerfile.api
     container_name: openfdd_api
     working_dir: /app
-    # Loopback-only on the host: use Caddy (or docker exec) as the entry point; scrapers use api:8000 on the bridge.
+    # Host bind: 127.0.0.1 when using Caddy/TLS (bootstrap --caddy-self-signed); 0.0.0.0 for standard HTTP lab (bootstrap --bacnet-address without TLS).
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${OFDD_API_HOST_BIND:-127.0.0.1}:8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -248,6 +266,8 @@ services:
       OFDD_TRUST_FORWARDED_PROTO: ${OFDD_TRUST_FORWARDED_PROTO:-false}
       # Bearer for diy-bacnet-server JSON-RPC (must match BACNET_RPC_API_KEY on bacnet-server).
       OFDD_BACNET_SERVER_API_KEY: ${OFDD_BACNET_SERVER_API_KEY:-}
+      # true = /docs on :8000 (HTTP lab); false when self-signed Caddy (bootstrap).
+      OFDD_ENABLE_OPENAPI_DOCS: "${OFDD_ENABLE_OPENAPI_DOCS:-false}"
       # External LLMs use Open-FDD endpoints directly (see docs/model-context endpoints).
       # When set, API trusts X-Caddy-Auth header (Caddy sets it after Basic auth so browser only logs in once)
       OFDD_CADDY_INTERNAL_SECRET: ${OFDD_CADDY_INTERNAL_SECRET:-openfdd-internal}
@@ -314,8 +334,9 @@ services:
           # would skip npm run build forever, so UI changes (and VITE_* env) never shipped.
           npm run build
           npx --yes serve -s dist -l 5173
+    # Host bind: loopback with Caddy/TLS; 0.0.0.0 for standard HTTP lab (see OFDD_FRONTEND_HOST_BIND in stack/.env).
     ports:
-      - "5173:5173"
+      - "${OFDD_FRONTEND_HOST_BIND:-127.0.0.1}:5173:5173"
     environment:
       VITE_OFDD_API_KEY: ${OFDD_API_KEY:-}
       # Deploy-friendly default behind reverse proxy (Caddy routes /api and /auth).

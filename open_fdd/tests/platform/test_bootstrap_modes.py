@@ -17,6 +17,11 @@ def test_bootstrap_help_lists_mode_flag():
     assert "model" in res.stdout
     assert "engine" in res.stdout
     assert "full" in res.stdout
+    assert "--bacnet-instance" in res.stdout
+    assert "--bacnet-address" in res.stdout
+    assert "open-fdd" in res.stdout
+    assert "--bacnet-name" not in res.stdout
+    assert "--allow-no-ui-auth" in res.stdout
 
 
 def test_bootstrap_rejects_invalid_mode():

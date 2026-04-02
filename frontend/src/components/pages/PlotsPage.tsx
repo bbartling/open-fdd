@@ -5,7 +5,7 @@ import { useFaultTimeseries, useFaultState } from "@/hooks/use-faults";
 import { DateRangeSelect } from "@/components/site/DateRangeSelect";
 import type { DatePreset } from "@/components/site/DateRangeSelect";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchCsv } from "@/lib/csv";
+import { downloadTimeseriesCsv, fetchCsv } from "@/lib/csv";
 import {
   inferYColumns,
   joinFaultSignals,
@@ -13,7 +13,7 @@ import {
   pickFaultBucket,
   type ParsedCsv,
 } from "@/lib/plots-csv";
-import { ChartLine, RefreshCw } from "lucide-react";
+import { ChartLine, Download, RefreshCw } from "lucide-react";
 
 function presetRange(preset: DatePreset): { start: string; end: string } {
   const end = new Date();
@@ -113,6 +113,7 @@ export function PlotsPage() {
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
   const [selectedFaultId, setSelectedFaultId] = useState<string>("");
   const [loadingCsv, setLoadingCsv] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
   const [parsedCsv, setParsedCsv] = useState<ParsedCsv | null>(null);
   const [yColumns, setYColumns] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -227,6 +228,31 @@ export function PlotsPage() {
       setLoadingCsv(false);
     }
   }, [selectedSiteId, start, end, pointIdsForExport, onCsvLoaded]);
+
+  const downloadExcelCsv = useCallback(async () => {
+    if (!selectedSiteId || pointIdsForExport.length === 0) return;
+    setDownloadingCsv(true);
+    setError(null);
+    try {
+      const startD = toDateOnly(start);
+      const endD = toDateOnly(end);
+      await downloadTimeseriesCsv(
+        {
+          site_id: selectedSiteId,
+          start_date: startD,
+          end_date: endD,
+          format: "wide",
+          point_ids: pointIdsForExport,
+        },
+        `openfdd_plots_device-${selectedDeviceId}_${startD}_${endD}.csv`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download CSV.");
+    } finally {
+      setDownloadingCsv(false);
+    }
+  }, [selectedSiteId, start, end, pointIdsForExport, selectedDeviceId]);
+
   const effectiveCsv = useMemo(() => {
     if (!parsedCsv || !selectedFaultId) return parsedCsv;
     const faults = (faultData?.series ?? []).filter((f) => String(f.metric) === selectedFaultId);
@@ -465,7 +491,19 @@ export function PlotsPage() {
             <RefreshCw className="h-4 w-4" />
             {loadingCsv ? "Loading..." : "Load Data from Database"}
           </button>
-          <span className="text-xs text-muted-foreground">Timestamp is fixed to `timestamp`; fault data is joined automatically when available.</span>
+          <button
+            type="button"
+            onClick={() => void downloadExcelCsv()}
+            disabled={downloadingCsv || !selectedDeviceId || pointIdsForExport.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-4 py-2 text-sm font-medium disabled:opacity-50"
+            title="UTF-8 with BOM, wide format: timestamp column plus one column per point (ISO UTC). Excel-ready."
+          >
+            <Download className="h-4 w-4" />
+            {downloadingCsv ? "Downloading..." : "Download CSV"}
+          </button>
+          <span className="text-xs text-muted-foreground">
+            Timestamp is fixed to `timestamp`; fault data is joined automatically when available. CSV download matches the selected device, points, and date range (same as Load); opens cleanly in Excel.
+          </span>
         </div>
       </div>
 

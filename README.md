@@ -23,38 +23,53 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 ---
 
+## Quick Starts
 
-## Quick Start — Open-FDD AFDD Platform Manually by the Human
+### Open-FDD Engine-only (rules engine, no Docker) PyPi
 
-Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux only** (maintainers primarily test Ubuntu Server and Linux Mint on **x86_64**; CI is x86_64). **ARM64** (e.g. Raspberry Pi 4/5) is not covered by CI but is used in the community—validate image availability and sizing (RAM/CPU) for Postgres + services. Windows is not supported.
-
-### Engine-only (rules engine, no Docker)
-
-If you only want the Python rules engine (no full platform stack):
+If you only want the Python rules engine (without the full platform stack), you can use it in standard Python environments.
 
 ```bash
 pip install open-fdd
 ```
 
-Then run the standalone examples from:
 
-- https://github.com/bbartling/open-fdd/tree/master/examples
+### Open-FDD AFDD Platform Manually by the Human
 
-### 🚀 Platform Deployment (Docker)
+Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux-only** and intended for IoT edge applications using Docker exclusively.
 
-```bash
-git clone https://github.com/bbartling/open-fdd.git
-cd open-fdd
-./scripts/bootstrap.sh
-```
 
-**Standard full-stack bootstrap with self-signed TLS (Caddy) and app login:** uses **JWT** and **`Authorization: Bearer`**.
+**Standard HTTP bootstrap (no TLS):** Bind the DIY BACnet server to a specific OT NIC and port, while using a separate NIC for outbound internet access via DHCP.
 
 ```bash
-printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
+cd /path/to/open-fdd
+
+printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
+  --bacnet-address 192.168.204.16/24:47808 \
+  --bacnet-instance 12345 \
+  --user ben \
+  --password-stdin
 ```
 
-Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See [Modular architecture](docs/modular_architecture.md) for the service matrix and mode behavior.
+> **NOTE:** Both the DIY BACnet server and Open-FDD API in the **Standard HTTP bootstrap (no TLS)** configuration still require bearer tokens for authorization. These are defined in `open-fdd/stack/.env` and are set during the bootstrapping process.
+
+
+**Standard hardened stack — self-signed TLS (Caddy) and app login:** Open-FDD runs over TLS with self-signed certificates, and there is no access to the Open-FDD API or the DIY BACnet server Docker container APIs.
+
+
+```bash
+cd /path/to/open-fdd
+
+printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
+  --bacnet-address 192.168.204.16/24:47808 \
+  --bacnet-instance 12345 \
+  --user ben \
+  --password-stdin \
+  --caddy-self-signed
+```
+
+
+Also available is the **partial stack** mode: `./scripts/bootstrap.sh --mode collector`, `--mode model`, or `--mode engine`. See the `Docs` below for more information.
 
 ---
 

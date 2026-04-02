@@ -31,6 +31,8 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 Configure dashboard login with **`./scripts/bootstrap.sh --user NAME`** and a **secret password source** (`--password-file`, `--password-stdin`, **`OFDD_APP_PASSWORD`**, or interactive prompt — see `bootstrap.sh --help`). **`--no-auth`** removes **`OFDD_API_KEY`** and app-user keys from `stack/.env` as applicable.
 
+**Bootstrap guardrail:** Starting the **full** stack or **`--mode model`** fails fast if **`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, and **`OFDD_JWT_SECRET`** are not all present in `stack/.env` (unless you pass **`--allow-no-ui-auth`** or **`--no-auth`**). **`--mode collector`** and **`--mode engine`** are exempt.
+
 **Examples (password not on the argv):**
 
 ```bash
@@ -61,6 +63,7 @@ Related tracking: **[Stack security hardening](https://github.com/bbartling/open
 | Area | Repo default / guidance |
 |------|-------------------------|
 | **Postgres publish** | `docker-compose.yml` binds the DB port to **`127.0.0.1:5432`** only — tools on the **host** can use `psql` locally; **remote machines cannot** reach the DB via that mapping. For stricter production, **remove** the `ports:` block under `db` so only containers on the compose network can connect (admin via `docker exec` or a throwaway `psql` container). |
+| **API / frontend host bind** | Compose uses **`OFDD_API_HOST_BIND`** and **`OFDD_FRONTEND_HOST_BIND`** (default **`127.0.0.1`**) for published ports **8000** and **5173**. **`./scripts/bootstrap.sh --bacnet-address …`** without **`--caddy-self-signed`** sets both to **`0.0.0.0`** for a standard **HTTP lab** (LAN access to `/docs` and the React app). **`--caddy-self-signed`** forces **loopback** so the LAN should use **Caddy HTTPS**, not raw **:8000** / **:5173**. |
 | **Edge TLS** | The committed Caddyfile serves **HTTP on :80** with security headers. For **HTTPS**, use a public DNS name and either Caddy automatic TLS or mounted certs; start with [`stack/caddy/Caddyfile.https.example`](../stack/caddy/Caddyfile.https.example) and set **`OFDD_TRUST_FORWARDED_PROTO=true`** on the API. **Do not** send `Strict-Transport-Security` on plain HTTP; the example adds HSTS only on the HTTPS site block. |
 | **Caddy headers** | The bundled **`stack/caddy/Caddyfile`** sets `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`. Optional: **CSP**, **rate limiting**, Caddy **basic auth** as a second layer — see [Caddyfile for protecting the entire API](#caddyfile-for-protecting-the-entire-api). |
 | **Secrets** | **`stack/.env`** is **gitignored** (and listed in `.gitignore`). Bootstrap creates or updates it; store **Argon2 hash**, **JWT secret**, and optional **`OFDD_API_KEY`** (machine-only — not for the browser UI) there. Never commit secrets. For Caddy **`X-Caddy-Auth`** flows, set **`OFDD_CADDY_INTERNAL_SECRET`** in `.env` (compose default is dev-only). Optional Grafana: **`GF_SECURITY_ADMIN_USER`** / **`GF_SECURITY_ADMIN_PASSWORD`** in `.env` instead of compose defaults. |

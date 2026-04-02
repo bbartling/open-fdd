@@ -83,6 +83,8 @@ class PlatformSettings(BaseSettings):
     jwt_secret: Optional[str] = None
     access_token_minutes: int = 60
     refresh_token_days: int = 7
+    # When true, expose /docs, /redoc, /openapi.json (HTTP lab). False when edge uses self-signed Caddy (bootstrap).
+    enable_openapi_docs: bool = False
     # When true, treat X-Forwarded-Proto: https as HTTPS for Secure cookies (TLS at reverse proxy only).
     trust_forwarded_proto: bool = False
     # When set, requests with header X-Caddy-Auth equal to this value are trusted (Caddy sets it after Basic auth). Use behind Caddy so the browser only does Basic once.

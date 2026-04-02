@@ -36,6 +36,7 @@
 #   ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests
 # Heavy ops example (pull, rebuild, verify, tests, app user, frontend volume reset, self-signed Caddy):
 #   printf '%s' 'YOUR_PASSWORD' | ./scripts/bootstrap.sh --maintenance --update --verify --force-rebuild --test --diy-bacnet-tests --user ben --password-stdin --frontend --caddy-self-signed
+#   Standard HTTP lab (OT NIC): ./scripts/bootstrap.sh --bacnet-address 192.168.204.11/24:47808 --bacnet-instance 1235423
 #
 # Day 1 after git clone (full stack + self-signed HTTPS on Caddy; no tests, no --frontend, no git pull):
 #   ./scripts/bootstrap.sh --caddy-self-signed
@@ -79,6 +80,7 @@ DIY_BACNET_TESTS=false
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
+ALLOW_NO_UI_AUTH=false
 APP_USER="${OFDD_APP_USER:-}"
 APP_PASSWORD="${OFDD_APP_PASSWORD:-}"
 APP_PASSWORD_FILE=""
@@ -87,6 +89,9 @@ FRONTEND_RESET=false
 CADDY_SELF_SIGNED=false
 CADDY_HTTP_ONLY=false
 CADDY_TLS_CN="${CADDY_TLS_CN:-openfdd.local}"
+# Optional: written to stack/.env when passed (see --bacnet-* in --help)
+BACNET_DEVICE_INSTANCE_CLI=""
+BACNET_ADDRESS_CLI=""
 RETENTION_DAYS=365
 LOG_MAX_SIZE="100m"
 LOG_MAX_FILES=3
@@ -159,6 +164,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --log-max-size)   i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_SIZE="${args[$i]}" ;;
     --log-max-files)  i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && LOG_MAX_FILES="${args[$i]}" ;;
     --no-auth) NO_AUTH=true ;;
+    --allow-no-ui-auth) ALLOW_NO_UI_AUTH=true ;;
     --user) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_USER="${args[$i]}" ;;
     --password-file) i=$(( i + 1 )); [[ $i -lt ${#args[@]} ]] && APP_PASSWORD_FILE="${args[$i]}" ;;
     --password-stdin) APP_PASSWORD_STDIN=true ;;
@@ -172,6 +178,22 @@ while [[ $i -lt ${#args[@]} ]]; do
         exit 1
       fi
       CADDY_TLS_CN="${args[$i]}"
+      ;;
+    --bacnet-instance)
+      i=$(( i + 1 ))
+      if [[ $i -ge ${#args[@]} ]]; then
+        echo "--bacnet-instance requires a value (BACnet device instance number)."
+        exit 1
+      fi
+      BACNET_DEVICE_INSTANCE_CLI="${args[$i]}"
+      ;;
+    --bacnet-address)
+      i=$(( i + 1 ))
+      if [[ $i -ge ${#args[@]} ]]; then
+        echo "--bacnet-address requires a value (e.g. 192.168.204.11/24:47808 for OT LAN / dual-NIC)."
+        exit 1
+      fi
+      BACNET_ADDRESS_CLI="${args[$i]}"
       ;;
     -h|--help)
       cat <<EOF
@@ -215,6 +237,7 @@ Docker install:
 
 Security:
   --no-auth                 Do not generate or set OFDD_API_KEY (API will not require Bearer auth). Default: generate key and write to stack/.env.
+  --allow-no-ui-auth        With --mode full or model (or --build-all): allow starting without Phase-1 UI login in stack/.env (default: require OFDD_APP_USER + hash + JWT).
   --caddy-self-signed       Self-signed TLS for Caddy (:443, :80→HTTPS); writes certs; stack/.env: OPENFDD_CADDYFILE, OFDD_TRUST_FORWARDED_PROTO=true, BACNET_SWAGGER_SERVERS_URL=/bacnet (HTTPS gateway UI at https://HOST/bacnet/docs)
   --caddy-tls-cn HOST       With --caddy-self-signed: certificate CN/SAN (default: openfdd.local)
   --caddy-http-only         Turn off self-signed Caddy mode (default HTTP Caddyfile on :80 only; OFDD_TRUST_FORWARDED_PROTO=false)
@@ -222,6 +245,13 @@ Security:
   --password-file PATH      Read Phase-1 app password from file (first line).
   --password-stdin          Read Phase-1 app password from stdin.
                             (Alternative: set OFDD_APP_PASSWORD env var.)
+
+  BACnet gateway (diy-bacnet-server; host network — see https://github.com/bbartling/diy-bacnet-server ):
+                            Gateway BACnet name is fixed as open-fdd (not configurable).
+  --bacnet-instance N       Writes OFDD_BACNET_DEVICE_INSTANCE → --instance (compose default 3456788 if omitted).
+  --bacnet-address ADDR     Writes OFDD_BACNET_ADDRESS → --address (e.g. 192.168.204.11/24:47808) for BACnet/IP on the OT NIC.
+                            Without --caddy-self-signed: reverts Caddy to HTTP :80 (clears prior OPENFDD_CADDYFILE self-signed mode),
+                            and sets OFDD_API_HOST_BIND=0.0.0.0 OFDD_FRONTEND_HOST_BIND=0.0.0.0 for LAN access to :8000 and :5173.
 
 EOF
       exit 0
@@ -545,6 +575,37 @@ write_auth_env_if_requested() {
   echo "Wrote Phase-1 auth config keys in: $auth_file (user: $APP_USER)"
 }
 
+# stack/.env keys expected together for /api/auth/login (see open_fdd.platform.api.auth.auth_user_config_status).
+stack_env_has_phase1_ui_auth() {
+  local f="$STACK_DIR/.env"
+  [[ -f "$f" ]] || return 1
+  grep -qE '^OFDD_APP_USER=.+' "$f" || return 1
+  grep -qE '^OFDD_APP_USER_HASH=.+' "$f" || return 1
+  grep -qE '^OFDD_JWT_SECRET=.+' "$f" || return 1
+  return 0
+}
+
+require_phase1_ui_auth_for_browser_stack_or_exit() {
+  if $ALLOW_NO_UI_AUTH || $NO_AUTH; then
+    return 0
+  fi
+  if stack_env_has_phase1_ui_auth; then
+    return 0
+  fi
+  cat <<EOF2 >&2
+=== Phase-1 UI login is not configured ===
+Stacks that include the web UI (--mode full or model, or --build-all) need /api/auth/login.
+Add credentials once (writes stack/.env), for example:
+
+  printf '%s' 'YOUR_PASSWORD' | $0 --user YOURNAME --password-stdin
+
+Re-run bootstrap with the same flags you use today plus --user and --password-stdin (or merge into one command).
+
+Lab / CI without UI login: add --allow-no-ui-auth
+EOF2
+  exit 1
+}
+
 ensure_mqtt_bridge_env_defaults() {
   local env_file="$1"
   [[ -f "$env_file" ]] || touch "$env_file"
@@ -573,6 +634,48 @@ env_file_set_kv() {
   fi
 }
 
+# Swagger/OpenAPI on API :8000 and BACnet gateway :8080: enabled for standard HTTP; disabled when self-signed Caddy is active.
+sync_openapi_docs_env() {
+  local f="$STACK_DIR/.env"
+  [[ -f "$f" ]] || touch "$f"
+  local new_val=true
+  if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$f" 2>/dev/null; then
+    new_val=false
+  fi
+  local old_line=""
+  old_line=$(grep -E '^OFDD_ENABLE_OPENAPI_DOCS=' "$f" 2>/dev/null | tail -1 || true)
+  local want="OFDD_ENABLE_OPENAPI_DOCS=${new_val}"
+  if [[ "$old_line" != "$want" ]]; then
+    env_file_set_kv "$f" "OFDD_ENABLE_OPENAPI_DOCS" "${new_val}"
+    echo "OpenAPI/Swagger UI: OFDD_ENABLE_OPENAPI_DOCS=${new_val} (off under --caddy-self-signed)."
+    BOOTSTRAP_RECREATE_API_FRONTEND=true
+    BOOTSTRAP_RECREATE_BACNET=true
+  fi
+}
+
+# Apply --bacnet-instance / --bacnet-address to stack/.env (compose passes OFDD_BACNET_*; gateway --name is always open-fdd).
+apply_bacnet_gateway_cli_to_env() {
+  local f="$STACK_DIR/.env"
+  [[ -f "$f" ]] || touch "$f"
+  if [[ -n "${BACNET_DEVICE_INSTANCE_CLI:-}" ]]; then
+    env_file_set_kv "$f" "OFDD_BACNET_DEVICE_INSTANCE" "$BACNET_DEVICE_INSTANCE_CLI"
+    echo "Wrote OFDD_BACNET_DEVICE_INSTANCE to stack/.env"
+    BOOTSTRAP_RECREATE_BACNET=true
+  fi
+  if [[ -n "${BACNET_ADDRESS_CLI:-}" ]]; then
+    env_file_set_kv "$f" "OFDD_BACNET_ADDRESS" "$BACNET_ADDRESS_CLI"
+    echo "Wrote OFDD_BACNET_ADDRESS to stack/.env (BACnet/IP bind; dual-NIC / OT LAN)"
+    BOOTSTRAP_RECREATE_BACNET=true
+    # Standard no-TLS lab: expose API and frontend on all interfaces so LAN clients can use http://HOST:8000/docs and :5173.
+    if ! $CADDY_SELF_SIGNED; then
+      env_file_set_kv "$f" "OFDD_API_HOST_BIND" "0.0.0.0"
+      env_file_set_kv "$f" "OFDD_FRONTEND_HOST_BIND" "0.0.0.0"
+      echo "Lab bind: OFDD_API_HOST_BIND=0.0.0.0 OFDD_FRONTEND_HOST_BIND=0.0.0.0 (use --caddy-self-signed for HTTPS + loopback-only API/frontend)"
+      BOOTSTRAP_RECREATE_API_FRONTEND=true
+    fi
+  fi
+}
+
 disable_caddy_self_signed_config() {
   local env_file="$STACK_DIR/.env"
   [[ -f "$env_file" ]] || return 0
@@ -585,6 +688,7 @@ disable_caddy_self_signed_config() {
   sed "${sed_i[@]}" "/^OPENFDD_CADDYFILE=/d" "$env_file" 2>/dev/null || true
   sed "${sed_i[@]}" "/^BACNET_SWAGGER_SERVERS_URL=/d" "$env_file" 2>/dev/null || true
   env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "false"
+  BOOTSTRAP_RECREATE_CADDY=true
   echo "Caddy: reverted to default HTTP-only entry (removed OPENFDD_CADDYFILE; OFDD_TRUST_FORWARDED_PROTO=false; removed BACNET_SWAGGER_SERVERS_URL if present)."
 }
 
@@ -617,8 +721,13 @@ ensure_caddy_self_signed_tls() {
   env_file_set_kv "$env_file" "OPENFDD_CADDYFILE" "./caddy/Caddyfile.selfsigned"
   env_file_set_kv "$env_file" "OFDD_TRUST_FORWARDED_PROTO" "true"
   env_file_set_kv "$env_file" "BACNET_SWAGGER_SERVERS_URL" "/bacnet"
+  env_file_set_kv "$env_file" "OFDD_API_HOST_BIND" "127.0.0.1"
+  env_file_set_kv "$env_file" "OFDD_FRONTEND_HOST_BIND" "127.0.0.1"
   chmod 600 "$env_file" 2>/dev/null || true
+  BOOTSTRAP_RECREATE_CADDY=true
+  BOOTSTRAP_RECREATE_API_FRONTEND=true
   echo "stack/.env: OPENFDD_CADDYFILE=./caddy/Caddyfile.selfsigned, OFDD_TRUST_FORWARDED_PROTO=true, BACNET_SWAGGER_SERVERS_URL=/bacnet"
+  echo "stack/.env: OFDD_API_HOST_BIND=127.0.0.1 OFDD_FRONTEND_HOST_BIND=127.0.0.1 (reach API/UI via Caddy HTTPS, not raw :8000/:5173 from LAN)"
   echo "Use https://localhost/ (browser warns). :80 redirects to HTTPS."
   echo "Operators: use https://localhost/ → BACnet tools (no Swagger required). Dev/advanced: https://localhost/bacnet/docs or :8080 on host."
 }
@@ -1277,7 +1386,13 @@ if $MAINTENANCE_ONLY && ! $UPDATE_PULL_REBUILD; then
 fi
 
 # From here on, we run stack operations (default/no args = FULL stack)
+# When stack/.env changes affect published ports or Caddy, force-recreate so `docker compose up -d` alone is never required after bootstrap.
+BOOTSTRAP_RECREATE_CADDY=false
+BOOTSTRAP_RECREATE_BACNET=false
+BOOTSTRAP_RECREATE_API_FRONTEND=false
+
 write_edge_env
+apply_bacnet_gateway_cli_to_env
 
 if $CADDY_SELF_SIGNED && $CADDY_HTTP_ONLY; then
   echo "Choose at most one of --caddy-self-signed and --caddy-http-only."
@@ -1287,7 +1402,12 @@ if $CADDY_HTTP_ONLY; then
   disable_caddy_self_signed_config
 elif $CADDY_SELF_SIGNED; then
   ensure_caddy_self_signed_tls
+elif [[ -n "${BACNET_ADDRESS_CLI:-}" ]]; then
+  # HTTP lab: OT bind without TLS — do not leave a previous --caddy-self-signed config in stack/.env.
+  disable_caddy_self_signed_config
 fi
+
+sync_openapi_docs_env
 
 # Reload stack/.env so OFDD_API_KEY (and others) are available for seed_config_via_api and compose
 if [[ -f "$STACK_DIR/.env" ]]; then
@@ -1310,6 +1430,33 @@ DC_PROFILE=()
 $WITH_GRAFANA && DC_PROFILE+=(--profile grafana)
 $WITH_MQTT_BRIDGE && DC_PROFILE+=(--profile mqtt)
 $WITH_MCP_RAG && DC_PROFILE+=(--profile mcp-rag)
+
+# After stack/.env or Caddyfile-related keys change, plain `up -d` may leave old containers;
+# force-recreate only services that are part of this MODE and were touched this run.
+bootstrap_compose_force_recreate_if_needed() {
+  local -a svcs=()
+  case "$MODE" in
+    full|model)
+      $BOOTSTRAP_RECREATE_CADDY && svcs+=(caddy)
+      $BOOTSTRAP_RECREATE_API_FRONTEND && svcs+=(api frontend)
+      ;;
+  esac
+  case "$MODE" in
+    full|collector)
+      $BOOTSTRAP_RECREATE_BACNET && svcs+=(bacnet-server)
+      ;;
+  esac
+  if $WITH_MQTT_BRIDGE; then
+    case "$MODE" in
+      full|collector) svcs+=(bacnet-server) ;;
+    esac
+  fi
+  ((${#svcs[@]} == 0)) && return 0
+  local -a uniq=()
+  mapfile -t uniq < <(printf '%s\n' "${svcs[@]}" | sort -u)
+  echo "=== Ensuring containers match stack/.env (force-recreate: ${uniq[*]}) ==="
+  (cd "$STACK_DIR" && $dc "${DC_PROFILE[@]}" up -d --force-recreate "${uniq[@]}")
+}
 
 # -----------------------------
 # --frontend: stop frontend, remove node_modules volume (fresh npm install on next up)
@@ -1378,6 +1525,7 @@ if $UPDATE_PULL_REBUILD; then
     $dc build
     $dc up -d
   fi
+  bootstrap_compose_force_recreate_if_needed
   cd "$REPO_ROOT"
 
   if ! $SKIP_BUILD; then
@@ -1411,9 +1559,11 @@ fi
 # -----------------------------
 if $BUILD_ALL; then
   cd "$STACK_DIR"
+  require_phase1_ui_auth_for_browser_stack_or_exit
   echo "=== Rebuilding and restarting all containers ==="
   $dc build
   $dc up -d
+  bootstrap_compose_force_recreate_if_needed
   echo "Done. All containers rebuilt and restarted."
   exit 0
 fi
@@ -1466,6 +1616,9 @@ if $WITH_MCP_RAG; then
 fi
 
 cd "$STACK_DIR"
+if [[ "$MODE" == "full" || "$MODE" == "model" ]]; then
+  require_phase1_ui_auth_for_browser_stack_or_exit
+fi
 
 if [[ "$MODE" == "collector" ]]; then
   echo "=== Starting collector mode (DB + BACnet server + scraper) ==="
@@ -1483,10 +1636,7 @@ else
   $dc "${DC_PROFILE[@]}" up -d --build
 fi
 
-# So bacnet-server picks up bridge env (server_hello returns mqtt_bridge)
-if $WITH_MQTT_BRIDGE; then
-  $dc "${DC_PROFILE[@]}" up -d --force-recreate bacnet-server
-fi
+bootstrap_compose_force_recreate_if_needed
 
 cd "$REPO_ROOT"
 
@@ -1519,22 +1669,30 @@ if [[ "$MODE" == "collector" ]]; then
   echo "  BACnet:   http://localhost:8080   (gateway HTTP; integrators / BACnet tools in full stack use Open-FDD UI)"
   echo "  (Collector mode: raw BACnet data path. No API/FDD unless explicitly started.)"
 elif [[ "$MODE" == "model" ]]; then
-  echo "  API:      http://localhost:8000   (docs: /docs)"
+  if grep -qE '^OFDD_ENABLE_OPENAPI_DOCS=true' "$STACK_DIR/.env" 2>/dev/null; then
+    echo "  API:      http://localhost:8000   (Swagger/OpenAPI: /docs)"
+  else
+    echo "  API:      http://localhost:8000   (Swagger/OpenAPI: off — self-signed TLS mode)"
+  fi
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
   if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
-    echo "  Self-signed TLS: use https://localhost/ for the UI (not :5173 alone). BACnet + CRUD: web app; optional dev OpenAPI https://localhost/api/docs"
+    echo "  Self-signed TLS: use https://localhost/ for the UI (not :5173 alone). OpenAPI UIs stay off; use the web app and BACnet tools in-app."
   fi
   echo "  (Model mode: knowledge graph and CRUD workflows.)"
 elif [[ "$MODE" == "engine" ]]; then
   echo "  (Engine mode: FDD and weather loops with DB. No API/frontend by default.)"
 else
-  echo "  API:      http://localhost:8000   (docs: /docs)"
+  if grep -qE '^OFDD_ENABLE_OPENAPI_DOCS=true' "$STACK_DIR/.env" 2>/dev/null; then
+    echo "  API:      http://localhost:8000   (Swagger/OpenAPI: /docs)"
+  else
+    echo "  API:      http://localhost:8000   (Swagger/OpenAPI: off — self-signed TLS mode)"
+  fi
   echo "  Frontend: http://localhost:5173   (or via Caddy http://localhost)"
   echo "  BACnet:   http://localhost:8080   (gateway; operators use web UI → BACnet tools)"
   if grep -qE '^OPENFDD_CADDYFILE=.*Caddyfile\.selfsigned' "$STACK_DIR/.env" 2>/dev/null; then
     echo ""
     echo "  Self-signed TLS: open the app at https://localhost/ (or https://THIS_HOST/) — not :5173 alone."
-    echo "  Optional dev OpenAPI (TLS): https://localhost/api/docs  |  gateway https://localhost/bacnet/docs"
+    echo "  OpenAPI/Swagger on :8000 and :8080 stay off; use the web app via Caddy HTTPS."
     echo "  Direct ports (HTTP, automation): :8000 API, :8080 gateway, :5173 static (no /api proxy)."
   fi
   echo "  (Grafana not started by default. Use --with-grafana to include it.)"
