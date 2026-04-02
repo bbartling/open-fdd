@@ -71,8 +71,8 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 ## Online Documentation
 
 - 📖 [**Docs**](https://bbartling.github.io/open-fdd/) — GitHub Pages (Linux quick start, stack, reference).
-- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline / print-friendly bundle (local clone: `pdf/open-fdd-docs.pdf`; build with `python3 scripts/build_docs_pdf.py` if missing).
-- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — canonical text on the docs site (same section as [**LLM workflow**](https://bbartling.github.io/open-fdd/modeling/llm_workflow)); GitHub Pages serves this path **without** a trailing slash.
+- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — offline, Kindle-friendly documentation
+- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — export the data model (knowledge graph) as JSON, run an **external** LLM-assisted tagging workflow outside Open‑FDD, then re-import the JSON; the backend parses it on import.
 - 🤖 [**Open‑Claw / external agents**](https://bbartling.github.io/open-fdd/openclaw_integration) — `GET /model-context/docs`, `GET /mcp/manifest`, data-model export/import for your own OpenAI-compatible stack.
 
 ---
@@ -80,9 +80,17 @@ If OpenFDD nails the ontology, the project will be a huge success: an open-sourc
 
 ## Dependencies
 
-[pandas](https://github.com/pandas-dev/pandas) · [PyYAML](https://github.com/yaml/pyyaml) · [FastAPI](https://fastapi.tiangolo.com/)  
+Authoritative lists and version pins: [`pyproject.toml`](pyproject.toml) (`dependencies` and `[project.optional-dependencies]`).
 
-Optional: [rdflib](https://github.com/RDFLib/rdflib) (Brick TTL), [matplotlib](https://github.com/matplotlib/matplotlib) (viz)
+**Core** (installed with `pip install open-fdd`): [pandas](https://github.com/pandas-dev/pandas) · [PyYAML](https://github.com/yaml/pyyaml) · [PyJWT](https://github.com/jpadilla/pyjwt) · [argon2-cffi](https://github.com/hynek/argon2-cffi) (password hashing for auth).
+
+**Platform / API** (extras e.g. `pip install "open-fdd[platform]"` or `.[dev]` in a clone): [FastAPI](https://fastapi.tiangolo.com/) · [Uvicorn](https://www.uvicorn.org/) · [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) · [httpx](https://www.python-httpx.org/) · [python-multipart](https://github.com/Kludex/python-multipart) · [psycopg2-binary](https://github.com/psycopg/psycopg2) · [requests](https://github.com/psf/requests) · [openai](https://github.com/openai/openai-python) (optional AI client).
+
+**Brick / SPARQL / TTL** (extra `[brick]` or bundled in `.[dev]`): [rdflib](https://github.com/RDFLib/rdflib) · [pyparsing](https://github.com/pyparsing/pyparsing) (pinned range for SPARQL compatibility).
+
+**BACnet** (extra `[bacnet]`): [bacpypes3](https://github.com/JoelBender/bacpypes3) · [ifaddr](https://github.com/pydron/ifaddr) · httpx.
+
+**Viz** (extra `[viz]`): [matplotlib](https://github.com/matplotlib/matplotlib).
 
 ---
 
