@@ -30,6 +30,8 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode
 
+from e2e_auth import ensure_app_login_if_needed
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent
 RULES_DIR = REPO_ROOT / "stack" / "rules"
@@ -291,7 +293,7 @@ def _test_one_yaml(
     return None
 
 
-def _run_frontend_check(frontend_url: str, headed: bool) -> str | None:
+def _run_frontend_check(frontend_url: str, headed: bool, ignore_ssl: bool = False) -> str | None:
     """Open /faults and assert page loads. Returns None on success, else error message."""
     try:
         from selenium import webdriver
@@ -307,8 +309,12 @@ def _run_frontend_check(frontend_url: str, headed: bool) -> str | None:
         opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
+    if ignore_ssl:
+        opts.add_argument("--ignore-certificate-errors")
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=opts)
     try:
+        driver.get(base)
+        ensure_app_login_if_needed(driver, base)
         driver.get(f"{base}/faults")
         WebDriverWait(driver, 15).until(
             lambda d: "Faults" in (d.page_source or "") or "fault" in (d.page_source or "").lower()[:3000]
@@ -325,6 +331,7 @@ def main() -> int:
     frontend_url = None
     frontend_check = False
     headed = False
+    ignore_ssl = False
     verify_faults = True
     site_hint = None
     i = 0
@@ -344,6 +351,10 @@ def main() -> int:
             continue
         if args[i] == "--headed":
             headed = True
+            i += 1
+            continue
+        if args[i] == "--ignore-ssl":
+            ignore_ssl = True
             i += 1
             continue
         if args[i] == "--skip-fault-verification":
@@ -416,7 +427,7 @@ def main() -> int:
 
     if frontend_check and frontend_url:
         print(f"  Frontend ({frontend_url}/faults): ", end="")
-        err = _run_frontend_check(frontend_url, headed)
+        err = _run_frontend_check(frontend_url, headed, ignore_ssl)
         if err:
             print(f"FAIL — {err}")
             failed += 1

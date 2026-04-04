@@ -91,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     bacnet_url = "http://192.168.204.16:8080"
     env_path = DEFAULT_ENV
     report_dir = DEFAULT_REPORT_DIR
+    ignore_ssl = False
 
     i = 0
     while i < len(argv):
@@ -115,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
             report_dir = Path(argv[i + 1])
             i += 2
             continue
+        if arg == "--ignore-ssl":
+            ignore_ssl = True
+            i += 1
+            continue
         raise SystemExit(f"Unknown or incomplete arg: {arg}")
 
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -128,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
     env_updates = _load_env_file(env_path)
     env.update(env_updates)
 
+    ssl_args: list[str] = ["--ignore-ssl"] if ignore_ssl else []
+
     steps: list[tuple[str, list[str]]] = [
         (
             "frontend_smoke",
@@ -136,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                 str(E2E_DIR / "1_e2e_frontend_selenium.py"),
                 "--frontend-url",
                 frontend_url,
+                *ssl_args,
                 "--bacnet-device-instance",
                 "3456789",
                 "3456790",
@@ -150,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
                 api_url,
                 "--frontend-url",
                 frontend_url,
+                *ssl_args,
                 "--frontend-parity",
                 "--save-report",
                 str(run_dir / "sparql_crud_report.json"),
@@ -164,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                 api_url,
                 "--frontend-url",
                 frontend_url,
+                *ssl_args,
                 "--frontend-check",
             ],
         ),

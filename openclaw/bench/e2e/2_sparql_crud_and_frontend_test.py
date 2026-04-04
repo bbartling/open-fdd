@@ -107,6 +107,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from e2e_auth import ensure_app_login_if_needed
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 _log = logging.getLogger(__name__)
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent
@@ -1151,6 +1153,7 @@ def _parse_args():
     frontend_url = None
     frontend_parity = False
     headed = False
+    ignore_ssl = False
     print_results = False
     expected_from_ttl = False
     generate_expected = False
@@ -1177,6 +1180,10 @@ def _parse_args():
             continue
         if args[i] == "--headed":
             headed = True
+            i += 1
+            continue
+        if args[i] == "--ignore-ssl":
+            ignore_ssl = True
             i += 1
             continue
         if args[i] in ("--print-results", "-p"):
@@ -1232,6 +1239,7 @@ def _parse_args():
         frontend_url,
         frontend_parity,
         headed,
+        ignore_ssl,
         print_results,
         expected_from_ttl,
         generate_expected,
@@ -1440,6 +1448,7 @@ def main() -> int:
         frontend_url,
         frontend_parity,
         headed,
+        ignore_ssl,
         print_results,
         expected_from_ttl,
         generate_expected,
@@ -1605,7 +1614,11 @@ def main() -> int:
             opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
+        if ignore_ssl:
+            opts.add_argument("--ignore-certificate-errors")
         driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=opts)
+        driver.get(frontend_url)
+        ensure_app_login_if_needed(driver, frontend_url)
         chrome_mode = "headed (visible)" if headed else "headless (no window — pass --headed to watch)"
         print(f"Frontend: {frontend_url} (parity + Selenium: {chrome_mode})")
 

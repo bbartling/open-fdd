@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,13 @@ def sparql(query: str) -> Any:
     return j("POST", "/data-model/sparql", json={"query": query})
 
 
+def _bacnet_rpc_headers() -> dict[str, str]:
+    k = (os.environ.get("OFDD_BACNET_SERVER_API_KEY") or "").strip()
+    if not k:
+        return {}
+    return {"Authorization": f"Bearer {k}"}
+
+
 def read_property(device_instance: int, device_address: str, obj: str) -> dict:
     body = {
         "jsonrpc": "2.0",
@@ -97,7 +105,12 @@ def read_property(device_instance: int, device_address: str, obj: str) -> dict:
             }
         },
     }
-    r = requests.post(BACNET + "/client_read_property", json=body, timeout=30)
+    r = requests.post(
+        BACNET + "/client_read_property",
+        json=body,
+        timeout=30,
+        headers=_bacnet_rpc_headers(),
+    )
     r.raise_for_status()
     return r.json()
 

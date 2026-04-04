@@ -65,6 +65,8 @@ Windows / copied scripts:
     or put a ``.env`` in the script directory / current directory.
   - Notepad-saved ``.env`` may use UTF-8 BOM; we read env files with UTF-8-sig so keys still parse.
   - HTTPS with a self-signed cert: add ``--ignore-ssl``.
+  - Phase-1 UI login: set ``OFDD_E2E_USERNAME`` and ``OFDD_E2E_PASSWORD`` in the environment
+    (or ``OFDD_APP_USER`` / ``OFDD_APP_PASSWORD``) to match the bootstrap app user.
 
 Not run by bootstrap.sh --test (that runs frontend lint+vitest and backend pytest only). Run this script separately when validating the full UI flow from a test bench (stack must be up).
 
@@ -94,6 +96,8 @@ import urllib.request
 from datetime import date, timedelta
 from pathlib import Path
 
+
+from e2e_auth import ensure_app_login_if_needed
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -1636,6 +1640,7 @@ def run_full_flow(
             lambda d: "Open-FDD" in (d.title or "") or "open-fdd" in (d.page_source or "").lower()[:2000]
         )
         print(f"Frontend loaded: {frontend_url}\n")
+        ensure_app_login_if_needed(driver, frontend_url)
 
         if only is None or only == "delete-all":
             print("[1] Delete all sites and reset graph (via UI)...")
