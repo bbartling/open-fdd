@@ -411,6 +411,26 @@ check_prereqs() {
   fi
 }
 
+# stack/.env Phase-1 keys (doctor argon2 gate + browser stack later in this script).
+stack_env_has_phase1_ui_auth() {
+  local f="$STACK_DIR/.env"
+  [[ -f "$f" ]] || return 1
+  grep -qE '^OFDD_APP_USER=.+' "$f" || return 1
+  grep -qE '^OFDD_APP_USER_HASH=.+' "$f" || return 1
+  grep -qE '^OFDD_JWT_SECRET=.+' "$f" || return 1
+  return 0
+}
+
+# Prefer repo .venv/bin/python when executable (same resolution as bootstrap_auth_python).
+choose_repo_python() {
+  local py="${REPO_ROOT}/.venv/bin/python"
+  if [[ -x "$py" ]]; then
+    printf '%s' "$py"
+  else
+    printf '%s' "python3"
+  fi
+}
+
 # Read-only checks for issue #119 (Ubuntu/docker/argon2/bootstrap UX).
 run_bootstrap_doctor() {
   echo "=== Open-FDD bootstrap doctor (read-only) ==="
@@ -443,22 +463,19 @@ run_bootstrap_doctor() {
     echo "[SKIP] Compose: docker not installed"
   fi
 
-  if have_cmd python3; then
-    echo "[OK]   python3: $(python3 --version 2>/dev/null)"
-  else
-    echo "[FAIL] python3: not found (needed for password hashing when using --user)"
-    fail=1
-  fi
-
-  local py="${REPO_ROOT}/.venv/bin/python"
+  local py
+  py="$(choose_repo_python)"
   if [[ -x "$py" ]]; then
-    echo "[OK]   Repo venv: $py"
+    echo "[OK]   Python: $($py --version 2>/dev/null | head -1) ($py)"
+  elif [[ "$py" == "python3" ]] && have_cmd python3; then
+    echo "[OK]   Python: $(python3 --version 2>/dev/null | head -1) (python3)"
   else
-    echo "[INFO] No executable venv at $REPO_ROOT/.venv/bin/python (optional; bootstrap uses python3 if missing)"
-    py="python3"
+    echo "[FAIL] Python: no executable at $REPO_ROOT/.venv/bin/python and python3 not in PATH (needed for --user / Phase-1 hashing when applicable)"
+    fail=1
+    py=""
   fi
 
-  if have_cmd "$py"; then
+  if [[ -n "$py" ]] && { [[ -x "$py" ]] || { [[ "$py" == "python3" ]] && have_cmd python3; }; }; then
     if "$py" -c "from argon2 import PasswordHasher" 2>/dev/null; then
       echo "[OK]   argon2 (argon2-cffi): import OK via $py"
     else
@@ -466,8 +483,18 @@ run_bootstrap_doctor() {
       echo "         sudo apt install -y python3-pip python3-venv"
       echo "         python3 -m venv $REPO_ROOT/.venv"
       echo "         $REPO_ROOT/.venv/bin/pip install argon2-cffi"
-      if [[ "$MODE" == "collector" ]] || $NO_AUTH || $ALLOW_NO_UI_AUTH; then
-        echo "[WARN] argon2: cannot import in $py — doctor does not fail (MODE=$MODE and/or --no-auth / --allow-no-ui-auth). Install before --user / Phase-1 login hashing."
+      local argon2_optional=0
+      if [[ "$MODE" == "collector" ]] || [[ "$MODE" == "engine" ]] || $NO_AUTH || $ALLOW_NO_UI_AUTH; then
+        argon2_optional=1
+      fi
+      if stack_env_has_phase1_ui_auth; then
+        argon2_optional=1
+      fi
+      if [[ -n "${OFDD_APP_USER:-}" && -n "${OFDD_APP_USER_HASH:-}" && -n "${OFDD_JWT_SECRET:-}" ]]; then
+        argon2_optional=1
+      fi
+      if [[ "$argon2_optional" -eq 1 ]]; then
+        echo "[WARN] argon2: cannot import in $py — doctor does not fail (MODE=$MODE, stack/env Phase-1 auth present, and/or --no-auth / --allow-no-ui-auth). Install before hashing a new --user password."
       else
         echo "[FAIL] argon2: cannot import in $py — install argon2-cffi for Phase-1 login hashing (--user, OFDD_APP_PASSWORD, etc.)"
         fail=1
@@ -598,9 +625,7 @@ write_edge_env() {
 
 # Python used for Argon2 hashing when configuring --user (prefers repo .venv).
 bootstrap_auth_python() {
-  local py="${REPO_ROOT}/.venv/bin/python"
-  [[ -x "$py" ]] || py="python3"
-  printf '%s' "$py"
+  choose_repo_python
 }
 
 verify_argon2_for_login_bootstrap() {
@@ -673,9 +698,9 @@ write_auth_env_if_requested() {
   fi
   local py
   py="$(bootstrap_auth_python)"
-  if ! have_cmd "$py"; then
+  if ! { [[ -x "$py" ]] || { [[ "$py" == "python3" ]] && have_cmd python3; }; }; then
     echo "=== No Python interpreter for password hashing ==="
-    echo "Expected: python3 or $REPO_ROOT/.venv/bin/python"
+    echo "Expected: python3 on PATH or executable $REPO_ROOT/.venv/bin/python"
     exit 1
   fi
   verify_argon2_for_login_bootstrap "$py"
@@ -727,16 +752,6 @@ write_auth_env_if_requested() {
   done
   chmod 600 "$auth_file" 2>/dev/null || true
   echo "Wrote Phase-1 auth config keys in: $auth_file (user: $APP_USER)"
-}
-
-# stack/.env keys expected together for /api/auth/login (see open_fdd.platform.api.auth.auth_user_config_status).
-stack_env_has_phase1_ui_auth() {
-  local f="$STACK_DIR/.env"
-  [[ -f "$f" ]] || return 1
-  grep -qE '^OFDD_APP_USER=.+' "$f" || return 1
-  grep -qE '^OFDD_APP_USER_HASH=.+' "$f" || return 1
-  grep -qE '^OFDD_JWT_SECRET=.+' "$f" || return 1
-  return 0
 }
 
 require_phase1_ui_auth_for_browser_stack_or_exit() {

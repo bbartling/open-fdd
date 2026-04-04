@@ -62,7 +62,7 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
   const [batchGraphSummary, setBatchGraphSummary] = useState<BatchRow[] | null>(null);
 
   const postGraphImportForDevice = useCallback(
-    async (deviceInstanceNum: number): Promise<void> => {
+    async (deviceInstanceNum: number): Promise<boolean> => {
       const devStr = String(deviceInstanceNum);
       try {
         const rows = await dataModelExport();
@@ -75,27 +75,36 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
             r.external_id,
         );
         const siteId = sites.length > 0 ? sites[0].id : null;
-        if (siteId && unimported.length > 0) {
-          const toImport = unimported.map((r) => ({ ...r, site_id: siteId }));
-          await dataModelImport({ points: toImport });
-          queryClient.invalidateQueries({ queryKey: ["data-model"] });
-          queryClient.invalidateQueries({ queryKey: ["points"] });
-          queryClient.invalidateQueries({ queryKey: ["equipment"] });
-          bacnetConsoleInfo("data_model import after graph", {
-            device_instance: deviceInstanceNum,
-            imported_rows: unimported.length,
-            site_id: siteId,
-          });
-        } else if (!siteId) {
+        if (!siteId) {
           bacnetConsoleWarn("skip data_model import (no site); create a site in Step 1", {
             device_instance: deviceInstanceNum,
           });
+          return false;
         }
+        if (unimported.length === 0) {
+          bacnetConsoleInfo("skip data_model import (no unimported BACnet rows for device)", {
+            device_instance: deviceInstanceNum,
+          });
+          return false;
+        }
+        const toImport = unimported.map((r) => ({ ...r, site_id: siteId }));
+        await dataModelImport({ points: toImport });
+        queryClient.invalidateQueries({ queryKey: ["data-model"] });
+        queryClient.invalidateQueries({ queryKey: ["points"] });
+        queryClient.invalidateQueries({ queryKey: ["equipment"] });
+        bacnetConsoleInfo("data_model import after graph", {
+          device_instance: deviceInstanceNum,
+          imported_rows: unimported.length,
+          site_id: siteId,
+        });
+        return true;
       } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
         bacnetConsoleWarn("data_model import failed (graph may still be updated)", {
           device_instance: deviceInstanceNum,
-          error: e instanceof Error ? e.message : String(e),
+          error: message,
         });
+        return false;
       }
     },
     [queryClient, sites],
@@ -126,6 +135,7 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
         end_instance: whoisEnd,
       });
       setWhoisResult(null);
+      setSelectedInstances(new Set());
     },
   });
 
@@ -250,8 +260,14 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
             index: i + 1,
             total: n,
           });
-          await postGraphImportForDevice(inst);
-          summary.push({ instance: inst, ok: true });
+          const importOk = await postGraphImportForDevice(inst);
+          summary.push({
+            instance: inst,
+            ok: importOk,
+            error: importOk
+              ? undefined
+              : "Data model import skipped or failed (no site, nothing to import, or API error — see console)",
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           bacnetConsoleError(`point_discovery_to_graph batch FAILED`, {
@@ -556,10 +572,10 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
           </div>
         )}
 
-        {toGraphMutation.isSuccess && (
+        {toGraphMutation.isSuccess && typeof toGraphMutation.variables === "number" && (
           <p className="text-sm text-muted-foreground">
-            Device {deviceInstance} added to graph (manual path). Refresh points or open the <strong>Data model</strong> page
-            → Export to see.
+            Device {toGraphMutation.variables} added to graph (manual path). Refresh points or open the <strong>Data model</strong>{" "}
+            page → Export to see.
           </p>
         )}
         {toGraphMutation.isError && (

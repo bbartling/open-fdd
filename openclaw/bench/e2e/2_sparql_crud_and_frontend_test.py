@@ -59,7 +59,7 @@ CLI flags (machine-friendly):
   --print-hvac-summary   Print AHU/VAV counts and BACnet point rows (extra SPARQL).
   --show-bacnet-addresses  Same as --print-hvac-summary (AHU/VAV points with device + object id).
   --http-timeout SEC     Per-request timeout for httpx (default 120). Use on slow/large graphs.
-  --no-predefined-buttons Skip the Data Model Testing **Summarize your HVAC** button suite (all `shortLabel`s from `data-model-testing-queries.ts`, HVAC + Engineering tabs — typically ~24×2 with/without BACnet refs; hidden-tab buttons may soft-skip).
+  --no-predefined-buttons Skip the Data Model Testing **Summarize your HVAC** button suite (all `shortLabel`s from `data-model-testing-queries.ts`, HVAC + Engineering tabs — typically ~24x2 with/without BACnet refs; hidden-tab buttons may soft-skip).
   --predefined-buttons-only  Only backend smoke (upload/sync/BACnet) + predefined-button parity; skip per-file .sparql loop.
   --save-report [PATH]   Write JSON report (flags, predefined-button rows, HVAC/BACnet summary). Default file in this script dir: sparql_crud_report_<UTC>.json. Summary is always fetched for the report; use --show-bacnet-addresses to also print it.
 
@@ -118,7 +118,20 @@ DATA_MODEL_TTL = REPO_ROOT / "config" / "data_model.ttl"
 FRONTEND_PREDEFINED_QUERIES_TS = (
     REPO_ROOT / "frontend" / "src" / "data" / "data-model-testing-queries.ts"
 )
-_FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
+# Engineering tab shortLabels — single source; keep in sync with data-model-testing-queries.ts (category: engineering).
+_ENGINEERING_PREDEFINED_LABELS_ORDERED: tuple[str, ...] = (
+    "AHU design CFM",
+    "By panel",
+    "AHU vendor",
+    "Cap no BACnet",
+    "Source sheet",
+    "Pump head/flow",
+    "Voltage/FLA",
+    "s223 topology",
+)
+_ENGINEERING_PREDEFINED_SHORT_LABELS: frozenset[str] = frozenset(_ENGINEERING_PREDEFINED_LABELS_ORDERED)
+
+_HVAC_FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
     "Sites",
     "AHUs",
     "Zones",
@@ -134,29 +147,12 @@ _FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
     "Meters",
     "Points",
     "Class summary",
-    # Engineering tab (same order as frontend PREDEFINED_QUERIES when TS parse fails)
-    "AHU design CFM",
-    "By panel",
-    "AHU vendor",
-    "Cap no BACnet",
-    "Source sheet",
-    "Pump head/flow",
-    "Voltage/FLA",
-    "s223 topology",
+)
+_FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
+    *_HVAC_FALLBACK_PREDEFINED_SHORT_LABELS,
+    *_ENGINEERING_PREDEFINED_LABELS_ORDERED,
 )
 BRICK_SCHEMA_NS = "https://brickschema.org/schema/Brick#"
-_ENGINEERING_PREDEFINED_SHORT_LABELS: frozenset[str] = frozenset(
-    (
-        "AHU design CFM",
-        "By panel",
-        "AHU vendor",
-        "Cap no BACnet",
-        "Source sheet",
-        "Pump head/flow",
-        "Voltage/FLA",
-        "s223 topology",
-    )
-)
 
 
 def _ensure_datamodel_testing_category(driver, wait, *, engineering: bool) -> None:
@@ -165,13 +161,17 @@ def _ensure_datamodel_testing_category(driver, wait, *, engineering: bool) -> No
     from selenium.webdriver.support import expected_conditions as EC
 
     testid = "category-engineering-button" if engineering else "category-hvac-button"
-    btn = wait.until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, f'[data-testid="{testid}"]'))
-    )
+    selector = f'[data-testid="{testid}"]'
+    btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
     ap = (btn.get_attribute("aria-pressed") or "").strip().lower()
     if ap != "true":
         btn.click()
-        time.sleep(0.12)
+
+        def _tab_pressed(driver_inner):
+            el = driver_inner.find_element(By.CSS_SELECTOR, selector)
+            return (el.get_attribute("aria-pressed") or "").strip().lower() == "true"
+
+        wait.until(_tab_pressed, f"Tab {testid} did not activate (aria-pressed=true)")
 
 
 def _load_env_file(path: str) -> None:
@@ -991,7 +991,7 @@ def _run_predefined_buttons_parity_suite(
 
     failed = 0
     print(
-        f"  Predefined buttons: {len(labels)} controls × 2 (BACnet refs off/on); "
+        f"  Predefined buttons: {len(labels)} controls x 2 (BACnet refs off/on); "
         f"queries from UI textarea vs API (Brick NS {BRICK_SCHEMA_NS})"
     )
 
@@ -1880,7 +1880,7 @@ def main() -> int:
     if sparql_files:
         bits.append(f"{len(sparql_files)} SPARQL file(s)")
     if frontend_parity and frontend_url and not no_predefined_buttons:
-        bits.append("Summarize-your-HVAC predefined buttons (×2 BACnet modes)")
+        bits.append("Summarize-your-HVAC predefined buttons (x2 BACnet modes)")
     print(f"\nPassed: {', '.join(bits) if bits else 'all checks'}.")
     return 0
 
