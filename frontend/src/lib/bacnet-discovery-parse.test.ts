@@ -11,6 +11,12 @@ describe("parseDeviceInstanceFromIAmIdentifier", () => {
   it("parses device:instance", () => {
     expect(parseDeviceInstanceFromIAmIdentifier("device:12345")).toBe(12345);
   });
+  it("accepts BACnet device id 0 (lower bound)", () => {
+    expect(parseDeviceInstanceFromIAmIdentifier("device:0")).toBe(0);
+  });
+  it("accepts BACnet device id 4194303 (upper bound)", () => {
+    expect(parseDeviceInstanceFromIAmIdentifier("device:4194303")).toBe(4194303);
+  });
   it("parses device,instance", () => {
     expect(parseDeviceInstanceFromIAmIdentifier("device,999")).toBe(999);
   });

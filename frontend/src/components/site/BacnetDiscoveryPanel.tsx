@@ -250,9 +250,6 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
             index: i + 1,
             total: n,
           });
-          queryClient.invalidateQueries({ queryKey: ["data-model"] });
-          queryClient.invalidateQueries({ queryKey: ["points"] });
-          queryClient.invalidateQueries({ queryKey: ["equipment"] });
           await postGraphImportForDevice(inst);
           summary.push({ instance: inst, ok: true });
         } catch (e) {
@@ -264,6 +261,9 @@ export function BacnetDiscoveryPanel({ stepLabel = "Step 2" }: BacnetDiscoveryPa
           summary.push({ instance: inst, ok: false, error: msg });
         }
       }
+      queryClient.invalidateQueries({ queryKey: ["data-model"] });
+      queryClient.invalidateQueries({ queryKey: ["points"] });
+      queryClient.invalidateQueries({ queryKey: ["equipment"] });
       setBatchGraphSummary(summary);
       return summary;
     },

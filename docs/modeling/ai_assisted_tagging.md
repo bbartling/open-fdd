@@ -40,6 +40,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 - **points** (required): Each row is a point to **create** (omit `point_id`; set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier`) or **update** (set `point_id` and fields to change). `site_id` should remain the export UUID when present. `equipment_id` is optional if `equipment_name` is provided with `site_id`.
 - **equipment** (optional): Updates equipment with Brick feeds/isFedBy, **`equipment_type`** (Brick class for `rdf:type`), **`engineering`**, **`metadata`**. Rows may use UUID fields (`equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id`) or name fields (`equipment_name`, `feeds`, `fed_by`) with `site_id` for resolution.
+- **No other top-level keys:** The API model uses **`extra="forbid"`** — unknown keys such as `sites` or `relationships` produce **422 Unprocessable Entity** (they are not silently ignored).
 
 **diy-bacnet ready:** The list of points to poll is **GET /data-model/export** filtered to rows where **polling === true**; each has `bacnet_device_id` and `object_identifier`.
 

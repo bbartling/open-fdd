@@ -358,6 +358,22 @@ def test_data_model_import_update_by_point_id_applies_equipment_name():
     assert any("equipment_id = %s" in s for s in update_sqls)
 
 
+def test_data_model_import_rejects_unknown_top_level_keys():
+    """DataModelImportBody uses extra=forbid — LLM payloads must not add sites/relationships/etc."""
+    body = {
+        "points": [
+            {
+                "point_id": str(uuid4()),
+                "brick_type": "Supply_Air_Temperature_Sensor",
+                "rule_input": "sat",
+            }
+        ],
+        "sites": [],
+    }
+    r = client.put("/data-model/import", json=body)
+    assert r.status_code == 422
+
+
 def test_data_model_import_updates_points():
     cursor = MagicMock()
     cursor.rowcount = 1

@@ -462,12 +462,16 @@ run_bootstrap_doctor() {
     if "$py" -c "from argon2 import PasswordHasher" 2>/dev/null; then
       echo "[OK]   argon2 (argon2-cffi): import OK via $py"
     else
-      echo "[FAIL] argon2: cannot import in $py — install argon2-cffi for Phase-1 login hashing"
       echo "       Recommended (avoids PEP 668 on Ubuntu 24.04+):"
       echo "         sudo apt install -y python3-pip python3-venv"
       echo "         python3 -m venv $REPO_ROOT/.venv"
       echo "         $REPO_ROOT/.venv/bin/pip install argon2-cffi"
-      fail=1
+      if [[ "$MODE" == "collector" ]] || $NO_AUTH || $ALLOW_NO_UI_AUTH; then
+        echo "[WARN] argon2: cannot import in $py — doctor does not fail (MODE=$MODE and/or --no-auth / --allow-no-ui-auth). Install before --user / Phase-1 login hashing."
+      else
+        echo "[FAIL] argon2: cannot import in $py — install argon2-cffi for Phase-1 login hashing (--user, OFDD_APP_PASSWORD, etc.)"
+        fail=1
+      fi
     fi
   fi
 

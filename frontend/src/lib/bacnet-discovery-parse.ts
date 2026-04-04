@@ -39,7 +39,7 @@ export function extractWhoisDevices(res: WhoIsResponse): WhoisDeviceRow[] {
     (body as { result?: { data?: { devices?: unknown[] }; devices?: unknown[] } })?.result?.data ??
     (body as { devices?: unknown[] });
   const devices = data?.devices ?? (Array.isArray(data) ? data : []);
-  return (devices as WhoisDeviceRow[]) ?? [];
+  return devices as WhoisDeviceRow[];
 }
 
 export type PointDiscoveryObjectRow = {

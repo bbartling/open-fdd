@@ -145,6 +145,33 @@ _FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
     "s223 topology",
 )
 BRICK_SCHEMA_NS = "https://brickschema.org/schema/Brick#"
+_ENGINEERING_PREDEFINED_SHORT_LABELS: frozenset[str] = frozenset(
+    (
+        "AHU design CFM",
+        "By panel",
+        "AHU vendor",
+        "Cap no BACnet",
+        "Source sheet",
+        "Pump head/flow",
+        "Voltage/FLA",
+        "s223 topology",
+    )
+)
+
+
+def _ensure_datamodel_testing_category(driver, wait, *, engineering: bool) -> None:
+    """Switch Summarize-your-HVAC to HVAC vs Engineering so the target preset button exists."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+
+    testid = "category-engineering-button" if engineering else "category-hvac-button"
+    btn = wait.until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, f'[data-testid="{testid}"]'))
+    )
+    ap = (btn.get_attribute("aria-pressed") or "").strip().lower()
+    if ap != "true":
+        btn.click()
+        time.sleep(0.12)
 
 
 def _load_env_file(path: str) -> None:
@@ -848,6 +875,7 @@ def _run_predefined_button_via_frontend(
     include_bacnet_refs: bool = False,
     timeout_sec: float = 60,
     navigate: bool = True,
+    engineering_tab: bool = False,
 ) -> tuple[bool, list[dict], str, str]:
     """Click one predefined HVAC button; return (ok, bindings, err, sparql_from_textarea).
 
@@ -884,6 +912,8 @@ def _run_predefined_button_via_frontend(
         if checkbox.is_selected() != include_bacnet_refs:
             checkbox.click()
             time.sleep(0.12)
+
+    _ensure_datamodel_testing_category(driver, wait, engineering=engineering_tab)
 
     btn_xpath = f"//button[normalize-space()='{button_text}']"
     try:
@@ -976,6 +1006,7 @@ def _run_predefined_buttons_parity_suite(
                 label,
                 include_bacnet_refs=bacnet_refs,
                 navigate=first,
+                engineering_tab=label in _ENGINEERING_PREDEFINED_SHORT_LABELS,
             )
             first = False
             row: dict = {

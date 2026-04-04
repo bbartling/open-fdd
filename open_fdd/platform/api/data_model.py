@@ -18,7 +18,7 @@ from uuid import UUID
 import psycopg2
 from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from open_fdd.platform.config import get_platform_settings
 from open_fdd.platform.database import get_conn
@@ -486,14 +486,9 @@ class EquipmentImportRow(BaseModel):
 
 
 class DataModelImportBody(BaseModel):
-    points: list[PointImportRow]
-    equipment: list[EquipmentImportRow] = Field(
-        default_factory=list,
-        description="Optional: update equipment feeds/fed_by; RDF is rebuilt and serialized after import.",
-    )
-
-    model_config = {
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
             "example": {
                 "points": [
                     {
@@ -512,8 +507,14 @@ class DataModelImportBody(BaseModel):
                     },
                 ]
             }
-        }
-    }
+        },
+    )
+
+    points: list[PointImportRow]
+    equipment: list[EquipmentImportRow] = Field(
+        default_factory=list,
+        description="Optional: update equipment feeds/fed_by; RDF is rebuilt and serialized after import.",
+    )
 
 
 def _normalize_ttl_id_to_uuid(s: str) -> str | None:

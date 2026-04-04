@@ -27,5 +27,9 @@ export function bacnetConsoleError(message: string, data?: Record<string, unknow
 }
 
 export function bacnetConsoleDebug(message: string, data?: unknown): void {
-  console.debug(`${BACNET_LOG_PREFIX} ${message}`, data);
+  if (data !== undefined) {
+    console.debug(`${BACNET_LOG_PREFIX} ${message}`, data);
+  } else {
+    console.debug(`${BACNET_LOG_PREFIX} ${message}`);
+  }
 }
