@@ -1,4 +1,10 @@
-/** Summarize-your-HVAC SPARQL (Brick NS below). Parity-tested by scripts/automated_testing/2_sparql_crud_and_frontend_test.py — keep queries valid for current Brick classes. */
+/**
+ * Summarize-your-HVAC SPARQL (Brick namespace below).
+ * **Brick 1.4 class names:** every `brick:Class` used here must stay in
+ * `brick-1.4-query-class-allowlist.ts` — enforced by `data-model-testing-queries.brick.test.ts`.
+ * Parity with `openclaw/bench/sparql/*.sparql` / `2_sparql_crud_and_frontend_test.py`.
+ * **AI tagging:** LLM import should set `equipment_type` to these same class local names so buttons return sensible counts — see `docs/modeling/llm_workflow.md`.
+ */
 import { Wind, Building2, Box, Flame, ThermometerSun, Layers, LayoutGrid, Gauge, List, Network, Code, GitBranch } from "lucide-react";
 
 const BRICK = "https://brickschema.org/schema/Brick#";

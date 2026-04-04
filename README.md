@@ -38,11 +38,41 @@ pip install open-fdd
 
 Open-FDD uses Docker and Docker Compose to orchestrate and manage all platform services within a unified containerized environment. The bootstrap script (`./scripts/bootstrap.sh`) is **Linux-only** and intended for IoT edge applications using Docker exclusively.
 
+### Debian / Ubuntu setup
 
-**Standard HTTP bootstrap (no TLS):** Bind the DIY BACnet server to a specific OT NIC and port, while using a separate NIC for outbound internet access via DHCP.
+- **Git:** Install Git if needed, e.g. `sudo apt update && sudo apt install git`.
+- **Docker:** Follow the official guide to install Docker Engine (and Compose): [Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+
+### Prerequisites (Ubuntu / Debian-style)
+
+After Docker is installed, add your Linux user to the **`docker`** group so you can run `docker` without `sudo` (log out and back in, or use `newgrp`, for the group change to apply):
 
 ```bash
-cd /path/to/open-fdd
+sudo usermod -aG docker "$USER"
+newgrp docker
+docker ps
+```
+
+Create a Python virtual environment and install **`argon2-cffi`** (used to hash passwords for bootstrap):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install argon2-cffi
+```
+
+Clone the repository:
+
+```bash
+git clone https://github.com/bbartling/open-fdd.git
+```
+
+### Standard HTTP bootstrap (no TLS) and app login
+
+The `--bacnet-address` value is the static bind address for BACnet, which is the usual setup for BACnet/IP on operations technology (OT) LANs. Bootstrap supports **dual-NIC** hosts: use this address on the OT interface; your other interface can use DHCP for outbound internet access.
+
+```bash
+cd open-fdd
 
 printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
   --bacnet-address 192.168.204.16/24:47808 \
@@ -54,11 +84,13 @@ printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
 > **NOTE:** Both the DIY BACnet server and Open-FDD API in the **Standard HTTP bootstrap (no TLS)** configuration still require bearer tokens for authorization. These are defined in `open-fdd/stack/.env` and are set during the bootstrapping process.
 
 
-**Standard hardened stack — self-signed TLS (Caddy) and app login:** Open-FDD runs over TLS with self-signed certificates, and there is no access to the Open-FDD API or the DIY BACnet server Docker container APIs.
+### Standard hardened stack — self-signed TLS (Caddy) and app login
+
+Open-FDD runs over TLS with self-signed certificates, and there is no access to the Open-FDD API or the DIY BACnet server Docker container APIs.
 
 
 ```bash
-cd /path/to/open-fdd
+cd open-fdd
 
 printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
   --bacnet-address 192.168.204.16/24:47808 \
@@ -66,6 +98,12 @@ printf '%s' 'YourSecurePassword' | ./scripts/bootstrap.sh \
   --user ben \
   --password-stdin \
   --caddy-self-signed
+```
+
+### Bootstrap Troubleshooting
+
+```bash
+./scripts/bootstrap.sh --doctor
 ```
 
 

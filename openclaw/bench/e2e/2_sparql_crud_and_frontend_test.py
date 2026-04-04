@@ -59,7 +59,7 @@ CLI flags (machine-friendly):
   --print-hvac-summary   Print AHU/VAV counts and BACnet point rows (extra SPARQL).
   --show-bacnet-addresses  Same as --print-hvac-summary (AHU/VAV points with device + object id).
   --http-timeout SEC     Per-request timeout for httpx (default 120). Use on slow/large graphs.
-  --no-predefined-buttons Skip the Data Model Testing **Summarize your HVAC** button suite (15×2 with/without BACnet refs).
+  --no-predefined-buttons Skip the Data Model Testing **Summarize your HVAC** button suite (all `shortLabel`s from `data-model-testing-queries.ts`, HVAC + Engineering tabs — typically ~24×2 with/without BACnet refs; hidden-tab buttons may soft-skip).
   --predefined-buttons-only  Only backend smoke (upload/sync/BACnet) + predefined-button parity; skip per-file .sparql loop.
   --save-report [PATH]   Write JSON report (flags, predefined-button rows, HVAC/BACnet summary). Default file in this script dir: sparql_crud_report_<UTC>.json. Summary is always fetched for the report; use --show-bacnet-addresses to also print it.
 
@@ -134,6 +134,15 @@ _FALLBACK_PREDEFINED_SHORT_LABELS: tuple[str, ...] = (
     "Meters",
     "Points",
     "Class summary",
+    # Engineering tab (same order as frontend PREDEFINED_QUERIES when TS parse fails)
+    "AHU design CFM",
+    "By panel",
+    "AHU vendor",
+    "Cap no BACnet",
+    "Source sheet",
+    "Pump head/flow",
+    "Voltage/FLA",
+    "s223 topology",
 )
 BRICK_SCHEMA_NS = "https://brickschema.org/schema/Brick#"
 
@@ -941,8 +950,9 @@ def _run_predefined_buttons_parity_suite(
     report_rows: list[dict] | None,
 ) -> int:
     """
-    Exercise every Summarize-your-HVAC button with BACnet refs off, then on.
-    Parity: UI table vs fresh API using the exact SPARQL read from the textarea after each click.
+    Exercise every predefined SPARQL button label (parsed from ``data-model-testing-queries.ts``)
+    with BACnet refs off, then on. Parity: UI table vs fresh API using the exact SPARQL read from
+    the textarea after each click. Buttons on the non-active tab (HVAC vs Engineering) may soft-skip.
     """
     labels = _load_predefined_short_labels()
     if not labels:

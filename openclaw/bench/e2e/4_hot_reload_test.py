@@ -382,20 +382,37 @@ def main() -> int:
 
     failed = 0
     suffix = str(int(time.time()))
-    for name in YAML_FILES_TO_TEST:
-        path = RULES_DIR / name
-        if not path.is_file():
-            print(f"  {name}: skip (not found)")
-            continue
-        test_filename = f"test_{path.stem}_{suffix}.yaml"
-        # Base id for YAML name:; flag: becomes {base}_flag so engine output columns match results_from_runner_output.
-        fault_base = f"test_{path.stem}_{suffix}"
-        err = _test_one_yaml(api_url, path, test_filename, fault_base, verify_faults, site_id_for_faults)
-        if err:
-            print(f"  {name}: FAIL — {err}")
-            failed += 1
-        else:
-            print(f"  {name}: OK")
+
+    def _cleanup_local_test_copies() -> None:
+        """Remove timestamped copies under rules_dir if DELETE /rules failed or the process exited early."""
+        for name in YAML_FILES_TO_TEST:
+            stem = Path(name).stem
+            p = RULES_DIR / f"test_{stem}_{suffix}.yaml"
+            try:
+                if p.is_file():
+                    p.unlink()
+            except OSError as e:
+                print(f"  (cleanup) could not remove {p.name}: {e}", file=sys.stderr)
+
+    try:
+        for name in YAML_FILES_TO_TEST:
+            path = RULES_DIR / name
+            if not path.is_file():
+                print(f"  {name}: skip (not found)")
+                continue
+            test_filename = f"test_{path.stem}_{suffix}.yaml"
+            # Base id for YAML name:; flag: becomes {base}_flag so engine output columns match results_from_runner_output.
+            fault_base = f"test_{path.stem}_{suffix}"
+            err = _test_one_yaml(
+                api_url, path, test_filename, fault_base, verify_faults, site_id_for_faults
+            )
+            if err:
+                print(f"  {name}: FAIL — {err}")
+                failed += 1
+            else:
+                print(f"  {name}: OK")
+    finally:
+        _cleanup_local_test_copies()
 
     if frontend_check and frontend_url:
         print(f"  Frontend ({frontend_url}/faults): ", end="")

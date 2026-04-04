@@ -77,6 +77,7 @@ UPDATE_PULL_REBUILD=false
 UPDATE_FORCE_REBUILD=false
 MAINTENANCE_ONLY=false
 DIY_BACNET_TESTS=false
+DOCTOR_ONLY=false
 INSTALL_DOCKER=false
 SKIP_DOCKER_INSTALL=false
 NO_AUTH=false
@@ -148,6 +149,7 @@ while [[ $i -lt ${#args[@]} ]]; do
     --update) UPDATE_PULL_REBUILD=true ;;
     --force-rebuild) UPDATE_FORCE_REBUILD=true ;;
     --maintenance) MAINTENANCE_ONLY=true ;;
+    --doctor) DOCTOR_ONLY=true ;;
     --diy-bacnet-tests) DIY_BACNET_TESTS=true ;;
     --install-docker) INSTALL_DOCKER=true ;;
     --skip-docker-install) SKIP_DOCKER_INSTALL=true ;;
@@ -206,6 +208,7 @@ Core:
   --with-grafana            Include Grafana (http://localhost:3000; optional SQL dashboards)
   --with-mqtt-bridge        Start Mosquitto + wire BACnet2MQTT env (experimental; future remote/MQTT use—not core product yet)
   --with-mcp-rag            Include MCP RAG service (http://localhost:8090; retrieval over docs/text + optional guarded API tools)
+  --doctor                  Read-only diagnostics: Docker, Compose, Python, argon2-cffi, paths (no stack changes). Exit 1 if critical checks fail.
   --verify                  Show running services + health checks (exits before starting stack)
   --verify --test           Verify services then run tests; then exit
   --test                    Run tests only: frontend (lint + typecheck + vitest), backend (pytest), Caddy validate; then exit (no E2E/Selenium)
@@ -378,26 +381,128 @@ docker_compose_cmd() {
 
 check_prereqs() {
   if ! have_cmd docker; then
-    echo "Missing: docker"
-    echo "  - Re-run with: $0 --install-docker"
-    echo "  - Or install Docker manually."
+    echo "=== Missing: docker ==="
+    echo "Install Docker Engine, then re-run. On this script:"
+    echo "  $0 --install-docker"
+    echo "Or see: https://docs.docker.com/engine/install/"
     exit 1
   fi
   if ! docker_compose_cmd >/dev/null 2>&1; then
-    echo "Missing: docker compose"
-    echo "  - Install docker compose plugin, or docker-compose."
+    echo "=== Missing: docker compose ==="
+    echo "Install the Docker Compose plugin (docker compose) or standalone docker-compose."
+    echo "  Ubuntu/Debian example: sudo apt install docker-compose-plugin"
     exit 1
   fi
   if ! docker ps >/dev/null 2>&1; then
-    echo "Docker is installed, but this user cannot access the Docker daemon."
-    echo "  - Try: sudo docker ps"
-    echo "  - If that works, add your user to the docker group and log in again:"
-    echo "      sudo usermod -aG docker \$USER"
-    echo "    Then log out and back in (or run: newgrp docker)."
-    echo "  - Check: docker -v && docker compose version && groups"
+    echo "=== Docker is installed, but this user cannot use the Docker daemon ==="
+    echo "Symptom: \`docker ps\` fails with permission denied or connection error."
+    echo ""
+    echo "Fix (pick one):"
+    echo "  1) Add your user to the docker group, then apply the group (or log out/in):"
+    echo "       sudo usermod -aG docker \$USER"
+    echo "       newgrp docker"
+    echo "       docker ps"
+    echo "     If \`newgrp\` is not enough, log out completely or reboot, then \`docker ps\` again."
+    echo "  2) Confirm the daemon is running: sudo systemctl status docker"
+    echo "  3) Compare: sudo docker ps   (if that works, it is definitely a group membership issue.)"
+    echo ""
+    echo "Diagnostics: $0 --doctor"
     exit 1
   fi
 }
+
+# Read-only checks for issue #119 (Ubuntu/docker/argon2/bootstrap UX).
+run_bootstrap_doctor() {
+  echo "=== Open-FDD bootstrap doctor (read-only) ==="
+  echo ""
+  local fail=0
+
+  if have_cmd docker; then
+    echo "[OK]   docker: $(docker --version 2>/dev/null | head -1)"
+  else
+    echo "[FAIL] docker: not found in PATH"
+    fail=1
+  fi
+
+  if have_cmd docker && docker ps >/dev/null 2>&1; then
+    echo "[OK]   Docker daemon: docker ps works for this user"
+  elif have_cmd docker; then
+    echo "[FAIL] Docker daemon: cannot run docker ps (permission denied or daemon down)"
+    echo "       Run: sudo usermod -aG docker \$USER && newgrp docker && docker ps"
+    fail=1
+  fi
+
+  if have_cmd docker; then
+    if docker_compose_cmd >/dev/null 2>&1; then
+      echo "[OK]   Compose: $(docker compose version 2>/dev/null | head -1 || docker-compose version 2>/dev/null | head -1)"
+    else
+      echo "[FAIL] docker compose / docker-compose not available"
+      fail=1
+    fi
+  else
+    echo "[SKIP] Compose: docker not installed"
+  fi
+
+  if have_cmd python3; then
+    echo "[OK]   python3: $(python3 --version 2>/dev/null)"
+  else
+    echo "[FAIL] python3: not found (needed for password hashing when using --user)"
+    fail=1
+  fi
+
+  local py="${REPO_ROOT}/.venv/bin/python"
+  if [[ -x "$py" ]]; then
+    echo "[OK]   Repo venv: $py"
+  else
+    echo "[INFO] No executable venv at $REPO_ROOT/.venv/bin/python (optional; bootstrap uses python3 if missing)"
+    py="python3"
+  fi
+
+  if have_cmd "$py"; then
+    if "$py" -c "from argon2 import PasswordHasher" 2>/dev/null; then
+      echo "[OK]   argon2 (argon2-cffi): import OK via $py"
+    else
+      echo "[FAIL] argon2: cannot import in $py — install argon2-cffi for Phase-1 login hashing"
+      echo "       Recommended (avoids PEP 668 on Ubuntu 24.04+):"
+      echo "         sudo apt install -y python3-pip python3-venv"
+      echo "         python3 -m venv $REPO_ROOT/.venv"
+      echo "         $REPO_ROOT/.venv/bin/pip install argon2-cffi"
+      fail=1
+    fi
+  fi
+
+  if [[ -d "$STACK_DIR" ]]; then
+    echo "[OK]   stack dir: $STACK_DIR"
+  else
+    echo "[FAIL] stack/ missing under repo root"
+    fail=1
+  fi
+  if [[ -f "$STACK_DIR/.env" ]]; then
+    echo "[OK]   stack/.env exists"
+  else
+    echo "[INFO] stack/.env not yet created (bootstrap will create it)"
+  fi
+
+  local sibling
+  sibling="$(cd "$REPO_ROOT/.." && pwd)/diy-bacnet-server"
+  if [[ -d "$sibling/.git" ]] || [[ -f "$sibling/bacpypes_server/main.py" ]]; then
+    echo "[OK]   diy-bacnet-server sibling: $sibling"
+  else
+    echo "[WARN] diy-bacnet-server not found beside open-fdd (bootstrap will clone if needed): $sibling"
+  fi
+
+  echo ""
+  if [[ "$fail" -gt 0 ]]; then
+    echo "Doctor: $fail critical check(s) failed. Fix above, then: $0 --doctor"
+    exit 1
+  fi
+  echo "Doctor: all critical checks passed."
+  exit 0
+}
+
+if $DOCTOR_ONLY; then
+  run_bootstrap_doctor
+fi
 
 write_edge_env() {
   local env_file="$STACK_DIR/.env"
@@ -487,6 +592,32 @@ write_edge_env() {
   write_auth_env_if_requested
 }
 
+# Python used for Argon2 hashing when configuring --user (prefers repo .venv).
+bootstrap_auth_python() {
+  local py="${REPO_ROOT}/.venv/bin/python"
+  [[ -x "$py" ]] || py="python3"
+  printf '%s' "$py"
+}
+
+verify_argon2_for_login_bootstrap() {
+  local py="$1"
+  if "$py" -c "from argon2 import PasswordHasher" 2>/dev/null; then
+    return 0
+  fi
+  echo "=== Cannot hash login password: Python module 'argon2' not importable ==="
+  echo "Bootstrap uses Argon2 (PyPI: argon2-cffi) to hash your Phase-1 UI password for stack/.env."
+  echo ""
+  echo "On Ubuntu 24.04+, system Python often blocks pip install (PEP 668). Use a venv:"
+  echo "  sudo apt install -y python3-pip python3-venv"
+  echo "  python3 -m venv $REPO_ROOT/.venv"
+  echo "  $REPO_ROOT/.venv/bin/pip install argon2-cffi"
+  echo "Then re-run bootstrap (it prefers $REPO_ROOT/.venv/bin/python when present)."
+  echo ""
+  echo "Or: export OFDD_APP_PASSWORD='...' and omit --password-stdin if the same python already has argon2-cffi."
+  echo "Check: $0 --doctor"
+  exit 1
+}
+
 write_auth_env_if_requested() {
   local auth_file="$STACK_DIR/.env"
   # If --no-auth is requested, remove all auth entries and stop.
@@ -524,23 +655,42 @@ write_auth_env_if_requested() {
     fi
   fi
   if [[ -z "${APP_PASSWORD:-}" ]]; then
-    echo "Password is empty; refusing to write auth config."
+    if $APP_PASSWORD_STDIN; then
+      echo "=== Empty password from stdin (--password-stdin) ==="
+      echo "Nothing was read from stdin (EOF, empty pipe, or no input)."
+      echo "Pipe a password without echoing it on the command line, e.g.:"
+      echo "  printf '%s\\n' 'your-password' | $0 --user YOURNAME --password-stdin ..."
+      echo "Using printf with %s avoids adding an extra newline as part of the secret."
+      echo "Alternatively set: export OFDD_APP_PASSWORD='your-password' (same shell) and omit --password-stdin."
+    else
+      echo "Password is empty; refusing to write auth config."
+    fi
     exit 1
   fi
-  local py="${REPO_ROOT}/.venv/bin/python"
-  [[ -x "$py" ]] || py="python3"
+  local py
+  py="$(bootstrap_auth_python)"
   if ! have_cmd "$py"; then
-    echo "python3 not found; cannot generate password hash for auth env."
+    echo "=== No Python interpreter for password hashing ==="
+    echo "Expected: python3 or $REPO_ROOT/.venv/bin/python"
     exit 1
   fi
-  local hash jwt_secret
+  verify_argon2_for_login_bootstrap "$py"
+  local hash jwt_secret herr
+  herr="$(mktemp)"
   hash="$(
-    OFDD_TMP_PASSWORD="$APP_PASSWORD" "$py" -c "from argon2 import PasswordHasher; import os; print(PasswordHasher().hash(os.environ['OFDD_TMP_PASSWORD']))" 2>/dev/null
-  )"
+    OFDD_TMP_PASSWORD="$APP_PASSWORD" "$py" -c "from argon2 import PasswordHasher; import os; print(PasswordHasher().hash(os.environ['OFDD_TMP_PASSWORD']))" 2>"$herr"
+  )" || true
   if [[ -z "${hash:-}" ]]; then
-    echo "Could not generate argon2 password hash (install argon2-cffi in this python env)."
+    echo "=== Argon2 password hashing failed unexpectedly ==="
+    echo "If you see ModuleNotFoundError below, install argon2-cffi for $py (see: $0 --doctor)."
+    if [[ -s "$herr" ]]; then
+      echo "--- Python stderr (password not logged) ---"
+      cat "$herr" >&2
+    fi
+    rm -f "$herr"
     exit 1
   fi
+  rm -f "$herr"
   jwt_secret="$($py -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null)"
   [[ -n "$jwt_secret" ]] || jwt_secret="openfdd-change-me-$(date +%s)"
   shell_quote() {

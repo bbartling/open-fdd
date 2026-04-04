@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSiteContext } from "@/contexts/site-context";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +39,7 @@ import {
   deviceRowKey,
   matrixCellKey,
 } from "@/components/pages/fault-matrix-utils";
+import { isHotReloadBenchArtifact } from "@/lib/rule-files";
 
 function FaultsTable({
   faults,
@@ -93,6 +95,7 @@ function FaultsTable({
           <TableHead>Fault</TableHead>
           <TableHead className="text-muted-foreground">Sensor / point</TableHead>
           <TableHead>Severity</TableHead>
+          <TableHead className="w-[1%] whitespace-nowrap text-muted-foreground">Plots</TableHead>
           <TableHead className="text-right">Since</TableHead>
         </TableRow>
       </TableHeader>
@@ -118,6 +121,22 @@ function FaultsTable({
               </TableCell>
               <TableCell>
                 <Badge variant={severityVariant(severity)}>{severity}</Badge>
+              </TableCell>
+              <TableCell>
+                {fault.bacnet_device_id != null && fault.bacnet_device_id !== "" ? (
+                  <Link
+                    className="text-xs text-primary underline-offset-2 hover:underline"
+                    to={`/plots?${new URLSearchParams({
+                      site: fault.site_id,
+                      device: fault.bacnet_device_id,
+                      fault: fault.fault_id,
+                    }).toString()}`}
+                  >
+                    Trends
+                  </Link>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </TableCell>
               <TableCell className="text-right text-muted-foreground">
                 {timeAgo(fault.last_changed_ts)}
@@ -630,6 +649,8 @@ function RuleFilesSection() {
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-xl" />;
   const files = data?.files ?? [];
+  const primaryRuleFiles = files.filter((f) => !isHotReloadBenchArtifact(f));
+  const benchArtifactFiles = files.filter((f) => isHotReloadBenchArtifact(f));
   const rulesDir = data?.rules_dir ?? "";
 
   return (
@@ -639,6 +660,7 @@ function RuleFilesSection() {
       </h2>
       <p className="mb-2 text-xs text-muted-foreground">
         Rule YAML from platform config (rules_dir via GET /config). Upload, download, or delete files; FDD loop hot-reloads each run.
+        Timestamped <span className="font-mono">test_*_*</span> files are bench/E2E artifacts, not created by site bootstrap—delete them if you do not need them.
       </p>
       <Card>
         <CardContent className="pt-4">
@@ -694,26 +716,56 @@ function RuleFilesSection() {
           {files.length === 0 && !data?.error ? (
             <p className="text-sm text-muted-foreground">No .yaml files in rules_dir.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {files.map((name) => (
-                <span key={name} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1">
-                  <button
-                    type="button"
-                    onClick={() => openFile(name)}
-                    className={`font-mono text-sm transition-colors ${
-                      selectedFile === name ? "text-primary underline" : "hover:text-primary"
-                    }`}
-                  >
-                    {name}
-                  </button>
-                  <button type="button" className="h-6 px-1 text-xs hover:text-primary" onClick={() => handleDownload(name)} title="Download">
-                    ↓
-                  </button>
-                  <button type="button" className="h-6 px-1 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(name)} title="Delete">
-                    ×
-                  </button>
-                </span>
-              ))}
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {primaryRuleFiles.map((name) => (
+                  <span key={name} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1">
+                    <button
+                      type="button"
+                      onClick={() => openFile(name)}
+                      className={`font-mono text-sm transition-colors ${
+                        selectedFile === name ? "text-primary underline" : "hover:text-primary"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                    <button type="button" className="h-6 px-1 text-xs hover:text-primary" onClick={() => handleDownload(name)} title="Download">
+                      ↓
+                    </button>
+                    <button type="button" className="h-6 px-1 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(name)} title="Delete">
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              {benchArtifactFiles.length > 0 && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                  <p className="mb-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                    Bench / E2E rule copies ({benchArtifactFiles.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {benchArtifactFiles.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => openFile(name)}
+                          className={`font-mono text-sm transition-colors ${
+                            selectedFile === name ? "text-primary underline" : "hover:text-primary"
+                          }`}
+                        >
+                          {name}
+                        </button>
+                        <button type="button" className="h-6 px-1 text-xs hover:text-primary" onClick={() => handleDownload(name)} title="Download">
+                          ↓
+                        </button>
+                        <button type="button" className="h-6 px-1 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(name)} title="Delete">
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {selectedFile && (

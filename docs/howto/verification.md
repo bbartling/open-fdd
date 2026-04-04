@@ -130,7 +130,11 @@ You can confirm that the BACnet scraper, weather scraper, and FDD loop are runni
 
 **Plots — fault line (0/1 when condition is true):**
 
-The fault overlay on Plots is driven by `GET /analytics/fault-timeseries`: one row per (time bucket, fault_id) where `fault_results` has data. The Plots page passes **`equipment_ids`** (repeatable query param) so series are limited to the selected BACnet device’s equipment rows; omit it for site-wide charts (e.g. dashboard). The frontend shows **1** only in buckets where the fault fired, and **0** otherwise. If you see a **constant flat line** (usually flat at 1):
+The fault overlay on Plots is driven by `GET /analytics/fault-timeseries`: one row per (time bucket, fault_id) where `fault_results` has data. The Plots page passes **`equipment_ids`** (repeatable query param) so series are limited to the selected BACnet device’s equipment rows; omit it for site-wide charts (e.g. dashboard). The frontend shows **1** only in buckets where the fault fired, and **0** otherwise.
+
+**Fault picker (which faults appear for a device):** The dropdown lists distinct `fault_id` values from `GET /faults/state` for the current site when the row is linked to the selected BACnet device **either** via the point/equipment graph (**`equipment_id`** on the fault matches equipment used by points on that device) **or** via **`fault_state.bacnet_device_id`** matching the selected device instance ID. Labels use fault definition names when available. Deep links: `/plots?site=SITE_ID&device=BACNET_INSTANCE&fault=FAULT_ID` (same `site` query param as the rest of the app). From **Faults → Active faults**, use **Trends** when BACnet device id is present.
+
+If you see a **constant flat line** (usually flat at 1):
 
 - **One long segment:** The API returns one time bucket per fault (e.g. one FDD run). With a **day** bucket and a 1-day range, that one bucket fills the chart → flat 1 all day. To see discrete 0/1 steps: use a **wider time range** (e.g. 7 days) so you get multiple buckets and see which days/hours had the fault, or use **hour** bucket (used automatically when range ≤ 2 days) so each hour is 0 or 1.
 - **FDD run frequency:** Fault results are written when the FDD loop runs (e.g. every `rule_interval_hours`). To see the fault only when the condition is true, ensure the loop runs multiple times in your range and the rule actually evaluates to 0 sometimes; otherwise every bucket may show 1.

@@ -70,7 +70,9 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
-- **Docker and Docker Compose:** Required. Install Docker Engine and Docker Compose (or `docker-compose`). See [Docker install](https://docs.docker.com/engine/install/) for your distro.
+- **Docker and Docker Compose:** Required. Install Docker Engine and Docker Compose (or `docker-compose`). See [Docker install](https://docs.docker.com/engine/install/) for your distro. Your user must be able to run **`docker ps`** (typically: member of the **`docker`** group, then `newgrp docker` or log out/in).
+- **Python + argon2-cffi (host):** If you use **`--user`** with **`--password-stdin`** (or **`--password-file`**), bootstrap hashes the password with **Argon2** using **host** Python (`./.venv/bin/python` if present, else **`python3`**). Install **`argon2-cffi`** into that environment. On Ubuntu 24.04+, system pip may refuse installs (**PEP 668**); use a venv, e.g. `python3 -m venv .venv && .venv/bin/pip install argon2-cffi`. Read-only check: `./scripts/bootstrap.sh --doctor`.
+- **Troubleshooting:** See the root [README](../README.md) section *Ubuntu prerequisites* and *Common bootstrap failures* (Docker permissions, missing argon2, PEP 668, venv).
 - **Git:** To clone the project:
   ```bash
   git clone https://github.com/bbartling/open-fdd.git

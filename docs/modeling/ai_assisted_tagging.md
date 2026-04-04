@@ -6,7 +6,7 @@ nav_order: 4
 
 # AI-assisted Brick tagging
 
-Open-FDD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump BACnet discovery and existing points as JSON, then have an **LLM or human** add Brick types, rule inputs, equipment relationships, and which points to poll — and send the result to **PUT /data-model/import**. The platform stays the single source of truth; tagging is the step where raw BACnet objects become a curated, rule-ready dataset.
+Open-FDD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump BACnet discovery and existing points as JSON, then have an **LLM or human** add **Brick point classes** (`brick_type`), **Brick equipment classes** (`equipment_type` — best guess the operator confirms), rule inputs, equipment relationships, and which points to poll — and send the result to **PUT /data-model/import**. The platform stays the single source of truth; tagging is the step where raw BACnet objects become a curated, rule-ready dataset.
 
 This workflow is intended for **mechanical engineers and building operators** who need the data model tagged so that FDD rules in `stack/rules/` have the correct inputs and only the right points are logged long-term.
 
@@ -22,14 +22,15 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 4. **Tag** — Send the export JSON to an LLM or edit manually. For each point set:
    - **site_id**, **external_id** (time-series key)
-   - **brick_type** (e.g. `Supply_Air_Temperature_Sensor`, `Zone_Air_Temperature_Sensor`)
+   - **brick_type** (e.g. `Supply_Air_Temperature_Sensor`, `Zone_Air_Temperature_Sensor`) — Brick **point** class
+   - **equipment_type** (e.g. `Air_Handling_Unit`, `Variable_Air_Volume_Box`) — Brick **1.4 equipment** class local name when you set **equipment_name**, so **Data Model Testing** preset buttons (AHUs, VAVs, chillers, …) return meaningful counts after import. Use the **best defensible guess**; the operator corrects rare mistakes with one-click SPARQL checks. See [LLM workflow](llm_workflow) canonical prompt and `frontend/src/data/brick-1.4-query-class-allowlist.ts`.
    - **rule_input** (name FDD rules use)
    - **unit** when known (e.g. `degF`, `%`, `cfm`, `0/1` for binary). Units are stored in the data model and TTL; the frontend uses them for Plots axis labels and grouping (e.g. temperatures on one axis, humidity on another). Use standard abbreviations so Plots and exports stay consistent.
    - **equipment_id** (optional) or **equipment_name** (optional, with site_id)
    - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `stack/rules/` have the required inputs.
-   - For **equipment relationships** (Brick feeds/isFedBy), use the import **equipment** array. UUID-based and name-based forms are both supported; name-based relationship rows require `site_id`.
+   - For **equipment relationships** (Brick feeds/isFedBy), optional **engineering**, and **equipment_type** on named equipment, use the import **equipment** array. UUID-based and name-based forms are both supported; name-based relationship rows require `site_id`.
 
-5. **Import** — **PUT /data-model/import** with body: **points** (array) and optional **equipment** (array for feeds/fed_by only). The API accepts **only** these two keys — no `sites`, `equipments`, or `relationships`. The backend creates/updates points and equipment relationships, then rebuilds the RDF and TTL.
+5. **Import** — **PUT /data-model/import** with body: **points** (array) and optional **equipment** (array for feeds/fed_by, **equipment_type**, **engineering**, etc.). The API accepts **only** these two keys — no `sites`, `equipments`, or `relationships`. The backend creates/updates points and equipment relationships, then rebuilds the RDF and TTL.
 
 6. **Scraping** — The BACnet scraper (data-model path) loads points where `bacnet_device_id`, `object_identifier`, and **polling = true**; it calls diy-bacnet-server **client_read_multiple** per device and writes to `timeseries_readings`. Grafana and FDD use the same data model.
 
@@ -38,7 +39,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 ## API contract (import)
 
 - **points** (required): Each row is a point to **create** (omit `point_id`; set `site_id`, `external_id`, `bacnet_device_id`, `object_identifier`) or **update** (set `point_id` and fields to change). `site_id` should remain the export UUID when present. `equipment_id` is optional if `equipment_name` is provided with `site_id`.
-- **equipment** (optional): Updates equipment with Brick feeds/isFedBy. Rows may use UUID fields (`equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id`) or name fields (`equipment_name`, `feeds`, `fed_by`) with `site_id` for resolution.
+- **equipment** (optional): Updates equipment with Brick feeds/isFedBy, **`equipment_type`** (Brick class for `rdf:type`), **`engineering`**, **`metadata`**. Rows may use UUID fields (`equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id`) or name fields (`equipment_name`, `feeds`, `fed_by`) with `site_id` for resolution.
 
 **diy-bacnet ready:** The list of points to poll is **GET /data-model/export** filtered to rows where **polling === true**; each has `bacnet_device_id` and `object_identifier`.
 
@@ -48,9 +49,9 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 **Where this is documented:** the tagging rules and agent flow are described **on this page** (you are in the right place) and summarized under **[LLM tagging workflow](../appendix/technical_reference#llm-tagging-workflow)** in the Technical reference. The [README](https://github.com/bbartling/open-fdd#ai-and-data-modeling) points here under **AI and data modeling**.
 
-**Canonical prompt text:** The **full** copy-paste system prompt (points + equipment rules, strict JSON output) is on the docs site under **[LLM workflow — Copy/paste prompt template](llm_workflow#copy-paste-prompt-template-recommended)**. You can save the same text to a local file (e.g. `pdf/canonical_llm_prompt.txt`) for agents; keep it in sync when you change instructions. The running API does **not** auto-inject this into chat UIs; load it yourself or point agents at the published section. For **HTTP model context**, use **`GET /model-context/docs`**, which serves **`pdf/open-fdd-docs.txt`** (or **`OFDD_DOCS_PATH`**)—regenerate that bundle after doc changes so agents see updates.
+**Canonical prompt text:** The **full** copy-paste system prompt (points + equipment rules, strict JSON output, **fault-first pre-flight** for polling) is on the docs site under **[LLM workflow — Copy/paste prompt template](llm_workflow#copy-paste-prompt-template-recommended)**. Published hub: **[Data modeling](https://bbartling.github.io/open-fdd/modeling/)** (same content as the repo after Pages build). You can save the same text to a local file (e.g. `pdf/canonical_llm_prompt.txt`) for agents; keep it in sync when you change instructions. The running API does **not** auto-inject this into chat UIs; load it yourself or point agents at the published section. For **HTTP model context**, use **`GET /model-context/docs`**, which serves **`pdf/open-fdd-docs.txt`** (or **`OFDD_DOCS_PATH`**)—regenerate that bundle after doc changes so agents see updates. Agents that can **fetch the web** may also load the [modeling hub](https://bbartling.github.io/open-fdd/modeling/) or the [template anchor](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) directly.
 
-**What the prompt must cover:** It should be generic for **any site** (single building, campus, or tenant). The only input that changes per run is the export JSON from **GET /data-model/export** (optionally `?site_id=YourSiteName`). The LLM must preserve all fields, add **brick_type**, **rule_input**, **unit** (when known), and **polling**, and use equipment by name and **site_id** from the export.
+**What the prompt must cover:** It should be generic for **any site** (single building, campus, or tenant). The only input that changes per run is the export JSON from **GET /data-model/export** (optionally `?site_id=YourSiteName`). The LLM must preserve all fields, add **brick_type**, **rule_input**, **unit** (when known), and **polling**, and use equipment by name and **site_id** from the export. **Best practice:** the operator should state **which faults/rules** will run and supply **YAML (or snippets) where possible** before treating **polling** as final; the canonical prompt enforces that as **pre-flight / job context** or a **conservative draft**.
 
 For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
@@ -58,7 +59,9 @@ For exact schema details and import body (points + equipment only), see the [Tec
 
 ## Rules for this project (what to send the LLM)
 
-To have the LLM align **rule_input** and Brick types with your FDD rules, you can include:
+**Start here for real jobs:** which Open-FDD faults you will run, plus **actual YAML** for those rules when you have it — that yields the best **polling** and **rule_input** choices.
+
+To have the LLM align **rule_input**, Brick types, **units**, and **polling** with your FDD rules, include:
 
 - **[Fault rules overview](../rules/overview)** — FDD rule types and YAML format.
 - **[Expression Rule Cookbook](../expression_rule_cookbook)** — AHU, chiller, weather, and advanced recipes; **rule_input** examples (e.g. sat, rat, zone_temp, sf_status).

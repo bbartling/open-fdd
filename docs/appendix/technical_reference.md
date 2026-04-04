@@ -184,7 +184,7 @@ Schema is defined in **`stack/sql/`** (migrations **001–016**). Idempotent; bo
 
 1. **Export** — GET `/data-model/export`.
 2. **Clean** — Keep only points to tag and poll.
-3. **Tag with LLM** — Use prompt in [AI-assisted tagging](../modeling/ai_assisted_tagging).
+3. **Tag with LLM** — Full canonical prompt: [LLM workflow — copy/paste template](../modeling/llm_workflow#copy-paste-prompt-template-recommended); overview in [AI-assisted tagging](../modeling/ai_assisted_tagging). The prompt is **fault-first**: gather which faults/rules will run (prefer **YAML**) before final **polling** decisions, or stay conservative. It also requires **equipment_type** (Brick **1.4** equipment class local names) aligned with **Data Model Testing** SPARQL presets — see `frontend/src/data/brick-1.4-query-class-allowlist.ts` and `data-model-testing-queries.brick.test.ts`.
 4. **Import** — PUT /data-model/import with `points` and optional `equipment`. Set `polling` false on points that should not be scraped.
 
 Prompt summary: Set `site_id`, `external_id`, `brick_type`, `rule_input`; optionally `equipment_id`, **`unit`** (e.g. degF, %, cfm, 0/1 — stored in DB and TTL; frontend uses it for Plots axis labels and grouping), and equipment `feeds_equipment_id`/`fed_by_equipment_id`. Output is the completed JSON for PUT /data-model/import.

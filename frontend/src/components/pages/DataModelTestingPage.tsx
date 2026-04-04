@@ -57,7 +57,12 @@ export function DataModelTestingPage() {
       />
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Data Model Testing</h1>
       <p className="mb-8 text-sm text-muted-foreground">
-        Run predefined summary queries or your own SPARQL against the current Brick + BACnet graph. Use these to verify the data model matches how you’d summarize the mechanical system.
+        Run predefined summary queries or your own SPARQL against the current Brick + BACnet graph (Brick Schema <strong>1.4</strong>-style class IRIs). Preset buttons use vetted <code className="rounded bg-muted px-1 font-mono text-xs">brick:Class</code> names — see{" "}
+        <code className="rounded bg-muted px-1 font-mono text-xs">brick-1.4-query-class-allowlist.ts</code>. After{" "}
+        <strong>AI-assisted tagging</strong>, set <code className="rounded bg-muted px-1 font-mono text-xs">equipment_type</code> on import to the same class local names (e.g.{" "}
+        <code className="rounded bg-muted px-1 font-mono text-xs">Air_Handling_Unit</code>,{" "}
+        <code className="rounded bg-muted px-1 font-mono text-xs">Variable_Air_Volume_Box</code>) so AHUs / VAVs / chillers counts light up with one click — see the canonical prompt in{" "}
+        <span className="font-medium">Docs → Data modeling → LLM workflow</span>.
       </p>
 
       {/* One-click HVAC summary buttons */}
