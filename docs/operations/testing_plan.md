@@ -6,7 +6,7 @@ nav_order: 7
 
 # Testing plan
 
-This is the evolving engineering plan for Open-FDD automated testing and the optional **OpenClaw lab** bench under [`openclaw/`](../../openclaw/).
+This is the evolving engineering plan for Open-FDD automated testing and the optional **OpenClaw lab** bench under [`openclaw/README.md`](../../openclaw/README.md).
 
 ## Near-term priorities
 

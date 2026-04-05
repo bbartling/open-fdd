@@ -1,0 +1,5 @@
+# Illustrative: after you resolve Haystack tags / refs, use stable slugs as keys.
+# Rule YAML would need to use these same names in `inputs` / expressions, or use column_map in RuleRunner.
+column_map:
+  discharge_air_temp_sensor: sat
+  outside_air_temp_sensor: oat

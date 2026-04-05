@@ -104,12 +104,12 @@ Run the rules once and exit. Use this when the loop isn’t running or you’re 
 python tools/run_rule_loop.py
 ```
 
-**Inside Docker:**
+**Inside Docker** (one-shot, same code path as the long-running loop but no `--loop` scheduler):
 ```bash
 cd stack
-docker compose exec fdd-loop python -m open_fdd.platform.loop run_fdd_loop
+docker compose exec fdd-loop python -m open_fdd.platform.drivers.run_rule_loop
 ```
-(or equivalent: exec into the container and run the loop script from there).
+(`fdd-loop` image defaults to `run_rule_loop --loop`; this overrides the command for a single run. From the repo you can also use `python tools/run_rule_loop.py` on the host with `OFDD_DB_DSN` set.)
 
 **Summary:** For “update faults now” with the normal Docker loop, use **touch** (or the script or `POST /run-fdd`). For a single run without the loop, use the **Py script** (or the exec command above).
 

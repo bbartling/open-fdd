@@ -79,7 +79,7 @@ The **committed** **`stack/caddy/Caddyfile`** already puts the **API and WebSock
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook, [test bench rule catalog](rules/test_bench_rule_catalog) |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [Operations](operations/index) | [Integrity sweep](operations/openfdd_integrity_sweep), [Overnight review](operations/overnight_review), [MCP RAG service](operations/mcp_rag_service), [Testing plan](operations/testing_plan) |
-| [How-to Guides](howto/index) | [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
+| [How-to Guides](howto/index) | [openfdd-engine vs `open_fdd.engine`](howto/openfdd_engine), [Engine-only / IoT](howto/engine_only_iot), [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
 | [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [Appendix](appendix) | [API Reference](appendix/api_reference) — REST at a glance; [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) |

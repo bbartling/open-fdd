@@ -1,25 +1,21 @@
-# Optional in-repo package under packages/openfdd-engine/ (Python name: openfdd_engine).
-#
-# Canonical public distribution for the 2.x rules engine is **open-fdd** on PyPI
-# (`pip install open-fdd` → `open_fdd.engine.RuleRunner`). There is no separate
-# PyPI project required for engine-only use.
-#
-# This workflow does **not** upload to PyPI. It only verifies the optional package
-# still builds. (Auto-publish on tags caused failures when no PyPI project existed.)
-#
-# If you later create a **openfdd-engine** project on PyPI + trusted publisher, add
-# a `push.tags` trigger and a gh-action-pypi-publish step (see git history / docs).
+# Optional package under packages/openfdd-engine/ (import name: openfdd_engine).
+# Publishes to PyPI project **openfdd-engine** when you push tag **openfdd-engine-v***.
+# Configure Trusted Publishing on PyPI for this workflow file before first upload.
 
-name: Build openfdd-engine package
+name: Publish openfdd-engine
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "openfdd-engine-v*"
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,3 +33,9 @@ jobs:
           python -m pip install build==1.2.2 twine==6.1.0
           python -m build
           twine check dist/*
+
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/openfdd-engine-v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/openfdd-engine/dist/

@@ -15,8 +15,12 @@ def test_engine_rule_runner_import() -> None:
 
 def test_engine_public_exports() -> None:
     from open_fdd.engine import (
+        BrickTtlColumnMapResolver,
+        FirstWinsCompositeResolver,
+        ManifestColumnMapResolver,
         RuleRunner,
         bounds_map_from_rule,
+        load_column_map_manifest,
         load_rule,
         resolve_from_ttl,
     )
@@ -24,3 +28,7 @@ def test_engine_public_exports() -> None:
     assert callable(load_rule)
     assert callable(resolve_from_ttl)
     assert callable(bounds_map_from_rule)
+    assert callable(load_column_map_manifest)
+    assert BrickTtlColumnMapResolver is not None
+    assert ManifestColumnMapResolver is not None
+    assert FirstWinsCompositeResolver is not None

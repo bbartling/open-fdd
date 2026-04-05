@@ -30,5 +30,6 @@ pip install -e ".[brick]"
 ## API (same surface as `open_fdd.engine`)
 
 - `RuleRunner`, `load_rule()`, `bounds_map_from_rule()`, `resolve_from_ttl()`
+- `ColumnMapResolver`, `BrickTtlColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest`
 
 Rule authoring: [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)

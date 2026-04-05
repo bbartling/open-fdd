@@ -176,7 +176,7 @@ Schema is defined in **`stack/sql/`** (migrations **001–016**). Idempotent; bo
 
 **Edge platform:** BACnet, Docker Compose, and day-two operations are **repo-first** (`./scripts/bootstrap.sh`, stack images). The stack typically uses **`pip install -e ".[platform,brick]"`** inside build contexts; PyPI is not required to run the full edge deployment.
 
-**Publishing:** Maintainer checklist: [PyPI releases (open-fdd)](../howto/openfdd_engine_pypi). Optional in-repo **`openfdd-engine`** package is documented there; **public engine installs use `pip install open-fdd`**.
+**Publishing:** Maintainer checklist: [PyPI releases (open-fdd)](../howto/openfdd_engine_pypi). Optional in-repo **`openfdd-engine`** package (**`openfdd_engine`** import) is a shim over **`open_fdd.engine`** — see [The optional openfdd-engine package](../howto/openfdd_engine); **public engine installs use `pip install open-fdd`**.
 
 ---
 
