@@ -8,6 +8,8 @@ nav_order: 2
 
 A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math. **Tuning:** Change `params` in YAML and trigger an FDD run (or wait for the schedule); the platform hot-reloads rules each run, so no restart is needed. See [Fault rules overview](rules/overview#hot-reload-edit--run--view-in-grafana) and [Configuration](configuration) (`rules_dir` is RDF-driven via GET `/config`).
 
+> **`column_map` — platform vs library:** On the **full AFDD stack**, **`fdd-loop`** runs **`run_fdd_loop`**, which builds **`column_map`** from **`config/data_model.ttl`** using **`BrickTtlColumnMapResolver`** (same mapping as **`resolve_from_ttl`** in **`open_fdd.engine.brick_resolver`**). Recipes below stay **Brick-oriented** and assume that path. When you run **`RuleRunner`** yourself (**`pip install open-fdd`**, notebooks, external IoT pipelines), **you** supply **`column_map`** as a **dict** (logical / Brick-class keys → your DataFrame column names), or plug a custom **`ColumnMapResolver`** if you extend the platform loop. The rule YAML shape does not change; only **who** builds the map changes. See [Engine-only deployment and external IoT pipelines](howto/engine_only_iot) and [The optional openfdd-engine package](howto/openfdd_engine).
+
 ---
 
 ## 100% Brick-model driven (no column in rules)
@@ -829,6 +831,14 @@ Use the [bounds](rules/overview#rule-types) and [flatline](rules/overview#rule-t
 | Hot water temp     | 50    | 212    |
 | Condenser water    | 50    | 110    |
 | CO2 (ppm)          | 400   | 2000   |
+
+---
+
+## Follow-up (RFCs): multi-ontology selectors & cookbook matrix
+
+**Multi-ontology rule YAML** (e.g. optional `selectors.brick` / `.haystack` / `.dbo` / `.s223` under each input) is a **separate RFC** — it would feed the same **`column_map`** / resolver layer while the **full AFDD stack stays Brick-only by default** for v1. Track design discussion on GitHub **#122** and follow-on issues.
+
+**Cookbook matrix / generator:** When a selector schema is stable, we can add a **generated appendix** (logical input × Brick × Haystack × DBO × 223P notes) from a single CSV/YAML source so the long cookbook does not drift. Until then, see **`examples/column_map_resolver_workshop/`** for manifest-based illustrations.
 
 ---
 

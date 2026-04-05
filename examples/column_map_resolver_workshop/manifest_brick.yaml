@@ -1,0 +1,4 @@
+# Brick class local names → DataFrame columns (same physical series: sat).
+column_map:
+  Supply_Air_Temperature_Sensor: sat
+  Outside_Air_Temperature_Sensor: oat

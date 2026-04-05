@@ -6,7 +6,7 @@ nav_order: 15
 
 # Cloning and porting
 
-The **open-fdd** repo should be portable to another lab, another workstation, or another Open-FDD deployment with minimal conceptual changes. Optional bench assets live under [`openclaw/`](../../openclaw/).
+The **open-fdd** repo should be portable to another lab, another workstation, or another Open-FDD deployment with minimal conceptual changes. Optional bench assets live under [`openclaw/README.md`](../../openclaw/README.md).
 
 ## Core portability idea
 
@@ -16,10 +16,10 @@ That means the repo carries the reusable process, while the live Open-FDD model 
 
 ## What should transfer cleanly
 
-- the test phases (`./scripts/bootstrap.sh --test` and optional [`openclaw/bench/e2e`](../../openclaw/bench/e2e))
-- the BACnet fake-device approach ([`openclaw/bench/fake_bacnet_devices`](../../openclaw/bench/fake_bacnet_devices))
+- the test phases (`./scripts/bootstrap.sh --test` and optional [`openclaw/bench/e2e/README.md`](../../openclaw/bench/e2e/README.md))
+- the BACnet fake-device approach ([`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/README.md))
 - the overnight review discipline
-- the SPARQL validation set ([`openclaw/bench/sparql`](../../openclaw/bench/sparql))
+- the SPARQL validation set ([`openclaw/bench/sparql/README.md`](../../openclaw/bench/sparql/README.md))
 - the operator framework ([`config/ai/operator_framework.yaml`](../../config/ai/operator_framework.yaml))
 - the continuous context-backup loop
 - the idea of proving telemetry-to-fault correctness rather than only checking page loads
@@ -56,7 +56,7 @@ Use this order on a fresh site:
 - verify backend auth and reachability
 - run SPARQL/model sanity checks
 - discover representative operator-relevant points from the model
-- run the daytime smoke suite first ([`openclaw/bench/e2e/README.md`](../../openclaw/bench/e2e))
+- run the daytime smoke suite first ([`openclaw/bench/e2e/README.md`](../../openclaw/bench/e2e/README.md))
 - fix auth/model/BACnet issues found there before trusting the overnight 12-hour run
 - only then move into recurring integrity sweeps and overnight review
 
@@ -69,7 +69,7 @@ If OpenClaw is cloned onto another machine for the **same current test bench**, 
 3. [OpenClaw context bootstrap](../operations/openclaw_context_bootstrap)
 4. [Open-FDD integrity sweep](../operations/openfdd_integrity_sweep)
 5. [BACnet-to-fault verification](../bacnet/fault_verification)
-6. [`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/)
+6. [`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/README.md)
 7. [Monitor the fake fault schedule](fake_fault_schedule_monitoring)
 
 And it should know these durable facts immediately:

@@ -65,7 +65,7 @@ This is the beginning of a machine-readable engineering context, not just a UI c
 
 ## SPARQL assets in the repo
 
-Relevant reusable queries live under [`openclaw/bench/sparql/`](../../openclaw/bench/sparql/), especially:
+Relevant reusable queries live under [`openclaw/bench/sparql/README.md`](../../openclaw/bench/sparql/README.md), especially:
 
 - `04_bacnet_devices.sparql`
 - `08_bacnet_telemetry_points.sparql`

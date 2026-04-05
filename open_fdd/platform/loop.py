@@ -11,7 +11,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from open_fdd.engine.column_map_resolver import ColumnMapResolver
 
 _log = logging.getLogger(__name__)
 
@@ -222,16 +225,19 @@ def run_fdd_loop(
     rules_dir: Optional[Path] = None,
     brick_ttl: Optional[Path] = None,
     lookback_days: Optional[int] = None,
+    column_map_resolver: Optional["ColumnMapResolver"] = None,
 ) -> list[FDDResult]:
     """
     Run FDD on last N days of data, write fault_results to DB.
     Loads rules from YAML every run (rule edits apply immediately).
     Runs all rules (sensor + weather) against site-level data.
+
+    ``column_map_resolver``: optional :class:`~open_fdd.engine.column_map_resolver.ColumnMapResolver`.
+    Default is :class:`~open_fdd.engine.column_map_resolver.BrickTtlColumnMapResolver` (Brick TTL),
+    matching historical behavior. The Docker ``fdd-loop`` entrypoint does not pass this; it uses the default.
     """
-    from open_fdd.engine.brick_resolver import (
-        resolve_from_ttl,
-        get_equipment_types_from_ttl,
-    )
+    from open_fdd.engine.brick_resolver import get_equipment_types_from_ttl
+    from open_fdd.engine.column_map_resolver import BrickTtlColumnMapResolver
     from open_fdd.engine.runner import RuleRunner, load_rules_from_dir
 
     settings = get_platform_settings()
@@ -261,7 +267,12 @@ def run_fdd_loop(
     if not ttl_path.exists():
         ttl_path = (repo_root / "config" / "data_model.ttl").resolve()
 
-    column_map = resolve_from_ttl(str(ttl_path)) if ttl_path.exists() else {}
+    resolver = (
+        column_map_resolver
+        if column_map_resolver is not None
+        else BrickTtlColumnMapResolver()
+    )
+    column_map = resolver.build_column_map(ttl_path=ttl_path)
     equipment_types = (
         get_equipment_types_from_ttl(str(ttl_path)) if ttl_path.exists() else []
     )

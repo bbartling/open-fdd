@@ -45,7 +45,7 @@ During overnight review, update the repo when any of these are true:
 1. Distill the lesson from local context
 2. Put it into the best durable home:
    - docs
-   - query template under [`openclaw/bench/sparql/`](../../openclaw/bench/sparql/)
+   - query template under [`openclaw/bench/sparql/README.md`](../../openclaw/bench/sparql/README.md)
    - YAML policy file (e.g. [`config/ai/operator_framework.yaml`](../../config/ai/operator_framework.yaml))
 3. Commit the change professionally
 4. Push to GitHub
