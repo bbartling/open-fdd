@@ -76,11 +76,6 @@ test = [
     "ipykernel",
     "matplotlib",
 ]
-# E2E frontend tests via Selenium (scripts/e2e_frontend_selenium.py)
-e2e = [
-    "selenium>=4.0",
-    "webdriver-manager>=4.0",
-]
 viz = [
     "matplotlib",
 ]

@@ -143,7 +143,7 @@ SELECT ?eq_label ?feeds_label WHERE {
 }
 ```
 
-In the **Data Model Testing** UI, the **Feed topology** button runs a graph-wide query that lists both `brick:feeds` and `brick:isFedBy` edges (with optional site / equipment labels). See `frontend/src/data/data-model-testing-queries.ts` (`equipment_feeds_topology`).
+In the **Data Model Testing** UI, the **Feed topology** button runs a graph-wide query that lists both `brick:feeds` and `brick:isFedBy` edges (with optional site / equipment labels). See [`open-fdd-afdd-stack` → `frontend/src/data/data-model-testing-queries.ts`](https://github.com/bbartling/open-fdd-afdd-stack/blob/main/frontend/src/data/data-model-testing-queries.ts) (`equipment_feeds_topology`).
 
 ---
 

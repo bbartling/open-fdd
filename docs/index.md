@@ -72,7 +72,7 @@ These chapters describe the **AFDD stack** deployment model (API, scrapers, Reac
 | [Configuration](configuration) | Platform config in the RDF graph (`stack` repo) |
 | [Security & Caddy](security) | Auth, reverse proxy, TLS |
 | [Operations](operations/index) | Integrity sweep, testing plan, MCP RAG, runbooks |
-| [Using the React dashboard](frontend) | Stack UI pages |
+| [Using the React dashboard](frontend) | Stack UI only — page links to [open-fdd-afdd-stack docs](https://bbartling.github.io/open-fdd-afdd-stack/frontend) |
 | [Appendix: API reference](appendix/api_reference) | REST summary for the stack API |
 
 ---
