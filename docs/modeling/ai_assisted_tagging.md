@@ -54,6 +54,8 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 **What the prompt must cover:** It should be generic for **any site** (single building, campus, or tenant). The only input that changes per run is the export JSON from **GET /data-model/export** (optionally `?site_id=YourSiteName`). The LLM must preserve all fields, add **brick_type**, **rule_input**, **unit** (when known), and **polling**, and use equipment by name and **site_id** from the export. **Best practice:** the operator should state **which faults/rules** will run and supply **YAML (or snippets) where possible** before treating **polling** as final; the canonical prompt enforces that as **pre-flight / job context** or a **conservative draft**.
 
+> **Ontology / column_map resolvers:** On the full stack, **`fdd-loop`** still resolves rule inputs from the **Brick** model in **`data_model.ttl`** by default (**`BrickTtlColumnMapResolver`**). Tagging with **`brick_type`** / **`rule_input`** is what keeps rules aligned with timeseries columns—you do not add a separate manifest to the LLM import JSON for that path. Optional **`ManifestColumnMapResolver`** / multi-ontology manifests are for library or custom pipelines; see the callout on [LLM workflow](llm_workflow).
+
 For exact schema details and import body (points + equipment only), see the [Technical reference](../appendix/technical_reference). It defines the primary task (Brick tagging), the export → tag → import flow, polling semantics, equipment feeds, and the **unit** field (e.g. degrees-fahrenheit, percent) used by the frontend and stored in the RDF/TTL.
 
 ---
