@@ -133,6 +133,7 @@ celerybeat.pid
 stack/.env
 .venv
 .venv-ansible
+.venv-split/
 env/
 venv/
 ENV/
