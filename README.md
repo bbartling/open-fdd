@@ -14,9 +14,9 @@
 
 </div>
 
-This repository is the Open-FDD **rules engine**, published on PyPI as [`open-fdd`](https://pypi.org/project/open-fdd/). You describe faults in YAML and run detection on pandas through `open_fdd.engine`. The same package provides `open_fdd.schema`, `open_fdd.reports`, an optional `openfdd_engine` import shim for older code, and notebooks and workshops under `examples/`.
+This repository is the Open-FDD **rules engine** only, published on PyPI as [`open-fdd`](https://pypi.org/project/open-fdd/).
 
-The full on-prem **AFDD platform**—Docker Compose, FastAPI, BACnet and weather scrapers, React UI, and `bootstrap.sh`—lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**. That repo installs this engine from PyPI and ships platform code as `openfdd_stack.platform`.
+For a full on-prem **automated fault detection and diagnostics (AFDD)** stack on Linux—Docker Compose, API, scrapers, React UI, and `./scripts/bootstrap.sh`—use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**. That repo installs this engine from PyPI.
 
 ---
 
@@ -32,7 +32,7 @@ runner = RuleRunner("/path/to/rules")
 df_out = runner.run(df)
 ```
 
-Extras: **`[brick]`**, **`[platform]`** (dependency bundle aligned with stack containers), **`[bacnet]`**, **`[viz]`**, **`[dev]`** for contributors. See [`pyproject.toml`](pyproject.toml).
+
 
 ---
 
