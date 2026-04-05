@@ -14,6 +14,8 @@ This page describes a **single upload** workflow for mechanical engineers: send 
 
 > **Web-connected agents:** If your LLM can fetch HTTPS documentation, point it at the published **[Data modeling](https://bbartling.github.io/open-fdd/modeling/)** hub and this page’s template anchor **[Copy/paste prompt template (recommended)](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended)** in addition to (or alongside) `GET /model-context/docs`, so instructions stay aligned with the live docs site.
 
+> **Full AFDD stack vs column-map resolvers:** This workflow still targets **Brick** point classes (`brick_type`), **`rule_input`**, and related import fields because **rule YAML** on the platform uses **Brick-class logical names**. In **`fdd-loop`**, the default **`BrickTtlColumnMapResolver`** builds **`column_map`** from **`config/data_model.ttl`** (same semantic model you enrich with import JSON). The LLM does **not** emit a separate “ontology manifest” for PyPI-style **`ManifestColumnMapResolver`**—that path is for **library / custom** pipelines ([Engine-only deployment and external IoT pipelines](../howto/engine_only_iot), [column map resolver workshop](../../examples/column_map_resolver_workshop/README.md)). If you ever run the loop with a **manifest-only** resolver, keep **rule YAML** and **`brick_type`** aligned with whatever logical keys your rules use.
+
 ---
 
 ## What you upload to the LLM
@@ -85,7 +87,7 @@ If YAML rules or snippets **are** provided:
 
 **After faults/rules are known, you must:**
 
-- Infer which **Brick classes** and **rule_input** slugs those rules require (from YAML expressions, `column_map`, and the Expression Rule Cookbook when YAML is thin).
+- Infer which **Brick classes** and **rule_input** slugs those rules require (from YAML expressions and the Expression Rule Cookbook when YAML is thin). On the full Open-FDD stack, the engine maps those Brick names to trend/BACnet columns from the published data model (TTL), so keep **brick_type** and **rule_input** consistent with the YAML—not a separate hand-authored column_map in this JSON.
 - Set **polling=true** for points that clearly supply those required inputs once tagged.
 - Leave **polling=false** for unrelated points unless the operator explicitly asked for broader trending/plotting.
 
