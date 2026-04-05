@@ -14,9 +14,10 @@
 
 </div>
 
-This repository is the Open-FDD **rules engine** only, published on PyPI as [`open-fdd`](https://pypi.org/project/open-fdd/).
+This repository contains the Open-FDD **rules engine only**, published on PyPI as [`open-fdd`](https://pypi.org/project/open-fdd/).
 
-For a full on-prem **automated fault detection and diagnostics (AFDD)** stack on Linux—Docker Compose, API, scrapers, React UI, and `./scripts/bootstrap.sh`—use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**. That repo installs this engine from PyPI.
+For the full on-prem **automated fault detection and diagnostics (AFDD)** stack, which is bootstrapped on Linux, see **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**. This stack uses the `open-fdd` engine internally (installed from PyPI) and is delivered as a fully free and open-source solution using Docker.
+
 
 ---
 
@@ -26,13 +27,8 @@ For a full on-prem **automated fault detection and diagnostics (AFDD)** stack on
 pip install open-fdd
 ```
 
-```python
-from open_fdd import RuleRunner
-runner = RuleRunner("/path/to/rules")
-df_out = runner.run(df)
-```
-
-
+See examples inside the repository:
+[https://github.com/bbartling/open-fdd/tree/master/examples](https://github.com/bbartling/open-fdd/tree/master/examples)
 
 ---
 
@@ -64,11 +60,11 @@ Use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** 
 
 ## Documentation
 
-- [**GitHub Pages (engine & concepts)**](https://bbartling.github.io/open-fdd/) — library, rules, modeling; some pages describe the full stack and point at **`openfdd_stack.platform`** (AFDD repo).
-- [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf)
-- [**LLM workflow template**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended)
-
-**Stack-only docs** (Compose, API operations) are maintained in the **open-fdd-afdd-stack** repository.
+- 📖 [**Engine documentation**](https://bbartling.github.io/open-fdd/) — `RuleRunner`, rule YAML, pandas, modeling concepts; some pages reference the full stack and **`openfdd_stack.platform`** ([AFDD stack repo](https://github.com/bbartling/open-fdd-afdd-stack)).
+- 📗 [**AFDD stack documentation**](https://bbartling.github.io/open-fdd-afdd-stack/) — Docker Compose, `./scripts/bootstrap.sh`, API, drivers, React UI (maintained in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)).
+- 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — Offline / Kindle-friendly. Build from a clone with `python3 scripts/build_docs_pdf.py` → `pdf/open-fdd-docs.pdf`.
+- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — Export the data model as JSON, run an **external** LLM-assisted tagging workflow, then re-import where your integration supports it.
+- 🤖 [**Open‑Claw / external agents**](https://bbartling.github.io/open-fdd/openclaw_integration) — Model-context docs, MCP manifest patterns, and export/import flows for your own OpenAI-compatible tooling.
 
 ---
 
