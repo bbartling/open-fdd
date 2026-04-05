@@ -1,15 +1,21 @@
 title: "Open-FDD"
-description: "Open-source edge analytics for smart buildings — BACnet, TimescaleDB, Grafana, rule-based FDD"
+description: "PyPI rules engine for HVAC fault detection — YAML rules on pandas (open_fdd.engine). Docker AFDD platform is a separate repo."
 baseurl: "/open-fdd"
 # Jekyll emits e.g. modeling/llm_workflow.html. GitHub Pages serves extensionless /open-fdd/modeling/llm_workflow
 # but /open-fdd/modeling/llm_workflow/ often 404s (no page/index.html). Prefer extensionless or .html in README links.
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
 
+plugins:
+  - jekyll-remote-theme
+  - jekyll-include-cache
+  - jekyll-seo-tag
+
 aux_links:
   "GitHub": "https://github.com/bbartling/open-fdd"
-  # open-fdd 2.x: pandas/YAML engine + extras; full stack from GitHub/Docker.
   "PyPI": "https://pypi.org/project/open-fdd/"
+  "AFDD stack (docs)": "https://bbartling.github.io/open-fdd-afdd-stack/"
+  "AFDD stack (repo)": "https://github.com/bbartling/open-fdd-afdd-stack"
 
 footer_content: "MIT License"
 

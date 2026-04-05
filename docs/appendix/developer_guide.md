@@ -29,7 +29,7 @@ The API serves this directory with FastAPI’s `StaticFiles` mounted at `/app` (
 ### How to develop the front-end
 
 1. **Run the API locally** (with a real or mock backend):
-   - From repo root: `pip install -e ".[platform,brick]"` then start the API (e.g. `uvicorn open_fdd.platform.api.main:app --reload --host 0.0.0.0 --port 8000`), or
+   - From repo root: `pip install -e ".[platform,brick]"` then start the API (e.g. `uvicorn openfdd_stack.platform.api.main:app --reload --host 0.0.0.0 --port 8000`), or
    - Use the full stack: `./scripts/bootstrap.sh` so the API runs in Docker.
 2. **Edit files** in `open_fdd/platform/static/` (HTML, JS, or CSS).
 3. **Reload the browser** at http://localhost:8000/app/ — there is no build step; changes are picked up on refresh. If you run the API in Docker, ensure the repo is mounted so your edits are visible inside the container (bootstrap mounts the repo into the API container where applicable).

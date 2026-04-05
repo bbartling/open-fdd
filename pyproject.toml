@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.0.13"
-description = "Fault Detection and Diagnostics for HVAC systems — config-driven, pandas-based"
+version = "2.0.14"
+description = "Open-FDD rules engine — YAML + pandas fault detection (PyPI library). Full AFDD Docker stack is a separate repo."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -118,17 +118,13 @@ Repository = "https://github.com/bbartling/open-fdd"
 [tool.setuptools.packages.find]
 include = ["open_fdd*", "openfdd_engine*"]
 
-[tool.setuptools.package-data]
-open_fdd = ["rules/*.yaml", "platform/static/*"]
-
 [tool.black]
 line-length = 88
 target-version = ["py314"]
-# Exclude files that trigger Black bugs or are intentionally unformatted (e2e script).
-extend-exclude = "open_fdd/platform/data_model_ttl\\.py|tools/graph_and_crud_test\\.py"
+extend-exclude = "tools/graph_and_crud_test\\.py"
 
 [tool.pytest.ini_options]
-testpaths = ["open_fdd/tests", "stack/ha_integration/tests"]
+testpaths = ["open_fdd/tests"]
 pythonpath = ["."]
 filterwarnings = [
     "ignore::DeprecationWarning:rdflib",

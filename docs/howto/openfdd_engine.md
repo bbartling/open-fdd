@@ -29,7 +29,7 @@ The same policy applies to the repo-root **`openfdd_engine/`** namespace used in
 |--------|------------|------------------------------|
 | **Core engine** | Loads YAML rules, runs checks on a `DataFrame`, produces fault columns | `from open_fdd.engine.runner import RuleRunner` |
 | **Optional shim** | Same classes, different package name (depends on **`open-fdd`**) | `from openfdd_engine import RuleRunner` |
-| **Platform loop** | Pulls Timescale data + TTL, builds frames per site, calls **`RuleRunner`**, writes **`fault_results`** | Docker: `python -m open_fdd.platform.drivers.run_rule_loop --loop` → `open_fdd.platform.loop.run_fdd_loop` |
+| **Platform loop** | Pulls Timescale data + TTL, builds frames per site, calls **`RuleRunner`**, writes **`fault_results`** | Docker: `python -m openfdd_stack.platform.drivers.run_rule_loop --loop` → `openfdd_stack.platform.loop.run_fdd_loop` |
 
 There is **no second rule engine** inside `openfdd_engine`: its modules **re-export** symbols from **`open_fdd.engine`** (see `packages/openfdd-engine/src/openfdd_engine/runner.py`).
 
@@ -80,12 +80,12 @@ from openfdd_engine import (
 
 In Docker, **`fdd-loop`** runs:
 
-`python -m open_fdd.platform.drivers.run_rule_loop --loop`
+`python -m openfdd_stack.platform.drivers.run_rule_loop --loop`
 
 That driver:
 
 1. Optionally refreshes Open-Meteo for the lookback window.  
-2. Calls **`run_fdd_loop()`** in **`open_fdd.platform.loop`**, which loads YAML from **`rules_dir`**, loads timeseries from Postgres, builds **`column_map`** via **`BrickTtlColumnMapResolver`** (Brick TTL — same as historical behavior) from **`config/data_model.ttl`**, and constructs **`RuleRunner`** from **`open_fdd.engine.runner`**. Advanced use: pass **`column_map_resolver=...`** into **`run_fdd_loop`** to swap mapping logic; the default stack does not. Library helpers in **`open_fdd.engine.column_map_resolver`**: **`ManifestColumnMapResolver`**, **`FirstWinsCompositeResolver`**, **`load_column_map_manifest`** (also re-exported from **`openfdd_engine`**).  
+2. Calls **`run_fdd_loop()`** in **`openfdd_stack.platform.loop`**, which loads YAML from **`rules_dir`**, loads timeseries from Postgres, builds **`column_map`** via **`BrickTtlColumnMapResolver`** (Brick TTL — same as historical behavior) from **`config/data_model.ttl`**, and constructs **`RuleRunner`** from **`open_fdd.engine.runner`**. Advanced use: pass **`column_map_resolver=...`** into **`run_fdd_loop`** to swap mapping logic; the default stack does not. Library helpers in **`open_fdd.engine.column_map_resolver`**: **`ManifestColumnMapResolver`**, **`FirstWinsCompositeResolver`**, **`load_column_map_manifest`** (also re-exported from **`openfdd_engine`**).  
 3. Writes results to **`fault_results`** (and run log for Grafana).
 
 So: **same YAML and same `RuleRunner` semantics** as a standalone script; the platform adds **DB, schedule, TTL, and weather**.

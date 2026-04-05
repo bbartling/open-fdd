@@ -413,36 +413,36 @@ Checking **Include BACnet device and point IDs** on Data Model Testing runs a va
 
 ## SPARQL smoke suite (repo files)
 
-The same queries used by **Data Model Testing** predefined buttons and by optional bench automation are checked in under **`openclaw/bench/sparql/`** in the [open-fdd](https://github.com/bbartling/open-fdd) repository. Run them via **POST /data-model/sparql** (body `{"query": "..."}`), **POST /data-model/sparql/upload**, or **Data Model Testing** → Custom SPARQL (paste or upload). See also the directory [README on GitHub](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/README.md) for the mapping to UI buttons and cookbook recipes.
+The same queries used by **Data Model Testing** predefined buttons and by optional bench automation are checked in under **`openclaw/bench/sparql/`** in the [open-fdd](https://github.com/bbartling/open-fdd) repository. Run them via **POST /data-model/sparql** (body `{"query": "..."}`), **POST /data-model/sparql/upload**, or **Data Model Testing** → Custom SPARQL (paste or upload). See also the directory [README on GitHub](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/README.md) for the mapping to UI buttons and cookbook recipes.
 
 | File | Role |
 |------|------|
-| [`01_platform_config.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/01_platform_config.sparql) | Recipe 1: platform config |
-| [`02_sites_labels.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/02_sites_labels.sparql) | Recipe 2 / **Sites** button |
-| [`02_site_counts.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/02_site_counts.sparql) | Site aggregate counts |
-| [`03_equipment_labels_testbench.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/03_equipment_labels_testbench.sparql) | Equipment for test-bench site |
-| [`03_point_labels_testbench.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/03_point_labels_testbench.sparql) | Points for test-bench site |
-| [`04_bacnet_devices.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/04_bacnet_devices.sparql) | Recipe 4: BACnet devices |
-| [`05_brick_rule_mapping.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/05_brick_rule_mapping.sparql) | Recipe 5: Brick → rule input |
-| [`06_polling_points_brick_type.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/06_polling_points_brick_type.sparql) | Polling points + Brick type (no BACnet join) |
-| [`07_count_triples.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/07_count_triples.sparql) | Triple count |
-| [`08_bacnet_telemetry_points.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/08_bacnet_telemetry_points.sparql) | BACnet telemetry / addressing |
-| [`09_graph_db_sync_counts.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/09_graph_db_sync_counts.sparql) | Graph vs DB sync counts |
-| [`10_ahus.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/10_ahus.sparql) | **AHUs** button |
-| [`11_zones.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/11_zones.sparql) | **Zones** button |
-| [`12_building.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/12_building.sparql) | **Building** button |
-| [`13_vav_boxes.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/13_vav_boxes.sparql) | **VAV boxes** button |
-| [`14_vavs_per_ahu.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/14_vavs_per_ahu.sparql) | **VAVs per AHU** button |
-| [`15_chillers.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/15_chillers.sparql) | **Chillers** button |
-| [`16_cooling_towers.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/16_cooling_towers.sparql) | **Cooling towers** button |
-| [`17_boilers.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/17_boilers.sparql) | **Boilers** button |
-| [`18_central_plant.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/18_central_plant.sparql) | **Central plant** button |
-| [`19_hvac_equipment.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/19_hvac_equipment.sparql) | **HVAC equipment** button |
-| [`20_meters.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/20_meters.sparql) | **Meters** button |
-| [`21_points.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/21_points.sparql) | **Points** button |
-| [`22_class_summary.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/22_class_summary.sparql) | **Class summary** button |
-| [`23_orphan_external_references.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/23_orphan_external_references.sparql) | Orphan `ref:` hygiene |
-| [`24_operator_site_context.sparql`](https://github.com/bbartling/open-fdd/blob/master/openclaw/bench/sparql/24_operator_site_context.sparql) | Operator site context discovery |
+| [`01_platform_config.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/01_platform_config.sparql) | Recipe 1: platform config |
+| [`02_sites_labels.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/02_sites_labels.sparql) | Recipe 2 / **Sites** button |
+| [`02_site_counts.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/02_site_counts.sparql) | Site aggregate counts |
+| [`03_equipment_labels_testbench.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/03_equipment_labels_testbench.sparql) | Equipment for test-bench site |
+| [`03_point_labels_testbench.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/03_point_labels_testbench.sparql) | Points for test-bench site |
+| [`04_bacnet_devices.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/04_bacnet_devices.sparql) | Recipe 4: BACnet devices |
+| [`05_brick_rule_mapping.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/05_brick_rule_mapping.sparql) | Recipe 5: Brick → rule input |
+| [`06_polling_points_brick_type.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/06_polling_points_brick_type.sparql) | Polling points + Brick type (no BACnet join) |
+| [`07_count_triples.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/07_count_triples.sparql) | Triple count |
+| [`08_bacnet_telemetry_points.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/08_bacnet_telemetry_points.sparql) | BACnet telemetry / addressing |
+| [`09_graph_db_sync_counts.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/09_graph_db_sync_counts.sparql) | Graph vs DB sync counts |
+| [`10_ahus.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/10_ahus.sparql) | **AHUs** button |
+| [`11_zones.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/11_zones.sparql) | **Zones** button |
+| [`12_building.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/12_building.sparql) | **Building** button |
+| [`13_vav_boxes.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/13_vav_boxes.sparql) | **VAV boxes** button |
+| [`14_vavs_per_ahu.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/14_vavs_per_ahu.sparql) | **VAVs per AHU** button |
+| [`15_chillers.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/15_chillers.sparql) | **Chillers** button |
+| [`16_cooling_towers.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/16_cooling_towers.sparql) | **Cooling towers** button |
+| [`17_boilers.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/17_boilers.sparql) | **Boilers** button |
+| [`18_central_plant.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/18_central_plant.sparql) | **Central plant** button |
+| [`19_hvac_equipment.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/19_hvac_equipment.sparql) | **HVAC equipment** button |
+| [`20_meters.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/20_meters.sparql) | **Meters** button |
+| [`21_points.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/21_points.sparql) | **Points** button |
+| [`22_class_summary.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/22_class_summary.sparql) | **Class summary** button |
+| [`23_orphan_external_references.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/23_orphan_external_references.sparql) | Orphan `ref:` hygiene |
+| [`24_operator_site_context.sparql`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/24_operator_site_context.sparql) | Operator site context discovery |
 
 ---
 

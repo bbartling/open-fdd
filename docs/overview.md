@@ -5,7 +5,9 @@ nav_order: 2
 
 # System Overview
 
-Open-FDD is an **open-source knowledge graph for building technology systems**, specializing in fault detection and diagnostics (FDD) for HVAC. FDD is often called AFDD when the platform runs it on a schedule (automated FDD). It runs on-premises so facilities keep control of their data and avoid vendor lock-in. This section describes the architecture, services, and data flow.
+**This repository** ships the **`open-fdd`** Python package on **PyPI**: YAML-defined **FDD rules on pandas** (`open_fdd.engine`), plus schema and reporting helpers. That engine can run **inside your own application** or inside the **AFDD Docker stack** (separate repo), which installs `open-fdd` from PyPI and adds TimescaleDB, scrapers, FastAPI, and a React UI.
+
+The text below describes the **full edge platform** as deployed from **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**—knowledge graph, services, and data flow. For engine-only usage, see **[Engine-only / IoT](howto/engine_only_iot)** and **[Getting started](getting_started)**.
 
 ---
 
@@ -53,9 +55,10 @@ Remote Open-FDD BACnet gateways (e.g. diy-bacnet-server plus scraper) can be dep
 
 ## Ways to deploy
 
-- **Docker Compose** (recommended): `./scripts/bootstrap.sh`
-- **Minimal (raw BACnet only):** DB + Grafana + BACnet server + scraper: `./scripts/bootstrap.sh --minimal` — no FDD, weather, or API.
-- **Manual:** Start DB, Grafana, run scrapers and FDD loop from host
+- **Docker Compose (AFDD stack):** In **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, run `./scripts/bootstrap.sh` (see **[stack docs](https://bbartling.github.io/open-fdd-afdd-stack/)**).
+- **Minimal stack (BACnet-focused):** `./scripts/bootstrap.sh --minimal` in that repo — DB + BACnet server + scraper; no full API/FDD/weather unless you add services.
+- **Engine only:** `pip install open-fdd` and run `RuleRunner` on pandas DataFrames (no Compose); see **[Engine-only / IoT](howto/engine_only_iot)**.
+- **Manual / custom:** Start your own processes; reuse the same rule YAML and `open_fdd.engine` APIs.
 
 ---
 

@@ -206,13 +206,13 @@ From the repo (with stack up and DB/API reachable):
 
 ```bash
 # Uses GET /config or env (OFDD_OPEN_METEO_*, OFDD_DB_DSN); writes to site from open_meteo_site_id
-python -m open_fdd.platform.drivers.run_weather_fetch
+python -m openfdd_stack.platform.drivers.run_weather_fetch
 ```
 
 Or from inside the API/worker image (replace with your image name if different):
 
 ```bash
-docker compose -f stack/docker-compose.yml run --rm api python -m open_fdd.platform.drivers.run_weather_fetch
+docker compose -f stack/docker-compose.yml run --rm api python -m openfdd_stack.platform.drivers.run_weather_fetch
 ```
 
 After a successful run, refresh the Weather page with the correct site selected; you should see temp/RH/wind panels.

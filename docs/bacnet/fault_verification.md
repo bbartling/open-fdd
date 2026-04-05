@@ -19,7 +19,7 @@ This is stronger than merely checking whether a page loads or whether a fault ap
 The target verification chain is:
 
 1. **Fake BACnet device schedule is known**
-   - use the deterministic schedules in [`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/README.md)
+   - use the deterministic schedules in [`openclaw/bench/fake_bacnet_devices/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/fake_bacnet_devices/README.md)
    - know which devices and points should be healthy vs faulted during the review window
 
 2. **DIY BACnet server RPC confirms source values**
@@ -32,7 +32,7 @@ The target verification chain is:
 
 3. **Open-FDD graph confirms BACnet addressing is modeled correctly**
    - query the data model for BACnet devices, point addressing, object identifiers, equipment relationships, polling points
-   - use the SPARQL assets in [`openclaw/bench/sparql/README.md`](../../openclaw/bench/sparql/README.md)
+   - use the SPARQL assets in [`openclaw/bench/sparql/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/sparql/README.md)
 
 4. **Open-FDD rules context is understood**
    - identify the relevant YAML rule(s) under **`stack/`** (mounted into containers as the live rules directory—not duplicated under `openclaw/`)

@@ -1,8 +1,0 @@
-# Data Model Testing → Building button (buildings, floors, HVAC equipment, zones counts)
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-SELECT (COUNT(DISTINCT ?b) AS ?buildings) (COUNT(DISTINCT ?f) AS ?floors) (COUNT(DISTINCT ?e) AS ?hvac_equipment) (COUNT(DISTINCT ?z) AS ?zones) WHERE {
-  OPTIONAL { ?b a brick:Building . }
-  OPTIONAL { ?f a brick:Floor . }
-  OPTIONAL { ?e a brick:HVAC_Equipment . }
-  OPTIONAL { ?z a brick:HVAC_Zone . }
-}

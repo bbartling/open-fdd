@@ -95,7 +95,7 @@ Bench and helper scripts treat Open‑FDD like any other REST client: they read 
 3. **Bearer token for REST** — set **`OFDD_API_KEY`** on the bench to the same value as in **`stack/.env` on the Open‑FDD host** (see [Security — authentication](security.md#frontend-and-api-authentication)). Do not commit that file; copy the key out of band. DB passwords and other secrets can stay on the server.
 4. **Browser UI from Windows (optional)** — open **`http://<open-fdd-host>/`** (Caddy) or **`http://<open-fdd-host>:5173`** (direct frontend). Sign in at **`/login`** when dashboard user auth is configured; the app uses **`VITE_API_BASE=/api`** behind Caddy so API calls stay same-origin. This is **independent** of the Bearer header OpenClaw uses for REST.
 
-**File handoff (`openclaw/issues_log.md`)** — [`HANDOFF_PROTOCOL.md`](../openclaw/HANDOFF_PROTOCOL.md) assumes both Cursor and OpenClaw can read the **same repo tree**. With a split setup, use **git push/pull** (or SSH to one canonical clone) so the lab trail stays in sync.
+**File handoff (`openclaw/issues_log.md`)** — [`HANDOFF_PROTOCOL.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/HANDOFF_PROTOCOL.md) assumes both Cursor and OpenClaw can read the **same repo tree**. With a split setup, use **git push/pull** (or SSH to one canonical clone) so the lab trail stays in sync.
 
 ---
 

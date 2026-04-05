@@ -38,7 +38,7 @@ open-fdd/
 ├── scripts/               # bootstrap.sh, fake_*_faults.py
 ├── tools/
 │   ├── discover_bacnet.py # Optional: BACnet discovery helper (bacpypes3); stack scrape is KG-driven
-│   ├── run_weather_fetch.py, run_rule_loop.py, run_host_stats.py  # BACnet: python -m open_fdd.platform.drivers.run_bacnet_scrape
+│   ├── run_weather_fetch.py, run_rule_loop.py, run_host_stats.py  # BACnet: python -m openfdd_stack.platform.drivers.run_bacnet_scrape
 │   ├── graph_and_crud_test.py # Full CRUD + RDF + SPARQL e2e (see SPARQL cookbook)
 │   ├── bacnet_crud_smoke_test.py # Simple BACnet instance range + CRUD smoke test
 │   ├── trigger_fdd_run.py
@@ -111,7 +111,7 @@ Tests live under `open_fdd/tests/`. Run: `pytest open_fdd/tests/ -v`. All use in
 
 With DB and diy-bacnet-server reachable:
 
-- **One shot:** `OFDD_BACNET_SERVER_URL=http://localhost:8080 python -m open_fdd.platform.drivers.run_bacnet_scrape`
+- **One shot:** `OFDD_BACNET_SERVER_URL=http://localhost:8080 python -m openfdd_stack.platform.drivers.run_bacnet_scrape`
 - **Loop:** add `--loop` (uses `OFDD_BACNET_SCRAPE_INTERVAL_MIN` or GET /config).
 
 **Confirm scraping:** Docker logs `openfdd_bacnet_scraper`; DB `timeseries_readings`; [Grafana SQL cookbook](../howto/grafana_cookbook); API `GET /download/csv`.

@@ -6,7 +6,7 @@ nav_order: 17
 
 # Monitor the fake fault schedule
 
-This page explains the right way to interpret spikes from the Open-FDD **fake BACnet bench** ([`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/README.md)).
+This page explains the right way to interpret spikes from the Open-FDD **fake BACnet bench** ([`openclaw/bench/fake_bacnet_devices/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/fake_bacnet_devices/README.md)).
 
 ## Why this matters
 
@@ -112,7 +112,7 @@ That is much stronger than treating a single spike as mysterious.
 
 If OpenClaw is cloned onto another machine on the same bench, this page plus:
 
-- [`openclaw/bench/fake_bacnet_devices/README.md`](../../openclaw/bench/fake_bacnet_devices/README.md)
+- [`openclaw/bench/fake_bacnet_devices/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/fake_bacnet_devices/README.md)
 - [BACnet-to-fault verification](../bacnet/fault_verification)
 - [OpenClaw context bootstrap](../operations/openclaw_context_bootstrap)
 - `openclaw/bench/scripts/monitor_fake_fault_schedule.py`

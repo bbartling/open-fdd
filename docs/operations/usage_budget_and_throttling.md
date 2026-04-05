@@ -108,7 +108,7 @@ Under pressure:
 
 - prefer targeted reruns instead of full reruns
 - fix the first blocker before repeating the whole suite
-- use the short-day BACnet profile ([`openclaw/bench/e2e/README.md`](../../openclaw/bench/e2e/README.md))
+- use the short-day BACnet profile ([`openclaw/bench/e2e/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/bench/e2e/README.md))
 
 ### Overnight review
 

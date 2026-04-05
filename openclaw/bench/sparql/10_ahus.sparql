@@ -1,5 +1,0 @@
-# Data Model Testing → AHUs button (count Air Handling Units)
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-SELECT (COUNT(?ahu) AS ?count) WHERE {
-  ?ahu a brick:Air_Handling_Unit .
-}

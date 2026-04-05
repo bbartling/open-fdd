@@ -1,4 +1,7 @@
 # FastAPI starter
+# React UI and stack live in open-fdd-afdd-stack; ignore stray bind-mount leftovers.
+/frontend/
+
 .DS_Store
 /data
 /tmp

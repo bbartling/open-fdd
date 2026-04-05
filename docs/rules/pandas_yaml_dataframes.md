@@ -24,7 +24,7 @@ So: **rules = list of dicts in memory**; **data = one wide-ish DataFrame** of ti
 
 ## 2. From Postgres rows to a site/equipment DataFrame
 
-The continuous loop (`open_fdd.platform.loop.run_fdd_loop`) loads telemetry with SQL, then reshapes it for pandas:
+The continuous loop (`openfdd_stack.platform.loop.run_fdd_loop`) loads telemetry with SQL, then reshapes it for pandas:
 
 1. **Query** `timeseries_readings` joined to `points` for the time window (`load_timeseries_for_site` / `load_timeseries_for_equipment`).
 2. **Build a long table**: `pd.DataFrame(rows)` with columns like `ts`, `external_id`, `value`.

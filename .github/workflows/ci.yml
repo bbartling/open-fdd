@@ -41,7 +41,13 @@ jobs:
           OFDD_API_KEY: ""
           OFDD_CADDY_INTERNAL_SECRET: ""
 
-      - name: Build engine package (dry run)
+      - name: Build open-fdd sdist/wheel (dry run)
+        run: |
+          python -m pip install build==1.2.2 twine==6.1.0
+          python -m build
+          twine check dist/*
+
+      - name: Build openfdd-engine package (dry run)
         working-directory: packages/openfdd-engine
         run: |
           python -m pip install build==1.2.2 twine==6.1.0

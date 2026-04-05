@@ -44,32 +44,3 @@ def test_column_map_resolver_protocol_runtime_check():
     """BrickTtlColumnMapResolver satisfies ColumnMapResolver protocol."""
     r = BrickTtlColumnMapResolver()
     assert isinstance(r, ColumnMapResolver)
-
-
-def test_run_fdd_loop_passes_ttl_path_to_custom_resolver(tmp_path):
-    """Injected resolver receives the same ttl_path the loop resolves (RFC Phase 1)."""
-    from open_fdd.platform.config import set_config_overlay
-    from open_fdd.platform.loop import run_fdd_loop
-
-    (tmp_path / "r.yaml").write_text("name: z\ntype: bounds\n")
-    cfg_ttl = tmp_path / "config" / "data_model.ttl"
-    cfg_ttl.parent.mkdir(parents=True)
-    cfg_ttl.write_text(_MINIMAL_TTL)
-    set_config_overlay({"rules_dir": str(tmp_path.resolve())})
-
-    mock_resolver = MagicMock()
-    mock_resolver.build_column_map.return_value = {}
-
-    with patch("open_fdd.platform.loop.get_conn", return_value=_mock_conn_no_sites()):
-        with patch("open_fdd.engine.runner.load_rules_from_dir", return_value=[]):
-            with patch(
-                "open_fdd.platform.loop.get_ttl_path_resolved",
-                return_value=str(cfg_ttl),
-            ):
-                run_fdd_loop(column_map_resolver=mock_resolver)
-
-    mock_resolver.build_column_map.assert_called_once()
-    kw = mock_resolver.build_column_map.call_args.kwargs
-    assert "ttl_path" in kw
-    assert isinstance(kw["ttl_path"], Path)
-    assert kw["ttl_path"].resolve() == cfg_ttl.resolve()

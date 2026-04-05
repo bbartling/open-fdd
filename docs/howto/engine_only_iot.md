@@ -12,13 +12,13 @@ Some integrators already operate **data collection** (historians, MQTT, propriet
 
 ## What `--mode engine` starts (Docker)
 
-From the repo root:
+From the **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** repo root (this is **not** the `open-fdd` engine-only clone):
 
 ```bash
 ./scripts/bootstrap.sh --mode engine
 ```
 
-This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture.md) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default.
+This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture.md) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default. The **FDD loop** still uses **`open-fdd` from PyPI** inside the container.
 
 **When it fits**
 

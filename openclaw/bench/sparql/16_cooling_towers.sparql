@@ -1,5 +1,0 @@
-# Data Model Testing → Cooling towers button
-PREFIX brick: <https://brickschema.org/schema/Brick#>
-SELECT (COUNT(?c) AS ?count) WHERE {
-  ?c a brick:Cooling_Tower .
-}

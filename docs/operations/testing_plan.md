@@ -6,7 +6,7 @@ nav_order: 7
 
 # Testing plan
 
-This is the evolving engineering plan for Open-FDD automated testing and the optional **OpenClaw lab** bench under [`openclaw/README.md`](../../openclaw/README.md).
+This is the evolving engineering plan for Open-FDD automated testing and the optional **OpenClaw lab** bench under [`openclaw/README.md`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/README.md).
 
 ## Near-term priorities
 
@@ -42,7 +42,7 @@ python openclaw/bench/e2e/automated_suite.py \
   --long-run-short-day
 ```
 
-Or on Windows: [`openclaw/windows/run_daytime_short_suite.cmd`](../../openclaw/windows/run_daytime_short_suite.cmd) (edit URLs first).
+Or on Windows: [`openclaw/windows/run_daytime_short_suite.cmd`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/windows/run_daytime_short_suite.cmd) (edit URLs first).
 
 ### 1. Keep authenticated backend graph checks healthy
 
