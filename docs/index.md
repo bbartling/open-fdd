@@ -1,28 +1,29 @@
 ---
 title: Home
 nav_order: 1
+description: "Install open-fdd from PyPI, run YAML fault rules on pandas DataFrames. Links to the full Docker AFDD stack."
 ---
 
-# Open-FDD engine (PyPI)
+# Open-FDD engine
 
-**`open-fdd`** is a Python library: load YAML fault rules, run them on **pandas** `DataFrame`s, get boolean fault columns. If you already use notebooks, CSVs, or a warehouse for time-series, you only need **`pip install open-fdd`**.
+{: .fs-6 .fw-400 }
+**`open-fdd`** on [PyPI](https://pypi.org/project/open-fdd/) is a small Python library: load **YAML** fault rules, run them on **pandas** `DataFrame`s, read boolean **`*_flag`** columns. If you already use notebooks, CSV exports, or a warehouse, you only need **`pip install open-fdd`**.
 
-The **Docker AFDD platform** (Compose, API, BACnet, React UI, graph, `bootstrap.sh`) is documented separately:
-
-**[→ AFDD stack documentation](https://bbartling.github.io/open-fdd-afdd-stack/)** · [GitHub](https://github.com/bbartling/open-fdd-afdd-stack) · [PyPI `open-fdd`](https://pypi.org/project/open-fdd/)
+> **Full platform** — Docker Compose, API, BACnet, React UI, knowledge graph, `bootstrap.sh` — lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.  
+> **Docs:** [AFDD stack (GitHub Pages)](https://bbartling.github.io/open-fdd-afdd-stack/) · [Repo](https://github.com/bbartling/open-fdd-afdd-stack)
 
 ---
 
 ## Start here
 
 | If you… | Read |
-|--------|------|
-| Want the smallest path from install to `RuleRunner` | [Getting started](getting_started) |
-| Have your own columns / ontologies (not only Brick TTL) | [Column map & resolvers](column_map_resolvers) |
-| Need CSV or batch workflows | [Standalone CSV / pandas](standalone_csv_pandas) |
+|---------|------|
+| Want the fastest path from install to `RuleRunner` | [Getting started](getting_started) |
+| Map Brick / ontology names to your column names | [Column map & resolvers](column_map_resolvers) |
+| Run rules on CSV or batch data (no database) | [Standalone CSV / pandas](standalone_csv_pandas) |
 | Author or tune YAML rules | [Fault rules](rules/overview) · [Expression cookbook](expression_rule_cookbook) |
-| Want workshop-style examples | [Examples in this repo](examples) |
-| Run FDD inside Docker but not the full UI stack | [Engine-only / IoT note](howto/engine_only_iot) (points at stack `--mode engine`) |
+| Browse workshop-style examples | [Examples in this repo](examples) |
+| Use Docker **`--mode engine`** without the full UI | [Engine-only / IoT](howto/engine_only_iot) |
 
 ---
 
