@@ -8,6 +8,8 @@ nav_order: 1
 
 Fault rules are YAML-defined checks run against time-series DataFrames. Each rule produces a boolean fault flag. **Open-FDD is 100% Brick-model driven:** rule inputs refer only to Brick classes; column mapping comes from the Brick TTL via SPARQL and [Brick external timeseries references](https://docs.brickschema.org/metadata/external-representations.html#timeseries) ([timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html)), which Open-FDD embraces at the heart of FDD.
 
+> **Full Docker platform:** `rules_dir`, React Faults page, sync-to-DB, `POST /run-fdd`, and Grafana views are described for operators on the **[AFDD stack docs — Fault rules](https://bbartling.github.io/open-fdd-afdd-stack/rules/overview)**. This page stays focused on **YAML semantics** and the **library** path (`RuleRunner`).
+
 ---
 
 ## Where rules live: config path and how to manage them
@@ -34,8 +36,8 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 **Fault definitions:** Each FDD run syncs the loaded rules into the `fault_definitions` table (fault_id, name, category, equipment_types). When you add or edit a rule (via frontend upload or by editing a file in `rules_dir`), the next run updates the DB and the Faults UI reflects the change. From the frontend you can also click **Sync definitions** to update the definitions table immediately.
 
 1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `stack/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
-2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
-3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](../howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
+2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](https://bbartling.github.io/open-fdd-afdd-stack/configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](https://bbartling.github.io/open-fdd-afdd-stack/appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
+3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](https://bbartling.github.io/open-fdd-afdd-stack/howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
 
 ---
 
@@ -99,7 +101,7 @@ That split is intentional: the RuleRunner stays fast and pandas-centric. **Downs
 - **SPARQL** (or export TTL) for **rated capacity** and **topology** on that equipment, and
 - **SQL** on `timeseries_readings` for duty estimates over the fault window
 
-…to approximate **energy penalties** or rank impact (see §5 in `examples/223P_engineering/README.md` and [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering)).
+…to approximate **energy penalties** or rank impact (see §5 in `examples/223P_engineering/README.md` and [Data model engineering (Brick + 223P MVP)](https://bbartling.github.io/open-fdd-afdd-stack/howto/data_model_engineering)).
 
 ---
 

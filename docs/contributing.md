@@ -7,6 +7,8 @@ nav_order: 14
 
 First off, thanks for taking the time to contribute!
 
+> **Documentation split:** This site documents the **`open-fdd`** PyPI engine. Pull requests that touch **Docker, API, React, BACnet, or the data model** should update **[open-fdd-afdd-stack docs](https://bbartling.github.io/open-fdd-afdd-stack/)** as well (or instead), and cross-link from here when the engine API changes.
+
 Open-FDD is in **Alpha**. The most valuable contributions right now are **bug reports** and **FDD rules**—especially from mechanical engineers and building professionals who can add and refine fault-detection rules using the [Expression Rule Cookbook](expression_rule_cookbook). All types of contributions are encouraged.
 
 **Phase focus:** Alpha emphasizes platform stability, driver implementation beyond BACnet, and API changes for specific integration needs. Beta (planned) will focus more on Brick data modeling (e.g. ASHRAE 223P), mechanical engineering and consulting input into the expression rule cookbook, and better default Grafana dashboards for HVAC analytics. See the [Table of Contents](#table-of-contents) for different ways to help and how this project handles them. Please read the relevant section before contributing; it helps maintainers and keeps things smooth for everyone.

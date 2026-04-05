@@ -1,7 +1,6 @@
 ---
-title: Standalone FDD with pandas
-nav_order: 11
-nav_exclude: true
+title: Standalone CSV / pandas
+nav_order: 6
 ---
 
 # Standalone FDD with pandas
@@ -19,8 +18,6 @@ The **edge platform** (TimescaleDB, Grafana, BACnet, API) remains **repo + Docke
 
 ---
 
-## Archived workflows in the repo
+## Full Docker platform
 
-For the current edge platform use the main docs below.
-
-For the current edge platform, use the main docs: [Home](index), [Overview](overview), [Getting Started](getting_started).
+For TimescaleDB, BACnet, API, and UI, use the **[AFDD stack documentation](https://bbartling.github.io/open-fdd-afdd-stack/)** and [Getting started](https://bbartling.github.io/open-fdd-afdd-stack/getting_started) there.

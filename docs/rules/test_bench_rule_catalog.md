@@ -6,7 +6,7 @@ nav_order: 3
 
 # Test bench rule catalog
 
-Open-FDD ships **two** default rules under [`stack/rules/`](https://github.com/bbartling/open-fdd/tree/master/stack/rules) (`sensor_bounds.yaml`, `sensor_flatline.yaml`). For **extended HVAC, chiller, heat-pump, and weather expression rules** used in lab automation and cookbook examples, the repository also keeps a **reference set** under **`openclaw/bench/rules_reference/`** (not loaded until you copy or upload them).
+The **AFDD stack** ships default rules under [`stack/rules/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/stack/rules) (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). For **extended HVAC, chiller, heat-pump, and weather expression rules** used in lab automation and cookbook examples, the stack repo keeps a **reference set** under **`openclaw/bench/rules_reference/`** (not loaded until you copy or upload them).
 
 Each file below links to the copy on **GitHub** (`master` branch) so the published docs site stays in sync with the repo.
 
@@ -47,4 +47,4 @@ Each file below links to the copy on **GitHub** (`master` branch) so the publish
 - [Expression rule cookbook](../expression_rule_cookbook) — AHU, chiller, weather patterns that match many of these files.
 - [OpenClaw lab README](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/openclaw/README.md) — bench layout including `rules_reference/` and E2E automation.
 
-The former **open-fdd-automated-testing** repo is superseded by the **`openclaw/`** tree in this repository; do not link automation to a separate rules tree.
+The former **open-fdd-automated-testing** repo is superseded by the **`openclaw/`** tree in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**; do not link automation to a separate rules tree.

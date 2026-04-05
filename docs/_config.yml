@@ -1,5 +1,5 @@
 title: "Open-FDD"
-description: "PyPI rules engine for HVAC fault detection — YAML rules on pandas (open_fdd.engine). Docker AFDD platform is a separate repo."
+description: "PyPI engine only: YAML rules on pandas (open_fdd.engine). Full AFDD platform docs: bbartling.github.io/open-fdd-afdd-stack"
 baseurl: "/open-fdd"
 # Jekyll emits e.g. modeling/llm_workflow.html. GitHub Pages serves extensionless /open-fdd/modeling/llm_workflow
 # but /open-fdd/modeling/llm_workflow/ often 404s (no page/index.html). Prefer extensionless or .html in README links.

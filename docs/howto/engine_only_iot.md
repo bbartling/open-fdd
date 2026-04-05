@@ -1,14 +1,13 @@
 ---
-title: Engine-only deployment and external IoT pipelines
-parent: How-to Guides
-nav_order: 21
+title: Engine-only & IoT pipelines
+nav_order: 5
 ---
 
 # Engine-only deployment and external IoT pipelines
 
 Some integrators already operate **data collection** (historians, MQTT, proprietary BAS exports) and **modeling / semantics** (warehouse schemas, optional Brick elsewhere). Open-FDD’s **`--mode engine`** and the **pandas YAML engine** let you add **FDD** without adopting the full stack.
 
-> **Package names:** The rules code lives under **`open_fdd.engine`**. The repo’s optional **`openfdd-engine`** package (**`openfdd_engine`**) is a thin re-export around the same API — not a different engine. See [The optional openfdd-engine package](openfdd_engine) for a comparison table and Docker vs library paths.
+> **Package names:** The rules code lives under **`open_fdd.engine`**. The repo’s optional **`openfdd-engine`** package (**`openfdd_engine`**) is a thin re-export around the same API — not a different engine. See [Getting started — optional shim](../getting_started#optional-import-shim-openfdd_engine).
 
 ## What `--mode engine` starts (Docker)
 
@@ -18,7 +17,7 @@ From the **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stac
 ./scripts/bootstrap.sh --mode engine
 ```
 
-This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture.md) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default. The **FDD loop** still uses **`open-fdd` from PyPI** inside the container.
+This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture (AFDD stack)](https://bbartling.github.io/open-fdd-afdd-stack/modular_architecture) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default. The **FDD loop** still uses **`open-fdd` from PyPI** inside the container.
 
 **When it fits**
 
@@ -64,7 +63,7 @@ Integrators own the bridge from **their** naming (warehouse columns, Haystack re
 
 **Priority / policy:** There is no automatic “ontology priority” in the engine — you supply **one** `column_map` per run (or one resolver that returns it). Ambiguity (e.g. multiple Haystack matches) should be resolved **before** calling **`RuleRunner`** with a strict dict.
 
-Types live in **`open_fdd.engine.column_map_resolver`** and are re-exported from **`openfdd_engine`** (shim only). More context: [The optional openfdd-engine package](openfdd_engine), GitHub **#122** (resolver RFC).
+Types live in **`open_fdd.engine.column_map_resolver`** and are re-exported from **`openfdd_engine`** (shim only). More context: [Column map & resolvers](../column_map_resolvers), [Getting started](../getting_started).
 
 ### Manifest file + composite priority (workshop / gap-fill)
 
@@ -83,7 +82,7 @@ pip install -e ".[dev]"   # from open-fdd clone, or
 pip install open-fdd      # when using a published version that includes the engine
 ```
 
-The repo also contains an optional **`openfdd-engine`** tree (`packages/openfdd-engine/`) that re-exports the same API; **`pip install open-fdd`** is the supported public install — use **`open_fdd.engine`** after install. More detail: [The optional openfdd-engine package](openfdd_engine).
+The repo also contains an optional **`openfdd-engine`** tree (`packages/openfdd-engine/`) that re-exports the same API; **`pip install open-fdd`** is the supported public install — use **`open_fdd.engine`** after install. More detail: [Getting started — optional shim](../getting_started#optional-import-shim-openfdd_engine).
 
 ## Standalone playground (optional)
 
@@ -101,4 +100,4 @@ That pattern is **not** a second engine — it is the **same** code path as prod
 | **`RuleRunner` in Python** | DataFrame + YAML directory | Identical rule YAML semantics on pandas |
 | **Full stack** | BACnet / UI needs | Collector + model + engine together |
 
-For mode overview and service list, start at [Modular architecture](../modular_architecture.md).
+For mode overview and service list, start at [Modular architecture](https://bbartling.github.io/open-fdd-afdd-stack/modular_architecture) on the AFDD stack docs site.

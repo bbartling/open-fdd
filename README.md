@@ -60,11 +60,11 @@ Use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** 
 
 ## Documentation
 
-- 📖 [**Engine documentation**](https://bbartling.github.io/open-fdd/) — `RuleRunner`, rule YAML, pandas, modeling concepts; some pages reference the full stack and **`openfdd_stack.platform`** ([AFDD stack repo](https://github.com/bbartling/open-fdd-afdd-stack)).
-- 📗 [**AFDD stack documentation**](https://bbartling.github.io/open-fdd-afdd-stack/) — Docker Compose, `./scripts/bootstrap.sh`, API, drivers, React UI (maintained in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)).
+- 📖 [**Engine documentation**](https://bbartling.github.io/open-fdd/) — `pip install open-fdd`, `RuleRunner`, column-map resolvers, rule YAML, examples (IoT / pandas first).
+- 📗 [**AFDD stack documentation**](https://bbartling.github.io/open-fdd-afdd-stack/) — Docker Compose, `./scripts/bootstrap.sh`, data modeling, API, BACnet, React UI ([repo](https://github.com/bbartling/open-fdd-afdd-stack)).
 - 📕 [**Documentation PDF**](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf) — Offline / Kindle-friendly. Build from a clone with `python3 scripts/build_docs_pdf.py` → `pdf/open-fdd-docs.pdf`.
-- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd/modeling/llm_workflow#copy-paste-prompt-template-recommended) — Export the data model as JSON, run an **external** LLM-assisted tagging workflow, then re-import where your integration supports it.
-- 🤖 [**Open‑Claw / external agents**](https://bbartling.github.io/open-fdd/openclaw_integration) — Model-context docs, MCP manifest patterns, and export/import flows for your own OpenAI-compatible tooling.
+- ✨ [**LLM prompt (copy/paste template)**](https://bbartling.github.io/open-fdd-afdd-stack/modeling/llm_workflow#copy-paste-prompt-template-recommended) — Data-model export → external LLM tagging → import (stack operators).
+- 🤖 [**Open‑Claw / external agents**](https://bbartling.github.io/open-fdd-afdd-stack/openclaw_integration) — Model-context docs, MCP manifest, export/import on the deployed API.
 
 ---
 

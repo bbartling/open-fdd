@@ -1,42 +1,35 @@
 ---
-title: Getting Started
-nav_order: 3
+title: Getting started
+nav_order: 2
 ---
 
-# Getting Started
+# Getting started
 
-This page covers **installing and using the `open-fdd` PyPI package** and **running tests** in this repository. For the **Docker AFDD platform** (Compose, `bootstrap.sh`, React UI, BACnet scrapers), use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** and its **[documentation site](https://bbartling.github.io/open-fdd-afdd-stack/)**.
+You need **Python 3.9+** and **pip**. Familiarity with **pandas** is enough to be productive.
 
----
-
-## Install the library (PyPI)
-
-**Requirements:** Python 3.9+.
+## Install
 
 ```bash
 pip install open-fdd
 ```
 
-Optional extras (see [`pyproject.toml`](https://github.com/bbartling/open-fdd/blob/master/pyproject.toml)): `[brick]`, `[bacnet]`, `[viz]`, `[platform]` (dependency bundle aligned with stack containers), `[dev]` for contributors.
+Optional extras (see [`pyproject.toml`](https://github.com/bbartling/open-fdd/blob/master/pyproject.toml) on GitHub):
 
----
+- **`[brick]`** — Brick TTL → column map (`BrickTtlColumnMapResolver`, SPARQL helpers)
+- **`[viz]`**, **`[bacnet]`**, **`[dev]`** — notebooks, tests, tooling
 
 ## Minimal usage
 
 ```python
 from open_fdd import RuleRunner
 
-runner = RuleRunner("/path/to/yaml/rules")
-df_out = runner.run(df)
+runner = RuleRunner("/path/to/rules")  # directory of `.yaml` files
+df_out = runner.run(df)                 # your DataFrame: traces as columns
 ```
 
-Rule YAML, column maps, and expression syntax are covered under **[Fault rules for HVAC](rules/overview)** and the **[expression rule cookbook](expression_rule_cookbook)**.
+Rules are the same YAML shape whether you use the library or the full platform. Inputs use **Brick class names**; you supply a **`column_map`** from those names to **your** column names unless you use a [resolver](column_map_resolvers) or Brick TTL.
 
----
-
-## Clone this repo and run tests
-
-Contributors and CI use an editable install:
+## Clone and run tests (contributors)
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
@@ -46,34 +39,19 @@ pip install -U pip && pip install -e ".[dev]"
 pytest open_fdd/tests/ -v --tb=short
 ```
 
-See **[TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md)** for how this relates to stack integration tests.
+More detail: [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md).
 
----
+## Optional import shim: `openfdd_engine`
 
-## Full Docker AFDD platform
+There is **one** rule engine (`open_fdd.engine`). The **`openfdd-engine`** PyPI package is an optional **re-export** (`import openfdd_engine`) for legacy layouts; it does not duplicate logic. See the table in [Engine-only / IoT](howto/engine_only_iot#library-path--same-yaml-any-dataframe).
 
-The **edge stack** is **not** in this repository. Clone the stack repo and run `scripts/bootstrap.sh`:
+## Full platform operators
 
-```bash
-git clone https://github.com/bbartling/open-fdd-afdd-stack.git
-cd open-fdd-afdd-stack
-chmod +x scripts/bootstrap.sh
-./scripts/bootstrap.sh --help
-```
+Bootstrap, ports, Caddy, data model, BACnet, and REST APIs live in the **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** docs:
 
-- **Stack docs (GitHub Pages):** [bbartling.github.io/open-fdd-afdd-stack](https://bbartling.github.io/open-fdd-afdd-stack/)
-- **Engine** inside stack images is installed from **PyPI** (`open-fdd`), version-pinned in `pyproject.toml` and Dockerfiles.
+[bbartling.github.io/open-fdd-afdd-stack](https://bbartling.github.io/open-fdd-afdd-stack/)
 
-Partial modes (`--mode collector|model|engine|full`), Caddy, Grafana, and MCP RAG are documented there.
+## PyPI releases (maintainers)
 
----
-
-## External agentic AI (stack only)
-
-When running the **AFDD stack**, OpenAI-compatible agents can use HTTP APIs (data-model export/import, model context docs). This **does not apply** to `pip install open-fdd` alone unless you build your own API. See **[Open‑Claw integration](openclaw_integration)** and **[API reference](appendix/api_reference)** for endpoint details in stack deployments.
-
----
-
-## Prerequisites (AFDD stack operators)
-
-If you are deploying the **Docker stack**, you need Linux, Docker, Docker Compose, Git, and (for dashboard login bootstrap) **argon2-cffi** on the host Python used by `bootstrap.sh`. Full prerequisites and troubleshooting are on the **[stack getting started](https://bbartling.github.io/open-fdd-afdd-stack/getting_started/)** page (same Markdown as `docs/getting_started.md` in the stack repo).
+Version bumps, tags, and **`openfdd-engine`** alignment are described in the stack docs (shared release checklist):  
+[PyPI releases (`open-fdd`)](https://bbartling.github.io/open-fdd-afdd-stack/howto/openfdd_engine_pypi).
