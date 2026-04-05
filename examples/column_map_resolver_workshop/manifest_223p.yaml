@@ -1,4 +1,5 @@
-# Illustrative: keys after you scope by equipment + connection in a 223P graph (naming is site-specific).
+# Illustrative slash-style keys (good for docs / bounds rules; not for type: expression — see manifest_223p_safe.yaml + demo_rule_223p.yaml).
+# Keys after you scope by equipment + connection in a 223P graph (naming is site-specific).
 column_map:
   "AHU-1/supply_air_temp": sat
   "AHU-1/outside_air_temp": oat

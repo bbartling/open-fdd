@@ -1,0 +1,15 @@
+# DBO / Google Digital Buildings–style type name — pair with manifest_dbo.yaml
+name: demo_high_sat_dbo
+description: Workshop — supply air over threshold (DBO-style input name)
+type: expression
+flag: demo_high_sat_flag
+
+inputs:
+  SupplyAirTemperatureSensor:
+    brick: SupplyAirTemperatureSensor
+
+params:
+  hi: 100.0
+
+expression: |
+  SupplyAirTemperatureSensor > hi

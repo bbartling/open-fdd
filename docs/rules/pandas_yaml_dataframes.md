@@ -6,7 +6,7 @@ nav_order: 4
 
 # YAML rules → Pandas DataFrames (under the hood)
 
-This note is for engineers who want to see **exactly** how Open-FDD turns **rule YAML on disk** into **pandas operations** on **time-series DataFrames**—and where Brick TTL fits in. It complements [Fault rules overview](overview) and [standalone CSV / pandas](../standalone_csv_pandas).
+This note is for engineers who want to see **exactly** how Open-FDD turns **rule YAML on disk** into **pandas operations** on **time-series DataFrames**—and where Brick TTL fits in. It complements [Fault rules overview](overview), [Getting started](../getting_started), and [Examples](../examples).
 
 ---
 
@@ -79,4 +79,4 @@ If a required column is missing, the runner either **raises** or **skips** the r
 | Rule output | Same index, +flag columns | vectorized masks, optional `rolling` |
 | `fault_results` / DB | Written from row-wise `FDDResult` | After flags are computed |
 
-For a **minimal** example of rules + CSV (no DB), see [standalone CSV / pandas](../standalone_csv_pandas) and unit tests in `open_fdd/tests/engine/test_runner.py`.
+For a **minimal** library-side example, use **`pd.read_csv`** + **`RuleRunner`** as in [Getting started](../getting_started); sample CSVs and notebooks live under **[`examples/AHU/`](https://github.com/bbartling/open-fdd/tree/master/examples/AHU)**. Unit tests: [`open_fdd/tests/engine/test_runner.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/tests/engine/test_runner.py).

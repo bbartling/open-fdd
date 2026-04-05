@@ -26,8 +26,12 @@ For the full on-prem **automated fault detection and diagnostics (AFDD)** stackâ
 pip install open-fdd
 ```
 
-See examples inside the repository:
-[https://github.com/bbartling/open-fdd/tree/master/examples](https://github.com/bbartling/open-fdd/tree/master/examples)
+Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/master/examples/README.md)** â€” quick runs for **Brick / Haystack / DBO / 223P** naming:
+
+```bash
+python examples/column_map_resolver_workshop/run_ontology_demo.py --list
+python examples/column_map_resolver_workshop/run_ontology_demo.py haystack
+```
 
 ---
 

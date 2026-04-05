@@ -101,7 +101,7 @@ That split is intentional: the RuleRunner stays fast and pandas-centric. **Downs
 - **SPARQL** (or export TTL) for **rated capacity** and **topology** on that equipment, and
 - **SQL** on `timeseries_readings` for duty estimates over the fault window
 
-…to approximate **energy penalties** or rank impact (see §5 in `examples/223P_engineering/README.md` and [Data model engineering (Brick + 223P MVP)](https://bbartling.github.io/open-fdd-afdd-stack/howto/data_model_engineering)).
+…to approximate **energy penalties** or rank impact; see [Data model engineering (Brick + 223P MVP)](https://bbartling.github.io/open-fdd-afdd-stack/howto/data_model_engineering) on the stack docs for modeling patterns.
 
 ---
 

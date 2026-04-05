@@ -1,0 +1,5 @@
+# Use with demo_rule_223p.yaml — keys are Python-safe for type: expression.
+# For slash-style labels (bounds-only / illustration), see manifest_223p.yaml.
+column_map:
+  ahu1_supply_air_temp: sat
+  ahu1_outside_air_temp: oat

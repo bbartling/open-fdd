@@ -20,7 +20,7 @@ description: "Install open-fdd from PyPI, run YAML fault rules on pandas DataFra
 |---------|------|
 | Want the fastest path from install to `RuleRunner` | [Getting started](getting_started) |
 | Map Brick / ontology names to your column names | [Column map & resolvers](column_map_resolvers) |
-| Run rules on CSV or batch data (no database) | [Standalone CSV / pandas](standalone_csv_pandas) |
+| Run rules on CSV or batch data (no database) | [Getting started](getting_started) · [Examples](examples) |
 | Author or tune YAML rules | [Fault rules](rules/overview) · [Expression cookbook](expression_rule_cookbook) |
 | Browse workshop-style examples | [Examples in this repo](examples) |
 | Use Docker **`--mode engine`** without the full UI | [Engine-only / IoT](howto/engine_only_iot) |

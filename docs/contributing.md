@@ -146,7 +146,7 @@ To contribute a rule or cookbook change:
 Documentation lives in the `docs/` directory and is published at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Just the Docs theme). Improvements are welcome:
 
 - Fix typos, clarify wording, or update steps.
-- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [How-to Guides](howto/index), or BACnet).
+- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [Engine-only / IoT](howto/engine_only_iot), or the [AFDD stack how-to index](https://bbartling.github.io/open-fdd-afdd-stack/howto/)).
 - Keep code blocks and links in sync with the codebase.
 
 **Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.

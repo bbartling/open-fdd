@@ -2,37 +2,65 @@
 title: Developer guide
 parent: Appendix
 nav_order: 2
+description: "open-fdd engine: exported symbols, package layout, tests, and how to extend the library."
 ---
 
-# Developer guide (engine repository)
+# Developer guide
 
-This repo is the **`open-fdd`** PyPI package: YAML rules + pandas. There is **no** FastAPI app or Docker Compose here—that lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** ([stack docs](https://bbartling.github.io/open-fdd-afdd-stack/)).
+The **`open-fdd`** package is the **rules engine**: YAML rule configs, **`RuleRunner`** on **pandas** `DataFrame`s, and helpers to build **`column_map`** from Brick TTL or manifests. Everything on this page is **library scope** only.
 
-## Layout
+---
+
+## Exported symbols
+
+**Typical imports**
+
+```python
+from open_fdd import RuleRunner, resolve_from_ttl
+```
+
+**Full engine surface** (`open_fdd.engine` — same package, explicit submodule):
+
+| Symbol | Role |
+|--------|------|
+| `RuleRunner` | Load rules from a directory or list of dicts; `run(df, ...)` adds fault flag columns |
+| `load_rule`, `bounds_map_from_rule` | Load one YAML file; extract bounds map for analytics |
+| `resolve_from_ttl` | Brick TTL → column mapping (requires **`open-fdd[brick]`**) |
+| `BrickTtlColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest` | Build `column_map` for `RuleRunner.run` |
+
+Source: [`open_fdd/engine/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/engine) on GitHub. Behavior and parameters are documented in **docstrings** on `RuleRunner.run` and resolver classes.
+
+---
+
+## Repository layout
 
 | Path | Role |
 |------|------|
-| `open_fdd/engine/` | `RuleRunner`, rule loading, expression eval, **`column_map_resolver`**, Brick helpers |
-| `open_fdd/schema/`, `open_fdd/reports/` | Shared models / reporting helpers |
-| `openfdd_engine/` | Thin re-export namespace in the clone (optional **`openfdd-engine`** on PyPI) |
-| `packages/openfdd-engine/` | Build metadata for the shim package |
-| `open_fdd/tests/` | Pytest suites (`engine`, schema, etc.) |
-| `examples/` | Notebooks, workshops, resolver demos |
+| `open_fdd/engine/` | Runner, checks, expression evaluation, column-map resolvers, Brick helpers |
+| `open_fdd/schema/`, `open_fdd/reports/` | Shared models and reporting helpers |
+| `open_fdd/tests/` | Pytest suites |
+| `examples/` | Notebooks and resolver workshops |
 
-## Tests
+---
+
+## Setup and tests
 
 ```bash
 pip install -e ".[dev]"
 pytest open_fdd/tests/ -v --tb=short
 ```
 
-Details: [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md).
+[TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md)
+
+---
 
 ## Extending the engine
 
-- New rule types or runner behavior → `open_fdd/engine/` (keep YAML schema stable where possible).
-- Public API surface → export from `open_fdd/engine/__init__.py` and document on this site ([Getting started](../getting_started), [Column map & resolvers](../column_map_resolvers)).
+- New rule **types** or runner behavior → `open_fdd/engine/`; keep on-disk YAML shape stable when possible.
+- New **public** symbols → export from [`open_fdd/engine/__init__.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/engine/__init__.py) (and top-level [`open_fdd/__init__.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/__init__.py) when appropriate), then document on this site.
 
-## Platform (API, React, SQL, Grafana, BACnet)
+---
 
-Use the stack **[Developer guide](https://bbartling.github.io/open-fdd-afdd-stack/appendix/developer_guide)** and **[Technical reference](https://bbartling.github.io/open-fdd-afdd-stack/appendix/technical_reference)** for migrations under `stack/sql/`, the React app, WebSockets, and operations.
+## Other repository
+
+The **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** repo documents a separate on-prem **product** that **consumes** this engine (installed from PyPI). For that product, see its **[documentation site](https://bbartling.github.io/open-fdd-afdd-stack/)** — it is not covered here.
