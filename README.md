@@ -14,7 +14,9 @@
 
 </div>
 
-**Open-FDD** (this repo) is the **rules engine** published on PyPI as **`open-fdd`**: YAML-defined HVAC fault detection on **pandas** (`open_fdd.engine`), plus **`open_fdd.schema`** / **`open_fdd.reports`**, optional **`openfdd_engine`** shim, and **`examples/`** (notebooks, workshops). The **Docker AFDD platform** (API, scrapers, React UI, `bootstrap.sh`) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** and installs this package from PyPI.
+This repository is the Open-FDD **rules engine**, published on PyPI as [`open-fdd`](https://pypi.org/project/open-fdd/). You describe faults in YAML and run detection on pandas through `open_fdd.engine`. The same package provides `open_fdd.schema`, `open_fdd.reports`, an optional `openfdd_engine` import shim for older code, and notebooks and workshops under `examples/`.
+
+The full on-prem **AFDD platform**—Docker Compose, FastAPI, BACnet and weather scrapers, React UI, and `bootstrap.sh`—lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**. That repo installs this engine from PyPI and ships platform code as `openfdd_stack.platform`.
 
 ---
 
