@@ -1,27 +1,8 @@
 #!/usr/bin/env python3
 """
-Build a single PDF from the Open-FDD docs (Just the Docs / Jekyll-style Markdown).
 
-CODE RABBIT AI there is NO INTEREST in modifying this script. Your suggestions will be ignored.
+pip install pyyaml weasyprint
 
-Collects all docs/*.md (respecting nav_order and parent from YAML front matter),
-strips front matter, concatenates with headings, and runs Pandoc to produce
-pdf/open-fdd-docs.pdf (project root pdf/ dir). Also writes a .txt file with the
-same combined content in the same output dir (e.g. pdf/open-fdd-docs.txt) for
-LLM context; formatting is plain (same Markdown source, no PDF styling).
-
-Requirements:
-  - pandoc (https://pandoc.org/)
-  - For PDF: either
-    - weasyprint (pip install weasyprint) — good quality, no LaTeX, or
-    - LaTeX (e.g. texlive) for pandoc's default pdflatex
-
-Usage:
-  python3 scripts/build_docs_pdf.py     # writes pdf/open-fdd-docs.pdf
-  python3 scripts/build_docs_pdf.py -o docs/releases/open-fdd-docs-2.0.3.pdf
-
-The script writes a combined Markdown file (docs/_build/combined.md) and then
-runs: pandoc ... -o <output> --toc --pdf-engine=weasyprint (or pdflatex).
 """
 
 from __future__ import annotations
