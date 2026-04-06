@@ -153,12 +153,12 @@ Documentation lives in the `docs/` directory and is published at [bbartling.gith
 
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
-**After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages builds extensionless URLs like `/modeling/llm_workflow`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
+**After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages serves extensionless URLs like `/expression_rule_cookbook`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
 
 ```bash
 BASE=https://bbartling.github.io/open-fdd
-curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow"    # expect 200
-curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow/"   # often 404 — avoid trailing slash in external links
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook"    # expect 200
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook/"   # often 404 — avoid trailing slash in external links
 curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"  # expect 302 or 200
 ```
 
@@ -167,7 +167,7 @@ curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/b
 ## Styleguides
 
 - **Python:** We use [Black](https://github.com/psf/black) for formatting. Run `black` on changed files before committing.
-- **YAML:** Match the style in `stack/rules/` and the expression rule cookbook (indentation, key order).
+- **YAML:** Match the style in `examples/` / `open_fdd/tests/fixtures/rules/` and the expression rule cookbook (indentation, key order).
 - **Markdown:** Use clear headings and lists; link to existing docs where relevant.
 
 ---
