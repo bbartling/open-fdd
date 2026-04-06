@@ -27,6 +27,48 @@ def load_rule(path: Union[str, Path]) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+# Order for column_map lookup: first match wins (manifest may key by any vocabulary).
+_ONTOLOGY_MAP_FIELDS = ("brick", "haystack", "dbo", "s223", "223p")
+
+
+def _resolve_input_column(key: str, val: Any, global_col_map: Dict[str, str]) -> str:
+    """
+    Map a rule input to a DataFrame column name.
+
+    Without column_map, uses inline ``column`` or the input key.
+    With column_map, tries ontology labels on the input dict in order
+    (brick, haystack, dbo, s223, 223p), then Brick disambiguation
+    ``BrickClass|column``, then ``column`` and ``key``.
+    """
+    if isinstance(val, str):
+        default_col = val
+        inp: Dict[str, Any] = {}
+    else:
+        inp = val if isinstance(val, dict) else {}
+        default_col = inp.get("column", key)
+
+    if not global_col_map:
+        return default_col
+
+    for field in _ONTOLOGY_MAP_FIELDS:
+        label = inp.get(field)
+        if label:
+            mapped = global_col_map.get(label)
+            if mapped is not None:
+                return mapped
+
+    brick_class = inp.get("brick")
+    if brick_class:
+        return (
+            global_col_map.get(f"{brick_class}|{default_col}")
+            or global_col_map.get(default_col)
+            or global_col_map.get(key)
+            or default_col
+        )
+
+    return global_col_map.get(default_col) or global_col_map.get(key) or default_col
+
+
 def _resolve_bounds(bounds: Any, units: str = "imperial") -> Optional[List[float]]:
     """Resolve bounds: [low, high] or {imperial: [...], metric: [...]}."""
     if bounds is None:
@@ -169,31 +211,12 @@ class RuleRunner:
         params = {**(rule.get("params") or {}), **(run_params or {})}
         global_col_map = column_map or {}
 
-        # Resolve column mappings from Brick TTL (SPARQL-driven). Rules declare Brick class;
-        # column_map from resolve_from_ttl provides Brick class → DataFrame column (rdfs:label).
-        # column fallback is optional for standalone/CSV use when no TTL is available.
-        col_map = {}
-        for key, val in inputs.items():
-            if isinstance(val, str):
-                col = val
-                brick_class = None
-            else:
-                inp = val if isinstance(val, dict) else {}
-                col = inp.get("column", key)
-                brick_class = inp.get("brick")
-            resolved = col
-            if global_col_map:
-                if brick_class:
-                    resolved = (
-                        global_col_map.get(brick_class)
-                        or global_col_map.get(f"{brick_class}|{col}")
-                        or global_col_map.get(col)
-                        or global_col_map.get(key)
-                        or col
-                    )
-                else:
-                    resolved = global_col_map.get(col) or global_col_map.get(key) or col
-            col_map[key] = resolved
+        # Map logical input keys (e.g. Brick class names) → DataFrame columns via column_map.
+        # The AFDD stack builds that map from TTL; engine-only callers pass a dict or manifest.
+        col_map = {
+            key: _resolve_input_column(key, val, global_col_map)
+            for key, val in inputs.items()
+        }
 
         if rule_type == "bounds":
             return self._run_bounds(rule, df, col_map, params)

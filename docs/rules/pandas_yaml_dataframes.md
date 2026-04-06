@@ -29,7 +29,7 @@ The continuous loop (`openfdd_stack.platform.loop.run_fdd_loop`) loads telemetry
 1. **Query** `timeseries_readings` joined to `points` for the time window (`load_timeseries_for_site` / `load_timeseries_for_equipment`).
 2. **Build a long table**: `pd.DataFrame(rows)` with columns like `ts`, `external_id`, `value`.
 3. **Pivot to wide**: `df.pivot_table(index="ts", columns="external_id", values="value")` so each point is a column (one column per `external_id`).
-4. **Rename columns** using a **column map** derived from Brick TTL (`resolve_from_ttl`): external refs or labels become the names rules expect (Brick-class-driven mapping).
+4. **Rename columns** using a **column map**: logical keys (often Brick class names) → your frame’s column names. On the AFDD stack, that map is built from TTL; with **`pip install open-fdd`** alone, use a dict or **`load_column_map_manifest`**.
 5. **Add** `timestamp = pd.to_datetime(df["ts"])` for time-based checks.
 
 Under the hood, pandas is doing **grouped aggregation in the pivot** (duplicate `(ts, external_id)` would aggregate), then **aligning** all series to a common `DatetimeIndex` (implicit via the pivot index).

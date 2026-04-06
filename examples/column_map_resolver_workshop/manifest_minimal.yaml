@@ -1,3 +1,0 @@
-# Logical / Brick-style keys → actual DataFrame column names (same frame as demo_one_shot.py).
-column_map:
-  Supply_Air_Temperature_Sensor: sat

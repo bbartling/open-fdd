@@ -1,16 +1,16 @@
 ---
 title: Column map & resolvers
 nav_order: 3
-description: "Map Brick-style rule input names to DataFrame columns: dict, TTL, manifest, or composite resolvers."
+description: "Map Brick-style rule input names to DataFrame columns: dict, manifest, or composite resolvers; Brick TTL mapping is stack-only."
 ---
 
 # Column map & resolvers
 
-YAML rules name their **`inputs`** with **Brick-style logical keys** (for example `Supply_Air_Temperature_Sensor`). Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …).
+YAML rules name their **`inputs`** with **logical keys**—often **Brick** class names (e.g. `Supply_Air_Temperature_Sensor`) on the stack, but the same mechanism supports **Haystack-style slugs**, **DBO** type names, or **223P-scoped** identifiers if those strings match your map. Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …). See [Expression Rule Cookbook — ontology labels](expression_rule_cookbook#ontology-labels).
 
-**`column_map`** is the bridge: `dict[str, str]` where each **key** is the **same string the rule YAML uses** (the logical / Brick-class side), and each **value** is the **actual `DataFrame` column name**.
+**`column_map`** is the bridge: `dict[str, str]` where each **key** is a **logical label** (Brick class, or a string from the rule’s optional **`haystack` / `dbo` / `s223` / `223p`** fields on that input), and each **value** is the **actual `DataFrame` column name**. `RuleRunner` tries those fields in order until one matches a map key; see [Expression Rule Cookbook](expression_rule_cookbook#ontology-labels).
 
-Pass it to **`RuleRunner.run(..., column_map=...)`**. You can build that dict by hand, load it from a manifest, derive it from a Brick **`.ttl`** file, or **merge** several sources with a composite resolver.
+Pass it to **`RuleRunner.run(..., column_map=...)`**. You can build that dict by hand, load it from a manifest, or **merge** several sources with a composite resolver. Deriving the map from a Brick **`.ttl`** file is done on the **[AFDD stack](https://github.com/bbartling/open-fdd-afdd-stack)** (rdflib), not in the **`open-fdd`** package.
 
 ---
 
@@ -30,19 +30,11 @@ No TTL file required if you already know the mapping. Keys must match the **inpu
 
 ---
 
-## 2. Brick TTL (`BrickTtlColumnMapResolver`)
+## 2. Brick TTL (AFDD stack only)
 
-If you have a Brick **`.ttl`** model (same general idea as a stack deployment’s RDF graph), **`BrickTtlColumnMapResolver`** runs the same SPARQL-based mapping logic the platform uses when resolving points from TTL.
+If you run the **Docker AFDD platform**, **`fdd-loop`** builds **`column_map`** from **`config/data_model.ttl`** using **`BrickTtlColumnMapResolver`** in **`openfdd_stack.platform.brick_ttl_resolver`** (depends on **rdflib** / **pyparsing**, declared in the stack’s **`pyproject.toml`** — not in **`open-fdd`**).
 
-```python
-from pathlib import Path
-from open_fdd.engine.column_map_resolver import BrickTtlColumnMapResolver
-
-cm = BrickTtlColumnMapResolver().build_column_map(ttl_path=Path("model.ttl"))
-runner.run(df, column_map=cm)
-```
-
-Install: **`pip install "open-fdd[brick]"`** (pulls **rdflib** and compatible **pyparsing** pins).
+For **engine-only** notebooks and pipelines, use a **manifest** (below) or a **plain dict** that lists the same logical keys your rules use.
 
 ---
 
@@ -64,21 +56,20 @@ For a raw dict without the resolver class, use **`load_column_map_manifest(path)
 
 ## 4. Composite priority (`FirstWinsCompositeResolver`)
 
-Run multiple resolvers **in order**; for each logical key, the **first resolver that defines it wins** (for example: TTL for most points, manifest only for gaps).
+Run multiple resolvers **in order**; for each logical key, the **first resolver that defines it wins** (for example: a base manifest, then an override file that only adds missing keys). On the stack you can compose the stack’s **`BrickTtlColumnMapResolver`** with a **`ManifestColumnMapResolver`** in your own startup code.
 
 ```python
 from pathlib import Path
 from open_fdd.engine.column_map_resolver import (
-    BrickTtlColumnMapResolver,
     FirstWinsCompositeResolver,
     ManifestColumnMapResolver,
 )
 
 composite = FirstWinsCompositeResolver(
-    BrickTtlColumnMapResolver(),
+    ManifestColumnMapResolver("base.yaml"),
     ManifestColumnMapResolver("extras.yaml"),
 )
-runner.run(df, column_map=composite.build_column_map(ttl_path=Path("model.ttl")))
+runner.run(df, column_map=composite.build_column_map(ttl_path=Path(".")))
 ```
 
 **Security:** There is **no** env-driven “import a resolver class by string” — compose resolvers in code or a small startup script.
@@ -87,17 +78,14 @@ runner.run(df, column_map=composite.build_column_map(ttl_path=Path("model.ttl"))
 
 ## Examples in the repo
 
-Workshop — **`examples/column_map_resolver_workshop/`** ([folder on GitHub](https://github.com/bbartling/open-fdd/tree/master/examples/column_map_resolver_workshop)):
+Minimal workshop — **`examples/column_map_resolver_workshop/`** ([folder on GitHub](https://github.com/bbartling/open-fdd/tree/master/examples/column_map_resolver_workshop)):
 
 | Resource | Link |
 |----------|------|
-| **CLI (`brick` / `haystack` / `dbo` / `223p` / `minimal`)** | [`run_ontology_demo.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/run_ontology_demo.py) |
+| **Run** | [`simple_ontology_demo.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_demo.py) |
+| **Rule YAML** (cookbook-style `inputs`) | [`simple_ontology_rule.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_rule.yaml) |
 | Walkthrough | [`README.md`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/README.md) |
 | Top-level index | [`examples/README.md`](https://github.com/bbartling/open-fdd/blob/master/examples/README.md) |
-| One-shot script (manifest + **`RuleRunner`**) | [`demo_one_shot.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_one_shot.py) |
-| Multi-ontology illustration | [`demo_multi_ontology_illustration.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_multi_ontology_illustration.py) |
-| Rules (Brick + Haystack + DBO + 223P) | [`demo_rule.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_rule.yaml), [`demo_rule_haystack.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_rule_haystack.yaml), [`demo_rule_dbo.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_rule_dbo.yaml), [`demo_rule_223p.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/demo_rule_223p.yaml) |
-| Manifests | [`manifest_minimal.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_minimal.yaml), [`manifest_brick.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_brick.yaml), [`manifest_haystack.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_haystack.yaml), [`manifest_dbo.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_dbo.yaml), [`manifest_223p.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_223p.yaml) (illustrative slashes), [`manifest_223p_safe.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/manifest_223p_safe.yaml) (expression-safe) |
 
 AHU / RTU notebooks and sample rules — **`examples/AHU/`** ([folder on GitHub](https://github.com/bbartling/open-fdd/tree/master/examples/AHU)):
 

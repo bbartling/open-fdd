@@ -6,28 +6,94 @@ nav_order: 2
 
 # Expression Rule Cookbook
 
-A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math. **Tuning:** Change `params` in YAML and trigger an FDD run (or wait for the schedule); the platform hot-reloads rules each run, so no restart is needed. See [Fault rules overview — Hot reload](rules/overview#hot-reload-edit--run--view) and [Configuration](https://bbartling.github.io/open-fdd-afdd-stack/configuration) on the AFDD stack docs (`rules_dir` is RDF-driven via GET `/config`).
+A quick guide for writing fault detection rules in **open-fdd**.
 
-> **`column_map` — platform vs library:** On the **full AFDD stack**, **`fdd-loop`** runs **`run_fdd_loop`**, which builds **`column_map`** from **`config/data_model.ttl`** using **`BrickTtlColumnMapResolver`** (same mapping as **`resolve_from_ttl`** in **`open_fdd.engine.brick_resolver`**). Recipes below stay **Brick-oriented** and assume that path. When you run **`RuleRunner`** yourself (**`pip install open-fdd`**, notebooks, external IoT pipelines), **you** supply **`column_map`** as a **dict** (logical / Brick-class keys → your DataFrame column names), or plug a custom **`ColumnMapResolver`** if you extend the platform loop. The rule YAML shape does not change; only **who** builds the map changes. See [Getting started](getting_started), [Engine-only / IoT](howto/engine_only_iot), and [Column map & resolvers](column_map_resolvers).
-
----
-
-## 100% Brick-model driven (no column in rules)
-
-Rule inputs use **Brick class names** only (e.g. `Supply_Air_Temperature_Sensor`). The **Brick TTL** is the source of truth: SPARQL resolves each Brick point to its [external timeseries reference](https://docs.brickschema.org/metadata/external-representations.html#timeseries) (`ref:TimeseriesReference` / `ref:hasTimeseriesId`), which yields the DataFrame column. Open-FDD embraces [Brick timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html) at the heart of FDD — **rules never reference `column`**; the data model provides the mapping. See the [SPARQL cookbook](https://bbartling.github.io/open-fdd-afdd-stack/modeling/sparql_cookbook#recipe-5-fdd--points-and-rule-mapping) (Recipe 5) on the stack docs site; run similar queries from the **Data model** UI or API there.
-
-- **Platform (DB):** Points have `brick_type` and `external_id`; TTL is built from DB. PATCH points or use data-model import to set `brick_type` (e.g. `Supply_Air_Temperature_Sensor` for SA-T).
-- **Disambiguation:** When multiple points share a Brick class, use `ofdd:mapsToRuleInput` in TTL; the runner resolves `BrickClass|rule_input`.
+Rules use **YAML** with `type: expression`.
+When the expression evaluates to **True**, the fault is flagged. open-fdd also makes **NumPy** available as `np`, so expressions can use functions like `np.abs()` or `np.maximum()`. 
 
 ---
 
-## How to define expressions
+## How inputs work
 
-1. **Inputs** — Declare Brick classes only (`brick: Supply_Air_Temperature_Sensor`). The runner resolves these via the Brick TTL (SPARQL) and Brick external timeseries references to DataFrame columns. Do not add `column` in YAML.
-2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
-3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
+Rules define logical inputs, and open-fdd resolves them to real time-series columns under the hood.
 
-**Minimal example (TTL-driven; no column):**
+Each input can now include labels from multiple ontologies, for example:
+
+```yaml
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
+```
+
+The rule expression still uses the **input key**:
+
+```yaml
+Supply_Air_Temperature_Sensor > max_temp
+```
+
+Not the Haystack, DBO, or 223P label. Those are only used for **resolution**.
+
+**Runnable minimal example:** [`examples/column_map_resolver_workshop/simple_ontology_demo.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_demo.py) (rule YAML uses the same `inputs` pattern; the script prints one run per ontology key in `column_map`).
+
+---
+
+## What this means
+
+open-fdd lets one rule work across different naming systems:
+
+* **Brick**
+* **Haystack**
+* **DBO**
+* **ASHRAE 223P-style names**
+
+You write the rule once.
+The platform matches the best available ontology label to the real DataFrame column. 
+
+---
+
+## Why this is useful
+
+This keeps rule logic clean while making the same rule easier to reuse across:
+
+* Brick-first AFDD deployments
+* Haystack-based projects
+* DBO-style models
+* future ontology adapters
+
+The equation stays readable, and the ontology mapping stays inside `inputs`. 
+
+---
+
+## Basic rule structure
+
+A rule usually has 3 parts:
+
+### 1. Inputs
+
+Logical point names plus ontology aliases.
+
+### 2. Params
+
+Thresholds and constants.
+
+### 3. Expression
+
+The fault logic.
+
+Use:
+
+* `&` for AND
+* `|` for OR
+* `~` for NOT
+
+You can also use pandas-style logic like `.diff()`, `.rolling()`, and `.notna()`. 
+
+---
+
+## Minimal example
 
 ```yaml
 name: high_temp_check
@@ -37,6 +103,9 @@ flag: high_temp_flag
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
 
 params:
   max_temp: 90.0
@@ -45,13 +114,23 @@ expression: |
   Supply_Air_Temperature_Sensor > max_temp
 ```
 
-The Brick TTL (and SPARQL) maps each Brick class to the actual column via external timeseries references. Set `points.brick_type` in the DB and sync TTL so the engine can resolve columns from the Brick model.
+---
+
+## Recommended mental model
+
+Think of it like this:
+
+* **`inputs`** = logical sensor names plus ontology aliases
+* **resolver** = finds the matching real column
+* **expression** = the actual fault logic
+
+So the YAML stays human-readable, while the ontology resolution happens behind the scenes. 
 
 ---
 
 ## AHU rules (reference-style)
 
-The following rules follow common industry practice for air-handling fault detection. Rules A through M are adapted from ASHRAE Guideline 36 (GL36) AFDD guidance. Thresholds and logic are tunable; adjust params for your site.
+The following rules follow common industry practice for air-handling fault detection. Rules A through M are adapted from ASHRAE Guideline 36 (GL36) AFDD guidance. Thresholds and logic are tunable; adjust params for your site. **Each `inputs` entry uses the same shape:** `brick`, `haystack`, `dbo`, and `s223` (see [ontology labels](#ontology-labels)).
 
 ### Rule A — Duct static below setpoint at full fan speed
 
@@ -67,10 +146,19 @@ equipment_type: [VAV_AHU]
 inputs:
   Supply_Air_Static_Pressure_Sensor:
     brick: Supply_Air_Static_Pressure_Sensor
+    haystack: supply_air_static_pressure_sensor
+    dbo: SupplyAirStaticPressureSensor
+    s223: bldg1_supply_air_static_pressure_sensor
   Supply_Air_Static_Pressure_Setpoint:
     brick: Supply_Air_Static_Pressure_Setpoint
+    haystack: supply_air_static_press_sp
+    dbo: SupplyAirStaticPressureSetpoint
+    s223: bldg1_supply_air_static_pressure_setpoint
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   sp_margin: 0.12
@@ -95,12 +183,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
+    haystack: return_air_temp_sensor
+    dbo: ReturnAirTemperatureSensor
+    s223: bldg1_return_air_temperature_sensor
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   blend_tol: 1.15
@@ -125,12 +225,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
+    haystack: return_air_temp_sensor
+    dbo: ReturnAirTemperatureSensor
+    s223: bldg1_return_air_temperature_sensor
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   blend_tol: 1.15
@@ -157,12 +269,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   blend_tol: 1.15
@@ -189,12 +313,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
+    haystack: supply_air_temp_sp
+    dbo: SupplyAirTemperatureSetpoint
+    s223: bldg1_supply_air_temperature_setpoint
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   supply_err_thres: 1.0
@@ -217,12 +353,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
 
 params:
   fan_delta_t: 0.55
@@ -248,12 +396,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
+    haystack: supply_air_temp_sp
+    dbo: SupplyAirTemperatureSetpoint
+    s223: bldg1_supply_air_temperature_setpoint
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
 
 params:
   oat_tol: 1.15
@@ -279,12 +439,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   oat_tol: 1.15
@@ -308,10 +480,19 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   oat_tol: 1.15
@@ -335,12 +516,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   fan_delta_t: 0.55
@@ -366,12 +559,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
+    haystack: supply_air_temp_sp
+    dbo: SupplyAirTemperatureSetpoint
+    s223: bldg1_supply_air_temperature_setpoint
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   sat_tol: 1.15
@@ -395,14 +600,29 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Cooling_Coil_Entering_Air_Temperature_Sensor:
     brick: Cooling_Coil_Entering_Air_Temperature_Sensor
+    haystack: cooling_coil_entering_air_temp_sensor
+    dbo: CoolingCoilEnteringAirTemperatureSensor
+    s223: bldg1_cooling_coil_entering_air_temperature_sensor
   Cooling_Coil_Leaving_Air_Temperature_Sensor:
     brick: Cooling_Coil_Leaving_Air_Temperature_Sensor
+    haystack: cooling_coil_leaving_air_temp_sensor
+    dbo: CoolingCoilLeavingAirTemperatureSensor
+    s223: bldg1_cooling_coil_leaving_air_temperature_sensor
   Heating_Valve_Command:
     brick: Valve_Command
+    haystack: heating_valve_cmd
+    dbo: HeatingValveCommand
+    s223: bldg1_heating_valve_command
   Cooling_Valve_Command:
     brick: Valve_Command
+    haystack: cooling_valve_cmd
+    dbo: CoolingValveCommand
+    s223: bldg1_cooling_valve_command
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   enter_tol: 1.15
@@ -427,14 +647,29 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Heating_Coil_Entering_Air_Temperature_Sensor:
     brick: Heating_Coil_Entering_Air_Temperature_Sensor
+    haystack: heating_coil_entering_air_temp_sensor
+    dbo: HeatingCoilEnteringAirTemperatureSensor
+    s223: bldg1_heating_coil_entering_air_temperature_sensor
   Heating_Coil_Leaving_Air_Temperature_Sensor:
     brick: Heating_Coil_Leaving_Air_Temperature_Sensor
+    haystack: heating_coil_leaving_air_temp_sensor
+    dbo: HeatingCoilLeavingAirTemperatureSensor
+    s223: bldg1_heating_coil_leaving_air_temperature_sensor
   Heating_Valve_Command:
     brick: Valve_Command
+    haystack: heating_valve_cmd
+    dbo: HeatingValveCommand
+    s223: bldg1_heating_valve_command
   Cooling_Valve_Command:
     brick: Valve_Command
+    haystack: cooling_valve_cmd
+    dbo: CoolingValveCommand
+    s223: bldg1_cooling_valve_command
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   enter_tol: 1.15
@@ -466,10 +701,19 @@ flag: dp_pump_flag
 inputs:
   Differential_Pressure_Sensor:
     brick: Differential_Pressure_Sensor
+    haystack: differential_pressure_sensor
+    dbo: DifferentialPressureSensor
+    s223: bldg1_differential_pressure_sensor
   Differential_Pressure_Setpoint:
     brick: Differential_Pressure_Setpoint
+    haystack: differential_pressure_sp
+    dbo: DifferentialPressureSetpoint
+    s223: bldg1_differential_pressure_setpoint
   Pump_Speed_Command:
     brick: Pump_Speed_Command
+    haystack: pump_speed_cmd
+    dbo: PumpSpeedCommand
+    s223: bldg1_pump_speed_command
 
 params:
   dp_margin: 2.2
@@ -493,8 +737,14 @@ flag: flow_high_flag
 inputs:
   Water_Flow_Sensor:
     brick: Water_Flow_Sensor
+    haystack: water_flow_sensor
+    dbo: WaterFlowSensor
+    s223: bldg1_water_flow_sensor
   Pump_Speed_Command:
     brick: Pump_Speed_Command
+    haystack: pump_speed_cmd
+    dbo: PumpSpeedCommand
+    s223: bldg1_pump_speed_command
 
 params:
   flow_hi_limit: 1100.0
@@ -518,10 +768,20 @@ flag: chw_temp_fault
 inputs:
   Chilled_Water_Supply_Temperature_Sensor:
     brick: Chilled_Water_Supply_Temperature_Sensor
+    # Haystack native form is a tag set (e.g. chilled + water + supply + temp + sensor); slug below is for column_map.
+    haystack: chilled_water_supply_temp_sensor
+    dbo: ChilledWaterSupplyTemperatureSensor
+    s223: bldg1_chilled_water_supply_temperature_sensor
   Chilled_Water_Supply_Temperature_Setpoint:
     brick: Chilled_Water_Supply_Temperature_Setpoint
+    haystack: chilled_water_supply_temp_sp
+    dbo: ChilledWaterSupplyTemperatureSetpoint
+    s223: bldg1_chilled_water_supply_temperature_setpoint
   Pump_Speed_Command:
     brick: Pump_Speed_Command
+    haystack: pump_speed_cmd
+    dbo: PumpSpeedCommand
+    s223: bldg1_pump_speed_command
 
 params:
   sp_band: 2.2
@@ -543,6 +803,9 @@ flag: chiller_runtime_fault
 inputs:
   Chiller_Status:
     brick: Chiller_Status
+    haystack: chiller_status
+    dbo: ChillerStatus
+    s223: bldg1_chiller_status
 
 params:
   # For 5-min data: 23 hours ≈ 276 samples; max_runtime = count of "on" samples in window
@@ -564,7 +827,6 @@ expression: |
 Flags when discharge air temperature is below a minimum (e.g. 80°F) while the supply fan is running. Indicates the heat pump is not heating effectively—possible issues with compressor, refrigerant, or reversing valve. Tunable via `min_discharge_temp`. Logic: if zone temp < 69°F (heating mode), the discharge should be warm; a cold discharge with the fan on and a cold zone indicates the heat pump is failing to heat.
 
 ```yaml
-
 name: hp_discharge_cold_when_heating
 description: Discharge air below minimum when fan on and zone is cold (heating mode)
 type: expression
@@ -574,10 +836,19 @@ equipment_type: [Heat_Pump]
 inputs:
   Supply_Air_Temperature_Sensor:
     brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
   Zone_Temperature_Sensor:
     brick: Zone_Temperature_Sensor
+    haystack: zone_air_temp_sensor
+    dbo: ZoneTemperatureSensor
+    s223: bldg1_zone_temperature_sensor
   Supply_Fan_Status:
     brick: Supply_Fan_Status
+    haystack: supply_fan_status
+    dbo: SupplyFanStatus
+    s223: bldg1_supply_fan_status
 
 params:
   min_discharge_temp: 85
@@ -607,8 +878,14 @@ equipment_type: [VAV]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Reheat_Valve_Command:
     brick: Valve_Command
+    haystack: reheat_valve_cmd
+    dbo: ReheatValveCommand
+    s223: bldg1_reheat_valve_command
 
 params:
   t_amb_cutoff: 78.0
@@ -632,6 +909,9 @@ equipment_type: [VAV]
 inputs:
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   full_open_pct: 97.5
@@ -663,8 +943,14 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
 
 params:
   t_amb_econ_cutoff: 63.0
@@ -688,10 +974,19 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Damper_Position_Command:
     brick: Damper_Position_Command
+    haystack: damper_position_cmd
+    dbo: DamperPositionCommand
+    s223: bldg1_damper_position_command
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
 
 params:
   t_amb_econ_cutoff: 63.0
@@ -715,12 +1010,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Mixed_Air_Temperature_Sensor:
     brick: Mixed_Air_Temperature_Sensor
+    haystack: mixed_air_temp_sensor
+    dbo: MixedAirTemperatureSensor
+    s223: bldg1_mixed_air_temperature_sensor
   Return_Air_Temperature_Sensor:
     brick: Return_Air_Temperature_Sensor
+    haystack: return_air_temp_sensor
+    dbo: ReturnAirTemperatureSensor
+    s223: bldg1_return_air_temperature_sensor
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Supply_Fan_Speed_Command:
     brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
 
 params:
   oa_min_pct: 21.0
@@ -746,12 +1053,24 @@ equipment_type: [AHU, VAV_AHU]
 inputs:
   Preheat_Coil_Leaving_Air_Temperature_Sensor:
     brick: Preheat_Coil_Leaving_Air_Temperature_Sensor
+    haystack: preheat_leaving_air_temp_sensor
+    dbo: PreheatCoilLeavingAirTemperatureSensor
+    s223: bldg1_preheat_coil_leaving_air_temperature_sensor
   Supply_Air_Temperature_Setpoint:
     brick: Supply_Air_Temperature_Setpoint
+    haystack: supply_air_temp_sp
+    dbo: SupplyAirTemperatureSetpoint
+    s223: bldg1_supply_air_temperature_setpoint
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
   Valve_Command:
     brick: Valve_Command
+    haystack: valve_cmd
+    dbo: ValveCommand
+    s223: bldg1_valve_command
 
 params:
   excess_tol: 2.2
@@ -785,6 +1104,9 @@ flag: fault_temp_spike
 inputs:
   Outside_Air_Temperature_Sensor:
     brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
 
 params:
   spike_limit: 16.0
@@ -808,8 +1130,14 @@ flag: fault_gust_lt_wind
 inputs:
   Wind_Gust_Speed_Sensor:
     brick: Wind_Gust_Speed_Sensor
+    haystack: wind_gust_speed_sensor
+    dbo: WindGustSpeedSensor
+    s223: bldg1_wind_gust_speed_sensor
   Wind_Speed_Sensor:
     brick: Wind_Speed_Sensor
+    haystack: wind_speed_sensor
+    dbo: WindSpeedSensor
+    s223: bldg1_wind_speed_sensor
 
 expression: |
   Wind_Gust_Speed_Sensor.notna() & Wind_Speed_Sensor.notna() & (Wind_Gust_Speed_Sensor < Wind_Speed_Sensor)
@@ -834,11 +1162,11 @@ Use the [bounds](rules/overview#rule-types) and [flatline](rules/overview#rule-t
 
 ---
 
-## Follow-up (RFCs): multi-ontology selectors & cookbook matrix
+## Follow-up (RFCs): nested selectors & cookbook matrix
 
-**Multi-ontology rule YAML** (e.g. optional `selectors.brick` / `.haystack` / `.dbo` / `.s223` under each input) is a **separate RFC** — it would feed the same **`column_map`** / resolver layer while the **full AFDD stack stays Brick-only by default** for v1. Track design discussion on GitHub **#122** and follow-on issues.
+**Flat ontology strings** (`brick`, `haystack`, `dbo`, `s223`, `223p` on each input) are implemented for **`column_map`** lookup in **`RuleRunner`**; see [ontology labels](#ontology-labels). **Nested** metadata (e.g. `selectors: { brick: { version: … } }`) or resolver plugins that read those structures are still **RFC** territory — GitHub **[#122](https://github.com/bbartling/open-fdd/issues/122)**. The **full AFDD stack** remains **Brick-first** for TTL-driven mapping.
 
-**Cookbook matrix / generator:** When a selector schema is stable, we can add a **generated appendix** (logical input × Brick × Haystack × DBO × 223P notes) from a single CSV/YAML source so the long cookbook does not drift. Until then, see **`examples/column_map_resolver_workshop/`** for manifest-based illustrations.
+**Cookbook matrix / generator:** When a selector schema is stable, add a **generated appendix** (logical input × Brick × Haystack × DBO × 223P) from a single CSV/YAML so the long cookbook does not drift. Until then, **`examples/column_map_resolver_workshop/simple_ontology_demo.py`** (with **`simple_ontology_rule.yaml`**) is the minimal reference for side-by-side **`column_map`** keys.
 
 ---
 

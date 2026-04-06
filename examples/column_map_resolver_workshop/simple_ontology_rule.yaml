@@ -1,0 +1,22 @@
+# One rule, cookbook-style: same logical input, several ontology labels.
+# The expression always uses the INPUT KEY (left side), not the Haystack/DBO/etc. strings.
+# See docs/expression_rule_cookbook.md — "How inputs work".
+
+name: simple_supply_air_hot
+description: Supply air temperature over threshold (demo)
+type: expression
+flag: supply_air_hot_flag
+
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+    haystack: discharge_air_temp_sensor
+    dbo: SupplyAirTemperatureSensor
+    s223: bldg1_supply_air_temperature_sensor
+    223p: ahu1_supply_air_temp_223p
+
+params:
+  hi: 100.0
+
+expression: |
+  Supply_Air_Temperature_Sensor > hi

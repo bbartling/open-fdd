@@ -21,15 +21,11 @@ cd packages/openfdd-engine
 pip install -e .
 ```
 
-For Brick TTL helpers:
+Brick TTL / **rdflib** mapping is **not** in **`open-fdd`**; use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** for that path.
 
-```bash
-pip install -e ".[brick]"
-```
+## API (subset of `open_fdd.engine`)
 
-## API (same surface as `open_fdd.engine`)
-
-- `RuleRunner`, `load_rule()`, `bounds_map_from_rule()`, `resolve_from_ttl()`
-- `ColumnMapResolver`, `BrickTtlColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest`
+- `RuleRunner`, `load_rule()`, `bounds_map_from_rule()`
+- `ColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest`
 
 Rule authoring: [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)

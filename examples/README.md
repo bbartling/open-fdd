@@ -1,37 +1,19 @@
 # Examples (`open-fdd`)
 
-Everything here uses the **engine only** (`pip install open-fdd`): **pandas** + **YAML rules** + optional **`column_map`** manifests. No Docker.
+Everything here uses the **engine only** (`pip install open-fdd`): **pandas** + **YAML rules** + optional **`column_map`**. No Docker.
 
-## Quick: Brick, Haystack, DBO, or 223P naming
+## Quick: one rule, many ontology key styles
 
-One script, pick how you name sensors in rule YAML vs DataFrame columns:
+One YAML rule (cookbook-style `inputs`) and one script that runs it five times with a different `column_map` key each time (Brick, Haystack, DBO, 223P):
 
 ```bash
 cd /path/to/open-fdd   # repo root
 pip install open-fdd   # or: pip install -e .
 
-python examples/column_map_resolver_workshop/run_ontology_demo.py --list
-python examples/column_map_resolver_workshop/run_ontology_demo.py brick
-python examples/column_map_resolver_workshop/run_ontology_demo.py haystack
-python examples/column_map_resolver_workshop/run_ontology_demo.py dbo
-python examples/column_map_resolver_workshop/run_ontology_demo.py 223p
+python examples/column_map_resolver_workshop/simple_ontology_demo.py
 ```
 
-| Mode | What it shows |
-|------|----------------|
-| **`brick`** | Brick class names → your columns `sat` / `oat` |
-| **`minimal`** | Same Brick rule, smallest manifest (supply air only) |
-| **`haystack`** | Haystack-style slugs (e.g. `discharge_air_temp_sensor` → `sat`) |
-| **`dbo`** | DBO / Google Digital Buildings–style names (e.g. `SupplyAirTemperatureSensor` → `sat`) |
-| **`223p`** | Scoped slugs safe for **`type: expression`** (e.g. `ahu1_supply_air_temp` → `sat`) |
-
-Details and file list: **[`column_map_resolver_workshop/README.md`](column_map_resolver_workshop/README.md)**.
-
-**Compare key shapes only** (no full rule run):
-
-```bash
-python examples/column_map_resolver_workshop/demo_multi_ontology_illustration.py
-```
+Details: **[`column_map_resolver_workshop/README.md`](column_map_resolver_workshop/README.md)**.
 
 ## AHU notebooks and CSVs
 

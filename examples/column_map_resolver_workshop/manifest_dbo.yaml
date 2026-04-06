@@ -1,4 +1,0 @@
-# Illustrative: Google Digital Buildings–style type names → columns (your vocabulary may differ).
-column_map:
-  SupplyAirTemperatureSensor: sat
-  OutsideAirTemperatureSensor: oat

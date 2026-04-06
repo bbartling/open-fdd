@@ -9,7 +9,7 @@ description: "Install open-fdd from PyPI, run YAML fault rules on pandas DataFra
 {: .fs-6 .fw-400 }
 **`open-fdd`** on [PyPI](https://pypi.org/project/open-fdd/) is a small Python library: load **YAML** fault rules, run them on **pandas** `DataFrame`s, read boolean **`*_flag`** columns. If you already use notebooks, CSV exports, or a warehouse, you only need **`pip install open-fdd`**.
 
-> **Full platform** — Docker Compose, API, BACnet, React UI, knowledge graph, `bootstrap.sh` — lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.  
+> **Full platform** — Docker Compose, API, BACnet, React UI, knowledge graph — lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.  
 > **Docs:** [AFDD stack (GitHub Pages)](https://bbartling.github.io/open-fdd-afdd-stack/) · [Repo](https://github.com/bbartling/open-fdd-afdd-stack)
 
 ---
@@ -19,7 +19,7 @@ description: "Install open-fdd from PyPI, run YAML fault rules on pandas DataFra
 | If you… | Read |
 |---------|------|
 | Want the fastest path from install to `RuleRunner` | [Getting started](getting_started) |
-| Map Brick / ontology names to your column names | [Column map & resolvers](column_map_resolvers) |
+| Map logical names (Brick, Haystack, DBO, 223P) to your columns | [Column map & resolvers](column_map_resolvers) · [Cookbook — ontology labels](expression_rule_cookbook#ontology-labels) |
 | Run rules on CSV or batch data (no database) | [Getting started](getting_started) · [Examples](examples) |
 | Author or tune YAML rules | [Fault rules](rules/overview) · [Expression cookbook](expression_rule_cookbook) |
 | Browse workshop-style examples | [Examples in this repo](examples) |

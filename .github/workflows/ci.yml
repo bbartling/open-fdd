@@ -1,4 +1,4 @@
-# Backend unit tests only. Frontend lint/typecheck and Caddy validate: run locally via scripts/bootstrap.sh --test.
+# Backend unit tests only. Full-stack checks (lint, Caddy, etc.) run in open-fdd-afdd-stack CI — see that repo.
 
 name: CI
 
@@ -29,14 +29,14 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e .
 
       # pdf/open-fdd-docs.txt is gitignored; generate it so /model-context/docs matches release builds.
       - name: Build combined docs text (LLM context)
         run: python scripts/build_docs_pdf.py --no-pdf
 
       - name: Backend (pytest)
-        run: pytest open_fdd/tests/ -v --tb=short
+        run: pytest
         env:
           OFDD_API_KEY: ""
           OFDD_CADDY_INTERNAL_SECRET: ""

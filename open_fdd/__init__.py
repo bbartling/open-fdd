@@ -5,10 +5,10 @@ Config-driven, pandas-based. Define fault rules in YAML, run against DataFrames.
 
 Example:
     from open_fdd import RuleRunner
-    runner = RuleRunner("stack/rules")
+    runner = RuleRunner(rules_path="path/to/rules")
     df_result = runner.run(df)
 """
 
-from open_fdd.engine import RuleRunner, resolve_from_ttl
+from open_fdd.engine import RuleRunner
 
-__all__ = ["RuleRunner", "resolve_from_ttl"]
+__all__ = ["RuleRunner"]

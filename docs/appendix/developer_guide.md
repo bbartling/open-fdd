@@ -7,7 +7,7 @@ description: "open-fdd engine: exported symbols, package layout, tests, and how 
 
 # Developer guide
 
-The **`open-fdd`** package is the **rules engine**: YAML rule configs, **`RuleRunner`** on **pandas** `DataFrame`s, and helpers to build **`column_map`** from Brick TTL or manifests. Everything on this page is **library scope** only.
+The **`open-fdd`** package is the **rules engine**: YAML rule configs, **`RuleRunner`** on **pandas** `DataFrame`s, and manifest helpers for **`column_map`**. Brick TTL / SPARQL mapping lives in **open-fdd-afdd-stack**. Everything on this page is **library scope** only.
 
 ---
 
@@ -16,7 +16,7 @@ The **`open-fdd`** package is the **rules engine**: YAML rule configs, **`RuleRu
 **Typical imports**
 
 ```python
-from open_fdd import RuleRunner, resolve_from_ttl
+from open_fdd import RuleRunner
 ```
 
 **Full engine surface** (`open_fdd.engine` — same package, explicit submodule):
@@ -25,8 +25,8 @@ from open_fdd import RuleRunner, resolve_from_ttl
 |--------|------|
 | `RuleRunner` | Load rules from a directory or list of dicts; `run(df, ...)` adds fault flag columns |
 | `load_rule`, `bounds_map_from_rule` | Load one YAML file; extract bounds map for analytics |
-| `resolve_from_ttl` | Brick TTL → column mapping (requires **`open-fdd[brick]`**) |
-| `BrickTtlColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest` | Build `column_map` for `RuleRunner.run` |
+| `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest` | Build `column_map` for `RuleRunner.run` (engine has no RDF) |
+| Brick TTL → `column_map` | **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** — `openfdd_stack.platform.brick_ttl_resolver` |
 
 Source: [`open_fdd/engine/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/engine) on GitHub. Behavior and parameters are documented in **docstrings** on `RuleRunner.run` and resolver classes.
 
@@ -36,7 +36,7 @@ Source: [`open_fdd/engine/`](https://github.com/bbartling/open-fdd/tree/master/o
 
 | Path | Role |
 |------|------|
-| `open_fdd/engine/` | Runner, checks, expression evaluation, column-map resolvers, Brick helpers |
+| `open_fdd/engine/` | Runner, checks, expression evaluation, manifest column-map resolvers |
 | `open_fdd/schema/`, `open_fdd/reports/` | Shared models and reporting helpers |
 | `open_fdd/tests/` | Pytest suites |
 | `examples/` | Notebooks and resolver workshops |
@@ -46,8 +46,8 @@ Source: [`open_fdd/engine/`](https://github.com/bbartling/open-fdd/tree/master/o
 ## Setup and tests
 
 ```bash
-pip install -e ".[dev]"
-pytest open_fdd/tests/ -v --tb=short
+pip install -e .
+pytest
 ```
 
 [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md)

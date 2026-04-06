@@ -5,27 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openfdd-engine"
 # Same 2.x release train as root `open-fdd`; separate PyPI project. Depends on last published `open-fdd` on PyPI.
-version = "2.0.14"
+version = "2.1.0"
 description = "Standalone Open-FDD Pandas/YAML fault detection engine"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Open-FDD Contributors" }]
 requires-python = ">=3.9"
 dependencies = [
-  "open-fdd>=2.0.13",
-  "pandas",
-  "pyyaml",
+  "open-fdd>=2.1.0",
 ]
 
 [project.optional-dependencies]
-brick = [
-  "rdflib>=7.5.0,<8",
-  "pyparsing>=2.1.0,<3.2",
-]
 dev = [
   "pytest",
-  "rdflib>=7.5.0,<8",
-  "pyparsing>=2.1.0,<3.2",
 ]
 
 [project.urls]

@@ -16,65 +16,46 @@
 
 This repository contains the Open-FDD **rules engine only**, published to PyPI via GitHub Actions as [`open-fdd`](https://pypi.org/project/open-fdd/).
 
-For the full on-prem **automated fault detection and diagnostics (AFDD)** stack—which uses the `open-fdd` engine from PyPI internally and is a fully bootstrapped Linux web application—see **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.
+For the full on-prem **automated fault detection and diagnostics (AFDD)** stack—which uses the `open-fdd` engine from PyPI internally as a full Linux web application—see **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.
 
 ---
 
-## Install
+## Install Package from PyPi
 
 ```bash
 pip install open-fdd
 ```
 
-Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/master/examples/README.md)** — quick runs for **Brick / Haystack / DBO / 223P** naming:
+Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/master/examples/README.md)** — quick runs for **Brick / Haystack / DBO / 223P** ontologies.
 
-```bash
-python examples/column_map_resolver_workshop/run_ontology_demo.py --list
-python examples/column_map_resolver_workshop/run_ontology_demo.py haystack
-```
-
----
-
-## Clone & test (contributors)
-
-```bash
-git clone https://github.com/bbartling/open-fdd.git
-cd open-fdd
-python3 -m venv .venv && source .venv/bin/activate
-pip install -U pip && pip install -e ".[dev]"
-pytest
-```
-
-More detail on engine-only versus AFDD stack checks: [TESTING.md](TESTING.md).
 
 ---
 
 ## Documentation
 
-
 * 📖 **[Engine Docs](https://bbartling.github.io/open-fdd/)** — `pip install open-fdd`, RuleRunner, YAML rules, examples
-* 📗 **[AFDD Stack Docs](https://bbartling.github.io/open-fdd-afdd-stack/)** — Docker, bootstrap, API, BACnet, UI ([repo](https://github.com/bbartling/open-fdd-afdd-stack))
-* 📕 **[PDF Docs](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf)** — offline build: `python3 scripts/build_docs_pdf.py`
-* ✨ **[LLM Workflow](https://bbartling.github.io/open-fdd-afdd-stack/modeling/llm_workflow#copy-paste-prompt-template-recommended)** — export → tag → import
-* 🤖 **[Open-Claw](https://bbartling.github.io/open-fdd-afdd-stack/openclaw_integration)** — agents, MCP, API workflows
-
+* 📕 **[PDF Docs](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf)** — offline build Kindle friendly
+* 📗 **[AFDD Stack Docs](https://bbartling.github.io/open-fdd-afdd-stack/)** — Docker, API, BACnet, UI ([repo](https://github.com/bbartling/open-fdd-afdd-stack))
 
 ---
 
 ## Dependencies
 
-See [`pyproject.toml`](pyproject.toml). **Core:** pandas, PyYAML, PyJWT, argon2-cffi. **`[platform]`** adds FastAPI, Uvicorn, httpx, psycopg2-binary, etc., for parity with container images (the FastAPI app code is not in this package).
+See [`pyproject.toml`](pyproject.toml). **Dependencies:** pandas, NumPy, PyYAML, pytest. **Brick TTL → column_map** (rdflib / SPARQL) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, not in this wheel. For **matplotlib** (notebooks / `fault_viz`) or **python-docx** (Word reports), install those packages separately if you use those modules.
 
 ---
 
 ## Contributing
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/bbartling/open-fdd.git
+cd open-fdd
+python3 -m venv env && source env/bin/activate
+pip install -U pip && pip install -e .
 pytest
 ```
 
-Details: [docs/contributing.md](docs/contributing.md). Discord **`#dev-chat`**.
+See also: [TESTING.md](TESTING.md), [docs/contributing.md](docs/contributing.md), and the channel on the `open-fdd` Discord for **`#dev-chat`**.
 
 ---
 

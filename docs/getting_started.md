@@ -14,16 +14,11 @@ You need **Python 3.9+** and **pip**. Basic **pandas** usage is enough to run ru
 pip install open-fdd
 ```
 
-**Optional dependency groups** (from [`pyproject.toml`](https://github.com/bbartling/open-fdd/blob/master/pyproject.toml)):
+**Included with `pip install open-fdd`:** **pytest** (running tests from a clone). The engine does **not** bundle **rdflib**; Brick **`.ttl`** → `column_map` is implemented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** (`openfdd_stack.platform.brick_ttl_resolver`).
 
-| Extra | What it adds |
-|-------|----------------|
-| **`open-fdd[brick]`** | **rdflib** — Brick **`.ttl`** → `column_map` via `BrickTtlColumnMapResolver`, TTL/SPARQL helpers |
-| **`open-fdd[viz]`** | **matplotlib** — plots in notebooks or examples |
-| **`open-fdd[bacnet]`** | **bacpypes3**, **ifaddr**, **httpx** — BACnet-related scripts/examples |
-| **`open-fdd[dev]`** | **pytest**, formatters, and stack-style deps used by the **open-fdd** test suite (contributors) |
+**Install separately if you need them:** **matplotlib** (notebooks / plotting), **python-docx** (Word export in report helpers), **black** / **pre-commit** (formatting — see repo config).
 
-Other groups (**`[test]`**, **`[docx]`**, **`[platform]`**, **`[monitoring]`**) are for CI or specialized tooling; see **`pyproject.toml`** for the exact lists.
+BACnet, FastAPI, and other **platform** dependencies live in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, not in this package.
 
 ## Run rules on a DataFrame
 
@@ -74,23 +69,23 @@ df_out = runner.run(df, timestamp_col="timestamp", column_map={...})
 
 If a rule references columns you do not have, use **`skip_missing_columns=True`** so those rules are skipped instead of raising. More mapping options: [Column map & resolvers](column_map_resolvers). For CSV → `DataFrame`, use **`pandas.read_csv`** then **`runner.run(df, ...)`**; sample data and notebooks: [Examples](examples).
 
-The **same YAML** runs in the full Docker platform; there the stack builds **`column_map`** from the data model. Here **you** supply the map (or **`open-fdd[brick]`** + a TTL file).
+The **same YAML** runs in the full Docker platform; there the stack builds **`column_map`** from the data model. Here **you** supply the map (dict or **`load_column_map_manifest`** / **`ManifestColumnMapResolver`**).
 
 ## Clone and run tests (contributors)
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
-python3 -m venv .venv && source .venv/bin/activate
-pip install -U pip && pip install -e ".[dev]"
-pytest open_fdd/tests/ -v --tb=short
+python3 -m venv env && source env/bin/activate
+pip install -U pip && pip install -e .
+pytest
 ```
 
 More detail: [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md).
 
 ## Full platform operators
 
-Bootstrap, Compose services, Caddy, BACnet, REST APIs, and the React UI are documented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**:
+Compose services, Caddy, BACnet, REST APIs, and the React UI are documented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**:
 
 [bbartling.github.io/open-fdd-afdd-stack](https://bbartling.github.io/open-fdd-afdd-stack/)
 

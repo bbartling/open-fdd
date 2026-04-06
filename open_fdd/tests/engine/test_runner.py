@@ -214,6 +214,144 @@ def test_runner_column_map_brick_class(sample_df):
     assert result["bounds_flag"].sum() == 0
 
 
+def test_runner_column_map_haystack_slug(sample_df):
+    """column_map keyed by Haystack-style slug when rule lists haystack on input."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "haystack": "discharge_air_temp_sensor",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(
+        sample_df,
+        column_map={"discharge_air_temp_sensor": "sat"},
+    )
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_column_map_brick_before_haystack(sample_df):
+    """brick is tried before haystack when both appear on the input."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "haystack": "discharge_air_temp_sensor",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    # Wrong haystack target; brick key wins first.
+    result = runner.run(
+        sample_df,
+        column_map={
+            "Supply_Air_Temperature_Sensor": "sat",
+            "discharge_air_temp_sensor": "rat",
+        },
+    )
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_column_map_223p_key(sample_df):
+    """column_map keyed by 223p-style slug (YAML key 223p)."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "223p": "ahu1_supply_air_temp",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(
+        sample_df,
+        column_map={"ahu1_supply_air_temp": "sat"},
+    )
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_column_map_dbo_key(sample_df):
+    """column_map keyed by dbo-style type name when rule lists dbo on input."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "dbo": "SupplyAirTemperatureSensor",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(
+        sample_df,
+        column_map={"SupplyAirTemperatureSensor": "sat"},
+    )
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_column_map_s223_key(sample_df):
+    """column_map keyed by s223 field (distinct from 223p YAML key)."""
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {
+            "sat": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "s223": "bldg1_supply_air_temperature_sensor",
+                "bounds": [40, 60],
+            }
+        },
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(
+        sample_df,
+        column_map={"bldg1_supply_air_temperature_sensor": "sat"},
+    )
+    assert result["bounds_flag"].sum() == 0
+
+
+def test_runner_expression_column_map_haystack_only(sample_df):
+    """expression rules resolve haystack column_map like bounds rules."""
+    rule = {
+        "name": "expr_sat",
+        "type": "expression",
+        "flag": "expr_flag",
+        "inputs": {
+            "Supply_Air_Temperature_Sensor": {
+                "brick": "Supply_Air_Temperature_Sensor",
+                "haystack": "discharge_air_temp_sensor",
+            }
+        },
+        "params": {"hi": 50.0},
+        "expression": "Supply_Air_Temperature_Sensor > hi",
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(
+        sample_df,
+        column_map={"discharge_air_temp_sensor": "sat"},
+    )
+    assert "expr_flag" in result.columns
+    assert result["expr_flag"].sum() > 0
+
+
 def test_runner_fc4_hunting():
     """Hunting rule - fault when excessive state changes in window."""
     # Alternate between two modes to create many state changes

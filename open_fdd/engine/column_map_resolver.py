@@ -1,8 +1,9 @@
 """
 Pluggable resolution of rule input keys → DataFrame column names (column_map).
 
-The full AFDD stack defaults to Brick TTL via :class:`BrickTtlColumnMapResolver`.
-Integrators may pass a custom :class:`ColumnMapResolver` into ``run_fdd_loop``.
+The full **AFDD stack** builds Brick TTL maps via ``BrickTtlColumnMapResolver`` in
+**open-fdd-afdd-stack** (``openfdd_stack.platform.brick_ttl_resolver``), not in the ``open-fdd``
+wheel. Integrators may pass any object satisfying :class:`ColumnMapResolver` into ``run_fdd_loop``.
 """
 
 from __future__ import annotations
@@ -23,20 +24,6 @@ class ColumnMapResolver(Protocol):
         :param ttl_path: Resolved Brick TTL file path (may not exist — return {}).
         :return: Mapping from Brick class / rule_input keys to DataFrame column names.
         """
-
-
-class BrickTtlColumnMapResolver:
-    """
-    Default resolver: SPARQL over Brick TTL (same as historical ``run_fdd_loop`` behavior).
-    Requires ``open-fdd[brick]`` / rdflib when the TTL file exists.
-    """
-
-    def build_column_map(self, *, ttl_path: Path) -> Dict[str, str]:
-        from open_fdd.engine.brick_resolver import resolve_from_ttl
-
-        if ttl_path.exists():
-            return dict(resolve_from_ttl(str(ttl_path)))
-        return {}
 
 
 def _normalize_manifest_mapping(raw: object) -> Dict[str, str]:
@@ -87,7 +74,7 @@ class ManifestColumnMapResolver:
     Workshop / engine-only helper: ``column_map`` from a JSON or YAML file on disk.
 
     ``build_column_map`` ignores ``ttl_path``; the manifest path is fixed at construction.
-    Use :class:`FirstWinsCompositeResolver` to combine Brick TTL + manifest (Brick first).
+    Use :class:`FirstWinsCompositeResolver` to merge several manifest-style sources (first wins per key).
     """
 
     def __init__(self, manifest_path: Union[str, Path]) -> None:
@@ -103,8 +90,8 @@ class FirstWinsCompositeResolver:
     Run several resolvers in order; each key is taken from the **first** resolver that
     defines it (ontology-style priority without config import strings).
 
-    Example: ``FirstWinsCompositeResolver(BrickTtlColumnMapResolver(), ManifestColumnMapResolver("extra.yaml"))``
-    — Brick fills keys from TTL; manifest supplies only **missing** keys.
+    Example: ``FirstWinsCompositeResolver(ManifestColumnMapResolver("base.yaml"), ManifestColumnMapResolver("extra.yaml"))``
+    — first file wins for shared keys; second adds only **missing** keys.
     """
 
     def __init__(self, *resolvers: ColumnMapResolver) -> None:

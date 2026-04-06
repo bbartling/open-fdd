@@ -4,9 +4,7 @@ Config-driven fault detection engine.
 Define fault rules in YAML, run them against pandas DataFrames.
 """
 
-from open_fdd.engine.brick_resolver import resolve_from_ttl
 from open_fdd.engine.column_map_resolver import (
-    BrickTtlColumnMapResolver,
     ColumnMapResolver,
     FirstWinsCompositeResolver,
     ManifestColumnMapResolver,
@@ -18,8 +16,6 @@ __all__ = [
     "RuleRunner",
     "bounds_map_from_rule",
     "load_rule",
-    "resolve_from_ttl",
-    "BrickTtlColumnMapResolver",
     "ColumnMapResolver",
     "ManifestColumnMapResolver",
     "FirstWinsCompositeResolver",

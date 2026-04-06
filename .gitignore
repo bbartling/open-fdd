@@ -128,7 +128,7 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments (includes stack/.env — bootstrap secrets; never commit)
+# Environments (includes stack/.env — AFDD stack / local secrets; never commit)
 .env
 stack/.env
 .venv
@@ -190,12 +190,12 @@ openclaw/bench/reports/*.md
 openclaw/.skill-workspace-marker
 openclaw/logs/*.pid
 
-# Local auth bootstrap output (single-user credentials + jwt secret)
+# Local auth output (single-user credentials + jwt secret; AFDD stack)
 stack/auth.env
 
 # Timestamped copies from openclaw/bench/e2e/4_hot_reload_test.py if API cleanup misses (numeric suffix)
 stack/rules/test_sensor_bounds_[0-9]*.yaml
 stack/rules/test_sensor_flatline_[0-9]*.yaml
 
-# Self-signed TLS material (bootstrap --caddy-self-signed)
+# Self-signed TLS material (local Caddy / AFDD stack dev)
 stack/caddy/certs/

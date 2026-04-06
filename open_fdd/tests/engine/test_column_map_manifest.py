@@ -53,26 +53,26 @@ def test_manifest_resolver_ignores_ttl_path(tmp_path):
     assert r.build_column_map(ttl_path=tmp_path / "any.ttl") == {"a": "b"}
 
 
-def test_first_wins_composite_brick_then_manifest(tmp_path):
-    pytest.importorskip("rdflib")
-    from open_fdd.tests.engine.test_brick_resolver import _MINIMAL_TTL
-
-    ttl = tmp_path / "m.ttl"
-    ttl.write_text(_MINIMAL_TTL)
-    man = tmp_path / "extra.yaml"
-    man.write_text(
+def test_first_wins_composite_two_manifests(tmp_path):
+    base = tmp_path / "base.yaml"
+    base.write_text(
+        "column_map:\n"
+        "  Supply_Air_Temperature_Sensor: sat\n"
+        "  Outside_Air_Temperature_Sensor: oat\n",
+        encoding="utf-8",
+    )
+    extra = tmp_path / "extra.yaml"
+    extra.write_text(
         "column_map:\n"
         "  Supply_Air_Temperature_Sensor: override_should_not_apply\n"
         "  Extra_Logical_Key: extra_col\n",
         encoding="utf-8",
     )
-    from open_fdd.engine.column_map_resolver import BrickTtlColumnMapResolver
-
     r = FirstWinsCompositeResolver(
-        BrickTtlColumnMapResolver(),
-        ManifestColumnMapResolver(man),
+        ManifestColumnMapResolver(base),
+        ManifestColumnMapResolver(extra),
     )
-    m = r.build_column_map(ttl_path=ttl)
+    m = r.build_column_map(ttl_path=tmp_path / "ignored.ttl")
     assert m["Supply_Air_Temperature_Sensor"] == "sat"
     assert m["Extra_Logical_Key"] == "extra_col"
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.0.14"
+version = "2.1.0"
 description = "Open-FDD rules engine — YAML + pandas fault detection (PyPI library). Full AFDD Docker stack is a separate repo."
 readme = "README.md"
 license = { text = "MIT" }
@@ -31,78 +31,9 @@ keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "
 
 dependencies = [
     "pandas",
+    "numpy",
     "pyyaml",
-    "PyJWT>=2.0",
-    "argon2-cffi>=21.0",
-]
-
-[project.optional-dependencies]
-# Development: use this for clone + run tests + black. pip install -e ".[dev]"
-dev = [
-    "aiohttp",
-    "pytest",
-    "black[jupyter]",
-    "pre-commit",
-    "httpx",
-    "psycopg2-binary",
-    "requests",
-    "pydantic-settings",
-    "fastapi",
-    "uvicorn[standard]",
-    "python-multipart",
-    # SPARQL: rdflib pulls pyparsing; pyparsing>=3.2 breaks rdflib 7.x SPARQL (Param.postParse2 / tokenList).
-    "rdflib>=7.5.0,<8",
-    "pyparsing>=2.1.0,<3.2",
-    "openai>=1.0",
-    "ipykernel",
-    "matplotlib",
-]
-# Same as dev (CI and docs may use .[test]; prefer .[dev] for local development)
-test = [
-    "aiohttp",
-    "pytest",
-    "black[jupyter]",
-    "pre-commit",
-    "httpx",
-    "psycopg2-binary",
-    "requests",
-    "pydantic-settings",
-    "fastapi",
-    "uvicorn[standard]",
-    "python-multipart",
-    "rdflib>=7.5.0,<8",
-    "pyparsing>=2.1.0,<3.2",
-    "openai>=1.0",
-    "ipykernel",
-    "matplotlib",
-]
-viz = [
-    "matplotlib",
-]
-brick = [
-    "rdflib>=7.5.0,<8",
-    "pyparsing>=2.1.0,<3.2",
-]
-docx = [
-    "python-docx",
-]
-platform = [
-    "psycopg2-binary",
-    "requests",
-    "httpx",
-    "pydantic-settings",
-    "fastapi",
-    "uvicorn[standard]",
-    "python-multipart",
-    "openai>=1.0",
-]
-bacnet = [
-    "bacpypes3",
-    "ifaddr",
-    "httpx",
-]
-monitoring = [
-    "docker",
+    "pytest>=7.0",
 ]
 
 [project.urls]
@@ -111,17 +42,8 @@ Documentation = "https://bbartling.github.io/open-fdd/"
 Repository = "https://github.com/bbartling/open-fdd"
 
 [tool.setuptools.packages.find]
-include = ["open_fdd*", "openfdd_engine*"]
-
-[tool.black]
-line-length = 88
-target-version = ["py314"]
-extend-exclude = "tools/graph_and_crud_test\\.py"
+include = ["open_fdd*"]
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]
 pythonpath = ["."]
-filterwarnings = [
-    "ignore::DeprecationWarning:rdflib",
-    "ignore::DeprecationWarning:pyparsing",
-]
