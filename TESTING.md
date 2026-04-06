@@ -40,6 +40,7 @@ python examples/column_map_resolver_workshop/simple_ontology_demo.py
 | Workflow | When it runs | What it does |
 |----------|----------------|--------------|
 | **CI** ([`ci.yml`](.github/workflows/ci.yml)) | PR + push to `master` | `pip install -e .`, `pytest`, docs text build |
+| **Docs PDF** ([`docs-pdf.yml`](.github/workflows/docs-pdf.yml)) | Push to `master` changing `docs/**` or the script; or manual dispatch | Rebuilds `pdf/open-fdd-docs.pdf` + `pdf/open-fdd-docs.txt` and commits if changed |
 | **Publish `open-fdd`** ([`publish-open-fdd.yml`](.github/workflows/publish-open-fdd.yml)) | Push tag `open-fdd-v*` or manual dispatch | `python -m build`, `twine check`; **PyPI upload only on tag `open-fdd-v*`** |
 
 ---

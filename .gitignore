@@ -180,6 +180,7 @@ config/data_model.ttl
 /pdf/*
 !/pdf/.gitkeep
 !/pdf/open-fdd-docs.pdf
+!/pdf/open-fdd-docs.txt
 
 # OpenClaw lab generated / local artifacts
 openclaw/dashboard/progress.json
