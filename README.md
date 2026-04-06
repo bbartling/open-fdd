@@ -5,7 +5,7 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Development Status](https://img.shields.io/badge/status-Beta-blue)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)
-[![PyPI](https://img.shields.io/pypi/v/open-fdd?label=PyPI)](https://pypi.org/project/open-fdd/)
+[![PyPI](https://img.shields.io/pypi/v/open-fdd?label=PyPI&logo=pypi&logoColor=white&cacheSeconds=600)](https://pypi.org/project/open-fdd/)
 
 
 <div align="center">

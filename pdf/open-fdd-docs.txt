@@ -10,7 +10,6 @@
 
 # Open-FDD engine
 
-{: .fs-6 .fw-400 }
 **`open-fdd`** on [PyPI](https://pypi.org/project/open-fdd/) is a small Python library: load **YAML** fault rules, run them on **pandas** `DataFrame`s, read boolean **`*_flag`** columns. If you already use notebooks, CSV exports, or a warehouse, you only need **`pip install open-fdd`**.
 
 > **Full platform** — Docker Compose, API, BACnet, React UI, knowledge graph — lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.  
