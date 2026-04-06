@@ -149,8 +149,6 @@ Documentation lives in the `docs/` directory and is published at [bbartling.gith
 - Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [Engine-only / IoT](howto/engine_only_iot), or the [AFDD stack how-to index](https://bbartling.github.io/open-fdd-afdd-stack/howto/)).
 - Keep code blocks and links in sync with the codebase.
 
-**Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
-
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
 **After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages serves extensionless URLs like `/expression_rule_cookbook`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
@@ -159,7 +157,6 @@ Open a PR with your changes; for large edits, an issue first can help align with
 BASE=https://bbartling.github.io/open-fdd
 curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook"    # expect 200
 curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook/"   # often 404 — avoid trailing slash in external links
-curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"  # expect 302 or 200
 ```
 
 ---

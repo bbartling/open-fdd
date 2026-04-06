@@ -1,4 +1,4 @@
-# Build a single PDF from docs/ via scripts/build_docs_pdf.py; upload as workflow artifact.
+# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs or the builder change; commit to master.
 
 name: Docs PDF
 
@@ -12,17 +12,24 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: docs-pdf-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pdf:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
           cache: pip
 
       - name: Install pandoc and WeasyPrint system libs
@@ -35,14 +42,13 @@ jobs:
       - name: Install Python deps
         run: pip install pyyaml weasyprint
 
-      - name: Build PDF
-        run: |
-          python scripts/build_docs_pdf.py \
-            -o pdf/open-fdd-engine-docs.pdf \
-            --keep-md \
-            --pdf-engine=weasyprint
+      - name: Build PDF and LLM text bundle
+        run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
 
-      - uses: actions/upload-artifact@v4
+      - name: Commit updated bundle if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          name: open-fdd-engine-documentation-pdf
-          path: pdf/open-fdd-engine-docs.pdf
+          commit_message: "chore(docs): regenerate PDF and text bundle"
+          file_pattern: pdf/open-fdd-docs.pdf pdf/open-fdd-docs.txt
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
