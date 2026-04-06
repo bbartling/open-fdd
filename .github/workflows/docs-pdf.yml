@@ -62,4 +62,4 @@ jobs:
             pdf/open-fdd-docs.txt
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          delete-branch: false
+          delete-branch: true
