@@ -7,6 +7,7 @@ strips front matter, concatenates with headings, and runs Pandoc to produce
 pdf/open-fdd-docs.pdf (project root pdf/ dir). Also writes a .txt file with the
 same combined content in the same output dir (e.g. pdf/open-fdd-docs.txt) for
 LLM context; formatting is plain (same Markdown source, no PDF styling).
+Kramdown/Jekyll inline attribute lists (``{: .class }``) are stripped so PDF/txt stay clean.
 
 Requirements:
   - pandoc (https://pandoc.org/)
@@ -30,10 +31,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Kramdown / Jekyll inline attribute lists (Just the Docs), e.g. {: .fs-6 .fw-400 }
+_KRAMDOWN_IAL_RE = re.compile(r"\{:[^}\n]*\}\s*")
 
 try:
     import yaml
@@ -69,6 +74,11 @@ def parse_front_matter(path: Path) -> tuple[dict, str]:
     except Exception:
         fm = {}
     return (fm or {}), body
+
+
+def strip_kramdown_ial(text: str) -> str:
+    """Remove Kramdown/Jekyll `{: ... }` blocks; Pandoc and plain text keep them as junk."""
+    return _KRAMDOWN_IAL_RE.sub("", text)
 
 
 def collect_md_files(docs_dir: Path) -> list[Path]:
@@ -184,7 +194,7 @@ def main() -> int:
             continue
         # One top-level heading per page so TOC is clean
         parts.append(f"# {title}\n\n")
-        parts.append(body)
+        parts.append(strip_kramdown_ial(body))
         if not body.endswith("\n"):
             parts.append("\n")
         parts.append("\n\n")
