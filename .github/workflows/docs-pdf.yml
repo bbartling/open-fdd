@@ -1,4 +1,5 @@
-# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs or the builder change; commit to master.
+# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs or the builder change.
+# Opens a PR (protected master cannot receive direct pushes from GITHUB_TOKEN).
 
 name: Docs PDF
 
@@ -13,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: docs-pdf-${{ github.ref }}
@@ -45,10 +47,19 @@ jobs:
       - name: Build PDF and LLM text bundle
         run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
 
-      - name: Commit updated bundle if changed
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Open PR with updated bundle (if changed)
+        uses: peter-evans/create-pull-request@v7
         with:
-          commit_message: "chore(docs): regenerate PDF and text bundle"
-          file_pattern: pdf/open-fdd-docs.pdf pdf/open-fdd-docs.txt
-          commit_user_name: github-actions[bot]
-          commit_user_email: github-actions[bot]@users.noreply.github.com
+          branch: chore/docs-pdf-refresh
+          commit-message: "chore(docs): regenerate PDF and text bundle"
+          title: "chore(docs): regenerate PDF and text bundle"
+          body: |
+            Automated refresh from **Docs PDF** workflow ([`.github/workflows/docs-pdf.yml`](.github/workflows/docs-pdf.yml)).
+
+            Merge when ready so `pdf/open-fdd-docs.pdf` and `pdf/open-fdd-docs.txt` stay current on `master`.
+          add-paths: |
+            pdf/open-fdd-docs.pdf
+            pdf/open-fdd-docs.txt
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          delete-branch: false
