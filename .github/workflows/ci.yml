@@ -28,17 +28,14 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[test]"
 
       # pdf/open-fdd-docs.txt is gitignored; generate it so /model-context/docs matches release builds.
       - name: Build combined docs text (LLM context)
         run: python scripts/build_docs_pdf.py --no-pdf
 
       - name: Backend (pytest)
-        run: pytest
-        env:
-          OFDD_API_KEY: ""
-          OFDD_CADDY_INTERNAL_SECRET: ""
+        run: python -m pytest
 
       - name: Build open-fdd sdist/wheel (dry run)
         run: |
