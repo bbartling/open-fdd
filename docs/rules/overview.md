@@ -48,7 +48,7 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 | `bounds` | Value outside `[low, high]` |
 | `flatline` | Rolling spread < tolerance (stuck sensor) |
 | `hunting` | Excessive state changes (PID hunting) |
-| `expression` | Custom pandas/numpy expression |
+| `expression` | Custom pandas/numpy expression; optional `params.schedule` and `params.weather_band` inject `schedule_occupied` and `weather_allows_fdd` (see [Schedule and weather gating](../expression_rule_cookbook#schedule-and-weather-gating-unoccupied-operation)) |
 | `oa_fraction` | OA fraction vs design airflow error |
 | `erv_efficiency` | ERV effectiveness out of range |
 

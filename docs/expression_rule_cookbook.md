@@ -116,6 +116,103 @@ expression: |
 
 ---
 
+## Schedule and weather gating (unoccupied operation)
+
+Use this pattern when a fault should apply only during **expected unoccupied hours** (e.g. nights and weekends) and only when **outside air is in a normal analysis band** (so you **ignore** the rule during extreme cold or heat).
+
+The engine injects two boolean **Series** aligned to each row (same length as your DataFrame):
+
+| Name | Meaning |
+|------|--------|
+| `schedule_occupied` | **True** during configured weekly hours (default: all **True** if you omit `params.schedule`). |
+| `weather_allows_fdd` | **True** when OAT is inside `[low, high]` for the chosen units (default: all **True** if you omit `params.weather_band`). |
+
+**Time axis:** Rules need either a **`DatetimeIndex`** on the DataFrame or a **`timestamp`** column (or pass `timestamp_col` to `RuleRunner.run()`). Schedule uses **local** wall-clock `weekday` and `hour` on those timestamps (Monday = 0 … Sunday = 6).
+
+**Typical fault** — equipment **running** (fan, compressor command, or status) when the site should be **unoccupied**, but only when OAT is between e.g. **32 °F and 85 °F**:
+
+```text
+(core_running) & ~schedule_occupied & weather_allows_fdd
+```
+
+- `core_running`: your usual command/status logic (fan speed, enable, etc.).
+- `~schedule_occupied`: **not** in the weekly “office open” window (e.g. Mon–Fri 08:00–17:00).
+- `weather_allows_fdd`: suppresses the fault when OAT is **below** the cold cutoff or **above** the heat cutoff (analysis ignored in extremes).
+
+**Params:**
+
+```yaml
+params:
+  # Fan / threshold (example)
+  fan_on: 0.01
+
+  schedule:
+    weekdays: [0, 1, 2, 3, 4]   # Mon–Fri; omit or use enabled: false for 24/7 schedule mask (all True)
+    start_hour: 8              # inclusive (local hour 0–23)
+    end_hour: 17               # exclusive (last minute included is 16:59)
+    # enabled: false           # optional: disable schedule injection (schedule_occupied all True)
+
+  weather_band:
+    oat_input: Outside_Air_Temperature_Sensor   # must match an entry under inputs
+    low: 32
+    high: 85
+    units: imperial            # imperial = °F; metric = °C for low/high
+    # enabled: false           # optional: disable OAT band (weather_allows_fdd all True)
+```
+
+**Metric example** (~0 °C … ~29 °C for the same idea as 32–85 °F):
+
+```yaml
+  weather_band:
+    oat_input: Outside_Air_Temperature_Sensor
+    low: 0.0
+    high: 29.5
+    units: metric
+```
+
+### Example — AHU / FCU / VRF / heat pump: operating outside office schedule
+
+Map **fan** (or **status**) and **OAT** in `inputs`; tune `equipment_type` for your library.
+
+```yaml
+name: hvac_operating_outside_office_schedule
+description: Supply fan (or unit) active when weekly schedule says unoccupied; suppressed outside OAT band
+type: expression
+flag: operating_unoccupied_schedule_flag
+equipment_type: [AHU, VAV_AHU, Fan_Coil_Unit, HVAC, Heat_Pump]
+
+inputs:
+  Supply_Fan_Speed_Command:
+    brick: Supply_Fan_Speed_Command
+    haystack: supply_fan_speed_cmd
+    dbo: SupplyFanSpeedCommand
+    s223: bldg1_supply_fan_speed_command
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    haystack: outside_air_temp_sensor
+    dbo: OutsideAirTemperatureSensor
+    s223: bldg1_outside_air_temperature_sensor
+
+params:
+  fan_on: 0.01
+  schedule:
+    weekdays: [0, 1, 2, 3, 4]
+    start_hour: 8
+    end_hour: 17
+  weather_band:
+    oat_input: Outside_Air_Temperature_Sensor
+    low: 32
+    high: 85
+    units: imperial
+
+expression: |
+  (Supply_Fan_Speed_Command > fan_on) & ~schedule_occupied & weather_allows_fdd
+```
+
+For **binary fan status** (0/1), use `(Supply_Fan_Status > 0.5) & ~schedule_occupied & weather_allows_fdd` and map `Supply_Fan_Status` in `inputs`. VRF / packaged units often expose a **run** or **compressor** command — use the same gating pattern with your Brick/Haystack points.
+
+---
+
 ## Recommended mental model
 
 Think of it like this:

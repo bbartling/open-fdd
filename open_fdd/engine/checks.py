@@ -9,6 +9,11 @@ from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 
+from open_fdd.engine.schedule_masks import (
+    build_schedule_weather_namespace,
+    params_for_expression_eval,
+)
+
 
 def check_bounds(series: pd.Series, low: float, high: float) -> pd.Series:
     """
@@ -38,6 +43,7 @@ def check_expression(
     expr: str,
     col_map: Dict[str, str],
     params: Optional[Dict[str, Any]] = None,
+    timestamp_col: Optional[str] = None,
 ) -> pd.Series:
     """
     Evaluate a pandas expression string against the DataFrame.
@@ -45,9 +51,17 @@ def check_expression(
     Expression can use:
     - Column aliases from col_map (e.g. duct_static -> df["dp"])
     - Param names from params (e.g. static_err_thres -> 0.1)
+    - ``schedule_occupied`` / ``weather_allows_fdd``: boolean Series injected when
+      ``params['schedule']`` or ``params['weather_band']`` are set (see
+      :mod:`open_fdd.engine.schedule_masks`).
 
     Example expression:
         (duct_static < duct_static_setpoint - static_err_thres) & (vfd >= vfd_max)
+
+    Schedule / weather example (fan running when building should be unoccupied, only
+    when OAT is in the analysis band):
+
+        fan_on & ~schedule_occupied & weather_allows_fdd
     """
     params = params or {}
     # Build eval namespace: map alias -> Series, param -> value, np for element-wise ops
@@ -55,10 +69,13 @@ def check_expression(
     for alias, col in col_map.items():
         if col in df.columns:
             namespace[alias] = df[col]
-    for k, v in params.items():
+    eval_params = params_for_expression_eval(params)
+    for k, v in eval_params.items():
         namespace[k] = v
-    # Restrict to only our names for safety
-    allowed = set(namespace.keys())
+    masks = build_schedule_weather_namespace(
+        df, col_map, params, timestamp_col=timestamp_col
+    )
+    namespace.update(masks)
     # Minimal safety: no builtins, no imports
     try:
         result = pd.eval(expr, local_dict=namespace, global_dict={})

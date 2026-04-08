@@ -223,7 +223,7 @@ class RuleRunner:
         if rule_type == "flatline":
             return self._run_flatline(rule, df, col_map)
         if rule_type == "expression":
-            return self._run_expression(rule, df, col_map, params)
+            return self._run_expression(rule, df, col_map, params, timestamp_col)
         if rule_type == "hunting":
             return self._run_hunting(rule, df, col_map, params)
         if rule_type == "oa_fraction":
@@ -281,12 +281,13 @@ class RuleRunner:
         df: pd.DataFrame,
         col_map: Dict[str, str],
         params: Dict[str, Any],
+        timestamp_col: Optional[str] = None,
     ) -> pd.Series:
         """Run expression-based rule."""
         expr = rule.get("expression", "")
         if not expr.strip():
             return pd.Series(False, index=df.index)
-        return check_expression(df, expr, col_map, params)
+        return check_expression(df, expr, col_map, params, timestamp_col=timestamp_col)
 
     def _run_hunting(
         self,

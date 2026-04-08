@@ -4,10 +4,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [ "master" ]
-  
+    branches: [main, master, develop]
   push:
-    branches: [ "master" ]
+    branches: [main, master, develop]
 
 permissions:
   contents: read
