@@ -17,7 +17,9 @@ When the expression evaluates to **True**, the fault is flagged. open-fdd also m
 
 Rules define logical inputs, and open-fdd resolves them to real time-series columns under the hood.
 
-Each input can now include labels from multiple ontologies, for example:
+### Ontology labels
+
+Each input can include labels from multiple ontologies, for example:
 
 ```yaml
 inputs:
