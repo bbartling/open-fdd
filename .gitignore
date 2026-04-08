@@ -1,5 +1,4 @@
-# FastAPI starter
-# React UI and stack live in open-fdd-afdd-stack; ignore stray bind-mount leftovers.
+# If a local checkout still has a top-level frontend/ folder, ignore it (UI lives in open-fdd-afdd-stack).
 /frontend/
 
 .DS_Store

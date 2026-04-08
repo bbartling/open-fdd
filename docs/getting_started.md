@@ -14,7 +14,7 @@ You need **Python 3.9+** and **pip**. Basic **pandas** usage is enough to run ru
 pip install open-fdd
 ```
 
-**Included with `pip install open-fdd`:** **pytest** (running tests from a clone). The engine does **not** bundle **rdflib**; Brick **`.ttl`** → `column_map` is implemented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** (`openfdd_stack.platform.brick_ttl_resolver`).
+**Not included** in `pip install open-fdd`: **pytest** (add **`[test]`** when installing from a clone: `pip install -e ".[test]"`). The engine does **not** bundle **rdflib**; Brick **`.ttl`** → `column_map` is implemented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** (`openfdd_stack.platform.brick_ttl_resolver`).
 
 **Install separately if you need them:** **matplotlib** (notebooks / plotting), **python-docx** (Word export in report helpers), **black** / **pre-commit** (formatting — see repo config).
 
@@ -77,8 +77,8 @@ The **same YAML** runs in the full Docker platform; there the stack builds **`co
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
 python3 -m venv env && source env/bin/activate
-pip install -U pip && pip install -e .
-pytest
+pip install -U pip && pip install -e ".[test]"
+python -m pytest
 ```
 
 More detail: [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md).

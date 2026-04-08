@@ -11,16 +11,16 @@ cd open-fdd
 python3 -m venv env
 source env/bin/activate                 # Windows: env\Scripts\activate
 pip install -U pip
-pip install -e .
+pip install -e ".[test]"
 python -c "import importlib.metadata as m; print('open-fdd', m.version('open-fdd'))"
-pytest
+python -m pytest
 ```
 
 ---
 
 ## 2. Run all `examples/` smoke scripts
 
-From the **repo root** with **`env` activated** (§1) and **`open-fdd` installed** (`pip install .` or `pip install -e .`).
+From the **repo root** with **`env` activated** (step 1 above) and **`open-fdd` installed** (`pip install .` or `pip install -e .`; use `pip install -e ".[test]"` if you need pytest).
 
 **Column map workshop** — from the **repo root** (`cd open-fdd`, `env` activated):
 
@@ -39,7 +39,7 @@ python examples/column_map_resolver_workshop/simple_ontology_demo.py
 
 | Workflow | When it runs | What it does |
 |----------|----------------|--------------|
-| **CI** ([`ci.yml`](.github/workflows/ci.yml)) | PR + push to `master` | `pip install -e .`, `pytest`, docs text build |
+| **CI** ([`ci.yml`](.github/workflows/ci.yml)) | PR + push to `master` | `pip install -e ".[test]"`, `python -m pytest`, docs text build |
 | **Docs PDF** ([`docs-pdf.yml`](.github/workflows/docs-pdf.yml)) | Push to `master` changing `docs/**` or the script; or manual dispatch | Rebuilds `pdf/open-fdd-docs.pdf` + `pdf/open-fdd-docs.txt` and opens a PR if they differ from `master` |
 | **Publish `open-fdd`** ([`publish-open-fdd.yml`](.github/workflows/publish-open-fdd.yml)) | Push tag `open-fdd-v*` or manual dispatch | `python -m build`, `twine check`; **PyPI upload only on tag `open-fdd-v*`** |
 

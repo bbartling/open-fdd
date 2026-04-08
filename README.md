@@ -57,7 +57,7 @@ Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/ma
 
 ## Dependencies
 
-See [`pyproject.toml`](pyproject.toml). **Dependencies:** pandas, NumPy, PyYAML, pytest. **Brick TTL → column_map** (rdflib / SPARQL) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, not in this wheel. For **matplotlib** (notebooks / `fault_viz`) or **python-docx** (Word reports), install those packages separately if you use those modules.
+See [`pyproject.toml`](pyproject.toml). **Runtime:** pandas, NumPy, PyYAML. **Tests (contributors / CI):** install with `pip install -e ".[test]"` to get **pytest** (not installed by plain `pip install open-fdd`). **Brick TTL → column_map** (rdflib / SPARQL) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, not in this wheel. For **matplotlib** (notebooks / `fault_viz`) or **python-docx** (Word reports), install those packages separately if you use those modules.
 
 ---
 
@@ -67,8 +67,8 @@ See [`pyproject.toml`](pyproject.toml). **Dependencies:** pandas, NumPy, PyYAML,
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
 python3 -m venv env && source env/bin/activate
-pip install -U pip && pip install -e .
-pytest
+pip install -U pip && pip install -e ".[test]"
+python -m pytest
 ```
 
 See also: [TESTING.md](TESTING.md), [docs/contributing.md](docs/contributing.md), and the channel on the `open-fdd` Discord for **`#dev-chat`**.

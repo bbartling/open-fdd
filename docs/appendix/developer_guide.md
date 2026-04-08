@@ -46,8 +46,8 @@ Source: [`open_fdd/engine/`](https://github.com/bbartling/open-fdd/tree/master/o
 ## Setup and tests
 
 ```bash
-pip install -e .
-pytest
+pip install -e ".[test]"
+python -m pytest
 ```
 
 [TESTING.md](https://github.com/bbartling/open-fdd/blob/master/TESTING.md)

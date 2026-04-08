@@ -103,7 +103,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 - Use the latest version and read the [documentation](https://bbartling.github.io/open-fdd/) to see if the behavior already exists or can be configured.
 - Search [issues](https://github.com/bbartling/open-fdd/issues) to see if the enhancement was already suggested; if so, add to that discussion.
-- Consider whether the idea fits Open-FDD's scope (edge AFDD, rules, API, BACnet, Grafana). Make a clear case for why it would help most users.
+- Consider whether the idea fits Open-FDD's scope: **engine** (YAML rules, `RuleRunner`, pandas) vs **platform** (API, BACnet, Grafana — often the [afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack) repo). Make a clear case for why it would help most users.
 
 ### How to submit a good enhancement suggestion
 
@@ -118,7 +118,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 **We especially welcome contributions from mechanical engineers and building professionals** who can add or improve FDD rules.
 
-- **Where rules live:** [Fault rules overview](rules/overview) — put project rules in **`stack/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
+- **Where rules live:** On the **AFDD stack**, live rules sit under **`stack/rules/`** in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack) — see [Fault rules overview](rules/overview) for semantics. In **this** repo, contribute example or fixture YAML under **`examples/`** or **`open_fdd/tests/fixtures/rules/`**, and cookbook prose in **`docs/`**.
 - **How to write rules:** [Expression Rule Cookbook](expression_rule_cookbook) — expression-type rules use YAML with BRICK-style inputs, params, and pandas/NumPy expressions. The cookbook includes AHU-style rules (e.g. GL36-inspired) and patterns you can adapt.
 - **What to contribute:**
   - **New rule YAMLs** for common faults (AHU, VAV, plant, sensors) that others can reuse.
@@ -127,7 +127,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 To contribute a rule or cookbook change:
 
-1. Add or edit files under `stack/rules/` for new/updated rules, or under `docs/expression_rule_cookbook.md` (and related docs) for cookbook content.
+1. Add or edit YAML under `examples/` or test fixtures, or edit `docs/expression_rule_cookbook.md` (and related docs). For rules that ship with the **Docker platform**, open a PR against **open-fdd-afdd-stack** (`stack/rules/`).
 2. Follow the existing YAML style and BRICK naming used in the cookbook.
 3. In a PR, describe the fault the rule targets and any assumptions (e.g. Brick types, units). If it's from a standard (e.g. ASHRAE), note the reference.
 
@@ -136,8 +136,8 @@ To contribute a rule or cookbook change:
 ## Your First Code Contribution
 
 - Look for issues labeled `good first issue` or `help wanted` (if we've added them).
-- The codebase is Python 3.11+, with FastAPI (API), pandas/NumPy (rules), and Docker for the platform. See [Getting Started](getting_started) and the README for setup.
-- For rule changes, run the test suite and, if possible, the FDD loop locally with sample data before submitting a PR.
+- This repo is the **pandas rules engine** (`open_fdd`): Python **3.9+**, pandas/NumPy, pytest for tests. The **FastAPI / Docker / React** product lives in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack). See [Getting Started](getting_started) and the README for setup.
+- For engine changes, run **`python -m pytest`** after **`pip install -e ".[test]"`**. Stack integration testing belongs in the afdd-stack repo.
 
 ---
 
