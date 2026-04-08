@@ -134,7 +134,7 @@ def test_weather_band_metric():
     df = pd.DataFrame(
         {
             "timestamp": [pd.Timestamp("2024-01-06 10:00")],
-            "oat": [15.0],  # ~59°F — in 0–29°C band
+            "oat": [15.0],  # ~59F - in 0-29C band
         }
     )
     params = {

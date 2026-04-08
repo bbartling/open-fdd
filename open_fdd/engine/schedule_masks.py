@@ -41,10 +41,10 @@ def weekly_occupied_mask(
     end_hour: int,
 ) -> pd.Series:
     """
-    True where local time falls on one of ``weekdays`` (Mon=0 … Sun=6) and
-    ``start_hour <= hour < end_hour`` (0–23).
+    True where local time falls on one of ``weekdays`` (Mon=0 ... Sun=6) and
+    ``start_hour <= hour < end_hour`` (0-23).
 
-    Example: weekdays Mon–Fri, 8:00–17:00 → ``[0,1,2,3,4]``, ``start_hour=8``,
+    Example: weekdays Mon-Fri, 8:00-17:00 -> ``[0,1,2,3,4]``, ``start_hour=8``,
     ``end_hour=17`` (last included minute is 16:59).
     """
     ts = pd.to_datetime(dt)

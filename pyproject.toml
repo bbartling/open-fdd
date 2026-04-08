@@ -33,6 +33,10 @@ dependencies = [
     "pandas",
     "numpy",
     "pyyaml",
+]
+
+[project.optional-dependencies]
+test = [
     "pytest>=7.0",
 ]
 

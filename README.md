@@ -33,9 +33,25 @@ Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/ma
 
 ## Documentation
 
-* 📖 **[Engine Docs](https://bbartling.github.io/open-fdd/)** — `pip install open-fdd`, RuleRunner, YAML rules, examples
-* 📕 **[PDF Docs](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf)** — prebuilt bundle in the repo (refreshed by CI when `docs/` change)
-* 📗 **[AFDD Stack Docs](https://bbartling.github.io/open-fdd-afdd-stack/)** — Docker, API, BACnet, UI ([repo](https://github.com/bbartling/open-fdd-afdd-stack))
+
+### Engine (Standalone / PyPI)
+
+* 🛠️ **[Open-FDD Engine Docs](https://bbartling.github.io/open-fdd/)**
+  RuleRunner, YAML rules, examples, and engine-only workflows
+
+* 📕 **[Engine PDF Docs](https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf)**
+  Offline / Kindle-friendly version of the engine documentation
+
+---
+
+### Full AFDD Stack (Docker + Web App)
+
+* 📗 **[AFDD Stack GitHub](https://github.com/bbartling/open-fdd-afdd-stack)**
+  Full platform — Dockerized Python web app using the Open-FDD engine
+
+* 💻 **[AFDD Stack Docs](https://bbartling.github.io/open-fdd-afdd-stack/)**
+  Setup, API, UI, BACnet integration, and full system architecture
+
 
 ---
 
