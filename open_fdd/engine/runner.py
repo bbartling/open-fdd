@@ -4,9 +4,11 @@ Config-driven fault rule runner.
 Loads YAML rule configs and evaluates them against pandas DataFrames.
 """
 
+from __future__ import annotations
+
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-
 
 import pandas as pd
 import yaml
@@ -19,6 +21,13 @@ from open_fdd.engine.checks import (
     check_oa_fraction,
     check_erv_efficiency,
 )
+from open_fdd.engine.input_validation import (
+    raise_if_strict_issues,
+    validate_rule_inputs,
+)
+from open_fdd.engine.rule_schema import coerce_rule_params as coerce_rule_params_dict
+
+_log = logging.getLogger(__name__)
 
 
 def load_rule(path: Union[str, Path]) -> Dict[str, Any]:
@@ -67,6 +76,15 @@ def _resolve_input_column(key: str, val: Any, global_col_map: Dict[str, str]) ->
         )
 
     return global_col_map.get(default_col) or global_col_map.get(key) or default_col
+
+
+def col_map_for_rule(rule: Dict[str, Any], global_col_map: Dict[str, str]) -> Dict[str, str]:
+    """Resolved logical input name → DataFrame column for one rule."""
+    inputs = rule.get("inputs", {})
+    return {
+        key: _resolve_input_column(key, val, global_col_map)
+        for key, val in inputs.items()
+    }
 
 
 def _resolve_bounds(bounds: Any, units: str = "imperial") -> Optional[List[float]]:
@@ -147,6 +165,8 @@ class RuleRunner:
         params: Optional[Dict[str, Any]] = None,
         skip_missing_columns: bool = False,
         column_map: Optional[Dict[str, str]] = None,
+        input_validation: Optional[str] = None,
+        coerce_rule_params: bool = True,
     ) -> pd.DataFrame:
         """
         Run all rules against the DataFrame.
@@ -158,6 +178,10 @@ class RuleRunner:
             params: Override params merged into each rule (e.g. units="metric" for bounds).
             skip_missing_columns: If True, skip rules with missing columns instead of raising.
             column_map: Optional {rule_input: df_column} from Brick/SPARQL. Overrides rule inputs.
+            input_validation: ``None``/``'off'`` (default), ``'warn'`` (log dtype/presence issues),
+                or ``'strict'`` (raise ``ValueError`` on missing columns or largely non-numeric inputs).
+            coerce_rule_params: If True (default), validate/coerce ``schedule`` / ``weather_band`` and
+                string numerics in merged rule params via Pydantic (see :mod:`open_fdd.engine.rule_schema`).
 
         Returns:
             DataFrame with original columns plus fault flag columns (e.g. rule_name_flag).
@@ -168,12 +192,41 @@ class RuleRunner:
         run_params = params or {}
         skip_missing = skip_missing_columns
         global_col_map = column_map or {}
+        iv_mode = (input_validation or "off").lower()
+        if iv_mode not in ("off", "warn", "strict"):
+            raise ValueError(
+                "input_validation must be None, 'off', 'warn', or 'strict'"
+            )
 
         for rule in self._rules:
             flag_name = rule.get("flag", f"{rule.get('name', 'rule')}_flag")
+            col_map = col_map_for_rule(rule, global_col_map)
+            rule_eff = dict(rule)
+            merged_p = {**(rule.get("params") or {}), **run_params}
+            if coerce_rule_params:
+                try:
+                    rule_eff["params"] = coerce_rule_params_dict(merged_p)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Rule '{rule.get('name', '?')}' has invalid params: {e}"
+                    ) from e
+            else:
+                rule_eff["params"] = merged_p
+
+            if iv_mode != "off":
+                issues = validate_rule_inputs(
+                    result,
+                    col_map,
+                    rule_name=str(rule.get("name", "?")),
+                    timestamp_col=timestamp_col,
+                    mode=iv_mode,
+                )
+                if iv_mode == "strict":
+                    raise_if_strict_issues(issues)
+
             try:
                 mask = self._evaluate_rule(
-                    rule, result, timestamp_col, run_params, global_col_map
+                    rule_eff, result, timestamp_col, run_params, global_col_map
                 )
                 # Per-rule rolling_window (params.rolling_window), else global
                 rw = (rule.get("params") or {}).get("rolling_window")
@@ -188,6 +241,13 @@ class RuleRunner:
                     result[flag_name] = mask.astype(int)
             except (KeyError, NameError) as e:
                 if skip_missing:
+                    _log.warning(
+                        "Skipping rule %r (flag %r): %s: %s",
+                        rule.get("name", "?"),
+                        flag_name,
+                        type(e).__name__,
+                        e,
+                    )
                     continue
                 raise RuntimeError(
                     f"Rule '{rule.get('name', '?')}' failed (missing column?): {e}"

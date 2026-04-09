@@ -15,6 +15,31 @@ from open_fdd.engine.schedule_masks import (
 )
 
 
+def normalize_cmd(
+    s: pd.Series,
+    *,
+    assume_if_gt_1: bool = True,
+) -> pd.Series:
+    """
+    Normalize command-style signals toward a 0–1 fraction.
+
+    If ``assume_if_gt_1`` (default) and any **finite** sample is ``> 1``, the whole
+    series is divided by **100** (percent → fraction), matching :func:`check_hunting`
+    heuristics. Mixed scales in one series are ambiguous—fix upstream when possible.
+
+    Non-numeric values become NaN (``pd.to_numeric(..., errors="coerce")``).
+    """
+    if not isinstance(s, pd.Series):
+        raise TypeError(
+            f"normalize_cmd expects a pandas Series, got {type(s).__name__}"
+        )
+    out = pd.to_numeric(s, errors="coerce")
+    if assume_if_gt_1 and out.notna().any():
+        if (out > 1.0).fillna(False).any():
+            out = out / 100.0
+    return out
+
+
 def check_bounds(series: pd.Series, low: float, high: float) -> pd.Series:
     """
     True where values are outside [low, high].
@@ -51,6 +76,8 @@ def check_expression(
     Expression can use:
     - Column aliases from col_map (e.g. duct_static -> df["dp"])
     - Param names from params (e.g. static_err_thres -> 0.1)
+    - ``normalize_cmd(series)`` — percent→fraction helper (same heuristic as built-in hunting/oa_fraction checks)
+    - ``np`` — NumPy
     - ``schedule_occupied`` / ``weather_allows_fdd``: boolean Series injected when
       ``params['schedule']`` or ``params['weather_band']`` are set (see
       :mod:`open_fdd.engine.schedule_masks`).
@@ -65,7 +92,7 @@ def check_expression(
     """
     params = params or {}
     # Build eval namespace: map alias -> Series, param -> value, np for element-wise ops
-    namespace = {"np": np}
+    namespace = {"np": np, "normalize_cmd": normalize_cmd}
     for alias, col in col_map.items():
         if col in df.columns:
             namespace[alias] = df[col]

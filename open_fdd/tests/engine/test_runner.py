@@ -392,3 +392,49 @@ def test_runner_fc4_hunting():
     result = runner.run(df)
     assert "hunting_flag" in result.columns
     assert result["hunting_flag"].sum() >= 1
+
+
+def test_runner_skip_missing_columns_logs_warning(caplog):
+    """When skip_missing_columns=True, NameError/KeyError is logged then skipped."""
+    import logging
+
+    rule = {
+        "name": "needs_missing_input",
+        "type": "expression",
+        "flag": "ghost_flag",
+        "inputs": {"Ghost_Sensor": {"column": "no_such_column_here"}},
+        "expression": "Ghost_Sensor > 0",
+    }
+    df = pd.DataFrame({"x": [1.0]})
+    runner = RuleRunner(rules=[rule])
+    with caplog.at_level(logging.WARNING, logger="open_fdd.engine.runner"):
+        result = runner.run(df, skip_missing_columns=True)
+    assert "ghost_flag" not in result.columns
+    assert any("Skipping rule" in rec.message for rec in caplog.records)
+
+
+def test_runner_input_validation_strict_missing_column():
+    rule = {
+        "name": "strict_rule",
+        "type": "expression",
+        "flag": "strict_flag",
+        "inputs": {"Missing": {"column": "not_in_df"}},
+        "expression": "Missing > 0",
+    }
+    df = pd.DataFrame({"sat": [1.0]})
+    runner = RuleRunner(rules=[rule])
+    with pytest.raises(ValueError, match="FDD input validation failed"):
+        runner.run(
+            df,
+            skip_missing_columns=True,
+            input_validation="strict",
+        )
+
+
+def test_runner_col_map_for_rule_exported():
+    from open_fdd.engine.runner import col_map_for_rule
+
+    rule = {
+        "inputs": {"a": {"column": "col_a"}},
+    }
+    assert col_map_for_rule(rule, {}) == {"a": "col_a"}

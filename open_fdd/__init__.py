@@ -11,4 +11,6 @@ Example:
 
 from open_fdd.engine import RuleRunner
 
-__all__ = ["RuleRunner"]
+__version__ = "2.3.0"
+
+__all__ = ["RuleRunner", "__version__"]
