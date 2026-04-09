@@ -225,8 +225,10 @@ class RuleRunner:
                     raise_if_strict_issues(issues)
 
             try:
+                # Params are already merged + coerced into rule_eff["params"]; do not pass
+                # run_params again or raw overrides would bypass coercion.
                 mask = self._evaluate_rule(
-                    rule_eff, result, timestamp_col, run_params, global_col_map
+                    rule_eff, result, timestamp_col, global_col_map
                 )
                 # Per-rule rolling_window (params.rolling_window), else global
                 rw = (rule.get("params") or {}).get("rolling_window")
@@ -262,13 +264,12 @@ class RuleRunner:
         rule: Dict[str, Any],
         df: pd.DataFrame,
         timestamp_col: Optional[str],
-        run_params: Optional[Dict[str, Any]] = None,
         column_map: Optional[Dict[str, str]] = None,
     ) -> pd.Series:
         """Evaluate a single rule and return boolean fault mask."""
         rule_type = rule.get("type", "expression")
         inputs = rule.get("inputs", {})
-        params = {**(rule.get("params") or {}), **(run_params or {})}
+        params = dict(rule.get("params") or {})
         global_col_map = column_map or {}
 
         # Map logical input keys (e.g. Brick class names) → DataFrame columns via column_map.

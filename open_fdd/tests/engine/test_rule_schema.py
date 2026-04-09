@@ -1,6 +1,7 @@
 """Pydantic coercion for rule params (schedule, weather_band, scalars)."""
 
 import pytest
+from pydantic import ValidationError
 
 from open_fdd.engine.rule_schema import coerce_rule_params
 
@@ -14,7 +15,7 @@ def test_coerce_schedule_defaults():
 
 
 def test_coerce_schedule_rejects_bad_weekday_type():
-    with pytest.raises(Exception):
+    with pytest.raises(TypeError, match="weekdays must be a list"):
         coerce_rule_params({"schedule": {"weekdays": "not-a-list"}})
 
 
@@ -32,7 +33,7 @@ def test_coerce_weather_band_units():
 
 
 def test_coerce_weather_band_rejects_bad_units():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         coerce_rule_params({"weather_band": {"units": "kelvin"}})
 
 

@@ -38,8 +38,8 @@ def _range_hint(alias: str, col: str, series: pd.Series) -> Optional[str]:
     mn = float(s.min())
     if mn >= 0 and mx > 1.0 and mx <= 100.0 and "Command" in alias:
         return (
-            f"input '{alias}' -> column '{col}' looks like 0–100% command signals; "
-            "cookbook thresholds often assume 0–1. Consider normalize_cmd(...) in the expression."
+            f"input '{alias}' -> column '{col}' looks like 0-100% command signals; "
+            "cookbook thresholds often assume 0-1. Consider normalize_cmd(...) in the expression."
         )
     return None
 

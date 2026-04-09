@@ -432,7 +432,7 @@ def test_runner_input_validation_strict_missing_column():
 
 
 def test_runner_col_map_for_rule_exported():
-    from open_fdd.engine.runner import col_map_for_rule
+    from open_fdd.engine import col_map_for_rule
 
     rule = {
         "inputs": {"a": {"column": "col_a"}},

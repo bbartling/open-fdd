@@ -21,7 +21,7 @@ def normalize_cmd(
     assume_if_gt_1: bool = True,
 ) -> pd.Series:
     """
-    Normalize command-style signals toward a 0–1 fraction.
+    Normalize command-style signals toward a 0-1 fraction.
 
     If ``assume_if_gt_1`` (default) and any **finite** sample is ``> 1``, the whole
     series is divided by **100** (percent → fraction), matching :func:`check_hunting`
