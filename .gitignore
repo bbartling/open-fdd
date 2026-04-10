@@ -1,6 +1,9 @@
 # If a stray top-level frontend/ exists, ignore it (canonical UI is afdd_stack/frontend/).
 /frontend/
 
+# Local VOLTTRON UI agent config (absolute web_root paths)
+afdd_stack/volttron_agents/openfdd_central_ui/agent-config.json
+
 .DS_Store
 /data
 /tmp

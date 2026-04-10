@@ -1,19 +1,19 @@
 ---
 title: Home
 nav_order: 1
-description: "Open-FDD monorepo: PyPI engine (open_fdd/) + Docker AFDD stack (afdd_stack/). Published from bbartling.github.io/open-fdd."
+description: "Open-FDD monorepo: PyPI engine (open_fdd/) + platform stack (afdd_stack/), VOLTTRON-first bootstrap, optional SQL compose. Published from bbartling.github.io/open-fdd."
 ---
 
 # Open-FDD
 
-> **Single repository:** the **`open-fdd`** engine (`RuleRunner`, rule YAML, column maps) lives in **`open_fdd/`** and ships to **PyPI**. The **Docker AFDD platform** lives in **`afdd_stack/`** (bootstrap, Compose, API, UI, BACnet). This documentation site covers both.
+> **Single repository:** the **`open-fdd`** engine (`RuleRunner`, rule YAML, column maps) lives in **`open_fdd/`** and ships to **PyPI**. Application code for the **platform** (FastAPI, React, SQL schema, VOLTTRON bridge helpers) lives in **`afdd_stack/`**. **Docker Compose** in this repo starts **Postgres/TimescaleDB** (and optional Grafana or Mosquitto profiles) only — not the API, Caddy, or BACnet containers. This documentation site covers both the library and the platform.
 
 {: .fs-6 .fw-400 }
-**On-prem AFDD stack** — from the repo root run **`./afdd_stack/scripts/bootstrap.sh`** to bring up Compose services. Containers build the engine from the same checkout (`pip install ".[stack]"` + `PYTHONPATH`). Brick/BACnet RDF, REST API, React dashboard, optional Grafana.
+**On-prem default path** — from the repo root run **`./afdd_stack/scripts/bootstrap.sh`** to prepare **VOLTTRON 9** and optionally **`--compose-db`** for local SQL. Field data and operator UI are expected on **VOLTTRON / VOLTTRON Central**; the **FastAPI** app and **React** app can still be run **from source** for modeling, SPARQL, and REST tooling. See **[Getting started](getting_started)** and **`afdd_stack/legacy/README.md`** for what was removed from Compose.
 
 Open-FDD is an open-source knowledge graph fault-detection platform for HVAC systems that helps facilities optimize their energy usage and cost-savings. Because it runs on-prem, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
-The building is modeled in a **unified graph**: Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `afdd_stack/config/data_model.ttl` (mounted into the API container as `/app/config/data_model.ttl`).
+The building is modeled in a **unified graph**: Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `afdd_stack/config/data_model.ttl` (the API process uses this path when you run FastAPI from the repo).
 
 ---
 
@@ -21,11 +21,11 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 Open-FDD is an **edge analytics and rules engine** for building automation. It:
 
-- **Ingests** BACnet points via diy-bacnet-server (JSON-RPC) and weather via Open-Meteo
-- **Stores** telemetry in TimescaleDB and models the building in a **unified RDF graph** (Brick + BACnet + config)
-- **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) on a configurable schedule
-- **Exposes** REST APIs for sites, points, equipment, data-model export/import, bulk timeseries and fault download (Excel-friendly CSV, JSON for cloud), TTL generation, SPARQL validation
-- **Visualizes** timeseries and fault results in Grafana
+- **Ingests** time-series and metadata via **VOLTTRON** (platform driver, pub/sub, SQL historian) on the building LAN; optional **Open-Meteo** or other sources can still feed the same SQL schema depending on how you deploy agents
+- **Stores** telemetry in **Postgres/TimescaleDB** and models the building in a **unified RDF graph** (Brick + BACnet + config)
+- **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) — in the platform this is moving toward **VOLTTRON agents** over historian/SQL data; the **`open_fdd`** engine remains usable standalone on pandas
+- **Exposes** (when FastAPI is running) REST APIs for sites, points, equipment, data-model export/import, bulk timeseries and fault download, TTL generation, SPARQL validation — for agents and Open‑Claw-style automation
+- **Visualizes** via **Grafana** (optional compose profile), **VOLTTRON Central**, or the **React** dashboard when you run the frontend from source
 
 Operators and integrators get full control, lower cost, and no vendor lock-in. Already powering HVAC optimization and commissioning workflows.
 
@@ -36,39 +36,26 @@ Operators and integrators get full control, lower cost, and no vendor lock-in. A
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
-./afdd_stack/scripts/bootstrap.sh
+./afdd_stack/scripts/bootstrap.sh --help
+./afdd_stack/scripts/bootstrap.sh --doctor
+./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
+# Optional local SQL (Open-F-DD schema + historian-friendly Postgres):
+./afdd_stack/scripts/bootstrap.sh --compose-db
 ```
 
-**Endpoints (direct access):**
+**Typical URLs (when you run components yourself):**
 
 | What | URL | Notes |
 |------|-----|--------|
-| **Frontend (React)** | http://localhost:5173 | Main UI: dashboard, sites, points, config, faults, plots. Use this for day-to-day workflows. |
-| **API (REST)** | http://localhost:8000/docs | Swagger UI for integration and scripts. High-level reference: [Appendix: API Reference](appendix/api_reference). |
-| **Caddy (reverse proxy)** | http://localhost:80 | Default `afdd_stack/stack/caddy/Caddyfile` proxies **`/api*`**, **`/auth*`**, **`/ws*`**, **`/ai*`** to the API (with `/api` prefix stripped) and **`/*`** to the frontend. See [Security and Caddy](security). Optional hardening (basic auth, TLS) is covered below. |
-| **TimescaleDB** | 127.0.0.1:5432 | Database `openfdd` (user `postgres`); host port is loopback-only in `afdd_stack/stack` compose ([Security — stack hardening](security#stack-hardening-db-caddy-secrets)). |
-| **BACnet (diy-bacnet-server)** | http://localhost:8080/docs | JSON-RPC API; UDP 47808 for BACnet/IP. |
-| **Grafana** | http://localhost:3000 | **Optional:** `./scripts/bootstrap.sh --with-grafana` (admin/admin). React frontend provides equivalent views. |
+| **Postgres/TimescaleDB** | `127.0.0.1:5432` (default compose) | Database and port come from `afdd_stack/stack/docker-compose.yml`; see [Security — database](security#stack-hardening-db-caddy-secrets). |
+| **API (REST)** | http://localhost:8000/docs | Run FastAPI with **`uvicorn`** from a dev venv — not started by default bootstrap. Reference: [Appendix: API Reference](appendix/api_reference). |
+| **Frontend (React)** | http://localhost:5173 | Dev server or static build when you run the frontend from **`afdd_stack/frontend/`** — not a Compose service here. |
+| **Grafana** | http://localhost:3000 | **Optional:** `docker compose --profile grafana …` from `afdd_stack/stack/` (see compose file). |
+| **VOLTTRON Central / edge** | (your deployment) | Use upstream VOLTTRON docs for ports and TLS. |
 
-**WebSockets:** The API exposes **`/ws/events`** for live updates (faults, CRUD, FDD run). The React app sends the current **access JWT** or **`OFDD_API_KEY`** as **`?token=`** when connecting; REST uses **`Authorization: Bearer`**. See [Security & Caddy](security).
+**WebSockets:** When the API is running, **`/ws/events`** uses the same auth model as REST (**JWT** or **`OFDD_API_KEY`** in the query string). See [Security](security#frontend-and-api-authentication).
 
----
-
-### Optional: extra Caddy hardening (basic auth, full route list, TLS)
-
-The **committed** **`afdd_stack/stack/caddy/Caddyfile`** already puts the **API and WebSocket** behind the same **:80** entry as the UI (no **basic auth** in the repo file). To add a **second perimeter** (one browser basic login before the app’s own dashboard login), **TLS**, or **many more explicit API paths**, use a custom Caddyfile pattern:
-
-1. **Use a Caddyfile that:**
-   - Listens on one port (e.g. `:80`, `:443`, or `:8088`).
-   - Optionally enables **basic_auth** for all routes (browser gate in front of the app).
-   - Keeps or extends **`/api*`**, **`/auth*`**, **`/ws*`**, **`/ai*`** → **`api:8000`** (strip **`/api`** when using that prefix pattern).
-   - Proxies **`/grafana`** to **`grafana:3000`** if you use `--with-grafana`.
-   - Proxies **`/*`** to the **frontend** (e.g. `frontend:5173`).
-   - When using Caddy basic auth, add **`header_up X-Caddy-Auth <secret>`** on API routes so the API accepts requests that passed Caddy (set **`OFDD_CADDY_INTERNAL_SECRET`** in the API container to the same value).
-
-2. **Full steps:** See [Security and Caddy](security) — Quick bootstrap, TLS / stack-hardening notes, default password change, and troubleshooting (401s, WebSocket behind Caddy).
-
-3. **Caddyfile location:** `afdd_stack/stack/caddy/Caddyfile`. An extended **example** (many paths + basic auth) is in [Security — Caddyfile for protecting the entire API](security#caddyfile-for-protecting-the-entire-api); **HTTPS** starter: [`Caddyfile.https.example` on GitHub](https://github.com/bbartling/open-fdd/blob/main/afdd_stack/stack/caddy/Caddyfile.https.example).
+**Legacy reverse proxy:** `afdd_stack/stack/caddy/Caddyfile` remains in the tree as a **reference** if you put Caddy in front of API + React yourself. It is **not** started by the default compose file. Patterns for basic auth and TLS are in [Security and Caddy](security).
 
 ---
 
@@ -85,9 +72,9 @@ The **committed** **`afdd_stack/stack/caddy/Caddyfile`** already puts the **API 
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, 223P-aligned engineering metadata, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook, [test bench rule catalog](rules/test_bench_rule_catalog) |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
-| [Operations](operations/index) | [Integrity sweep](operations/openfdd_integrity_sweep), [Overnight review](operations/overnight_review), [MCP RAG service](operations/mcp_rag_service), [Testing plan](operations/testing_plan) |
+| [Operations](operations/index) | [Integrity sweep](operations/openfdd_integrity_sweep), [Overnight review](operations/overnight_review), [Testing plan](operations/testing_plan) |
 | [How-to Guides](howto/index) | [openfdd-engine vs `open_fdd.engine`](howto/openfdd_engine), [Engine-only / IoT](howto/engine_only_iot), [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
-| [Security & Caddy](security) | Basic auth, bootstrap, hardening, optional TLS |
+| [Security & Caddy](security) | API auth, optional Caddy/TLS patterns (custom deployments) |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [Appendix](appendix) | [API Reference](appendix/api_reference) — REST at a glance; [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers |
@@ -96,18 +83,17 @@ The **committed** **`afdd_stack/stack/caddy/Caddyfile`** already puts the **API 
 
 ---
 
-## Stack
+## Stack (what ships in this repo)
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| **Caddy** | 80 | Reverse proxy: API/auth/WebSocket/AI routes + frontend (see [Security](security); optional basic auth / TLS) |
-| **API** | 8000 | REST API, Swagger `/docs`, WebSocket `/ws/events` |
-| **Frontend** | 5173 | React dashboard (sites, points, faults, plots) |
-| **TimescaleDB** | 5432 | PostgreSQL + TimescaleDB |
-| **Grafana** | 3000 | **Optional** dashboards (`--with-grafana`); React frontend has equivalent views |
-| **diy-bacnet-server** | 8080 | JSON-RPC API (HTTP); optional BACnet2MQTT + experimental MQTT RPC gateway when env vars set ([MQTT how-to](howto/mqtt_integration)) |
-| **diy-bacnet-server** | 47808 | BACnet/IP (UDP) |
-| **Mosquitto (MQTT)** | 1883 | **Optional / experimental:** `./scripts/bootstrap.sh --with-mqtt-bridge` — generic broker for BACnet2MQTT and/or MQTT RPC cmd/ack ([MQTT how-to](howto/mqtt_integration)) |
+| Piece | Port / location | Purpose |
+|-------|-----------------|---------|
+| **Postgres/TimescaleDB** | 5432 (default compose) | Open-F-DD metadata + time series schema; compatible with VOLTTRON SQL historian when you share one server |
+| **Grafana** | 3000 | **Optional** compose profile |
+| **Mosquitto** | 1883 | **Optional** compose profile — generic MQTT broker ([MQTT how-to](howto/mqtt_integration)) |
+| **VOLTTRON** | (deployment-specific) | Clone/install via **`bootstrap.sh`**; BACnet, historian, Central — upstream docs |
+| **FastAPI + React** | 8000 / 5173 when run locally | **Source** under `afdd_stack/`; not started by default compose |
+
+**Removed from Compose (see `afdd_stack/legacy/README.md`):** Caddy, API container, frontend container, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop container. BACnet integration for new deployments is expected on **VOLTTRON**; the **[BACnet](bacnet/overview)** section still describes the **FastAPI ⇄ diy-bacnet-server** path for labs or custom stacks.
 
 ---
 

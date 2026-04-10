@@ -1,0 +1,41 @@
+# HTTPS with locally generated certs (bootstrap --caddy-self-signed).
+# Certs: stack/caddy/certs/cert.pem + key.pem (gitignored). API: set OFDD_TRUST_FORWARDED_PROTO=true (bootstrap does this).
+# Browsers will warn until you trust the cert or use a private CA.
+
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+:443 {
+	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	handle /ai* {
+		reverse_proxy api:8000
+	}
+	handle /api* {
+		uri strip_prefix /api
+		reverse_proxy api:8000
+	}
+	handle /auth* {
+		reverse_proxy api:8000
+	}
+	handle /ws* {
+		reverse_proxy api:8000
+	}
+	# diy-bacnet-server (host :8080, network_mode: host) — browser TLS via Caddy; strip /bacnet before proxy.
+	handle /bacnet {
+		redir /bacnet/ permanent
+	}
+	handle_path /bacnet/* {
+		reverse_proxy host.docker.internal:8080
+	}
+	handle /* {
+		reverse_proxy frontend:5173
+	}
+}

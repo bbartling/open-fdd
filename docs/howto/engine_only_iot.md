@@ -8,7 +8,7 @@ nav_order: 21
 
 > **Library-only (`pip install open-fdd`):** See the **[engine documentation](https://bbartling.github.io/open-fdd/)** — [Getting started](https://bbartling.github.io/open-fdd/getting_started), [Column map & resolvers](https://bbartling.github.io/open-fdd/column_map_resolvers), and [Engine-only & IoT](https://bbartling.github.io/open-fdd/howto/engine_only_iot) (same topics as below, scoped to pandas integrators).
 
-Some integrators already operate **data collection** (historians, MQTT, proprietary BAS exports) and **modeling / semantics** (warehouse schemas, optional Brick elsewhere). Open-FDD’s **`--mode engine`** and the **pandas YAML engine** let you add **FDD** without adopting the full stack.
+Some integrators already operate **data collection** (historians, MQTT, proprietary BAS exports) and **modeling / semantics** (warehouse schemas, optional Brick elsewhere). The **pandas YAML engine** (`open_fdd.engine`) and **VOLTTRON agents** let you add **FDD** without adopting a full legacy Docker stack.
 
 > **Package names:** The rules code lives under **`open_fdd.engine`**. The repo’s optional **`openfdd-engine`** package (**`openfdd_engine`**) is a thin re-export around the same API — not a different engine. See [The optional openfdd-engine package](openfdd_engine) for a comparison table and Docker vs library paths.
 
@@ -92,8 +92,8 @@ That pattern is **not** a second engine — it is the **same** code path as prod
 
 | Approach | You bring | Open-FDD provides |
 |----------|-----------|-------------------|
-| **`--mode engine`** | Postgres feed + ops for containers | `fdd-loop`, weather worker, DB |
+| **VOLTTRON + SQL / agents** | Historian + agent packaging | FDD against DB time series |
 | **`RuleRunner` in Python** | DataFrame + YAML directory | Identical rule YAML semantics on pandas |
-| **Full stack** | BACnet / UI needs | Collector + model + engine together |
+| **Full platform (custom)** | BACnet / UI / REST | Restore legacy compose or run API + React from source + VOLTTRON on edge |
 
 For mode overview and service list, start at [Modular architecture](../modular_architecture.md).

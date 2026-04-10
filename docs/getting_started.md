@@ -11,34 +11,24 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ## Do this to bootstrap
 
-1. **Prerequisites:** Docker, Docker Compose, and Git installed (see below).
-2. **Clone and run bootstrap** (from any directory):
+1. **Prerequisites:** **Git** and **Python 3** on the edge host (Linux). **Docker** is optional — only if you want the local **Timescale** container for Open-FDD SQL schema (`--compose-db`).
+2. **Clone and run bootstrap** (from repo root):
 
    ```bash
    git clone https://github.com/bbartling/open-fdd.git
    cd open-fdd
-   ./afdd_stack/scripts/bootstrap.sh
+   ./afdd_stack/scripts/bootstrap.sh --help
+   ./afdd_stack/scripts/bootstrap.sh --doctor
+   ./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
    ```
 
-   Partial module modes are also supported:
+3. **Optional local database** (faults / sites / points schema + historian-friendly Postgres):
 
    ```bash
-   ./afdd_stack/scripts/bootstrap.sh --mode collector
-   ./afdd_stack/scripts/bootstrap.sh --mode model
-   ./afdd_stack/scripts/bootstrap.sh --mode engine
+   ./afdd_stack/scripts/bootstrap.sh --compose-db
    ```
 
-   **Optional one-liner (HTTPS + login):** Piping your password on stdin lets bootstrap create a dashboard user, generate a self-signed certificate for Caddy (then use `https://localhost/`; the browser will warn until you trust the cert), set `afdd_stack/stack/.env` for TLS-aware cookies on the API, and start the same full stack as a plain `./afdd_stack/scripts/bootstrap.sh`.
-
-   ```bash
-   printf '%s' 'YOUR_PASSWORD' | ./afdd_stack/scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
-   ```
-
-   That’s it. The script builds and starts the full stack (DB, API, frontend, Caddy, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop), waits for Postgres, runs migrations, and **seeds platform config** via the API (PUT /config) so runtime settings are in the knowledge graph. When it finishes you get:
-
-   - **API:** http://localhost:8000 (interactive OpenAPI/Swagger at `/docs` is **disabled** in the shipped API; use the React app and [API reference](appendix/api_reference)).  
-   - **Frontend:** http://localhost:5173 (or via Caddy http://localhost:80). See [Using the React dashboard](frontend) for what each page does.  
-   - **DB:** `127.0.0.1:5432`/openfdd (postgres/postgres) — bound to loopback only; not exposed on the LAN.  
+Field BACnet, scraping, FDD loop execution, and operator UI are expected on **VOLTTRON / VOLTTRON Central**, not in this compose file. The FastAPI app may still be run **from source** for development (`uvicorn`); it is no longer shipped as a Docker service here.
 
 ---
 
@@ -54,31 +44,25 @@ Manual Data Model export/import (JSON) always works without any AI.
 
 See [Open‑Claw integration](openclaw_integration) and [API Reference](appendix/api_reference) for endpoint details.
 
-Optional MCP RAG profile:
-
-```bash
-./afdd_stack/scripts/bootstrap.sh --with-mcp-rag
-```
-
-This starts an MCP-style retrieval sidecar at `http://localhost:8090` using derived index artifacts from canonical docs.
+The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **removed**; use **`GET /openapi.json`** / **`/docs`** and **`GET /model-context/docs`** for agents instead.
 
 ---
 
 ## Prerequisites
 
-- **OS:** Linux only (Ubuntu Server latest, or Linux Mint). Maintainers primarily test on **x86_64** (e.g. Ubuntu Server). Community reports indicate **ARM64** (e.g. Raspberry Pi 4/5) can work with Docker, but you must validate image availability and resource sizing (RAM/CPU) for your environment. The bootstrap script and Docker stack are not supported on Windows. Keep the system updated:
+- **OS:** Linux for VOLTTRON edge (e.g. Raspberry Pi). Maintainers primarily test on **x86_64** and **ARM64**. Bootstrap shell is not aimed at Windows. Keep the system updated:
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
-- **Docker and Docker Compose:** Required. Install Docker Engine and Docker Compose (or `docker-compose`). See [Docker install](https://docs.docker.com/engine/install/) for your distro. Your user must be able to run **`docker ps`** (typically: member of the **`docker`** group, then `newgrp docker` or log out/in).
-- **Python + argon2-cffi (host):** Whenever you configure **`--user`**, bootstrap hashes the Phase-1 app password with **Argon2** using **host** Python (`./.venv/bin/python` if present, else **`python3`**) — that includes **interactive prompt**, **`--password-stdin`**, **`--password-file`**, and **`OFDD_APP_PASSWORD`** (see `verify_argon2_for_login_bootstrap` in `afdd_stack/scripts/bootstrap.sh`). Install **`argon2-cffi`** in that environment. On Ubuntu 24.04+, system pip may refuse installs (**PEP 668**); use a venv, e.g. `python3 -m venv .venv && .venv/bin/pip install argon2-cffi`. Read-only check: `./afdd_stack/scripts/bootstrap.sh --doctor` — missing argon2 is a **failure** there unless you passed **`--mode collector`**, **`--no-auth`**, or **`--allow-no-ui-auth`** (then it is a **warning** only).
-- **Troubleshooting:** See the root [README](../README.md) section *Ubuntu prerequisites* and *Common bootstrap failures* (Docker permissions, missing argon2, PEP 668, venv).
+- **Docker and Docker Compose:** **Optional** — only for **`--compose-db`** (Timescale + init SQL). See [Docker install](https://docs.docker.com/engine/install/).
+- **Python:** Use a venv for monorepo dev tests: `pip install -e ".[dev]"` (see root README).
+- **Troubleshooting:** `./afdd_stack/scripts/bootstrap.sh --doctor` checks **git** and **python3**.
 - **Git:** To clone the project:
   ```bash
   git clone https://github.com/bbartling/open-fdd.git
   cd open-fdd
   ```
-- **BACnet (default data driver):** The default data driver is BACnet. Bootstrap **automatically** builds and starts [diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server) as its own Docker container (plus the BACnet scraper). Run **BACnet discovery** from the UI or API, then add points to the **data model** (with `bacnet_device_id` / `object_identifier`)—the scraper reads **only the database + graph**, not a CSV file. See [BACnet → Setup](bacnet/index#setup) and [BACnet overview](bacnet/overview). To run without BACnet (e.g. central-only with remote gateways), start only the services you need (e.g. `docker compose --profile grafana up -d db api fdd-loop weather-scraper grafana` from `afdd_stack/stack/` if you want optional Grafana).
+- **BACnet / field data:** Use **VOLTTRON** Platform Driver + historian on the edge. Historical docs for diy-bacnet + scraper may still describe APIs that proxy a gateway when you run the FastAPI app from source.
 
 ---
 
@@ -86,114 +70,34 @@ This starts an MCP-style retrieval sidecar at `http://localhost:8090` using deri
 
 `afdd_stack/scripts/bootstrap.sh` (run from the **repo root**):
 
-1. Ensures **diy-bacnet-server** exists as a sibling repo (clones it if missing).
-2. Runs **docker compose up -d --build** from `afdd_stack/stack/` (builds all images, starts all services).
-3. Waits for **Postgres** to be ready (~15s).
-4. Applies **database migrations** (idempotent; safe on existing DBs).
-5. **Seeds platform config** via PUT /config (waits for API, then sends default or `afdd_stack/stack/.env` values into the RDF graph).
-6. Optionally runs **--reset-data** if you passed that flag (deletes all sites + data-model reset; for testing).
+1. **`--clone-volttron`** — clone or update [Eclipse VOLTTRON](https://github.com/eclipse-volttron/volttron) (`OFDD_VOLTTRON_DIR`, branch `releases/9.x` by default).
+2. **`--install-venv`** — `python3 -m venv` under the VOLTTRON tree and `pip install -e` VOLTTRON.
+3. **`--compose-db`** — optional `docker compose … up -d db` for Timescale + `stack/sql` init.
+4. **`--print-paths`** — prints `PYTHONPATH` so agents can `import openfdd_stack`.
 
+**Bootstrap options:** Run `./afdd_stack/scripts/bootstrap.sh --help`. The old “one command brings up API + Caddy + BACnet in Docker” flow is **removed**; see **`afdd_stack/legacy/README.md`** for what changed.
 
-**Default full stack:** `./afdd_stack/scripts/bootstrap.sh` (no flags) starts TimescaleDB, API, **diy-bacnet-server** (BACnet/IP bridge), **BACnet scraper**, weather scraper, FDD loop, and **Caddy** reverse proxy (HTTP on `:80` unless you add TLS flags below). Same service set as the optional one-liner in [Do this to bootstrap](#do-this-to-bootstrap).
+**Open-FDD API from source:** If you run **`uvicorn`** for local development, configure secrets and auth in **`afdd_stack/stack/.env`** as described under **[Security — authentication](security#frontend-and-api-authentication)** (API keys, JWT, dashboard user). That file is **not** populated by the slim bootstrap; compose no longer starts the API container.
 
-**Standard full-stack bootstrap with self-signed TLS (Caddy) and app login:** uses **JWT** and **`Authorization: Bearer`**, not HTTP Basic Auth ([Security — authentication](security#frontend-and-api-authentication)).
+**Optional Grafana:** With Docker available, from `afdd_stack/stack/` you can start the **`grafana`** profile (see compose file comments) for dashboards against the same Postgres/Timescale host; use the [Grafana SQL cookbook](howto/grafana_cookbook).
 
-```bash
-printf '%s' 'YOUR_PASSWORD' | ./afdd_stack/scripts/bootstrap.sh --user YOURNAME --password-stdin --caddy-self-signed
-```
-
-**Bootstrap options:** Run `./afdd_stack/scripts/bootstrap.sh --help` for the full list. Summary:
-
-| Option | Effect |
-|--------|--------|
-| *(none)* | Build and start full stack (DB, API, frontend, Caddy, BACnet server, scrapers, FDD loop). Prints API key if generated. Grafana and MQTT broker **not** started by default. |
-| `--with-grafana` | **Optional:** include Grafana at http://localhost:3000 (admin/admin). Add a `/grafana` route in Caddy when you extend the Caddyfile (see [Security](security)). |
-| `--with-mqtt-bridge` | **Optional / experimental:** start Mosquitto (`:1883`) for a **generic** broker. Pass **`BACNET2MQTT_*`** / **`MQTT_RPC_*`** env through `afdd_stack/stack/.env` to **diy-bacnet-server** for BACnet2MQTT and/or the experimental MQTT RPC gateway ([MQTT integration](howto/mqtt_integration)). |
-| `--with-mcp-rag` | **Optional:** include MCP RAG service at http://localhost:8090 (derived from canonical docs and generated docs text). |
-| `--mode MODE` | Module mode: `full` (default), `collector`, `model`, `engine`. |
-| `--minimal` | DB + BACnet server + bacnet-scraper only. No FDD, weather, or API. Add `--with-grafana` for Grafana. |
-| `--verify` | Health checks only: list containers, test DB; exit. Does not start or stop. |
-| `--test` | Run tests and exit. With explicit `--mode`, runs that mode only. Without explicit `--mode` (default full), runs matrix: `collector`, `model`, `engine`, `full`. |
-| `--build SERVICE ...` | Rebuild and restart only listed services, then exit. Services: `api`, `bacnet-server`, `bacnet-scraper`, `caddy`, `db`, `fdd-loop`, `frontend`, `grafana`, `host-stats`, `mcp-rag`, `mosquitto` (with `--with-mqtt-bridge`), `weather-scraper`. |
-| `--build-all` | Rebuild and restart all services; then exit. |
-| `--frontend` | Before start: stop frontend container and remove `frontend_node_modules` volume so the next `up` runs a fresh `npm ci`. Use after changing `frontend/package.json`; the frontend service also runs `npm run build` on every start. |
-| `--update` | Git pull open-fdd and diy-bacnet-server (sibling), then rebuild and restart (keeps DB). |
-| `--maintenance` | Safe Docker prune only (no volume prune). |
-| `--reset-grafana` | Wipe Grafana volume and re-apply provisioning. DB and other data retained. |
-| `--reset-data` | Delete all sites via API and POST /data-model/reset (testing). |
-| `--retention-days N` | TimescaleDB retention in days (default 365). Env: `OFDD_RETENTION_DAYS`. |
-| `--log-max-size SIZE` | Docker log max size per file (default `100m`). Env: `OFDD_LOG_MAX_SIZE`. |
-| `--log-max-files N` | Docker log max files per container (default 3). Env: `OFDD_LOG_MAX_FILES`. |
-| `--install-docker` | Attempt Docker install (Linux) then continue. |
-| `--skip-docker-install` | Explicitly skip Docker install (no-op; use with scripts that call bootstrap after install). |
-| `--caddy-self-signed` | Self-signed HTTPS for Caddy (`:443`, `:80` → HTTPS): writes certs under `afdd_stack/stack/caddy/certs/`, sets `OPENFDD_CADDYFILE` and `OFDD_TRUST_FORWARDED_PROTO=true` in `afdd_stack/stack/.env`. |
-| `--caddy-tls-cn HOST` | With `--caddy-self-signed`: certificate CN/SAN (default `openfdd.local`). |
-| `--caddy-http-only` | Revert to the default HTTP-only Caddyfile on `:80`; removes `OPENFDD_CADDYFILE` from `afdd_stack/stack/.env` and sets `OFDD_TRUST_FORWARDED_PROTO=false`. |
-| `--no-auth` | Removes auth-related keys from `afdd_stack/stack/.env`: **`OFDD_API_KEY`**, app-user keys (**`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`**, token TTLs), and **`OFDD_BACNET_SERVER_API_KEY`**. Open-FDD API then skips Bearer/JWT enforcement; diy-bacnet-server gets an empty **`BACNET_RPC_API_KEY`** so RPC Bearer middleware is off. |
-| `--user NAME` | Dashboard user: writes `OFDD_APP_USER`, Argon2 hash, `OFDD_JWT_SECRET`, and token TTLs into `afdd_stack/stack/.env` (requires a password — next rows). |
-| `--password-file PATH` | Read the dashboard password from a file (first line); avoids putting the password on the command line. |
-| `--password-stdin` | Read the dashboard password from stdin (pipe or redirect into bootstrap; see [Security — authentication](security#frontend-and-api-authentication) and `bootstrap.sh` header comments). |
-| *(env)* | Alternative: set **`OFDD_APP_PASSWORD`** for the dashboard password when using `--user`, or use the interactive prompt if neither file nor stdin is used. |
-
-**Bearer tokens and API keys (`afdd_stack/stack/.env`):** With a normal bootstrap (no `--no-auth`), secrets live in **`afdd_stack/stack/.env`** (gitignored). They are **not** the same token—each service uses the one that matches its role:
-
-| Variable | Consumed by | Role |
-|----------|-------------|------|
-| **`OFDD_API_KEY`** | **Open-FDD API** | Machine **`Authorization: Bearer`** for REST (Swagger **Authorize**, BACnet scraper → `GET /config`, scripts, agents). |
-| **`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, **`OFDD_JWT_SECRET`** (+ TTL keys) | **Open-FDD API** (`/auth/login`, JWT validation) | Dashboard login; the browser keeps a **short-lived JWT** and sends **`Authorization: Bearer`** with that token on API calls—not the dashboard password. |
-| **`OFDD_BACNET_SERVER_API_KEY`** | **Open-FDD API** and **bacnet-scraper** (outbound to the gateway) | **`Authorization: Bearer`** on JSON-RPC to **diy-bacnet-server**. Docker Compose passes the **same value** into the gateway container as **`BACNET_RPC_API_KEY`**. When that env is non-empty, the gateway enforces Bearer on RPC routes except **`POST /server_hello`**; when empty, RPC auth is disabled. |
-
-You normally only edit **`afdd_stack/stack/.env`**; do not set **`BACNET_RPC_API_KEY`** separately unless you override compose env. Standalone diy-bacnet-server (outside this stack) uses **`BACNET_RPC_API_KEY`** in **its** environment only—see the [diy-bacnet-server README](https://github.com/bbartling/diy-bacnet-server/blob/master/README.md).
-
-Dashboard login and piping passwords into `--user` are covered in more detail (including maintenance one-liners) under **[Security — authentication](security#frontend-and-api-authentication)**.
-
-To **update** an existing clone: `git pull` then `./afdd_stack/scripts/bootstrap.sh`, or `./afdd_stack/scripts/bootstrap.sh --update`. Rebuild single services: `./afdd_stack/scripts/bootstrap.sh --build api`.
-
----
-
-## Standard HTTP lab: remote LAN access
-{: #standard-http-lab-remote-lan-access}
-
-These notes apply when you use **standard HTTP bootstrap** (no **`--caddy-self-signed`**) and want to open the UI or API from **another machine on the LAN** (for example after the root [README](../README.md) one-liner with **`--bacnet-address`** and **`--user`**).
-
-### Bearer tokens
-
-The DIY BACnet gateway and Open-FDD API still require **Bearer** tokens for most operations. Values are defined in **`afdd_stack/stack/.env`** and are set during bootstrap. See the table **[Bearer tokens and API keys](#bearer-tokens-and-api-keys-stackenv)** above.
-
-### Web UI URL (no TLS)
-
-Open the app with **`http://`** on port **80** (Caddy), for example `http://192.168.204.16/`. **`https://`** is only for the **hardened** stack (**`--caddy-self-signed`**). The default **`afdd_stack/stack/caddy/Caddyfile`** does not terminate TLS on **443** for this profile, so **`https://192.168.204.16/`** is not the lab UI.
-
-### Remote API from another PC
-
-Bootstrap waits for the API using **`http://127.0.0.1:8000`** on the **server only** (reliable loopback probe; avoids IPv6 **`localhost`** quirks). That address is **not** what other PCs should use.
-
-For **Swagger or REST on port 8000** from another machine, **`afdd_stack/stack/.env`** must include **`OFDD_API_HOST_BIND=0.0.0.0`** so Docker publishes **`0.0.0.0:8000`**. Bootstrap sets that automatically when you use **`--bacnet-address …`** without **`--caddy-self-signed`**. If you are **not** using **`--bacnet-address`**, add **`--lan-bind`** to the same bootstrap command (HTTP lab only).
-
-Open the host firewall for **80**, **8000**, **8080** (and **5173** if you need the raw frontend port) as needed.
-
-### Remote UI when port 80 is blocked
-
-The stack also publishes **host port 8880** mapped to the **same** Caddy HTTP site as port **80**. If Swagger on **`http://EDGE_IP:8000/docs`** works from your laptop but **`http://EDGE_IP/`** does not, the firewall may allow **8000/tcp** but not **80/tcp**. Use **`http://EDGE_IP:8880/`** or allow **80/tcp** (e.g. **`sudo ufw allow 80/tcp`**). Use an explicit **`http://`** URL if the browser tries **https://** on **443** and fails.
-
-### Automatic `ufw` rules (Ubuntu / Debian)
-
-When **ufw** is **active** and the stack is in **HTTP lab** mode with **`OFDD_API_HOST_BIND=0.0.0.0`**, **`./afdd_stack/scripts/bootstrap.sh`** attempts **`sudo ufw allow`** for **80, 8880, 8000, 8080, 5173/tcp** if **passwordless sudo** works (**`sudo -n`**). Otherwise it prints the exact commands to run. Pass **`--no-open-firewall`** to skip that behavior.
+**VOLTTRON Central / edge UI:** Use upstream VOLTTRON and Central docs for remote access, TLS, and operator UI — not Caddy from this repo.
 
 ---
 
 ## After bootstrap
 
-- **Grafana (if you used `--with-grafana`):** Open http://localhost:3000. A TimescaleDB datasource is provisioned (`openfdd_timescale`); build dashboards with the [Grafana SQL cookbook](howto/grafana_cookbook). If provisioning is wrong, run `./afdd_stack/scripts/bootstrap.sh --reset-grafana` (keeps DB data).
-- **Minimal mode:** If you used `--minimal`, only DB, BACnet server, and scraper run (plus Grafana **only** if you also passed `--with-grafana`). No API by default; use scraper logs (and Grafana if enabled) to confirm data flow. To add the full stack later, run `./afdd_stack/scripts/bootstrap.sh` without `--minimal`.
+- **Database:** With **`--compose-db`**, Postgres listens on the host port defined in compose (see `afdd_stack/stack/docker-compose.yml`). Apply VOLTTRON SQL historian **`tables_def`** against the same server if you colocate historian tables with Open-FDD schema; keep backups and migrations explicit.
+- **Agents:** Point **`PYTHONPATH`** at this repo (**`--print-paths`**) when packaging Open-FDD logic as VOLTTRON agents.
 
 ---
 
 ## Next steps
 
-- **[How-to Guides](howto/index)** — Grafana dashboards (optional) and SQL cookbook.
-- **[Configuration](configuration)** — Platform config, rule YAML, services that read config from the API.
-- **[Security & Caddy](security)** — Basic auth, throttling, TLS.
-- **[Appendix: API Reference](appendix/api_reference)** — REST endpoints at a glance. Interactive Swagger/OpenAPI (`/docs`) is **disabled** in the default API build; use the React app, this appendix, or export OpenAPI from a dev configuration if you need a schema browser.
+- **[How-to Guides](howto/index)** — Grafana (optional) and SQL cookbook.
+- **[Configuration](configuration)** — Platform config, rule YAML.
+- **[Security](security)** — API keys and JWT when running the FastAPI app from source.
+- **[Appendix: API Reference](appendix/api_reference)** — REST endpoints for agents and tooling.
+- **[VOLTTRON gateway and sync](concepts/volttron_gateway_and_sync)** — how field data and SQL fit together.
 
-For **BACnet** (discovery and data model): [BACnet](bacnet/index) and [BACnet overview](bacnet/overview). For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.
+For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.
