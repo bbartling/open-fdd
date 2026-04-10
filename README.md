@@ -14,9 +14,12 @@
 
 </div>
 
-This repository contains the Open-FDD **rules engine only**, published to PyPI via GitHub Actions as [`open-fdd`](https://pypi.org/project/open-fdd/).
+This **monorepo** holds:
 
-For the full on-prem **automated fault detection and diagnostics (AFDD)** stack—which uses the `open-fdd` engine from PyPI internally as a full Linux web application—see **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**.
+- **`open_fdd/`** — the **PyPI rules engine** ([`open-fdd`](https://pypi.org/project/open-fdd/)), published from CI as the slim wheel/sdist (no stack code in the wheel).
+- **`afdd_stack/`** — the full on-prem **AFDD Docker platform** (FastAPI, TimescaleDB, BACnet scrapers, React UI). Run **`./afdd_stack/scripts/bootstrap.sh`** from the repo root after cloning.
+
+Containers install the engine from the copied `open_fdd` sources alongside `openfdd_stack` via `pip install ".[stack]"` at image build time.
 
 ---
 
@@ -44,20 +47,81 @@ Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/ma
 
 ---
 
-### Full AFDD Stack (Docker + Web App)
+### Full AFDD stack (`afdd_stack/`)
 
-* 📗 **[AFDD Stack GitHub](https://github.com/bbartling/open-fdd-afdd-stack)**
-  Full platform — Dockerized Python web app using the Open-FDD engine
+* 📗 **Same repo** — [`afdd_stack/README.md`](afdd_stack/README.md), `afdd_stack/stack/docker-compose.yml`, `./afdd_stack/scripts/bootstrap.sh`
+* 💻 **Docs** — [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Jekyll site includes engine + platform guides in `docs/`)
 
-* 💻 **[AFDD Stack Docs](https://bbartling.github.io/open-fdd-afdd-stack/)**
-  Setup, API, UI, BACnet integration, and full system architecture
+### Bootstrap (from repo root)
 
+The `--bacnet-address` value is the static bind for BACnet/IP on OT LANs. Bootstrap supports **dual-NIC** hosts: bind BACnet on the OT interface; another interface can use DHCP for internet.
+
+**Standard HTTP (no TLS) and app login**
+
+```bash
+cd open-fdd
+
+printf '%s' 'YourSecurePassword' | ./afdd_stack/scripts/bootstrap.sh \
+  --bacnet-address 192.168.204.16/24:47808 \
+  --bacnet-instance 12345 \
+  --user ben \
+  --password-stdin
+```
+
+**LAN / firewall / ports:** See [Getting started — Standard HTTP lab](https://bbartling.github.io/open-fdd/getting_started#standard-http-lab-remote-lan-access) (bearer keys in `afdd_stack/stack/.env`, ports **80** / **8880** / **8000**, **ufw** hints).
+
+**Self-signed TLS (Caddy) and app login**
+
+```bash
+cd open-fdd
+
+printf '%s' 'YourSecurePassword' | ./afdd_stack/scripts/bootstrap.sh \
+  --bacnet-address 192.168.204.16/24:47808 \
+  --bacnet-instance 12345 \
+  --user ben \
+  --password-stdin \
+  --caddy-self-signed
+```
+
+**Bootstrap troubleshooting**
+
+```bash
+./afdd_stack/scripts/bootstrap.sh --doctor
+```
+
+### Validate the stack with `curl` (after containers are up)
+
+**API on loopback (plain HTTP)** — Compose maps the API to `127.0.0.1:8000` by default:
+
+```bash
+curl -sS http://127.0.0.1:8000/health
+# Expect HTTP 200 and JSON including "status":"ok"
+```
+
+**HTTP-only Caddy** (bootstrap **without** `--caddy-self-signed`):
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/
+# Expect 200 (or another success redirect to the UI)
+```
+
+**Self-signed HTTPS** (bootstrap **with** `--caddy-self-signed`): `:80` redirects to `https://`; use **`-k`** so `curl` accepts the dev cert:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/
+# Often 301 → https://127.0.0.1/
+
+curl -sk -o /dev/null -w '%{http_code}\n' https://127.0.0.1/
+# Expect 200 (HTML shell for the React app)
+```
+
+If you follow redirects from `http://` with `curl -L`, add **`-k`** (e.g. `curl -skL http://127.0.0.1/`) so the HTTPS hop does not fail on certificate verification.
 
 ---
 
 ## Dependencies
 
-See [`pyproject.toml`](pyproject.toml). **Runtime:** pandas, NumPy, PyYAML. **Tests (contributors / CI):** install with `pip install -e ".[test]"` to get **pytest** (not installed by plain `pip install open-fdd`). **Brick TTL → column_map** (rdflib / SPARQL) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)**, not in this wheel. For **matplotlib** (notebooks / `fault_viz`) or **python-docx** (Word reports), install those packages separately if you use those modules.
+See [`pyproject.toml`](pyproject.toml). **Engine runtime:** pandas, NumPy, PyYAML, pydantic. **Contributors / CI:** `pip install -e ".[dev]"` installs **pytest**, **stack** dependencies (FastAPI, rdflib, …), and tooling. **`pip install open-fdd`** from PyPI stays engine-only. **Brick TTL → column_map** (rdflib / SPARQL) lives under **`afdd_stack/openfdd_stack/`**, not in the published wheel. For **matplotlib** (notebooks / `fault_viz`) or **python-docx** (Word reports), install those packages separately if you use those modules.
 
 ---
 
@@ -67,7 +131,7 @@ See [`pyproject.toml`](pyproject.toml). **Runtime:** pandas, NumPy, PyYAML. **Te
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
 python3 -m venv env && source env/bin/activate
-pip install -U pip && pip install -e ".[test]"
+pip install -U pip && pip install -e ".[dev]"
 python -m pytest
 ```
 

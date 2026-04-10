@@ -7,8 +7,6 @@ nav_order: 14
 
 First off, thanks for taking the time to contribute!
 
-> **Documentation split:** This site documents the **`open-fdd`** PyPI engine. Pull requests that touch **Docker, API, React, BACnet, or the data model** should update **[open-fdd-afdd-stack docs](https://bbartling.github.io/open-fdd-afdd-stack/)** as well (or instead), and cross-link from here when the engine API changes.
-
 Open-FDD is in **Alpha**. The most valuable contributions right now are **bug reports** and **FDD rules**—especially from mechanical engineers and building professionals who can add and refine fault-detection rules using the [Expression Rule Cookbook](expression_rule_cookbook). All types of contributions are encouraged.
 
 **Phase focus:** Alpha emphasizes platform stability, driver implementation beyond BACnet, and API changes for specific integration needs. Beta (planned) will focus more on Brick data modeling (e.g. ASHRAE 223P), mechanical engineering and consulting input into the expression rule cookbook, and better default Grafana dashboards for HVAC analytics. See the [Table of Contents](#table-of-contents) for different ways to help and how this project handles them. Please read the relevant section before contributing; it helps maintainers and keeps things smooth for everyone.
@@ -45,7 +43,7 @@ This project expects everyone to be respectful and constructive. By participatin
 
 ## I Have a Question
 
-Before asking, please check the [documentation](https://bbartling.github.io/open-fdd/) and search [existing issues](https://github.com/bbartling/open-fdd/issues) to see if your question is already answered.
+Before asking, check **[this site’s docs](https://bbartling.github.io/open-fdd/)** (platform) and the **[engine docs](https://bbartling.github.io/open-fdd/)** (`pip install open-fdd`), and search [stack issues](https://github.com/bbartling/open-fdd/issues) / [engine issues](https://github.com/bbartling/open-fdd/issues).
 
 If you still need help:
 
@@ -72,7 +70,7 @@ When contributing, you agree that you have authored 100% of the content, have th
 ### Before submitting a bug report
 
 - Use the latest version (main branch or latest release).
-- Confirm the bug is in Open-FDD and not in your environment (e.g. wrong Python version, missing config). Check the [documentation](https://bbartling.github.io/open-fdd/) and [I Have a Question](#i-have-a-question) first.
+- Confirm the bug is in Open-FDD and not in your environment (e.g. wrong Python version, missing config). Check the [platform docs](https://bbartling.github.io/open-fdd/) or [engine docs](https://bbartling.github.io/open-fdd/) and [I Have a Question](#i-have-a-question) first.
 - Search [issues](https://github.com/bbartling/open-fdd/issues?q=label%3Abug) to see if the bug is already reported.
 - Collect:
   - **Stack trace** (Traceback) if applicable
@@ -101,9 +99,9 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 ### Before submitting
 
-- Use the latest version and read the [documentation](https://bbartling.github.io/open-fdd/) to see if the behavior already exists or can be configured.
+- Use the latest version and read the [platform](https://bbartling.github.io/open-fdd/) or [engine](https://bbartling.github.io/open-fdd/) documentation to see if the behavior already exists or can be configured.
 - Search [issues](https://github.com/bbartling/open-fdd/issues) to see if the enhancement was already suggested; if so, add to that discussion.
-- Consider whether the idea fits Open-FDD's scope: **engine** (YAML rules, `RuleRunner`, pandas) vs **platform** (API, BACnet, Grafana — often the [afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack) repo). Make a clear case for why it would help most users.
+- Consider whether the idea fits Open-FDD's scope (edge AFDD, rules, API, BACnet, Grafana). Make a clear case for why it would help most users.
 
 ### How to submit a good enhancement suggestion
 
@@ -118,7 +116,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 **We especially welcome contributions from mechanical engineers and building professionals** who can add or improve FDD rules.
 
-- **Where rules live:** On the **AFDD stack**, live rules sit under **`stack/rules/`** in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack) — see [Fault rules overview](rules/overview) for semantics. In **this** repo, contribute example or fixture YAML under **`examples/`** or **`open_fdd/tests/fixtures/rules/`**, and cookbook prose in **`docs/`**.
+- **Where rules live:** [Fault rules overview](rules/overview) — put project rules in **`stack/rules/`** (YAML). The FDD loop reloads them every run; no restart needed.
 - **How to write rules:** [Expression Rule Cookbook](expression_rule_cookbook) — expression-type rules use YAML with BRICK-style inputs, params, and pandas/NumPy expressions. The cookbook includes AHU-style rules (e.g. GL36-inspired) and patterns you can adapt.
 - **What to contribute:**
   - **New rule YAMLs** for common faults (AHU, VAV, plant, sensors) that others can reuse.
@@ -127,7 +125,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 To contribute a rule or cookbook change:
 
-1. Add or edit YAML under `examples/` or test fixtures, or edit `docs/expression_rule_cookbook.md` (and related docs). For rules that ship with the **Docker platform**, open a PR against **open-fdd-afdd-stack** (`stack/rules/`).
+1. Add or edit files under `stack/rules/` for new/updated rules, or under `docs/expression_rule_cookbook.md` (and related docs) for cookbook content.
 2. Follow the existing YAML style and BRICK naming used in the cookbook.
 3. In a PR, describe the fault the rule targets and any assumptions (e.g. Brick types, units). If it's from a standard (e.g. ASHRAE), note the reference.
 
@@ -136,27 +134,30 @@ To contribute a rule or cookbook change:
 ## Your First Code Contribution
 
 - Look for issues labeled `good first issue` or `help wanted` (if we've added them).
-- This repo is the **pandas rules engine** (`open_fdd`): Python **3.9+**, pandas/NumPy, pytest for tests. The **FastAPI / Docker / React** product lives in [open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack). See [Getting Started](getting_started) and the README for setup.
-- For engine changes, run **`python -m pytest`** after **`pip install -e ".[test]"`**. Stack integration testing belongs in the afdd-stack repo.
+- The codebase is Python 3.11+, with FastAPI (API), pandas/NumPy (rules), and Docker for the platform. See [Getting Started](getting_started) and the README for setup.
+- For rule changes, run the test suite and, if possible, the FDD loop locally with sample data before submitting a PR.
 
 ---
 
 ## Improving the Documentation
 
-Documentation lives in the `docs/` directory and is published at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Just the Docs theme). Improvements are welcome:
+Documentation for **this monorepo** lives in `docs/` and is published at **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)** (Just the Docs — engine + AFDD stack). Improvements are welcome:
 
 - Fix typos, clarify wording, or update steps.
-- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [Engine-only / IoT](howto/engine_only_iot), or the [AFDD stack how-to index](https://bbartling.github.io/open-fdd-afdd-stack/howto/)).
+- Add examples or how-tos (e.g. for the [Expression Rule Cookbook](expression_rule_cookbook), [How-to Guides](howto/index), or BACnet).
 - Keep code blocks and links in sync with the codebase.
+
+**Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
 
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
-**After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages serves extensionless URLs like `/expression_rule_cookbook`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
+**After changing README or high-traffic doc links**, spot-check the live site (GitHub Pages builds extensionless URLs like `/modeling/llm_workflow`; the same path with a **trailing slash** often 404s because Jekyll emits `page.html`, not `page/index.html`):
 
 ```bash
 BASE=https://bbartling.github.io/open-fdd
-curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook"    # expect 200
-curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook/"   # often 404 — avoid trailing slash in external links
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow"    # expect 200
+curl -sS -o /dev/null -w "%{http_code}" "$BASE/modeling/llm_workflow/"   # often 404 — avoid trailing slash in external links
+curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/blob/master/pdf/open-fdd-docs.pdf"  # expect 302 or 200
 ```
 
 ---
@@ -164,7 +165,7 @@ curl -sS -o /dev/null -w "%{http_code}" "$BASE/expression_rule_cookbook/"   # of
 ## Styleguides
 
 - **Python:** We use [Black](https://github.com/psf/black) for formatting. Run `black` on changed files before committing.
-- **YAML:** Match the style in `examples/` / `open_fdd/tests/fixtures/rules/` and the expression rule cookbook (indentation, key order).
+- **YAML:** Match the style in `stack/rules/` and the expression rule cookbook (indentation, key order).
 - **Markdown:** Use clear headings and lists; link to existing docs where relevant.
 
 ---

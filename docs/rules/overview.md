@@ -8,8 +8,6 @@ nav_order: 1
 
 Fault rules are YAML-defined checks run against time-series DataFrames. Each rule produces a boolean fault flag. **Open-FDD is 100% Brick-model driven:** rule inputs refer only to Brick classes; column mapping comes from the Brick TTL via SPARQL and [Brick external timeseries references](https://docs.brickschema.org/metadata/external-representations.html#timeseries) ([timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html)), which Open-FDD embraces at the heart of FDD.
 
-> **Full Docker platform:** `rules_dir`, React Faults page, sync-to-DB, `POST /run-fdd`, and Grafana views are described for operators on the **[AFDD stack docs — Fault rules](https://bbartling.github.io/open-fdd-afdd-stack/rules/overview)**. This page stays focused on **YAML semantics** and the **library** path (`RuleRunner`).
-
 ---
 
 ## Where rules live: config path and how to manage them
@@ -23,7 +21,7 @@ Fault rules are YAML-defined checks run against time-series DataFrames. Each rul
 | **React frontend (Faults page)** | Upload new YAML, download existing files, delete files, and **Sync definitions** so the fault_definitions table updates without waiting for the next FDD run. Preferred when you have UI access. |
 | **Files on disk** | Edit or add files directly under the configured path (e.g. `stack/rules/` on the host or in the container). Same outcome: next FDD run (or **Sync definitions** from the UI) picks them up. |
 
-Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` when running the AFDD stack). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](../expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
+Config: `rules_dir: "stack/rules"` (GET/PUT `/config` or `OFDD_RULES_DIR` at bootstrap). If that path does not exist, the loop falls back to `stack/rules`. Default rules ship in `stack/rules/` (e.g. `sensor_bounds.yaml`, `sensor_flatline.yaml`). See the [Expression Rule Cookbook](../expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations and how telemetry is pivoted into a DataFrame, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
 
 **Reference rule library (not loaded by default):** Additional AHU, chiller, heat-pump, and weather YAML examples used for lab automation and docs live under **`openclaw/bench/rules_reference/`** in the repo. See the [Test bench rule catalog](test_bench_rule_catalog) for a table of every file with GitHub links.
 
@@ -36,8 +34,8 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 **Fault definitions:** Each FDD run syncs the loaded rules into the `fault_definitions` table (fault_id, name, category, equipment_types). When you add or edit a rule (via frontend upload or by editing a file in `rules_dir`), the next run updates the DB and the Faults UI reflects the change. From the frontend you can also click **Sync definitions** to update the definitions table immediately.
 
 1. **Add or edit** rules: use the Faults page (upload/paste YAML, or choose file) or edit files in `stack/rules/*.yaml`. Change `params` (e.g. `tolerance`, `rolling_window`) to tune sensitivity.
-2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](https://bbartling.github.io/open-fdd-afdd-stack/configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](https://bbartling.github.io/open-fdd-afdd-stack/appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
-3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](https://bbartling.github.io/open-fdd-afdd-stack/howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
+2. **Run** FDD: wait for the next scheduled run (per `rule_interval_hours` and `lookback_days` in [platform config](../configuration)), or trigger with `touch config/.run_fdd_now` or `POST /run-fdd` (see [Appendix: API Reference](../appendix/api_reference)). Or use **Sync definitions** in the UI to only refresh the definitions table.
+3. **View** fault results in the React Faults/Plots views or in Grafana (see [Grafana SQL cookbook](../howto/grafana_cookbook)). Every run reloads all rules from disk — hot reload.
 
 ---
 
@@ -48,7 +46,7 @@ Open-FDD is **AFDD** (Automated Fault Detection and Diagnostics). The project **
 | `bounds` | Value outside `[low, high]` |
 | `flatline` | Rolling spread < tolerance (stuck sensor) |
 | `hunting` | Excessive state changes (PID hunting) |
-| `expression` | Custom pandas/numpy expression; optional `params.schedule` and `params.weather_band` inject `schedule_occupied` and `weather_allows_fdd` (see [Schedule and weather gating](../expression_rule_cookbook#schedule-and-weather-gating-unoccupied-operation)) |
+| `expression` | Custom pandas/numpy expression |
 | `oa_fraction` | OA fraction vs design airflow error |
 | `erv_efficiency` | ERV effectiveness out of range |
 
@@ -81,7 +79,6 @@ params:
 
 - **Brick TTL:** Each rule input declares a Brick class (e.g. `brick: Supply_Air_Temperature_Sensor`). The engine resolves Brick points via SPARQL to their [external timeseries reference](https://docs.brickschema.org/metadata/external-representations.html#timeseries) (`ref:TimeseriesReference` / `ref:hasTimeseriesId`), yielding the DataFrame column name. See [Brick timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html).
 - **Column map:** Built from the Brick model (e.g. `rdfs:label` or external_id) → column names; no `column` in rule YAML.
-- **Haystack, DBO, 223P:** The **same** YAML rule shape works if you use **other logical keys** (slugs or scoped IDs) and supply a **`column_map`** from a manifest or custom resolver. Rule files do **not** yet declare ontology versions or parallel labels per input; see [Expression Rule Cookbook — ontology labels](../expression_rule_cookbook#ontology-labels).
 
 ---
 
@@ -102,7 +99,7 @@ That split is intentional: the RuleRunner stays fast and pandas-centric. **Downs
 - **SPARQL** (or export TTL) for **rated capacity** and **topology** on that equipment, and
 - **SQL** on `timeseries_readings` for duty estimates over the fault window
 
-…to approximate **energy penalties** or rank impact; see [Data model engineering (Brick + 223P MVP)](https://bbartling.github.io/open-fdd-afdd-stack/howto/data_model_engineering) on the stack docs for modeling patterns.
+…to approximate **energy penalties** or rank impact (see §5 in `examples/223P_engineering/README.md` and [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering)).
 
 ---
 

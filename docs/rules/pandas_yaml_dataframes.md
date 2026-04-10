@@ -6,7 +6,7 @@ nav_order: 4
 
 # YAML rules → Pandas DataFrames (under the hood)
 
-This note is for engineers who want to see **exactly** how Open-FDD turns **rule YAML on disk** into **pandas operations** on **time-series DataFrames**—and where Brick TTL fits in. It complements [Fault rules overview](overview), [Getting started](../getting_started), and [Examples](../examples).
+This note is for engineers who want to see **exactly** how Open-FDD turns **rule YAML on disk** into **pandas operations** on **time-series DataFrames**—and where Brick TTL fits in. It complements [Fault rules overview](overview) and [standalone CSV / pandas](../standalone_csv_pandas).
 
 ---
 
@@ -29,7 +29,7 @@ The continuous loop (`openfdd_stack.platform.loop.run_fdd_loop`) loads telemetry
 1. **Query** `timeseries_readings` joined to `points` for the time window (`load_timeseries_for_site` / `load_timeseries_for_equipment`).
 2. **Build a long table**: `pd.DataFrame(rows)` with columns like `ts`, `external_id`, `value`.
 3. **Pivot to wide**: `df.pivot_table(index="ts", columns="external_id", values="value")` so each point is a column (one column per `external_id`).
-4. **Rename columns** using a **column map**: logical keys (often Brick class names) → your frame’s column names. On the AFDD stack, that map is built from TTL; with **`pip install open-fdd`** alone, use a dict or **`load_column_map_manifest`**.
+4. **Rename columns** using a **column map** (on the stack: from TTL via **`openfdd_stack.platform.brick_ttl_resolver`**; with **`pip install open-fdd`**: dict or manifest).
 5. **Add** `timestamp = pd.to_datetime(df["ts"])` for time-based checks.
 
 Under the hood, pandas is doing **grouped aggregation in the pivot** (duplicate `(ts, external_id)` would aggregate), then **aligning** all series to a common `DatetimeIndex` (implicit via the pivot index).
@@ -79,4 +79,4 @@ If a required column is missing, the runner either **raises** or **skips** the r
 | Rule output | Same index, +flag columns | vectorized masks, optional `rolling` |
 | `fault_results` / DB | Written from row-wise `FDDResult` | After flags are computed |
 
-For a **minimal** library-side example, use **`pd.read_csv`** + **`RuleRunner`** as in [Getting started](../getting_started); sample CSVs and notebooks live under **[`examples/AHU/`](https://github.com/bbartling/open-fdd/tree/master/examples/AHU)**. Unit tests: [`open_fdd/tests/engine/test_runner.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/tests/engine/test_runner.py).
+For a **minimal** example of rules + CSV (no DB), see [standalone CSV / pandas](../standalone_csv_pandas) and unit tests in `open_fdd/tests/engine/test_runner.py`.

@@ -1,4 +1,4 @@
-# If a local checkout still has a top-level frontend/ folder, ignore it (UI lives in open-fdd-afdd-stack).
+# If a stray top-level frontend/ exists, ignore it (canonical UI is afdd_stack/frontend/).
 /frontend/
 
 .DS_Store
@@ -127,10 +127,12 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments (includes stack/.env — AFDD stack / local secrets; never commit)
+# Environments (includes AFDD stack .env — local secrets; never commit)
 .env
 stack/.env
+afdd_stack/stack/.env
 .venv
+.venv-ci/
 .venv-ansible
 .venv-split/
 env/
@@ -192,10 +194,18 @@ openclaw/logs/*.pid
 
 # Local auth output (single-user credentials + jwt secret; AFDD stack)
 stack/auth.env
+afdd_stack/stack/auth.env
 
 # Timestamped copies from openclaw/bench/e2e/4_hot_reload_test.py if API cleanup misses (numeric suffix)
 stack/rules/test_sensor_bounds_[0-9]*.yaml
 stack/rules/test_sensor_flatline_[0-9]*.yaml
+afdd_stack/stack/rules/test_sensor_bounds_[0-9]*.yaml
+afdd_stack/stack/rules/test_sensor_flatline_[0-9]*.yaml
 
 # Self-signed TLS material (local Caddy / AFDD stack dev)
 stack/caddy/certs/
+afdd_stack/stack/caddy/certs/
+
+# Runtime graph + trigger (AFDD stack bind-mount)
+afdd_stack/config/data_model.ttl
+afdd_stack/config/.run_fdd_now
