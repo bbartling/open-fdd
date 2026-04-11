@@ -1,7 +1,7 @@
-"""VOLTTRON ↔ Open-F-DD bridge (topic parsing, scrape flattening, Brick point catalog).
+"""VOLTTRON ↔ Open-FDD bridge (topic parsing, scrape flattening, Brick point catalog).
 
 This package is the **first concrete slice** of the VOLTTRON-first retrofit: agents or ETL
-jobs can map **platform driver** style publishes into **Open-F-DD** ``external_id`` keys
+jobs can map **platform driver** style publishes into **Open-FDD** ``external_id`` keys
 without going through the HTTP CRUD path. The monorepo **FastAPI** stack remains until
 feature parity exists here and in deployment agents.
 """

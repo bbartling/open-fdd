@@ -9,7 +9,7 @@ nav_order: 12
 
 ## Platform config (RDF + CRUD)
 
-Platform config lives in the **same RDF graph** as Brick (`config/data_model.ttl`). Optional legacy BACnet-related keys may still appear in RDF from older imports; **ingestion** is from **VOLTTRON → SQL**, not from Open-F-DD scrapers. No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph. The **entire app is bootstrapped from this data model** (sites, equipment, points, and platform config such as `ofdd:rulesDir`, `ofdd:bacnetScrapeIntervalMin`, etc.). **`rules_dir` (ofdd:rulesDir) remains required**: it is the path where FDD rule YAML files are stored; the frontend upload/download UI manages files *in* that path and does not replace the need for the path itself. **Individual rule YAML files are not stored in the data model**—only the single directory path (e.g. `ofdd:rulesDir "stack/rules"`) is; the files themselves live on disk under that path.
+Platform config lives in the **same RDF graph** as Brick (`config/data_model.ttl`). Optional legacy BACnet-related keys may still appear in RDF from older imports; **ingestion** is from **VOLTTRON → SQL**, not from Open-FDD scrapers. No YAML file. **Where:** Bootstrap seeds via PUT /config; API GET/PUT /config and POST /data-model/sparql use the graph. The **entire app is bootstrapped from this data model** (sites, equipment, points, and platform config such as `ofdd:rulesDir`, `ofdd:bacnetScrapeIntervalMin`, etc.). **`rules_dir` (ofdd:rulesDir) remains required**: it is the path where FDD rule YAML files are stored; the frontend upload/download UI manages files *in* that path and does not replace the need for the path itself. **Individual rule YAML files are not stored in the data model**—only the single directory path (e.g. `ofdd:rulesDir "stack/rules"`) is; the files themselves live on disk under that path.
 
 - **Bootstrap:** `./scripts/bootstrap.sh` seeds config via PUT /config (defaults or `OFDD_*` from `stack/.env`).
 - **API:** GET /config, PUT /config; query via POST /data-model/sparql.
@@ -57,13 +57,13 @@ Example keys (GET/PUT /config or OFDD_* at bootstrap seed):
 
 ## Model context endpoint (external agents)
 
-Open‑FDD can serve its own documentation as plain-text model context for external AI agents (for example an OpenAI-compatible tool like Open‑Claw).
+Open-FDD can serve its own documentation as plain-text model context for external AI agents (for example an OpenAI-compatible tool like Open‑Claw).
 
 The endpoint is `GET /model-context/docs`.
 
 By default it returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or the file pointed to by `OFDD_DOCS_PATH` if set). If you need specific sections, pass `query=...` for keyword retrieval and control output size with `max_chars`.
 
-Open‑FDD does not embed or run an LLM; you supply the LLM provider externally.
+Open-FDD does not embed or run an LLM; you supply the LLM provider externally.
 
 Security note: when `OFDD_API_KEY` is enabled, this endpoint requires Bearer auth like other API routes.
 
@@ -72,7 +72,7 @@ Security note: when `OFDD_API_KEY` is enabled, this endpoint requires Bearer aut
 
 ## Config consumers (today)
 
-**Default:** **VOLTTRON** historians and agents write **SQL** using deployment-specific config; they do **not** need Open-F-DD’s **GET /config** for BACnet scrape intervals.
+**Default:** **VOLTTRON** historians and agents write **SQL** using deployment-specific config; they do **not** need Open-FDD’s **GET /config** for BACnet scrape intervals.
 
 **Optional FastAPI process:** When you run the API, **GET /config** still serves platform RDF keys for the React **Config** UI (rules dir, graph sync, Open-Meteo toggles, **legacy** BACnet keys for forks). **Standalone weather scraper** (if you still run one from `legacy`) can read **GET /config** for `open_meteo_*` fields.
 

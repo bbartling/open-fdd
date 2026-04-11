@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Trigger Open-F-DD data-model TTL sync from cron or systemd timer.
+# Trigger Open-FDD data-model TTL sync from cron or systemd timer.
 #
 # Requires: curl, API reachable from this host (same Docker network, localhost, or VPN).
 #

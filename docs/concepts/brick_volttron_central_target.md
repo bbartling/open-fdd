@@ -6,7 +6,7 @@ nav_order: 6
 
 # Target vision — Brick on VOLTTRON, Central as hub, no FastAPI
 
-This page captures a **long-range architecture** some deployments want: **Open-F-DD runs as a layer across VOLTTRON (and optionally VOLTTRON Central)**, the **canonical model is Brick**, and the **standalone FastAPI service goes away**. Lab folders like **vibe_code_apps_7** stay **experiments and education**; they are not the shipping product, but they inform it.
+This page captures a **long-range architecture** some deployments want: **Open-FDD runs as a layer across VOLTTRON (and optionally VOLTTRON Central)**, the **canonical model is Brick**, and the **standalone FastAPI service goes away**. Lab folders like **vibe_code_apps_7** stay **experiments and education**; they are not the shipping product, but they inform it.
 
 ---
 
@@ -14,7 +14,7 @@ This page captures a **long-range architecture** some deployments want: **Open-F
 
 | Stated goal | Translation in engineering terms |
 |-------------|-----------------------------------|
-| Layer on **VOLTTRON Central** | One **control plane** (instance registry, health, optional plots) plus **shared storage** (often **PostgreSQL or Timescale** behind historians on each instance). Open-F-DD logic becomes **agents + jobs + DB schema**, not a second “platform” beside VOLTTRON. |
+| Layer on **VOLTTRON Central** | One **control plane** (instance registry, health, optional plots) plus **shared storage** (often **PostgreSQL or Timescale** behind historians on each instance). Open-FDD logic becomes **agents + jobs + DB schema**, not a second “platform” beside VOLTTRON. |
 | **“Just a Brick model”** | **Brick (and friends) is the only semantic schema** you commit to for topology and point identity. You **stop maintaining a parallel RDF universe** (e.g. separate BACnet RDF blobs) **unless** you still need discovery artifacts—in which case they are **import steps** into Brick, not a second permanent graph. |
 | **Get rid of FastAPI** | You **remove the current `afdd_stack` FastAPI process** as the public API. **Something else** must still provide: **authenticated CRUD**, **queries** (SPARQL or SQL views over Brick), **file or export contracts**, and **any browser or LLM integration**. That “something” is **new work**—it does not appear for free inside Central’s UI. |
 
@@ -22,11 +22,11 @@ This page captures a **long-range architecture** some deployments want: **Open-F
 
 ## Reality check — VOLTTRON Central is not a Brick server
 
-[VOLTTRON Central](https://volttron.readthedocs.io/) and the **platform historian** are built around **topics and time series** (`topics`, `data`, metadata)—not around **Brick classes, relationships, and SPARQL**. So “Open-F-DD as a layer on top” means:
+[VOLTTRON Central](https://volttron.readthedocs.io/) and the **platform historian** are built around **topics and time series** (`topics`, `data`, metadata)—not around **Brick classes, relationships, and SPARQL**. So “Open-FDD as a layer on top” means:
 
 1. **Brick lives in your own tables** (or in a small triple store) in **PostgreSQL** (or attached to Central’s DB strategy), **designed by you**.
 2. **Historian** continues to own **high-volume samples**; you **join** or **map** historian topics to **Brick `Point`** identities via stable IDs you control.
-3. **Open-F-DD’s rules engine** still needs **pandas-shaped** inputs: you **materialize** frames from historian plus Brick metadata in an **agent or scheduled job**, not by magic from Central alone.
+3. **Open-FDD’s rules engine** still needs **pandas-shaped** inputs: you **materialize** frames from historian plus Brick metadata in an **agent or scheduled job**, not by magic from Central alone.
 
 **Central** is valuable for **many instances** and **operator visibility**; it is **not** a replacement for a **semantic application server** unless you build that server elsewhere.
 
@@ -55,7 +55,7 @@ The **PyPI `open-fdd` engine** is **YAML + pandas**, not RDF at runtime. A **Bri
 
 ## Code landing zone (monorepo)
 
-The first importable slice lives in Python package **`openfdd_stack.volttron_bridge`** (`afdd_stack/openfdd_stack/volttron_bridge/`): **device topic parsing**, **flattening** platform-driver style dicts, **mapping** flattens to Open-F-DD ``external_id`` keys for engine rows, and **DB lookup** of points for an equipment name that matches a VOLTTRON driver device. Agents on the Pi can depend on this package once it is installed from the monorepo. Unit tests: ``afdd_stack/openfdd_stack/tests/platform/test_volttron_bridge.py``.
+The first importable slice lives in Python package **`openfdd_stack.volttron_bridge`** (`afdd_stack/openfdd_stack/volttron_bridge/`): **device topic parsing**, **flattening** platform-driver style dicts, **mapping** flattens to Open-FDD ``external_id`` keys for engine rows, and **DB lookup** of points for an equipment name that matches a VOLTTRON driver device. Agents on the Pi can depend on this package once it is installed from the monorepo. Unit tests: ``afdd_stack/openfdd_stack/tests/platform/test_volttron_bridge.py``.
 
 ---
 
@@ -78,6 +78,6 @@ The first importable slice lives in Python package **`openfdd_stack.volttron_bri
 
 ## Bottom line
 
-- **Yes**, you can aim for **Open-F-DD conceptual stack** (Brick + engine + alarms) **running across VOLTTRON and Central’s ecosystem**, with **vibe_code_apps_7-style work** kept as **education only**.
+- **Yes**, you can aim for **Open-FDD conceptual stack** (Brick + engine + alarms) **running across VOLTTRON and Central’s ecosystem**, with **vibe_code_apps_7-style work** kept as **education only**.
 - **No**, you cannot **delete FastAPI** today without **replacing** its responsibilities; **Central does not subsume** SPARQL, CRUD, and the current React contract by itself.
 - **“Just Brick”** is a **schema and product simplification**, not a smaller amount of **software**—it is often **more discipline** in one graph instead of two.

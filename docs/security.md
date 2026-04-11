@@ -4,7 +4,7 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 ## Current default (VOLTTRON-first)
 
-The **default** path in this monorepo is **`./afdd_stack/scripts/bootstrap.sh`**: **volttron-docker** / **VOLTTRON Central** prep and optional **`--compose-db`** (Postgres/Timescale + Open-F-DD init SQL). **Docker Compose** here does **not** start Caddy, the FastAPI container, the React container, or **any** field-bus gateway — **BACnet/Modbus live only in site VOLTTRON**. See **`afdd_stack/legacy/README.md`** and **[Getting started](getting_started.md)**.
+The **default** path in this monorepo is **`./afdd_stack/scripts/bootstrap.sh`**: **volttron-docker** / **VOLTTRON Central** prep and optional **`--compose-db`** (Postgres/Timescale + Open-FDD init SQL). **Docker Compose** here does **not** start Caddy, the FastAPI container, the React container, or **any** field-bus gateway — **BACnet/Modbus live only in site VOLTTRON**. See **`afdd_stack/legacy/README.md`** and **[Getting started](getting_started.md)**.
 
 The sections below apply when you run **FastAPI + React + Caddy yourself** (local development or a custom deployment). For **VOLTTRON Central** perimeter security, use **upstream VOLTTRON** documentation.
 
@@ -224,7 +224,7 @@ The **default committed** `stack/caddy/Caddyfile` does **not** include **basic a
 | **Frontend**       | 5173  | No (HTTP)              | React app; use Caddy to serve and protect. Sends Bearer token to API. |
 | **Grafana**        | 3000  | No (HTTP)              | Optional (--with-grafana); use Caddy at /grafana or Grafana's own auth. |
 | **TimescaleDB**   | 5432  | No (plain PostgreSQL)  | Compose maps **`127.0.0.1:5432`** to the container so the host can use `psql` locally; remote clients do not get a LAN-wide DB port. Remove `ports` under `db` for internal-only DB. |
-| **Legacy lab gateway** | 8080  | No (HTTP)             | **Only if you run** a separate diy-bacnet-style JSON-RPC gateway yourself; **not** part of default Open-F-DD. |
+| **Legacy lab gateway** | 8080  | No (HTTP)             | **Only if you run** a separate diy-bacnet-style JSON-RPC gateway yourself; **not** part of default Open-FDD. |
 
 - **Recommendation:** When hardened, expose only Caddy (compose defaults to **port 80**; use **443** or another port with TLS when ready) to the building/remote network. Do not expose 5432, 8000, 5173, 3000, or ad hoc gateway ports to the internet. Plan for Caddy **basic auth** and **TLS** as security hardening matures; keep the database and **site VOLTTRON** hosts behind the firewall. The React frontend runs in its own container and is served by Caddy (or another reverse proxy), not as static files from the FastAPI process.
 
@@ -261,7 +261,7 @@ Open-FDD does **not** rate-limit incoming HTTP requests to the API. There is no 
 
 ### 2. Outbound: OT/building network (VOLTTRON)
 
-**Open-F-DD services in this repo do not originate BACnet/Modbus traffic.** Pacing and politeness on the **OT LAN** are configured in **each site’s VOLTTRON** deployment (driver scan rates, historian publish rules, etc.—see upstream VOLTTRON documentation). Open-F-DD reads **SQL** and optional HTTP to its own API.
+**Open-FDD services in this repo do not originate BACnet/Modbus traffic.** Pacing and politeness on the **OT LAN** are configured in **each site’s VOLTTRON** deployment (driver scan rates, historian publish rules, etc.—see upstream VOLTTRON documentation). Open-FDD reads **SQL** and optional HTTP to its own API.
 
 | Component | Config | Effect |
 |-----------|--------|--------|
@@ -364,5 +364,5 @@ During development, use **Trivy** to scan container images and the repo for vuln
 - **Passwords:** Change default by running `caddy hash-password` and updating the Caddyfile; use strong passwords for Grafana and Postgres.
 - **Unencrypted by default:** API, Grafana, TimescaleDB, and any **optional** lab HTTP gateway you add are plain HTTP/TCP; protect them with network isolation and Caddy (and optional TLS).
 - **Hardening:** Strong passwords, expose only Caddy, keep DB and internal services off the public internet, keep software updated.
-- **Throttling:** (1) No API rate limiting by default. (2) OT pacing is owned by **VOLTTRON** at the site; Open-F-DD reads SQL and runs FDD/weather on configured intervals. (3) To throttle incoming API traffic, use the reverse proxy (e.g. Caddy with a rate-limiting module) or middleware.
+- **Throttling:** (1) No API rate limiting by default. (2) OT pacing is owned by **VOLTTRON** at the site; Open-FDD reads SQL and runs FDD/weather on configured intervals. (3) To throttle incoming API traffic, use the reverse proxy (e.g. Caddy with a rate-limiting module) or middleware.
 - **TLS:** Optional; default is non-TLS. Add self-signed or Let’s Encrypt via Caddy when you need HTTPS.

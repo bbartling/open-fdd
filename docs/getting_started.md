@@ -21,6 +21,8 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./afdd_stack/scripts/bootstrap.sh --doctor
    ```
 
+   **Clone directory:** matches the GitHub repo name **`open-fdd`**. If `cd` fails, list your home directory — a common mistake is cloning correctly but typing an **extra** hyphen in the folder name (see the exact spelling in the clone URL above).
+
    **VOLTTRON Central via Docker (when you have Docker):**
 
    ```bash
@@ -50,13 +52,13 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./afdd_stack/scripts/bootstrap.sh --compose-db
    ```
 
-**BACnet, Modbus, and other OT protocols are not implemented in this application** — they run **only inside each building’s VOLTTRON** instance (drivers, proxies, **ZMQ** VIP/pub-sub). Historians write **SQL** that Open-F-DD consumes. FDD execution and operator UI beyond Central are typically **VOLTTRON** or optional **FastAPI/React from source**; this compose file does not start those services.
+**BACnet, Modbus, and other OT protocols are not implemented in this application** — they run **only inside each building’s VOLTTRON** instance (drivers, proxies, **ZMQ** VIP/pub-sub). Historians write **SQL** that Open-FDD consumes. FDD execution and operator UI beyond Central are typically **VOLTTRON** or optional **FastAPI/React from source**; this compose file does not start those services.
 
 ---
 
 ## External Agentic AI (OpenAI-compatible)
 
-Open‑FDD does not embed an LLM. Instead, external AI agents (for example an OpenAI-compatible tool like Open‑Claw) can take advantage of Open‑FDD by calling its APIs:
+Open-FDD does not embed an LLM. Instead, external AI agents (for example an OpenAI-compatible tool like Open‑Claw) can take advantage of Open-FDD by calling its APIs:
 
 1. Export the current data model JSON: `GET /data-model/export`
 2. Fetch documentation as model context: `GET /model-context/docs` (optionally with `query=...` / keyword retrieval)

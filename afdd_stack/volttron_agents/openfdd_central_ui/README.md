@@ -1,4 +1,4 @@
-# Open-F-DD Central UI agent
+# Open-FDD Central UI agent
 
 Small **VOLTTRON** agent that registers static files so the React app can load next to **VOLTTRON Central** on the same platform web port.
 
@@ -21,7 +21,7 @@ Then open `https://<host>:<port>/openfdd/` after the agent is running (same orig
    docker exec -itu volttron volttron1 bash -lc 'pip install -e /path/to/open-fdd/afdd_stack/volttron_agents/openfdd_central_ui'
    ```
 
-   Mount the Open-F-DD repo into the container if you use a host path for `-e`.
+   Mount the Open-FDD repo into the container if you use a host path for `-e`.
 
 3. Install/start the agent with **`vctl`** (exact flags depend on your VOLTTRON 9.x build). Typical pattern:
 
@@ -41,4 +41,4 @@ Then open `https://<host>:<port>/openfdd/` after the agent is running (same orig
 
 ## API base URL
 
-The built SPA still calls the **Open-F-DD FastAPI** host. Set **`VITE_API_TARGET`** at build time if the API is not same-origin, or put a reverse proxy in front of both.
+The built SPA still calls the **Open-FDD FastAPI** host. Set **`VITE_API_TARGET`** at build time if the API is not same-origin, or put a reverse proxy in front of both.

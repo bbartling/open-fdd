@@ -6,7 +6,9 @@ nav_order: 4
 
 # AI-assisted Brick tagging
 
-Open-F-DD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump **existing DB points** (and optional graph-backed fields) as JSON, then have an **LLM or human** add **Brick point classes** (`brick_type`), **Brick equipment classes** (`equipment_type` — best guess the operator confirms), rule inputs, and equipment relationships — and send the result to **PUT /data-model/import**. **Live BACnet/Modbus ingest is not performed by Open-F-DD**; site **VOLTTRON** historians populate `timeseries_readings` when `external_id` lines up. Tagging is how you make the **semantic model** rule-ready.
+**Related (LLM + engineering):** [LLM workflow — copy/paste prompt](llm_workflow), [AI-assisted energy calculations](ai_assisted_energy_calculations), [Data model engineering (Brick + 223P)](../howto/data_model_engineering), and [Open Claw integration](../openclaw_integration) (HTTP agents plus **section 1f**: SSH operator for remote VOLTTRON edge → Central, with links to official VOLTTRON docs).
+
+Open-FDD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump **existing DB points** (and optional graph-backed fields) as JSON, then have an **LLM or human** add **Brick point classes** (`brick_type`), **Brick equipment classes** (`equipment_type` — best guess the operator confirms), rule inputs, and equipment relationships — and send the result to **PUT /data-model/import**. **Live BACnet/Modbus ingest is not performed by Open-FDD**; site **VOLTTRON** historians populate `timeseries_readings` when `external_id` lines up. Tagging is how you make the **semantic model** rule-ready.
 
 This workflow is intended for **mechanical engineers and building operators** who need the data model tagged so that FDD rules in `stack/rules/` have the correct inputs and only the right points are logged long-term.
 
@@ -84,11 +86,11 @@ See [LLM workflow (export + rules + validate → import)](llm_workflow) for the 
 
 ## External agent integration (Open‑Claw or any OpenAI-compatible LLM)
 
-**Where it runs:** Outside Open‑FDD (in your external LLM/Open‑Claw environment). Open‑FDD stays the single source of truth; your agent orchestrates `GET /data-model/export` → LLM tagging → `PUT /data-model/import`.
+**Where it runs:** Outside Open-FDD (in your external LLM/Open‑Claw environment). Open-FDD stays the single source of truth; your agent orchestrates `GET /data-model/export` → LLM tagging → `PUT /data-model/import`.
 
 **How it’s invoked:** Your external agent calls `GET /data-model/export` (optionally with a site filter), tags the export via Open‑Claw (OpenAI-compatible) using the canonical prompt, then imports validated JSON with `PUT /data-model/import`. If validation fails, include the error text and retry (prompt chaining).
 
-**What the agent does:** It uses the same API endpoints as the manual process: `GET /data-model/export` (optionally filtered by site) → LLM tagging using the canonical prompt → validate that the returned JSON matches Open‑FDD’s import schema → `PUT /data-model/import` (or return JSON for the engineer to import).
+**What the agent does:** It uses the same API endpoints as the manual process: `GET /data-model/export` (optionally filtered by site) → LLM tagging using the canonical prompt → validate that the returned JSON matches Open-FDD’s import schema → `PUT /data-model/import` (or return JSON for the engineer to import).
 
 ---
 
@@ -113,8 +115,8 @@ So the agent uses **retry** with **prompt chaining**: keep the same export/rules
 ## Automating tagging (external agents)
 
 1. Call `GET /data-model/export` to get the export JSON (optionally with `?site_id=...`).
-2. Fetch Open‑FDD documentation context for the LLM: `GET /model-context/docs` (use `query=...` to retrieve relevant sections).
-3. Prompt/tag with Open‑Claw (OpenAI-compatible) to produce import JSON that matches the Open‑FDD schema.
+2. Fetch Open-FDD documentation context for the LLM: `GET /model-context/docs` (use `query=...` to retrieve relevant sections).
+3. Prompt/tag with Open‑Claw (OpenAI-compatible) to produce import JSON that matches the Open-FDD schema.
 4. Validate and import:
    - either return JSON for the engineer to review, or
    - call `PUT /data-model/import` with the validated JSON.

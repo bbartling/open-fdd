@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Platform REST API
 
-REST API for the Open-F-DD platform: CRUD, data model, bulk download, analytics, and FDD trigger. Run with **`uvicorn`** when developing — there is **no** default API container in slim Compose.
+REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, and FDD trigger. Run with **`uvicorn`** when developing — there is **no** default API container in slim Compose.
 
 **Base URL:** `http://localhost:8000`  
 **Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
@@ -101,7 +101,7 @@ CRUD for points (sensors, setpoints, commands) that reference timeseries. Deleti
 | fdd_input          | string | no       | Name FDD rules use for this point (defaults to external_id) |
 | unit               | string | no       | Unit of measure |
 | description        | string | no       | Optional |
-| bacnet_device_id   | string | no       | Optional **metadata** (imports / legacy); Open-F-DD does **not** poll BACnet by default. |
+| bacnet_device_id   | string | no       | Optional **metadata** (imports / legacy); Open-FDD does **not** poll BACnet by default. |
 | object_identifier  | string | no       | Optional **metadata**. |
 | object_name        | string | no       | Optional display name. |
 

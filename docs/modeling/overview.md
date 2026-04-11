@@ -6,7 +6,7 @@ nav_order: 1
 
 # Data model flow
 
-Open-F-DD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), **optional** BACnet-shaped or other RDF from **imports / legacy tooling**, platform config, and **engineering / 223-style topology** (`ofdd:*` schedule fields and `s223:*` connection patterns from **Data Model Engineering**). **Telemetry** arrives from **VOLTTRON → SQL**; CRUD and import align **`external_id`** with those readings. **Backend SPARQL** runs over the in-memory graph (rdflib). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL. See [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering) and **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**.
+Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), **optional** BACnet-shaped or other RDF from **imports / legacy tooling**, platform config, and **engineering / 223-style topology** (`ofdd:*` schedule fields and `s223:*` connection patterns from **Data Model Engineering**). **Telemetry** arrives from **VOLTTRON → SQL**; CRUD and import align **`external_id`** with those readings. **Backend SPARQL** runs over the in-memory graph (rdflib). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL. See [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering) and **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**.
 
 ---
 

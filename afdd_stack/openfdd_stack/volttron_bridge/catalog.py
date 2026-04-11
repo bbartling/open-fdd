@@ -1,4 +1,4 @@
-"""Resolve Open-F-DD points for a VOLTTRON driver device name (Brick equipment row)."""
+"""Resolve Open-FDD points for a VOLTTRON driver device name (Brick equipment row)."""
 
 from __future__ import annotations
 

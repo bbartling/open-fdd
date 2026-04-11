@@ -6,7 +6,7 @@ nav_order: 4
 
 # Points
 
-Points are time-series references in the Open-FDD data model. They link **telemetry that already arrived in SQL** (historian / ETL keyed by `external_id`) to equipment and Brick semantics. **Open-F-DD does not poll BACnet or Modbus**; site **VOLTTRON** does.
+Points are time-series references in the Open-FDD data model. They link **telemetry that already arrived in SQL** (historian / ETL keyed by `external_id`) to equipment and Brick semantics. **Open-FDD does not poll BACnet or Modbus**; site **VOLTTRON** does.
 
 ---
 
@@ -25,7 +25,7 @@ Each point has:
 | `unit` | Optional unit of measure |
 | `description` | Optional |
 | **Optional legacy metadata** | |
-| `bacnet_device_id` | Optional. May be filled from **imports** or historical tooling; **not** used by Open-F-DD to poll BACnet. |
+| `bacnet_device_id` | Optional. May be filled from **imports** or historical tooling; **not** used by Open-FDD to poll BACnet. |
 | `object_identifier` | Optional. Same — metadata only in the default architecture. |
 | `object_name` | Optional. Human-readable name (often aligns with `external_id`). |
 | `modbus_config` | Optional. **Legacy / lab** column; **ingest Modbus in VOLTTRON**, then map SQL rows to `external_id`. |
@@ -53,11 +53,11 @@ TimescaleDB hypertable, optimized for range scans and downsampling.
 - **Rule layer:** `fdd_input` / `rule_input` maps to DataFrame column names used by YAML rules.
 
 The data-model API and Brick TTL coordinate `external_id` ↔ `rule_input` ↔ `brick_type`.
-Open-F-DD may emit Brick external references for interoperability; **BACnet/Modbus on the wire remain in VOLTTRON**. See [External representations](external_representations).
+Open-FDD may emit Brick external references for interoperability; **BACnet/Modbus on the wire remain in VOLTTRON**. See [External representations](external_representations).
 
 ### Optional BACnet-style metadata
 
-`bacnet_device_id` / `object_identifier` may still be populated for **imports, migration, or SPARQL examples**. They do **not** cause Open-F-DD to poll BACnet in the default deployment. See **[Edge field buses (VOLTTRON)](../bacnet/)**.
+`bacnet_device_id` / `object_identifier` may still be populated for **imports, migration, or SPARQL examples**. They do **not** cause Open-FDD to poll BACnet in the default deployment. See **[Edge field buses (VOLTTRON)](../bacnet/)**.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Map flattened scrapes to Open-F-DD ``external_id`` columns (FDD engine input shape)."""
+"""Map flattened scrapes to Open-FDD ``external_id`` columns (FDD engine input shape)."""
 
 from __future__ import annotations
 

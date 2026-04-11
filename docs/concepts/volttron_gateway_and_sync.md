@@ -6,9 +6,9 @@ nav_order: 5
 
 # VOLTTRON gateway, FastAPI, and data-model sync
 
-This page is the **buildable** version of the layered stack: **each site’s VOLTTRON owns all field protocols** (BACnet, Modbus, etc., **only inside VOLTTRON**), **ZMQ** VIP / pub-sub on the VOLTTRON bus, and the [SQL historian](https://volttron.readthedocs.io/en/stable/volttron-api/services/SQLHistorian/README.html) (optional **TimescaleDB**). **Open-F-DD does not speak those wires**; it keeps the **semantic layer, CRUD, SPARQL, and the React modeling UI** when you run FastAPI/React, and consumes **SQL** for FDD. It also answers: **can scripts + cron replace “always-on” sync?**
+This page is the **buildable** version of the layered stack: **each site’s VOLTTRON owns all field protocols** (BACnet, Modbus, etc., **only inside VOLTTRON**), **ZMQ** VIP / pub-sub on the VOLTTRON bus, and the [SQL historian](https://volttron.readthedocs.io/en/stable/volttron-api/services/SQLHistorian/README.html) (optional **TimescaleDB**). **Open-FDD does not speak those wires**; it keeps the **semantic layer, CRUD, SPARQL, and the React modeling UI** when you run FastAPI/React, and consumes **SQL** for FDD. It also answers: **can scripts + cron replace “always-on” sync?**
 
-**Docker in this repo:** `afdd_stack/stack/docker-compose.yml` runs **Postgres/TimescaleDB** (and optional Grafana or Mosquitto profiles) only. It does **not** start the Open-F-DD API, Caddy, React, or **any** field-bus gateway; use **site VOLTTRON** and **VOLTTRON Central** (or your own process manager) for ingest and fleet UI.
+**Docker in this repo:** `afdd_stack/stack/docker-compose.yml` runs **Postgres/TimescaleDB** (and optional Grafana or Mosquitto profiles) only. It does **not** start the Open-FDD API, Caddy, React, or **any** field-bus gateway; use **site VOLTTRON** and **VOLTTRON Central** (or your own process manager) for ingest and fleet UI.
 
 For a **long-range target** where **Brick is canonical on VOLTTRON or Central** and the **standalone FastAPI service is intentionally retired**, see **[Target vision — Brick on VOLTTRON, Central, no FastAPI](brick_volttron_central_target)** (that path replaces FastAPI with explicit alternatives—it does not remove the need for an API surface).
 
@@ -21,7 +21,7 @@ For a **long-range target** where **Brick is canonical on VOLTTRON or Central** 
   ----------------------------              ---------------------------------
 
   VOLTTRON 9 + ZMQ VIP / pub-sub  ------>  Postgres / Timescale
-  Field drivers (BACnet, Modbus, …        (historian tables + Open-F-DD schema)
+  Field drivers (BACnet, Modbus, …        (historian tables + Open-FDD schema)
    only inside VOLTTRON)
 
   Historian / ETL agents          ------>  optional FastAPI + React
@@ -70,20 +70,20 @@ If **only** the FastAPI process updates the DB through CRUD, the in-memory graph
 
 If a **separate writer** (VOLTTRON agent, dbt, script) updates **Postgres** tables that back Brick (sites, equipment, points metadata), the **in-memory RDF graph** in the API process can be **stale** until you:
 
-- **`POST /data-model/reset`** — repopulates **Brick from DB only**, rewrites TTL, and clears **non-Brick** triples that the API had loaded (see the route docstring in `openfdd_stack/platform/api/data_model.py`). **BACnet RDF is not** produced by Open-F-DD in the default architecture.
+- **`POST /data-model/reset`** — repopulates **Brick from DB only**, rewrites TTL, and clears **non-Brick** triples that the API had loaded (see the route docstring in `openfdd_stack/platform/api/data_model.py`). **BACnet RDF is not** produced by Open-FDD in the default architecture.
 - Or route topology changes through the **existing REST import or CRUD** so the graph updates inside the API.
 
 **Cron alone cannot fix stale in-memory state** if nothing calls the API or restarts the process; you need at least **one** of: HTTP call to reset or serialize, **shared process** that owns the graph, or a **long-term refactor** (e.g. sidecar triple store).
 
 ### 3) Time-series values (live readings)
 
-Historian topics (`devices/...`) are **not** the same as Brick TTL. Sync **readings** into Open-F-DD’s `timeseries_readings` (or future merged schema) with a **small ETL agent** on a schedule or on pub/sub. That is **orthogonal** to TTL serialize cron.
+Historian topics (`devices/...`) are **not** the same as Brick TTL. Sync **readings** into Open-FDD’s `timeseries_readings` (or future merged schema) with a **small ETL agent** on a schedule or on pub/sub. That is **orthogonal** to TTL serialize cron.
 
 ---
 
 ## VOLTTRON Central
 
-Use **[VOLTTRON Central](https://volttron.readthedocs.io/)** when you need **multi-instance** operations and health views. Do **not** treat it as the primary **energy engineering** or **SPARQL** UI; keep those on **Open-F-DD’s React + FastAPI**.
+Use **[VOLTTRON Central](https://volttron.readthedocs.io/)** when you need **multi-instance** operations and health views. Do **not** treat it as the primary **energy engineering** or **SPARQL** UI; keep those on **Open-FDD’s React + FastAPI**.
 
 ---
 

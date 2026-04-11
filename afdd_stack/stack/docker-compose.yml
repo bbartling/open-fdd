@@ -1,10 +1,10 @@
-# Open-F-DD — optional Postgres/Timescale for Open-F-DD fault schema + historian-friendly SQL.
+# Open-FDD — optional Postgres/Timescale for Open-FDD fault schema + historian-friendly SQL.
 # Field BACnet and UI live on VOLTTRON / VOLTTRON Central — not in this compose file.
 #
 # Run from monorepo root:
 #   docker compose -f afdd_stack/stack/docker-compose.yml up -d
 #
-# Apply Open-F-DD DDL: ./afdd_stack/sql/*.sql are mounted into docker-entrypoint-initdb.d on first DB init only.
+# Apply Open-FDD DDL: ./afdd_stack/sql/*.sql are mounted into docker-entrypoint-initdb.d on first DB init only.
 # For existing volumes, run migrations manually: docker compose exec -T db psql -U postgres -d openfdd -f - < afdd_stack/stack/sql/002_....sql
 #
 # Point a VOLTTRON SQL historian at this instance (localhost:5432) using the same DB or a dedicated schema

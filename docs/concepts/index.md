@@ -10,7 +10,7 @@ Conceptual guides and worked examples for how Open-FDD fits into larger workflow
 
 | Page | Description |
 |------|-------------|
-| [Site VOLTTRON and the data plane (ZMQ)](site_volttron_data_plane) | **Start here:** each building runs VOLTTRON (ZMQ VIP / pub-sub); Open-F-DD does **not** host BACnet/Modbus; data arrives via historian SQL and identity mapping. |
+| [Site VOLTTRON and the data plane (ZMQ)](site_volttron_data_plane) | **Start here:** each building runs VOLTTRON (ZMQ VIP / pub-sub); Open-FDD does **not** host BACnet/Modbus; data arrives via historian SQL and identity mapping. |
 | [RDF, Brick, and optional BACnet-shaped metadata](../bacnet-rdf-and-brick) | How the TTL graph relates to SQL; BACnet-shaped triples are optional/legacy, not default ingest. |
 | [Cloud export example](cloud_export) | How a cloud vendor or MSI can pull fault and timeseries data from the Open-FDD API and send it to their cloud for deeper insights. Uses the `examples/cloud_export` script as a starting point. |
 | [Context and recordkeeping](context_and_recordkeeping) | Durable context policy: what belongs in versioned docs vs private local memory. |

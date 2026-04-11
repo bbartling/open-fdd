@@ -1,4 +1,4 @@
-"""Unit tests for VOLTTRON ↔ Open-F-DD bridge (retrofit foundation)."""
+"""Unit tests for VOLTTRON ↔ Open-FDD bridge (retrofit foundation)."""
 
 from unittest.mock import MagicMock, patch
 from uuid import UUID

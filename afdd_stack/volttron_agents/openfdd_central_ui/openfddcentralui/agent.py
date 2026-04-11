@@ -1,5 +1,5 @@
 """
-Serve the Open-F-DD React production build from the VOLTTRON platform web service.
+Serve the Open-FDD React production build from the VOLTTRON platform web service.
 
 Requires a web-enabled platform (``bind-web-address`` in ``$VOLTTRON_HOME/config``) and
 ``VolttronCentral`` / ``VolttronCentralPlatform`` installed per upstream ``vcfg`` docs.

@@ -13,7 +13,7 @@ One-page cheat sheet for Open-FDD. Details live in [Verification](verification),
 
 ## What it is
 
-Open-F-DD is an open-source **analytics stack for smart buildings**: **site VOLTTRON** (ZMQ message bus) ingests BACnet/Modbus on the OT LAN and writes **SQL**; this repo provides **Postgres/Timescale**, optional **FastAPI + React** for Brick/SPARQL, and **FDD** rules. The app tier can run **on-prem or in the cloud** as long as it can reach the database securely.
+Open-FDD is an open-source **analytics stack for smart buildings**: **site VOLTTRON** (ZMQ message bus) ingests BACnet/Modbus on the OT LAN and writes **SQL**; this repo provides **Postgres/Timescale**, optional **FastAPI + React** for Brick/SPARQL, and **FDD** rules. The app tier can run **on-prem or in the cloud** as long as it can reach the database securely.
 
 ---
 

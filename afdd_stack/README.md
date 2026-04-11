@@ -62,7 +62,7 @@ Then follow **`$HOME/volttron-docker/README.md`**: build the image, **`docker co
 4. **`./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config`** — writes **`volttron_agents/openfdd_central_ui/agent-config.json`** pointing `web_root` at `frontend/dist`.
 5. Install the agent from **`afdd_stack/volttron_agents/openfdd_central_ui/`** (see that folder’s **README.md**) inside the running VOLTTRON container (or mount the repo and `pip install -e` there) so the platform web server serves **`/openfdd/`** alongside **`/vc/`** for Central.
 
-### Optional: Timescale only (Open-F-DD SQL schema)
+### Optional: Timescale only (Open-FDD SQL schema)
 
 Compose no longer runs API, Caddy, BACnet, or React. For a local DB matching **`stack/sql`** migrations:
 

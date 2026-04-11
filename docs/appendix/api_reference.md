@@ -6,7 +6,7 @@ nav_order: 0
 
 # API Reference
 
-The Open-F-DD **FastAPI** app exposes a **REST API** (default port **8000**) for CRUD, config, data model, bulk download, analytics, **legacy** BACnet proxy routes (if you enable a lab gateway), faults, and jobs. It is **not** started by the default **`bootstrap.sh`** or slim **Compose** — run it with **`uvicorn`** from a dev install when you need REST/SPARQL/modeling. **Use the React frontend** (e.g. http://localhost:5173 with `npm run dev` under `afdd_stack/frontend/`) for workflows such as sites, points, config, faults, and plots. Use the API for scripts, Open‑Claw, and cloud export.
+The Open-FDD **FastAPI** app exposes a **REST API** (default port **8000**) for CRUD, config, data model, bulk download, analytics, **legacy** BACnet proxy routes (if you enable a lab gateway), faults, and jobs. It is **not** started by the default **`bootstrap.sh`** or slim **Compose** — run it with **`uvicorn`** from a dev install when you need REST/SPARQL/modeling. **Use the React frontend** (e.g. http://localhost:5173 with `npm run dev` under `afdd_stack/frontend/`) for workflows such as sites, points, config, faults, and plots. Use the API for scripts, Open‑Claw, and cloud export.
 
 **Interactive docs:** When the API is running, open **Swagger UI** at [http://localhost:8000/docs](http://localhost:8000/docs) or **ReDoc** at [http://localhost:8000/redoc](http://localhost:8000/redoc). Full **OpenAPI 3.1** spec: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json). When `OFDD_API_KEY` is set (e.g. in `afdd_stack/stack/.env`), click **Authorize** in Swagger and paste the key so **Try it out** works.
 
@@ -34,11 +34,11 @@ The Open-F-DD **FastAPI** app exposes a **REST API** (default port **8000**) for
 
 ## Model context docs endpoint
 
-Open‑FDD can serve its documentation as plain text model context via:
+Open-FDD can serve its documentation as plain text model context via:
 
 - `GET /model-context/docs`
 
-This endpoint is designed for external LLM agents (OpenAI-compatible providers like Open‑Claw). Open‑FDD does not embed or run an LLM; it only provides documentation context.
+This endpoint is designed for external LLM agents (OpenAI-compatible providers like Open‑Claw). Open-FDD does not embed or run an LLM; it only provides documentation context.
 
 By default, `mode=excerpt` returns a truncated excerpt of `pdf/open-fdd-docs.txt` (or `OFDD_DOCS_PATH` if set). For more control:
 

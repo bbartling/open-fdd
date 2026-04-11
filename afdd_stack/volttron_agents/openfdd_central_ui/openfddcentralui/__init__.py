@@ -1,1 +1,1 @@
-"""Open-F-DD UI agent package."""
+"""Open-FDD UI agent package."""

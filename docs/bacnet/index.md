@@ -6,9 +6,9 @@ has_children: false
 
 # Edge field buses (VOLTTRON)
 
-**Open-F-DD does not implement BACnet, Modbus, or other field buses.** Those protocols run **only inside each building’s VOLTTRON** deployment (platform driver, BACnet proxy, Modbus devices, etc., per **your** VOLTTRON configuration). Telemetry reaches Open-F-DD through **SQL** (historian, ETL) and **topic identity** aligned with `points` / `external_id`—not through this repository hosting OT traffic.
+**Open-FDD does not implement BACnet, Modbus, or other field buses.** Those protocols run **only inside each building’s VOLTTRON** deployment (platform driver, BACnet proxy, Modbus devices, etc., per **your** VOLTTRON configuration). Telemetry reaches Open-FDD through **SQL** (historian, ETL) and **topic identity** aligned with `points` / `external_id`—not through this repository hosting OT traffic.
 
-**Message bus:** VOLTTRON’s default inter-platform path is **ZeroMQ (ZMQ)** VIP and pub/sub as described in upstream docs. **RabbitMQ is not** part of Open-F-DD’s reference architecture; if you add AMQP for a custom integration, treat it as **out of scope** for these docs.
+**Message bus:** VOLTTRON’s default inter-platform path is **ZeroMQ (ZMQ)** VIP and pub/sub as described in upstream docs. **RabbitMQ is not** part of Open-FDD’s reference architecture; if you add AMQP for a custom integration, treat it as **out of scope** for these docs.
 
 **Where to read next**
 

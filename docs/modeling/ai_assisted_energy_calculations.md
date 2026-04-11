@@ -6,7 +6,7 @@ nav_order: 8
 
 # AI-assisted energy engineering (export → LLM → import)
 
-After the **Brick / BACnet data model** is in place ([AI-assisted data modeling](ai_assisted_tagging), [LLM workflow](llm_workflow)), you can use the same **export → external LLM → import** pattern for **site-scoped energy / savings calculation specs**. Each building keeps its own rows in Postgres; the API also serializes them into `config/data_model.ttl` as `ofdd:EnergyCalculation` with `brick:isPartOf` the site.
+After the **Brick / BACnet data model** is in place ([AI-assisted data modeling](ai_assisted_tagging), [LLM workflow](llm_workflow)), you can use the same **export → external LLM → import** pattern for **site-scoped energy / savings calculation specs**. For Open Claw, auth, and **SSH operator** flows (including remote VOLTTRON edge → Central), see **[Open Claw integration](../openclaw_integration)**. Each building keeps its own rows in Postgres; the API also serializes them into `config/data_model.ttl` as `ofdd:EnergyCalculation` with `brick:isPartOf` the site.
 
 **Predefined calculators** (labels, parameter keys, units) are versioned in the platform (`openfdd_stack.platform.energy_calc_library`). The UI on **Energy Engineering** mirrors them; the LLM must **only** use `calc_type` values and **parameter keys** that appear in the export bundle.
 

@@ -208,7 +208,7 @@ export function DataModelPage() {
             </li>
             <li>
               <strong>Field alignment</strong> — Use <strong>VOLTTRON Central</strong> and the platform driver / historian for
-              live data. In Open-F-DD, set <code className="rounded bg-muted px-1 text-xs">external_id</code> (and optional Brick
+              live data. In Open-FDD, set <code className="rounded bg-muted px-1 text-xs">external_id</code> (and optional Brick
               metadata) on points so rules and SQL line up with historian topics.
             </li>
             <li>
