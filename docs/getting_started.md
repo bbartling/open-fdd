@@ -11,7 +11,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
 
 ## Do this to bootstrap
 
-1. **Prerequisites:** **Git** and **Python 3** on the edge host (Linux). **Docker** is optional — only if you want the local **Timescale** container for Open-FDD SQL schema (`--compose-db`).
+1. **Prerequisites:** **Git** and **Docker** (including Compose v2). **Python 3** on the host for monorepo dev, **`--smoke-fdd-loop`**, and tooling — the bootstrap script no longer installs VOLTTRON in a host venv; use **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** for the platform.
 2. **Clone and run bootstrap** (from repo root):
 
    ```bash
@@ -19,7 +19,29 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    cd open-fdd
    ./afdd_stack/scripts/bootstrap.sh --help
    ./afdd_stack/scripts/bootstrap.sh --doctor
-   ./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
+   ```
+
+   **VOLTTRON Central via Docker (when you have Docker):**
+
+   ```bash
+   ./afdd_stack/scripts/bootstrap.sh --volttron-docker
+   cd "${OFDD_VOLTTRON_DOCKER_DIR:-$HOME/volttron-docker}"
+   # Build the image and run docker compose per that repository's README.
+   ```
+
+   **One-shot lab (Timescale + stubs + clone volttron-docker):**
+
+   ```bash
+   ./afdd_stack/scripts/bootstrap.sh --central-lab
+   ```
+
+   **Run the test suite (like the legacy stack’s `--test`):**
+
+   ```bash
+   ./afdd_stack/scripts/bootstrap.sh --test
+   # If pytest is missing: OFDD_BOOTSTRAP_INSTALL_DEV=1 ./afdd_stack/scripts/bootstrap.sh --test
+   # Optional: eslint + tsc + vitest in afdd_stack/frontend
+   # OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./afdd_stack/scripts/bootstrap.sh --test
    ```
 
 3. **Optional local database** (faults / sites / points schema + historian-friendly Postgres):
@@ -54,9 +76,9 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
   ```bash
   sudo apt update && sudo apt upgrade -y
   ```
-- **Docker and Docker Compose:** **Optional** — only for **`--compose-db`** (Timescale + init SQL). See [Docker install](https://docs.docker.com/engine/install/).
-- **Python:** Use a venv for monorepo dev tests: `pip install -e ".[dev]"` (see root README).
-- **Troubleshooting:** `./afdd_stack/scripts/bootstrap.sh --doctor` checks **git** and **python3**.
+- **Docker and Docker Compose:** **Optional** for **`--compose-db`** (Timescale + init SQL) and **recommended** for **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** (VOLTTRON Central in a container). See [Docker install](https://docs.docker.com/engine/install/).
+- **Python:** Use a venv for monorepo dev tests: `pip install -e ".[dev]"` (see root README). For **`--smoke-fdd-loop`**, install **`pip install -e ".[stack]"`** in that venv or set **`PYTHONPATH`** from **`--print-paths`**.
+- **Troubleshooting:** `./afdd_stack/scripts/bootstrap.sh --doctor` checks **git**, **python3**, **Docker**, and **Compose**.
 - **Git:** To clone the project:
   ```bash
   git clone https://github.com/bbartling/open-fdd.git
@@ -70,10 +92,12 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
 
 `afdd_stack/scripts/bootstrap.sh` (run from the **repo root**):
 
-1. **`--clone-volttron`** — clone or update [Eclipse VOLTTRON](https://github.com/eclipse-volttron/volttron) (`OFDD_VOLTTRON_DIR`, branch `releases/9.x` by default).
-2. **`--install-venv`** — `python3 -m venv` under the VOLTTRON tree and `pip install -e` VOLTTRON.
+1. **`--central-lab`** — runs **`--compose-db`**, waits for Postgres, writes **`$VOLTTRON_HOME`** stubs (**`--volttron-config-stub`**, **`--write-env-defaults`**, **`--write-logrotate`**), verifies the FDD schema, then **`--volttron-docker`** (clone/update **volttron-docker**). Afterward, build the image and **`docker compose up`** from **`$HOME/volttron-docker`** (see that repo’s README).
+2. **`--volttron-docker`** (alias **`--clone-volttron-docker`**) — clone or update **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** into **`OFDD_VOLTTRON_DOCKER_DIR`** (default **`$HOME/volttron-docker`**).
 3. **`--compose-db`** — optional `docker compose … up -d db` for Timescale + `stack/sql` init.
-4. **`--print-paths`** — prints `PYTHONPATH` so agents can `import openfdd_stack`.
+4. **`--print-paths`** — prints `PYTHONPATH` so host tools can `import openfdd_stack`.
+5. **`--doctor`** — checks **git**, **python3**, **docker**, **docker compose**, and the volttron-docker checkout path.
+6. **`--test`** — runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests` from the repo root. Set **`OFDD_BOOTSTRAP_INSTALL_DEV=1`** for a one-shot **`pip install -e ".[dev]"`** before pytest. Set **`OFDD_BOOTSTRAP_FRONTEND_TEST=1`** to also run **`npm ci`**, **`npm run lint`**, **`npm run build`**, and **`npm run test`** under **`afdd_stack/frontend`**. Optional **`OFDD_PYTEST_ARGS`** adds extra pytest flags (shell word-splitting applies).
 
 **Bootstrap options:** Run `./afdd_stack/scripts/bootstrap.sh --help`. The old “one command brings up API + Caddy + BACnet in Docker” flow is **removed**; see **`afdd_stack/legacy/README.md`** for what changed.
 
@@ -99,5 +123,6 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
 - **[Security](security)** — API keys and JWT when running the FastAPI app from source.
 - **[Appendix: API Reference](appendix/api_reference)** — REST endpoints for agents and tooling.
 - **[VOLTTRON gateway and sync](concepts/volttron_gateway_and_sync)** — how field data and SQL fit together.
+- **[VOLTTRON Central and AFDD parity (monorepo)](howto/volttron_central_and_parity)** — phased plan (one DB, mapping, FDD runner, Brick UI, multi-site) aligned with Central + **volttron-docker**.
 
 For data modeling and fault rules: [Data modeling](modeling/overview), [Fault rules for HVAC](rules/overview). **Data model export/import (JSON)** works without any AI—you can always export, tag manually or with an external LLM, and import.

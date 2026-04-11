@@ -15,6 +15,7 @@ Minimal **`pip install open-fdd`** workflows (no Docker) live on the **[engine d
 - [The optional openfdd-engine package](openfdd_engine) — `openfdd_engine` vs `open_fdd.engine` vs Docker `fdd-loop`; when to use which install.
 - [Engine-only deployment and external IoT pipelines](engine_only_iot) — `--mode engine` vs pandas `RuleRunner`; same YAML on DataFrames.
 - [Data model engineering (Brick + 223P MVP)](data_model_engineering) — Engineering UI, JSON round-trip, `s223`/`ofdd` RDF, SPARQL examples, and how that ties to FDD + DB for impact-style analytics.
+- [VOLTTRON Central and AFDD parity (monorepo)](volttron_central_and_parity) — One DB + historian, Central + volttron-docker bootstrap, FDD loop options, multi-site; contrast with the archived all-in-one stack.
 - [Cloning and porting](cloning_and_porting) — Same tools, any building; checklist for OpenClaw clones on a bench.
 - [OpenClaw subscription setup (Codex OAuth)](openclaw_subscription_setup) — ChatGPT subscription path vs API key; stale `openai/...` cleanup.
 - [Monitor the fake fault schedule](fake_fault_schedule_monitoring) — Interpret 180°F spikes on the fake BACnet bench.

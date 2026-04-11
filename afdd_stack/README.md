@@ -49,10 +49,10 @@ pip install open-fdd
 ```bash
 ./afdd_stack/scripts/bootstrap.sh --help
 ./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
+./afdd_stack/scripts/bootstrap.sh --central-lab
 ```
 
-Then set `VOLTTRON_HOME`, activate `$OFDD_VOLTTRON_DIR/env`, and follow [VOLTTRON 9 docs](https://volttron.readthedocs.io/). Use **`openfdd_stack.volttron_bridge`** (add `PYTHONPATH` with monorepo + `afdd_stack` — run **`--print-paths`**) to map device topics → `external_id` for rules.
+Then follow **`$HOME/volttron-docker/README.md`**: build the image, **`docker compose up`**, and mount your **`VOLTTRON_HOME`** (bootstrap can write stubs under **`~/.volttron`** first). Use **`openfdd_stack.volttron_bridge`** on the host or inside the container (run **`--print-paths`** on the host for `PYTHONPATH`) to map device topics → `external_id` for rules.
 
 ### React UI next to VOLTTRON Central (`/openfdd/`)
 
@@ -60,7 +60,7 @@ Then set `VOLTTRON_HOME`, activate `$OFDD_VOLTTRON_DIR/env`, and follow [VOLTTRO
 2. **`./afdd_stack/scripts/bootstrap.sh --volttron-config-stub`** — optional one-time stub for `$VOLTTRON_HOME/config` when the file does not exist yet (lab defaults; override with **`OFDD_VOLTTRON_BIND_WEB`** / **`OFDD_VOLTTRON_INSTANCE_NAME`**).
 3. **`./afdd_stack/scripts/bootstrap.sh --build-openfdd-ui`** — `npm ci` + production build with **`VITE_BASE_PATH=/openfdd/`** by default.
 4. **`./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config`** — writes **`volttron_agents/openfdd_central_ui/agent-config.json`** pointing `web_root` at `frontend/dist`.
-5. Install the agent from **`afdd_stack/volttron_agents/openfdd_central_ui/`** (see that folder’s **README.md**) inside the VOLTTRON venv so the platform web server serves **`/openfdd/`** alongside **`/vc/`** for Central.
+5. Install the agent from **`afdd_stack/volttron_agents/openfdd_central_ui/`** (see that folder’s **README.md**) inside the running VOLTTRON container (or mount the repo and `pip install -e` there) so the platform web server serves **`/openfdd/`** alongside **`/vc/`** for Central.
 
 ### Optional: Timescale only (Open-F-DD SQL schema)
 
@@ -85,14 +85,16 @@ After **`docker compose … up`**, configure **`afdd_stack/stack/.env`** (API ke
 
 ### Run tests (CI / local)
 
-From the **monorepo root** (not `bootstrap.sh --test` anymore):
+From the **monorepo root**, **`./afdd_stack/scripts/bootstrap.sh --test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests` (same paths as **`pyproject.toml`**). If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or once: **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./afdd_stack/scripts/bootstrap.sh --test`**. Optional frontend: **`OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./afdd_stack/scripts/bootstrap.sh --test`** (requires Node/npm).
+
+Equivalent manual recipe:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]"
 python3 -m pytest -q
 ```
 
-Frontend (optional): `cd afdd_stack/frontend && npm ci && npm run lint && npx tsc -b --noEmit && npm run test`
+Parity-oriented Central + DB + FDD phases: [VOLTTRON Central and AFDD parity](https://bbartling.github.io/open-fdd/howto/volttron_central_and_parity) (published site) or **`docs/howto/volttron_central_and_parity.md`** in this repo.
 
 ---
 

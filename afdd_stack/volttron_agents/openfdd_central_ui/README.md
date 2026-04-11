@@ -15,12 +15,13 @@ Then open `https://<host>:<port>/openfdd/` after the agent is running (same orig
 ## Configure
 
 1. Copy `agent-config.example.json` to `agent-config.json` and set `web_root` to the absolute path of `afdd_stack/frontend/dist`, **or** run `./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config`.
-2. Activate the **VOLTTRON** venv and install this package in editable mode:
+2. With **volttron-docker**, install this package **inside** the platform container (adjust container name / user per your compose file), for example:
 
    ```bash
-   source "$OFDD_VOLTTRON_DIR/env/bin/activate"
-   pip install -e "$PATH_TO_OPEN_FDD/afdd_stack/volttron_agents/openfdd_central_ui"
+   docker exec -itu volttron volttron1 bash -lc 'pip install -e /path/to/open-fdd/afdd_stack/volttron_agents/openfdd_central_ui'
    ```
+
+   Mount the Open-F-DD repo into the container if you use a host path for `-e`.
 
 3. Install/start the agent with **`vctl`** (exact flags depend on your VOLTTRON 9.x build). Typical pattern:
 

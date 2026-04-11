@@ -12,7 +12,7 @@ The historical **`./scripts/bootstrap.sh --mode {collector|model|engine|full}`**
 
 ```bash
 ./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
+./afdd_stack/scripts/bootstrap.sh --central-lab
 ./afdd_stack/scripts/bootstrap.sh --compose-db    # optional local Postgres/Timescale
 ./afdd_stack/scripts/bootstrap.sh --print-paths   # PYTHONPATH for openfdd_stack agents
 ```

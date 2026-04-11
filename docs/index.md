@@ -38,9 +38,11 @@ git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
 ./afdd_stack/scripts/bootstrap.sh --help
 ./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --clone-volttron --install-venv
+./afdd_stack/scripts/bootstrap.sh --central-lab
 # Optional local SQL (Open-F-DD schema + historian-friendly Postgres):
 ./afdd_stack/scripts/bootstrap.sh --compose-db
+# Pytest (+ optional frontend when OFDD_BOOTSTRAP_FRONTEND_TEST=1):
+./afdd_stack/scripts/bootstrap.sh --test
 ```
 
 **Typical URLs (when you run components yourself):**
@@ -73,7 +75,7 @@ cd open-fdd
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook, [test bench rule catalog](rules/test_bench_rule_catalog) |
 | [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
 | [Operations](operations/index) | [Integrity sweep](operations/openfdd_integrity_sweep), [Overnight review](operations/overnight_review), [Testing plan](operations/testing_plan) |
-| [How-to Guides](howto/index) | [openfdd-engine vs `open_fdd.engine`](howto/openfdd_engine), [Engine-only / IoT](howto/engine_only_iot), [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
+| [How-to Guides](howto/index) | [VOLTTRON Central + parity](howto/volttron_central_and_parity), [openfdd-engine vs `open_fdd.engine`](howto/openfdd_engine), [Engine-only / IoT](howto/engine_only_iot), [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
 | [Security & Caddy](security) | API auth, optional Caddy/TLS patterns (custom deployments) |
 | [Configuration](configuration) | Platform config, rule YAML |
 | [Appendix](appendix) | [API Reference](appendix/api_reference) — REST at a glance; [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) |

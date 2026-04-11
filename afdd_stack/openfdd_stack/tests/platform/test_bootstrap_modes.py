@@ -10,17 +10,29 @@ _BOOTSTRAP = _REPO_ROOT / "afdd_stack" / "scripts" / "bootstrap.sh"
 def test_bootstrap_is_self_contained_volttron_entry():
     text = _BOOTSTRAP.read_text(encoding="utf-8")
     assert "VOLTTRON" in text
-    assert "OFDD_VOLTTRON_DIR" in text
+    assert "OFDD_VOLTTRON_DOCKER_DIR" in text
+    assert "OFDD_VOLTTRON_DIR" not in text
     assert "bootstrap_volttron.sh" not in text
 
 
 def test_bootstrap_has_compose_db_optional():
     text = _BOOTSTRAP.read_text(encoding="utf-8")
+    assert "--test" in text
+    assert "OFDD_BOOTSTRAP_INSTALL_DEV" in text
+    assert "run_bootstrap_test" in text
+    assert "--volttron-docker" in text
+    assert "--clone-volttron-docker" in text
+    assert "OFDD_VOLTTRON_DOCKER_DIR" in text
     assert "--compose-db" in text
     assert "--build-openfdd-ui" in text
     assert "--write-openfdd-ui-agent-config" in text
     assert "--volttron-config-stub" in text
     assert "--print-vcfg-hints" in text
+    assert "--central-lab" in text
+    assert "--verify-fdd-schema" in text
+    assert "--write-env-defaults" in text
+    assert "America/Chicago" in text or "OFDD_DEFAULT_TZ" in text
+    assert "volttron-docker" in text
 
 
 def test_bootstrap_doctor_runs_read_only_checks():
@@ -34,7 +46,7 @@ def test_bootstrap_doctor_runs_read_only_checks():
     )
     out = (res.stdout or "") + (res.stderr or "")
     assert res.returncode in (0, 1)
-    assert "VOLTTRON bootstrap doctor" in out
+    assert "bootstrap doctor" in out
 
 
 def test_bootstrap_help_lists_options():
@@ -47,9 +59,14 @@ def test_bootstrap_help_lists_options():
         timeout=30,
     )
     assert res.returncode == 0
-    assert "--clone-volttron" in res.stdout
-    assert "--install-venv" in res.stdout
-    assert "--doctor" in res.stdout
+    out = res.stdout
+    assert "--volttron-docker" in out
+    assert "--clone-volttron-docker" in out
+    assert "--install-venv" not in out
+    assert "--doctor" in out
+    assert "--central-lab" in out
+    assert "--verify-fdd-schema" in out
+    assert "--test" in out
 
 
 def test_bootstrap_rejects_unknown_option():

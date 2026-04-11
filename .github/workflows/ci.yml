@@ -34,8 +34,8 @@ jobs:
       - name: Build combined docs text (LLM context)
         run: python scripts/build_docs_pdf.py --no-pdf
 
-      - name: Pytest (engine + AFDD stack)
-        run: python -m pytest -v --tb=short
+      - name: Bootstrap --test (pytest via script; same paths as pyproject)
+        run: ./afdd_stack/scripts/bootstrap.sh --test
         env:
           OFDD_API_KEY: ""
           OFDD_CADDY_INTERNAL_SECRET: ""
