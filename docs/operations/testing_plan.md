@@ -91,7 +91,7 @@ The target standard is:
 - Open-FDD fault outputs show that exact fault
 - the overnight process writes a durable report
 
-See [BACnet-to-fault verification](../bacnet/fault_verification) and the report template at `openclaw/reports/overnight-bacnet-verification-template.md` in the repo (not on GitHub Pages).
+See [Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane) and the report template at `openclaw/reports/overnight-bacnet-verification-template.md` in the repo (not on GitHub Pages) if you still run a bench that mentions BACnet in the filename.
 
 ### 4. Preserve reusable context for future clones
 

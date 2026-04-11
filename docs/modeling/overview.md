@@ -6,7 +6,7 @@ nav_order: 1
 
 # Data model flow
 
-Open-FDD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), BACnet discovery RDF (from bacpypes3 in diy-bacnet-server), platform config, and **engineering / 223-style topology** (`ofdd:*` schedule fields and `s223:*` connection patterns from **Data Model Engineering**). CRUD, discovery, and engineering import all feed this graph; **all backend queries are SPARQL-driven** (rdflib Graph parse + SPARQL; no grep or text search on the TTL). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL. See [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering) for how that layer ties to FDD, PostgreSQL, and optional **energy-penalty-style** analytics.
+Open-F-DD uses a **unified graph**: one semantic model that combines Brick (sites, equipment, points), **optional** BACnet-shaped or other RDF from **imports / legacy tooling**, platform config, and **engineering / 223-style topology** (`ofdd:*` schedule fields and `s223:*` connection patterns from **Data Model Engineering**). **Telemetry** arrives from **VOLTTRON → SQL**; CRUD and import align **`external_id`** with those readings. **Backend SPARQL** runs over the in-memory graph (rdflib). Rules resolve inputs via `ofdd:mapsToRuleInput` in the TTL. See [Data model engineering (Brick + 223P MVP)](../howto/data_model_engineering) and **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**.
 
 ---
 
@@ -20,7 +20,7 @@ Sites + Equipment + Points (DB)  ← single source of truth
   Data-model export / CRUD
          │
          ▼
-  Brick TTL (config/data_model.ttl)  ← Brick section reserialized on every create/update/delete; same file can include BACnet discovery + engineering RDF (one file for SPARQL)
+  Brick TTL (config/data_model.ttl)  ← Brick section reserialized on every create/update/delete; same file may include optional imported RDF + engineering (one file for SPARQL)
          │
          ▼
   FDD column_map (external_id → rule_input)

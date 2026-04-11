@@ -6,7 +6,7 @@ nav_order: 4
 
 # AI-assisted Brick tagging
 
-Open-FDD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump BACnet discovery and existing points as JSON, then have an **LLM or human** add **Brick point classes** (`brick_type`), **Brick equipment classes** (`equipment_type` — best guess the operator confirms), rule inputs, equipment relationships, and which points to poll — and send the result to **PUT /data-model/import**. The platform stays the single source of truth; tagging is the step where raw BACnet objects become a curated, rule-ready dataset.
+Open-F-DD supports **AI-assisted data modeling**: use **GET /data-model/export** to dump **existing DB points** (and optional graph-backed fields) as JSON, then have an **LLM or human** add **Brick point classes** (`brick_type`), **Brick equipment classes** (`equipment_type` — best guess the operator confirms), rule inputs, and equipment relationships — and send the result to **PUT /data-model/import**. **Live BACnet/Modbus ingest is not performed by Open-F-DD**; site **VOLTTRON** historians populate `timeseries_readings` when `external_id` lines up. Tagging is how you make the **semantic model** rule-ready.
 
 This workflow is intended for **mechanical engineers and building operators** who need the data model tagged so that FDD rules in `stack/rules/` have the correct inputs and only the right points are logged long-term.
 
@@ -14,11 +14,11 @@ This workflow is intended for **mechanical engineers and building operators** wh
 
 ## Workflow (export → tag → import)
 
-1. **Discover** — Use the API: **POST /bacnet/whois_range**, then **POST /bacnet/point_discovery_to_graph** per device. The in-memory graph and `config/data_model.ttl` now contain BACnet devices and objects.
+1. **Discover (optional / legacy lab only)** — If you still run a **separate** JSON-RPC gateway, you may use **POST /bacnet/*** routes to seed BACnet-shaped RDF. **Default path:** define **`external_id`** to match **VOLTTRON** historian output and use CRUD/import without wire discovery from this app.
 
 2. **Sites and equipment** — Create the building/site and equipment (AHUs, VAVs, zones) via **POST /sites** and **POST /equipment**. Keep `site_id` UUIDs from export when present. For equipment assignment on import, you can use `equipment_id` UUIDs or `equipment_name` (resolved/created under `site_id`).
 
-3. **Export** — **GET /data-model/export** (or `?bacnet_only=true` for discovery-only). Returns a single JSON array: BACnet discovery rows plus all DB points. Unimported BACnet rows have `point_id: null`, `polling: false`, and null `equipment_id`/`brick_type`/`rule_input`. **`site_id` / `site_name` are pre-filled** when you pass **`?site_id=`** (UUID or site name), when the **Data model** UI has a site selected in the top bar, or when the database has **exactly one site** — so LLMs can assign `equipment_name` safely. With **multiple sites** and no `site_id` filter, those fields stay null until you scope the export.
+3. **Export** — **GET /data-model/export** (or `?bacnet_only=true` to filter rows that still carry BACnet-style metadata). Returns a single JSON array. **`site_id` / `site_name` are pre-filled** when you pass **`?site_id=`** (UUID or site name), when the **Data model** UI has a site selected in the top bar, or when the database has **exactly one site** — so LLMs can assign `equipment_name` safely. With **multiple sites** and no `site_id` filter, those fields stay null until you scope the export.
 
 4. **Tag** — Send the export JSON to an LLM or edit manually. For each point set:
    - **site_id**, **external_id** (time-series key)
@@ -27,12 +27,12 @@ This workflow is intended for **mechanical engineers and building operators** wh
    - **rule_input** (name FDD rules use)
    - **unit** when known (e.g. `degF`, `%`, `cfm`, `0/1` for binary). Units are stored in the data model and TTL; the frontend uses them for Plots axis labels and grouping (e.g. temperatures on one axis, humidity on another). Use standard abbreviations so Plots and exports stay consistent.
    - **equipment_id** (optional) or **equipment_name** (optional, with site_id)
-   - **polling: true** for every point that must be **logged long-term** for this job (sensors/setpoints that FDD rules use); **polling: false** for points not needed. The LLM should tell the operator which points will be logged so they can confirm rules in `stack/rules/` have the required inputs.
+   - **polling:** **Legacy** flag from removed BACnet scraper flows; **VOLTTRON** logging is driven by historian config, not this field. You may still set it for forks that read export JSON.
    - For **equipment relationships** (Brick feeds/isFedBy), optional **engineering**, and **equipment_type** on named equipment, use the import **equipment** array. UUID-based and name-based forms are both supported; name-based relationship rows require `site_id`.
 
 5. **Import** — **PUT /data-model/import** with body: **points** (array) and optional **equipment** (array for feeds/fed_by, **equipment_type**, **engineering**, etc.). The API accepts **only** these two keys — no `sites`, `equipments`, or `relationships`. The backend creates/updates points and equipment relationships, then rebuilds the RDF and TTL.
 
-6. **Scraping** — The BACnet scraper (data-model path) loads points where `bacnet_device_id`, `object_identifier`, and **polling = true**; it calls diy-bacnet-server **client_read_multiple** per device and writes to `timeseries_readings`. Grafana and FDD use the same data model.
+6. **Time series** — Ensure **VOLTTRON** (or your ETL) writes readings for each **`external_id`** you care about. Grafana and FDD both read the same SQL-backed model.
 
 ---
 
@@ -42,7 +42,7 @@ This workflow is intended for **mechanical engineers and building operators** wh
 - **equipment** (optional): Updates equipment with Brick feeds/isFedBy, **`equipment_type`** (Brick class for `rdf:type`), **`engineering`**, **`metadata`**. Rows may use UUID fields (`equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id`) or name fields (`equipment_name`, `feeds`, `fed_by`) with `site_id` for resolution.
 - **No other top-level keys:** The API model uses **`extra="forbid"`** — unknown keys such as `sites` or `relationships` produce **422 Unprocessable Entity** (they are not silently ignored).
 
-**diy-bacnet ready:** The list of points to poll is **GET /data-model/export** filtered to rows where **polling === true**; each has `bacnet_device_id` and `object_identifier`.
+**Historian alignment:** Prefer matching **GET /data-model/export** rows to the **topic / point names** your **site VOLTTRON** historian uses. See **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**.
 
 ---
 
@@ -154,5 +154,5 @@ That way: **Setup** = tag from export (same instructions as above, optionally st
 ---
 
 - [Appendix: API Reference](../appendix/api_reference) — Data model export/import, CRUD
-- [BACnet overview](../bacnet/overview) — Discovery and data-model scrape
+- [Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane) — ingest and `external_id` alignment
 - [Fault rules](../rules/overview) — Brick-driven rules in `stack/rules/`

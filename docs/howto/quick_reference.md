@@ -13,7 +13,7 @@ One-page cheat sheet for Open-FDD. Details live in [Verification](verification),
 
 ## What it is
 
-Open-FDD is an open-source **edge analytics platform for smart buildings** that ingests BACnet and other OT telemetry, stores it in TimescaleDB, and runs rule-based fault detection and diagnostics locally with APIs and an optional Grafana path. As the open alternative to proprietary tools like SkyFoundry’s SkySpark, it gives operators full control, lower cost, and cloud-agnostic deployment, and already powers real-world HVAC optimization and commissioning workflows.
+Open-F-DD is an open-source **analytics stack for smart buildings**: **site VOLTTRON** (ZMQ message bus) ingests BACnet/Modbus on the OT LAN and writes **SQL**; this repo provides **Postgres/Timescale**, optional **FastAPI + React** for Brick/SPARQL, and **FDD** rules. The app tier can run **on-prem or in the cloud** as long as it can reach the database securely.
 
 ---
 
@@ -25,16 +25,15 @@ Open-FDD is an open-source **edge analytics platform for smart buildings** that 
 | **Grafana** | http://localhost:3000 | Optional (`--with-grafana`); admin / admin |
 | **Frontend (React)** | http://localhost:5173 | Dashboard, Config, Points, Data model, Faults, Plots. Via Caddy: http://localhost:80. |
 | **API (Swagger)** | http://localhost:8000/docs | REST API; Bearer auth when `OFDD_API_KEY` set. |
-| **BACnet Swagger** | http://localhost:8080/docs | diy-bacnet-server JSON-RPC. |
-| **MQTT broker** | localhost:1883 | Optional: `./scripts/bootstrap.sh --with-mqtt-bridge` (Mosquitto). Use with **diy-bacnet-server** BACnet2MQTT and/or **MQTT RPC gateway** env vars; see [MQTT integration](mqtt_integration). |
+| **Optional Mosquitto** | localhost:1883 | **Optional** compose profile — generic MQTT; **not** the VOLTTRON bus ([MQTT integration](mqtt_integration)). |
+| **VOLTTRON / Central** | (your deployment) | Built per **volttron-docker** README — BACnet/Modbus **only here**. |
 
 On another host, replace `localhost` with the server IP (e.g. `http://192.168.204.16:8000`). For bootstrap options run `./scripts/bootstrap.sh --help`.
 
-**Check BACnet and MQTT bridge status** (when bridge enabled, `result.mqtt_bridge` is present):
+**Check API liveness** (when FastAPI is running):
 
 ```bash
-curl -s -X POST http://localhost:8000/bacnet/server_hello -H "Content-Type: application/json" -d '{}'
-# Or direct to gateway: curl -s -X POST http://localhost:8080/server_hello -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":"0","method":"server_hello","params":{}}'
+curl -s http://localhost:8000/health
 ```
 
 ---
@@ -42,12 +41,12 @@ curl -s -X POST http://localhost:8000/bacnet/server_hello -H "Content-Type: appl
 ## Bootstrap output (after `./scripts/bootstrap.sh`)
 
 ```
-DB:       127.0.0.1:5432/openfdd  (postgres/postgres; loopback bind)
-Frontend: http://localhost:5173   (or :80 via Caddy)
-API:      http://localhost:8000   (docs: /docs)
-Grafana:  http://localhost:3000   (optional; --with-grafana; admin/admin)
-BACnet:   http://localhost:8080   (diy-bacnet-server Swagger)
-MQTT:     localhost:1883          (optional / experimental; --with-mqtt-bridge)
+DB:        127.0.0.1:5432/openfdd  (postgres/postgres; loopback bind)
+Frontend:  http://localhost:5173   (npm run dev; optional Caddy)
+API:       http://localhost:8000   (uvicorn; docs: /docs)
+Grafana:   http://localhost:3000   (optional compose profile)
+MQTT:      localhost:1883          (optional Mosquitto profile — not VOLTTRON ZMQ)
+VOLTTRON:  (per volttron-docker / site LAN)
 ```
 
 ---

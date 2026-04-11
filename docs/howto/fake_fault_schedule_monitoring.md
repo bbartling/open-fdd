@@ -113,7 +113,7 @@ That is much stronger than treating a single spike as mysterious.
 If OpenClaw is cloned onto another machine on the same bench, this page plus:
 
 - [`openclaw/bench/fake_bacnet_devices/README.md`](https://github.com/bbartling/open-fdd/tree/main/afdd_stack/openclaw/bench/fake_bacnet_devices/README.md)
-- [BACnet-to-fault verification](../bacnet/fault_verification)
+- [Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)
 - [OpenClaw context bootstrap](../operations/openclaw_context_bootstrap)
 - `openclaw/bench/scripts/monitor_fake_fault_schedule.py`
 

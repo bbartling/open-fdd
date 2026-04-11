@@ -1,32 +1,27 @@
 ---
 title: MQTT integration (optional)
-parent: How-to Guides
+parent: How-to guides
 nav_order: 3
 ---
 
-# MQTT integration (optional) — Open-FDD + diy-bacnet-server
+# MQTT integration (optional)
 
-Open-FDD does **not** require MQTT for core FDD, BACnet scraping, or the web UI. MQTT is **optional** and aimed at **future** edge/automation patterns and **generic** brokers (typically **Mosquitto**), not a specific cloud vendor.
+**VOLTTRON’s default platform bus is ZeroMQ (ZMQ)** VIP and pub/sub — **not** MQTT and **not** RabbitMQ. Open-F-DD documentation assumes **site VOLTTRON** handles BACnet/Modbus and historians write **SQL**. See **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**.
 
-## What the stack can do today
+This page covers an **optional** **Mosquitto** broker from `afdd_stack/stack/docker-compose.yml` when you enable the **`mosquitto`** / MQTT-related **compose profile**. Use it only if **you** add MQTT clients (Home Assistant, custom bridges, cloud shadow topics, etc.). It is **not** required for FDD, for the React UI, or for VOLTTRON ingest.
 
-1. **Mosquitto (compose profile)**  
-   Run `./scripts/bootstrap.sh --with-mqtt-bridge` to start a broker on **`localhost:1883`** (see [Getting started](../getting_started) and [Quick reference](quick_reference)).
+---
 
-2. **BACnet2MQTT (diy-bacnet-server)**  
-   When **`BACNET2MQTT_ENABLED=true`** and **`MQTT_BROKER_URL`** point at that broker, **diy-bacnet-server** publishes per-point state under **`MQTT_BASE_TOPIC`** (default `bacnet2mqtt`) and can publish Home Assistant discovery under **`HA_DISCOVERY_TOPIC`**. This is documented in the **[diy-bacnet-server repo](https://github.com/bbartling/diy-bacnet-server)** (README and `HOME_ASSISTANT_MQTT_CHEATSHEET.md`).
+## What you can do
 
-3. **MQTT RPC gateway (experimental, diy-bacnet-server)**  
-   When **`MQTT_RPC_GATEWAY_ENABLED=true`**, the same gateway process can subscribe to **`{MQTT_RPC_TOPIC_PREFIX}/cmd`** and publish structured acks on **`.../ack`**, using the **same method names** as HTTP JSON-RPC (`server_hello`, `client_whois_range`, `client_read_property`, etc.). Optional **telemetry** topics advertise supported methods and periodic metadata.  
-   Configure via **`stack/.env`** (variables are passed through **`stack/docker-compose.yml`** to the **bacnet-server** service). See the upstream **[MQTT RPC gateway](https://github.com/bbartling/diy-bacnet-server/blob/master/README.md#mqtt-rpc-gateway-optional-experimental)** section for topic layout and security notes (TLS, ACLs).
+1. **Start Mosquitto** from `afdd_stack/stack/` using the compose file’s **MQTT profile** (see comments in `docker-compose.yml` and [Quick reference](quick_reference)).
+2. **Publish or subscribe** from your own services at the edge or in the data center. Keep ACLs and TLS aligned with your security model.
+3. **Do not confuse** this broker with **VOLTTRON’s internal message bus** — that remains **ZMQ** per upstream VOLTTRON docs.
 
-## Open-FDD product scope
-
-- Core data path remains **HTTP JSON-RPC** from the **BACnet scraper** and API to **diy-bacnet-server**.
-- MQTT features are **additive**: monitoring via BACnet2MQTT, command/ack experimentation via the RPC gateway, without replacing the database-backed scraper or auth model (**`OFDD_BACNET_SERVER_API_KEY`** → **`BACNET_RPC_API_KEY`** on the gateway).
+---
 
 ## Related docs
 
-- [Getting started](../getting_started) — `--with-mqtt-bridge`
-- [Quick reference](quick_reference) — broker port and status checks
-- [BACnet overview](../bacnet/overview) — gateway and scraper roles
+- [Getting started](../getting_started) — bootstrap and compose
+- [Quick reference](quick_reference) — ports and checks
+- [Edge field buses (VOLTTRON)](../bacnet/) — field protocols live in VOLTTRON, not in Open-F-DD

@@ -68,7 +68,7 @@ If OpenClaw is cloned onto another machine for the **same current test bench**, 
 2. [`openclaw/README.md`](https://github.com/bbartling/open-fdd/tree/main/afdd_stack/openclaw/README.md)
 3. [OpenClaw context bootstrap](../operations/openclaw_context_bootstrap)
 4. [Open-FDD integrity sweep](../operations/openfdd_integrity_sweep)
-5. [BACnet-to-fault verification](../bacnet/fault_verification)
+5. [Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane) — verify historian → SQL → FDD chain
 6. [`openclaw/bench/fake_bacnet_devices/README.md`](https://github.com/bbartling/open-fdd/tree/main/afdd_stack/openclaw/bench/fake_bacnet_devices/README.md)
 7. [Monitor the fake fault schedule](fake_fault_schedule_monitoring)
 

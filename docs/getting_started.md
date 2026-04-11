@@ -50,7 +50,7 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./afdd_stack/scripts/bootstrap.sh --compose-db
    ```
 
-Field BACnet, scraping, FDD loop execution, and operator UI are expected on **VOLTTRON / VOLTTRON Central**, not in this compose file. The FastAPI app may still be run **from source** for development (`uvicorn`); it is no longer shipped as a Docker service here.
+**BACnet, Modbus, and other OT protocols are not implemented in this application** — they run **only inside each building’s VOLTTRON** instance (drivers, proxies, **ZMQ** VIP/pub-sub). Historians write **SQL** that Open-F-DD consumes. FDD execution and operator UI beyond Central are typically **VOLTTRON** or optional **FastAPI/React from source**; this compose file does not start those services.
 
 ---
 
@@ -84,7 +84,7 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
   git clone https://github.com/bbartling/open-fdd.git
   cd open-fdd
   ```
-- **BACnet / field data:** Use **VOLTTRON** Platform Driver + historian on the edge. Historical docs for diy-bacnet + scraper may still describe APIs that proxy a gateway when you run the FastAPI app from source.
+- **Field data:** Configure **VOLTTRON** at the site (Platform Driver, historian, **ZMQ** message bus per upstream docs — **not** RabbitMQ in this project’s reference design). See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**. Legacy FastAPI `/bacnet/*` proxy routes are **not** the default ingest path.
 
 ---
 
@@ -99,7 +99,7 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
 5. **`--doctor`** — checks **git**, **python3**, **docker**, **docker compose**, and the volttron-docker checkout path.
 6. **`--test`** — runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests` from the repo root. Set **`OFDD_BOOTSTRAP_INSTALL_DEV=1`** for a one-shot **`pip install -e ".[dev]"`** before pytest. Set **`OFDD_BOOTSTRAP_FRONTEND_TEST=1`** to also run **`npm ci`**, **`npm run lint`**, **`npm run build`**, and **`npm run test`** under **`afdd_stack/frontend`**. Optional **`OFDD_PYTEST_ARGS`** adds extra pytest flags (shell word-splitting applies).
 
-**Bootstrap options:** Run `./afdd_stack/scripts/bootstrap.sh --help`. The old “one command brings up API + Caddy + BACnet in Docker” flow is **removed**; see **`afdd_stack/legacy/README.md`** for what changed.
+**Bootstrap options:** Run `./afdd_stack/scripts/bootstrap.sh --help`. The old “one command brings up API + Caddy + field-bus containers in Docker” flow is **removed**; see **`afdd_stack/legacy/README.md`** for what changed.
 
 **Open-FDD API from source:** If you run **`uvicorn`** for local development, configure secrets and auth in **`afdd_stack/stack/.env`** as described under **[Security — authentication](security#frontend-and-api-authentication)** (API keys, JWT, dashboard user). That file is **not** populated by the slim bootstrap; compose no longer starts the API container.
 

@@ -35,7 +35,7 @@ See also: [Security and Caddy](../security) and [Operations testing plan](../ope
 
 ## Scan container images
 
-Open-FDD builds several images (API, BACnet scraper, weather scraper, FDD loop, hoststats, and optionally diy-bacnet-server). Image names depend on your Compose project (often `stack` if you run from `stack/` or with `-f stack/docker-compose.yml`).
+Upstream **slim** compose builds **db** (+ optional Grafana/Mosquitto). If **you** maintain a **fork** that restores API, BACnet scraper, weather scraper, FDD loop, etc., scan those image names too. Image names depend on your Compose project (often `stack` if you run from `stack/` or with `-f stack/docker-compose.yml`).
 
 1. **List built images:**
    ```bash

@@ -34,12 +34,11 @@ Or: `docker compose -f stack/docker-compose.yml up -d` from repo root. Reboot: c
 | Change | Action |
 |--------|--------|
 | **Log limits, retention SQL, Grafana datasource** | `docker compose up -d` (restart). Log limits and datasource apply after restart. |
-| **Open-Meteo driver** (new weather points: solar, cloud, wind_dir) | Rebuild weather-scraper: `docker compose build weather-scraper && docker compose up -d weather-scraper` |
-| **API code** (download, data-model, main, config UI at /app/) | `./scripts/bootstrap.sh --build api` or `docker compose build api && docker compose up -d api` |
-| **BACnet from config UI** | API container must reach diy-bacnet-server: `OFDD_BACNET_SERVER_URL` is set in docker-compose to `http://host.docker.internal:8080` (bacnet-server on host). Restart API after changing. |
-| **All containers** (full rebuild and restart) | `./scripts/bootstrap.sh --build-all` — no DB wait or migrations; exits after `docker compose build && docker compose up -d`. |
-| **FDD loop, BACnet scraper code** | `docker compose build bacnet-scraper fdd-loop` (or `--build`); fdd-loop also mounts `open_fdd` from host, so host code changes apply on restart. |
-| **Config UI scrape interval ignored by BACnet scraper** | When the API has Bearer auth (`OFDD_API_KEY`), the scraper must have the same key to call GET /config. Ensure `OFDD_API_KEY` is in `stack/.env` and passed to the bacnet-scraper service in docker-compose; then `./scripts/bootstrap.sh --build bacnet-scraper` so the scraper restarts with the key. See [Configuration → Services that read config from the API](../configuration#services-that-read-config-from-the-api-bacnet-scraper). |
+| **Open-Meteo / weather (legacy fork)** | If you still run a removed weather-scraper service, rebuild that image only. Default path: weather fetched with **FDD** or disabled. |
+| **FastAPI code** (when you containerize it yourself) | Rebuild **your** `api` image or restart `uvicorn` on the host. |
+| **VOLTTRON / historian** | Rebuild or restart **site** containers per **volttron-docker** / your fleet process — not covered by this repo’s slim compose. |
+| **Legacy diy-bacnet + scraper fork** | Only if you restored removed services: see **`afdd_stack/legacy/README.md`**. Do **not** use for new BACnet ingest. |
+| **All services (custom compose)** | `docker compose build && docker compose up -d` from **your** compose project. |
 | **Grafana datasource missing or wrong** | `./scripts/bootstrap.sh --reset-grafana` |
 
 ---

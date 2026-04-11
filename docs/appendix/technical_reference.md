@@ -7,9 +7,9 @@ nav_exclude: true
 
 # Technical reference
 
-Developer and maintainer reference: directory layout, environment variables, unit tests, BACnet scrape, data model API, bootstrap, database schema, and LLM tagging workflow. For user-facing docs see the [Documentation](..) index.
+Developer and maintainer reference: directory layout, environment variables, unit tests, **legacy** BACnet driver modules, data model API, bootstrap, database schema, and LLM tagging workflow. **Default product ingest is VOLTTRON → SQL** — see **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**. For user-facing docs see the [Documentation](..) index.
 
-**Setup:** `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"`. Tests: `pytest open_fdd/tests/ -v`. BACnet scrape: see **Run BACnet scrape** and **Confirm BACnet is scraping** below.
+**Setup:** `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"`. Tests: `pytest open_fdd/tests/ -v` or `./afdd_stack/scripts/bootstrap.sh --test`.
 
 ---
 
@@ -85,7 +85,7 @@ Used to build the PUT /config body at bootstrap; thereafter config is in the gra
 | `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
 | `OFDD_RULES_DIR` | stack/rules | YAML rules directory (hot reload). |
 | `OFDD_BRICK_TTL_DIR` | config | Brick TTL directory. |
-| `OFDD_BACNET_SERVER_URL` | — | diy-bacnet-server URL (e.g. http://localhost:8080). |
+| `OFDD_BACNET_SERVER_URL` | — | **Legacy lab only:** diy-bacnet-style gateway URL if FastAPI proxy routes are enabled. |
 | `OFDD_BACNET_SITE_ID` | default | Site to tag when scraping. |
 | `OFDD_BACNET_GATEWAYS` | — | JSON array for central aggregator. |
 | `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
@@ -107,24 +107,21 @@ Tests live under `open_fdd/tests/`. Run: `pytest open_fdd/tests/ -v`. All use in
 
 ---
 
-## Run BACnet scrape
+## Legacy BACnet scrape driver (not default ingest)
 
-With DB and diy-bacnet-server reachable:
+The Python module **`openfdd_stack.platform.drivers.run_bacnet_scrape`** remains for **forks and dev** when a diy-bacnet-style gateway and DB are reachable. **Do not** use this as the primary path for new sites — configure **VOLTTRON** historians instead.
 
-- **One shot:** `OFDD_BACNET_SERVER_URL=http://localhost:8080 python -m openfdd_stack.platform.drivers.run_bacnet_scrape`
-- **Loop:** add `--loop` (uses `OFDD_BACNET_SCRAPE_INTERVAL_MIN` or GET /config).
-
-**Confirm scraping:** Docker logs `openfdd_bacnet_scraper`; DB `timeseries_readings`; [Grafana SQL cookbook](../howto/grafana_cookbook); API `GET /download/csv`.
+**Confirm SQL writes:** query `timeseries_readings`; [Grafana SQL cookbook](../howto/grafana_cookbook); API `GET /download/csv` when FastAPI runs.
 
 ---
 
-## Data model API and discovery flow
+## Data model API and tagging flow
 
-**GET /data-model/export** — BACnet discovery + DB points (optional `?bacnet_only=true`, `?site_id=...`). Use for [AI-assisted tagging](../modeling/ai_assisted_tagging); then **PUT /data-model/import**.
+**GET /data-model/export** — DB points (+ optional graph fields; `?bacnet_only=true` filters BACnet-shaped metadata). Use for [AI-assisted tagging](../modeling/ai_assisted_tagging); then **PUT /data-model/import**.
 
 **PUT /data-model/import** — Points (required) and optional equipment (feeds/fed_by). Creates/updates points; backend rebuilds RDF and serializes TTL.
 
-**Flow:** Discover (POST /bacnet/whois_range, POST /bacnet/point_discovery_to_graph) → Sites/equipment (CRUD) → GET /data-model/export → Tag (LLM or manual) → PUT /data-model/import → Scraping → GET /data-model/check, POST /data-model/sparql for integrity.
+**Flow (recommended):** Align **`external_id`** with **VOLTTRON** historian keys → Sites/equipment (CRUD) → GET /data-model/export → Tag (LLM or manual) → PUT /data-model/import → **SQL readings** visible to FDD/Grafana → GET /data-model/check, POST /data-model/sparql for integrity. Optional **POST /bacnet/*** steps are **lab-only**.
 
 See [Data modeling overview](../modeling/overview) and [SPARQL cookbook](../modeling/sparql_cookbook).
 
@@ -132,7 +129,7 @@ See [Data modeling overview](../modeling/overview) and [SPARQL cookbook](../mode
 
 ## Data model sync
 
-Live store: **in-memory RDF graph** (`platform/graph_model.py`). Brick triples from DB; BACnet from point_discovery. SPARQL and TTL read from this graph. Background thread serializes to `config/data_model.ttl` every **OFDD_GRAPH_SYNC_INTERVAL_MIN**; **POST /data-model/serialize** on demand.
+Live store: **in-memory RDF graph** (`platform/graph_model.py`). Brick triples from DB; optional BACnet-shaped triples only if loaded via **legacy** discovery/import. SPARQL and TTL read from this graph. Background thread serializes to `config/data_model.ttl` every **OFDD_GRAPH_SYNC_INTERVAL_MIN**; **POST /data-model/serialize** on demand.
 
 ---
 

@@ -5,20 +5,19 @@ nav_order: 2
 
 # System Overview
 
-**This repository** ships the **`open-fdd`** Python package on **PyPI**: YAML-defined **FDD rules on pandas** (`open_fdd.engine`), plus schema and reporting helpers. That engine can run **inside your own application**, inside **VOLTTRON agents**, or beside optional **FastAPI + React** when you run them from this monorepo. **Docker Compose** here is intentionally slim: **Postgres/TimescaleDB** (+ optional Grafana/Mosquitto), not the full edge stack.
+**This repository** ships the **`open-fdd`** Python package on **PyPI**: YAML-defined **FDD rules on pandas** (`open_fdd.engine`), plus schema and reporting helpers. That engine can run **inside your own application**, inside **VOLTTRON agents**, or beside optional **FastAPI + React** when you run them from this monorepo. **Docker Compose** here is intentionally slim: **Postgres/TimescaleDB** (+ optional Grafana/Mosquitto), not field-protocol services.
 
-The text below describes the **full edge platform** in **`afdd_stack/`** within the **[open-fdd monorepo](https://github.com/bbartling/open-fdd)**—knowledge graph, services, and data flow. For engine-only usage, see **[Engine-only / IoT](howto/engine_only_iot)** and **[Getting started](getting_started)**.
+The text below describes the **platform** in **`afdd_stack/`** within the **[open-fdd monorepo](https://github.com/bbartling/open-fdd)**—knowledge graph, services, and data flow. **Open-F-DD does not host BACnet, Modbus, or other OT buses.** Those live in **per-building VOLTTRON** deployments; telemetry reaches this stack through **SQL** (historian, ETL) and **identity mapping** (`external_id`, points). For engine-only usage, see **[Engine-only / IoT](howto/engine_only_iot)** and **[Getting started](getting_started)**.
+
+**Read first:** **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)** — ZMQ VIP / pub-sub on the VOLTTRON bus (not RabbitMQ in the reference design), optional cloud or on-prem for the app tier, same integration contract.
 
 ---
 
-
 ## Architecture
 
-![Open-FDD Edge Platform Architecture](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd-schematic.png)
+![Open-F-DD Edge Platform Architecture](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd-schematic.png)
 
-This project is an open-source stack; a cloud or MSI vendor can develop their own Docker container and deploy it on the **same client-hosted server** that runs Open-FDD, pulling from the local API over the LAN. That approach removes the need for a separate IoT or edge device dedicated to the vendor.
-
-If **BACnet collection** moves to **VOLTTRON** on an edge Pi while this repo keeps **graph, SPARQL, and modeling**, use the layered notes in **[VOLTTRON gateway, FastAPI, and data-model sync](concepts/volttron_gateway_and_sync)** (includes **cron** for TTL checkpoints and when to call **reset** vs **serialize**).
+Integrators may run Open-F-DD **beside** client-hosted services or pull from the local API over the LAN. **Field collection** is always **site-local VOLTTRON** (drivers, proxies, historians) on the OT network; the **semantic and FDD tier** reads **Postgres** and optional **FastAPI** routes.
 
 ---
 
@@ -26,41 +25,39 @@ If **BACnet collection** moves to **VOLTTRON** on an edge Pi while this repo kee
 
 | Component | Description |
 |-----------|-------------|
-| **VOLTTRON (edge)** | **Default** field path: platform driver, BACnet proxy, pub/sub, SQL historian into Postgres/Timescale (same DB server as Open-FDD schema is possible). Operator UI: **VOLTTRON Central** (upstream). |
-| **TimescaleDB** | PostgreSQL with TimescaleDB extension in compose. Metadata and time-series tables for Open-FDD; historian tables use VOLTTRON’s **`tables_def`** when you colocate. |
-| **FastAPI (optional, from source)** | CRUD, data-model export/import, TTL, SPARQL, BACnet **proxy** routes when a diy-bacnet gateway is reachable. Run with **`uvicorn`** for development or integration — not a default container. |
-| **React (optional, from source)** | Dashboard under `afdd_stack/frontend/` when you need the modeling UI without Central. |
-| **Grafana (optional profile)** | Pre-provisioned TimescaleDB datasource when you enable the **`grafana`** compose profile. Build dashboards with the [Grafana SQL cookbook](howto/grafana_cookbook). |
+| **VOLTTRON (per site)** | **Required for field data:** platform driver, BACnet/Modbus **inside VOLTTRON only**, pub/sub over **ZMQ**, SQL historian. **VOLTTRON Central** for fleet UI — upstream docs. |
+| **TimescaleDB** | PostgreSQL with TimescaleDB extension in compose. Open-F-DD metadata + time-series tables; historian tables use VOLTTRON’s **`tables_def`** when you colocate on one server. |
+| **FastAPI (optional, from source)** | CRUD, data-model export/import, TTL, SPARQL, jobs. **Legacy** `/bacnet/*` proxy routes exist only if you run a separate lab gateway; they are **not** the default ingest path. |
+| **React (optional, from source)** | Dashboard under `afdd_stack/frontend/` for modeling and plots. |
+| **Grafana (optional profile)** | Pre-provisioned TimescaleDB datasource when you enable the **`grafana`** compose profile. [Grafana SQL cookbook](howto/grafana_cookbook). |
 
-**Legacy Docker services (removed from default compose):** BACnet scraper, weather scraper, FDD loop container, diy-bacnet-server container, Caddy, API/frontend containers — see **`afdd_stack/legacy/README.md`**. The **[diy-bacnet-server](https://github.com/bbartling/diy-bacnet-server)** + scraper pattern remains documented under **[BACnet](bacnet/overview)** for labs or custom deployments where FastAPI proxies JSON-RPC.
+**Removed from default Compose:** see **`afdd_stack/legacy/README.md`** (Caddy, API/frontend containers, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop container). Do not resurrect them for **new** BACnet/Modbus ingest.
 
 ---
 
-## Campus-based architecture
+## Multi-building and “central” deployments
 
-![Open-FDD Edge Platform Architecture Campus](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd-schematic-bacnet-gateway.png)
+![Open-F-DD campus schematic](https://raw.githubusercontent.com/bbartling/open-fdd/master/open-fdd-schematic-bacnet-gateway.png)
 
-**Campus / multi-building BACnet** is increasingly handled with **VOLTTRON** on each site (or subnet): local BACnet stays on the OT LAN; historians or agents forward **topics and SQL** toward a central database or service boundary. That preserves one **semantic model** and integration surface without exposing raw BACnet to every cloud vendor.
-
-**Legacy Open-FDD Docker pattern (still documented):** Remote **diy-bacnet-server** plus **bacnet-scraper** pointed at a **central FastAPI** instance — create each building’s **site** on the central API and set **`OFDD_BACNET_SITE_ID`** (and related env). **Central aggregator:** **`OFDD_BACNET_GATEWAYS`** JSON array for multiple gateways (see [Configuration — BACnet](configuration#bacnet-single-gateway-remote-gateways-central-aggregator)). Direct **`OFDD_DB_DSN`** from remote scrapers is a **high-trust LAN** pattern only. See **`afdd_stack/legacy/README.md`** for what the repo no longer starts by default.
+**Each building** runs **VOLTTRON** on the local LAN. Historians (or agents) write **SQL** toward a database you designate—on the edge appliance, a central VM, or a managed cloud Postgres **with appropriate network security**. Open-F-DD keeps **one semantic model** and fault pipeline keyed by **site** and **points**; it does **not** require raw BACnet to reach the app tier.
 
 ---
 
 ## Data flow
 
-1. **Ingestion (default):** VOLTTRON platform driver + historian (or your ETL) writes time-series into **Postgres/Timescale** — align topic/point identity with Open-FDD **`points`** / **`external_id`** (see [VOLTTRON gateway and sync](concepts/volttron_gateway_and_sync)). **Legacy:** BACnet scraper / weather scraper containers wrote directly to `timeseries_readings` when the full Docker stack was used.
-2. **Data model (unified graph):** Brick (sites, equipment, points), optional BACnet RDF from discovery (**diy-bacnet-server** path when FastAPI is used), platform config, and future ontologies — CRUD and **POST /bacnet/point_discovery_to_graph** (when API is up) update the graph; SPARQL queries it. TTL file `config/data_model.ttl`; **POST /data-model/serialize** on demand.
-3. **FDD (Python/pandas):** Rules run against DataFrames — via **VOLTTRON agents** against SQL/historian data (direction of travel for the default platform) or via the historical **`fdd-loop`** pattern when you restore a custom deployment. **`fault_results`** remain the canonical output table in the Open-FDD schema.
-4. **Visualization:** Grafana (optional), VOLTTRON Central, or React when you run it.
+1. **Ingestion:** **VOLTTRON** at the site writes time series into **Postgres/Timescale** (historian + `tables_def`). Align topic/point identity with Open-F-DD **`points`** / **`external_id`** ([VOLTTRON gateway and sync](concepts/volttron_gateway_and_sync), **`openfdd_stack.volttron_bridge`**).
+2. **Data model:** Brick (sites, equipment, points), platform config, optional RDF from **import** or legacy tooling — CRUD and SPARQL when FastAPI runs; TTL at `config/data_model.ttl`.
+3. **FDD:** Rules run on pandas — **VOLTTRON agents**, scheduled jobs, or **`open_fdd.engine`** on DataFrames. **`fault_results`** remain the canonical output table.
+4. **Visualization:** Grafana (optional), **VOLTTRON Central**, or React when you run it.
 
 ---
 
 ## Ways to deploy
 
-- **VOLTTRON edge (default):** **`./afdd_stack/scripts/bootstrap.sh`** — clones/updates **VOLTTRON 9**, optional venv, optional **`--compose-db`** for local Timescale + Open-FDD SQL schema only.
-- **Optional SQL only:** `docker compose -f afdd_stack/stack/docker-compose.yml up -d` — **TimescaleDB** + init SQL (no API/Caddy/BACnet containers). See **`afdd_stack/legacy/README.md`**.
-- **Engine only:** `pip install open-fdd` and run `RuleRunner` on pandas DataFrames (no Compose); see **[Engine-only / IoT](howto/engine_only_iot)**.
-- **Manual / custom:** Start your own processes; reuse the same rule YAML and `open_fdd.engine` APIs.
+- **VOLTTRON + SQL (default):** **`./afdd_stack/scripts/bootstrap.sh`** — **volttron-docker**, optional **`--compose-db`** for Timescale + Open-F-DD SQL init only.
+- **SQL only:** `docker compose -f afdd_stack/stack/docker-compose.yml up -d` — **TimescaleDB** + init SQL. **`afdd_stack/legacy/README.md`** lists removed services.
+- **Engine only:** `pip install open-f-dd` and `RuleRunner` on pandas — **[Engine-only / IoT](howto/engine_only_iot)**.
+- **Manual / custom:** your processes; same rule YAML and `open_fdd.engine` APIs.
 
 ---
 
@@ -68,6 +65,6 @@ If **BACnet collection** moves to **VOLTTRON** on an edge Pi while this repo kee
 
 - **Sites** — Buildings or facilities.
 - **Equipment** — Devices (AHUs, VAVs, heat pumps). Belong to a site.
-- **Points** — Time-series references. Have `external_id` (raw name), `rule_input` (FDD column ref), optional `brick_type` (Brick class).
-- **Fault rules** — YAML files (bounds, flatline, hunting, expression). Run against DataFrame; produce boolean fault flags. See [Fault rules for HVAC](rules/overview).
-- **Unified graph** — One semantic model (Brick + BACnet + platform config; future 223P or other ontologies). Stored in `config/data_model.ttl`; maps Brick classes → `external_id` for rule resolution; queryable via SPARQL.
+- **Points** — Time-series references. **`external_id`** aligns with VOLTTRON historian / topic naming; **`rule_input`** for FDD columns; optional **`brick_type`**.
+- **Fault rules** — YAML (bounds, flatline, hunting, expression). See [Fault rules for HVAC](rules/overview).
+- **Unified graph** — Brick + platform config (+ optional RDF). SPARQL and TTL when FastAPI runs.

@@ -11,7 +11,7 @@ Open-FDD separates concerns into **collector**, **model**, **engine**, and **int
 
 | Module | Concern | Typical runtime today |
 |--------|---------|------------------------|
-| **Collector** | Field BACnet / MQTT / historian ingestion | **VOLTTRON** platform driver + SQL historian (edge); optional ETL into `timeseries_readings` |
+| **Collector** | Field protocols + historian (**ZMQ** bus in VOLTTRON, not RabbitMQ here) | **Per-site VOLTTRON** platform driver + SQL historian; optional ETL into `timeseries_readings` |
 | **Model** | Brick / data-model CRUD, SPARQL, TTL | **FastAPI** (+ optional React) **from source** when you need the semantic layer |
 | **Engine** | Pandas / YAML FDD execution | **VOLTTRON agents** or **`open_fdd.engine`** on DataFrames; historical **`fdd-loop`** container removed from default compose |
 | **Interface** | REST, OpenClaw-style HTTP, export/import | **FastAPI** when running **`uvicorn`**; **VOLTTRON Central** for fleet/edge UI |
@@ -22,7 +22,7 @@ The one-command **`./scripts/bootstrap.sh --mode …`** matrix applied when Comp
 
 If you maintain a **private fork** or custom compose that restores those services, you can still think in terms of:
 
-- **Collector slice:** DB + BACnet gateway + scrape path  
+- **Collector slice:** DB + **site VOLTTRON** historians (SQL) + topic mapping  
 - **Model slice:** DB + API + frontend + reverse proxy  
 - **Engine slice:** DB + scheduled FDD + optional weather  
 

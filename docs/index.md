@@ -1,19 +1,19 @@
 ---
 title: Home
 nav_order: 1
-description: "Open-FDD monorepo: PyPI engine (open_fdd/) + platform stack (afdd_stack/), VOLTTRON-first bootstrap, optional SQL compose. Published from bbartling.github.io/open-fdd."
+description: "Open-F-DD monorepo: PyPI engine (open_fdd/) + platform SQL/schema and optional FastAPI/React; field ingest is site VOLTTRON (ZMQ), not BACnet/Modbus in this app. Published from bbartling.github.io/open-fdd."
 ---
 
 # Open-FDD
 
-> **Single repository:** the **`open-fdd`** engine (`RuleRunner`, rule YAML, column maps) lives in **`open_fdd/`** and ships to **PyPI**. Application code for the **platform** (FastAPI, React, SQL schema, VOLTTRON bridge helpers) lives in **`afdd_stack/`**. **Docker Compose** in this repo starts **Postgres/TimescaleDB** (and optional Grafana or Mosquitto profiles) only — not the API, Caddy, or BACnet containers. This documentation site covers both the library and the platform.
+> **Single repository:** the **`open-fdd`** engine (`RuleRunner`, rule YAML, column maps) lives in **`open_fdd/`** and ships to **PyPI**. Application code for the **platform** (FastAPI, React, SQL schema, VOLTTRON bridge helpers) lives in **`afdd_stack/`**. **Docker Compose** here starts **Postgres/TimescaleDB** (and optional Grafana or Mosquitto) only — **not** field buses. **BACnet, Modbus, and similar OT protocols run only inside each building’s VOLTTRON** deployment; Open-F-DD consumes **SQL** (and optional HTTP APIs), not raw device wires.
 
 {: .fs-6 .fw-400 }
-**On-prem default path** — from the repo root run **`./afdd_stack/scripts/bootstrap.sh`** to prepare **VOLTTRON 9** and optionally **`--compose-db`** for local SQL. Field data and operator UI are expected on **VOLTTRON / VOLTTRON Central**; the **FastAPI** app and **React** app can still be run **from source** for modeling, SPARQL, and REST tooling. See **[Getting started](getting_started)** and **`afdd_stack/legacy/README.md`** for what was removed from Compose.
+**Default path (on-prem or cloud for the app tier)** — from the repo root run **`./afdd_stack/scripts/bootstrap.sh`** to prepare **VOLTTRON Central / edge** via **volttron-docker** and optionally **`--compose-db`** for SQL. **Per-site VOLTTRON** on the building LAN uses **ZMQ** VIP and pub/sub for the platform message bus (not RabbitMQ in this reference design). Run **FastAPI + React from source** when you need Brick CRUD, SPARQL, and REST. See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**, **[Getting started](getting_started)**, and **`afdd_stack/legacy/README.md`**.
 
 Open-FDD is an open-source knowledge graph fault-detection platform for HVAC systems that helps facilities optimize their energy usage and cost-savings. Because it runs on-prem, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
-The building is modeled in a **unified graph**: Brick (sites, equipment, points), BACnet discovery RDF, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `afdd_stack/config/data_model.ttl` (the API process uses this path when you run FastAPI from the repo).
+The building is modeled in a **unified graph**: Brick (sites, equipment, points), optional RDF from imports or legacy tooling, platform config, and—as the project evolves—other ontologies such as ASHRAE 223P, in one semantic model queried via SPARQL and serialized to `afdd_stack/config/data_model.ttl` when you run **FastAPI** from the repo. **Field discovery RDF** is not produced by Open-F-DD services in the default architecture—VOLTTRON and your ETL own what lands in SQL and what you merge into the graph.
 
 ---
 
@@ -21,8 +21,8 @@ The building is modeled in a **unified graph**: Brick (sites, equipment, points)
 
 Open-FDD is an **edge analytics and rules engine** for building automation. It:
 
-- **Ingests** time-series and metadata via **VOLTTRON** (platform driver, pub/sub, SQL historian) on the building LAN; optional **Open-Meteo** or other sources can still feed the same SQL schema depending on how you deploy agents
-- **Stores** telemetry in **Postgres/TimescaleDB** and models the building in a **unified RDF graph** (Brick + BACnet + config)
+- **Receives** time-series and metadata written by **site VOLTTRON** historians and agents (**ZMQ** pub/sub on the VOLTTRON bus, **SQL** into Postgres/Timescale); optional **Open-Meteo** or other writers can still feed the same SQL schema depending on how you deploy jobs
+- **Stores** telemetry in **Postgres/TimescaleDB** and models the building in a **unified RDF graph** (Brick + platform config + optional imported RDF)
 - **Runs** YAML-defined FDD rules (bounds, flatline, hunting, expression) — in the platform this is moving toward **VOLTTRON agents** over historian/SQL data; the **`open_fdd`** engine remains usable standalone on pandas
 - **Exposes** (when FastAPI is running) REST APIs for sites, points, equipment, data-model export/import, bulk timeseries and fault download, TTL generation, SPARQL validation — for agents and Open‑Claw-style automation
 - **Visualizes** via **Grafana** (optional compose profile), **VOLTTRON Central**, or the **React** dashboard when you run the frontend from source
@@ -70,10 +70,10 @@ cd open-fdd
 | [Modular Architecture](modular_architecture) | Collector/Model/Engine/Interface boundaries and mode-based bootstrap matrix. |
 | [Getting Started](getting_started) | Install, bootstrap, first run |
 | [Using the React dashboard](frontend) | Overview, Config, Points, Data model, Faults, Plots, Web weather, System resources |
-| [BACnet](bacnet/overview) | Discovery, scraping, RPC, RDF/BRICK (knowledge graph, bacpypes3) |
+| [Edge field buses (VOLTTRON)](bacnet/) | **Open-F-DD does not run BACnet/Modbus**; site VOLTTRON does. ZMQ message bus; historian → SQL. |
 | [Data modeling](modeling/overview) | Sites, equipment, points (CRUD), Brick TTL, 223P-aligned engineering metadata, [SPARQL cookbook](modeling/sparql_cookbook), [AI-assisted tagging](modeling/ai_assisted_tagging) |
 | [Fault rules for HVAC](rules/overview) | Rule types, expression cookbook, [test bench rule catalog](rules/test_bench_rule_catalog) |
-| [Concepts](concepts/cloud_export) | [Cloud export example](concepts/cloud_export) — how vendors pull data from the API to their cloud |
+| [Concepts](concepts/index) | [Site VOLTTRON + ZMQ data plane](concepts/site_volttron_data_plane), [Cloud export](concepts/cloud_export), … |
 | [Operations](operations/index) | [Integrity sweep](operations/openfdd_integrity_sweep), [Overnight review](operations/overnight_review), [Testing plan](operations/testing_plan) |
 | [How-to Guides](howto/index) | [VOLTTRON Central + parity](howto/volttron_central_and_parity), [openfdd-engine vs `open_fdd.engine`](howto/openfdd_engine), [Engine-only / IoT](howto/engine_only_iot), [Data model engineering](howto/data_model_engineering), [Grafana dashboards (optional)](howto/grafana_dashboards), [Grafana SQL cookbook](howto/grafana_cookbook) |
 | [Security & Caddy](security) | API auth, optional Caddy/TLS patterns (custom deployments) |
@@ -81,7 +81,7 @@ cd open-fdd
 | [Appendix](appendix) | [API Reference](appendix/api_reference) — REST at a glance; [Technical reference](appendix/technical_reference), [Developer guide](appendix/developer_guide) |
 | [Contributing](contributing) | How to contribute; alpha/beta focus; bugs, rules, docs, drivers |
 
-**Use the React frontend** for config, sites, points, data model, faults, and plots. **API details** (CRUD, config, data-model, download, analytics, BACnet) are summarized in [Appendix: API Reference](appendix/api_reference); full OpenAPI at `/docs` and `/openapi.json`. **Grafana** is optional; the React UI provides equivalent timeseries and fault views.
+**Use the React frontend** for config, sites, points, data model, faults, and plots. **API details** (CRUD, config, data-model, download, analytics; legacy BACnet proxy routes if you enable them) are summarized in [Appendix: API Reference](appendix/api_reference); full OpenAPI at `/docs` and `/openapi.json`. **Grafana** is optional; the React UI provides equivalent timeseries and fault views.
 
 ---
 
@@ -91,11 +91,11 @@ cd open-fdd
 |-------|-----------------|---------|
 | **Postgres/TimescaleDB** | 5432 (default compose) | Open-F-DD metadata + time series schema; compatible with VOLTTRON SQL historian when you share one server |
 | **Grafana** | 3000 | **Optional** compose profile |
-| **Mosquitto** | 1883 | **Optional** compose profile — generic MQTT broker ([MQTT how-to](howto/mqtt_integration)) |
-| **VOLTTRON** | (deployment-specific) | Clone/install via **`bootstrap.sh`**; BACnet, historian, Central — upstream docs |
+| **Mosquitto** | 1883 | **Optional** compose profile — generic MQTT broker **only if you add it**; not the VOLTTRON bus ([MQTT how-to](howto/mqtt_integration)) |
+| **VOLTTRON** | (per building) | **Site instances** on the LAN: drivers, **ZMQ** VIP/pub-sub, historian → SQL; Central/fleet UI — upstream docs |
 | **FastAPI + React** | 8000 / 5173 when run locally | **Source** under `afdd_stack/`; not started by default compose |
 
-**Removed from Compose (see `afdd_stack/legacy/README.md`):** Caddy, API container, frontend container, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop container. BACnet integration for new deployments is expected on **VOLTTRON**; the **[BACnet](bacnet/overview)** section still describes the **FastAPI ⇄ diy-bacnet-server** path for labs or custom stacks.
+**Removed from Compose (see `afdd_stack/legacy/README.md`):** Caddy, API container, frontend container, diy-bacnet-server, BACnet scraper, weather scraper, FDD loop container. **Do not** plan new BACnet/Modbus ingest through those services; use **[site VOLTTRON](concepts/site_volttron_data_plane)** and SQL. The **[Edge field buses](bacnet/)** page states this explicitly and points to legacy material in git only.
 
 ---
 

@@ -100,7 +100,7 @@ To get a clean slate and run tests (e.g. `graph_and_crud_test.py`) or re-import 
 2. **Faster FDD/scrapers for testing (optional):**  
    - **FDD:** Set `rule_interval_hours: 0.1` (6 min) or `1` in your config, or env `OFDD_RULE_INTERVAL_HOURS=0.1`. Fractional hours are supported; minimum sleep is 60 s.  
    - **BACnet:** Set `bacnet_scrape_interval_min: 1` (or env `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1`) so the scraper runs every minute.  
-   **Docker:** The compose file defaults to 5 min. To use 1 min, set `OFDD_BACNET_SCRAPE_INTERVAL_MIN=1` in **stack/.env**, then from the repo root run `cd stack && docker compose up -d` (or `./scripts/bootstrap.sh`) so the bacnet-scraper container gets the new env.  
+   **Docker (legacy fork only):** If you still run a removed BACnet scraper, tune its env per **`afdd_stack/legacy/README.md`**. Default deployments use **VOLTTRON** pacing on the OT LAN instead.  
    Restart the affected containers after changing (e.g. `docker restart openfdd_fdd_loop openfdd_bacnet_scraper`), or use **POST /run-fdd** / trigger file to run FDD immediately without changing the interval.
 
 **Workflow: reset → test → Grafana**

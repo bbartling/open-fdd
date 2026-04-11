@@ -1,5 +1,5 @@
 title: "Open-FDD"
-description: "Rules engine (PyPI) and AFDD Docker stack — docs for open_fdd/ and afdd_stack/"
+description: "Open-F-DD: PyPI engine + SQL/semantic stack; field ingest is site VOLTTRON (ZMQ), not BACnet/Modbus in this app."
 baseurl: "/open-fdd"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"

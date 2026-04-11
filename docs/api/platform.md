@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Platform REST API
 
-REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, and FDD trigger. Served by the API container on port 8000.
+REST API for the Open-F-DD platform: CRUD, data model, bulk download, analytics, and FDD trigger. Run with **`uvicorn`** when developing — there is **no** default API container in slim Compose.
 
 **Base URL:** `http://localhost:8000`  
 **Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
@@ -95,50 +95,47 @@ CRUD for points (sensors, setpoints, commands) that reference timeseries. Deleti
 | Field              | Type   | Required | Description |
 |--------------------|--------|----------|-------------|
 | site_id            | UUID   | yes      | Parent site |
-| external_id        | string | yes      | BACnet/OT identifier (e.g. object name) |
+| external_id        | string | yes      | Identifier from the **writer** (e.g. VOLTTRON historian / topic key) |
 | equipment_id       | UUID   | no       | Parent equipment |
 | brick_type         | string | no       | Brick class (e.g. Supply_Air_Temperature_Sensor) |
 | fdd_input          | string | no       | Name FDD rules use for this point (defaults to external_id) |
 | unit               | string | no       | Unit of measure |
 | description        | string | no       | Optional |
-| bacnet_device_id   | string | no       | BACnet device instance (e.g. 3456789). With object_identifier, enables data-model scrape for this point. |
-| object_identifier  | string | no       | BACnet object ID (e.g. analog-input,1). |
-| object_name        | string | no       | BACnet object name (often same as external_id). |
+| bacnet_device_id   | string | no       | Optional **metadata** (imports / legacy); Open-F-DD does **not** poll BACnet by default. |
+| object_identifier  | string | no       | Optional **metadata**. |
+| object_name        | string | no       | Optional display name. |
 
 **Update body (PATCH /points/{id}):** Same fields; omit to leave unchanged. Responses (GET/POST/PATCH) include `bacnet_device_id`, `object_identifier`, `object_name` when set.
 
 ---
 
-## BACnet proxy and import
+## BACnet proxy routes (legacy lab only)
 
-The API proxies to diy-bacnet-server for discovery and can import results into the data model.
+**Default ingest is VOLTTRON → SQL**, not these HTTP routes. If **you** run a separate **diy-bacnet-style** JSON-RPC gateway and enable env vars (`OFDD_BACNET_SERVER_URL`, …), the API can still **proxy** discovery calls. See **`afdd_stack/legacy/README.md`** and **[Edge field buses (VOLTTRON)](../bacnet/)**.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET    | /bacnet/gateways      | List configured gateways (default from OFDD_BACNET_SERVER_URL plus OFDD_BACNET_GATEWAYS). Use the returned `id` in `?gateway=` on BACnet POST endpoints. |
-| POST   | /bacnet/server_hello   | Test connection to diy-bacnet-server |
-| POST   | /bacnet/whois_range   | Who-Is over an instance range (body: optional `url`, `request`: `{start_instance, end_instance}`) |
-| POST   | /bacnet/point_discovery | Point discovery for a device (body: optional `url`, `instance`: `{device_instance}`) |
-| POST   | /bacnet/point_discovery_to_graph | **Point discovery → in-memory graph**. Calls the gateway for point discovery (device instance), builds BACnet TTL from JSON, updates the graph and optionally writes `config/data_model.ttl`. Body: `instance` (device_instance), optional `update_graph`, `write_file`, `url`. |
+| Method | Path | Notes |
+|--------|------|--------|
+| GET    | /bacnet/gateways      | Lists configured lab gateways when env is set. |
+| POST   | /bacnet/server_hello … | JSON-RPC proxy to your gateway — **optional**. |
 
-Config UI at `/app/` provides a BACnet panel. Use **POST /bacnet/point_discovery_to_graph** to put BACnet devices/points into the graph; create points in the DB via CRUD or [data-model export/import](../modeling/ai_assisted_tagging).
+For new deployments, configure **site VOLTTRON** and map historian data to **`external_id`** instead of relying on `/bacnet/*`.
 
 ---
 
 ## Data model
 
-Brick-semantic data model: **single export route** (BACnet discovery + DB points), bulk import (points + optional equipment feeds), TTL, SPARQL. TTL is auto-synced on every CRUD and import. For the **AI-assisted tagging** workflow (export → LLM/human → import), see [AI-assisted data modeling](../modeling/ai_assisted_tagging).
+Brick-semantic data model: export (DB + graph snapshot), bulk import (points + optional equipment feeds), TTL, SPARQL. TTL is auto-synced on every CRUD and import. For the **AI-assisted tagging** workflow (export → LLM/human → import), see [AI-assisted data modeling](../modeling/ai_assisted_tagging).
 
 ### GET /data-model/export
 
-**Single export route:** Returns one JSON array of BACnet discovery (from graph) plus all DB points. Use for LLM Brick tagging; then PUT /data-model/import.
+**Single export route:** Returns one JSON array combining **graph snapshot fields** (when present) with **all DB points**. Use for LLM Brick tagging; then PUT /data-model/import.
 
 | Query param   | Type    | Required | Description |
 |---------------|---------|----------|-------------|
 | site_id       | string  | no       | Site UUID or name; omit for all sites |
-| bacnet_only   | boolean | no       | If true, return only rows with `bacnet_device_id` and `object_identifier` (discovery rows). Default false = full dump. |
+| bacnet_only   | boolean | no       | If true, return only rows with `bacnet_device_id` and `object_identifier` set (**metadata filter**). Default false = full dump. |
 
-**Response:** `200 OK` — JSON array. Each row: `point_id` (null if unimported), `bacnet_device_id`, `object_identifier`, `object_name`, `site_id`, `site_name`, `equipment_id`, `equipment_name`, `external_id`, `brick_type`, `rule_input`, `unit`, **`polling`** (default false for unimported). Points to poll for the BACnet scraper = rows where **polling === true**.
+**Response:** `200 OK` — JSON array of point-shaped rows. The **`polling`** flag is **legacy** (removed BACnet scraper in default Compose); prefer **VOLTTRON** historian writes into `timeseries_readings`.
 
 ---
 
@@ -152,8 +149,8 @@ Bulk create/update **points** and optionally update **equipment** feeds/fed_by. 
 |-------------------|--------|-------------|
 | point_id          | UUID   | Omit to create; set to update existing |
 | site_id, external_id | required for create | Real UUIDs from GET /sites; external_id = time-series key |
-| bacnet_device_id, object_identifier | required for create from discovery | From export |
-| brick_type, rule_input, equipment_id, unit, polling | optional | polling = true for points to log (BACnet scraper) |
+| bacnet_device_id, object_identifier | optional metadata | From older exports if present |
+| brick_type, rule_input, equipment_id, unit, polling | optional | **`polling`** is legacy; ingest is via **VOLTTRON**/SQL |
 | equipment (array) | optional | Each item: `equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id` (Brick feeds/isFedBy; UUIDs from GET /equipment) |
 
 **Response:** `200 OK` — e.g. `{"created": N, "updated": M, "total": ...}`
