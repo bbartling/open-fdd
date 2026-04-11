@@ -1,0 +1,312 @@
+---
+title: Platform REST API
+parent: API Reference
+nav_order: 1
+nav_exclude: true
+---
+
+# Platform REST API
+
+REST API for the Open-FDD platform: CRUD, data model, bulk download, analytics, and FDD trigger. Run with **`uvicorn`** when developing — there is **no** default API container in slim Compose.
+
+**Base URL:** `http://localhost:8000`  
+**Interactive docs:** When the API is running, open [Swagger UI](http://localhost:8000/docs) or [ReDoc](http://localhost:8000/redoc).
+
+**Authentication:** When **`OFDD_API_KEY`** and/or **app-user** config is active, the API requires `Authorization: Bearer <token>` on protected routes: `<token>` is either **`OFDD_API_KEY`** or a **JWT access token** from **`POST /auth/login`**. Exemptions include `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app`, and **`/auth/*`**. The React app uses **login + JWT** (and HttpOnly refresh cookies) for REST and WebSocket; see [Security — authentication](../security#frontend-and-api-authentication).
+
+---
+
+## Health
+
+### GET /health
+
+Liveness check. Use for load balancers and monitoring.
+
+| Response | Body |
+|----------|------|
+| 200 OK   | `{"status": "ok"}` (may include `graph_serialization`, `last_fdd_run`; see Swagger or `/openapi.json` for full schema) |
+
+---
+
+## Sites
+
+CRUD for sites (buildings or zones). Deleting a site cascades to equipment, points, timeseries, fault results, and fault events. Brick TTL is regenerated after each mutation.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /sites         | List all sites |
+| POST   | /sites         | Create site |
+| GET    | /sites/{id}    | Get site by UUID |
+| PATCH  | /sites/{id}    | Update site |
+| DELETE | /sites/{id}    | Delete site and all dependent data |
+
+**Create body (POST /sites):**
+
+| Field         | Type   | Required | Description |
+|---------------|--------|----------|-------------|
+| name          | string | yes      | Site name |
+| description   | string | no       | Optional description |
+| metadata_     | object | no       | Optional JSON metadata |
+
+**Update body (PATCH /sites/{id}):** Same fields; omit to leave unchanged.
+
+---
+
+## Equipment
+
+CRUD for equipment (AHUs, VAVs, chillers, etc.) under a site. Deleting equipment cascades to its points and their timeseries. Brick TTL is regenerated after each mutation.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /equipment          | List equipment (optional `?site_id=uuid`) |
+| POST   | /equipment          | Create equipment |
+| GET    | /equipment/{id}     | Get equipment by UUID |
+| PATCH  | /equipment/{id}     | Update equipment |
+| DELETE | /equipment/{id}     | Delete equipment and its points |
+
+**Create body (POST /equipment):**
+
+| Field           | Type   | Required | Description |
+|-----------------|--------|----------|-------------|
+| site_id         | UUID   | yes      | Parent site |
+| name            | string | yes      | Equipment name |
+| description     | string | no       | Optional |
+| equipment_type  | string | no       | e.g. AHU, VAV, Chiller |
+| metadata_       | object | no       | Optional JSON (alias: `metadata`) |
+
+**Update body (PATCH /equipment/{id}):** Same fields; omit to leave unchanged.
+
+---
+
+## Points
+
+CRUD for points (sensors, setpoints, commands) that reference timeseries. Deleting a point cascades to its timeseries_readings. Brick TTL is regenerated after each mutation.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | /points           | List points (optional `?site_id=uuid` or `?equipment_id=uuid`) |
+| POST   | /points           | Create point |
+| GET    | /points/{id}      | Get point by UUID |
+| PATCH  | /points/{id}      | Update point |
+| DELETE | /points/{id}      | Delete point and its timeseries |
+
+**Create body (POST /points):**
+
+| Field              | Type   | Required | Description |
+|--------------------|--------|----------|-------------|
+| site_id            | UUID   | yes      | Parent site |
+| external_id        | string | yes      | Identifier from the **writer** (e.g. VOLTTRON historian / topic key) |
+| equipment_id       | UUID   | no       | Parent equipment |
+| brick_type         | string | no       | Brick class (e.g. Supply_Air_Temperature_Sensor) |
+| fdd_input          | string | no       | Name FDD rules use for this point (defaults to external_id) |
+| unit               | string | no       | Unit of measure |
+| description        | string | no       | Optional |
+| bacnet_device_id   | string | no       | Optional **metadata** (imports / legacy); Open-FDD does **not** poll BACnet by default. |
+| object_identifier  | string | no       | Optional **metadata**. |
+| object_name        | string | no       | Optional display name. |
+
+**Update body (PATCH /points/{id}):** Same fields; omit to leave unchanged. Responses (GET/POST/PATCH) include `bacnet_device_id`, `object_identifier`, `object_name` when set.
+
+---
+
+## BACnet proxy routes (legacy lab only)
+
+**Default ingest is VOLTTRON → SQL**, not these HTTP routes. If **you** run a separate **diy-bacnet-style** JSON-RPC gateway and enable env vars (`OFDD_BACNET_SERVER_URL`, …), the API can still **proxy** discovery calls. See **`afdd_stack/legacy/README.md`** and **[Edge field buses (VOLTTRON)](../bacnet/)**.
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET    | /bacnet/gateways      | Lists configured lab gateways when env is set. |
+| POST   | /bacnet/server_hello … | JSON-RPC proxy to your gateway — **optional**. |
+
+For new deployments, configure **site VOLTTRON** and map historian data to **`external_id`** instead of relying on `/bacnet/*`.
+
+---
+
+## Data model
+
+Brick-semantic data model: export (DB + graph snapshot), bulk import (points + optional equipment feeds), TTL, SPARQL. TTL is auto-synced on every CRUD and import. For the **AI-assisted tagging** workflow (export → LLM/human → import), see [AI-assisted data modeling](../modeling/ai_assisted_tagging).
+
+### GET /data-model/export
+
+**Single export route:** Returns one JSON array combining **graph snapshot fields** (when present) with **all DB points**. Use for LLM Brick tagging; then PUT /data-model/import.
+
+| Query param   | Type    | Required | Description |
+|---------------|---------|----------|-------------|
+| site_id       | string  | no       | Site UUID or name; omit for all sites |
+| bacnet_only   | boolean | no       | If true, return only rows with `bacnet_device_id` and `object_identifier` set (**metadata filter**). Default false = full dump. |
+
+**Response:** `200 OK` — JSON array of point-shaped rows. The **`polling`** flag is **legacy** (removed BACnet scraper in default Compose); prefer **VOLTTRON** historian writes into `timeseries_readings`.
+
+---
+
+### PUT /data-model/import
+
+Bulk create/update **points** and optionally update **equipment** feeds/fed_by. The API accepts **only** two top-level keys: **points** and **equipment** (no sites, equipments, or relationships). Used for Brick workflow: export → tag (brick_type, rule_input, polling, equipment relationships) → import. TTL is regenerated after import.
+
+**Body:** `{"points": [...], "equipment": [...]}` (equipment optional).
+
+| Field (per point) | Type   | Description |
+|-------------------|--------|-------------|
+| point_id          | UUID   | Omit to create; set to update existing |
+| site_id, external_id | required for create | Real UUIDs from GET /sites; external_id = time-series key |
+| bacnet_device_id, object_identifier | optional metadata | From older exports if present |
+| brick_type, rule_input, equipment_id, unit, polling | optional | **`polling`** is legacy; ingest is via **VOLTTRON**/SQL |
+| equipment (array) | optional | Each item: `equipment_id`, `feeds_equipment_id`, `fed_by_equipment_id` (Brick feeds/isFedBy; UUIDs from GET /equipment) |
+
+**Response:** `200 OK` — e.g. `{"created": N, "updated": M, "total": ...}`
+
+---
+
+### GET /data-model/ttl
+
+Generate Brick TTL from current DB state. Returns Turtle (text/turtle).
+
+| Query param | Type   | Default | Description |
+|-------------|--------|---------|-------------|
+| site_id     | string | —       | Filter by site UUID or name; omit for all sites |
+| save        | bool   | true    | If true, write TTL to config/data_model.ttl (best-effort; may fail if read-only) |
+
+**Response:** `200 OK` — Turtle document. On save failure, body still returns TTL; headers `X-TTL-Save: failed` and `X-TTL-Save-Error` indicate the error.
+
+---
+
+### POST /data-model/sparql
+
+Run a SPARQL query against the current data model (TTL generated from DB). Use in Swagger for ad-hoc validation.
+
+**Body:** `{"query": "PREFIX brick: <...> SELECT ?s ?p ?o WHERE { ... } LIMIT 10"}`
+
+**Response:** `200 OK` — `{"bindings": [{ "s": "...", "p": "...", "o": "..." }, ...]}`
+
+**Errors:** `400` invalid TTL or SPARQL; `503` if rdflib not installed (`pip install open-fdd[brick]`).
+
+---
+
+### POST /data-model/sparql/upload
+
+Run a SPARQL query from an uploaded `.sparql` file (e.g. from `scripts/automated_testing/sparql/`). Same behavior as POST /data-model/sparql with the file contents as query.
+
+**Body:** multipart/form-data, file = `.sparql` file.
+
+**Response:** Same as POST /data-model/sparql.
+
+---
+
+## Bulk download
+
+CSV exports are Excel-friendly (UTF-8 BOM, ISO timestamps). Wide format = timestamp column on the left, one column per point.
+
+### GET /download/csv
+
+Download timeseries as CSV. Use for bookmarking or simple curl.
+
+| Query param | Type   | Required | Description |
+|-------------|--------|----------|-------------|
+| site_id     | string | yes      | Site name or UUID |
+| start_date  | date   | yes      | Start of range (YYYY-MM-DD) |
+| end_date    | date   | yes      | End of range |
+| format      | string | no       | `wide` (default, Excel) or `long` (ts, point_key, value) |
+
+**Response:** `200 OK` — CSV attachment `openfdd_timeseries_{start}_{end}.csv`. `404` if site not found or no data.
+
+---
+
+### POST /download/csv
+
+Same as GET but supports optional point filter in body.
+
+**Body:**
+
+| Field      | Type     | Required | Description |
+|------------|----------|----------|-------------|
+| site_id    | string   | yes      | Site name or UUID |
+| start_date | date     | yes      | Start of range |
+| end_date   | date     | yes      | End of range |
+| format     | string   | no       | `wide` or `long` (default wide) |
+| point_ids  | string[] | no       | Limit to these point UUIDs |
+
+**Response:** Same as GET /download/csv.
+
+---
+
+### GET /download/faults
+
+Export fault results for MSI/cloud integration. Poll this endpoint (e.g. cron) to sync faults into your platform.
+
+| Query param | Type   | Required | Description |
+|-------------|--------|----------|-------------|
+| start_date  | date   | yes      | Start of range |
+| end_date    | date   | yes      | End of range |
+| site_id     | string | no       | Site name or UUID; omit for all sites |
+| format      | string | no       | `csv` (default, Excel-friendly) or `json` |
+
+**Response:**
+
+- **CSV:** `200 OK` — attachment `openfdd_faults_{start}_{end}.csv` (ts, site_id, equipment_id, fault_id, flag_value, evidence).
+- **JSON:** `200 OK` — `{"faults": [...], "count": N}`.
+
+`404` if site_id provided and not found.
+
+---
+
+## Analytics
+
+Data-model driven: results depend on points having the right brick_type (e.g. fan/VFD for motor runtime).
+
+### GET /analytics/motor-runtime
+
+Motor runtime hours from fan/VFD points. If no suitable point exists, returns `NO DATA`.
+
+| Query param | Type   | Required | Description |
+|-------------|--------|----------|-------------|
+| site_id     | string | yes      | Site name or UUID |
+| start_date  | date   | yes      | Start of range |
+| end_date    | date   | yes      | End of range |
+
+**Response:** `200 OK` — `{"motor_runtime_hours": 123.45, "point": {...}}` or `{"status": "NO DATA", "reason": "..."}`. Cached to `analytics_motor_runtime` for Grafana.
+
+---
+
+### GET /analytics/fault-summary
+
+Fault counts by fault_id. For dashboards and cloud integration.
+
+| Query param | Type   | Required | Description |
+|-------------|--------|----------|-------------|
+| start_date  | date   | yes      | Start of range |
+| end_date    | date   | yes      | End of range |
+| site_id     | string | no       | Site name or UUID; omit for all sites |
+
+**Response:** `200 OK` — `{"site_id": "...", "period": {"start": "...", "end": "..."}, "by_fault_id": [{"fault_id": "...", "count": N, "flag_sum": M}, ...], "total_faults": N}`.
+
+---
+
+### GET /analytics/system/* (host, containers, disk)
+
+System resource metrics for the React **System resources** page (and optional Grafana/JSON consumers). Data comes from `host_metrics`, `container_metrics`, and `disk_metrics`; these tables are populated by the **host-stats** service. If the tables do not exist (e.g. host-stats not deployed), endpoints return empty lists.
+
+| Endpoint | Description |
+|----------|--------------|
+| `GET /analytics/system/host` | Latest host metrics per hostname (mem_used_gb, mem_available_gb, load_1/5/15, swap_used_gb). |
+| `GET /analytics/system/host/series?from_ts=&to_ts=` | Time series of host memory and load for charts (ISO datetimes). |
+| `GET /analytics/system/containers` | Running containers from the latest host-stats scrape only (cpu_pct, mem_mb, mem_pct, pids); aligns with `docker ps`, unlike raw “latest row per name” over all history. |
+| `GET /analytics/system/containers/series?from_ts=&to_ts=` | Time series of container memory (MB) and CPU % for charts. |
+| `GET /analytics/system/disk` | Latest disk usage per host/mount (used_gb, free_gb, total_gb, used_pct). |
+
+---
+
+## Run FDD now
+
+### POST /run-fdd
+
+Trigger an immediate FDD rule run and reset the loop timer when the fdd-loop container runs with `--loop`. Touches the trigger file; the loop picks it up within 60 seconds.
+
+**Response:** `200 OK` — `{"status": "triggered", "path": "config/.run_fdd_now"}` (or configured path).
+
+---
+
+## OpenAPI
+
+- **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs) — try all endpoints; version = installed open-fdd package.
+- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc).
+- **OpenAPI JSON:** [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json).

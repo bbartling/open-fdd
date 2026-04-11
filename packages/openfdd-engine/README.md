@@ -21,7 +21,7 @@ cd packages/openfdd-engine
 pip install -e .
 ```
 
-Brick TTL / **rdflib** mapping is **not** in **`open-fdd`**; use **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** for that path.
+Brick TTL / **rdflib** mapping is **not** in **`open-fdd`**; use **`afdd_stack/openfdd_stack/`** in this monorepo (`pip install -e ".[stack]"` from the repo root).
 
 ## API (subset of `open_fdd.engine`)
 

@@ -1,178 +1,99 @@
 ---
-title: Engine-only & IoT pipelines
-nav_order: 5
-description: "Build a pandas DataFrame, map Haystack / Brick / DBO / 223P names to columns, run RuleRunner — without the Docker stack."
+title: Engine-only deployment and external IoT pipelines
+parent: How-to Guides
+nav_order: 21
 ---
 
-# Engine-only and IoT-style use
+# Engine-only deployment and external IoT pipelines
 
-This page is for people who already have **time-series data** (historian export, MQTT pipeline, warehouse query, CSV) and want **`open-fdd`** to evaluate **YAML rules** on a **`pandas.DataFrame`**.
+> **Library-only (`pip install open-fdd`):** See the **[engine documentation](https://bbartling.github.io/open-fdd/)** — [Getting started](https://bbartling.github.io/open-fdd/getting_started), [Column map & resolvers](https://bbartling.github.io/open-fdd/column_map_resolvers), and [Engine-only & IoT](https://bbartling.github.io/open-fdd/howto/engine_only_iot) (same topics as below, scoped to pandas integrators).
 
-You do **not** need Postgres, TimescaleDB, or Docker for that path.
+Some integrators already operate **data collection** (historians, MQTT, proprietary BAS exports) and **modeling / semantics** (warehouse schemas, optional Brick elsewhere). The **pandas YAML engine** (`open_fdd.engine`) and **VOLTTRON agents** let you add **FDD** without adopting a full legacy Docker stack.
 
-> **`from open_fdd import RuleRunner`** after **`pip install open-fdd`**. Rules live under **`open_fdd.engine`**; see [Getting started](../getting_started) for a full walkthrough.
+> **Package names:** The rules code lives under **`open_fdd.engine`**. The repo’s optional **`openfdd-engine`** package (**`openfdd_engine`**) is a thin re-export around the same API — not a different engine. See [The optional openfdd-engine package](openfdd_engine) for a comparison table and Docker vs library paths.
 
----
+## What `--mode engine` starts (Docker)
 
-## The only idea you need
+From the repo root:
 
-1. Build a **wide** table: one row per time step, one column per sensor (plus optional **`timestamp`**).
-2. Your YAML rules talk in **logical names** (whatever you put in `inputs` and in **`expression`** — e.g. a Brick class name, a Haystack slug you invented, a 223P-scoped label).
-3. **`column_map`** is a dict: **`{ logical_name: actual_column_name_in_df }`**. It tells **`RuleRunner`** which physical column to use when the rule says a given name.
-
-The **left-hand keys** of **`column_map`** must match the names your **rule YAML** uses. The **right-hand values** are whatever your pipeline actually named the columns (`sat`, `AHU1_SA_T`, …).
-
----
-
-## One `DataFrame` you can reuse
-
-Most examples below use the same small frame: two sensors as columns **`sat`** and **`oat`**, plus **`timestamp`**.
-
-```python
-import pandas as pd
-
-df = pd.DataFrame(
-    {
-        "timestamp": pd.date_range("2025-01-01", periods=6, freq="h", tz="UTC"),
-        "sat": [72.0, 74.0, 76.0, 105.0, 70.0, 71.0],
-        "oat": [35.0, 36.0, 38.0, 40.0, 34.0, 33.0],
-    }
-)
+```bash
+./scripts/bootstrap.sh --mode engine
 ```
 
-Your real job is whatever produces **`df`** (SQL, Parquet, MQTT aggregate, …). **`open-fdd`** only cares that the columns exist.
+This brings up **TimescaleDB**, the **`fdd-loop`** service, and **`weather-scraper`** — see [Modular architecture](../modular_architecture.md) for the matrix. There is **no** API, React, or BACnet scraper in this slice by default.
 
----
+**When it fits**
 
-## Brick-style names (common default)
+- You will **load aligned time-series into Postgres** (same DB the platform uses) and let the existing loop consume **rules + data model** from the normal Open-FDD deployment pattern.
+- You want **weather-augmented** or **scheduled** FDD in the same containerized runtime as production Open-FDD.
 
-Rules often use **Brick class local names** like **`Supply_Air_Temperature_Sensor`**. Your warehouse columns stay short (**`sat`**, **`oat`**).
+**When something else fits better**
 
-**`column_map`** (Brick class name → your column):
+- Your data lives in **Snowflake / BigQuery / a lake** and you only need **rule evaluation** on batches or streams: use the **Python library** path below (no Docker).
 
-```python
-column_map = {
-    "Supply_Air_Temperature_Sensor": "sat",
-    "Outside_Air_Temperature_Sensor": "oat",
-}
+## Library path — same YAML, any DataFrame
+
+The rule runner is **`open_fdd.engine.runner.RuleRunner`**. It loads the **same** `.yaml` rule files as the platform (`type: bounds|flatline|expression|hunting|oa_fraction|erv_efficiency`, `inputs`, `params`, etc.). Authoring references:
+
+- [Expression rule cookbook](../expression_rule_cookbook.md)
+- Examples under `examples/my_rules/` in the repo
+
+**Minimal integration pattern**
+
+1. Build a **pandas** `DataFrame` whose columns are your sensor traces (and optional `timestamp`).
+2. Point **`RuleRunner`** at a directory of `.yaml` files **or** pass `rules=[...]` dicts.
+3. Call **`run(df, timestamp_col=..., skip_missing_columns=True, column_map={...})`**.
+4. Read boolean **`*_flag`** columns (and optional rolling persistence — same parameters as in-platform).
+
+**`column_map`** — when your modeling layer uses Brick class URIs or tags but dataframe columns are different (e.g. `temp_sa` vs `Supply_Air_Temperature_Sensor`), pass the same **`column_map`** concept the platform uses after SPARQL resolution. See `RuleRunner.run` docstring in `open_fdd/engine/runner.py`.
+
+### Bring your own `column_map` or resolver
+
+Integrators own the bridge from **their** naming (warehouse columns, Haystack refs, another graph) into what **`RuleRunner`** expects:
+
+1. **Plain dict (most common)** — Build `column_map: dict[str, str]` (rule input / Brick-class key → **actual DataFrame column name**) and pass it to **`RuleRunner.run(..., column_map=column_map)`**. No TTL required on your side if you already know the columns.
+
+2. **Brick TTL** — The **`open-fdd`** wheel does **not** include **rdflib**. If you need SPARQL over a **`.ttl`** file in **Python code outside the Docker stack**, either install **rdflib** yourself and copy the small resolver from **`openfdd_stack.platform.brick_ttl_resolver`** in **`afdd_stack/openfdd_stack/`** (same monorepo), or build **`column_map`** another way (manifest / dict).
+
+3. **Custom `ColumnMapResolver`** — Implement the **`ColumnMapResolver`** protocol (`build_column_map(*, ttl_path: Path) -> dict[str, str]`) with your own lookup (REST, SQL, manifest file, etc.). You may ignore **`ttl_path`** if your source is elsewhere. For **forked** platform code, **`run_fdd_loop(..., column_map_resolver=your_resolver)`** swaps mapping for the DB loop; the **stock Docker `fdd-loop`** does **not** set this — it keeps **`BrickTtlColumnMapResolver`** from **`openfdd_stack.platform.brick_ttl_resolver`**.
+
+**Priority / policy:** There is no automatic “ontology priority” in the engine — you supply **one** `column_map` per run (or one resolver that returns it). Ambiguity (e.g. multiple Haystack matches) should be resolved **before** calling **`RuleRunner`** with a strict dict.
+
+Types live in **`open_fdd.engine.column_map_resolver`** and are re-exported from **`openfdd_engine`** (shim only). More context: [The optional openfdd-engine package](openfdd_engine), GitHub **#122** (resolver RFC).
+
+### Manifest file + composite priority (workshop / gap-fill)
+
+- **`load_column_map_manifest(path)`** — reads **`.json`** or **`.yaml`** / **`.yml`**. Accepts either a flat `str → str` object or **`column_map:`** nested mapping.
+- **`ManifestColumnMapResolver(path)`** — same map via the **`ColumnMapResolver`** protocol; **`build_column_map`** ignores **`ttl_path`** (manifest is the source of truth for that resolver).
+- **`FirstWinsCompositeResolver(r1, r2, ...)`** — runs each resolver in order; **the first resolver to define a key wins** (on the stack: **`BrickTtlColumnMapResolver`** then **`ManifestColumnMapResolver("extras.yaml")`**; in library-only code, two manifests or a dict + manifest). This is the supported pattern for **ontology-style priority** without unsafe dynamic imports.
+
+**Config-driven resolver class names** (e.g. loading a Python import path from env) are **not** supported on purpose — easy to turn into **import injection**. Compose resolvers in code or a thin startup script.
+
+**Examples:** `examples/column_map_resolver_workshop/` in the **open-fdd** repo — **`simple_ontology_demo.py`** + **`simple_ontology_rule.yaml`**.
+
+**Install**
+
+```bash
+pip install -e .          # from open-fdd clone, or
+pip install open-fdd      # PyPI engine
 ```
 
-Minimal example rule (cookbook-style multi-ontology **`inputs`**): [`simple_ontology_rule.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_rule.yaml). The **`expression`** always uses the **input key** (e.g. **`Supply_Air_Temperature_Sensor`**), not the ontology alias strings.
+The repo also contains an optional **`openfdd-engine`** tree (`packages/openfdd-engine/`) that re-exports the same API; **`pip install open-fdd`** is the supported public install — use **`open_fdd.engine`** after install. More detail: [The optional openfdd-engine package](openfdd_engine).
 
----
+## Standalone playground (optional)
 
-## Haystack-flavored names
+An **in-repo** example folder is included for workshops and quick starts:
 
-Haystack gives you **tags or refs**; you still choose **stable slugs** for **`column_map`** keys. If your rule uses **cookbook-style** **`inputs`** (Brick input key + **`haystack:`** alias on the same block), the **`expression`** still names the **input key**; **`column_map`** uses the Haystack slug:
+- `examples/engine_iot_playground/` with `README.md`, `rules/*.yaml`, `data/RTU11.csv`, `run_demo.py`, and `RTU11_engine_tutorial.ipynb`.
 
-```python
-column_map = {
-    "discharge_air_temp_sensor": "sat",
-    "outside_air_temp_sensor": "oat",
-}
-```
+That pattern is **not** a second engine — it is the **same** code path as production rules, without Docker.
 
-See [`simple_ontology_demo.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_demo.py) (Haystack row).
+## Summary
 
----
+| Approach | You bring | Open-FDD provides |
+|----------|-----------|-------------------|
+| **VOLTTRON + SQL / agents** | Historian + agent packaging | FDD against DB time series |
+| **`RuleRunner` in Python** | DataFrame + YAML directory | Identical rule YAML semantics on pandas |
+| **Full platform (custom)** | BACnet / UI / REST | Restore legacy compose or run API + React from source + VOLTTRON on edge |
 
-## DBO / Google Digital Buildings–style names
-
-Illustrative **type-style** keys (your site may differ). Physical columns are still **`sat`** / **`oat`**.
-
-**`column_map`** (DBO-style type name → column):
-
-```python
-column_map = {
-    "SupplyAirTemperatureSensor": "sat",
-    "OutsideAirTemperatureSensor": "oat",
-}
-```
-
-With cookbook-style **`inputs`**, the **`expression`** still uses the **input key**; **`column_map`** matches the **`dbo:`** label. See **`simple_ontology_demo.py`** (DBO row).
-
----
-
-## 223P-scoped names
-
-223P graphs often need **equipment + connection** in the label so “supply air temp” is not ambiguous. Your **graph** might use paths like **`AHU-1 / supply_air_temp`**; when you feed **`RuleRunner`**, you still emit a **`column_map`** from **whatever string you use as the rule input key** → **`sat`** / **`oat`**.
-
-**Illustrative map** (slash-style labels — often **not** valid in **`type: expression`** rules):
-
-```python
-column_map = {
-    "AHU-1/supply_air_temp": "sat",
-    "AHU-1/outside_air_temp": "oat",
-}
-```
-
-**Important — `type: expression`:** Variables inside **`expression`** come from **input keys**, which must be **valid Python identifiers**. Put scoped graph strings on **`s223:`** / **`223p:`** in **`inputs`** and key **`column_map`** by those strings (see **`simple_ontology_rule.yaml`**). Use **safe slugs** (underscores), not slashes, when a label must double as an input key.
-
-Example safe keys (match **`s223:`** / **`223p:`** on **`inputs`** — see **`simple_ontology_rule.yaml`**):
-
-```python
-column_map = {"bldg1_supply_air_temperature_sensor": "sat"}
-# or
-column_map = {"ahu1_supply_air_temp_223p": "sat"}
-```
-
----
-
-## Run **`RuleRunner`**
-
-From a rule file plus a **`column_map`** dict (or load a manifest with **`load_column_map_manifest`**):
-
-```python
-from pathlib import Path
-from open_fdd.engine.runner import RuleRunner, load_rule
-
-root = Path("examples/column_map_resolver_workshop")  # adjust to your clone
-rules = [load_rule(root / "simple_ontology_rule.yaml")]
-runner = RuleRunner(rules=rules)
-
-column_map = {"discharge_air_temp_sensor": "sat"}  # Haystack-style key → column
-
-out = runner.run(
-    df,
-    timestamp_col="timestamp",
-    column_map=column_map,
-    params={"units": "imperial"},
-    skip_missing_columns=True,
-)
-```
-
-**Minimal demo:** [`simple_ontology_demo.py`](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/simple_ontology_demo.py) prints one run per ontology key style using the same rule YAML.
-
----
-
-## Manifests on disk, Brick TTL, composites
-
-Covered step-by-step on **[Column map & resolvers](../column_map_resolvers)**:
-
-- **YAML/JSON manifest** — `ManifestColumnMapResolver`, `load_column_map_manifest`
-- **Brick `.ttl` file** — handled by the **AFDD stack** (`openfdd_stack.platform.brick_ttl_resolver`); **`pip install open-fdd`** alone uses manifests or a plain dict
-- **TTL + small override file** — `FirstWinsCompositeResolver` (first resolver wins per key)
-
-Implementation: [`open_fdd/engine/column_map_resolver.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/engine/column_map_resolver.py). Workshop: **[`examples/column_map_resolver_workshop/`](https://github.com/bbartling/open-fdd/tree/master/examples/column_map_resolver_workshop)** ([README](https://github.com/bbartling/open-fdd/blob/master/examples/column_map_resolver_workshop/README.md)).
-
----
-
-## Docker **`--mode engine`** (different repo)
-
-**Postgres, `fdd-loop`, weather worker, and Compose “engine” mode** are part of the **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack)** Docker platform, not something you run from the **`open-fdd`** library repo alone. That path is for teams who want **scheduled FDD inside Compose** with the same database pattern as the full product.
-
-- **Modes and services:** [Modular architecture](https://bbartling.github.io/open-fdd-afdd-stack/modular_architecture) (AFDD stack docs).
-- **Stack setup:** [Getting started](https://bbartling.github.io/open-fdd-afdd-stack/getting_started) on the stack site.
-
-If your data lives in **Snowflake, BigQuery, a lake, or flat files**, stay on **`RuleRunner` + `DataFrame`** above — no requirement to use that Docker slice.
-
----
-
-## See also
-
-- [Getting started](../getting_started) — install, extras, one complete **`RuleRunner`** example
-- [Expression rule cookbook](../expression_rule_cookbook) — authoring **`expression`** rules
-- [Examples (repository)](../examples) — **`AHU/`** notebooks and CSVs
-- [Fault rules overview](../rules/overview) — YAML **`inputs`**, **`flag`**, types
-
-Maintainers: alternate PyPI package name and release alignment — [PyPI releases (`open-fdd`)](https://bbartling.github.io/open-fdd-afdd-stack/howto/openfdd_engine_pypi) (stack docs).
+For mode overview and service list, start at [Modular architecture](../modular_architecture.md).

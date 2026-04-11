@@ -29,26 +29,7 @@
         "type": "object",
         "properties": {
           "column": { "type": "string" },
-          "brick": {
-            "type": "string",
-            "description": "Brick class local name; used for column_map lookup (first among ontology fields)"
-          },
-          "haystack": {
-            "type": "string",
-            "description": "Optional Haystack-oriented slug for column_map lookup"
-          },
-          "dbo": {
-            "type": "string",
-            "description": "Optional Google Digital Buildings–style type name for column_map lookup"
-          },
-          "s223": {
-            "type": "string",
-            "description": "Optional ASHRAE 223P-oriented identifier for column_map lookup"
-          },
-          "223p": {
-            "type": "string",
-            "description": "Alias for s223-style lookup (quote key in YAML: '223p')"
-          },
+          "brick": { "type": "string" },
           "bounds": {
             "oneOf": [
               { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },

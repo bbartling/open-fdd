@@ -1,12 +1,10 @@
 title: "Open-FDD"
-description: "PyPI engine only: YAML rules on pandas (open_fdd.engine). Full AFDD platform docs: bbartling.github.io/open-fdd-afdd-stack"
+description: "Open-FDD: PyPI engine + SQL/semantic stack; field ingest is site VOLTTRON (ZMQ), not BACnet/Modbus in this app."
 baseurl: "/open-fdd"
-# Jekyll emits e.g. modeling/llm_workflow.html. GitHub Pages serves extensionless /open-fdd/modeling/llm_workflow
-# but /open-fdd/modeling/llm_workflow/ often 404s (no page/index.html). Prefer extensionless or .html in README links.
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
 
-# Sidebar branding (same asset as README)
+# Match engine docs branding (shared project visual)
 logo: "https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png"
 
 plugins:
@@ -15,12 +13,10 @@ plugins:
   - jekyll-seo-tag
 
 aux_links:
-  "GitHub": "https://github.com/bbartling/open-fdd"
-  "PyPI": "https://pypi.org/project/open-fdd/"
-  "AFDD stack (docs)": "https://bbartling.github.io/open-fdd-afdd-stack/"
-  "AFDD stack (repo)": "https://github.com/bbartling/open-fdd-afdd-stack"
+  "GitHub (monorepo)": "https://github.com/bbartling/open-fdd"
+  "PyPI (open-fdd)": "https://pypi.org/project/open-fdd/"
 
-footer_content: "MIT · <a href=\"https://github.com/bbartling/open-fdd\">open-fdd</a> · <a href=\"https://bbartling.github.io/open-fdd-afdd-stack/\">AFDD stack docs</a>"
+footer_content: "MIT · <a href=\"https://github.com/bbartling/open-fdd\">open-fdd</a> · Engine + AFDD stack docs"
 
 heading_anchors: true
 
