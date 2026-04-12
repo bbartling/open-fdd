@@ -1,0 +1,12 @@
+# Open-F-DD lab overlay: attach volttron1 to the stack DB network (DNS name "db" / openfdd_timescale).
+# Use with: docker compose -f docker-compose.yml -f docker-compose.openfdd.override.yml up -d
+# Applied by: ./scripts/bootstrap.sh --volttron-docker-lab-push
+services:
+  volttron1:
+    networks:
+      - default
+      - stack_default
+
+networks:
+  stack_default:
+    external: true

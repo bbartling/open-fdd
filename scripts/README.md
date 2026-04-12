@@ -13,6 +13,8 @@ Typical Central lab:
 ```bash
 cd open-fdd
 ./scripts/bootstrap.sh --central-lab
+./scripts/bootstrap.sh --print-volttron-central-sql-forward-poc   # Edge→Central ForwardHistorian + log hints
+# OFDD_FORWARD_CONFIG_OUT=/path/forward.json OFDD_FORWARD_CENTRAL_VIP=tcp://CENTRAL:22916 ./scripts/bootstrap.sh --write-forward-historian-config-template
 ./scripts/volttron-docker.sh up -d
 ./scripts/volttron-docker.sh ps
 ```

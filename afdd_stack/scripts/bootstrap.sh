@@ -19,17 +19,31 @@
 #   OFDD_PG_HOST / OFDD_DB_DSN — DB checks and openfdd-defaults.env
 #   OFDD_VOLTTRON_LOG_DIR — log directory for host-mounted VOLTTRON_HOME (logrotate fragment)
 #   OFDD_VOLTTRON_CONFIG_STRICT=1 — do not auto-quarantine duplicate web-ssl-* lines in $VOLTTRON_HOME/config
+#   OFDD_FORWARD_CONFIG_OUT — required for --write-forward-historian-config-template (absolute path to JSON)
+#   OFDD_FORWARD_CENTRAL_VIP — destination-vip for that template (default tcp://127.0.0.1:22916)
+#   OFDD_VOLTTRON_DOCKER_SERVICE — docker compose service name for exec hints (default volttron1)
+#   OFDD_VOLTTRON_AUTH_CREDENTIALS — for --volttron-docker-auth-add (sensitive; export in shell only)
+#   OFDD_VOLTTRON_REMOTE_USER_ID — for --volttron-docker-auth-remote-approve
+#   OFDD_VOLTTRON_CONFIG_MAX_LINES — for --volttron-docker-show-config (default 120)
+#   OFDD_VOLTTRON_LOG_LINES / OFDD_VOLTTRON_LOG_GREP — for --volttron-docker-tail-logs
+#   OFDD_VOLTTRON_LAB_SKIP_PUSH=1 — --volttron-docker-lab-up skips copying lab templates first
+#   OFDD_VOLTTRON_LAB_NO_BACKUP=1 — --volttron-docker-lab-push overwrites without *.bak.* copies
+#   OFDD_VOLTTRON_DOCKER_DOWN_VOLUMES=1 — --volttron-docker-lab-down passes docker compose down -v
+#   OFDD_COMPOSE_DB_MAX_WAIT — seconds to wait for pg_isready after up -d db (default 90)
 #
 # Quick start (from open-fdd repo root):
 #   ./scripts/bootstrap.sh --central-lab
-#   # Then build the image and start VOLTTRON (upstream volttron-docker; do not commit Open-FDD changes there):
-#   ./scripts/volttron-docker.sh up -d
+#   # Minimal Central + SQLHistorian (templates + compose + psycopg2; no manual docker exec):
+#   LOCAL_USER_ID=$(id -u) ./scripts/bootstrap.sh --volttron-docker-lab-up
+#   # Or build the image and: ./scripts/volttron-docker.sh up -d
 #
 # Optional UI + Central prep (still from repo root):
 #   ./scripts/bootstrap.sh --build-openfdd-ui
 #   ./scripts/bootstrap.sh --write-openfdd-ui-agent-config
 #   ./scripts/bootstrap.sh --volttron-config-stub
 #   ./scripts/bootstrap.sh --print-vcfg-hints
+#   ./scripts/bootstrap.sh --print-forward-historian-cheatsheet
+#   ./scripts/bootstrap.sh --print-volttron-central-sql-forward-poc
 #
 # Local verification (no Docker services required for pytest):
 #   ./scripts/bootstrap.sh --test
@@ -78,6 +92,25 @@ SMOKE_FDD_LOOP=false
 CENTRAL_LAB=false
 VOLTTRON_DOCKER=false
 TEST=false
+PRINT_FORWARD_HISTORIAN_CHEATSHEET=false
+WRITE_FORWARD_HISTORIAN_CONFIG_TEMPLATE=false
+PRINT_VOLTTRON_CENTRAL_SQL_FORWARD_POC=false
+VOLTTRON_DOCKER_SERVERKEY=false
+VOLTTRON_DOCKER_SHOW_CONFIG=false
+VOLTTRON_DOCKER_CAT_CONFIG=false
+VOLTTRON_DOCKER_AUTH_REMOTE_LIST=false
+VOLTTRON_DOCKER_AUTH_REMOTE_APPROVE=false
+VOLTTRON_DOCKER_AUTH_ADD=false
+VOLTTRON_DOCKER_TAIL_LOGS=false
+VOLTTRON_DOCKER_LAB_PUSH=false
+VOLTTRON_DOCKER_LAB_UP=false
+VOLTTRON_DOCKER_LAB_DOWN=false
+VOLTTRON_DOCKER_INSTALL_PG_DRIVER=false
+VOLTTRON_DOCKER_AGENTS=false
+VOLTTRON_DOCKER_AGENT_STATUS=false
+VOLTTRON_DOCKER_BASH=false
+VOLTTRON_DOCKER_COMPOSE=false
+declare -a VOLTTRON_DOCKER_COMPOSE_ARGS=()
 
 usage() {
   cat <<'EOF'
@@ -90,8 +123,8 @@ Usage:
 
 Typical flow (from open-fdd repo root):
   ./scripts/bootstrap.sh --central-lab
-  ./scripts/volttron-docker.sh up -d   # runs docker compose in OFDD_VOLTTRON_DOCKER_DIR (default ~/volttron-docker)
-  # Build image first if needed — https://github.com/VOLTTRON/volttron-docker
+  LOCAL_USER_ID=$(id -u) ./scripts/bootstrap.sh --volttron-docker-lab-up
+  # Or: ./scripts/volttron-docker.sh up -d  (compose in OFDD_VOLTTRON_DOCKER_DIR; build image if needed)
 
 Options:
   --doctor              Check git, python3, Docker, monorepo paths
@@ -110,6 +143,43 @@ Options:
   --verify-fdd-schema   psql or docker exec: assert FDD tables exist (fault_definitions, fault_results, fdd_run_log, …)
   --smoke-fdd-loop      One-shot run_fdd_loop() (needs DB + pip install -e ".[stack]" or PYTHONPATH from --print-paths)
   --print-vcfg-hints    Certificate defaults + volttron-docker / Central notes
+  --print-forward-historian-cheatsheet
+                        Print Edge→Central ForwardHistorian auth + log commands (see docs/howto/edge_forward_historian_to_central.md)
+  --write-forward-historian-config-template
+                        Write JSON template for ForwardHistorian (requires OFDD_FORWARD_CONFIG_OUT=/abs/path.json;
+                        optional OFDD_FORWARD_CENTRAL_VIP default tcp://127.0.0.1:22916; serverkey is PLACEHOLDER)
+  --print-volttron-central-sql-forward-poc
+                        Print SQL-forward lab goals + cheatsheet pointer + docker log one-liners + Central agent hygiene note
+  --volttron-docker-serverkey
+                        Same key as inside the container: docker exec -itu volttron volttron1 bash → vctl auth serverkey (non-interactive)
+  --volttron-docker-bash
+                        Interactive: docker exec -itu volttron <service> bash (replaces this shell; type exit to leave)
+  --volttron-docker-show-config
+                        docker exec: print first N lines of \$VOLTTRON_HOME/config (OFDD_VOLTTRON_CONFIG_MAX_LINES default 120)
+  --volttron-docker-cat-config
+                        docker exec: cat full \$VOLTTRON_HOME/config (same as in-container: cat \$VOLTTRON_HOME/config)
+  --volttron-docker-auth-remote-list
+                        docker exec: vctl auth remote list (pending edge registrations)
+  --volttron-docker-auth-remote-approve
+                        docker exec: vctl auth remote approve (requires OFDD_VOLTTRON_REMOTE_USER_ID from the list)
+  --volttron-docker-auth-add
+                        docker exec: vctl auth add --credentials (requires OFDD_VOLTTRON_AUTH_CREDENTIALS, e.g. edge forwarder pubkey)
+  --volttron-docker-tail-logs
+                        docker exec: tail volttron.log (OFDD_VOLTTRON_LOG_LINES default 200; optional OFDD_VOLTTRON_LOG_GREP=egrep pattern)
+  --volttron-docker-lab-push
+                        Copy minimal Central+SQLHistorian lab files from afdd_stack/scripts/volttron_docker_lab/ into OFDD_VOLTTRON_DOCKER_DIR (backs up targets unless OFDD_VOLTTRON_LAB_NO_BACKUP=1)
+  --volttron-docker-lab-up
+                        Lab push (unless OFDD_VOLTTRON_LAB_SKIP_PUSH=1) + docker compose up -d + wait for container + install PostgreSQL driver in image (eclipsevolttron often lacks psycopg2)
+  --volttron-docker-lab-down
+                        docker compose down in OFDD_VOLTTRON_DOCKER_DIR (add OFDD_VOLTTRON_DOCKER_DOWN_VOLUMES=1 for down -v)
+  --volttron-docker-install-pg-driver
+                        docker exec (root): pip install psycopg2-binary for SQLHistorian→Postgres in the running container
+  --volttron-docker-agents
+                        docker exec: vctl list (running agents)
+  --volttron-docker-agent-status
+                        docker exec: vctl status
+  --volttron-docker-compose
+                        Run docker compose in OFDD_VOLTTRON_DOCKER_DIR; must be LAST flag — remaining args are passed through (e.g. --volttron-docker-compose ps | logs -f volttron1 | down)
   --central-lab         One shot: --compose-db + wait for Postgres + --volttron-config-stub + --write-env-defaults
                         + --write-logrotate + --verify-fdd-schema + --volttron-docker + printed next steps
   --test                Run pytest (open_fdd/tests + afdd_stack/openfdd_stack/tests) from repo root; optional frontend
@@ -120,8 +190,23 @@ Env (optional, for --test):
   OFDD_BOOTSTRAP_FRONTEND_TEST=1 npm ci + lint + vitest in afdd_stack/frontend (requires Node/npm)
   OFDD_PYTEST_ARGS               extra arguments passed to pytest (quoted string)
 
+Env (optional, for ForwardHistorian template / logs):
+  OFDD_FORWARD_CONFIG_OUT        absolute path for --write-forward-historian-config-template (required)
+  OFDD_FORWARD_CENTRAL_VIP       destination-vip value (default tcp://127.0.0.1:22916)
+  OFDD_VOLTTRON_DOCKER_SERVICE   docker compose service for exec (default volttron1)
+  OFDD_VOLTTRON_AUTH_CREDENTIALS  public key / credential string for --volttron-docker-auth-add (sensitive — export in shell only)
+  OFDD_VOLTTRON_REMOTE_USER_ID    identity string for --volttron-docker-auth-remote-approve
+  OFDD_VOLTTRON_CONFIG_MAX_LINES  lines of config to print (default 120)
+  OFDD_VOLTTRON_LOG_LINES         tail -n for --volttron-docker-tail-logs (default 200)
+  OFDD_VOLTTRON_LOG_GREP          if set, pipe volttron.log through: grep -E "\$OFDD_VOLTTRON_LOG_GREP" | tail
+
 Env (optional, for VOLTTRON_HOME / volttron-docker):
   OFDD_VOLTTRON_CONFIG_STRICT=1  do not auto-quarantine duplicate web-ssl-cert / web-ssl-key in \$VOLTTRON_HOME/config
+  OFDD_VOLTTRON_LAB_SKIP_PUSH=1   with --volttron-docker-lab-up: do not copy lab templates first
+  OFDD_VOLTTRON_LAB_NO_BACKUP=1   with --volttron-docker-lab-push: overwrite without timestamped backups
+  OFDD_VOLTTRON_DOCKER_DOWN_VOLUMES=1  with --volttron-docker-lab-down: remove named volumes (compose down -v)
+  LOCAL_USER_ID                 UID for volttron-docker gosu (default: current user from id -u when using lab-up)
+  OFDD_COMPOSE_DB_MAX_WAIT      max seconds to wait for Postgres after --compose-db (default 90)
 
 EOF
 }
@@ -144,6 +229,34 @@ docker_compose_cmd() {
   return 1
 }
 
+# docker compose up --wait has hung for some users after services already show Healthy (Compose/Docker edge cases).
+# We start the container then poll pg_isready with a hard cap instead.
+wait_openfdd_postgres_ready() {
+  local max i ok
+  max="${OFDD_COMPOSE_DB_MAX_WAIT:-90}"
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'openfdd_timescale'; then
+    echo "[FAIL] Container openfdd_timescale not running after compose up. Try: cd \"$STACK_DIR\" && docker compose ps" >&2
+    exit 1
+  fi
+  echo "=== Waiting for Postgres (openfdd), max ${max}s (pg_isready) ==="
+  ok=0
+  for i in $(seq 1 "$max"); do
+    if docker exec openfdd_timescale pg_isready -U postgres -d openfdd >/dev/null 2>&1; then
+      ok=1
+      echo "[OK]   Postgres ready after ${i}s"
+      break
+    fi
+    if (( i % 5 == 1 )); then
+      echo "[INFO] $(date -Iseconds) waiting for pg_isready ($i/${max})…"
+    fi
+    sleep 1
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    echo "[FAIL] Postgres did not become ready in ${max}s. Check: docker logs openfdd_timescale" >&2
+    exit 1
+  fi
+}
+
 run_compose_db() {
   if ! have_cmd docker; then
     echo "[SKIP] docker not in PATH — install Docker to use --compose-db"
@@ -159,16 +272,9 @@ run_compose_db() {
   echo "[INFO] $(date -Iseconds) compose: COMPOSE_HTTP_TIMEOUT=${COMPOSE_HTTP_TIMEOUT} DOCKER_CLIENT_TIMEOUT=${DOCKER_CLIENT_TIMEOUT}"
   (
     cd "$STACK_DIR"
-    # Prefer --wait (Compose v2.29+): blocks until db healthcheck passes.
-    set +e
-    $dc up -d --wait db
-    st=$?
-    set -e
-    if [[ "$st" -ne 0 ]]; then
-      echo "[WARN] compose up --wait exited $st (older compose?); retrying: up -d db"
-      $dc up -d db
-    fi
+    $dc up -d db
   )
+  wait_openfdd_postgres_ready
   echo "[INFO] $(date -Iseconds) compose finished OK"
   echo "DB: postgresql://postgres:postgres@127.0.0.1:5432/openfdd"
 }
@@ -534,25 +640,6 @@ EOF
 run_central_lab() {
   echo "=== Open-FDD central-lab bundle ==="
   run_compose_db
-  if have_cmd docker && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'openfdd_timescale'; then
-    echo "=== Waiting for Postgres (openfdd), max 60s ==="
-    local i ok=0
-    for i in {1..60}; do
-      if docker exec openfdd_timescale pg_isready -U postgres -d openfdd >/dev/null 2>&1; then
-        ok=1
-        echo "[OK]   Postgres ready after ${i}s"
-        break
-      fi
-      if (( i % 5 == 1 )); then
-        echo "[INFO] $(date -Iseconds) waiting for pg_isready ($i/60)…"
-      fi
-      sleep 1
-    done
-    if [[ "$ok" -ne 1 ]]; then
-      echo "[FAIL] Postgres did not become ready in 60s. Check: docker logs openfdd_timescale"
-      exit 1
-    fi
-  fi
   run_volttron_config_stub
   run_write_env_defaults
   run_write_logrotate
@@ -560,17 +647,376 @@ run_central_lab() {
   run_clone_volttron_docker
   echo ""
   echo "=== Next: start VOLTTRON in Docker (upstream checkout; do not commit Open-F-DD files there) ==="
-  echo "  \"$REPO_ROOT/scripts/volttron-docker.sh\" up -d"
+  echo "  LOCAL_USER_ID=\$(id -u) \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-lab-up"
+  echo "  # Or manually: \"$REPO_ROOT/scripts/volttron-docker.sh\" up -d"
   echo "  # Build the image first if needed: see $VOLTTRON_DOCKER_DIR/README.md"
   echo "  # Mount $(volttron_home) as VOLTTRON_HOME in the container if you used the stubs above."
   echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --print-vcfg-hints"
 }
 
+
+
+run_print_forward_historian_cheatsheet() {
+  local doc="$REPO_ROOT/docs/howto/edge_forward_historian_to_central.md"
+  echo "=== Edge ForwardHistorian → Central (cheat sheet) ==="
+  if [[ -f "$doc" ]]; then
+    echo "Full doc: file://$doc"
+    echo "Published path: docs/howto/edge_forward_historian_to_central.md"
+  else
+    echo "[WARN] Missing $doc (use a full Open-F-DD clone)."
+  fi
+  cat <<'CHEAT'
+
+--- Central (Docker host): manual docker vs ./scripts/bootstrap.sh (repo root) ---
+  docker exec -itu volttron volttron1 bash     →  ./scripts/bootstrap.sh --volttron-docker-bash
+  vctl auth serverkey                           →  ./scripts/bootstrap.sh --volttron-docker-serverkey
+  cat \$VOLTTRON_HOME/config                    →  ./scripts/bootstrap.sh --volttron-docker-cat-config
+  vctl auth add --credentials <Pi_pubkey>       →  OFDD_VOLTTRON_AUTH_CREDENTIALS='<Pi_pubkey>' ./scripts/bootstrap.sh --volttron-docker-auth-add
+  vctl auth remote list / approve               →  ./scripts/bootstrap.sh --volttron-docker-auth-remote-list
+                                                →  OFDD_VOLTTRON_REMOTE_USER_ID='<id>' ./scripts/bootstrap.sh --volttron-docker-auth-remote-approve
+  vctl list / vctl status                       →  ./scripts/bootstrap.sh --volttron-docker-agents / --volttron-docker-agent-status
+  tail volttron.log                             →  ./scripts/bootstrap.sh --volttron-docker-tail-logs
+
+Order (high level):
+  1) Central: server key (bootstrap flags above, or vctl inside --volttron-docker-bash).
+  2) Edge (Pi / native VOLTTRON): write forward JSON → vctl install/start ForwardHistorian → vctl auth publickey --tag forward-to-central
+  3) Central: vctl auth add --credentials <publickey from step 2> (use --volttron-docker-auth-add on host).
+  4) Edge: vctl stop/start --tag forward-to-central
+
+Central logs (from Open-F-DD host; no docker exec typing):
+  ./scripts/bootstrap.sh --volttron-docker-tail-logs
+  OFDD_VOLTTRON_LOG_GREP='forward|vip|auth|error' ./scripts/bootstrap.sh --volttron-docker-tail-logs
+
+Edge logs (on edge host only):
+  tail -n 120 "\$VOLTTRON_HOME/volttron.log"
+
+CHEAT
+}
+
+run_write_forward_historian_config_template() {
+  local out="${OFDD_FORWARD_CONFIG_OUT:-}"
+  if [[ -z "$out" ]]; then
+    echo "[FAIL] Set OFDD_FORWARD_CONFIG_OUT=/absolute/path/forward-to-central.json" >&2
+    exit 1
+  fi
+  local vip="${OFDD_FORWARD_CENTRAL_VIP:-tcp://127.0.0.1:22916}"
+  mkdir -p "$(dirname "$out")"
+  cat >"$out" <<EOF
+{
+  "destination-vip": "${vip}",
+  "destination-serverkey": "REPLACE_WITH_OUTPUT_OF_vctl_auth_serverkey_ON_CENTRAL",
+  "capture_log_data": false
+}
+EOF
+  echo "[OK]   Wrote ForwardHistorian template: $out"
+  echo "       Replace destination-serverkey after: \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-serverkey"
+  chmod 600 "$out" 2>/dev/null || true
+}
+
+run_print_volttron_central_sql_forward_poc() {
+  cat <<'POC'
+=== Open-F-DD: Central for SQL + ForwardHistorian (lab mental model) ===
+
+Goal
+  - Central (Docker): SQL historian / aggregation; optional Central UI. Skip BACnet proxy / platform driver on Central unless you need them.
+  - Edges: BACnet + drivers locally; ForwardHistorian to Central VIP (usually tcp://CENTRAL_IP:22916).
+
+Open-F-DD scope
+  - This repo does not modify ~/volttron-docker. Curate agents with upstream platform_config.yml and vctl inside the container.
+  - Host --central-lab stubs apply to the live container only if that VOLTTRON_HOME is bind-mounted (see docs/howto/volttron_central_and_parity.md).
+
+Commands
+  ./scripts/bootstrap.sh --print-forward-historian-cheatsheet
+  OFDD_FORWARD_CENTRAL_VIP='tcp://CENTRAL_LAN_IP:22916' OFDD_FORWARD_CONFIG_OUT=/tmp/forward-to-central.json \
+    ./scripts/bootstrap.sh --write-forward-historian-config-template
+
+  # Central Docker from host — wrappers call vctl / cat inside the container:
+  ./scripts/bootstrap.sh --volttron-docker-serverkey
+  ./scripts/bootstrap.sh --volttron-docker-cat-config
+  ./scripts/bootstrap.sh --volttron-docker-show-config
+  ./scripts/bootstrap.sh --volttron-docker-auth-remote-list
+  OFDD_VOLTTRON_AUTH_CREDENTIALS='<edge-forwarder-pubkey>' ./scripts/bootstrap.sh --volttron-docker-auth-add
+  OFDD_VOLTTRON_REMOTE_USER_ID='<pending-id>' ./scripts/bootstrap.sh --volttron-docker-auth-remote-approve
+  OFDD_VOLTTRON_LOG_GREP='forward|vip|auth|error' ./scripts/bootstrap.sh --volttron-docker-tail-logs
+
+POC
+  run_print_forward_historian_cheatsheet
+}
+
+volttron_docker_service() {
+  echo "${OFDD_VOLTTRON_DOCKER_SERVICE:-volttron1}"
+}
+
+require_docker_volttron_container() {
+  local c
+  c="$(volttron_docker_service)"
+  if ! have_cmd docker; then
+    echo "[FAIL] docker not in PATH" >&2
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "[FAIL] Docker daemon not reachable" >&2
+    exit 1
+  fi
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$c"; then
+    echo "[FAIL] container '$c' is not running. Try: \"$REPO_ROOT/scripts/volttron-docker.sh\" ps && up -d" >&2
+    exit 1
+  fi
+}
+
+run_volttron_docker_serverkey() {
+  require_docker_volttron_container
+  local c
+  c="$(volttron_docker_service)"
+  echo "[INFO] $(date -Iseconds) Central platform server key (vctl auth serverkey in container $c)"
+  echo "[INFO] Manual equivalent: docker exec -itu volttron $c bash -lc 'vctl auth serverkey'"
+  # Non-interactive exec has no login PATH; vctl lives under ~/.local/bin in upstream images.
+  echo "Central server key:"
+  docker exec --user volttron "$c" sh -lc 'vctl auth serverkey'
+}
+
+run_volttron_docker_bash() {
+  require_docker_volttron_container
+  local c
+  c="$(volttron_docker_service)"
+  echo "[INFO] Interactive shell in $c as user volttron (upstream: docker exec -itu volttron $c bash). Exit bash to return." >&2
+  exec docker exec -itu volttron "$c" bash
+}
+
+run_volttron_docker_show_config() {
+  require_docker_volttron_container
+  local n="${OFDD_VOLTTRON_CONFIG_MAX_LINES:-120}"
+  echo "[INFO] $(date -Iseconds) sed 1,$n \$VOLTTRON_HOME/config (container $(volttron_docker_service))"
+  docker exec --user volttron "$(volttron_docker_service)" sh -lc 'sed -n "1,'"$n"'p" "$VOLTTRON_HOME/config"'
+}
+
+run_volttron_docker_cat_config() {
+  require_docker_volttron_container
+  echo "[INFO] $(date -Iseconds) cat \$VOLTTRON_HOME/config (container $(volttron_docker_service))"
+  docker exec --user volttron "$(volttron_docker_service)" sh -lc 'cat "$VOLTTRON_HOME/config"'
+}
+
+run_volttron_docker_auth_remote_list() {
+  require_docker_volttron_container
+  docker exec --user volttron "$(volttron_docker_service)" sh -lc 'vctl auth remote list'
+}
+
+run_volttron_docker_auth_remote_approve() {
+  require_docker_volttron_container
+  if [[ -z "${OFDD_VOLTTRON_REMOTE_USER_ID:-}" ]]; then
+    echo "[FAIL] Set OFDD_VOLTTRON_REMOTE_USER_ID (from vctl auth remote list on Central)." >&2
+    exit 1
+  fi
+  echo "[INFO] $(date -Iseconds) vctl auth remote approve \"$OFDD_VOLTTRON_REMOTE_USER_ID\""
+  docker exec -e OFDD_VOLTTRON_REMOTE_USER_ID="$OFDD_VOLTTRON_REMOTE_USER_ID" --user volttron "$(volttron_docker_service)" \
+    sh -lc 'vctl auth remote approve "$OFDD_VOLTTRON_REMOTE_USER_ID"'
+}
+
+run_volttron_docker_auth_add() {
+  require_docker_volttron_container
+  if [[ -z "${OFDD_VOLTTRON_AUTH_CREDENTIALS:-}" ]]; then
+    echo "[FAIL] Set OFDD_VOLTTRON_AUTH_CREDENTIALS (edge forwarder public key from: vctl auth publickey --tag forward-to-central)." >&2
+    exit 1
+  fi
+  echo "[INFO] $(date -Iseconds) vctl auth add --credentials … (${#OFDD_VOLTTRON_AUTH_CREDENTIALS} chars)"
+  docker exec -e OFDD_VOLTTRON_AUTH_CREDENTIALS="$OFDD_VOLTTRON_AUTH_CREDENTIALS" --user volttron "$(volttron_docker_service)" \
+    sh -lc 'vctl auth add --credentials "$OFDD_VOLTTRON_AUTH_CREDENTIALS"'
+}
+
+run_volttron_docker_tail_logs() {
+  require_docker_volttron_container
+  local c n
+  c="$(volttron_docker_service)"
+  n="${OFDD_VOLTTRON_LOG_LINES:-200}"
+  if [[ -n "${OFDD_VOLTTRON_LOG_GREP:-}" ]]; then
+    docker exec -e G="${OFDD_VOLTTRON_LOG_GREP}" -e N="$n" --user volttron "$c" \
+      sh -lc 'grep -E "$G" "$VOLTTRON_HOME/volttron.log" | tail -n "$N"'
+  else
+    docker exec -e N="$n" --user volttron "$c" sh -lc 'tail -n "$N" "$VOLTTRON_HOME/volttron.log"'
+  fi
+}
+
+volttron_docker_lab_dir() {
+  echo "$SCRIPT_DIR/volttron_docker_lab"
+}
+
+require_volttron_docker_checkout() {
+  if [[ ! -d "$VOLTTRON_DOCKER_DIR" ]]; then
+    echo "[FAIL] Missing volttron-docker directory: $VOLTTRON_DOCKER_DIR" >&2
+    echo "       Run: \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker" >&2
+    exit 1
+  fi
+  if [[ ! -f "$VOLTTRON_DOCKER_DIR/docker-compose.yml" ]]; then
+    echo "[FAIL] No docker-compose.yml in $VOLTTRON_DOCKER_DIR" >&2
+    exit 1
+  fi
+}
+
+volttron_docker_run_compose() {
+  require_volttron_docker_checkout
+  local dc
+  dc="$(docker_compose_cmd)" || {
+    echo "[FAIL] docker compose not available" >&2
+    exit 1
+  }
+  (
+    cd "$VOLTTRON_DOCKER_DIR"
+    if [[ -f docker-compose.openfdd.override.yml ]]; then
+      # shellcheck disable=SC2086
+      $dc -f docker-compose.yml -f docker-compose.openfdd.override.yml "$@"
+    else
+      # shellcheck disable=SC2086
+      $dc -f docker-compose.yml "$@"
+    fi
+  )
+}
+
+run_volttron_docker_lab_push() {
+  local lab
+  lab="$(volttron_docker_lab_dir)"
+  require_volttron_docker_checkout
+  if [[ ! -d "$lab" ]]; then
+    echo "[FAIL] Missing lab template directory: $lab" >&2
+    exit 1
+  fi
+  for need in platform_config.yml historian.config docker-compose.openfdd.override.yml; do
+    if [[ ! -f "$lab/$need" ]]; then
+      echo "[FAIL] Missing lab template file: $lab/$need" >&2
+      exit 1
+    fi
+  done
+  mkdir -p "$VOLTTRON_DOCKER_DIR/configs"
+  _lab_backup() {
+    local f="$1"
+    [[ -f "$f" ]] || return 0
+    [[ "${OFDD_VOLTTRON_LAB_NO_BACKUP:-0}" == 1 ]] && return 0
+    cp -a "$f" "${f}.bak.$(date +%s)"
+    echo "[INFO] Backed up $f"
+  }
+  echo "=== Lab push → $VOLTTRON_DOCKER_DIR ==="
+  _lab_backup "$VOLTTRON_DOCKER_DIR/platform_config.yml"
+  cp -a "$lab/platform_config.yml" "$VOLTTRON_DOCKER_DIR/platform_config.yml"
+  _lab_backup "$VOLTTRON_DOCKER_DIR/configs/historian.config"
+  cp -a "$lab/historian.config" "$VOLTTRON_DOCKER_DIR/configs/historian.config"
+  _lab_backup "$VOLTTRON_DOCKER_DIR/docker-compose.openfdd.override.yml"
+  cp -a "$lab/docker-compose.openfdd.override.yml" "$VOLTTRON_DOCKER_DIR/docker-compose.openfdd.override.yml"
+  echo "[OK]   Lab templates installed (Central + SQLHistorian → db:5432/openfdd on network stack_default)."
+  echo "       Start DB first: \"$REPO_ROOT/scripts/bootstrap.sh\" --compose-db"
+  echo "       Then:            LOCAL_USER_ID=\$(id -u) \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-lab-up"
+}
+
+run_volttron_docker_install_pg_driver() {
+  require_docker_volttron_container
+  local c
+  c="$(volttron_docker_service)"
+  echo "[INFO] $(date -Iseconds) Installing psycopg2-binary in container $c (root pip; stock image often lacks Postgres driver)"
+  docker exec -u root "$c" sh -lc \
+    'python3 -m pip install -U pip setuptools wheel >/dev/null 2>&1 || true; python3 -m pip install --only-binary=:all: "psycopg2-binary"' \
+    || {
+      echo "[WARN] pip install psycopg2-binary failed; SQLHistorian→Postgres may still fail until driver is available." >&2
+      return 0
+    }
+  docker exec -u root "$c" python3 -c "import psycopg2" 2>/dev/null && echo "[OK]   psycopg2 import works in container."
+}
+
+run_volttron_docker_lab_down() {
+  require_volttron_docker_checkout
+  local vol=()
+  [[ "${OFDD_VOLTTRON_DOCKER_DOWN_VOLUMES:-0}" == 1 ]] && vol=(-v)
+  if [[ "${#vol[@]}" -gt 0 ]]; then
+    echo "=== docker compose down -v in $VOLTTRON_DOCKER_DIR ==="
+  else
+    echo "=== docker compose down in $VOLTTRON_DOCKER_DIR ==="
+  fi
+  volttron_docker_run_compose down "${vol[@]}"
+}
+
+run_volttron_docker_lab_up() {
+  have_cmd docker || {
+    echo "[FAIL] docker not in PATH" >&2
+    exit 1
+  }
+  export LOCAL_USER_ID="${LOCAL_USER_ID:-$(id -u)}"
+  echo "[INFO] LOCAL_USER_ID=$LOCAL_USER_ID (volttron-docker gosu)"
+  if [[ "${OFDD_VOLTTRON_LAB_SKIP_PUSH:-0}" != 1 ]]; then
+    run_volttron_docker_lab_push
+  else
+    require_volttron_docker_checkout
+    echo "[INFO] OFDD_VOLTTRON_LAB_SKIP_PUSH=1 — not copying lab templates"
+  fi
+  if [[ -f "$VOLTTRON_DOCKER_DIR/docker-compose.openfdd.override.yml" ]] && ! docker network inspect stack_default >/dev/null 2>&1; then
+    echo "[FAIL] Docker network stack_default not found. Start the DB stack first so it is created, e.g.:" >&2
+    echo "       \"$REPO_ROOT/scripts/bootstrap.sh\" --compose-db" >&2
+    exit 1
+  fi
+  echo "=== docker compose up -d in $VOLTTRON_DOCKER_DIR ==="
+  volttron_docker_run_compose up -d
+  local c i
+  c="$(volttron_docker_service)"
+  echo "[INFO] Waiting for container $c …"
+  for i in $(seq 1 90); do
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$c"; then
+      echo "[OK]   $c is running (${i}s)"
+      break
+    fi
+    if [[ "$i" -eq 90 ]]; then
+      echo "[FAIL] $c did not start in time. Try: \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-compose -- ps" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  # Wait until docker exec works, then install Postgres driver for SQLHistorian
+  sleep 3
+  for i in $(seq 1 30); do
+    if docker exec -u root "$c" true 2>/dev/null; then
+      break
+    fi
+    sleep 2
+  done
+  run_volttron_docker_install_pg_driver || true
+  echo ""
+  echo "=== Next (no shell inside container required) ==="
+  echo "  https://127.0.0.1:8443/index.html        # first-time admin (self-signed cert)"
+  echo "  https://127.0.0.1:8443/vc/index.html     # Volttron Central UI"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-serverkey   # same as vctl auth serverkey in container"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-cat-config   # same as cat \$VOLTTRON_HOME/config"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-bash       # optional: interactive bash as volttron"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-agents"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --volttron-docker-tail-logs"
+}
+
+run_volttron_docker_compose() {
+  if [[ "${#VOLTTRON_DOCKER_COMPOSE_ARGS[@]}" -eq 0 ]]; then
+    VOLTTRON_DOCKER_COMPOSE_ARGS=(ps)
+    echo "[INFO] No args after --volttron-docker-compose; defaulting to: ps"
+  fi
+  echo "=== docker compose ${VOLTTRON_DOCKER_COMPOSE_ARGS[*]} (in $VOLTTRON_DOCKER_DIR) ==="
+  volttron_docker_run_compose "${VOLTTRON_DOCKER_COMPOSE_ARGS[@]}"
+}
+
+run_volttron_docker_agents() {
+  require_docker_volttron_container
+  docker exec --user volttron "$(volttron_docker_service)" sh -lc 'vctl list'
+}
+
+run_volttron_docker_agent_status() {
+  require_docker_volttron_container
+  docker exec --user volttron "$(volttron_docker_service)" sh -lc 'vctl status'
+}
+
+
 any_true() {
   $DOCTOR || $VOLTTRON_DOCKER || $PRINT_PATHS || $COMPOSE_DB \
     || $BUILD_OPENFDD_UI || $WRITE_OPENFDD_UI_AGENT_CONFIG || $VOLTTRON_CONFIG_STUB \
     || $PRINT_VCFG_HINTS || $WRITE_ENV_DEFAULTS || $WRITE_LOGROTATE \
-    || $VERIFY_FDD_SCHEMA || $SMOKE_FDD_LOOP || $CENTRAL_LAB || $TEST
+    || $VERIFY_FDD_SCHEMA || $SMOKE_FDD_LOOP || $CENTRAL_LAB || $TEST \
+    || $PRINT_FORWARD_HISTORIAN_CHEATSHEET || $WRITE_FORWARD_HISTORIAN_CONFIG_TEMPLATE \
+    || $PRINT_VOLTTRON_CENTRAL_SQL_FORWARD_POC \
+    || $VOLTTRON_DOCKER_SERVERKEY || $VOLTTRON_DOCKER_SHOW_CONFIG || $VOLTTRON_DOCKER_CAT_CONFIG || $VOLTTRON_DOCKER_AUTH_REMOTE_LIST \
+    || $VOLTTRON_DOCKER_AUTH_REMOTE_APPROVE || $VOLTTRON_DOCKER_AUTH_ADD || $VOLTTRON_DOCKER_TAIL_LOGS \
+    || $VOLTTRON_DOCKER_LAB_PUSH || $VOLTTRON_DOCKER_LAB_UP || $VOLTTRON_DOCKER_LAB_DOWN \
+    || $VOLTTRON_DOCKER_INSTALL_PG_DRIVER || $VOLTTRON_DOCKER_AGENTS || $VOLTTRON_DOCKER_AGENT_STATUS \
+    || $VOLTTRON_DOCKER_BASH || $VOLTTRON_DOCKER_COMPOSE
 }
 
 if [[ $# -eq 0 ]]; then
@@ -595,6 +1041,29 @@ while [[ $# -gt 0 ]]; do
     --verify-fdd-schema) VERIFY_FDD_SCHEMA=true ;;
     --smoke-fdd-loop) SMOKE_FDD_LOOP=true ;;
     --central-lab) CENTRAL_LAB=true ;;
+    --print-forward-historian-cheatsheet) PRINT_FORWARD_HISTORIAN_CHEATSHEET=true ;;
+    --write-forward-historian-config-template) WRITE_FORWARD_HISTORIAN_CONFIG_TEMPLATE=true ;;
+    --print-volttron-central-sql-forward-poc) PRINT_VOLTTRON_CENTRAL_SQL_FORWARD_POC=true ;;
+    --volttron-docker-serverkey) VOLTTRON_DOCKER_SERVERKEY=true ;;
+    --volttron-docker-show-config) VOLTTRON_DOCKER_SHOW_CONFIG=true ;;
+    --volttron-docker-cat-config) VOLTTRON_DOCKER_CAT_CONFIG=true ;;
+    --volttron-docker-auth-remote-list) VOLTTRON_DOCKER_AUTH_REMOTE_LIST=true ;;
+    --volttron-docker-auth-remote-approve) VOLTTRON_DOCKER_AUTH_REMOTE_APPROVE=true ;;
+    --volttron-docker-auth-add) VOLTTRON_DOCKER_AUTH_ADD=true ;;
+    --volttron-docker-tail-logs) VOLTTRON_DOCKER_TAIL_LOGS=true ;;
+    --volttron-docker-lab-push) VOLTTRON_DOCKER_LAB_PUSH=true ;;
+    --volttron-docker-lab-up) VOLTTRON_DOCKER_LAB_UP=true ;;
+    --volttron-docker-lab-down) VOLTTRON_DOCKER_LAB_DOWN=true ;;
+    --volttron-docker-install-pg-driver) VOLTTRON_DOCKER_INSTALL_PG_DRIVER=true ;;
+    --volttron-docker-agents) VOLTTRON_DOCKER_AGENTS=true ;;
+    --volttron-docker-agent-status) VOLTTRON_DOCKER_AGENT_STATUS=true ;;
+    --volttron-docker-bash) VOLTTRON_DOCKER_BASH=true ;;
+    --volttron-docker-compose)
+      shift
+      VOLTTRON_DOCKER_COMPOSE_ARGS=("$@")
+      VOLTTRON_DOCKER_COMPOSE=true
+      break
+      ;;
     --test) TEST=true ;;
     *)
       echo "Unknown option: $1"
@@ -618,7 +1087,25 @@ $VERIFY_FDD_SCHEMA && run_verify_fdd_schema
 $SMOKE_FDD_LOOP && run_smoke_fdd_loop
 $PRINT_VCFG_HINTS && run_print_vcfg_hints
 $CENTRAL_LAB && run_central_lab
+$PRINT_FORWARD_HISTORIAN_CHEATSHEET && run_print_forward_historian_cheatsheet
+$WRITE_FORWARD_HISTORIAN_CONFIG_TEMPLATE && run_write_forward_historian_config_template
+$PRINT_VOLTTRON_CENTRAL_SQL_FORWARD_POC && run_print_volttron_central_sql_forward_poc
+$VOLTTRON_DOCKER_SERVERKEY && run_volttron_docker_serverkey
+$VOLTTRON_DOCKER_SHOW_CONFIG && run_volttron_docker_show_config
+$VOLTTRON_DOCKER_CAT_CONFIG && run_volttron_docker_cat_config
+$VOLTTRON_DOCKER_AUTH_REMOTE_LIST && run_volttron_docker_auth_remote_list
+$VOLTTRON_DOCKER_AUTH_REMOTE_APPROVE && run_volttron_docker_auth_remote_approve
+$VOLTTRON_DOCKER_AUTH_ADD && run_volttron_docker_auth_add
+$VOLTTRON_DOCKER_TAIL_LOGS && run_volttron_docker_tail_logs
+$VOLTTRON_DOCKER_LAB_PUSH && run_volttron_docker_lab_push
+$VOLTTRON_DOCKER_LAB_DOWN && run_volttron_docker_lab_down
+$VOLTTRON_DOCKER_COMPOSE && run_volttron_docker_compose
+$VOLTTRON_DOCKER_LAB_UP && run_volttron_docker_lab_up
+$VOLTTRON_DOCKER_INSTALL_PG_DRIVER && run_volttron_docker_install_pg_driver
+$VOLTTRON_DOCKER_AGENTS && run_volttron_docker_agents
+$VOLTTRON_DOCKER_AGENT_STATUS && run_volttron_docker_agent_status
 $TEST && run_bootstrap_test
+$VOLTTRON_DOCKER_BASH && run_volttron_docker_bash
 
 if ! any_true; then
   usage

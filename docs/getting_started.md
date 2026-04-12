@@ -21,7 +21,15 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./scripts/bootstrap.sh --doctor
    ```
 
-   **Clone directory:** matches the GitHub repo name: **`open-fdd`** (spell it **`open`**, one hyphen **`-`**, then **`fdd`** — eight characters total, same as the clone URL ending **`…/open-f-dd.git`**). **Wrong:** any path like **`open-f-dd`** (a **second** hyphen between **`f`** and **`dd`**, i.e. `…/open-f-dd`) — that directory does not exist and is not the repo name. If `cd` fails, run `ls ~` and match the folder exactly to the URL above.
+   **Clone directory:** default folder name matches the repo slug in the clone URL: **`open-fdd`** (`open`, one ASCII hyphen, `fdd`; eight characters, one hyphen total). **Typo:** **`open-f-dd`** inserts a **second** hyphen between **`f`** and **`dd`** — that path is not this repo, so `cd` fails and later commands run in the wrong directory. **Avoid typing the folder name:** clone into **`openfdd`** — **`git clone https://github.com/bbartling/open-fdd.git openfdd`** then **`cd openfdd`**. If you already cloned under **`$HOME`** (directory name matches **`open*fdd`**), point **`~/openfdd`** at it without hand-copying paths:
+
+   ```bash
+   repo="$(find "$HOME" -maxdepth 1 -type d -name 'open*fdd' 2>/dev/null | head -n1)"
+   [ -z "$repo" ] && { echo "No repo dir matching open*fdd under \$HOME; clone first."; exit 1; }
+   rm -f "$HOME/openfdd"
+   ln -sfn "$repo" "$HOME/openfdd"
+   cd "$HOME/openfdd" && pwd && ls scripts/bootstrap.sh
+   ```
 
    **VOLTTRON Central via Docker (when you have Docker):**
 
@@ -84,6 +92,7 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
 - **Git:** To clone the project:
   ```bash
   git clone https://github.com/bbartling/open-fdd.git
+  # Optional: git clone https://github.com/bbartling/open-fdd.git openfdd && cd openfdd
   cd open-fdd
   ```
 - **Field data:** Configure **VOLTTRON** at the site (Platform Driver, historian, **ZMQ** message bus per upstream docs — **not** RabbitMQ in this project’s reference design). See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**. Legacy FastAPI `/bacnet/*` proxy routes are **not** the default ingest path.

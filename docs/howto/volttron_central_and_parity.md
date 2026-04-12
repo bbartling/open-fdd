@@ -65,6 +65,10 @@ From the **repo root**:
 
 Then build and run **volttron-docker** per [VOLTTRON/volttron-docker](https://github.com/VOLTTRON/volttron-docker): mount the host directory you prepared with **`--volttron-config-stub`** / **`--write-env-defaults`** as **`VOLTTRON_HOME`** so Central state and Open-FDD env survive restarts.
 
+**Compose vs host stubs:** If **`docker-compose.yml`** only mounts **`./configs`** (or similar) and **does not** bind-mount a host directory onto the container’s **`VOLTTRON_HOME`** (commonly **`/home/volttron/.volttron`**), then **`--central-lab`** files under the **host** **`~/.volttron`** are **not** the live config for **`volttron1`**. Align volumes with the [volttron-docker README](https://github.com/VOLTTRON/volttron-docker) (`LOCAL_USER_ID` + host dir → container **`VOLTTRON_HOME`**) before debugging web routes.
+
+**Central UI probes:** Upstream expects **`https://<host>:8443/vc/index.html`** for the Central UI and **`…/admin/login.html`** for admin setup—not every build returns **200** for a bare **`/vc/`** URL; use **`curl -kIL`** on **`/vc/index.html`** when checking from the host.
+
 **`--test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests`. If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or run once with **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./scripts/bootstrap.sh --test`**. To also run **eslint**, **`npm run build`** (includes `tsc`), and **Vitest** in `afdd_stack/frontend`, set **`OFDD_BOOTSTRAP_FRONTEND_TEST=1`**. Extra pytest CLI flags: **`OFDD_PYTEST_ARGS`** (space-separated; same caveats as any shell-expanded variable).
 
 ---
@@ -73,4 +77,5 @@ Then build and run **volttron-docker** per [VOLTTRON/volttron-docker](https://gi
 
 - [Getting started](../getting_started) — prerequisites and bootstrap options  
 - [Mode-aware runbooks](../operations/mode_aware_runbooks) — collector / model / engine / interface framing  
+- [Edge ForwardHistorian → Central (cheat sheet)](edge_forward_historian_to_central) — VIP + serverkey + `vctl auth add` + log hints  
 - [openfdd_central_ui README](https://github.com/bbartling/open-fdd/blob/main/afdd_stack/volttron_agents/openfdd_central_ui/README.md) — static Open-FDD UI under `/openfdd/` on Central  

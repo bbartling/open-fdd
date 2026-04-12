@@ -10,7 +10,7 @@ From the monorepo root:
 VITE_BASE_PATH=/openfdd/ ./scripts/bootstrap.sh --build-openfdd-ui
 ```
 
-Then open `https://<host>:<port>/openfdd/` after the agent is running (same origin as `/vc/` for Central).
+Then open `https://<host>:<port>/openfdd/` after the agent is running (same origin as VOLTTRON Central’s UI). **Central UI URL** in upstream docs is typically **`https://<host>:<port>/vc/index.html`** (and often **`/admin/login.html`** for the admin bootstrap page)—a bare **`/vc/`** path may **404** depending on static routing; use **`/vc/index.html`** when probing with `curl`.
 
 ## Configure
 
@@ -37,7 +37,7 @@ Then open `https://<host>:<port>/openfdd/` after the agent is running (same orig
 ## Platform prerequisites
 
 - Run **`vcfg`** once on the instance to enable the web server and install **VolttronCentral** + **VolttronCentralPlatform** (see [VOLTTRON Central deployment](https://volttron.readthedocs.io/en/main/deploying-volttron/multi-platform/volttron-central-deployment.html)).
-- This agent only adds **`/openfdd/`**; Central remains at **`/vc/`** (default upstream paths).
+- This agent only adds **`/openfdd/`**; Central remains under **`/vc/`** (entry page **`/vc/index.html`** per upstream).
 
 ## API base URL
 
