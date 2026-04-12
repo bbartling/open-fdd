@@ -62,25 +62,33 @@ Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/ma
 cd open-fdd
 
 ./scripts/bootstrap.sh --doctor
-# One-shot: local Timescale + VOLTTRON_HOME stubs + clone volttron-docker + schema check
+# One-shot: Timescale + VOLTTRON_HOME stubs + clone volttron-docker + schema check (does not start volttron1)
 ./scripts/bootstrap.sh --central-lab
 
-# Build the image first if needed — see volttron-docker README (“Advanced Usage” for VOLTTRON_HOME bind-mount).
+# Minimal Central + SQLHistorian in volttron-docker (templates, compose, Postgres driver hint):
+./scripts/bootstrap.sh --compose-db && LOCAL_USER_ID=$(id -u) ./scripts/bootstrap.sh --volttron-docker-lab-up
+```
+
+Or start **volttron-docker** manually after **`--central-lab`** (build the image first if needed — see **[volttron-docker README](https://github.com/VOLTTRON/volttron-docker)** and “Advanced Usage” for **`VOLTTRON_HOME`** bind-mount):
+
+```bash
 ./scripts/volttron-docker.sh up -d
 ./scripts/volttron-docker.sh ps
 ```
 
-Then open **VOLTTRON Central** in a browser per upstream docs (default layout is often **`https://<host>:8443/vc/`** when the sample `platform_config.yml` uses HTTPS on 8443). Optional **Open-FDD UI next to Central:** build with `VITE_BASE_PATH=/openfdd/`, run `./scripts/bootstrap.sh --write-openfdd-ui-agent-config`, install **`openfdd_central_ui`** inside the container — see [`afdd_stack/volttron_agents/openfdd_central_ui/README.md`](afdd_stack/volttron_agents/openfdd_central_ui/README.md).
+**From the repo root, common Central checks (no interactive `docker exec` required):** `./scripts/bootstrap.sh --volttron-docker-serverkey`, **`--volttron-docker-agents`**, **`--volttron-docker-agent-status`**, **`--volttron-docker-cat-config`**, **`OFDD_VOLTTRON_AUTH_CREDENTIALS='…' ./scripts/bootstrap.sh --volttron-docker-auth-add`**, **`--volttron-docker-tail-logs`** (tries the in-container log file first, then falls back to **`docker logs`**), **`--volttron-docker-forward-proof`** (docker log slice + heuristic **`public.data`** counts on **`openfdd`**). Full mapping: **`./scripts/bootstrap.sh --print-forward-historian-cheatsheet`** · [Edge → Central ForwardHistorian](docs/howto/edge_forward_historian_to_central.md).
 
-**Docs:** [Getting started](docs/getting_started.md) · [VOLTTRON Central and AFDD parity](docs/howto/volttron_central_and_parity.md) · [Open Claw + SSH operator notes](docs/openclaw_integration.md) (section 1f).
+Then open **VOLTTRON Central** in a browser per upstream docs (often **`https://<host>:8443/vc/index.html`** with HTTPS on 8443). Optional **Open-FDD UI next to Central:** build with `VITE_BASE_PATH=/openfdd/`, run `./scripts/bootstrap.sh --write-openfdd-ui-agent-config`, install **`openfdd_central_ui`** inside the container — see [`afdd_stack/volttron_agents/openfdd_central_ui/README.md`](afdd_stack/volttron_agents/openfdd_central_ui/README.md).
+
+**Docs:** [Getting started](docs/getting_started.md) · [VOLTTRON Central and AFDD parity](docs/howto/volttron_central_and_parity.md) · [Edge → Central ForwardHistorian](docs/howto/edge_forward_historian_to_central.md) · [Open Claw + SSH operator notes](docs/openclaw_integration.md) (section 1f).
 
 **Historical (removed from `bootstrap.sh`):** Flags like **`--bacnet-address`**, **`--caddy-self-signed`**, **`--password-stdin`** belonged to the old all-in-one Compose stack. They are **not** available in the current script. What changed: [`afdd_stack/legacy/README.md`](afdd_stack/legacy/README.md).
 
 ### Validate services
 
-- **Timescale / Open-FDD schema:** with the DB container up, use `psql` or `docker exec` as in [`docs/getting_started.md`](docs/getting_started.md).
+- **Timescale / Open-FDD schema:** with the DB container up, use `psql` or `docker exec` as in [`docs/getting_started.md`](docs/getting_started.md), or **`./scripts/bootstrap.sh --verify-fdd-schema`**.
 - **FastAPI health** (`curl http://127.0.0.1:8000/health`): only after you run **uvicorn** from source — the default Compose file does **not** start an API container.
-- **VOLTTRON:** `docker logs volttron1` (or your compose service name) if the platform container exits during first boot. If you see **`DuplicateOptionError: ... web-ssl-cert`**, run **`./scripts/bootstrap.sh --central-lab`** again (or **`--volttron-config-stub`**) — it quarantines a broken **`$VOLTTRON_HOME/config`** with duplicate **`web-ssl-*`** lines and rewrites the stub. Then **`./scripts/volttron-docker.sh down`**, **`docker rm -f volttron1`**, **`./scripts/volttron-docker.sh up -d`** so first-boot **`setup-platform.py`** can finish. Set **`OFDD_VOLTTRON_CONFIG_STRICT=1`** to disable auto-quarantine.
+- **VOLTTRON:** **`./scripts/bootstrap.sh --volttron-docker-tail-logs`** (file tail or **`docker logs`** fallback), **`--volttron-docker-forward-proof`**, or **`docker logs volttron1`** if the platform misbehaves during first boot. If you see **`DuplicateOptionError: ... web-ssl-cert`**, run **`./scripts/bootstrap.sh --central-lab`** again (or **`--volttron-config-stub`**) — it quarantines a broken **`$VOLTTRON_HOME/config`** with duplicate **`web-ssl-*`** lines and rewrites the stub. Then **`./scripts/volttron-docker.sh down`**, **`docker rm -f volttron1`**, **`./scripts/volttron-docker.sh up -d`** so first-boot **`setup-platform.py`** can finish. Set **`OFDD_VOLTTRON_CONFIG_STRICT=1`** to disable auto-quarantine.
 
 ---
 

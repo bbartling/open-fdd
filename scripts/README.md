@@ -4,7 +4,7 @@ All **Open-FDD** automation lives here and under **`afdd_stack/`**. The **[voltt
 
 | Script | Purpose |
 |--------|--------|
-| **`bootstrap.sh`** | Delegates to **`afdd_stack/scripts/bootstrap.sh`** — doctor, `--central-lab`, Timescale, VOLTTRON_HOME stubs, clone/update **volttron-docker**, tests, UI build flags, etc. |
+| **`bootstrap.sh`** | Delegates to **`afdd_stack/scripts/bootstrap.sh`** — doctor, **`--compose-db`**, **`--central-lab`**, **`--volttron-docker-lab-up`**, **`--volttron-docker-*`** (serverkey, auth-add, tail-logs, **forward-proof**, …), tests, UI build. **`./scripts/bootstrap.sh --help`**. |
 | **`volttron-docker.sh`** | Runs **`docker compose …`** inside **`OFDD_VOLTTRON_DOCKER_DIR`** so you never need to treat the PNNL tree as part of Open-FDD. Example: `./scripts/volttron-docker.sh up -d` |
 | **`build_docs_pdf.py`** | Maintainer helper to build the engine PDF (pre-existing in this directory). |
 
@@ -13,8 +13,11 @@ Typical Central lab:
 ```bash
 cd open-fdd
 ./scripts/bootstrap.sh --central-lab
-./scripts/bootstrap.sh --print-volttron-central-sql-forward-poc   # Edge→Central ForwardHistorian + log hints
+./scripts/bootstrap.sh --compose-db && LOCAL_USER_ID=$(id -u) ./scripts/bootstrap.sh --volttron-docker-lab-up
+./scripts/bootstrap.sh --print-forward-historian-cheatsheet
 # OFDD_FORWARD_CONFIG_OUT=/path/forward.json OFDD_FORWARD_CENTRAL_VIP=tcp://CENTRAL:22916 ./scripts/bootstrap.sh --write-forward-historian-config-template
-./scripts/volttron-docker.sh up -d
-./scripts/volttron-docker.sh ps
+./scripts/bootstrap.sh --volttron-docker-serverkey
+./scripts/bootstrap.sh --volttron-docker-forward-proof
 ```
+
+Alternate: **`./scripts/volttron-docker.sh up -d`** instead of **`--volttron-docker-lab-up`** if you manage **`~/volttron-docker`** by hand.

@@ -61,6 +61,8 @@ From the **repo root**:
 | Doctor (git, Python, Docker, compose, paths) | `./scripts/bootstrap.sh --doctor` |
 | One-shot lab: DB + `VOLTTRON_HOME` stubs + schema verify + clone **volttron-docker** | `./scripts/bootstrap.sh --central-lab` |
 | Clone/update official Docker layout | `./scripts/bootstrap.sh --volttron-docker` |
+| Minimal Central + SQLHistorian in **`volttron-docker`** (templates, compose, **`psycopg2`**) | `LOCAL_USER_ID=$(id -u) ./scripts/bootstrap.sh --volttron-docker-lab-up` |
+| ForwardHistorian auth / logs / “did rows land?” hints on Central | [Edge → Central cheat sheet](edge_forward_historian_to_central) (`--volttron-docker-*`, **`--volttron-docker-forward-proof`**) |
 | Local test suite (pytest; optional frontend via env) | `./scripts/bootstrap.sh --test` |
 
 Then build and run **volttron-docker** per [VOLTTRON/volttron-docker](https://github.com/VOLTTRON/volttron-docker): mount the host directory you prepared with **`--volttron-config-stub`** / **`--write-env-defaults`** as **`VOLTTRON_HOME`** so Central state and Open-FDD env survive restarts.

@@ -21,14 +21,20 @@ This page covers **prerequisites** and the **bootstrap script**: how to get the 
    ./scripts/bootstrap.sh --doctor
    ```
 
-   **Clone directory:** default folder name matches the repo slug in the clone URL: **`open-fdd`** (`open`, one ASCII hyphen, `fdd`; eight characters, one hyphen total). **Typo:** **`open-f-dd`** inserts a **second** hyphen between **`f`** and **`dd`** — that path is not this repo, so `cd` fails and later commands run in the wrong directory. **Avoid typing the folder name:** clone into **`openfdd`** — **`git clone https://github.com/bbartling/open-fdd.git openfdd`** then **`cd openfdd`**. If you already cloned under **`$HOME`** (directory name matches **`open*fdd`**), point **`~/openfdd`** at it without hand-copying paths:
+   **Clone directory:** the GitHub repository is **`bbartling/open-fdd`**; a default clone creates **`open-fdd/`**. Always **`cd`** into your actual clone path before running **`./scripts/bootstrap.sh`**. Watch for typos in the directory name (wrong hyphen placement) so you are not editing a different tree.
+
+   **Optional symlink** under **`$HOME`** (only if you want a stable path; if **`$HOME/open-fdd`** already exists as a **real directory**, remove or rename it first — **`rm -f`** will not remove a directory, and **`ln -sfn`** could place a link **inside** it by mistake):
 
    ```bash
-   repo="$(find "$HOME" -maxdepth 1 -type d -name 'open*fdd' 2>/dev/null | head -n1)"
-   [ -z "$repo" ] && { echo "No repo dir matching open*fdd under \$HOME; clone first."; exit 1; }
-   rm -f "$HOME/openfdd"
-   ln -sfn "$repo" "$HOME/openfdd"
-   cd "$HOME/openfdd" && pwd && ls scripts/bootstrap.sh
+   repo="$(find "$HOME" -maxdepth 1 -type d -name 'open-fdd' 2>/dev/null | head -n1)"
+   [ -z "$repo" ] && { echo "No directory named open-fdd under \$HOME; clone first."; exit 1; }
+   if [ -e "$HOME/open-fdd" ] && [ ! -L "$HOME/open-fdd" ]; then
+     echo "\$HOME/open-fdd exists and is not a symlink; remove or rename it first."
+     exit 1
+   fi
+   rm -f "$HOME/open-fdd"
+   ln -sfn "$repo" "$HOME/open-fdd"
+   cd "$HOME/open-fdd" && pwd && ls scripts/bootstrap.sh
    ```
 
    **VOLTTRON Central via Docker (when you have Docker):**
@@ -92,7 +98,6 @@ The optional **MCP RAG** sidecar and **`--with-mcp-rag`** bootstrap flag were **
 - **Git:** To clone the project:
   ```bash
   git clone https://github.com/bbartling/open-fdd.git
-  # Optional: git clone https://github.com/bbartling/open-fdd.git openfdd && cd openfdd
   cd open-fdd
   ```
 - **Field data:** Configure **VOLTTRON** at the site (Platform Driver, historian, **ZMQ** message bus per upstream docs — **not** RabbitMQ in this project’s reference design). See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**. Legacy FastAPI `/bacnet/*` proxy routes are **not** the default ingest path.

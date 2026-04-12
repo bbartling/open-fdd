@@ -1,4 +1,4 @@
-# Open-F-DD lab: Volttron Central + SQLHistorian only (no driver, BACnet, actuator, VCP).
+# Open-FDD lab: Volttron Central + SQLHistorian only (no driver, BACnet, actuator, VCP).
 # Copied into OFDD_VOLTTRON_DOCKER_DIR by: ./scripts/bootstrap.sh --volttron-docker-lab-push
 config:
   vip-address: tcp://0.0.0.0:22916
