@@ -825,22 +825,11 @@ type TabId = "energy" | "metadata";
 
 export function EnergyEngineeringPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabFromUrl = searchParams.get("tab");
-  const initialTab: TabId = tabFromUrl === "metadata" ? "metadata" : "energy";
-  const [tab, setTabState] = useState<TabId>(initialTab);
-
-  useEffect(() => {
-    const t = searchParams.get("tab");
-    if (t === "metadata" || t === "energy") {
-      setTabState(t);
-    } else {
-      setTabState("energy");
-    }
-  }, [searchParams]);
+  const t = searchParams.get("tab");
+  const tab: TabId = t === "metadata" || t === "energy" ? t : "energy";
 
   const setTab = useCallback(
     (next: TabId) => {
-      setTabState(next);
       setSearchParams(
         (prev) => {
           const p = new URLSearchParams(prev);

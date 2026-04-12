@@ -1,14 +1,15 @@
-"""Bootstrap script tests — single VOLTTRON-first scripts/bootstrap.sh."""
+"""Bootstrap script tests — entry point ./scripts/bootstrap.sh (implementation in afdd_stack/scripts)."""
 
 import subprocess
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_BOOTSTRAP = _REPO_ROOT / "afdd_stack" / "scripts" / "bootstrap.sh"
+_BOOTSTRAP = _REPO_ROOT / "scripts" / "bootstrap.sh"
+_BOOTSTRAP_IMPL = _REPO_ROOT / "afdd_stack" / "scripts" / "bootstrap.sh"
 
 
 def test_bootstrap_is_self_contained_volttron_entry():
-    text = _BOOTSTRAP.read_text(encoding="utf-8")
+    text = _BOOTSTRAP_IMPL.read_text(encoding="utf-8")
     assert "VOLTTRON" in text
     assert "OFDD_VOLTTRON_DOCKER_DIR" in text
     assert "OFDD_VOLTTRON_DIR" not in text
@@ -16,7 +17,7 @@ def test_bootstrap_is_self_contained_volttron_entry():
 
 
 def test_bootstrap_has_compose_db_optional():
-    text = _BOOTSTRAP.read_text(encoding="utf-8")
+    text = _BOOTSTRAP_IMPL.read_text(encoding="utf-8")
     assert "--test" in text
     assert "OFDD_BOOTSTRAP_INSTALL_DEV" in text
     assert "run_bootstrap_test" in text

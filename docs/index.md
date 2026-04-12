@@ -9,7 +9,7 @@ description: "Open-FDD monorepo: PyPI engine (open_fdd/) + platform SQL/schema a
 > **Single repository:** the **`open-fdd`** engine (`RuleRunner`, rule YAML, column maps) lives in **`open_fdd/`** and ships to **PyPI**. Application code for the **platform** (FastAPI, React, SQL schema, VOLTTRON bridge helpers) lives in **`afdd_stack/`**. **Docker Compose** here starts **Postgres/TimescaleDB** (and optional Grafana or Mosquitto) only — **not** field buses. **BACnet, Modbus, and similar OT protocols run only inside each building’s VOLTTRON** deployment; Open-FDD consumes **SQL** (and optional HTTP APIs), not raw device wires.
 
 {: .fs-6 .fw-400 }
-**Default path (on-prem or cloud for the app tier)** — from the repo root run **`./afdd_stack/scripts/bootstrap.sh`** to prepare **VOLTTRON Central / edge** via **volttron-docker** and optionally **`--compose-db`** for SQL. **Per-site VOLTTRON** on the building LAN uses **ZMQ** VIP and pub/sub for the platform message bus (not RabbitMQ in this reference design). Run **FastAPI + React from source** when you need Brick CRUD, SPARQL, and REST. See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**, **[Getting started](getting_started)**, and **`afdd_stack/legacy/README.md`**.
+**Default path (on-prem or cloud for the app tier)** — from the repo root run **`./scripts/bootstrap.sh`** to prepare **VOLTTRON Central / edge** via **volttron-docker** and optionally **`--compose-db`** for SQL. **Per-site VOLTTRON** on the building LAN uses **ZMQ** VIP and pub/sub for the platform message bus (not RabbitMQ in this reference design). Run **FastAPI + React from source** when you need Brick CRUD, SPARQL, and REST. See **[Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane)**, **[Getting started](getting_started)**, and **`afdd_stack/legacy/README.md`**.
 
 Open-FDD is an open-source knowledge graph fault-detection platform for HVAC systems that helps facilities optimize their energy usage and cost-savings. Because it runs on-prem, facilities never have to worry about a vendor hiking prices, going dark, or walking away with their data. The platform is an AFDD stack designed to run inside the building, behind the firewall, under the owner’s control. It transforms operational data into actionable, cost-saving insights and provides a secure integration layer that any cloud platform can use without vendor lock-in. U.S. Department of Energy research reports median energy savings of roughly 8–9% from FDD programs—meaningful annual savings depending on facility size and energy spend.
 
@@ -36,13 +36,14 @@ Operators and integrators get full control, lower cost, and no vendor lock-in. A
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
-./afdd_stack/scripts/bootstrap.sh --help
-./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --central-lab
-# Optional local SQL (Open-FDD schema + historian-friendly Postgres):
-./afdd_stack/scripts/bootstrap.sh --compose-db
+./scripts/bootstrap.sh --help
+./scripts/bootstrap.sh --doctor
+./scripts/bootstrap.sh --central-lab
+./scripts/volttron-docker.sh up -d
+# Optional local SQL (Open-FDD schema + historian-friendly Postgres) if you did not use --central-lab:
+./scripts/bootstrap.sh --compose-db
 # Pytest (+ optional frontend when OFDD_BOOTSTRAP_FRONTEND_TEST=1):
-./afdd_stack/scripts/bootstrap.sh --test
+./scripts/bootstrap.sh --test
 ```
 
 **Typical URLs (when you run components yourself):**

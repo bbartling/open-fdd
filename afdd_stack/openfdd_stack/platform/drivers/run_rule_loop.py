@@ -110,7 +110,7 @@ def main() -> int:
 
                 if isinstance(e, psycopg2.OperationalError):
                     log.info(
-                        "Tip: rule loop needs TimescaleDB. Start stack: ./afdd_stack/scripts/bootstrap.sh or docker compose -f afdd_stack/stack/docker-compose.yml up -d"
+                        "Tip: rule loop needs TimescaleDB. Start stack: ./scripts/bootstrap.sh --compose-db or docker compose -f afdd_stack/stack/docker-compose.yml up -d"
                     )
             except ImportError:
                 pass

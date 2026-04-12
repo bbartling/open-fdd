@@ -5,7 +5,7 @@ nav_order: 4
 
 # Modular Architecture
 
-Open-FDD separates concerns into **collector**, **model**, **engine**, and **interface** modules. The **default bootstrap** in this repo is **VOLTTRON-first** (`./afdd_stack/scripts/bootstrap.sh`) and no longer maps those modules to **`docker compose` services** the way the old full stack did.
+Open-FDD separates concerns into **collector**, **model**, **engine**, and **interface** modules. The **default bootstrap** in this repo is **VOLTTRON-first** (`./scripts/bootstrap.sh`) and no longer maps those modules to **`docker compose` services** the way the old full stack did.
 
 ## Module contracts (conceptual)
 

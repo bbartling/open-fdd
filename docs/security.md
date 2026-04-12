@@ -4,7 +4,7 @@ This document describes how to protect Open-FDD endpoints with **Caddy** (revers
 
 ## Current default (VOLTTRON-first)
 
-The **default** path in this monorepo is **`./afdd_stack/scripts/bootstrap.sh`**: **volttron-docker** / **VOLTTRON Central** prep and optional **`--compose-db`** (Postgres/Timescale + Open-FDD init SQL). **Docker Compose** here does **not** start Caddy, the FastAPI container, the React container, or **any** field-bus gateway — **BACnet/Modbus live only in site VOLTTRON**. See **`afdd_stack/legacy/README.md`** and **[Getting started](getting_started.md)**.
+The **default** path in this monorepo is **`./scripts/bootstrap.sh`**: **volttron-docker** / **VOLTTRON Central** prep and optional **`--compose-db`** (Postgres/Timescale + Open-FDD init SQL). **Docker Compose** here does **not** start Caddy, the FastAPI container, the React container, or **any** field-bus gateway — **BACnet/Modbus live only in site VOLTTRON**. See **`afdd_stack/legacy/README.md`** and **[Getting started](getting_started.md)**.
 
 The sections below apply when you run **FastAPI + React + Caddy yourself** (local development or a custom deployment). For **VOLTTRON Central** perimeter security, use **upstream VOLTTRON** documentation.
 
@@ -39,7 +39,7 @@ The sections below apply when you run **FastAPI + React + Caddy yourself** (loca
 
 Configure dashboard login by setting **`OFDD_APP_USER`**, **`OFDD_APP_USER_HASH`**, and **`OFDD_JWT_SECRET`** in **`afdd_stack/stack/.env`** (see script comments in a legacy fork or generate hashes per FastAPI auth docs). Remove or empty **`OFDD_API_KEY`** / app-user keys for an open local dev API only if you accept the risk.
 
-**Legacy note:** Older **`./scripts/bootstrap.sh --user`** / **`--mode model`** guardrails applied when Compose started the **model** stack automatically; the **current** `afdd_stack/scripts/bootstrap.sh` does not manage those flags.
+**Legacy note:** Older **`./scripts/bootstrap.sh --user`** / **`--mode model`** guardrails applied when Compose started the **model** stack automatically; the **current** `./scripts/bootstrap.sh` does not manage those flags.
 
 **Examples (password not on the argv):**
 
@@ -79,7 +79,7 @@ Related tracking: **[Stack security hardening](https://github.com/bbartling/open
 
 ## Quick bootstrap with Caddy (custom deployments)
 
-The **default** `afdd_stack/scripts/bootstrap.sh` does **not** start Caddy or the full Docker stack. Use **[Getting started](getting_started.md)** first.
+The **default** `./scripts/bootstrap.sh` does **not** start Caddy or the full Docker stack. Use **[Getting started](getting_started.md)** first.
 
 If you run **FastAPI + React + Caddy** yourself (custom compose or manual processes):
 

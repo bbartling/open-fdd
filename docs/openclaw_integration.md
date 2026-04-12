@@ -44,7 +44,7 @@ Use **`GET /openapi.json`** or the **Swagger UI** at **`/docs`** (when enabled) 
 
 ## 1c) Edge + central split (VOLTTRON direction)
 
-Field collection is on **VOLTTRON** on the building LAN. **`./afdd_stack/scripts/bootstrap.sh`** prepares **VOLTTRON 9** and can start **optional Timescale** via **`--compose-db`**. **`docker compose -f afdd_stack/stack/docker-compose.yml`** is **SQL-only** (see `afdd_stack/legacy/README.md`).
+Field collection is on **VOLTTRON** on the building LAN. **`./scripts/bootstrap.sh`** prepares **VOLTTRON 9** and can start **optional Timescale** via **`--compose-db`**. **`docker compose -f afdd_stack/stack/docker-compose.yml`** is **SQL-only** (see `afdd_stack/legacy/README.md`).
 
 ---
 
@@ -64,7 +64,7 @@ Bench and helper scripts treat Open-FDD like any other REST client: they read **
 
 **What the external agent needs**
 
-1. **Shell access to the Linux host** (SSH) if it will run **`./afdd_stack/scripts/bootstrap.sh`**, `pytest`, or edit files in the clone — point OpenClaw’s workspace at that path or mount it. If the agent only drives **HTTP tools**, a full clone on Windows is optional.
+1. **Shell access to the Linux host** (SSH) if it will run **`./scripts/bootstrap.sh`**, `pytest`, or edit files in the clone — point OpenClaw’s workspace at that path or mount it. If the agent only drives **HTTP tools**, a full clone on Windows is optional.
 2. **Reachable base URL** — from the Windows machine, **`http://localhost:8000` does not reach the Linux server.** Use the host’s **LAN IP or DNS name**:
    - **Direct API:** `http://<open-fdd-host>:8000/...` (paths as in Swagger, e.g. `/sites`, `/data-model/sparql`). FastAPI must be running (**`uvicorn`**) on that host; the default repo bootstrap does not start it.
    - **Behind a reverse proxy (optional):** If you deploy **Caddy** (or similar) in front of the API, use your operator URL (e.g. `http://<host>/api/...` with a strip-prefix pattern). Auth endpoints stay under **`/auth/...`** per your proxy rules.
@@ -86,7 +86,7 @@ Read and bookmark these before automating anything:
 
 - **[VOLTTRON Central deployment](https://volttron.readthedocs.io/en/main/deploying-volttron/multi-platform/volttron-central-deployment.html)** — multi-platform, Central UI, instance registration, and the **operator workflow** (including certificates and networking).
 - **[VOLTTRON 9 / platform docs](https://volttron.readthedocs.io/)** — `vctl`, `vcfg`, agents, historians, and the **ZMQ** VIP / pub-sub message bus (not RabbitMQ for core VOLTTRON traffic).
-- **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** — how this repo’s **`./afdd_stack/scripts/bootstrap.sh --volttron-docker`** clone is meant to be **built and run** (mount **`VOLTTRON_HOME`**, compose layout).
+- **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** — how this repo’s **`./scripts/bootstrap.sh --volttron-docker`** clone is meant to be **built and run** (mount **`VOLTTRON_HOME`**, compose layout).
 
 Open-FDD docs that give **context** (not a substitute for the above): [Site VOLTTRON and the data plane (ZMQ)](concepts/site_volttron_data_plane), [VOLTTRON gateway, FastAPI, and data-model sync](concepts/volttron_gateway_and_sync), [VOLTTRON Central and AFDD parity](howto/volttron_central_and_parity).
 

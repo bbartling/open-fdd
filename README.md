@@ -17,7 +17,7 @@
 This **monorepo** holds:
 
 - **`open_fdd/`** — the **PyPI rules engine** ([`open-fdd`](https://pypi.org/project/open-fdd/)), published from CI as the slim wheel/sdist (no stack code in the wheel).
-- **`afdd_stack/`** — the full on-prem **AFDD Docker platform** (FastAPI, TimescaleDB, BACnet scrapers, React UI). Run **`./afdd_stack/scripts/bootstrap.sh`** from the repo root after cloning.
+- **`afdd_stack/`** — the on-prem **platform** (Open-FDD SQL schema in Postgres/Timescale, optional FastAPI + React from source, VOLTTRON bridge helpers). **Field BACnet/Modbus and VOLTTRON Central** run under **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** and upstream VOLTTRON, not in the slim Compose file alone. Host commands: **`scripts/bootstrap.sh`**, **`scripts/volttron-docker.sh`** (see [`scripts/README.md`](scripts/README.md)).
 
 Containers install the engine from the copied `open_fdd` sources alongside `openfdd_stack` via `pip install ".[stack]"` at image build time.
 
@@ -49,73 +49,38 @@ Examples: **[`examples/README.md`](https://github.com/bbartling/open-fdd/blob/ma
 
 ### Full AFDD stack (`afdd_stack/`)
 
-* 📗 **Same repo** — [`afdd_stack/README.md`](afdd_stack/README.md), `afdd_stack/stack/docker-compose.yml`, `./afdd_stack/scripts/bootstrap.sh`
+* 📗 **Same repo** — [`afdd_stack/README.md`](afdd_stack/README.md), `afdd_stack/stack/docker-compose.yml`, `./scripts/bootstrap.sh`
 * 💻 **Docs** — [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) (Jekyll site includes engine + platform guides in `docs/`)
 
 ### Bootstrap (from repo root)
 
-The `--bacnet-address` value is the static bind for BACnet/IP on OT LANs. Bootstrap supports **dual-NIC** hosts: bind BACnet on the OT interface; another interface can use DHCP for internet.
+**Why `docker ps` shows Timescale but not VOLTTRON Central:** `afdd_stack/stack/docker-compose.yml` starts **`db`** as **`openfdd_timescale`** (and optional profiles). **VOLTTRON Central is a separate upstream stack:** **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** is cloned next to this repo (default **`$HOME/volttron-docker`**). Open-FDD does **not** live inside that tree; use **`./scripts/volttron-docker.sh`** to run **`docker compose`** there so you never treat the PNNL checkout as part of Open-FDD.
 
-**Standard HTTP (no TLS) and app login**
-
-```bash
-cd open-fdd
-
-printf '%s' 'YourSecurePassword' | ./afdd_stack/scripts/bootstrap.sh \
-  --bacnet-address 192.168.204.16/24:47808 \
-  --bacnet-instance 12345 \
-  --user ben \
-  --password-stdin
-```
-
-**LAN / firewall / ports:** See [Getting started — Standard HTTP lab](https://bbartling.github.io/open-fdd/getting_started#standard-http-lab-remote-lan-access) (bearer keys in `afdd_stack/stack/.env`, ports **80** / **8880** / **8000**, **ufw** hints).
-
-**Self-signed TLS (Caddy) and app login**
+**Current bootstrap (VOLTTRON Central path):**
 
 ```bash
 cd open-fdd
 
-printf '%s' 'YourSecurePassword' | ./afdd_stack/scripts/bootstrap.sh \
-  --bacnet-address 192.168.204.16/24:47808 \
-  --bacnet-instance 12345 \
-  --user ben \
-  --password-stdin \
-  --caddy-self-signed
+./scripts/bootstrap.sh --doctor
+# One-shot: local Timescale + VOLTTRON_HOME stubs + clone volttron-docker + schema check
+./scripts/bootstrap.sh --central-lab
+
+# Build the image first if needed — see volttron-docker README (“Advanced Usage” for VOLTTRON_HOME bind-mount).
+./scripts/volttron-docker.sh up -d
+./scripts/volttron-docker.sh ps
 ```
 
-**Bootstrap troubleshooting**
+Then open **VOLTTRON Central** in a browser per upstream docs (default layout is often **`https://<host>:8443/vc/`** when the sample `platform_config.yml` uses HTTPS on 8443). Optional **Open-FDD UI next to Central:** build with `VITE_BASE_PATH=/openfdd/`, run `./scripts/bootstrap.sh --write-openfdd-ui-agent-config`, install **`openfdd_central_ui`** inside the container — see [`afdd_stack/volttron_agents/openfdd_central_ui/README.md`](afdd_stack/volttron_agents/openfdd_central_ui/README.md).
 
-```bash
-./afdd_stack/scripts/bootstrap.sh --doctor
-```
+**Docs:** [Getting started](docs/getting_started.md) · [VOLTTRON Central and AFDD parity](docs/howto/volttron_central_and_parity.md) · [Open Claw + SSH operator notes](docs/openclaw_integration.md) (section 1f).
 
-### Validate the stack with `curl` (after containers are up)
+**Historical (removed from `bootstrap.sh`):** Flags like **`--bacnet-address`**, **`--caddy-self-signed`**, **`--password-stdin`** belonged to the old all-in-one Compose stack. They are **not** available in the current script. What changed: [`afdd_stack/legacy/README.md`](afdd_stack/legacy/README.md).
 
-**API on loopback (plain HTTP)** — Compose maps the API to `127.0.0.1:8000` by default:
+### Validate services
 
-```bash
-curl -sS http://127.0.0.1:8000/health
-# Expect HTTP 200 and JSON including "status":"ok"
-```
-
-**HTTP-only Caddy** (bootstrap **without** `--caddy-self-signed`):
-
-```bash
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/
-# Expect 200 (or another success redirect to the UI)
-```
-
-**Self-signed HTTPS** (bootstrap **with** `--caddy-self-signed`): `:80` redirects to `https://`; use **`-k`** so `curl` accepts the dev cert:
-
-```bash
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/
-# Often 301 → https://127.0.0.1/
-
-curl -sk -o /dev/null -w '%{http_code}\n' https://127.0.0.1/
-# Expect 200 (HTML shell for the React app)
-```
-
-If you follow redirects from `http://` with `curl -L`, add **`-k`** (e.g. `curl -skL http://127.0.0.1/`) so the HTTPS hop does not fail on certificate verification.
+- **Timescale / Open-FDD schema:** with the DB container up, use `psql` or `docker exec` as in [`docs/getting_started.md`](docs/getting_started.md).
+- **FastAPI health** (`curl http://127.0.0.1:8000/health`): only after you run **uvicorn** from source — the default Compose file does **not** start an API container.
+- **VOLTTRON:** `docker logs volttron1` (or your compose service name) if the platform container exits during first boot. If you see **`DuplicateOptionError: ... web-ssl-cert`**, run **`./scripts/bootstrap.sh --central-lab`** again (or **`--volttron-config-stub`**) — it quarantines a broken **`$VOLTTRON_HOME/config`** with duplicate **`web-ssl-*`** lines and rewrites the stub. Then **`./scripts/volttron-docker.sh down`**, **`docker rm -f volttron1`**, **`./scripts/volttron-docker.sh up -d`** so first-boot **`setup-platform.py`** can finish. Set **`OFDD_VOLTTRON_CONFIG_STRICT=1`** to disable auto-quarantine.
 
 ---
 

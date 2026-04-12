@@ -9,7 +9,7 @@ nav_exclude: true
 
 Developer and maintainer reference: directory layout, environment variables, unit tests, **legacy** BACnet driver modules, data model API, bootstrap, database schema, and LLM tagging workflow. **Default product ingest is VOLTTRON → SQL** — see **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**. For user-facing docs see the [Documentation](..) index.
 
-**Setup:** `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"`. Tests: `pytest open_fdd/tests/ -v` or `./afdd_stack/scripts/bootstrap.sh --test`.
+**Setup:** `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"`. Tests: `pytest open_fdd/tests/ -v` or `./scripts/bootstrap.sh --test`.
 
 ---
 

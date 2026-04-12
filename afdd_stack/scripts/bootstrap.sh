@@ -18,22 +18,23 @@
 #   OFDD_VOLTTRON_CENTRAL_WEB  Edge only: Central URL (default: http://127.0.0.1:8443)
 #   OFDD_PG_HOST / OFDD_DB_DSN — DB checks and openfdd-defaults.env
 #   OFDD_VOLTTRON_LOG_DIR — log directory for host-mounted VOLTTRON_HOME (logrotate fragment)
+#   OFDD_VOLTTRON_CONFIG_STRICT=1 — do not auto-quarantine duplicate web-ssl-* lines in $VOLTTRON_HOME/config
 #
 # Quick start (from open-fdd repo root):
-#   ./afdd_stack/scripts/bootstrap.sh --central-lab
-#   # Then build the image and start VOLTTRON (see $HOME/volttron-docker/README.md):
-#   cd "$HOME/volttron-docker" && docker compose up
+#   ./scripts/bootstrap.sh --central-lab
+#   # Then build the image and start VOLTTRON (upstream volttron-docker; do not commit Open-FDD changes there):
+#   ./scripts/volttron-docker.sh up -d
 #
 # Optional UI + Central prep (still from repo root):
-#   ./afdd_stack/scripts/bootstrap.sh --build-openfdd-ui
-#   ./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config
-#   ./afdd_stack/scripts/bootstrap.sh --volttron-config-stub
-#   ./afdd_stack/scripts/bootstrap.sh --print-vcfg-hints
+#   ./scripts/bootstrap.sh --build-openfdd-ui
+#   ./scripts/bootstrap.sh --write-openfdd-ui-agent-config
+#   ./scripts/bootstrap.sh --volttron-config-stub
+#   ./scripts/bootstrap.sh --print-vcfg-hints
 #
 # Local verification (no Docker services required for pytest):
-#   ./afdd_stack/scripts/bootstrap.sh --test
-#   OFDD_BOOTSTRAP_INSTALL_DEV=1 ./afdd_stack/scripts/bootstrap.sh --test   # pip install -e ".[dev]" first
-#   OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./afdd_stack/scripts/bootstrap.sh --test  # also npm lint + vitest (needs Node)
+#   ./scripts/bootstrap.sh --test
+#   OFDD_BOOTSTRAP_INSTALL_DEV=1 ./scripts/bootstrap.sh --test   # pip install -e ".[dev]" first
+#   OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./scripts/bootstrap.sh --test  # also npm lint + vitest (needs Node)
 #
 set -euo pipefail
 
@@ -82,13 +83,15 @@ usage() {
   cat <<'EOF'
 Open-FDD bootstrap (VOLTTRON in Docker via volttron-docker)
 
+Entry point: run from repo root as ./scripts/bootstrap.sh (thin wrapper over afdd_stack/scripts/bootstrap.sh).
+
 Usage:
-  ./afdd_stack/scripts/bootstrap.sh --help
+  ./scripts/bootstrap.sh --help
 
 Typical flow (from open-fdd repo root):
-  ./afdd_stack/scripts/bootstrap.sh --central-lab
-  cd "$HOME/volttron-docker"    # or OFDD_VOLTTRON_DOCKER_DIR
-  # Build image + docker compose per README: https://github.com/VOLTTRON/volttron-docker
+  ./scripts/bootstrap.sh --central-lab
+  ./scripts/volttron-docker.sh up -d   # runs docker compose in OFDD_VOLTTRON_DOCKER_DIR (default ~/volttron-docker)
+  # Build image first if needed — https://github.com/VOLTTRON/volttron-docker
 
 Options:
   --doctor              Check git, python3, Docker, monorepo paths
@@ -116,6 +119,9 @@ Env (optional, for --test):
   OFDD_BOOTSTRAP_INSTALL_DEV=1   pip install -U pip setuptools wheel && pip install -e ".[dev]" before pytest
   OFDD_BOOTSTRAP_FRONTEND_TEST=1 npm ci + lint + vitest in afdd_stack/frontend (requires Node/npm)
   OFDD_PYTEST_ARGS               extra arguments passed to pytest (quoted string)
+
+Env (optional, for VOLTTRON_HOME / volttron-docker):
+  OFDD_VOLTTRON_CONFIG_STRICT=1  do not auto-quarantine duplicate web-ssl-cert / web-ssl-key in \$VOLTTRON_HOME/config
 
 EOF
 }
@@ -283,10 +289,32 @@ print(f"Wrote {cfg_path} (web_root -> {dist})")
 PY
 }
 
+# volttron-docker setup-platform.py can append web-ssl-cert/key to an existing config; if the file
+# already contained those keys (e.g. partial rerun), ConfigParser raises DuplicateOptionError.
+run_volttron_quarantine_duplicate_ssl_config() {
+  local cfg="$1"
+  [[ -f "$cfg" ]] || return 0
+  if [[ "${OFDD_VOLTTRON_CONFIG_STRICT:-0}" == 1 ]]; then
+    return 0
+  fi
+  local cert key
+  cert=$(grep -cE '^[[:space:]]*web-ssl-cert[[:space:]]*=' "$cfg" 2>/dev/null || true)
+  key=$(grep -cE '^[[:space:]]*web-ssl-key[[:space:]]*=' "$cfg" 2>/dev/null || true)
+  cert=${cert:-0}
+  key=${key:-0}
+  if [[ "$cert" -gt 1 ]] || [[ "$key" -gt 1 ]]; then
+    local bak="${cfg}.bak.duplicate-ssl.$(date +%s)"
+    echo "[WARN] $cfg has duplicate web-ssl lines (web-ssl-cert=$cert web-ssl-key=$key); volttron-ctl will not start."
+    echo "[INFO] Quarantining to $bak — next step rewrites a stub if you run --volttron-config-stub / --central-lab."
+    mv "$cfg" "$bak"
+  fi
+}
+
 run_volttron_config_stub() {
   local home
   home="$(volttron_home)"
   mkdir -p "$home"
+  run_volttron_quarantine_duplicate_ssl_config "$home/config"
   if [[ -f "$home/config" ]]; then
     echo "[SKIP] $home/config already exists (remove it first if you want a stub)"
     return 0
@@ -315,7 +343,7 @@ EOF
   fi
   echo "Wrote stub $home/config (instance-name=$inst bind-web-address=$bind role=$VOLTTRON_ROLE)"
   echo "Next: mount this directory as the container user's VOLTTRON_HOME (see volttron-docker README)."
-  echo "      ./afdd_stack/scripts/bootstrap.sh --write-env-defaults"
+  echo "      ./scripts/bootstrap.sh --write-env-defaults"
   echo "      In the container: vcfg / vctl as documented upstream."
 }
 
@@ -488,8 +516,8 @@ Typical steps (inside the running container or per volttron-docker docs):
 2) Edge: set OFDD_VOLTTRON_ROLE=edge and re-run --volttron-config-stub on the host (stub lands under the mounted VOLTTRON_HOME).
 
 Open-FDD UI (host build, then install agent in container):
-  ./afdd_stack/scripts/bootstrap.sh --build-openfdd-ui
-  ./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config
+  ./scripts/bootstrap.sh --build-openfdd-ui
+  ./scripts/bootstrap.sh --write-openfdd-ui-agent-config
   See afdd_stack/volttron_agents/openfdd_central_ui/README.md
 
 Logs: $vh/logrotate-openfdd-volttron.conf (if you rotate host-visible volttron.log)
@@ -531,11 +559,11 @@ run_central_lab() {
   run_verify_fdd_schema
   run_clone_volttron_docker
   echo ""
-  echo "=== Next: start VOLTTRON in Docker ==="
-  echo "  cd \"$VOLTTRON_DOCKER_DIR\""
-  echo "  # Build the image and run compose (see README in that directory)."
+  echo "=== Next: start VOLTTRON in Docker (upstream checkout; do not commit Open-F-DD files there) ==="
+  echo "  \"$REPO_ROOT/scripts/volttron-docker.sh\" up -d"
+  echo "  # Build the image first if needed: see $VOLTTRON_DOCKER_DIR/README.md"
   echo "  # Mount $(volttron_home) as VOLTTRON_HOME in the container if you used the stubs above."
-  echo "  $0 --print-vcfg-hints"
+  echo "  \"$REPO_ROOT/scripts/bootstrap.sh\" --print-vcfg-hints"
 }
 
 any_true() {

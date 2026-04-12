@@ -11,10 +11,10 @@ The historical **`./scripts/bootstrap.sh --mode {collector|model|engine|full}`**
 ## Current commands
 
 ```bash
-./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --central-lab
-./afdd_stack/scripts/bootstrap.sh --compose-db    # optional local Postgres/Timescale
-./afdd_stack/scripts/bootstrap.sh --print-paths   # PYTHONPATH for openfdd_stack agents
+./scripts/bootstrap.sh --doctor
+./scripts/bootstrap.sh --central-lab
+./scripts/bootstrap.sh --compose-db    # optional local Postgres/Timescale
+./scripts/bootstrap.sh --print-paths   # PYTHONPATH for openfdd_stack agents
 ```
 
 Then follow **VOLTTRON** and **VOLTTRON Central** docs on the edge host. Use **FastAPI** (**`uvicorn`**) and the **React** app from source when you need REST/SPARQL/modeling.

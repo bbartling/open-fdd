@@ -21,7 +21,7 @@ Folder **`AHU/`**: sample **`rules/*.yaml`**, **`RTU11.csv`**, **`AHU7.csv`**, a
 
 ## Full Docker platform
 
-Compose, API, and UI live in **`afdd_stack/`** in this repository (`./afdd_stack/scripts/bootstrap.sh`).
+Compose, API, and UI live in **`afdd_stack/`** in this repository (`./scripts/bootstrap.sh`).
 
 ## Docs on the web
 

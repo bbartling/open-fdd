@@ -7,14 +7,14 @@ Small **VOLTTRON** agent that registers static files so the React app can load n
 From the monorepo root:
 
 ```bash
-VITE_BASE_PATH=/openfdd/ ./afdd_stack/scripts/bootstrap.sh --build-openfdd-ui
+VITE_BASE_PATH=/openfdd/ ./scripts/bootstrap.sh --build-openfdd-ui
 ```
 
 Then open `https://<host>:<port>/openfdd/` after the agent is running (same origin as `/vc/` for Central).
 
 ## Configure
 
-1. Copy `agent-config.example.json` to `agent-config.json` and set `web_root` to the absolute path of `afdd_stack/frontend/dist`, **or** run `./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config`.
+1. Copy `agent-config.example.json` to `agent-config.json` and set `web_root` to the absolute path of `afdd_stack/frontend/dist`, **or** run `./scripts/bootstrap.sh --write-openfdd-ui-agent-config`.
 2. With **volttron-docker**, install this package **inside** the platform container (adjust container name / user per your compose file), for example:
 
    ```bash

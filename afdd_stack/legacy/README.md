@@ -7,4 +7,4 @@ The **Docker Compose** file under **`afdd_stack/stack/docker-compose.yml`** now 
 
 **Removed from Compose (by design):** diy-bacnet-server, BACnet scraper, FastAPI **api** container, **Caddy**, **frontend** container, FDD loop container, weather scraper, host-stats. Those roles move to **VOLTTRON agents** and **Central** UI/auth.
 
-**Bootstrap:** one script — **`./afdd_stack/scripts/bootstrap.sh`** — VOLTTRON clone/venv plus optional **`--compose-db`**.
+**Bootstrap:** **`./scripts/bootstrap.sh`** — optional **`--compose-db`**, **`--volttron-docker`** / **`--central-lab`**, then build/run **[volttron-docker](https://github.com/VOLTTRON/volttron-docker)** on the host (not a host venv of VOLTTRON inside this repo).

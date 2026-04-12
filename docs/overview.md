@@ -54,7 +54,7 @@ Integrators may run Open-FDD **beside** client-hosted services or pull from the 
 
 ## Ways to deploy
 
-- **VOLTTRON + SQL (default):** **`./afdd_stack/scripts/bootstrap.sh`** — **volttron-docker**, optional **`--compose-db`** for Timescale + Open-FDD SQL init only.
+- **VOLTTRON + SQL (default):** **`./scripts/bootstrap.sh`** — **volttron-docker**, optional **`--compose-db`** for Timescale + Open-FDD SQL init only.
 - **SQL only:** `docker compose -f afdd_stack/stack/docker-compose.yml up -d` — **TimescaleDB** + init SQL. **`afdd_stack/legacy/README.md`** lists removed services.
 - **Engine only:** `pip install open-fdd` and `RuleRunner` on pandas — **[Engine-only / IoT](howto/engine_only_iot)**.
 - **Manual / custom:** your processes; same rule YAML and `open_fdd.engine` APIs.

@@ -14,7 +14,7 @@ This guide is the **recommended path back to parity** with the historical all-in
 
 ## Phase 1 — Data plane (one Postgres / Timescale home)
 
-- Start the platform database from the monorepo: `./afdd_stack/scripts/bootstrap.sh --compose-db` (or **`--central-lab`**, which includes compose + stubs + schema check + **volttron-docker** clone). See [Getting started](../getting_started).
+- Start the platform database from the monorepo: `./scripts/bootstrap.sh --compose-db` (or **`--central-lab`**, which includes compose + stubs + schema check + **volttron-docker** clone). See [Getting started](../getting_started).
 - Use **one** Postgres (or Timescale) instance for:
   - Open-FDD schema (sites, equipment, points, faults, readings) initialized from `afdd_stack/stack/sql/`.
   - **VOLTTRON SQL historian** tables when you colocate telemetry — configure the historian’s **`tables_def`** (and connection string) so time series land in the same server/database you pass as **`OFDD_DB_DSN`**. Upstream reference: [SQLHistorian](https://volttron.readthedocs.io/en/stable/volttron-api/services/SQLHistorian/README.html).
@@ -24,7 +24,7 @@ This guide is the **recommended path back to parity** with the historical all-in
 
 ## Phase 2 — Mapping (topics → Open-FDD)
 
-- Install or mount this repo where FDD code runs (host venv with `pip install -e ".[stack]"` or **`PYTHONPATH`** from `./afdd_stack/scripts/bootstrap.sh --print-paths`; same layout inside a custom agent container if you bake an image).
+- Install or mount this repo where FDD code runs (host venv with `pip install -e ".[stack]"` or **`PYTHONPATH`** from `./scripts/bootstrap.sh --print-paths`; same layout inside a custom agent container if you bake an image).
 - Use **`openfdd_stack.volttron_bridge`** so device / topic naming lines up with **`external_id`**, equipment, and point naming in SQL. Conceptual background: [VOLTTRON gateway and sync](../concepts/volttron_gateway_and_sync), [Brick and VOLTTRON Central target](../concepts/brick_volttron_central_target).
 
 ---
@@ -58,14 +58,14 @@ From the **repo root**:
 
 | Goal | Command |
 |------|--------|
-| Doctor (git, Python, Docker, compose, paths) | `./afdd_stack/scripts/bootstrap.sh --doctor` |
-| One-shot lab: DB + `VOLTTRON_HOME` stubs + schema verify + clone **volttron-docker** | `./afdd_stack/scripts/bootstrap.sh --central-lab` |
-| Clone/update official Docker layout | `./afdd_stack/scripts/bootstrap.sh --volttron-docker` |
-| Local test suite (pytest; optional frontend via env) | `./afdd_stack/scripts/bootstrap.sh --test` |
+| Doctor (git, Python, Docker, compose, paths) | `./scripts/bootstrap.sh --doctor` |
+| One-shot lab: DB + `VOLTTRON_HOME` stubs + schema verify + clone **volttron-docker** | `./scripts/bootstrap.sh --central-lab` |
+| Clone/update official Docker layout | `./scripts/bootstrap.sh --volttron-docker` |
+| Local test suite (pytest; optional frontend via env) | `./scripts/bootstrap.sh --test` |
 
 Then build and run **volttron-docker** per [VOLTTRON/volttron-docker](https://github.com/VOLTTRON/volttron-docker): mount the host directory you prepared with **`--volttron-config-stub`** / **`--write-env-defaults`** as **`VOLTTRON_HOME`** so Central state and Open-FDD env survive restarts.
 
-**`--test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests`. If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or run once with **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./afdd_stack/scripts/bootstrap.sh --test`**. To also run **eslint**, **`npm run build`** (includes `tsc`), and **Vitest** in `afdd_stack/frontend`, set **`OFDD_BOOTSTRAP_FRONTEND_TEST=1`**. Extra pytest CLI flags: **`OFDD_PYTEST_ARGS`** (space-separated; same caveats as any shell-expanded variable).
+**`--test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests`. If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or run once with **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./scripts/bootstrap.sh --test`**. To also run **eslint**, **`npm run build`** (includes `tsc`), and **Vitest** in `afdd_stack/frontend`, set **`OFDD_BOOTSTRAP_FRONTEND_TEST=1`**. Extra pytest CLI flags: **`OFDD_PYTEST_ARGS`** (space-separated; same caveats as any shell-expanded variable).
 
 ---
 

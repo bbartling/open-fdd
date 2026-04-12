@@ -47,19 +47,19 @@ pip install open-fdd
 **Field BACnet** belongs on **VOLTTRON 9** (Platform Driver + BACnet Proxy), like **[vibe_code_apps_6](https://github.com/bbartling/py-bacnet-stacks-playground/tree/develop/vibe_code_apps_6)**. From the **monorepo root**:
 
 ```bash
-./afdd_stack/scripts/bootstrap.sh --help
-./afdd_stack/scripts/bootstrap.sh --doctor
-./afdd_stack/scripts/bootstrap.sh --central-lab
+./scripts/bootstrap.sh --help
+./scripts/bootstrap.sh --doctor
+./scripts/bootstrap.sh --central-lab
 ```
 
 Then follow **`$HOME/volttron-docker/README.md`**: build the image, **`docker compose up`**, and mount your **`VOLTTRON_HOME`** (bootstrap can write stubs under **`~/.volttron`** first). Use **`openfdd_stack.volttron_bridge`** on the host or inside the container (run **`--print-paths`** on the host for `PYTHONPATH`) to map device topics → `external_id` for rules.
 
 ### React UI next to VOLTTRON Central (`/openfdd/`)
 
-1. **`./afdd_stack/scripts/bootstrap.sh --print-vcfg-hints`** — reminders for **`vcfg`** (web bind, **VolttronCentral**, **VolttronCentralPlatform**).
-2. **`./afdd_stack/scripts/bootstrap.sh --volttron-config-stub`** — optional one-time stub for `$VOLTTRON_HOME/config` when the file does not exist yet (lab defaults; override with **`OFDD_VOLTTRON_BIND_WEB`** / **`OFDD_VOLTTRON_INSTANCE_NAME`**).
-3. **`./afdd_stack/scripts/bootstrap.sh --build-openfdd-ui`** — `npm ci` + production build with **`VITE_BASE_PATH=/openfdd/`** by default.
-4. **`./afdd_stack/scripts/bootstrap.sh --write-openfdd-ui-agent-config`** — writes **`volttron_agents/openfdd_central_ui/agent-config.json`** pointing `web_root` at `frontend/dist`.
+1. **`./scripts/bootstrap.sh --print-vcfg-hints`** — reminders for **`vcfg`** (web bind, **VolttronCentral**, **VolttronCentralPlatform**).
+2. **`./scripts/bootstrap.sh --volttron-config-stub`** — optional one-time stub for `$VOLTTRON_HOME/config` when the file does not exist yet (lab defaults; override with **`OFDD_VOLTTRON_BIND_WEB`** / **`OFDD_VOLTTRON_INSTANCE_NAME`**).
+3. **`./scripts/bootstrap.sh --build-openfdd-ui`** — `npm ci` + production build with **`VITE_BASE_PATH=/openfdd/`** by default.
+4. **`./scripts/bootstrap.sh --write-openfdd-ui-agent-config`** — writes **`volttron_agents/openfdd_central_ui/agent-config.json`** pointing `web_root` at `frontend/dist`.
 5. Install the agent from **`afdd_stack/volttron_agents/openfdd_central_ui/`** (see that folder’s **README.md**) inside the running VOLTTRON container (or mount the repo and `pip install -e` there) so the platform web server serves **`/openfdd/`** alongside **`/vc/`** for Central.
 
 ### Optional: Timescale only (Open-FDD SQL schema)
@@ -67,7 +67,7 @@ Then follow **`$HOME/volttron-docker/README.md`**: build the image, **`docker co
 Compose no longer runs API, Caddy, BACnet, or React. For a local DB matching **`stack/sql`** migrations:
 
 ```bash
-./afdd_stack/scripts/bootstrap.sh --compose-db
+./scripts/bootstrap.sh --compose-db
 # or: docker compose -f afdd_stack/stack/docker-compose.yml up -d
 ```
 
@@ -80,12 +80,12 @@ After **`docker compose … up`**, configure **`afdd_stack/stack/.env`** (API ke
 ### Bootstrap / doctor
 
 ```bash
-./afdd_stack/scripts/bootstrap.sh --doctor   # VOLTTRON prep checks
+./scripts/bootstrap.sh --doctor   # VOLTTRON prep checks
 ```
 
 ### Run tests (CI / local)
 
-From the **monorepo root**, **`./afdd_stack/scripts/bootstrap.sh --test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests` (same paths as **`pyproject.toml`**). If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or once: **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./afdd_stack/scripts/bootstrap.sh --test`**. Optional frontend: **`OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./afdd_stack/scripts/bootstrap.sh --test`** (requires Node/npm).
+From the **monorepo root**, **`./scripts/bootstrap.sh --test`** runs **`pytest`** on `open_fdd/tests` and `afdd_stack/openfdd_stack/tests` (same paths as **`pyproject.toml`**). If **`pytest`** is missing, use a venv with **`pip install -e ".[dev]"`** or once: **`OFDD_BOOTSTRAP_INSTALL_DEV=1 ./scripts/bootstrap.sh --test`**. Optional frontend: **`OFDD_BOOTSTRAP_FRONTEND_TEST=1 ./scripts/bootstrap.sh --test`** (requires Node/npm).
 
 Equivalent manual recipe:
 
