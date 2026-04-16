@@ -19,10 +19,6 @@ Details: **[`column_map_resolver_workshop/README.md`](column_map_resolver_worksh
 
 Folder **`AHU/`**: sample **`rules/*.yaml`**, **`RTU11.csv`**, **`AHU7.csv`**, and Jupyter notebooks. Open locally after `git clone` (see **`AHU/`** — no single CLI entrypoint).
 
-## Full Docker platform
-
-Compose, API, and UI live in **`afdd_stack/`** in this repository (`./scripts/bootstrap.sh`).
-
 ## Docs on the web
 
 - [Examples (repository)](https://bbartling.github.io/open-fdd/examples) — engine docs index  

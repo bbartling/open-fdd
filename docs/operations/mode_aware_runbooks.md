@@ -6,28 +6,20 @@ nav_order: 6
 
 # Mode-aware runbooks
 
-The historical **`./scripts/bootstrap.sh --mode {collector|model|engine|full}`** flow matched a **full Docker Compose** stack (BACnet scraper, API, Caddy, `fdd-loop`, etc.). That stack is **no longer** the default in this monorepo.
+This repository is the **`open_fdd`** **rules engine** only. There is no **`--mode collector|model|engine|full`** Docker orchestration in-tree.
 
-## Current commands
+---
 
-```bash
-./scripts/bootstrap.sh --doctor
-./scripts/bootstrap.sh --central-lab
-./scripts/bootstrap.sh --compose-db    # optional local Postgres/Timescale
-./scripts/bootstrap.sh --print-paths   # PYTHONPATH for openfdd_stack agents
-```
+## Recommended checks
 
-Then follow **VOLTTRON** and **VOLTTRON Central** docs on the edge host. Use **FastAPI** (**`uvicorn`**) and the **React** app from source when you need REST/SPARQL/modeling.
+| Goal | Command |
+|------|---------|
+| Verify install | `python -c "import open_fdd; print('ok')"` |
+| Run unit tests | `pytest` |
+| Editable dev install | `pip install -e ".[dev]"` |
 
-## Tests (monorepo)
+---
 
-From the repo root with a dev venv:
+## Test bench vs production data
 
-```bash
-pip install -e ".[dev]"
-python -m pytest
-```
-
-## Legacy Docker modes
-
-If you run a **fork** or custom compose that still exposes **`--mode`**, treat those runbooks as **deployment-specific**. Upstream removal details: **`afdd_stack/legacy/README.md`**.
+Treat **synthetic** or **lab** CSVs as a different **operational state** from **production** BMS exports: tighten tolerances, window sizes, and alert routing in production. See [Operational states](../concepts/operational_states).

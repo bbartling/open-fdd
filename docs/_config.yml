@@ -1,5 +1,5 @@
 title: "Open-FDD"
-description: "Open-FDD: PyPI engine + SQL/semantic stack; field ingest is site VOLTTRON (ZMQ), not BACnet/Modbus in this app."
+description: "Open-FDD: YAML-defined fault detection rules on pandas (PyPI package open-fdd)."
 baseurl: "/open-fdd"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"
@@ -13,10 +13,10 @@ plugins:
   - jekyll-seo-tag
 
 aux_links:
-  "GitHub (monorepo)": "https://github.com/bbartling/open-fdd"
+  "GitHub": "https://github.com/bbartling/open-fdd"
   "PyPI (open-fdd)": "https://pypi.org/project/open-fdd/"
 
-footer_content: "MIT · <a href=\"https://github.com/bbartling/open-fdd\">open-fdd</a> · Engine + AFDD stack docs"
+footer_content: "MIT · <a href=\"https://github.com/bbartling/open-fdd\">open-fdd</a>"
 
 heading_anchors: true
 

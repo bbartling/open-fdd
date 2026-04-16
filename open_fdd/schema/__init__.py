@@ -1,4 +1,4 @@
-"""Canonical FDD result/event schema for time-series DB and Grafana."""
+"""Canonical FDD result/event schema for time-series storage and analytics."""
 
 from open_fdd.schema.fdd_result import (
     FDDResult,

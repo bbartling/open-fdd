@@ -7,7 +7,7 @@ nav_exclude: true
 
 # Engine API
 
-Programmatic Python API for loading FDD rules and running the rule engine against pandas DataFrames. Used by the platform FDD loop and by standalone scripts. Import from `open_fdd.engine.runner` and related modules.
+Programmatic Python API for loading FDD rules and running the rule engine against pandas DataFrames. Import from `open_fdd.engine.runner` and related modules.
 
 ---
 
@@ -33,7 +33,7 @@ Load all rules from a directory (all `*.yaml` files).
 ```python
 from open_fdd.engine.runner import load_rules_from_dir
 
-rules = load_rules_from_dir("stack/rules")
+rules = load_rules_from_dir("examples/AHU/rules")
 # Returns list of rule dicts
 ```
 
@@ -47,7 +47,7 @@ rules = load_rules_from_dir("stack/rules")
 from open_fdd.engine.runner import RuleRunner
 
 # From directory
-runner = RuleRunner(rules_path="stack/rules")
+runner = RuleRunner(rules_path="examples/AHU/rules")
 
 # From list of rule dicts
 runner = RuleRunner(rules=[rule1, rule2, ...])

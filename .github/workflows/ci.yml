@@ -1,4 +1,4 @@
-# Monorepo: open-fdd engine tests + AFDD stack tests (afdd_stack). PyPI release is engine-only.
+# open-fdd: engine tests (open_fdd/tests). PyPI release is the open_fdd package only.
 
 name: CI
 
@@ -25,7 +25,7 @@ jobs:
           python-version: "3.14"
           cache: "pip"
 
-      - name: Install monorepo (engine + stack deps for tests)
+      - name: Install package (dev deps for tests)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
@@ -34,8 +34,8 @@ jobs:
       - name: Build combined docs text (LLM context)
         run: python scripts/build_docs_pdf.py --no-pdf
 
-      - name: Bootstrap --test (pytest via script; same paths as pyproject)
-        run: ./scripts/bootstrap.sh --test
+      - name: Run tests (pytest)
+        run: python -m pytest
         env:
           OFDD_API_KEY: ""
           OFDD_CADDY_INTERNAL_SECRET: ""

@@ -6,28 +6,62 @@ nav_order: 2
 
 # Expression Rule Cookbook
 
-A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math. **Tuning:** Change `params` in YAML and trigger an FDD run (or wait for the schedule); the platform hot-reloads rules each run, so no restart is needed. See [Fault rules overview](rules/overview#hot-reload-edit--run--view-in-grafana) and [Configuration](configuration) (`rules_dir` is RDF-driven via GET `/config`).
+A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math. **Tuning:** Change `params` in YAML and re-run **`RuleRunner`** on your DataFrame. See [Fault rules overview](rules/overview) and [Configuration](configuration).
 
-> **`column_map` — platform vs library:** On the **full AFDD stack**, **`fdd-loop`** runs **`run_fdd_loop`**, which builds **`column_map`** from **`config/data_model.ttl`** using **`BrickTtlColumnMapResolver`** in **`openfdd_stack.platform.brick_ttl_resolver`** (**rdflib** is a stack dependency, not an **`open-fdd`** dependency). Recipes below stay **Brick-oriented** and assume that path. When you run **`RuleRunner`** yourself (**`pip install open-fdd`**, notebooks, external IoT pipelines), **you** supply **`column_map`** as a **dict** (logical / Brick-class keys → your DataFrame column names), or plug a custom **`ColumnMapResolver`** if you extend the platform loop. The rule YAML shape does not change; only **who** builds the map changes. See [Engine-only deployment and external IoT pipelines](howto/engine_only_iot) and [The optional openfdd-engine package](howto/openfdd_engine).
+> **`column_map`:** The engine is **ontology-agnostic**: YAML **`inputs`** expose logical names you use in the **`expression`**. **`column_map`** (dict or manifest) maps **Brick**, **Haystack**, **DBO**, **223P** (`s223` / `223p` fields), or arbitrary keys → **actual DataFrame columns**. Optional per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** are tried **in that order** against `column_map` (**first match wins**). See [Column map resolvers](column_map_resolvers) and **`examples/column_map_resolver_workshop/simple_ontology_demo.py`**. Full **graph, TTL, SPARQL, and CRUD** workflows live in **[open-fdd-afdd-stack docs](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
 
 ---
 
-## 100% Brick-model driven (no column in rules)
+## Ontology labels (Brick, Haystack, DBO, 223P) {#ontology-labels}
 
-Rule inputs use **Brick class names** only (e.g. `Supply_Air_Temperature_Sensor`). The **Brick TTL** is the source of truth: SPARQL resolves each Brick point to its [external timeseries reference](https://docs.brickschema.org/metadata/external-representations.html#timeseries) (`ref:TimeseriesReference` / `ref:hasTimeseriesId`), which yields the DataFrame column. Open-FDD embraces [Brick timeseries storage](https://docs.brickschema.org/metadata/timeseries-storage.html) at the heart of FDD — **rules never reference `column`**; the data model provides the mapping. See the [SPARQL cookbook](modeling/sparql_cookbook#recipe-5-fdd--points-and-rule-mapping) (Recipe 5) and run similar queries via Data Model Testing or `scripts/automated_testing/sparql/`.
+Most cookbook recipes use **Brick class names** because that is a common **interoperable** vocabulary—but the **same rule file** can run against a Haystack- or 223P-keyed `column_map` if your inputs declare the matching field:
 
-- **Platform (DB):** Points have `brick_type` and `external_id`; TTL is built from DB. PATCH points or use data-model import to set `brick_type` (e.g. `Supply_Air_Temperature_Sensor` for SA-T).
-- **Disambiguation:** When multiple points share a Brick class, use `ofdd:mapsToRuleInput` in TTL; the runner resolves `BrickClass|rule_input`.
+```yaml
+inputs:
+  sat:
+    brick: Supply_Air_Temperature_Sensor
+    haystack: "your-haystack-ref"
+    dbo: "your-dbo-type"
+    s223: "your-s223-term"
+```
+
+Pass a **`column_map`** whose keys are exactly those strings (or use **`ManifestColumnMapResolver`** / **`FirstWinsCompositeResolver`**). Workshop: **`examples/column_map_resolver_workshop/README.md`**.
+
+**Brick + timeseries metadata:** If you follow [Brick external references](https://docs.brickschema.org/metadata/external-representations.html#timeseries) in a graph pipeline, you still reduce that to a **`dict[str, str]`** before calling **`RuleRunner`** here.
+
+---
+
+## Occupied hours and weather gating (expressions)
+
+For **`type: expression`**, optional **`params.schedule`** defines weekday + hour-of-day occupancy. The engine injects boolean **`schedule_occupied`** (True **inside** the window). Combine with your equipment logic, e.g. **fan running when unoccupied**:
+
+```yaml
+params:
+  schedule:
+    weekdays: [0, 1, 2, 3, 4]   # Mon–Fri; Mon=0 … Sun=6
+    start_hour: 8
+    end_hour: 17                 # 8:00–16:59 local hour
+  weather_band:
+    oat_input: Outside_Air_Temperature_Sensor
+    units: imperial
+    low: 32
+    high: 85
+
+expression: |
+  fan_on & ~schedule_occupied & weather_allows_fdd
+```
+
+**`weather_band`** injects **`weather_allows_fdd`** (outside air in range). Omit nested blocks or set **`enabled: false`** to leave a mask all-True.
 
 ---
 
 ## How to define expressions
 
-1. **Inputs** — Declare Brick classes only (`brick: Supply_Air_Temperature_Sensor`). The runner resolves these via the Brick TTL (SPARQL) and Brick external timeseries references to DataFrame columns. Do not add `column` in YAML.
+1. **Inputs** — Each key becomes an alias in the expression. Prefer structured dicts with **`brick`** / **`haystack`** / **`dbo`** / **`s223`** / **`223p`** plus optional **`column`** (fallback DataFrame column when no `column_map` match).
 2. **Params** — Thresholds and constants go in `params`. Reference by name (e.g. `err_thresh`, `vfd_max`).
 3. **Expression** — Must evaluate to a boolean Series (True = fault). Use `&` (AND), `|` (OR), `~` (NOT). Use `.diff()`, `.rolling()`, `.notna()` for time-series logic.
 
-**Minimal example (TTL-driven; no column):**
+**Minimal example (column_map from Brick labels):**
 
 ```yaml
 name: high_temp_check
@@ -45,7 +79,13 @@ expression: |
   Supply_Air_Temperature_Sensor > max_temp
 ```
 
-The Brick TTL (and SPARQL) maps each Brick class to the actual column via external timeseries references. Set `points.brick_type` in the DB and sync TTL so the engine can resolve columns from the Brick model.
+```python
+runner.run(
+    df,
+    column_map={"Supply_Air_Temperature_Sensor": "SAT"},
+    timestamp_col="timestamp",
+)
+```
 
 ---
 
@@ -70,13 +110,13 @@ Many cookbook thresholds (e.g. `drv_hi_frac: 0.93`, comparisons to `0.01`) assum
    (np.where(Supply_Fan_Speed_Command > 1, Supply_Fan_Speed_Command / 100.0, Supply_Fan_Speed_Command) >= 0.93)
    ```
 
-Mixed 0–1 and 0–100 in one series is ambiguous—prefer consistent scaling per point in the **data model** or **trend export**.
+Mixed 0–1 and 0–100 in one series is ambiguous—prefer consistent scaling per point in your **source data** or **trend export**.
 
 **Engine validation (open-fdd 2.3+)**
 
 - Merged rule **`params`** are coerced/validated with **Pydantic** for `schedule` and `weather_band` (string numerics for scalars are best-effort coerced).
 - **`RuleRunner.run(..., input_validation='warn'|'strict')`** checks that mapped columns exist and are **largely numeric** after `pd.to_numeric`; **`strict`** raises before evaluating expressions.
-- On the **AFDD stack**, set **`OFDD_FDD_STRICT_RULES=true`** to enable strict validation and **`skip_missing_columns=False`** when the installed open-fdd is **≥ 2.3** (older wheels still get fail-fast on missing columns in strict mode, without `input_validation`).
+- In **strict** deployments, use **`RuleRunner.run(..., input_validation='strict', skip_missing_columns=False)`** with open-fdd **≥ 2.3** so bad column maps fail fast before expressions run.
 
 When **`skip_missing_columns=True`** (production default), rules that hit missing names/columns are **skipped** and a **warning** is logged (rule name, flag, exception).
 
@@ -869,10 +909,10 @@ Use the [bounds](rules/overview#rule-types) and [flatline](rules/overview#rule-t
 
 ## Follow-up (RFCs): multi-ontology selectors & cookbook matrix
 
-**Multi-ontology rule YAML** (e.g. optional `selectors.brick` / `.haystack` / `.dbo` / `.s223` under each input) is a **separate RFC** — it would feed the same **`column_map`** / resolver layer while the **full AFDD stack stays Brick-only by default** for v1. Track design discussion on GitHub **#122** and follow-on issues.
+**Multi-ontology inputs** today use the per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** (see [Ontology labels](#ontology-labels)) plus **`column_map`**. Deeper graph and API workflows live in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
 
 **Cookbook matrix / generator:** When a selector schema is stable, we can add a **generated appendix** (logical input × Brick × Haystack × DBO × 223P notes) from a single CSV/YAML source so the long cookbook does not drift. Until then, see the **open-fdd** repo’s **`examples/column_map_resolver_workshop/simple_ontology_demo.py`** (with **`simple_ontology_rule.yaml`**).
 
 ---
 
-**Next:** [Fake fault schedule / flatline monitoring](howto/fake_fault_schedule_monitoring)
+**Next:** [Verification](howto/verification) · [Column map resolvers](column_map_resolvers)

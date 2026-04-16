@@ -1,5 +1,0 @@
-include README.md
-include LICENSE
-include pyproject.toml
-recursive-include openfdd_stack/platform/static *
-recursive-include tools *.py

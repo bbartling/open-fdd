@@ -6,17 +6,9 @@ has_children: true
 
 # Operations
 
-Operational playbooks for recurring Open-FDD verification, OpenClaw context durability, and operator-style review loops.
+Engine-focused notes for tests and runbooks. **Deployment, integrity sweeps, and lab automation** for the full stack are documented in **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
 
 | Page | Description |
 |------|-------------|
-| [Open-FDD integrity sweep](openfdd_integrity_sweep) | 20-minute operator-style health and model integrity checks. |
-| [Overnight review](overnight_review) | 6 PM-6 AM deeper review pattern for logs, behavior drift, and durable context updates. |
-| [OpenClaw context bootstrap](openclaw_context_bootstrap) | What durable context should be stored in-repo vs kept local/private. |
-| [Operator framework](operator_framework) | Canonical operator reasoning contract and source-of-truth order. |
-| [MCP RAG service](mcp_rag_service) | **Deprecated** — removed; see page for migration to OpenAPI/model-context. |
-| [Mode-aware runbooks](mode_aware_runbooks) | Collector/model/engine/full orchestration flows for humans and OpenClaw. |
-| [Testing plan](testing_plan) | Engineering plan for bench testing, auth/SPARQL checks, and overnight evidence. |
-| [Continuous context backup loop](continuous_context_backup) | What to commit to the repo vs keep local (no secrets). |
-| [Usage budget and throttling](usage_budget_and_throttling) | Throttle ladder when model/API budget is tight. |
-
+| [Testing plan](testing_plan) | What CI runs; local pytest expectations. |
+| [Mode-aware runbooks](mode_aware_runbooks) | Rules engine vs custom orchestration (no Docker stack in-tree). |

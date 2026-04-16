@@ -7,9 +7,9 @@ nav_exclude: true
 
 # Technical reference
 
-Developer and maintainer reference: directory layout, environment variables, unit tests, **legacy** BACnet driver modules, data model API, bootstrap, database schema, and LLM tagging workflow. **Default product ingest is VOLTTRON → SQL** — see **[Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)**. For user-facing docs see the [Documentation](..) index.
+Maintainer-focused layout for the **`open-fdd`** PyPI package (rules engine on pandas).
 
-**Setup:** `python3 -m venv .venv && source .venv/bin/activate`. Install: `pip install -e ".[dev]"`. Tests: `pytest open_fdd/tests/ -v` or `./scripts/bootstrap.sh --test`.
+**Setup:** `python3 -m venv .venv && source .venv/bin/activate` (Windows: `.venv\Scripts\activate`). Install: `pip install -e ".[dev]"`. Tests: `pytest`.
 
 ---
 
@@ -18,170 +18,36 @@ Developer and maintainer reference: directory layout, environment variables, uni
 ```
 open-fdd/
 ├── open_fdd/
-│   ├── engine/            # runner, checks (PyPI open-fdd)
-│   ├── reports/           # fault_viz, docx, fault_report
-│   ├── schema/            # FDD result/event (canonical)
-│   ├── platform/          # FastAPI, DB, drivers, loop
-│   │   ├── api/           # CRUD (sites, points, equipment), config, bacnet, data_model, download, analytics, run_fdd
-│   │   ├── drivers/       # open_meteo, bacnet (RPC + knowledge-graph scrape)
-│   │   ├── bacnet_brick.py # BACnet object_type → BRICK class mapping
-│   │   ├── config.py, database.py, data_model_ttl.py, graph_model.py, site_resolver.py
-│   │   ├── loop.py, rules_loader.py
-│   │   └── static/        # Config UI — index.html, app.js, styles.css (served at /app; see Developer guide)
-│   └── tests/             # engine/, platform/, test_schema.py
-├── stack/rules/           # Default FDD rule YAML (sensor_bounds, sensor_flatline); upload more via Faults UI
-├── stack/                 # docker-compose, Dockerfiles, SQL, grafana, caddy
-│   ├── sql/               # 001_init … 015_fault_state_and_audit (migrations; see Developer guide — Database schema)
-│   ├── grafana/           # provisioning/datasources, optional dashboards
-│   └── caddy/             # Caddy only: [`stack/caddy/Caddyfile`](../../stack/caddy/Caddyfile) (minimal rev proxy; hardening TBD — [Security](../security))
-├── config/                # data_model.ttl (Brick + BACnet + platform config)
-├── scripts/               # bootstrap.sh, fake_*_faults.py
-├── tools/
-│   ├── discover_bacnet.py # Optional: BACnet discovery helper (bacpypes3); stack scrape is KG-driven
-│   ├── run_weather_fetch.py, run_rule_loop.py, run_host_stats.py  # BACnet: python -m openfdd_stack.platform.drivers.run_bacnet_scrape
-│   ├── graph_and_crud_test.py # Full CRUD + RDF + SPARQL e2e (see SPARQL cookbook)
-│   ├── bacnet_crud_smoke_test.py # Simple BACnet instance range + CRUD smoke test
-│   ├── trigger_fdd_run.py
-│   └── ...
-└── examples/              # cloud_export, run_all_rules_brick, etc.
+│   ├── engine/           # RuleRunner, checks, column_map resolvers, rule YAML schema
+│   ├── schema/         # FDD result / event models (pydantic)
+│   ├── reports/        # Optional: fault_viz, docx, fault_report (extra deps may apply)
+│   └── tests/          # pytest suite (engine + schema)
+├── docs/               # Jekyll / Just the Docs site
+├── examples/           # Runnable examples and notebooks
+├── packages/
+│   └── openfdd-engine/ # Optional thin PyPI wrapper (separate distribution)
+├── scripts/            # build_docs_pdf.py (optional doc bundle)
+├── tools/              # Optional maintainer scripts
+└── pyproject.toml
 ```
 
-**Front-end and database:** See [Developer guide](developer_guide) for Config UI development (no build step; edit `platform/static/` and refresh) and the full database schema (migrations 001–016, tables, cascade deletes).
+---
+
+## Tests
+
+| Path | Role |
+|------|------|
+| `open_fdd/tests/engine/` | `RuleRunner`, expressions, schedules, column maps |
+| `open_fdd/tests/test_schema.py` | Result / event schema |
+| `open_fdd/tests/examples/` | Import smoke tests |
+
+CI runs `pytest` from the repo root after `pip install -e ".[dev]"`.
 
 ---
 
-## Environmental variables
+## Related reading
 
-All platform settings use the **`OFDD_`** prefix (pydantic-settings; `.env` and env override). Set on the **host** (e.g. `stack/.env` or in `docker-compose.yml`); Docker passes them into each container.
-
-**After first bootstrap, platform config lives in the RDF graph** (GET/PUT /config; `config/data_model.ttl`). The **Required / infra** vars below are always read from env. The **Platform config (graph)** vars are used to **seed the graph at bootstrap** (PUT /config) and as fallback for processes that don't call GET /config (e.g. FDD loop container). Scrapers (BACnet, weather) that call GET /config get live config from the graph. See [Configuration](../configuration) and [SPARQL cookbook](../modeling/sparql_cookbook).
-
-### Required / infra (always from env)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OFDD_DB_DSN` | `postgresql://postgres:postgres@localhost:5432/openfdd` | TimescaleDB connection. In Docker: `postgresql://postgres:postgres@db:5432/openfdd`. |
-| `OFDD_API_URL` | http://localhost:8000 | Used by bootstrap and by scrapers to call GET /config. |
-| `OFDD_API_KEY` | Generated by bootstrap | Optional. When set, all requests (except `/`, `/health`, `/docs`, `/redoc`, `/openapi.json`, `/app`) require `Authorization: Bearer <OFDD_API_KEY>`. Bootstrap generates a key and writes it to `stack/.env` unless you pass `--no-auth`. Use for API auth (e.g. frontend, scripts). |
-| `OFDD_BRICK_TTL_PATH` | config/data_model.ttl | Unified TTL (Brick + BACnet + config); API load/save. |
-| `OFDD_APP_TITLE` | Open-FDD API | API title. |
-| `OFDD_APP_VERSION` | 2.0.5 | Fallback when package metadata missing (`PlatformSettings`). |
-| `OFDD_DEBUG` | false | Debug mode. |
-| `OFDD_FDD_TRIGGER_FILE` | config/.run_fdd_now | Touch to trigger FDD run and reset timer. |
-| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Minutes between graph serialize to TTL (API). |
-| `OFDD_HOST_STATS_INTERVAL_SEC` | 60 | host-stats container interval (seconds). |
-| `OFDD_DISK_MOUNT_PATHS` | / | Comma-separated paths for disk usage → `disk_metrics`. |
-| `OFDD_RETENTION_DAYS` | 365 | TimescaleDB retention (bootstrap / 007_retention). |
-| `OFDD_LOG_MAX_SIZE` | 100m | Docker log max size per file. |
-| `OFDD_LOG_MAX_FILES` | 3 | Docker log file count. |
-
-### Platform config (RDF graph; env seeds bootstrap)
-
-Used to build the PUT /config body at bootstrap; thereafter config is in the graph. Containers that don't fetch GET /config (e.g. FDD loop) still read these from env.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OFDD_RULE_INTERVAL_HOURS` | 3 | FDD run interval (hours). |
-| `OFDD_LOOKBACK_DAYS` | 3 | Lookback window for timeseries. |
-| `OFDD_RULES_DIR` | stack/rules | YAML rules directory (hot reload). |
-| `OFDD_BRICK_TTL_DIR` | config | Brick TTL directory. |
-| `OFDD_BACNET_SERVER_URL` | — | **Legacy lab only:** diy-bacnet-style gateway URL if FastAPI proxy routes are enabled. |
-| `OFDD_BACNET_SITE_ID` | default | Site to tag when scraping. |
-| `OFDD_BACNET_GATEWAYS` | — | JSON array for central aggregator. |
-| `OFDD_BACNET_SCRAPE_ENABLED` | true | Enable BACnet scraper. |
-| `OFDD_BACNET_SCRAPE_INTERVAL_MIN` | 5 | Scrape interval (minutes). |
-| `OFDD_OPEN_METEO_*` | (see Configuration) | enabled, interval_hours, latitude, longitude, timezone, days_back, site_id. |
-| `OFDD_GRAPH_SYNC_INTERVAL_MIN` | 5 | Graph sync interval (also in graph). |
-
-**Optional:** `OFDD_ENV_FILE` ([Configuration](../configuration)).
-
----
-
-## Unit tests
-
-Tests live under `open_fdd/tests/`. Run: `pytest open_fdd/tests/ -v`. All use in-process mocks; no shared DB or live API. For end-to-end (real API, optional BACnet): `python tools/graph_and_crud_test.py` (see [SPARQL cookbook](../modeling/sparql_cookbook)).
-
-- **engine/** (PyPI `open-fdd`) — runner, checks; Brick TTL map: **platform/brick_ttl_resolver**
-- **platform/** — bacnet_api, bacnet_brick, bacnet_driver, config, crud_api, data_model_api, data_model_ttl, download_api, graph_model, rules_loader, site_resolver
-- **test_schema.py** — FDD result/event to row
-
----
-
-## Legacy BACnet scrape driver (not default ingest)
-
-The Python module **`openfdd_stack.platform.drivers.run_bacnet_scrape`** remains for **forks and dev** when a diy-bacnet-style gateway and DB are reachable. **Do not** use this as the primary path for new sites — configure **VOLTTRON** historians instead.
-
-**Confirm SQL writes:** query `timeseries_readings`; [Grafana SQL cookbook](../howto/grafana_cookbook); API `GET /download/csv` when FastAPI runs.
-
----
-
-## Data model API and tagging flow
-
-**GET /data-model/export** — DB points (+ optional graph fields; `?bacnet_only=true` filters BACnet-shaped metadata). Use for [AI-assisted tagging](../modeling/ai_assisted_tagging); then **PUT /data-model/import**.
-
-**PUT /data-model/import** — Points (required) and optional equipment (feeds/fed_by). Creates/updates points; backend rebuilds RDF and serializes TTL.
-
-**Flow (recommended):** Align **`external_id`** with **VOLTTRON** historian keys → Sites/equipment (CRUD) → GET /data-model/export → Tag (LLM or manual) → PUT /data-model/import → **SQL readings** visible to FDD/Grafana → GET /data-model/check, POST /data-model/sparql for integrity. Optional **POST /bacnet/*** steps are **lab-only**.
-
-See [Data modeling overview](../modeling/overview) and [SPARQL cookbook](../modeling/sparql_cookbook).
-
----
-
-## Data model sync
-
-Live store: **in-memory RDF graph** (`platform/graph_model.py`). Brick triples from DB; optional BACnet-shaped triples only if loaded via **legacy** discovery/import. SPARQL and TTL read from this graph. Background thread serializes to `config/data_model.ttl` every **OFDD_GRAPH_SYNC_INTERVAL_MIN**; **POST /data-model/serialize** on demand.
-
----
-
-## Bootstrap and client updates
-
-**Safe for clients:** `./scripts/bootstrap.sh --update --maintenance --verify` does not wipe TimescaleDB or Grafana data (no volume prune). Migrations in `stack/sql/` are idempotent. See [Getting started](../getting_started).
-
-**Troubleshooting 500 (db host unresolved):** Ensure full stack is up so API can resolve hostname `db`. Run `./scripts/bootstrap.sh` or `docker compose -f stack/docker-compose.yml up -d`.
-
----
-
-## Database schema (TimescaleDB)
-
-Schema is defined in **`stack/sql/`** (migrations **001–016**). Idempotent; bootstrap runs them in order. **Cascade deletes:** Site → equipment, points, timeseries; equipment → points; point → timeseries. Full migration list and table details: [Developer guide — Database schema](developer_guide#database-schema-timescaledb). See [Danger zone](../howto/danger_zone).
-
-| Table | Purpose |
-|-------|---------|
-| **sites** | id, name, description, metadata, created_at |
-| **equipment** | id, site_id, name, equipment_type, feeds_equipment_id, fed_by_equipment_id |
-| **points** | id, site_id, equipment_id, external_id, brick_type, fdd_input, unit, bacnet_*, object_name, polling |
-| **timeseries_readings** | ts, site_id, point_id, value, job_id (hypertable; BACnet + weather + CSV ingest) |
-| **ingest_jobs** | id, site_id, name, format, point_columns, row_count (CSV ingest metadata) |
-| **fault_results** | ts, site_id, equipment_id, fault_id, flag_value (hypertable) |
-| **fault_events** | id, site_id, equipment_id, fault_id, start_ts, end_ts, duration_seconds, evidence |
-| **fault_state** | current active fault per (site_id, equipment_id, fault_id) |
-| **fault_definitions** | fault_id, name, description, severity, category, equipment_types, inputs, params, expression, source |
-| **fdd_run_log** | run_ts, status, sites_processed, faults_written (last FDD run for UI) |
-| **analytics_motor_runtime** | site_id, period_start, period_end, runtime_hours (data-model driven) |
-| **host_metrics** | ts, hostname, mem_*, swap_*, load_1/5/15 (hypertable) |
-| **container_metrics** | ts, container_name, cpu_pct, mem_*, pids, net_*, block_* (hypertable) |
-| **disk_metrics** | ts, hostname, mount_path, total_bytes, used_bytes, free_bytes (hypertable) |
-| **bacnet_write_audit** | point_id, value, source, ts, success, reason (write audit) |
-
----
-
-## PyPI and this repo
-
-**Current `open-fdd` on PyPI (2.x):** [open-fdd](https://pypi.org/project/open-fdd/) publishes the **`open_fdd` Python package**, including **`open_fdd.engine`** — the same **YAML + pandas** `RuleRunner` as the platform. Base install depends on **pandas** and **PyYAML**; optional extras (`[dev]`, `[platform]`, …) add FastAPI, tests, Brick, etc. **IoT / notebook use:** `pip install open-fdd` and point `RuleRunner` at rule YAML; see [Engine-only deployment and external IoT pipelines](../howto/engine_only_iot).
-
-**Very old PyPI releases (0.x / pre–2.x):** Historical “equations only” artifacts may still appear in version history. Prefer **2.x** or **`pip install -e .`** from this repo.
-
-**Edge platform:** BACnet, Docker Compose, and day-two operations are **repo-first** (`./scripts/bootstrap.sh`, stack images). The stack typically uses **`pip install -e ".[platform,brick]"`** inside build contexts; PyPI is not required to run the full edge deployment.
-
-**Publishing:** Maintainer checklist: [PyPI releases (open-fdd)](../howto/openfdd_engine_pypi). Optional in-repo **`openfdd-engine`** package (**`openfdd_engine`** import) is a shim over **`open_fdd.engine`** — see [The optional openfdd-engine package](../howto/openfdd_engine); **public engine installs use `pip install open-fdd`**.
-
----
-
-## LLM tagging workflow
-
-1. **Export** — GET `/data-model/export`.
-2. **Clean** — Keep only points to tag and poll.
-3. **Tag with LLM** — Full canonical prompt: [LLM workflow — copy/paste template](../modeling/llm_workflow#copy-paste-prompt-template-recommended); overview in [AI-assisted tagging](../modeling/ai_assisted_tagging). The prompt is **fault-first**: gather which faults/rules will run (prefer **YAML**) before final **polling** decisions, or stay conservative. It also requires **equipment_type** (Brick **1.4** equipment class local names) aligned with **Data Model Testing** SPARQL presets — see `frontend/src/data/brick-1.4-query-class-allowlist.ts` and `data-model-testing-queries.brick.test.ts`.
-4. **Import** — PUT /data-model/import with `points` and optional `equipment`. Set `polling` false on points that should not be scraped.
-
-Prompt summary: Set `site_id`, `external_id`, `brick_type`, `rule_input`; optionally `equipment_id`, **`unit`** (e.g. degF, %, cfm, 0/1 — stored in DB and TTL; frontend uses it for Plots axis labels and grouping), and equipment `feeds_equipment_id`/`fed_by_equipment_id`. Output is the completed JSON for PUT /data-model/import.
+- [Column map resolvers](../column_map_resolvers)
+- [Expression rule cookbook](../expression_rule_cookbook)
+- [Rules overview](../rules/overview)
+- [API — Engine](../api/engine)

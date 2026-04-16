@@ -1,8 +1,8 @@
 """
 Canonical real-time FDD result and event schema.
 
-Foundation for writing to TimescaleDB and Grafana. Used by the continuous
-diagnostic loop and backfill.
+Foundation for writing fault rows to a database or export pipeline. Used by
+continuous diagnostic loops and backfills.
 """
 
 from __future__ import annotations

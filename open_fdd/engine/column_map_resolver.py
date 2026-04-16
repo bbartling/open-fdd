@@ -1,9 +1,8 @@
 """
 Pluggable resolution of rule input keys → DataFrame column names (column_map).
 
-The full **AFDD stack** builds Brick TTL maps via ``BrickTtlColumnMapResolver`` in
-**``afdd_stack/openfdd_stack``** (``openfdd_stack.platform.brick_ttl_resolver``), not in the ``open-fdd``
-wheel. Integrators may pass any object satisfying :class:`ColumnMapResolver` into ``run_fdd_loop``.
+A separate Brick/TTL integration can implement a TTL-backed resolver; it is not shipped inside the ``open-fdd``
+wheel. Integrators may pass any object satisfying :class:`ColumnMapResolver` when constructing workflows around :class:`open_fdd.engine.runner.RuleRunner`.
 """
 
 from __future__ import annotations

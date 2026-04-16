@@ -273,7 +273,7 @@ class RuleRunner:
         global_col_map = column_map or {}
 
         # Map logical input keys (e.g. Brick class names) → DataFrame columns via column_map.
-        # The AFDD stack builds that map from TTL; engine-only callers pass a dict or manifest.
+        # External Brick/TTL tooling can build that map; engine-only callers pass a dict or manifest.
         col_map = {
             key: _resolve_input_column(key, val, global_col_map)
             for key, val in inputs.items()
