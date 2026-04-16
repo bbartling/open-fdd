@@ -1,6 +1,0 @@
-repos:
-  - repo: https://github.com/psf/black
-    rev: 26.1.0
-    hooks:
-      - id: black
-        files: ^open_fdd/

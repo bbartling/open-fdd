@@ -10,5 +10,5 @@ FDD fault rule types, YAML format, and expression cookbook for HVAC and building
 
 | Page | Description |
 |------|-------------|
-| [Overview](overview) | Rule types, `stack/rules`, hot reload, Brick inputs |
-| [Test bench rule catalog](test_bench_rule_catalog) | Links to reference YAML under `openclaw/bench/rules_reference/` (AHU FC, chillers, weather, etc.) |
+| [Overview](overview) | Rule types, `RuleRunner`, column maps, hot reload |
+| [Test bench rule catalog](test_bench_rule_catalog) | Links to example YAML under `open_fdd/tests/fixtures/rules/` and `examples/AHU/rules/` |

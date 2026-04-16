@@ -1,8 +1,5 @@
-# If a stray top-level frontend/ exists, ignore it (canonical UI is afdd_stack/frontend/).
+# If a stray top-level frontend/ exists, ignore it
 /frontend/
-
-# Local VOLTTRON UI agent config (absolute web_root paths)
-afdd_stack/volttron_agents/openfdd_central_ui/agent-config.json
 
 .DS_Store
 /data
@@ -109,15 +106,10 @@ profile_default/
 ipython_config.py
 
 # pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
+#   Intended to run in multiple environments; otherwise, check in:
 # .python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
 #Pipfile.lock
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
@@ -130,10 +122,9 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments (includes AFDD stack .env — local secrets; never commit)
+# Environments
 .env
 stack/.env
-afdd_stack/stack/.env
 .venv
 .venv-ci/
 .venv-ansible
@@ -174,12 +165,6 @@ cython_debug/
 # Maintainer notes (local only; do not commit)
 NOTES.md
 
-# FDD trigger file (ephemeral)
-config/.run_fdd_now
-
-# Brick + BACnet TTL generated at runtime (DB + in-memory graph); do not track
-config/data_model.ttl
-
 # Generated docs PDF (scripts/build_docs_pdf.py) — commit pdf/open-fdd-docs.pdf to allow download
 /pdf/*
 !/pdf/.gitkeep
@@ -195,20 +180,13 @@ openclaw/bench/reports/*.md
 openclaw/.skill-workspace-marker
 openclaw/logs/*.pid
 
-# Local auth output (single-user credentials + jwt secret; AFDD stack)
-stack/auth.env
-afdd_stack/stack/auth.env
-
 # Timestamped copies from openclaw/bench/e2e/4_hot_reload_test.py if API cleanup misses (numeric suffix)
 stack/rules/test_sensor_bounds_[0-9]*.yaml
 stack/rules/test_sensor_flatline_[0-9]*.yaml
-afdd_stack/stack/rules/test_sensor_bounds_[0-9]*.yaml
-afdd_stack/stack/rules/test_sensor_flatline_[0-9]*.yaml
 
-# Self-signed TLS material (local Caddy / AFDD stack dev)
+# Self-signed TLS material (local dev only)
 stack/caddy/certs/
-afdd_stack/stack/caddy/certs/
 
-# Runtime graph + trigger (AFDD stack bind-mount)
-afdd_stack/config/data_model.ttl
-afdd_stack/config/.run_fdd_now
+# Runtime graph + trigger (local dev bind-mount patterns)
+config/data_model.ttl
+config/.run_fdd_now

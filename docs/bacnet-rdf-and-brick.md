@@ -6,10 +6,8 @@ parent: Concepts
 
 # RDF, Brick, and optional BACnet-shaped metadata
 
-Open-FDD models the building as a **Brick-oriented knowledge graph** in `config/data_model.ttl` when you run **FastAPI**. **CRUD**, **SPARQL**, and **data-model import/export** maintain sites, equipment, and points.
+The **`open-fdd`** wheel evaluates rules on **pandas** using **`column_map`** (dict or manifest). **Brick**, **223P**, **Haystack**, **DBO**, and BACnet-shaped **TTL** are **not** parsed inside this package—you build the bridge in your pipeline or use a platform that does.
 
-**BACnet on the wire** is **not** owned by Open-FDD in the default architecture: **site VOLTTRON** performs discovery and reads/writes devices; **historians** persist time series to **Postgres**. Any **BACnet-shaped RDF** in the graph is either **legacy** (from older deployments), **imported**, or produced only if **you** explicitly run **legacy** `/bacnet/point_discovery_to_graph` against a **separate** lab gateway — not something this documentation recommends for new ingest.
+**Where the full graph story lives:** **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)** (CRUD, SPARQL, import/export, compose, hosted services).
 
-**Preferred path:** align **`external_id`** and SQL rows with VOLTTRON topics ([Site VOLTTRON and the data plane (ZMQ)](../concepts/site_volttron_data_plane)), use **SPARQL** for validation, and keep Brick metadata in sync via CRUD or import.
-
-See also **[Edge field buses (VOLTTRON)](bacnet/)** (docs index entry under **BACnet** path for historical URLs).
+**Here in this repo:** see **[Column map resolvers](column_map_resolvers)** and the **[Expression rule cookbook](expression_rule_cookbook)** for ontology-agnostic rule authoring.

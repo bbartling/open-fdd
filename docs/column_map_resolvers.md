@@ -1,16 +1,16 @@
 ---
 title: Column map & resolvers
 nav_order: 3
-description: "Map Brick-style rule input names to DataFrame columns: dict, manifest, or composite resolvers; Brick TTL mapping is stack-only."
+description: "Map Brick-style rule input names to DataFrame columns: dict, manifest, or composite resolvers."
 ---
 
 # Column map & resolvers
 
-YAML rules name their **`inputs`** with **logical keys**—often **Brick** class names (e.g. `Supply_Air_Temperature_Sensor`) on the stack, but the same mechanism supports **Haystack-style slugs**, **DBO** type names, or **223P-scoped** identifiers if those strings match your map. Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …). See [Expression Rule Cookbook — ontology labels](expression_rule_cookbook#ontology-labels).
+YAML rules name their **`inputs`** with **logical keys**—often **Brick** class names (e.g. `Supply_Air_Temperature_Sensor`), but the same **`column_map`** mechanism supports **Haystack** refs, **DBO** types, **223P** / **`s223`** strings, or any custom key you put on the input dict. Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …). See [Expression rule cookbook — ontology labels](expression_rule_cookbook#ontology-labels).
 
 **`column_map`** is the bridge: `dict[str, str]` where each **key** is a **logical label** (Brick class, or a string from the rule’s optional **`haystack` / `dbo` / `s223` / `223p`** fields on that input), and each **value** is the **actual `DataFrame` column name**. `RuleRunner` tries those fields in order until one matches a map key; see [Expression Rule Cookbook](expression_rule_cookbook#ontology-labels).
 
-Pass it to **`RuleRunner.run(..., column_map=...)`**. You can build that dict by hand, load it from a manifest, or **merge** several sources with a composite resolver. Deriving the map from a Brick **`.ttl`** file is done on the **[AFDD stack](https://github.com/bbartling/open-fdd)** (rdflib), not in the **`open-fdd`** package.
+Pass it to **`RuleRunner.run(..., column_map=...)`**. You can build that dict by hand, load it from a manifest, or **merge** several sources with a composite resolver. Deriving the map from a Brick **`.ttl`** file with SPARQL is done in **your** services (typically with **rdflib** installed there), not inside the **`open-fdd`** wheel.
 
 ---
 
@@ -30,11 +30,11 @@ No TTL file required if you already know the mapping. Keys must match the **inpu
 
 ---
 
-## 2. Brick TTL (AFDD stack only)
+## 2. Brick TTL (your integration)
 
-If you run the **Docker AFDD platform**, **`fdd-loop`** builds **`column_map`** from **`config/data_model.ttl`** using **`BrickTtlColumnMapResolver`** in **`openfdd_stack.platform.brick_ttl_resolver`** (depends on **rdflib** / **pyparsing**, declared in the stack’s **`pyproject.toml`** — not in **`open-fdd`**).
+If you maintain **`data_model.ttl`** (or another graph), run SPARQL or graph walks in **your** Python environment (**rdflib**, etc.) and reduce the result to the same **`dict[str, str]`** you would pass to **`RuleRunner.run`**.
 
-For **engine-only** notebooks and pipelines, use a **manifest** (below) or a **plain dict** that lists the same logical keys your rules use.
+For **engine-only** notebooks and pipelines, a **manifest** (below) or **plain dict** is usually simpler.
 
 ---
 
@@ -92,11 +92,11 @@ AHU / RTU notebooks and sample rules — **`examples/AHU/`** ([folder on GitHub]
 | Resource | Link |
 |----------|------|
 | Sample YAML rules | [`rules/sensor_bounds.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/rules/sensor_bounds.yaml), [`rules/sensor_flatline.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/rules/sensor_flatline.yaml), [`rules/sat_operating_band.yaml`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/rules/sat_operating_band.yaml) |
-| Notebooks | [`RTU11_standardized_refactored.ipynb`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU11_standardized_refactored.ipynb), [`RTU7_standardized_refactored.ipynb`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU7_standardized_refactored.ipynb), [`RTU7_machine_learning.ipynb`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU7_machine_learning.ipynb) |
+| Notebooks | [`RTU11_standardized_refactored.ipynb`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU11_standardized_refactored.ipynb), [`RTU7_standardized_refactored.ipynb`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU7_standardized_refactored.ipynb) |
 | Sample CSV | [`RTU11.csv`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/RTU11.csv), [`AHU7.csv`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/AHU7.csv) |
 | Helpers | [`openfdd_notebook_helpers_v2.py`](https://github.com/bbartling/open-fdd/blob/master/examples/AHU/openfdd_notebook_helpers_v2.py) |
 
-More narrative (Docker **`--mode engine`**, IoT pipelines, **`column_map` policy**): [Engine-only & IoT pipelines](howto/engine_only_iot). Curated doc links: [Examples (repository)](examples).
+More narrative (IoT pipelines, **`column_map` policy**): [Engine-only & IoT pipelines](howto/engine_only_iot). Curated doc links: [Examples (repository)](examples).
 
 ---
 

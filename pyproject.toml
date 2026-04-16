@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.3.0"
-description = "Open-FDD rules engine (PyPI) plus optional AFDD stack (Docker/API/BACnet) in afdd_stack/."
+version = "2.3.1"
+description = "Open-FDD: YAML-defined fault detection rules on pandas DataFrames (PyPI)."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -27,7 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "brick"]
+keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas"]
 
 dependencies = [
     "pandas",
@@ -40,41 +40,10 @@ dependencies = [
 test = [
     "pytest>=7.0",
 ]
-# AFDD platform (FastAPI, Timescale, BACnet drivers, Brick/RDF). Not included in the PyPI wheel.
-stack = [
-    "rdflib>=7.5.0,<8",
-    "pyparsing>=2.1.0,<3.2",
-    "pydantic-settings>=2.2,<3",
-    "psycopg2-binary>=2.9.9",
-    "fastapi>=0.115,<1",
-    "python-multipart>=0.0.9",
-    "uvicorn[standard]>=0.30",
-    "httpx>=0.27",
-    "requests>=2.31",
-    "PyJWT>=2.8,<3",
-    "argon2-cffi>=23.1",
-    "docker>=7.0,<8",
-]
 dev = [
     "pytest>=7.0",
-    "rdflib>=7.5.0,<8",
-    "pyparsing>=2.1.0,<3.2",
-    "pydantic-settings>=2.2,<3",
-    "psycopg2-binary>=2.9.9",
-    "fastapi>=0.115,<1",
-    "python-multipart>=0.0.9",
-    "uvicorn[standard]>=0.30",
-    "httpx>=0.27",
-    "requests>=2.31",
-    "PyJWT>=2.8,<3",
-    "argon2-cffi>=23.1",
-    "docker>=7.0,<8",
     "black[jupyter]>=24.0",
     "pre-commit",
-    "aiohttp",
-    "selenium>=4.0",
-    "webdriver-manager>=4.0",
-    "openai>=1.0",
 ]
 
 [project.urls]
@@ -88,12 +57,6 @@ include = ["open_fdd*"]
 [tool.black]
 line-length = 88
 target-version = ["py314"]
-extend-exclude = "afdd_stack/openfdd_stack/platform/data_model_ttl\\.py|afdd_stack/tools/graph_and_crud_test\\.py"
 
 [tool.pytest.ini_options]
-testpaths = ["open_fdd/tests", "afdd_stack/openfdd_stack/tests"]
-pythonpath = [".", "afdd_stack"]
-filterwarnings = [
-    "ignore::DeprecationWarning:rdflib",
-    "ignore::DeprecationWarning:pyparsing",
-]
+testpaths = ["open_fdd/tests"]

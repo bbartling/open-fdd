@@ -10,7 +10,7 @@ Use **`open_fdd.engine`** (`RuleRunner`, `load_rule`, …). See [open-fdd on PyP
 
 ---
 
-This directory builds an **optional** distribution **`openfdd-engine`** (import **`openfdd_engine`**) — a thin re-export that **depends on `open-fdd`**. It is **not** the primary release artifact; maintainers may publish it as a **second PyPI project** only if they create that project and wire CI. For most users and for social posts: **`pip install open-fdd`** is the correct one-liner.
+This directory builds an **optional** distribution **`openfdd-engine`** (import **`openfdd_engine`**) — a thin re-export that **depends on `open-fdd`**. It is **not** the primary release artifact; maintainers may publish it as a **second PyPI project** only if they create that project and wire CI. For most users: **`pip install open-fdd`** is the correct one-liner.
 
 ## Optional local / editable install
 
@@ -21,7 +21,7 @@ cd packages/openfdd-engine
 pip install -e .
 ```
 
-Brick TTL / **rdflib** mapping is **not** in **`open-fdd`**; use **`afdd_stack/openfdd_stack/`** in this monorepo (`pip install -e ".[stack]"` from the repo root).
+Brick TTL / **rdflib** column-map resolvers are **not** part of **`open-fdd`**; if you maintain RDF tooling elsewhere, bridge it by building a **column_map** dict or manifest your resolver understands (see [Column map resolvers](https://github.com/bbartling/open-fdd/blob/master/docs/column_map_resolvers.md)).
 
 ## API (subset of `open_fdd.engine`)
 

@@ -22,17 +22,16 @@ So: **rules = list of dicts in memory**; **data = one wide-ish DataFrame** of ti
 
 ---
 
-## 2. From Postgres rows to a site/equipment DataFrame
+## 2. From long telemetry rows to a wide DataFrame
 
-The continuous loop (`openfdd_stack.platform.loop.run_fdd_loop`) loads telemetry with SQL, then reshapes it for pandas:
+A common pattern (warehouse export, historian CSV, SQL query) is a **long** table (`timestamp`, `point_id`, `value`). For **`RuleRunner`** you typically:
 
-1. **Query** `timeseries_readings` joined to `points` for the time window (`load_timeseries_for_site` / `load_timeseries_for_equipment`).
-2. **Build a long table**: `pd.DataFrame(rows)` with columns like `ts`, `external_id`, `value`.
-3. **Pivot to wide**: `df.pivot_table(index="ts", columns="external_id", values="value")` so each point is a column (one column per `external_id`).
-4. **Rename columns** using a **column map** (on the stack: from TTL via **`openfdd_stack.platform.brick_ttl_resolver`**; with **`pip install open-fdd`**: dict or manifest).
-5. **Add** `timestamp = pd.to_datetime(df["ts"])` for time-based checks.
+1. Load rows into pandas.
+2. **Pivot to wide**: `df.pivot_table(index="timestamp", columns="point_id", values="value")` (or equivalent) so each sensor is a column.
+3. **Rename columns** using **`column_map`** (dict or manifest) so rule inputs line up with Brick-style or logical keys.
+4. Parse the index with **`pd.to_datetime`** when you need time-based checks.
 
-Under the hood, pandas is doing **grouped aggregation in the pivot** (duplicate `(ts, external_id)` would aggregate), then **aligning** all series to a common `DatetimeIndex` (implicit via the pivot index).
+pandas handles aggregation during the pivot when duplicate index/column pairs exist; the result is one row per timestamp.
 
 ---
 
@@ -55,7 +54,7 @@ So each rule adds **one column** of flags; the frame grows **width-wise**, not r
 
 Inside `_evaluate_rule`, Open-FDD branches on `rule["type"]` (e.g. `bounds`, `flatline`, `expression`, …):
 
-- **`column_map` resolution**: For each logical input key, the runner picks a **DataFrame column name**. If the YAML input has a **`brick`** class, the global `column_map` from TTL is consulted first (`brick` → column label), so the **same YAML** can run against different exports as long as TTL maps Brick classes to the right columns.
+- **`column_map` resolution**: For each logical input key, the runner picks a **DataFrame column name**. If the YAML input has a **`brick`** class, the supplied **`column_map`** dict is consulted (`brick` class key → column label), so the **same YAML** can run against different exports as long as the map matches your frame.
 - **Bounds / thresholds**: Typical pattern is `(series < low) | (series > high)` using **vectorized** comparisons — these are **numpy ufuncs** under pandas, no Python `for` over rows.
 - **Expressions**: String expressions may be evaluated in a **restricted eval** context (`open_fdd.engine.checks.check_expression`) with named series bound to `result[col]` — still vectorized.
 
@@ -63,9 +62,9 @@ If a required column is missing, the runner either **raises** or **skips** the r
 
 ---
 
-## 5. Hot reload: YAML vs DataFrame lifetime
+## 5. Reloading rules vs DataFrame lifetime
 
-`run_fdd_loop` calls **`load_rules_from_dir(rules_path)` every run**, then filters by equipment types from TTL, then **`RuleRunner(rules=rules)`**. There is **no** long-lived compiled rule object on disk—editing YAML affects the **next** scheduled run (or the next manual `POST /run-fdd`). The **DataFrame** exists only for the duration of that run’s Python call stack (load → run → persist results).
+If you call **`load_rules_from_dir`** before each **`RuleRunner`** construction, edits to YAML on disk take effect on the **next** run. The **DataFrame** you pass in exists only for that evaluation; construct a fresh frame for each batch or window as your pipeline requires.
 
 ---
 
@@ -77,6 +76,6 @@ If a required column is missing, the runner either **raises** or **skips** the r
 | Loaded rules | `list[dict]` | None |
 | Telemetry window | `DataFrame` (time × points) | pivot, datetime index, column rename |
 | Rule output | Same index, +flag columns | vectorized masks, optional `rolling` |
-| `fault_results` / DB | Written from row-wise `FDDResult` | After flags are computed |
+| Downstream store | Your app persists outputs if needed | After flags are computed |
 
 For a **minimal** example of rules + CSV (no DB), see [standalone CSV / pandas](../standalone_csv_pandas) and unit tests in `open_fdd/tests/engine/test_runner.py`.
