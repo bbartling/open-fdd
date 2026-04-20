@@ -25,7 +25,7 @@ With **`skip_missing_columns=True`** (default), a bad **`column_map`** can cause
 
 ## 3. Units and scaling
 
-Expressions use raw column values. **0–1 vs 0–100** command scaling is your responsibility unless you call **`normalize_cmd(...)`** in the expression (see [Expression rule cookbook](expression_rule_cookbook#signal-scaling-0--1-fraction-vs-0--100-percent)).
+Expressions use raw column values. **0–1 vs 0–100** command scaling is your responsibility unless you call **`normalize_cmd(...)`** in the expression (see [Expression rule cookbook](../expression_rule_cookbook#signal-scaling-0--1-fraction-vs-0--100-percent)).
 
 ---
 

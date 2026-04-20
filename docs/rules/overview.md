@@ -33,9 +33,11 @@ See the [Expression rule cookbook](../expression_rule_cookbook) to add or adapt 
 | `bounds` | Value outside `[low, high]` |
 | `flatline` | Rolling spread < tolerance (stuck sensor) |
 | `hunting` | Excessive state changes (PID hunting) |
-| `expression` | Custom pandas/numpy expression |
+| `expression` | Custom pandas/numpy expression; supports schedule/weather gating via `params.schedule` and `params.weather_band` |
 | `oa_fraction` | OA fraction vs design airflow error |
 | `erv_efficiency` | ERV effectiveness out of range |
+
+These six values are the built-in `type` values in the engine. **Occupied-hours and weather gating are not separate rule types**; they are optional masks injected for `type: expression` rules (`schedule_occupied`, `weather_allows_fdd`). See the [Expression rule cookbook](../expression_rule_cookbook#occupied-hours-and-weather-gating-expressions).
 
 ---
 
