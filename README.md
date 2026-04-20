@@ -25,7 +25,7 @@ pip install open-fdd
 
 Examples: **[`examples/README.md`](examples/README.md)**.
 
-Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)** (Jekyll site under `docs/`), plus **[`docs/howto/openfdd_engine_pypi.md`](docs/howto/openfdd_engine_pypi.md)** for releases.
+Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**
 
 ---
 
