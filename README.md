@@ -23,9 +23,9 @@ This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detec
 pip install open-fdd
 ```
 
-Examples: **[`examples/README.md`](examples/README.md)**.
-
-Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**
+**[Online Docs](https://bbartling.github.io/open-fdd/)**
+**[examples/README.md](examples/README.md)**
+**[Open FDD AFDD Stack Github](https://github.com/bbartling/open-fdd-afdd-stack)**
 
 ---
 
