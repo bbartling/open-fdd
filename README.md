@@ -23,9 +23,28 @@ This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detec
 pip install open-fdd
 ```
 
-Examples: **[`examples/README.md`](examples/README.md)**.
+---
 
-Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**
+## Online Documentation
+
+This application is part of a broader ecosystem that together forms the **Open FDD AFDD Stack**, enabling a fully orchestrated, edge-deployable analytics and optimization platform for building automation systems.
+
+* 🔗 **DIY BACnet Server**
+  Lightweight BACnet server with JSON-RPC and MQTT support for IoT integrations.
+  [Documentation](https://bbartling.github.io/diy-bacnet-server/) · [GitHub](https://github.com/bbartling/diy-bacnet-server)
+
+* 📖 **Open FDD AFDD Stack**
+  Full AFDD framework with Docker bootstrap, API services, drivers, and React web UI.
+  [Documentation](https://bbartling.github.io/open-fdd-afdd-stack/) · [GitHub](https://github.com/bbartling/open-fdd-afdd-stack)
+
+* 📘 **Open FDD Fault Detection Engine**
+  Core rules engine with `RuleRunner`, YAML-based fault logic, and pandas workflows.
+  [Documentation](https://bbartling.github.io/open-fdd/) · [GitHub](https://github.com/bbartling/open-fdd) · [PyPI](https://pypi.org/project/open-fdd/)
+
+* ⚙️ **easy-aso Framework**
+  Lightweight framework for Automated Supervisory Optimization (ASO) algorithms at the IoT edge.
+  [Documentation](https://bbartling.github.io/easy-aso/) · [GitHub](https://github.com/bbartling/easy-aso) · [PyPI](https://pypi.org/project/easy-aso/0.1.7/)
+
 
 ---
 
@@ -45,13 +64,12 @@ pytest
 
 ## Dependencies
 
-Runtime: **pandas**, **NumPy**, **PyYAML**, **pydantic** (see [`pyproject.toml`](pyproject.toml)). For **matplotlib** (notebooks) or **python-docx** (Word reports), install those separately if you use those examples.
-
----
-
-## Contributing
-
-See [TESTING.md](TESTING.md), [docs/contributing.md](docs/contributing.md), and the `open-fdd` Discord **`#dev-chat`**.
+* Python 3.12+
+* `pandas`
+* `numpy`
+* `pyyaml`
+* `pydantic>=2.4,<3`
+* `pip` + virtual environment tooling (`python3 -m venv`)
 
 ---
 
