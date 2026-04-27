@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Any
 
 from open_fdd.desktop.storage.model_store import ModelStore
@@ -57,14 +59,14 @@ class TtlService:
             eid = str(eq["id"]).replace("-", "_")
             sid = str(eq["site_id"]).replace("-", "_")
             et = _safe_brick_type(str(eq.get("equipment_type") or "Equipment"), "Equipment")
-            lines.append(f":eq_{eid} a brick:{_escape(et)} ;")
+            lines.append(f":eq_{eid} a brick:{et} ;")
             lines.append(f'  rdfs:label "{_escape(str(eq.get("name", "Equipment")))}" ;')
             lines.append(f'  brick:isPartOf :site_{sid} .')
             lines.append("")
         for pt in model.get("points", []):
             pid = str(pt["id"]).replace("-", "_")
             bt = _safe_brick_type(str(pt.get("brick_type") or "Point"), "Point")
-            lines.append(f":pt_{pid} a brick:{_escape(bt)} ;")
+            lines.append(f":pt_{pid} a brick:{bt} ;")
             lines.append(f'  rdfs:label "{_escape(str(pt.get("external_id", "")))}" ;')
             if pt.get("equipment_id"):
                 lines.append(f'  brick:isPointOf :eq_{str(pt["equipment_id"]).replace("-", "_")} ;')
@@ -80,6 +82,17 @@ class TtlService:
     def sync(self) -> Path:
         ttl = self.build_ttl()
         self.ttl_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ttl_path.write_text(ttl, encoding="utf-8")
+        fd, tmp_name = tempfile.mkstemp(prefix=f"{self.ttl_path.name}.", suffix=".tmp", dir=str(self.ttl_path.parent))
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, mode="w", encoding="utf-8") as handle:
+                handle.write(ttl)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_path, self.ttl_path)
+        except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
         return self.ttl_path
 

@@ -4,13 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
-from open_fdd.desktop.drivers.csv_driver import infer_timestamp_column, ingest_csv_to_feather
 from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.model_service import ModelService
-from open_fdd.desktop.storage.connectors import FeatherConnector, TimeSeriesConnector
+from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
 
@@ -22,32 +19,17 @@ class IngestService:
 
     def __post_init__(self) -> None:
         if self.connector is None:
+            from open_fdd.desktop.storage.connectors import FeatherConnector
+
             self.connector = FeatherConnector(self.feather_store)
 
     def ingest_csv(self, *, csv_path: str | Path, site_id: str, source: str = "csv") -> dict[str, Any]:
-        if isinstance(self.connector, FeatherConnector):
-            result = ingest_csv_to_feather(csv_path=csv_path, source=source, site_id=site_id, store=self.feather_store)
-            metric_columns = result.metric_columns
-            rows = result.rows
-            dropped_rows = result.dropped_rows
-            target = str(result.file_path)
-            feather_path = str(result.file_path)
-        else:
-            frame = pd.read_csv(csv_path)
-            original_len = len(frame.index)
-            if frame.empty:
-                metric_columns = []
-                rows = 0
-                dropped_rows = 0
-            else:
-                ts_col = infer_timestamp_column([str(c) for c in frame.columns])
-                frame[ts_col] = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
-                frame = frame[frame[ts_col].notna()].copy()
-                metric_columns = [str(c) for c in frame.columns if str(c) != ts_col]
-                rows = len(frame.index)
-                dropped_rows = original_len - rows
-            target = self.connector.write_frame(source=source, site_id=site_id, frame=frame)
-            feather_path = ""
+        result = self.connector.ingest_csv(csv_path=str(csv_path), source=source, site_id=site_id)
+        metric_columns = [str(c) for c in result.get("metrics", [])]
+        rows = int(result.get("rows", 0))
+        dropped_rows = int(result.get("dropped_rows", 0))
+        target = str(result.get("storage_path", ""))
+        feather_path = str(result.get("feather_path", ""))
         with self.model_service.transaction() as model:
             for metric in metric_columns:
                 self._upsert_point_for_metric(model=model, site_id=site_id, metric=metric, source=source)
@@ -71,7 +53,7 @@ class IngestService:
         return self.connector.read_frame(source=source, site_id=site_id)
 
     def purge_timeseries(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
-        return self.feather_store.purge(source=source, site_id=site_id)
+        return self.connector.purge(source=source, site_id=site_id)
 
     def _upsert_point_for_metric(
         self,

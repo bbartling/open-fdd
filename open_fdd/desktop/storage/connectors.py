@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Protocol
 
 import pandas as pd
@@ -17,6 +18,10 @@ class TimeSeriesConnector(Protocol):
 
     def read_frame(self, *, source: str, site_id: str) -> pd.DataFrame: ...
 
+    def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict: ...
+
+    def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]: ...
+
 
 @dataclass
 class FeatherConnector:
@@ -28,6 +33,21 @@ class FeatherConnector:
     def read_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.store.read_site_frames(source=source, site_id=site_id)
 
+    def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict:
+        from open_fdd.desktop.drivers.csv_driver import ingest_csv_to_feather
+
+        result = ingest_csv_to_feather(csv_path=csv_path, source=source, site_id=site_id, store=self.store)
+        return {
+            "rows": result.rows,
+            "dropped_rows": result.dropped_rows,
+            "storage_path": str(result.file_path),
+            "feather_path": str(result.file_path),
+            "metrics": result.metric_columns,
+        }
+
+    def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
+        return self.store.purge(source=source, site_id=site_id)
+
 
 @dataclass
 class SqliteConnector:
@@ -38,6 +58,10 @@ class SqliteConnector:
 
     db_path: str
     table_name: str = "timeseries_readings"
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", self.table_name):
+            raise ValueError(f"Unsafe table_name '{self.table_name}'. Use letters/digits/underscore and start with a letter/_")
 
     def _ensure_schema(self) -> None:
         import sqlite3
@@ -86,4 +110,40 @@ class SqliteConnector:
         wide = rows.pivot_table(index="ts", columns="metric", values="value", aggfunc="last").reset_index()
         wide = wide.rename(columns={"ts": "timestamp"})
         return wide
+
+    def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict:
+        from open_fdd.desktop.drivers.csv_driver import infer_timestamp_column
+
+        frame = pd.read_csv(csv_path)
+        original_len = len(frame.index)
+        if frame.empty:
+            metrics: list[str] = []
+            dropped_rows = 0
+            rows = 0
+        else:
+            ts_col = infer_timestamp_column([str(c) for c in frame.columns])
+            frame[ts_col] = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+            frame = frame[frame[ts_col].notna()].copy()
+            metrics = [str(c) for c in frame.columns if str(c) != ts_col]
+            rows = len(frame.index)
+            dropped_rows = original_len - rows
+        out = self.write_frame(source=source, site_id=site_id, frame=frame)
+        return {"rows": rows, "dropped_rows": dropped_rows, "storage_path": out, "feather_path": "", "metrics": metrics}
+
+    def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
+        import sqlite3
+
+        self._ensure_schema()
+        where_parts: list[str] = []
+        params: list[str] = []
+        if source is not None:
+            where_parts.append("source = ?")
+            params.append(str(source))
+        if site_id is not None:
+            where_parts.append("site_id = ?")
+            params.append(str(site_id))
+        where_sql = f" WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        with sqlite3.connect(self.db_path) as conn:
+            cur = conn.execute(f"DELETE FROM {self.table_name}{where_sql}", params)
+            return {"files_deleted": int(cur.rowcount or 0), "dirs_deleted": 0, "bytes_deleted": 0}
 

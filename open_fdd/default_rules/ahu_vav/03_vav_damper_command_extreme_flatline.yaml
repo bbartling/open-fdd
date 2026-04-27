@@ -14,7 +14,6 @@ params:
   low_fraction: 0.02
   high_fraction: 0.98
   flatline_tolerance_fraction: 0.005
-rolling_window: 12
 expression: |
   (
     (normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).count() >= roll_samples)

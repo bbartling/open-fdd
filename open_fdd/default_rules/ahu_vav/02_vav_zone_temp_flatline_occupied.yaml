@@ -14,7 +14,6 @@ params:
   occupied_end_hour: 17
   roll_samples: 12
   flatline_tolerance_f: 0.05
-rolling_window: 12
 expression: |
   (
     (Zone_Air_Temperature_Sensor.index.dayofweek < 5)

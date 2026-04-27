@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("fastapi")
+pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
 from open_fdd.desktop_bridge.server import create_app
@@ -50,12 +54,13 @@ SELECT (COUNT(?s) AS ?count) WHERE { ?s a brick:Site . }"""
 def test_desktop_bridge_csv_ingest_missing_file_returns_400() -> None:
     app = create_app()
     client = TestClient(app)
+    missing_csv = "/not/a/real/path/missing.csv"
     res = client.post(
         "/ingest/csv",
         json={
             "site_id": "site-missing",
             "source": "csv",
-            "csv_path": "C:/definitely/not/real/missing.csv",
+            "csv_path": missing_csv,
         },
     )
     assert res.status_code == 400

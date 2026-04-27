@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import shutil
 from typing import Any
+import logging
 
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -18,6 +19,7 @@ from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import default_rules_root
 
+_log = logging.getLogger(__name__)
 
 @dataclass
 class BridgeServices:
@@ -84,6 +86,14 @@ def create_app() -> FastAPI:
         allow_credentials=True,
     )
     services = _build_services()
+    def _safe_sync_ttl() -> str | None:
+        try:
+            path = services.ttl.sync()
+            return str(path)
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("TTL sync failed")
+            return str(exc)
+
     app.state.ttl_sync_interval_seconds = 30
     app.state.last_ttl_sync_iso = ""
     app.state.ttl_sync_error = ""
@@ -125,26 +135,31 @@ def create_app() -> FastAPI:
     @app.post("/sites")
     def create_site(body: SiteCreateBody) -> dict[str, Any]:
         site = services.model.create_site(body.name.strip() or "Site")
-        services.ttl.sync()
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
         return site
 
     @app.delete("/sites/{site_id}")
     def delete_site(site_id: str) -> dict[str, int]:
         out = services.model.delete_site(site_id)
-        services.ttl.sync()
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            return {**out, "ttl_sync_warning": ttl_error}
         return out
 
     @app.post("/sites/{site_id}/rule-pack")
     def set_site_rule_pack(site_id: str, body: SiteRulePackBody) -> dict[str, Any]:
-        model = services.model.load()
-        site = next((s for s in model.get("sites", []) if str(s.get("id")) == str(site_id)), None)
-        if site is None:
-            return {"error": f"Unknown site id: {site_id}"}
-        metadata = site.get("metadata") if isinstance(site.get("metadata"), dict) else {}
-        metadata["rule_pack"] = body.rule_pack
-        site["metadata"] = metadata
-        services.model.store.save(model)
-        services.ttl.sync()
+        with services.model.transaction() as model:
+            site = next((s for s in model.get("sites", []) if str(s.get("id")) == str(site_id)), None)
+            if site is None:
+                raise HTTPException(status_code=404, detail=f"Unknown site id: {site_id}")
+            metadata = site.get("metadata") if isinstance(site.get("metadata"), dict) else {}
+            metadata["rule_pack"] = body.rule_pack
+            site["metadata"] = metadata
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
         return site
 
     @app.post("/model/import")
@@ -290,23 +305,25 @@ LIMIT 50""",
     def timeseries_purge(body: TimeseriesPurgeBody) -> dict[str, Any]:
         out = services.ingest.purge_timeseries(source=body.source, site_id=body.site_id)
         points_removed = 0
+        ttl_error: str | None = None
         if body.prune_points:
-            model = services.model.load()
-            before = len(model.get("points", []))
-            kept = []
-            for point in model.get("points", []):
-                md = point.get("metadata") if isinstance(point.get("metadata"), dict) else {}
-                p_source = md.get("source")
-                p_site = point.get("site_id")
-                match_source = body.source is None or str(p_source) == str(body.source)
-                match_site = body.site_id is None or str(p_site) == str(body.site_id)
-                if match_source and match_site:
-                    continue
-                kept.append(point)
-            model["points"] = kept
-            services.model.store.save(model)
-            services.ttl.sync()
+            with services.model.transaction() as model:
+                before = len(model.get("points", []))
+                kept = []
+                for point in model.get("points", []):
+                    md = point.get("metadata") if isinstance(point.get("metadata"), dict) else {}
+                    p_source = md.get("source")
+                    p_site = point.get("site_id")
+                    match_source = body.source is None or str(p_source) == str(body.source)
+                    match_site = body.site_id is None or str(p_site) == str(body.site_id)
+                    if match_source and match_site:
+                        continue
+                    kept.append(point)
+                model["points"] = kept
+            ttl_error = _safe_sync_ttl()
             points_removed = before - len(kept)
+        if ttl_error:
+            return {**out, "points_removed": points_removed, "ttl_sync_warning": ttl_error}
         return {**out, "points_removed": points_removed}
 
     return app

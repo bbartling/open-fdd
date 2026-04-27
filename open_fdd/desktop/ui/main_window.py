@@ -553,16 +553,22 @@ class DesktopMainWindow:
         if not site_id:
             self.ingest_out.setPlainText("Set a site id first.")
             return
-        result = self.ingest_service.ingest_weather(site_id=site_id, days_back=1)
-        self.ingest_out.setPlainText(f"Weather rows ingested: {result['rows']}")
+        try:
+            result = self.ingest_service.ingest_weather(site_id=site_id, days_back=1)
+            self.ingest_out.setPlainText(f"Weather rows ingested: {result['rows']}")
+        except Exception as exc:
+            self.ingest_out.setPlainText(f"Error: {exc}\n{traceback.format_exc()}")
 
     def _on_run_onboard(self) -> None:
         site_id = self._site_id_for_ingest()
         if not site_id:
             self.ingest_out.setPlainText("Set a site id first.")
             return
-        result = self.ingest_service.ingest_onboard(site_id=site_id)
-        self.ingest_out.setPlainText(f"Onboard rows ingested: {result['rows']}")
+        try:
+            result = self.ingest_service.ingest_onboard(site_id=site_id)
+            self.ingest_out.setPlainText(f"Onboard rows ingested: {result['rows']}")
+        except Exception as exc:
+            self.ingest_out.setPlainText(f"Error: {exc}\n{traceback.format_exc()}")
 
     def _on_run_rules(self) -> None:
         site_id = self._site_id_for_ingest()
@@ -624,8 +630,11 @@ class DesktopMainWindow:
                 lines = []
                 source = self.source_input_ingest.text().strip() or "csv"
                 for csv in csvs:
-                    res = self.ingest_service.ingest_csv(csv_path=csv, source=source, site_id=site_id)
-                    lines.append(f'{Path(csv).name}: rows={res["rows"]}, metrics={len(res["metrics"])}')
+                    try:
+                        res = self.ingest_service.ingest_csv(csv_path=csv, source=source, site_id=site_id)
+                        lines.append(f'{Path(csv).name}: rows={res["rows"]}, metrics={len(res["metrics"])}')
+                    except Exception as exc:
+                        lines.append(f"{Path(csv).name}: ERROR {exc}")
                 self.drop_zone.setPlainText("\n".join(csvs))
                 self.ingest_out.setPlainText("\n".join(lines))
                 self._refresh_model_views()

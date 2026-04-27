@@ -81,7 +81,7 @@ export function DataModelTestingPage() {
           </thead>
           <tbody>
             {output.rows.map((row, idx) => (
-              <tr key={idx}>
+              <tr key={`${output.columns.map((c) => row[c] ?? "").join("|")}::${idx}`}>
                 {output.columns.map((c) => (
                   <td key={`${idx}-${c}`} style={{ padding: 8, borderBottom: "1px solid var(--border)" }}>
                     {row[c] ?? ""}

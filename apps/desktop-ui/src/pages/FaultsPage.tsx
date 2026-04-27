@@ -17,20 +17,26 @@ export function FaultsPage() {
   const [output, setOutput] = useState("");
 
   async function runRules() {
-    const out = await desktopFetch<RuleResponse>("/rules/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        site_id: siteId,
-        source,
-        rules_path: rulesPath,
-        chunk_rows: Number(chunkRows || "0"),
-      }),
-    });
-    setOutput(
-      `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
-        `Columns: ${out.columns.join(", ")}\nFault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
-    );
+    try {
+      const out = await desktopFetch<RuleResponse>("/rules/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: siteId,
+          source,
+          rules_path: rulesPath,
+          chunk_rows: Number(chunkRows || "0"),
+        }),
+      });
+      setOutput(
+        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
+          `Columns: ${out.columns.join(", ")}\nFault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
+      );
+    } catch (error) {
+      console.error("runRules failed", error);
+      const message = error instanceof Error ? error.message : String(error);
+      setOutput(`Error running rules: ${message}`);
+    }
   }
 
   return (

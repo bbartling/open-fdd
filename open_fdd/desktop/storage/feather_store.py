@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import hashlib
 from pathlib import Path
 from uuid import uuid4
 from typing import Iterable
@@ -13,8 +14,11 @@ from open_fdd.desktop.storage.paths import feather_root
 
 
 def _safe_name(value: str) -> str:
-    out = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in value.strip())
-    return out or "default"
+    raw = str(value or "").strip()
+    out = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in raw)
+    out = out or "default"
+    suffix = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+    return f"{out}_{suffix}"
 
 
 @dataclass

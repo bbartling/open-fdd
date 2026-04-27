@@ -13,19 +13,29 @@ export function DataModelPage() {
   const [replaceModel, setReplaceModel] = useState(true);
 
   async function doExport() {
-    const model = await desktopFetch<ModelPayload>("/model/export");
-    setJsonText(JSON.stringify(model, null, 2));
-    setOut("Exported model JSON.");
+    try {
+      const model = await desktopFetch<ModelPayload>("/model/export");
+      setJsonText(JSON.stringify(model, null, 2));
+      setOut("Exported model JSON.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOut(`Export failed: ${message}`);
+    }
   }
 
   async function doImport() {
-    const payload = JSON.parse(jsonText);
-    const resp = await desktopFetch<{ sites: number; equipment: number; points: number }>("/model/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payload, replace: replaceModel }),
-    });
-    setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}`);
+    try {
+      const payload = JSON.parse(jsonText);
+      const resp = await desktopFetch<{ sites: number; equipment: number; points: number }>("/model/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload, replace: replaceModel }),
+      });
+      setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOut(`Import failed: ${message}`);
+    }
   }
 
   return (
