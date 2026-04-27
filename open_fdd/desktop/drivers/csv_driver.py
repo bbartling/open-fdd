@@ -11,6 +11,7 @@ from open_fdd.desktop.storage.feather_store import FeatherStore
 @dataclass
 class CsvIngestResult:
     rows: int
+    dropped_rows: int
     file_path: Path
     timestamp_column: str
     metric_columns: list[str]
@@ -36,14 +37,17 @@ def ingest_csv_to_feather(
     frame = pd.read_csv(csv_path)
     if frame.empty:
         out = store.write_frame(source=source, site_id=site_id, frame=frame)
-        return CsvIngestResult(rows=0, file_path=out, timestamp_column="", metric_columns=[])
+        return CsvIngestResult(rows=0, dropped_rows=0, file_path=out, timestamp_column="", metric_columns=[])
     ts_col = infer_timestamp_column([str(c) for c in frame.columns])
+    original_len = len(frame.index)
     frame[ts_col] = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
     frame = frame[frame[ts_col].notna()].copy()
+    kept_len = len(frame.index)
     metric_columns = [str(c) for c in frame.columns if str(c) != ts_col]
     out = store.write_frame(source=source, site_id=site_id, frame=frame)
     return CsvIngestResult(
-        rows=int(len(frame.index)),
+        rows=kept_len,
+        dropped_rows=original_len - kept_len,
         file_path=out,
         timestamp_column=ts_col,
         metric_columns=metric_columns,

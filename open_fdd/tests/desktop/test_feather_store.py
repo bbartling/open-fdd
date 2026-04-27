@@ -23,3 +23,31 @@ def test_feather_store_roundtrip(tmp_path: Path) -> None:
     assert len(merged.index) == 2
     assert "value" in merged.columns
 
+
+def test_feather_store_stats_and_targeted_purge(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    store = FeatherStore(root=tmp_path / "feather")
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(["2026-01-01T00:00:00Z"], utc=True),
+            "value": [1.0],
+        }
+    )
+    store.write_frame(source="csv", site_id="site-1", frame=frame)
+    store.write_frame(source="csv", site_id="site-2", frame=frame)
+    store.write_frame(source="weather", site_id="site-1", frame=frame)
+
+    stats_before = store.stats()
+    assert stats_before["file_count"] == 3
+    assert stats_before["source_count"] == 2
+    assert stats_before["site_count"] == 3
+    assert stats_before["bytes_total"] > 0
+
+    purged = store.purge(source="csv", site_id="site-1")
+    assert purged["files_deleted"] == 1
+    assert purged["bytes_deleted"] > 0
+
+    stats_after = store.stats()
+    assert stats_after["file_count"] == 2
+    assert stats_after["source_count"] == 2
+

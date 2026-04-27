@@ -11,10 +11,11 @@ from open_fdd.desktop.storage.feather_store import FeatherStore
 @dataclass
 class WeatherFetchResult:
     rows: int
-    source: str = "open_meteo"
+    source: str = "synthetic"
 
 
 def run_weather_fetch(*, store: FeatherStore, site_id: str, days_back: int = 1) -> WeatherFetchResult:
+    # TODO: Replace with live Open-Meteo HTTP ingestion.
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(days=max(1, int(days_back)))
     rng = pd.date_range(start=start, end=end, freq="1h", tz="UTC")
@@ -26,5 +27,5 @@ def run_weather_fetch(*, store: FeatherStore, site_id: str, days_back: int = 1) 
         }
     )
     store.write_frame(source="weather", site_id=site_id, frame=frame)
-    return WeatherFetchResult(rows=int(len(frame.index)))
+    return WeatherFetchResult(rows=len(frame.index))
 

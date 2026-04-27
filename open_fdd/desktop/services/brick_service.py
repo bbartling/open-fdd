@@ -10,6 +10,10 @@ class BrickService:
     ttl_path: Path
 
     def resolve_column_map(self) -> dict[str, str]:
+        """
+        Resolve BRICK/fdd_input keys to point labels.
+        Note: mapping is last-write-wins for duplicate keys.
+        """
         try:
             from rdflib import Graph
         except ImportError:
@@ -22,21 +26,23 @@ class BrickService:
         PREFIX brick: <https://brickschema.org/schema/Brick#>
         PREFIX ofdd: <http://openfdd.local/ontology#>
         PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-        SELECT ?brickClass ?label ?ruleInput WHERE {
+        SELECT ?brick_class ?label ?rule_input WHERE {
           ?p a ?b .
           FILTER(STRSTARTS(STR(?b), STR(brick:)))
-          BIND(REPLACE(STR(?b), "https://brickschema.org/schema/Brick#", "") AS ?brickClass)
+          BIND(REPLACE(STR(?b), "https://brickschema.org/schema/Brick#", "") AS ?brick_class)
           ?p rdfs:label ?label .
-          OPTIONAL { ?p ofdd:mapsToRuleInput ?ruleInput . }
+          OPTIONAL { ?p ofdd:mapsToRuleInput ?rule_input . }
         }
+        ORDER BY ?brick_class ?rule_input ?label
         """
         out: dict[str, str] = {}
         for row in graph.query(query):
-            brick_class = str(getattr(row, "brickClass", "")).strip()
-            label = str(getattr(row, "label", "")).strip()
+            row_map = row.asdict() if hasattr(row, "asdict") else {}
+            brick_class = str(row_map.get("brick_class") or getattr(row, "brick_class", "")).strip()
+            label = str(row_map.get("label") or getattr(row, "label", "")).strip()
             if brick_class and label:
                 out[brick_class] = label
-            rule_input = str(getattr(row, "ruleInput", "") or "").strip()
+            rule_input = str(row_map.get("rule_input") or getattr(row, "rule_input", "") or "").strip()
             if rule_input and label:
                 out[rule_input] = label
         return out

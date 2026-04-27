@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+from pandas.testing import assert_series_equal
 import yaml
 
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
@@ -27,5 +28,5 @@ def test_rule_loop_batched_matches_full(tmp_path: Path) -> None:
     cfg_chunk = RuleLoopConfig(rules_path=str(rules_dir), chunk_rows=200)
     out_full = run_rule_loop_batched(frame, cfg_full)
     out_chunk = run_rule_loop_batched(frame, cfg_chunk)
-    assert out_full["sat_flag"].sum() == out_chunk["sat_flag"].sum()
+    assert_series_equal(out_full["sat_flag"], out_chunk["sat_flag"])
 

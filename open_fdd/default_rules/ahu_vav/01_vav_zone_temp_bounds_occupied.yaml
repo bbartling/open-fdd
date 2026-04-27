@@ -1,0 +1,29 @@
+name: vav_zone_temp_bounds_occupied_8_to_5
+version: 1
+type: expression
+description: VAV zone temperature outside 69-75 degF during occupied office hours, Monday-Friday 8:00-17:00.
+equipment_type:
+  - Variable_Air_Volume_Box
+  - Variable_Air_Volume_Box_With_Reheat
+  - VAV
+inputs:
+  Zone_Air_Temperature_Sensor:
+    brick: Zone_Air_Temperature_Sensor
+params:
+  low_temp_f: 69.0
+  high_temp_f: 75.0
+  occupied_start_hour: 8
+  occupied_end_hour: 17
+rolling_window: 3
+expression: |
+  (
+    (Zone_Air_Temperature_Sensor.index.dayofweek < 5)
+    & (Zone_Air_Temperature_Sensor.index.hour >= occupied_start_hour)
+    & (Zone_Air_Temperature_Sensor.index.hour < occupied_end_hour)
+    & (
+      (Zone_Air_Temperature_Sensor < low_temp_f)
+      | (Zone_Air_Temperature_Sensor > high_temp_f)
+    )
+  )
+flag: vav_zone_temp_bounds_occ_fault
+severity: warning

@@ -10,8 +10,15 @@ Example:
 """
 
 from open_fdd.engine import RuleRunner
-from open_fdd.desktop import GUI
 
 __version__ = "2.3.1"
 
-__all__ = ["RuleRunner", "GUI", "__version__"]
+__all__ = ["GUI", "RuleRunner", "__version__"]
+
+
+def __getattr__(name: str):
+    if name == "GUI":
+        from open_fdd.desktop import GUI
+
+        return GUI
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -4,6 +4,8 @@
 
 Run Open-FDD as a pure Python desktop app with no web server and no Docker runtime.
 
+This repository now includes a Tauri + React desktop UI workspace at `apps/desktop-ui` that talks to a local Python bridge.
+
 ## Install
 
 ```bash
@@ -25,10 +27,23 @@ open_fdd.GUI()
 open-fdd-desktop
 ```
 
+### Tauri + React desktop UI
+
+```bash
+# terminal 1
+open-fdd-desktop-bridge
+
+# terminal 2
+cd apps/desktop-ui
+npm install
+npm run dev
+```
+
 ## Data model + BRICK
 
 - Desktop stores model data in user-writable app-data (`open-fdd-desktop/model.json`).
 - BRICK TTL is generated to `open-fdd-desktop/data_model.ttl`.
+- App-data root is platform-specific (`%APPDATA%` on Windows, `~/.local/share` on Linux, `~/Library/Application Support` on macOS) and is resolved by `open_fdd.desktop.storage.paths.desktop_data_dir`.
 - BRICK input mapping for rules resolves through `open_fdd.desktop.services.BrickService`.
 
 ## Feather-first ingestion

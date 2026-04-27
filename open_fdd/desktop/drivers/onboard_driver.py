@@ -14,6 +14,7 @@ class OnboardScrapeResult:
 
 
 def run_onboard_scrape(*, store: FeatherStore, site_id: str) -> OnboardScrapeResult:
+    # TODO: Replace with the real onboard scraper integration.
     now = datetime.now(timezone.utc)
     frame = pd.DataFrame(
         {
@@ -23,5 +24,5 @@ def run_onboard_scrape(*, store: FeatherStore, site_id: str) -> OnboardScrapeRes
         }
     )
     store.write_frame(source="onboard", site_id=site_id, frame=frame)
-    return OnboardScrapeResult(rows=1)
+    return OnboardScrapeResult(rows=len(frame.index))
 

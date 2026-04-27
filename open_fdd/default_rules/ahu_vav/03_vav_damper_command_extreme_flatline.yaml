@@ -1,0 +1,44 @@
+name: vav_damper_command_extreme_flatline
+version: 1
+type: expression
+description: VAV damper command is stuck/flatlined near fully closed or fully open for an extended period.
+equipment_type:
+  - Variable_Air_Volume_Box
+  - Variable_Air_Volume_Box_With_Reheat
+  - VAV
+inputs:
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+params:
+  roll_samples: 12
+  low_fraction: 0.02
+  high_fraction: 0.98
+  flatline_tolerance_fraction: 0.005
+rolling_window: 12
+expression: |
+  (
+    (normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).count() >= roll_samples)
+    & (
+      (
+        (normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).min() >= high_fraction)
+        & (
+          (
+            normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).max()
+            - normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).min()
+          ) <= flatline_tolerance_fraction
+        )
+      )
+      |
+      (
+        (normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).max() <= low_fraction)
+        & (
+          (
+            normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).max()
+            - normalize_cmd(Damper_Position_Command).rolling(window=roll_samples).min()
+          ) <= flatline_tolerance_fraction
+        )
+      )
+    )
+  )
+flag: vav_damper_cmd_extreme_flatline_fault
+severity: warning

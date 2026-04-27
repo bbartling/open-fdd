@@ -1,0 +1,150 @@
+:root {
+  --bg: #111319;
+  --panel: #1a1e27;
+  --text: #e8edf6;
+  --muted: #aeb8c7;
+  --primary: #4b70dc;
+  --border: #2f3746;
+  --sidebar-bg: #161b23;
+  --nav-hover-bg: #242b38;
+  --nav-active-bg: #3a4f8f;
+  --nav-active-text: #f5f8ff;
+  --input-bg: #0f131b;
+  --input-text: #e8edf6;
+  --drop-bg: #0f131b;
+  --drop-border: #5f6f8f;
+}
+
+[data-theme="light"] {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --text: #111827;
+  --muted: #5b6475;
+  --primary: #2f57c7;
+  --border: #d8dfec;
+  --sidebar-bg: #edf2fb;
+  --nav-hover-bg: #dfe7f8;
+  --nav-active-bg: #2f57c7;
+  --nav-active-text: #ffffff;
+  --input-bg: #ffffff;
+  --input-text: #111827;
+  --drop-bg: #f9fbff;
+  --drop-border: #8aa0d7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 270px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  padding: 20px 12px;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.nav-item {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.nav-item.active,
+.nav-item:hover {
+  background: var(--nav-hover-bg);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.content {
+  padding: 18px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.title {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+button {
+  background: var(--primary);
+  color: white;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+textarea,
+input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  padding: 10px;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.drop-zone {
+  border: 1px dashed var(--drop-border);
+  background: var(--drop-bg);
+  border-radius: 10px;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
