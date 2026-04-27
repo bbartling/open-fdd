@@ -23,6 +23,25 @@ This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detec
 pip install open-fdd
 ```
 
+Desktop extras:
+
+```bash
+pip install "open-fdd[desktop]"
+```
+
+Launch from Python:
+
+```python
+import open_fdd
+open_fdd.GUI()
+```
+
+Or CLI:
+
+```bash
+open-fdd-desktop
+```
+
 ---
 
 ## Online Documentation

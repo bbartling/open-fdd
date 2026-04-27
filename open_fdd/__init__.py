@@ -10,7 +10,8 @@ Example:
 """
 
 from open_fdd.engine import RuleRunner
+from open_fdd.desktop import GUI
 
-__version__ = "2.3.0"
+__version__ = "2.3.1"
 
-__all__ = ["RuleRunner", "__version__"]
+__all__ = ["RuleRunner", "GUI", "__version__"]
