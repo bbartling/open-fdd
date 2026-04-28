@@ -43,6 +43,7 @@ test = [
 desktop = [
     "PySide6>=6.8",
     "pyarrow>=15.0.0",
+    "scikit-learn>=1.5.0",
     "rdflib>=7.0.0",
     "fastapi>=0.115.0",
     "python-multipart>=0.0.20",

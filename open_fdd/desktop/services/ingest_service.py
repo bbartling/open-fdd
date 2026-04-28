@@ -8,6 +8,7 @@ import pandas as pd
 
 from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
+from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
@@ -85,6 +86,43 @@ class IngestService:
 
     def purge_timeseries(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         return self.connector.purge(source=source, site_id=site_id)
+
+    def train_ml_baseline(
+        self,
+        *,
+        site_id: str,
+        source: str,
+        target_col: str,
+        feature_cols: list[str] | None = None,
+        lag_cols: list[str] | None = None,
+        residual_quantile: float = 0.95,
+        rule_flag_col: str | None = None,
+        output_source: str | None = None,
+    ) -> dict[str, Any]:
+        ml = MLService(connector=self.connector)
+        result = ml.train_baseline(
+            site_id=site_id,
+            source=source,
+            target_col=target_col,
+            feature_cols=feature_cols,
+            lag_cols=lag_cols,
+            residual_quantile=residual_quantile,
+            rule_flag_col=rule_flag_col,
+            output_source=output_source,
+        )
+        return {
+            "rows_train": result.rows_train,
+            "rows_test": result.rows_test,
+            "rows_scored": result.rows_scored,
+            "model_name": result.model_name,
+            "mae": result.mae,
+            "rmse": result.rmse,
+            "r2": result.r2,
+            "residual_threshold": result.residual_threshold,
+            "output_source": result.output_source,
+            "storage_ref": result.storage_ref,
+            "overlap_with_rule_flag": result.overlap_with_rule_flag,
+        }
 
     def _upsert_point_for_metric(
         self,

@@ -64,6 +64,7 @@ class DesktopMainWindow:
         self._active_jobs = 0
         self._run_weather_button = None
         self._run_onboard_button = None
+        self._run_ml_button = None
         self._run_rules_button = None
         self.window = QMainWindow()
         self.window.setWindowTitle("Open-FDD Desktop")
@@ -300,8 +301,11 @@ class DesktopMainWindow:
         weather_btn.clicked.connect(self._on_run_weather)
         onboard_btn = QPushButton("Run Onboard Scrape")
         onboard_btn.clicked.connect(self._on_run_onboard)
+        ml_btn = QPushButton("Train ML Baseline")
+        ml_btn.clicked.connect(self._on_run_ml_baseline)
         self._run_weather_button = weather_btn
         self._run_onboard_button = onboard_btn
+        self._run_ml_button = ml_btn
         refresh_sites_btn = QPushButton("Refresh Sites")
         refresh_sites_btn.clicked.connect(self._refresh_site_selector)
         row.addWidget(QLabel("Site"))
@@ -313,8 +317,36 @@ class DesktopMainWindow:
         row.addWidget(pick_btn)
         row.addWidget(weather_btn)
         row.addWidget(onboard_btn)
+        row.addWidget(ml_btn)
         row.addWidget(refresh_sites_btn)
         lay.addLayout(row)
+
+        ml_row = QHBoxLayout()
+        self.ml_target_input = QLineEdit()
+        self.ml_target_input.setPlaceholderText("ML target (e.g. SAT (°F))")
+        self.ml_features_input = QLineEdit()
+        self.ml_features_input.setPlaceholderText("features csv (blank = all numeric)")
+        self.ml_lags_input = QLineEdit()
+        self.ml_lags_input.setPlaceholderText("lag cols csv (optional)")
+        self.ml_rule_flag_input = QLineEdit()
+        self.ml_rule_flag_input.setPlaceholderText("rule flag column for overlap (optional)")
+        self.ml_quantile_input = QLineEdit()
+        self.ml_quantile_input.setPlaceholderText("residual quantile (0.95)")
+        self.ml_output_source_input = QLineEdit()
+        self.ml_output_source_input.setPlaceholderText("output source (optional)")
+        ml_row.addWidget(QLabel("ML target"))
+        ml_row.addWidget(self.ml_target_input)
+        ml_row.addWidget(QLabel("Features"))
+        ml_row.addWidget(self.ml_features_input)
+        ml_row.addWidget(QLabel("Lags"))
+        ml_row.addWidget(self.ml_lags_input)
+        ml_row.addWidget(QLabel("Rule flag"))
+        ml_row.addWidget(self.ml_rule_flag_input)
+        ml_row.addWidget(QLabel("Q"))
+        ml_row.addWidget(self.ml_quantile_input)
+        ml_row.addWidget(QLabel("Out source"))
+        ml_row.addWidget(self.ml_output_source_input)
+        lay.addLayout(ml_row)
         self.ingest_out = QTextEdit()
         self.ingest_out.setReadOnly(True)
         lay.addWidget(self.ingest_out)
@@ -589,6 +621,56 @@ class DesktopMainWindow:
             on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
         )
 
+    def _on_run_ml_baseline(self) -> None:
+        site_id = self._site_id_for_ingest()
+        if not site_id:
+            self.ingest_out.setPlainText("Set a site id first.")
+            return
+        target_col = self.ml_target_input.text().strip()
+        if not target_col:
+            self.ingest_out.setPlainText("Set ML target column first.")
+            return
+        source = self.source_input_ingest.text().strip() or "csv"
+        feature_cols = [c.strip() for c in self.ml_features_input.text().split(",") if c.strip()]
+        lag_cols = [c.strip() for c in self.ml_lags_input.text().split(",") if c.strip()]
+        rule_flag = self.ml_rule_flag_input.text().strip() or None
+        output_source = self.ml_output_source_input.text().strip() or None
+        q = 0.95
+        try:
+            q = float(self.ml_quantile_input.text().strip() or 0.95)
+        except ValueError:
+            q = 0.95
+
+        self.ingest_out.setPlainText("Training ML baseline...")
+        self._set_busy(True)
+        self._run_in_background(
+            lambda: self.ingest_service.train_ml_baseline(
+                site_id=site_id,
+                source=source,
+                target_col=target_col,
+                feature_cols=feature_cols or None,
+                lag_cols=lag_cols or None,
+                residual_quantile=q,
+                rule_flag_col=rule_flag,
+                output_source=output_source,
+            ),
+            on_success=lambda result: self._on_ml_worker_success(result),
+            on_error=lambda exc, tb: self.ingest_out.setPlainText(f"ML run failed: {exc}\n{tb}"),
+        )
+
+    def _on_ml_worker_success(self, result: dict) -> None:
+        self.ingest_out.setPlainText(
+            "ML baseline completed\n"
+            f"Model: {result.get('model_name')}\n"
+            f"Rows train/test/scored: {result.get('rows_train')}/{result.get('rows_test')}/{result.get('rows_scored')}\n"
+            f"R2: {result.get('r2'):.4f}  MAE: {result.get('mae'):.4f}  RMSE: {result.get('rmse'):.4f}\n"
+            f"Residual threshold: {result.get('residual_threshold'):.4f}\n"
+            f"Rule overlap rows: {result.get('overlap_with_rule_flag')}\n"
+            f"Output source: {result.get('output_source')}\n"
+            f"Storage: {result.get('storage_ref')}"
+        )
+        self._refresh_model_views()
+
     def _on_run_rules(self) -> None:
         site_id = self._site_id_for_ingest()
         source = self.source_input.text().strip() or "csv"
@@ -629,7 +711,7 @@ class DesktopMainWindow:
         )
 
     def _set_busy(self, busy: bool) -> None:
-        for btn in (self._run_weather_button, self._run_onboard_button, self._run_rules_button):
+        for btn in (self._run_weather_button, self._run_onboard_button, self._run_ml_button, self._run_rules_button):
             if btn is not None:
                 btn.setEnabled(not busy)
 
