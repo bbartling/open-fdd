@@ -64,5 +64,6 @@ def test_ingest_service_ml_baseline_returns_metrics(tmp_path: Path) -> None:
     assert out["rows_test"] > 0
     assert out["rows_scored"] > 0
     assert isinstance(out["r2"], float)
+    assert 0.8 <= out["r2"] <= 1.0
     assert out["output_source"].startswith("ml_sat")
 

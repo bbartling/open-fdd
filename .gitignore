@@ -191,7 +191,8 @@ stack/caddy/certs/
 config/data_model.ttl
 config/.run_fdd_now
 open-fdd-desktop/feather_store/
-*.feather
+open-fdd-desktop/**/*.feather
+tmp_ml_smoke/
 
 # Tauri + React desktop UI build artifacts
 apps/desktop-ui/node_modules/

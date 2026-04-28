@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import warnings
 
 
 @dataclass
@@ -36,7 +37,14 @@ class BrickService:
         ORDER BY ?brick_class ?rule_input ?label
         """
         out: dict[str, str] = {}
-        for row in graph.query(query):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="'count' is passed as positional argument",
+                category=DeprecationWarning,
+            )
+            rows = list(graph.query(query))
+        for row in rows:
             row_map = row.asdict() if hasattr(row, "asdict") else {}
             brick_class = str(row_map.get("brick_class") or getattr(row, "brick_class", "")).strip()
             label = str(row_map.get("label") or getattr(row, "label", "")).strip()
@@ -63,7 +71,14 @@ class BrickService:
         }
         """
         vals: list[str] = []
-        for row in graph.query(query):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="'count' is passed as positional argument",
+                category=DeprecationWarning,
+            )
+            rows = list(graph.query(query))
+        for row in rows:
             t = str(getattr(row, "t", "")).strip()
             if t and t not in vals:
                 vals.append(t)

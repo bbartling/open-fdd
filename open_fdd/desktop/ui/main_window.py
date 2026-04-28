@@ -635,11 +635,15 @@ class DesktopMainWindow:
         lag_cols = [c.strip() for c in self.ml_lags_input.text().split(",") if c.strip()]
         rule_flag = self.ml_rule_flag_input.text().strip() or None
         output_source = self.ml_output_source_input.text().strip() or None
-        q = 0.95
+        q_text = self.ml_quantile_input.text().strip()
         try:
-            q = float(self.ml_quantile_input.text().strip() or 0.95)
+            q = float(q_text or 0.95)
         except ValueError:
-            q = 0.95
+            self.ingest_out.setPlainText("Invalid residual quantile. Enter a number between 0 and 1 (for example 0.95).")
+            return
+        if not (0.0 < q < 1.0):
+            self.ingest_out.setPlainText("Residual quantile must be between 0 and 1 (exclusive).")
+            return
 
         self.ingest_out.setPlainText("Training ML baseline...")
         self._set_busy(True)

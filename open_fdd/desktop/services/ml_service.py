@@ -144,9 +144,9 @@ class MLService:
 
         overlap = 0
         if rule_flag_col and rule_flag_col in df.columns:
-            merged = scored.merge(df[[ts_col, rule_flag_col]], on=ts_col, how="left")
-            merged_rule = pd.to_numeric(merged[rule_flag_col], errors="coerce").fillna(0).astype(int)
-            overlap = int(((merged["ml_residual_fault"] == 1) & (merged_rule == 1)).sum())
+            # Align rule flag directly on scored row index to avoid many-to-many timestamp merges.
+            aligned_rule = pd.to_numeric(df.loc[scored.index, rule_flag_col], errors="coerce").fillna(0).astype(int)
+            overlap = int(((scored["ml_residual_fault"] == 1) & (aligned_rule == 1)).sum())
 
         out_source = output_source or f"ml_{_safe_token(target_col)}"
         output_frame = scored[[ts_col, target_col, "ml_prediction", "ml_residual", "ml_abs_residual", "ml_residual_fault"]].copy()

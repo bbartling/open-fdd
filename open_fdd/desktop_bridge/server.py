@@ -10,6 +10,7 @@ from typing import Any
 import logging
 import os
 import ctypes
+import warnings
 
 from fastapi import FastAPI
 from fastapi import File
@@ -84,7 +85,20 @@ class RuleUploadBody(BaseModel):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="open-fdd desktop bridge")
+    services = _build_services()
+
+    @contextlib.asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        task = asyncio.create_task(_ttl_sync_loop(app))
+        app.state.ttl_sync_task = task
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    app = FastAPI(title="open-fdd desktop bridge", lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -97,7 +111,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         allow_credentials=True,
     )
-    services = _build_services()
 
     def _rules_dir() -> Path:
         path = default_rules_root() / "ahu_vav"
@@ -174,27 +187,15 @@ def create_app() -> FastAPI:
     app.state.last_ttl_sync_iso = ""
     app.state.ttl_sync_error = ""
 
-    async def _ttl_sync_loop() -> None:
+    async def _ttl_sync_loop(app_ref: FastAPI) -> None:
         while True:
             try:
                 path = services.ttl.sync()
-                app.state.last_ttl_sync_iso = str(path)
-                app.state.ttl_sync_error = ""
+                app_ref.state.last_ttl_sync_iso = str(path)
+                app_ref.state.ttl_sync_error = ""
             except Exception as exc:  # pragma: no cover - defensive runtime loop
-                app.state.ttl_sync_error = str(exc)
-            await asyncio.sleep(int(app.state.ttl_sync_interval_seconds))
-
-    @app.on_event("startup")
-    async def startup_event() -> None:
-        app.state.ttl_sync_task = asyncio.create_task(_ttl_sync_loop())
-
-    @app.on_event("shutdown")
-    async def shutdown_event() -> None:
-        task = getattr(app.state, "ttl_sync_task", None)
-        if task is not None:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+                app_ref.state.ttl_sync_error = str(exc)
+            await asyncio.sleep(int(app_ref.state.ttl_sync_interval_seconds))
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -402,7 +403,14 @@ LIMIT 50""",
         graph.parse(ttl_path, format="turtle")
         rows = []
         columns: list[str] = []
-        for row in graph.query(body.query):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="'count' is passed as positional argument",
+                category=DeprecationWarning,
+            )
+            query_rows = list(graph.query(body.query))
+        for row in query_rows:
             row_map = row.asdict() if hasattr(row, "asdict") else {}
             if not columns:
                 columns = [str(k) for k in row_map.keys()]

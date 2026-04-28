@@ -666,6 +666,150 @@ expression: |
 
 ## VAV zones
 
+## Standard AHU/VAV starter pack (practical baseline)
+
+These starter rules map directly to your regurgitated YAML set and are good defaults for first deployments:
+
+- `01_vav_zone_temp_bounds_occupied.yaml`
+- `02_vav_zone_temp_flatline_occupied.yaml`
+- `03_vav_damper_command_extreme_flatline.yaml`
+- `04_ahu_runtime_outside_schedule.yaml`
+- `05_ahu_duct_static_pressure_not_maintained.yaml`
+- `06_ahu_internal_temp_sensor_bounds.yaml`
+- `07_ahu_internal_temp_sensor_flatline.yaml`
+
+Use these as a baseline, then tune:
+
+- **Schedules:** `occupied_start_hour`, `occupied_end_hour`
+- **Rolling persistence:** `rolling_window`, `roll_samples`
+- **Deadbands/tolerances:** `*_tolerance_*`, `*_deadband_*`
+- **Command scaling:** use `normalize_cmd(...)` when command units may be 0-100 instead of 0-1
+
+### Starter: economizer 100% OA temperature tracking
+
+When OA damper is effectively fully open and fan is on, mixed/leaving temperatures should closely track outdoor air (subject to sensor + fan heat tolerance).
+
+```yaml
+name: ahu_econ_100oa_temp_tracking_fault
+description: At (near) 100% OA, MAT and SAT should track OAT within tolerance
+type: expression
+flag: ahu_econ_100oa_temp_tracking_fault
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+  Supply_Fan_Status:
+    brick: Supply_Fan_Status
+
+params:
+  # OA damper threshold in fraction (0.95 = 95% open)
+  damper_near_full_open: 0.95
+  fan_on_threshold: 0.5
+  # Imperial: 2.0 F ~= 1.1 C
+  temp_tracking_tol_f: 2.0
+  # Optional fan heat allowance; Imperial: 0.5 F ~= 0.3 C
+  fan_heat_allowance_f: 0.5
+
+expression: |
+  (Supply_Fan_Status > fan_on_threshold)
+  & (normalize_cmd(Damper_Position_Command) >= damper_near_full_open)
+  & (
+    (np.abs(Mixed_Air_Temperature_Sensor - Outside_Air_Temperature_Sensor) > temp_tracking_tol_f)
+    | (np.abs((Supply_Air_Temperature_Sensor - fan_heat_allowance_f) - Mixed_Air_Temperature_Sensor) > temp_tracking_tol_f)
+  )
+```
+
+### Starter: mechanical cooling when free cooling should be used
+
+Flags when cooling valve is active while outdoor conditions are favorable for economizer cooling.
+
+```yaml
+name: ahu_mech_cooling_when_free_cooling_available
+description: Mechanical cooling active when OAT is low enough for free cooling opportunity
+type: expression
+flag: ahu_mech_cooling_when_free_cooling_available_fault
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Supply_Air_Temperature_Setpoint:
+    brick: Supply_Air_Temperature_Setpoint
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+  Valve_Command:
+    brick: Valve_Command
+
+params:
+  # Imperial defaults; equivalent Celsius values in comments
+  free_cooling_margin_f: 2.0     # ~= 1.1 C
+  damper_low_open_max: 0.50      # 50% open
+  cooling_cmd_on_min: 0.10
+
+expression: |
+  (Outside_Air_Temperature_Sensor <= Supply_Air_Temperature_Setpoint - free_cooling_margin_f)
+  & (normalize_cmd(Damper_Position_Command) < damper_low_open_max)
+  & (normalize_cmd(Valve_Command) >= cooling_cmd_on_min)
+```
+
+### Starter: OA damper too open in hot or very cold ambient
+
+This captures two common waste/comfort risk conditions:
+
+- **Hot ambient:** damper 50%+ open when OAT > 70 F (21.1 C)
+- **Very cold ambient:** damper 50%+ open when OAT < 40 F (4.4 C)
+
+```yaml
+name: ahu_oa_damper_excess_open_extreme_ambient
+description: OA damper too open under hot or very cold outdoor conditions
+type: expression
+flag: ahu_oa_damper_excess_open_extreme_ambient_fault
+equipment_type: [AHU, VAV_AHU]
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+  Damper_Position_Command:
+    brick: Damper_Position_Command
+
+params:
+  oa_damper_open_min: 0.50
+  high_oat_threshold_f: 70.0   # 21.1 C
+  low_oat_threshold_f: 40.0    # 4.4 C
+
+expression: |
+  (normalize_cmd(Damper_Position_Command) >= oa_damper_open_min)
+  & (
+    (Outside_Air_Temperature_Sensor >= high_oat_threshold_f)
+    | (Outside_Air_Temperature_Sensor <= low_oat_threshold_f)
+  )
+```
+
+### Metric equivalents quick note
+
+If your site trends are in Celsius, convert thresholds accordingly:
+
+- `69 F` -> `20.6 C`
+- `75 F` -> `23.9 C`
+- `70 F` -> `21.1 C`
+- `63 F` -> `17.2 C`
+- `40 F` -> `4.4 C`
+- `35 F` -> `1.7 C`
+- `120 F` -> `48.9 C`
+- `2.0 F tolerance` -> `1.1 C`
+- `0.5 F fan allowance` -> `0.3 C`
+
+For SI pressure, `0.15 inH2O` is about `37 Pa`.
+
+---
+
 ### Excessive heating during warm weather
 
 Reheat valve open when outdoor air is warm. Suggests over-cooling or setpoint issues.
