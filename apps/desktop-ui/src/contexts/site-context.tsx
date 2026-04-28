@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { desktopFetch } from "../lib/api";
 
 export type Site = {
@@ -10,7 +10,7 @@ type SiteContextValue = {
   sites: Site[];
   selectedSiteId: string;
   setSelectedSiteId: (siteId: string) => void;
-  refreshSites: () => Promise<void>;
+  refreshSites: () => Promise<Site[]>;
 };
 
 const SiteContext = createContext<SiteContextValue | null>(null);
@@ -18,13 +18,19 @@ const SiteContext = createContext<SiteContextValue | null>(null);
 export function SiteProvider({ children }: { children: React.ReactNode }) {
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
+  const refreshReqIdRef = useRef(0);
 
   const refreshSites = useCallback(async () => {
+    refreshReqIdRef.current += 1;
+    const requestId = refreshReqIdRef.current;
     const next = await desktopFetch<Site[]>("/sites");
+    if (requestId !== refreshReqIdRef.current) {
+      return [];
+    }
     setSites(next);
     if (next.length === 0) {
       setSelectedSiteId("");
-      return;
+      return next;
     }
     setSelectedSiteId((current) => {
       if (current && next.some((site) => site.id === current)) {
@@ -32,6 +38,7 @@ export function SiteProvider({ children }: { children: React.ReactNode }) {
       }
       return next[0].id;
     });
+    return next;
   }, []);
 
   useEffect(() => {

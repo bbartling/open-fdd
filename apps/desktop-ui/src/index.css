@@ -48,7 +48,7 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: "SF Pro Display", "Inter", "Segoe UI", Arial, sans-serif;
+  font-family: "SF Pro Display", Inter, "Segoe UI", Arial, sans-serif;
   line-height: 1.45;
 }
 

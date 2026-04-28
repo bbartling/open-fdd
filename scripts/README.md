@@ -4,6 +4,9 @@
 |--------|---------|
 | **`build_docs_pdf.py`** | Maintainer helper to combine Markdown docs and build `pdf/open-fdd-docs.pdf` (optional Pandoc / WeasyPrint). Also writes `pdf/open-fdd-docs.txt` with `--no-pdf`. |
 | **`bootstrap-desktop.ps1`** | Windows bootstrap/launcher for desktop mode. Can create venv, install deps, and launch FastAPI bridge + Tauri desktop UI in separate terminals. |
+| **`onboard_list_metadata.py`** | Lists Onboard buildings and sample point metadata from the API. |
+| **`onboard_backfill_smoke.py`** | One-shot Onboard ingest smoke test into desktop Feather storage. |
+| **`_onboard_cli.py`** | Shared helper for Onboard scripts (API key fallback from local env files). |
 
 From the repo root:
 
@@ -22,3 +25,15 @@ Useful flags:
 - `-NoBridge` (launch only Tauri)
 - `-NoTauri` (launch only bridge)
 - `-NoLaunch` (setup only, do not launch)
+
+Onboard metadata check:
+
+```powershell
+python .\scripts\onboard_list_metadata.py --building "Office Building"
+```
+
+Onboard ingest smoke run:
+
+```powershell
+python .\scripts\onboard_backfill_smoke.py --site-id default
+```

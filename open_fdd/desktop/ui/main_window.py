@@ -33,7 +33,7 @@ class DesktopMainWindow:
             QVBoxLayout,
             QWidget,
         )
-        from PySide6.QtCore import Qt, QEvent, QObject
+        from PySide6.QtCore import Qt, QEvent, QObject, QRunnable, QThreadPool, Signal
         from PySide6.QtGui import QFont
 
         self._qt = {
@@ -55,8 +55,16 @@ class DesktopMainWindow:
             "Qt": Qt,
             "QEvent": QEvent,
             "QObject": QObject,
+            "QRunnable": QRunnable,
+            "QThreadPool": QThreadPool,
+            "Signal": Signal,
             "QFont": QFont,
         }
+        self._thread_pool = QThreadPool.globalInstance()
+        self._active_jobs = 0
+        self._run_weather_button = None
+        self._run_onboard_button = None
+        self._run_rules_button = None
         self.window = QMainWindow()
         self.window.setWindowTitle("Open-FDD Desktop")
         self.window.resize(1400, 860)
@@ -292,6 +300,8 @@ class DesktopMainWindow:
         weather_btn.clicked.connect(self._on_run_weather)
         onboard_btn = QPushButton("Run Onboard Scrape")
         onboard_btn.clicked.connect(self._on_run_onboard)
+        self._run_weather_button = weather_btn
+        self._run_onboard_button = onboard_btn
         refresh_sites_btn = QPushButton("Refresh Sites")
         refresh_sites_btn.clicked.connect(self._refresh_site_selector)
         row.addWidget(QLabel("Site"))
@@ -330,6 +340,7 @@ class DesktopMainWindow:
         self.chunk_size_input.setPlaceholderText("chunk rows (optional)")
         run_btn = QPushButton("Run Rules")
         run_btn.clicked.connect(self._on_run_rules)
+        self._run_rules_button = run_btn
         row.addWidget(QLabel("Rules"))
         row.addWidget(self.rules_path)
         row.addWidget(QLabel("Source"))
@@ -553,22 +564,28 @@ class DesktopMainWindow:
         if not site_id:
             self.ingest_out.setPlainText("Set a site id first.")
             return
-        try:
-            result = self.ingest_service.ingest_weather(site_id=site_id, days_back=1)
-            self.ingest_out.setPlainText(f"Weather rows ingested: {result['rows']}")
-        except Exception as exc:
-            self.ingest_out.setPlainText(f"Error: {exc}\n{traceback.format_exc()}")
+        self.ingest_out.setPlainText("Running weather ingest...")
+        self._set_busy(True)
+        source = self.source_input_ingest.text().strip() or "weather"
+        self._run_in_background(
+            lambda: self.ingest_service.ingest_weather(site_id=site_id, source=source, days_back=1),
+            on_success=lambda result: self._on_ingest_worker_success(f"Weather rows ingested: {result['rows']}"),
+            on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
+        )
 
     def _on_run_onboard(self) -> None:
         site_id = self._site_id_for_ingest()
         if not site_id:
             self.ingest_out.setPlainText("Set a site id first.")
             return
-        try:
-            result = self.ingest_service.ingest_onboard(site_id=site_id)
-            self.ingest_out.setPlainText(f"Onboard rows ingested: {result['rows']}")
-        except Exception as exc:
-            self.ingest_out.setPlainText(f"Error: {exc}\n{traceback.format_exc()}")
+        self.ingest_out.setPlainText("Running onboard ingest...")
+        self._set_busy(True)
+        source = self.source_input_ingest.text().strip() or "onboard"
+        self._run_in_background(
+            lambda: self.ingest_service.ingest_onboard(site_id=site_id, source=source),
+            on_success=lambda result: self._on_ingest_worker_success(f"Onboard rows ingested: {result['rows']}"),
+            on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
+        )
 
     def _on_run_rules(self) -> None:
         site_id = self._site_id_for_ingest()
@@ -577,10 +594,6 @@ class DesktopMainWindow:
             self.rules_out.setPlainText("Set a site id first.")
             return
         try:
-            frame = self.ingest_service.load_source_frame(source=source, site_id=site_id)
-            if frame.empty:
-                self.rules_out.setPlainText("No Feather data found for site/source.")
-                return
             rules_path = self.rules_path.text().strip()
             if not rules_path:
                 self.rules_out.setPlainText("Provide rules path.")
@@ -590,16 +603,73 @@ class DesktopMainWindow:
                 chunk = int(self.chunk_size_input.text().strip() or 0)
             except ValueError:
                 chunk = 0
-            out = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk))
-            fault_cols = [c for c in out.columns if c.endswith("_flag")]
-            fault_totals = {c: int(out[c].sum()) for c in fault_cols}
-            tail_preview = out.tail(10).to_string(index=False)
-            self.rules_out.setPlainText(
-                f"Input rows: {len(frame.index)}\nOutput rows: {len(out.index)}\nColumns: {list(out.columns)}\n"
-                f"Fault totals: {fault_totals}\nTTL: {model_ttl_path()}\n\nPreview:\n{tail_preview}"
+            self.rules_out.setPlainText("Running rule loop...")
+            self._set_busy(True)
+            self._run_in_background(
+                lambda: self._run_rules_job(site_id=site_id, source=source, rules_path=rules_path, chunk=chunk),
+                on_success=lambda payload: self.rules_out.setPlainText(str(payload)),
+                on_error=lambda exc, tb: self.rules_out.setPlainText(f"Rule run failed: {exc}\n{tb}"),
             )
         except Exception as exc:
             self.rules_out.setPlainText(f"Rule run failed: {exc}\n{traceback.format_exc()}")
+
+    def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int) -> str:
+        frame = self.ingest_service.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return "No Feather data found for site/source."
+        out = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk))
+        fault_cols = [c for c in out.columns if c.endswith("_flag")]
+        fault_totals = {c: int(out[c].sum()) for c in fault_cols}
+        tail_preview = out.tail(10).to_string(index=False)
+        return (
+            f"Input rows: {len(frame.index)}\nOutput rows: {len(out.index)}\nColumns: {list(out.columns)}\n"
+            f"Fault totals: {fault_totals}\nTTL: {model_ttl_path()}\n\nPreview:\n{tail_preview}"
+        )
+
+    def _set_busy(self, busy: bool) -> None:
+        for btn in (self._run_weather_button, self._run_onboard_button, self._run_rules_button):
+            if btn is not None:
+                btn.setEnabled(not busy)
+
+    def _on_ingest_worker_success(self, message: str) -> None:
+        self.ingest_out.setPlainText(message)
+        self._refresh_model_views()
+
+    def _run_in_background(self, fn, on_success, on_error) -> None:
+        QObject = self._qt["QObject"]
+        Signal = self._qt["Signal"]
+        QRunnable = self._qt["QRunnable"]
+
+        class _WorkerSignals(QObject):
+            success = Signal(object)
+            error = Signal(str, str)
+            finished = Signal()
+
+        class _Worker(QRunnable):
+            def __init__(self):
+                super().__init__()
+                self.signals = _WorkerSignals()
+
+            def run(self):
+                try:
+                    result = fn()
+                    self.signals.success.emit(result)
+                except Exception as exc:  # noqa: BLE001
+                    self.signals.error.emit(str(exc), traceback.format_exc())
+                finally:
+                    self.signals.finished.emit()
+
+        worker = _Worker()
+        worker.signals.success.connect(on_success)
+        worker.signals.error.connect(on_error)
+        worker.signals.finished.connect(self._on_worker_finished)
+        self._active_jobs += 1
+        self._thread_pool.start(worker)
+
+    def _on_worker_finished(self) -> None:
+        self._active_jobs = max(0, self._active_jobs - 1)
+        if self._active_jobs == 0:
+            self._set_busy(False)
 
     def eventFilter(self, watched, event):
         QEvent = self._qt["QEvent"]

@@ -49,6 +49,7 @@ export function RuleSetupPage() {
       const out = await desktopFetch<RuleInstall>("/rules/defaults/install", { method: "POST" });
       setInstalledPath(out.rules_path);
       setStatus(`Installed ${out.copied.length} default rules to ${out.rules_path}`);
+      await refreshRules();
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }

@@ -46,6 +46,7 @@ export function Sidebar() {
         <button
           className={`theme-btn ${theme === "light" ? "active" : ""}`}
           type="button"
+          aria-pressed={theme === "light"}
           onClick={() => setTheme("light")}
         >
           Light
@@ -53,6 +54,7 @@ export function Sidebar() {
         <button
           className={`theme-btn ${theme === "dark" ? "active" : ""}`}
           type="button"
+          aria-pressed={theme === "dark"}
           onClick={() => setTheme("dark")}
         >
           Dark
@@ -60,6 +62,7 @@ export function Sidebar() {
         <button
           className={`theme-btn ${theme === "system" ? "active" : ""}`}
           type="button"
+          aria-pressed={theme === "system"}
           onClick={() => setTheme("system")}
         >
           System

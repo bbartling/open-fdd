@@ -56,6 +56,21 @@ class IngestService:
 
     def ingest_onboard(self, *, site_id: str) -> dict[str, Any]:
         result = run_onboard_scrape(store=self.connector, site_id=site_id)
+        metrics = [str(m) for m in (result.metrics or [])]
+        storage_ref = str(result.storage_ref or "")
+        with self.model_service.transaction() as model:
+            for metric in metrics:
+                md = (result.point_metadata or {}).get(metric, {})
+                self._upsert_point_for_metric(
+                    model=model,
+                    site_id=site_id,
+                    metric=metric,
+                    source=result.source,
+                    storage_ref=storage_ref,
+                    brick_type_override=str(md.get("brick_type") or "Point"),
+                    fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
+                    unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
+                )
         return {"rows": result.rows, "source": result.source}
 
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
@@ -72,6 +87,9 @@ class IngestService:
         metric: str,
         source: str,
         storage_ref: str,
+        brick_type_override: str | None = None,
+        fdd_input_override: str | None = None,
+        unit_override: str | None = None,
     ) -> None:
         existing = next(
             (
@@ -89,6 +107,12 @@ class IngestService:
             md["external_ref"] = storage_ref
             md["source"] = source
             existing["metadata"] = md
+            if brick_type_override:
+                existing["brick_type"] = brick_type_override
+            if fdd_input_override is not None:
+                existing["fdd_input"] = fdd_input_override
+            if unit_override is not None:
+                existing["unit"] = unit_override
             return
         model["points"].append(
             {
@@ -96,9 +120,9 @@ class IngestService:
                 "site_id": site_id,
                 "equipment_id": None,
                 "external_id": metric,
-                "brick_type": "Point",
-                "fdd_input": None,
-                "unit": None,
+                "brick_type": brick_type_override or "Point",
+                "fdd_input": fdd_input_override,
+                "unit": unit_override,
                 "metadata": {
                     "external_ref": storage_ref,
                     "source": source,

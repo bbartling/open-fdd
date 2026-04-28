@@ -39,7 +39,7 @@ if (-not (Test-Path $VenvActivate)) {
     Write-Step "Creating Python virtualenv..."
     Push-Location $RepoRoot
     try {
-        python -m venv .venv
+        Invoke-Checked { python -m venv .venv } "Failed to create .venv with 'python -m venv .venv'."
     } finally {
         Pop-Location
     }
@@ -51,17 +51,21 @@ if ($InstallDeps) {
     $killed = $false
     try {
         foreach ($p in Get-Process -Name "open-fdd-desktop-bridge" -ErrorAction SilentlyContinue) {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-            $killed = $true
+            try {
+                Stop-Process -Id $p.Id -Force
+            } catch {
+                Write-Warning "Failed to stop bridge process id=$($p.Id): $($_.Exception.Message)"
+            }
         }
+        $killed = -not (Get-Process -Name "open-fdd-desktop-bridge" -ErrorAction SilentlyContinue)
     } catch {
-        # best effort
+        Write-Warning "Error while checking bridge processes: $($_.Exception.Message)"
     }
     if (-not $killed) {
         try {
             $null = & taskkill /F /IM open-fdd-desktop-bridge.exe 2>$null
         } catch {
-            # best effort
+            Write-Warning "taskkill fallback failed: $($_.Exception.Message)"
         }
     }
     if (Test-Path $bridgeExePath) {

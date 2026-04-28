@@ -98,16 +98,16 @@ export function FaultsPage() {
       return;
     }
     try {
-      await desktopFetch<{ filename: string }>("/rules", {
+      const out = await desktopFetch<{ filename: string }>("/rules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: name, content: ruleContent }),
       });
-      setRuleStatus(`Uploaded ${name}`);
-      setRuleFilename("");
+      setRuleStatus(`Uploaded ${out.filename}`);
+      setRuleFilename(out.filename);
       setRuleContent("");
       await refreshRuleFiles();
-      await openRuleFile(name);
+      await openRuleFile(out.filename);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setRuleStatus(`Upload failed: ${message}`);

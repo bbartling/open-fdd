@@ -7,6 +7,44 @@ type Site = {
   name: string;
 };
 
+type SiteCreateResponse = Site & {
+  warning?: string;
+  ttl_sync_warning?: string;
+  ttlWarning?: string;
+  ttl_warnings?: string | string[];
+  warnings?: string | string[];
+};
+
+type SiteDeleteResponse = {
+  deleted_sites: number;
+  deleted_equipment: number;
+  deleted_points: number;
+  ttl_sync_warning?: string;
+  warning?: string;
+  ttlWarning?: string;
+  ttl_warnings?: string | string[];
+  warnings?: string | string[];
+};
+
+function extractTtlWarning(payload: {
+  warning?: string;
+  ttl_sync_warning?: string;
+  ttlWarning?: string;
+  ttl_warnings?: string | string[];
+  warnings?: string | string[];
+}): string {
+  const raw =
+    payload.ttl_sync_warning
+    ?? payload.ttlWarning
+    ?? payload.warning
+    ?? payload.ttl_warnings
+    ?? payload.warnings;
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => typeof item === "string" && item.trim().length > 0).join("; ");
+  }
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
 export function SiteManagementPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [siteName, setSiteName] = useState("");
@@ -15,12 +53,11 @@ export function SiteManagementPage() {
 
   async function refresh() {
     try {
-      const out = await desktopFetch<Site[]>("/sites");
+      const out = await refreshGlobalSites();
       setSites(out);
       if (out.length > 0 && !out.some((site) => site.id === selectedSiteId)) {
         setSelectedSiteId(out[0].id);
       }
-      await refreshGlobalSites();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -32,13 +69,18 @@ export function SiteManagementPage() {
 
   async function onCreate() {
     try {
-      const site = await desktopFetch<Site>("/sites", {
+      const site = await desktopFetch<SiteCreateResponse>("/sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: siteName.trim() || "Site" }),
       });
+      const ttlWarning = extractTtlWarning(site);
       setSiteName("");
-      setStatus(`Created site ${site.name} (${site.id.slice(0, 8)}), TTL synced.`);
+      setStatus(
+        ttlWarning
+          ? `Created site ${site.name} (${site.id.slice(0, 8)}). TTL warning: ${ttlWarning}`
+          : `Created site ${site.name} (${site.id.slice(0, 8)}), TTL synced.`,
+      );
       setSelectedSiteId(site.id);
       void refresh();
     } catch (error) {
@@ -48,8 +90,13 @@ export function SiteManagementPage() {
 
   async function onDelete(id: string) {
     try {
-      await desktopFetch(`/sites/${id}`, { method: "DELETE" });
-      setStatus(`Deleted site ${id.slice(0, 8)}, TTL synced.`);
+      const out = await desktopFetch<SiteDeleteResponse>(`/sites/${id}`, { method: "DELETE" });
+      const ttlWarning = extractTtlWarning(out);
+      setStatus(
+        ttlWarning
+          ? `Deleted site ${id.slice(0, 8)}. TTL warning: ${ttlWarning}`
+          : `Deleted site ${id.slice(0, 8)}, TTL synced.`,
+      );
       if (selectedSiteId === id) {
         setSelectedSiteId("");
       }

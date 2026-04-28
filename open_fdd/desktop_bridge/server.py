@@ -217,7 +217,7 @@ def create_app() -> FastAPI:
         return site
 
     @app.delete("/sites/{site_id}")
-    def delete_site(site_id: str) -> dict[str, int]:
+    def delete_site(site_id: str) -> dict[str, Any]:
         out = services.model.delete_site(site_id)
         ttl_error = _safe_sync_ttl()
         if ttl_error:
@@ -301,13 +301,17 @@ def create_app() -> FastAPI:
         source: str = Form("csv"),
         file: UploadFile = File(...),
     ) -> dict[str, Any]:
+        chunk_size = 64 * 1024
         suffix = Path(file.filename or "").suffix or ".csv"
         fd, tmp_name = tempfile.mkstemp(prefix="openfdd_upload_", suffix=suffix)
         tmp_path = Path(tmp_name)
         try:
-            content = await file.read()
             with os.fdopen(fd, mode="wb") as handle:
-                handle.write(content)
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
                 handle.flush()
                 os.fsync(handle.fileno())
             return services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
@@ -404,6 +408,13 @@ LIMIT 50""",
                 columns = [str(k) for k in row_map.keys()]
             rows.append({k: str(v) for k, v in row_map.items()})
         return {"columns": columns, "rows": rows}
+
+    @app.get("/data-model/ttl")
+    def data_model_ttl(save: bool = False) -> Response:
+        ttl = services.ttl.build_ttl()
+        if save:
+            services.ttl.sync()
+        return Response(content=ttl, media_type="text/plain; charset=utf-8")
 
     @app.get("/rules/defaults")
     def list_default_rules() -> dict[str, Any]:

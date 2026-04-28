@@ -23,7 +23,21 @@ This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detec
 pip install open-fdd
 ```
 
-Desktop extras:
+## Desktop App
+
+Desktop mode is under active development. Current recommended launcher on Windows is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
+```
+
+Daily startup (without reinstalling deps):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
+```
+
+macOS/Linux bash equivalent is planned.
 
 ```bash
 pip install "open-fdd[desktop]"
@@ -51,7 +65,7 @@ open-fdd-desktop-bridge
 # terminal 2
 cd apps/desktop-ui
 npm install
-npm run dev
+npm run tauri dev
 # or package
 npm run tauri build
 ```
