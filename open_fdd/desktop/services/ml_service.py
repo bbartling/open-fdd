@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 
 
@@ -70,8 +71,8 @@ class MLService:
             raise ValueError(f"Target column not found: {target_col}")
 
         df = frame.copy()
-        ts_col = "timestamp" if "timestamp" in df.columns else str(df.columns[0])
-        df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce", utc=True)
+        ts_col = infer_timestamp_column(df)
+        df[ts_col] = parse_timestamp_series(df, timestamp_col=ts_col, min_valid_ratio=0.5)
         df = df[df[ts_col].notna()].sort_values(ts_col).reset_index(drop=True)
         if df.empty:
             raise ValueError("No valid timestamp rows available after parsing.")
@@ -92,7 +93,7 @@ class MLService:
         if not feature_set:
             raise ValueError("No usable feature columns found.")
 
-        model_df = df[[ts_col, target_col] + feature_set].copy()
+        model_df = df[[ts_col, target_col, *feature_set]].copy()
         for col in [target_col] + feature_set:
             model_df[col] = pd.to_numeric(model_df[col], errors="coerce")
         model_df = model_df.dropna(subset=[target_col] + feature_set)
@@ -134,8 +135,9 @@ class MLService:
                 best_rmse = rmse
                 best_r2 = r2
 
-        assert best_model is not None
-        scored = model_df[[ts_col, target_col] + feature_set].copy()
+        if best_model is None:
+            raise RuntimeError("No best_model found after evaluating candidates.")
+        scored = model_df[[ts_col, target_col, *feature_set]].copy()
         scored["ml_prediction"] = best_model.predict(scored[feature_set])
         scored["ml_residual"] = scored[target_col] - scored["ml_prediction"]
         scored["ml_abs_residual"] = scored["ml_residual"].abs()

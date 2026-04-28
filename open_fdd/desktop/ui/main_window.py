@@ -683,15 +683,28 @@ class DesktopMainWindow:
         )
 
     def _on_ml_worker_success(self, result: dict) -> None:
+        def _f(name: str) -> float:
+            val = result.get(name)
+            if val is None:
+                raise ValueError(f"Missing ML result value: {name}")
+            return float(val)
+
+        model_name = str(result.get("model_name") or "unknown")
+        rows_train = int(result.get("rows_train") or 0)
+        rows_test = int(result.get("rows_test") or 0)
+        rows_scored = int(result.get("rows_scored") or 0)
+        overlap = int(result.get("overlap_with_rule_flag") or 0)
+        output_source = str(result.get("output_source") or "")
+        storage_ref = str(result.get("storage_ref") or "")
         self.ingest_out.setPlainText(
             "ML baseline completed\n"
-            f"Model: {result.get('model_name')}\n"
-            f"Rows train/test/scored: {result.get('rows_train')}/{result.get('rows_test')}/{result.get('rows_scored')}\n"
-            f"R2: {result.get('r2'):.4f}  MAE: {result.get('mae'):.4f}  RMSE: {result.get('rmse'):.4f}\n"
-            f"Residual threshold: {result.get('residual_threshold'):.4f}\n"
-            f"Rule overlap rows: {result.get('overlap_with_rule_flag')}\n"
-            f"Output source: {result.get('output_source')}\n"
-            f"Storage: {result.get('storage_ref')}"
+            f"Model: {model_name}\n"
+            f"Rows train/test/scored: {rows_train}/{rows_test}/{rows_scored}\n"
+            f"R2: {_f('r2'):.4f}  MAE: {_f('mae'):.4f}  RMSE: {_f('rmse'):.4f}\n"
+            f"Residual threshold: {_f('residual_threshold'):.4f}\n"
+            f"Rule overlap rows: {overlap}\n"
+            f"Output source: {output_source}\n"
+            f"Storage: {storage_ref}"
         )
         self._refresh_model_views()
 

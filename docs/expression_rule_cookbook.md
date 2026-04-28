@@ -668,7 +668,7 @@ expression: |
 
 ## Standard AHU/VAV starter pack (practical baseline)
 
-These starter rules map directly to your regurgitated YAML set and are good defaults for first deployments:
+These starter rules map directly to the provided YAML templates and are good defaults for initial deployments:
 
 - `01_vav_zone_temp_bounds_occupied.yaml`
 - `02_vav_zone_temp_flatline_occupied.yaml`

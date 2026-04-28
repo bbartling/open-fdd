@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -106,3 +108,185 @@ def test_desktop_bridge_purge_can_prune_matching_points() -> None:
     point_ids = {str(p.get("id")) for p in points}
     assert "p1" not in point_ids
     assert "p2" in point_ids
+
+
+def test_desktop_bridge_model_validate_and_import_strict_payload() -> None:
+    app = create_app()
+    client = TestClient(app)
+    payload = {
+        "sites": [{"id": "s1", "name": "Site 1"}],
+        "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "AHU"}],
+        "points": [{"id": "p1", "site_id": "s1", "equipment_id": "e1", "external_id": "sat"}],
+    }
+    validated = client.post("/model/validate", json={"payload": payload})
+    assert validated.status_code == 200
+    assert validated.json().get("valid") is True
+    imported = client.post("/model/import", json={"replace": True, "payload": payload})
+    assert imported.status_code == 200
+    assert imported.json().get("sites") == 1
+
+
+def test_desktop_bridge_timeseries_query_and_bounds(tmp_path: Path) -> None:
+    app = create_app()
+    client = TestClient(app)
+    csv_path = tmp_path / "bridge_query.csv"
+    csv_path.write_text(
+        "timestamp,sat,oat\n"
+        "2026-01-01T00:00:00Z,55,30\n"
+        "2026-01-01T01:00:00Z,56,31\n"
+        "2026-01-01T02:00:00Z,57,32\n",
+        encoding="utf-8",
+    )
+    created = client.post("/sites", json={"name": "Query Site"})
+    assert created.status_code == 200
+    site_id = created.json()["id"]
+    ingested = client.post(
+        "/ingest/csv",
+        json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+    )
+    assert ingested.status_code == 200
+
+    bounds = client.post("/timeseries/bounds", json={"site_id": site_id, "source": "csv"})
+    assert bounds.status_code == 200
+    body = bounds.json()
+    assert str(body.get("start", "")).startswith("2026-01-01T00:00:00")
+    assert str(body.get("end", "")).startswith("2026-01-01T02:00:00")
+
+    queried = client.post(
+        "/timeseries/query",
+        json={
+            "site_id": site_id,
+            "sources": ["csv"],
+            "start_ts": "2026-01-01T01:00:00Z",
+            "end_ts": "2026-01-01T02:00:00Z",
+            "columns": ["sat"],
+            "limit": 10,
+        },
+    )
+    assert queried.status_code == 200
+    q = queried.json()
+    assert "rows" in q
+    assert len(q["rows"]) == 2
+
+
+def test_desktop_bridge_weather_config_roundtrip() -> None:
+    app = create_app()
+    client = TestClient(app)
+    set_resp = client.post(
+        "/config/weather",
+        json={
+            "latitude": 42.36,
+            "longitude": -71.06,
+            "timezone": "America/New_York",
+            "base_url": "https://archive-api.open-meteo.com/v1/archive",
+        },
+    )
+    assert set_resp.status_code == 200
+    get_resp = client.get("/config/weather")
+    assert get_resp.status_code == 200
+    body = get_resp.json()
+    assert str(body.get("latitude")) != ""
+    assert str(body.get("longitude")) != ""
+
+
+def test_desktop_bridge_sparql_endpoints() -> None:
+    app = create_app()
+    client = TestClient(app)
+    created = client.post("/sites", json={"name": "SPARQL Site"})
+    assert created.status_code == 200
+    text_query = """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?s) AS ?count) WHERE { ?s a brick:Site . }"""
+    sparql = client.post("/data-model/sparql", json={"query": text_query})
+    assert sparql.status_code == 200
+    bindings = sparql.json().get("bindings", [])
+    assert isinstance(bindings, list)
+
+    files = {"file": ("check.sparql", text_query, "application/sparql-query")}
+    upload = client.post("/data-model/sparql/upload", files=files)
+    assert upload.status_code == 200
+    assert isinstance(upload.json().get("bindings", []), list)
+
+
+def test_desktop_bridge_bacnet_config_and_ingest(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+    client = TestClient(app)
+    created = client.post("/sites", json={"name": "BACnet Site"})
+    assert created.status_code == 200
+    site_id = created.json()["id"]
+
+    def _fake_ingest_bacnet(self, *, site_id: str, server_url: str, api_key: str = ""):
+        assert site_id
+        assert server_url.startswith("http")
+        return {
+            "rows": 1,
+            "source": "bacnet",
+            "success": True,
+            "devices_polled": 1,
+            "points_polled": 2,
+        }
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.ingest_bacnet",
+        _fake_ingest_bacnet,
+    )
+
+    cfg = client.post(
+        "/config/bacnet",
+        json={
+            "enabled": True,
+            "interval_seconds": 300,
+            "site_id": site_id,
+            "server_url": "http://192.168.204.18:8080",
+            "api_key": "token",
+        },
+    )
+    assert cfg.status_code == 200
+    body = cfg.json()
+    assert body.get("enabled") is True
+    assert body.get("interval_seconds") == 300
+    assert body.get("api_key_set") is True
+
+    run = client.post("/ingest/bacnet", json={"site_id": site_id})
+    assert run.status_code == 200
+    out = run.json()
+    assert out.get("success") is True
+    assert out.get("source") == "bacnet"
+
+
+def test_desktop_bridge_bacnet_ingest_requires_server_url() -> None:
+    app = create_app()
+    client = TestClient(app)
+    cleared = client.post(
+        "/config/bacnet",
+        json={
+            "enabled": False,
+            "interval_seconds": 300,
+            "site_id": "",
+            "server_url": "",
+            "api_key": "",
+        },
+    )
+    assert cleared.status_code == 200
+    created = client.post("/sites", json={"name": "BACnet Missing URL"})
+    assert created.status_code == 200
+    site_id = created.json()["id"]
+    run = client.post("/ingest/bacnet", json={"site_id": site_id})
+    assert run.status_code == 400
+    assert "Missing BACnet server URL" in str(run.json().get("detail", ""))
+
+
+def test_desktop_bridge_bacnet_interval_is_clamped() -> None:
+    app = create_app()
+    client = TestClient(app)
+    cfg = client.post(
+        "/config/bacnet",
+        json={
+            "enabled": True,
+            "interval_seconds": 1,
+            "site_id": "",
+            "server_url": "http://192.168.204.18:8080",
+        },
+    )
+    assert cfg.status_code == 200
+    body = cfg.json()
+    assert int(body.get("interval_seconds", 0)) >= 5

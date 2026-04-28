@@ -6,10 +6,12 @@ from typing import Any
 
 import pandas as pd
 
+from open_fdd.desktop.drivers.bacnet_driver import run_bacnet_scrape
 from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
@@ -81,6 +83,54 @@ class IngestService:
                 )
         return {"rows": result.rows, "source": result.source, "success": True}
 
+    def ingest_bacnet(
+        self,
+        *,
+        site_id: str,
+        server_url: str,
+        api_key: str = "",
+    ) -> dict[str, Any]:
+        model = self.model_service.load()
+        result = run_bacnet_scrape(
+            store=self.connector,
+            model=model,
+            site_id=site_id,
+            server_url=server_url,
+            api_key=api_key,
+        )
+        if not result.success:
+            return {
+                "rows": result.rows,
+                "source": result.source,
+                "success": False,
+                "error": result.error or "BACnet ingest failed.",
+                "devices_polled": result.devices_polled,
+                "points_polled": result.points_polled,
+            }
+        metrics = [str(m) for m in (result.metrics or [])]
+        storage_ref = str(result.storage_ref or "")
+        with self.model_service.transaction() as model_tx:
+            for metric in metrics:
+                md = (result.point_metadata or {}).get(metric, {})
+                self._upsert_point_for_metric(
+                    model=model_tx,
+                    site_id=site_id,
+                    metric=metric,
+                    source=result.source,
+                    storage_ref=storage_ref,
+                    brick_type_override=str(md.get("brick_type") or "Point"),
+                    fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
+                    unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
+                )
+        return {
+            "rows": result.rows,
+            "source": result.source,
+            "success": True,
+            "devices_polled": result.devices_polled,
+            "points_polled": result.points_polled,
+            "warning": result.error,
+        }
+
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.connector.read_frame(source=source, site_id=site_id)
 
@@ -95,8 +145,8 @@ class IngestService:
         frame = self.load_source_frame(source=source, site_id=site_id)
         if frame.empty:
             return frame
-        ts_col = "timestamp" if "timestamp" in frame.columns else str(frame.columns[0])
-        parsed = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+        ts_col = infer_timestamp_column(frame)
+        parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
         out = frame[parsed.notna()].copy()
         out[ts_col] = parsed[parsed.notna()]
         if start_ts:
@@ -111,13 +161,13 @@ class IngestService:
         frame = self.load_source_frame(source=source, site_id=site_id)
         if frame.empty:
             return {"rows": 0, "timestamp_col": None, "start": None, "end": None}
-        ts_col = "timestamp" if "timestamp" in frame.columns else str(frame.columns[0])
-        parsed = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+        ts_col = infer_timestamp_column(frame)
+        parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
         valid = parsed[parsed.notna()]
         if valid.empty:
-            return {"rows": int(len(frame.index)), "timestamp_col": ts_col, "start": None, "end": None}
+            return {"rows": len(frame.index), "timestamp_col": ts_col, "start": None, "end": None}
         return {
-            "rows": int(len(frame.index)),
+            "rows": len(frame.index),
             "timestamp_col": ts_col,
             "start": valid.min().isoformat(),
             "end": valid.max().isoformat(),
