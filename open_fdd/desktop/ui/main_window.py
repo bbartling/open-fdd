@@ -566,9 +566,8 @@ class DesktopMainWindow:
             return
         self.ingest_out.setPlainText("Running weather ingest...")
         self._set_busy(True)
-        source = self.source_input_ingest.text().strip() or "weather"
         self._run_in_background(
-            lambda: self.ingest_service.ingest_weather(site_id=site_id, source=source, days_back=1),
+            lambda: self.ingest_service.ingest_weather(site_id=site_id, days_back=1),
             on_success=lambda result: self._on_ingest_worker_success(f"Weather rows ingested: {result['rows']}"),
             on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
         )
@@ -580,10 +579,13 @@ class DesktopMainWindow:
             return
         self.ingest_out.setPlainText("Running onboard ingest...")
         self._set_busy(True)
-        source = self.source_input_ingest.text().strip() or "onboard"
         self._run_in_background(
-            lambda: self.ingest_service.ingest_onboard(site_id=site_id, source=source),
-            on_success=lambda result: self._on_ingest_worker_success(f"Onboard rows ingested: {result['rows']}"),
+            lambda: self.ingest_service.ingest_onboard(site_id=site_id),
+            on_success=lambda result: (
+                self._on_ingest_worker_success(f"Onboard rows ingested: {result['rows']}")
+                if result.get("success", True)
+                else self.ingest_out.setPlainText(f"Onboard ingest failed: {result.get('error', 'Unknown error')}")
+            ),
             on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
         )
 

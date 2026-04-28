@@ -52,10 +52,17 @@ class IngestService:
 
     def ingest_weather(self, *, site_id: str, days_back: int = 1) -> dict[str, Any]:
         result = run_weather_fetch(store=self.connector, site_id=site_id, days_back=days_back)
-        return {"rows": result.rows, "source": result.source}
+        return {"rows": result.rows, "source": "weather"}
 
     def ingest_onboard(self, *, site_id: str) -> dict[str, Any]:
         result = run_onboard_scrape(store=self.connector, site_id=site_id)
+        if not result.success:
+            return {
+                "rows": result.rows,
+                "source": result.source,
+                "success": False,
+                "error": result.error or "Onboard ingest failed.",
+            }
         metrics = [str(m) for m in (result.metrics or [])]
         storage_ref = str(result.storage_ref or "")
         with self.model_service.transaction() as model:
@@ -71,7 +78,7 @@ class IngestService:
                     fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
                     unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
                 )
-        return {"rows": result.rows, "source": result.source}
+        return {"rows": result.rows, "source": result.source, "success": True}
 
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.connector.read_frame(source=source, site_id=site_id)

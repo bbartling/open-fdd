@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 from typing import Protocol
 import urllib.error
@@ -21,19 +22,33 @@ class OnboardScrapeResult:
     metrics: list[str] | None = None
     storage_ref: str | None = None
     point_metadata: dict[str, dict[str, str | None]] | None = None
+    success: bool = True
+    error: str | None = None
 
 
 def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResult:
+    logger = logging.getLogger(__name__)
     base_url = os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io").rstrip("/")
     api_key = os.getenv("OFDD_ONBOARD_API_KEY", "").strip()
     building_ids_raw = os.getenv("OFDD_ONBOARD_BUILDING_IDS", "").strip()
     lookback_hours = int(os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24"))
+    allow_synthetic = os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"}
 
     if not api_key:
+        msg = "Missing OFDD_ONBOARD_API_KEY. Set credentials to run onboard ingest."
+        if not allow_synthetic:
+            return OnboardScrapeResult(rows=0, source="onboard", metrics=[], storage_ref=None, success=False, error=msg)
         now = datetime.now(timezone.utc)
         frame = pd.DataFrame({"timestamp": [now], "diagnostic_source": ["onboard"], "value": [1.0]})
         storage_ref = store.write_frame(source="onboard", site_id=site_id, frame=frame)
-        return OnboardScrapeResult(rows=len(frame.index), source="onboard", metrics=["value"], storage_ref=storage_ref)
+        return OnboardScrapeResult(
+            rows=len(frame.index),
+            source="onboard",
+            metrics=["value"],
+            storage_ref=storage_ref,
+            success=True,
+            error="Synthetic onboard data ingested (OFDD_ONBOARD_ALLOW_SYNTHETIC enabled).",
+        )
 
     def _request_json(path: str, *, method: str = "GET", payload: dict | None = None) -> list[dict]:
         url = f"{base_url}{path}"
@@ -86,15 +101,24 @@ def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResul
         point_ids = [int(p["id"]) for p in points if p.get("id") is not None]
         if not point_ids:
             continue
-        query_rows = _request_json(
-            "/query-v2",
-            method="POST",
-            payload={
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "point_ids": point_ids,
-            },
-        )
+        try:
+            query_rows = _request_json(
+                "/query-v2",
+                method="POST",
+                payload={
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "point_ids": point_ids,
+                },
+            )
+        except urllib.error.URLError as exc:
+            logger.warning(
+                "Skipping onboard building due to query-v2 failure. building_id=%s point_ids=%s error=%s",
+                building_id,
+                point_ids,
+                exc,
+            )
+            continue
         points_by_id = {int(p["id"]): p for p in points if p.get("id") is not None}
         for item in query_rows:
             point_id = item.get("point_id")

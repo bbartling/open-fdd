@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlparse
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -13,6 +14,9 @@ from _onboard_cli import fallback_api_key_from_env_files
 
 
 def _request_json(base_url: str, api_key: str, path: str) -> list[dict]:
+    parsed = urlparse(base_url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError(f"Invalid API base URL scheme for base_url={base_url!r}. Use http or https.")
     req = urllib.request.Request(
         f"{base_url.rstrip('/')}{path}",
         headers={"X-OB-Api": api_key, "Content-Type": "application/json"},
