@@ -1,0 +1,343 @@
+:root,
+[data-theme="dark"] {
+  --bg: #0f1218;
+  --panel: #161b24;
+  --panel-soft: #1b2230;
+  --text: #e8edf6;
+  --muted: #97a3b8;
+  --primary: #4f78e8;
+  --primary-strong: #5b82ef;
+  --border: #273043;
+  --sidebar-bg: #131923;
+  --nav-hover-bg: #1f2735;
+  --nav-active-bg: #293855;
+  --nav-active-text: #f6f9ff;
+  --input-bg: #121824;
+  --input-text: #e8edf6;
+  --drop-bg: #111825;
+  --drop-border: #4f78e8;
+  --danger: #d45555;
+}
+
+[data-theme="light"] {
+  --bg: #f4f7fc;
+  --panel: #ffffff;
+  --panel-soft: #f6f8fc;
+  --text: #111827;
+  --muted: #556179;
+  --primary: #2f57c7;
+  --primary-strong: #3b63d1;
+  --border: #d8dfec;
+  --sidebar-bg: #eef2fa;
+  --nav-hover-bg: #dfe7f8;
+  --nav-active-bg: #2f57c7;
+  --nav-active-text: #ffffff;
+  --input-bg: #ffffff;
+  --input-text: #111827;
+  --drop-bg: #f9fbff;
+  --drop-border: #7d95cf;
+  --danger: #c23b3b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Pro Display", Inter, "Segoe UI", Arial, sans-serif;
+  line-height: 1.45;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 264px;
+  flex-shrink: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: var(--sidebar-bg);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 6px 8px;
+}
+
+.brand {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-chip {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.nav-icon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+}
+
+.nav-item:hover {
+  background: var(--nav-hover-bg);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.theme-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.theme-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 0;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.theme-btn.active {
+  border-color: var(--primary);
+  color: var(--text);
+  background: color-mix(in srgb, var(--primary) 16%, var(--panel));
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.topbar-title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.topbar-subtitle {
+  margin: 2px 0 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.site-selector {
+  width: 240px;
+}
+
+.status-strip {
+  padding: 9px 20px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-soft) 85%, transparent);
+}
+
+.content {
+  padding: 18px 20px;
+  overflow: auto;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.title {
+  margin-top: 0;
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+button {
+  background: linear-gradient(180deg, var(--primary-strong), var(--primary));
+  color: white;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.06);
+}
+
+textarea,
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  padding: 10px;
+}
+
+.grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stack-page {
+  display: grid;
+  gap: 12px;
+}
+
+.site-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.site-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.site-row:last-child {
+  border-bottom: 0;
+}
+
+.site-row.active {
+  background: color-mix(in srgb, var(--primary) 12%, var(--panel));
+}
+
+.site-select {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+.site-select:hover {
+  filter: none;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.danger-btn {
+  background: color-mix(in srgb, var(--danger) 88%, #000 12%);
+}
+
+.secondary-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.drop-zone {
+  border: 1px dashed var(--drop-border);
+  background: var(--drop-bg);
+  border-radius: 10px;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1120px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 6px;
+  }
+  .topbar {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,33 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Protocol
+
+import pandas as pd
+
+class FrameStore(Protocol):
+    def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
+
+
+@dataclass
+class WeatherFetchResult:
+    rows: int
+    source: str = "synthetic"
+
+
+def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) -> WeatherFetchResult:
+    # TODO: Replace with live Open-Meteo HTTP ingestion.
+    end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(days=max(1, int(days_back)))
+    rng = pd.date_range(start=start, end=end, freq="1h", tz="UTC")
+    frame = pd.DataFrame(
+        {
+            "timestamp": rng,
+            "outside_air_temp_c": [12.0] * len(rng),
+            "outside_air_rh_pct": [55.0] * len(rng),
+        }
+    )
+    store.write_frame(source="weather", site_id=site_id, frame=frame)
+    return WeatherFetchResult(rows=len(frame.index))
+

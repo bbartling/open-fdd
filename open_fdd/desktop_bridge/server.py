@@ -1,0 +1,525 @@
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from dataclasses import dataclass
+from pathlib import Path
+import shutil
+import tempfile
+from typing import Any
+import logging
+import os
+import ctypes
+
+from fastapi import FastAPI
+from fastapi import File
+from fastapi import Form
+from fastapi import HTTPException
+from fastapi import Response
+from fastapi import UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
+from open_fdd.desktop.services.ingest_service import IngestService
+from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.services.ttl_service import TtlService
+from open_fdd.desktop.storage.paths import default_rules_root
+
+_log = logging.getLogger(__name__)
+
+@dataclass
+class BridgeServices:
+    model: ModelService
+    ingest: IngestService
+    ttl: TtlService
+
+
+def _build_services() -> BridgeServices:
+    model = ModelService()
+    ingest = IngestService(model_service=model)
+    ttl = TtlService(model_store=model.store)
+    return BridgeServices(model=model, ingest=ingest, ttl=ttl)
+
+
+class CsvIngestBody(BaseModel):
+    site_id: str
+    source: str = "csv"
+    csv_path: str
+
+
+class ModelImportBody(BaseModel):
+    payload: dict[str, Any]
+    replace: bool = True
+
+
+class RuleRunBody(BaseModel):
+    site_id: str
+    source: str = "csv"
+    rules_path: str
+    chunk_rows: int = 0
+
+
+class SiteCreateBody(BaseModel):
+    name: str
+
+
+class SparqlQueryBody(BaseModel):
+    query: str
+
+
+class SiteRulePackBody(BaseModel):
+    rule_pack: str
+
+
+class TimeseriesPurgeBody(BaseModel):
+    source: str | None = None
+    site_id: str | None = None
+    prune_points: bool = False
+
+
+class RuleUploadBody(BaseModel):
+    filename: str
+    content: str
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="open-fdd desktop bridge")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "tauri://localhost",
+            "https://tauri.localhost",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=True,
+    )
+    services = _build_services()
+
+    def _rules_dir() -> Path:
+        path = default_rules_root() / "ahu_vav"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _safe_rule_filename(filename: str) -> str:
+        name = Path(filename).name
+        if name != filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        lower = name.lower()
+        if not (lower.endswith(".yaml") or lower.endswith(".yml")):
+            raise HTTPException(status_code=400, detail="Rule file must end with .yaml or .yml")
+        return name
+    def _safe_sync_ttl() -> str | None:
+        try:
+            services.ttl.sync()
+            return None
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("TTL sync failed")
+            return str(exc)
+
+    def _memory_info() -> dict[str, int | float]:
+        if os.name == "nt":
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            total = int(stat.ullTotalPhys)
+            avail = int(stat.ullAvailPhys)
+        else:
+            pages = int(os.sysconf("SC_PHYS_PAGES"))
+            page_size = int(os.sysconf("SC_PAGE_SIZE"))
+            avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            total = pages * page_size
+            avail = avail_pages * page_size
+        used = max(0, total - avail)
+        pct = round((used / total) * 100, 2) if total > 0 else 0.0
+        return {
+            "total_bytes": total,
+            "available_bytes": avail,
+            "used_bytes": used,
+            "used_percent": pct,
+        }
+
+    def _disk_info() -> dict[str, int | float | str]:
+        target = Path.home()
+        usage = shutil.disk_usage(target)
+        total = int(usage.total)
+        free = int(usage.free)
+        used = int(usage.used)
+        pct = round((used / total) * 100, 2) if total > 0 else 0.0
+        return {
+            "path": str(target),
+            "total_bytes": total,
+            "free_bytes": free,
+            "used_bytes": used,
+            "used_percent": pct,
+        }
+
+    app.state.ttl_sync_interval_seconds = 30
+    app.state.last_ttl_sync_iso = ""
+    app.state.ttl_sync_error = ""
+
+    async def _ttl_sync_loop() -> None:
+        while True:
+            try:
+                path = services.ttl.sync()
+                app.state.last_ttl_sync_iso = str(path)
+                app.state.ttl_sync_error = ""
+            except Exception as exc:  # pragma: no cover - defensive runtime loop
+                app.state.ttl_sync_error = str(exc)
+            await asyncio.sleep(int(app.state.ttl_sync_interval_seconds))
+
+    @app.on_event("startup")
+    async def startup_event() -> None:
+        app.state.ttl_sync_task = asyncio.create_task(_ttl_sync_loop())
+
+    @app.on_event("shutdown")
+    async def shutdown_event() -> None:
+        task = getattr(app.state, "ttl_sync_task", None)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/model/export")
+    def model_export() -> dict[str, Any]:
+        return services.model.load()
+
+    @app.get("/sites")
+    def list_sites() -> list[dict[str, Any]]:
+        return services.model.load().get("sites", [])
+
+    @app.post("/sites")
+    def create_site(body: SiteCreateBody) -> dict[str, Any]:
+        site = services.model.create_site(body.name.strip() or "Site")
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
+        return site
+
+    @app.delete("/sites/{site_id}")
+    def delete_site(site_id: str) -> dict[str, Any]:
+        out = services.model.delete_site(site_id)
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            return {**out, "ttl_sync_warning": ttl_error}
+        return out
+
+    @app.post("/sites/{site_id}/rule-pack")
+    def set_site_rule_pack(site_id: str, body: SiteRulePackBody) -> dict[str, Any]:
+        with services.model.transaction() as model:
+            site = next((s for s in model.get("sites", []) if str(s.get("id")) == str(site_id)), None)
+            if site is None:
+                raise HTTPException(status_code=404, detail=f"Unknown site id: {site_id}")
+            metadata = site.get("metadata") if isinstance(site.get("metadata"), dict) else {}
+            metadata["rule_pack"] = body.rule_pack
+            site["metadata"] = metadata
+        ttl_error = _safe_sync_ttl()
+        if ttl_error:
+            site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
+        return site
+
+    @app.post("/model/import")
+    def model_import(body: ModelImportBody) -> dict[str, int]:
+        normalized = {
+            "sites": body.payload.get("sites", []) if isinstance(body.payload.get("sites"), list) else [],
+            "equipment": body.payload.get("equipment", []) if isinstance(body.payload.get("equipment"), list) else [],
+            "points": body.payload.get("points", []) if isinstance(body.payload.get("points"), list) else [],
+        }
+        with services.model.transaction() as model:
+            if body.replace:
+                model["sites"] = normalized["sites"]
+                model["equipment"] = normalized["equipment"]
+                model["points"] = normalized["points"]
+            else:
+                model["sites"].extend(normalized["sites"])
+                model["equipment"].extend(normalized["equipment"])
+                model["points"].extend(normalized["points"])
+        return {
+            "sites": len(normalized["sites"]),
+            "equipment": len(normalized["equipment"]),
+            "points": len(normalized["points"]),
+        }
+
+    @app.post("/model/ttl/sync")
+    def model_ttl_sync() -> dict[str, str]:
+        path = services.ttl.sync()
+        return {"path": str(path)}
+
+    @app.get("/model/ttl/status")
+    def model_ttl_status() -> dict[str, Any]:
+        return {
+            "ttl_path": str(services.ttl.ttl_path),
+            "sync_interval_seconds": int(app.state.ttl_sync_interval_seconds),
+            "last_sync_path": app.state.last_ttl_sync_iso,
+            "last_sync_error": app.state.ttl_sync_error,
+        }
+
+    @app.post("/ingest/csv")
+    def ingest_csv(body: CsvIngestBody) -> dict[str, Any]:
+        csv_path = Path(body.csv_path).expanduser()
+        if not csv_path.is_absolute():
+            csv_path = (Path.cwd() / csv_path).resolve()
+        if not csv_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"CSV file not found: {body.csv_path}. "
+                    f"Resolved path: {csv_path}. "
+                    "Use an absolute file path (example: C:/Users/ben/Documents/data.csv)."
+                ),
+            )
+        try:
+            return services.ingest.ingest_csv(csv_path=csv_path, site_id=body.site_id, source=body.source)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/ingest/csv/upload")
+    async def ingest_csv_upload(
+        site_id: str = Form(...),
+        source: str = Form("csv"),
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        chunk_size = 64 * 1024
+        suffix = Path(file.filename or "").suffix or ".csv"
+        fd, tmp_name = tempfile.mkstemp(prefix="openfdd_upload_", suffix=suffix)
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, mode="wb") as handle:
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            with contextlib.suppress(Exception):
+                tmp_path.unlink(missing_ok=True)
+
+    @app.post("/rules/run")
+    def rules_run(body: RuleRunBody) -> dict[str, Any]:
+        frame = services.ingest.load_source_frame(source=body.source, site_id=body.site_id)
+        if frame.empty:
+            return {"input_rows": 0, "output_rows": 0, "columns": [], "fault_totals": {}, "preview": ""}
+        out = run_rule_loop_batched(
+            frame,
+            RuleLoopConfig(rules_path=body.rules_path, chunk_rows=int(body.chunk_rows or 0)),
+        )
+        fault_cols = [c for c in out.columns if c.endswith("_flag")]
+        fault_totals = {c: int(out[c].sum()) for c in fault_cols}
+        preview = out.tail(10).to_string(index=False)
+        return {
+            "input_rows": len(frame.index),
+            "output_rows": len(out.index),
+            "columns": [str(c) for c in out.columns],
+            "fault_totals": fault_totals,
+            "preview": preview,
+        }
+
+    @app.get("/plots/frame")
+    def plots_frame(site_id: str, source: str = "csv", limit: int = 5000) -> dict[str, Any]:
+        frame = services.ingest.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return {"columns": [], "rows": []}
+        cap = max(1, min(int(limit), 20_000))
+        frame = frame.tail(cap).copy()
+        if "timestamp" in frame.columns:
+            frame["timestamp"] = frame["timestamp"].astype(str)
+        return {
+            "columns": [str(c) for c in frame.columns],
+            "rows": frame.to_dict(orient="records"),
+        }
+
+    @app.get("/data-model/testing/predefined")
+    def data_model_testing_predefined() -> list[dict[str, str]]:
+        return [
+            {
+                "id": "sites",
+                "label": "List sites",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?site ?site_label WHERE {
+  ?site a brick:Site .
+  OPTIONAL { ?site rdfs:label ?site_label . }
+}
+ORDER BY ?site_label""",
+            },
+            {
+                "id": "ahu_count",
+                "label": "Count AHUs",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?ahu) AS ?count) WHERE {
+  ?ahu a brick:Air_Handling_Unit .
+}""",
+            },
+            {
+                "id": "class_summary",
+                "label": "Class summary",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?type (COUNT(?e) AS ?count) WHERE {
+  ?e a ?type .
+  FILTER(STRSTARTS(STR(?type), "https://brickschema.org/schema/Brick#"))
+}
+GROUP BY ?type
+ORDER BY DESC(?count)
+LIMIT 50""",
+            },
+        ]
+
+    @app.post("/data-model/testing/query")
+    def data_model_testing_query(body: SparqlQueryBody) -> dict[str, Any]:
+        try:
+            from rdflib import Graph
+        except ImportError:
+            return {"columns": [], "rows": [], "error": "rdflib not installed"}
+        ttl_path = services.ttl.sync()
+        graph = Graph()
+        graph.parse(ttl_path, format="turtle")
+        rows = []
+        columns: list[str] = []
+        for row in graph.query(body.query):
+            row_map = row.asdict() if hasattr(row, "asdict") else {}
+            if not columns:
+                columns = [str(k) for k in row_map.keys()]
+            rows.append({k: str(v) for k, v in row_map.items()})
+        return {"columns": columns, "rows": rows}
+
+    @app.get("/data-model/ttl")
+    def data_model_ttl(save: bool = False) -> Response:
+        ttl = services.ttl.build_ttl()
+        if save:
+            services.ttl.sync()
+        return Response(content=ttl, media_type="text/plain; charset=utf-8")
+
+    @app.get("/rules/defaults")
+    def list_default_rules() -> dict[str, Any]:
+        source_dir = Path(__file__).resolve().parents[1] / "default_rules" / "ahu_vav"
+        files = sorted(source_dir.glob("*.yaml"))
+        return {
+            "rule_pack": "ahu_vav",
+            "source_dir": str(source_dir),
+            "files": [f.name for f in files],
+        }
+
+    @app.post("/rules/defaults/install")
+    def install_default_rules() -> dict[str, Any]:
+        source_dir = Path(__file__).resolve().parents[1] / "default_rules" / "ahu_vav"
+        dest_dir = default_rules_root() / "ahu_vav"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        copied: list[str] = []
+        for src in sorted(source_dir.glob("*.yaml")):
+            dst = dest_dir / src.name
+            shutil.copy2(src, dst)
+            copied.append(src.name)
+        return {"rule_pack": "ahu_vav", "rules_path": str(dest_dir), "copied": copied}
+
+    @app.get("/rules")
+    def list_rules() -> dict[str, Any]:
+        rules_dir = _rules_dir()
+        files = sorted(
+            [p.name for p in rules_dir.iterdir() if p.is_file() and p.suffix.lower() in {".yaml", ".yml"}]
+        )
+        return {"rules_dir": str(rules_dir), "files": files}
+
+    @app.get("/rules/{filename}")
+    def get_rule_file(filename: str) -> Response:
+        safe = _safe_rule_filename(filename)
+        path = _rules_dir() / safe
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
+        return Response(content=path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+    @app.post("/rules")
+    def upload_rule_file(body: RuleUploadBody) -> dict[str, Any]:
+        safe = _safe_rule_filename(body.filename.strip())
+        path = _rules_dir() / safe
+        path.write_text(body.content, encoding="utf-8")
+        return {"filename": safe, "size": len(body.content)}
+
+    @app.delete("/rules/{filename}")
+    def delete_rule_file(filename: str) -> dict[str, str]:
+        safe = _safe_rule_filename(filename)
+        path = _rules_dir() / safe
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
+        path.unlink()
+        return {"deleted": safe}
+
+    @app.post("/rules/sync-definitions")
+    def sync_rule_definitions() -> dict[str, Any]:
+        # Desktop bridge does not persist separate DB fault definitions.
+        # This endpoint mirrors AFDD frontend UX and is a no-op.
+        return {"synced": 0, "mode": "desktop_noop"}
+
+    @app.get("/storage/timeseries/stats")
+    def timeseries_stats() -> dict[str, int]:
+        return services.ingest.feather_store.stats()
+
+    @app.get("/system/resources")
+    def system_resources() -> dict[str, Any]:
+        return {
+            "memory": _memory_info(),
+            "disk": _disk_info(),
+        }
+
+    @app.post("/storage/timeseries/purge")
+    def timeseries_purge(body: TimeseriesPurgeBody) -> dict[str, Any]:
+        out = services.ingest.purge_timeseries(source=body.source, site_id=body.site_id)
+        points_removed = 0
+        ttl_error: str | None = None
+        if body.prune_points:
+            with services.model.transaction() as model:
+                before = len(model.get("points", []))
+                kept = []
+                for point in model.get("points", []):
+                    md = point.get("metadata") if isinstance(point.get("metadata"), dict) else {}
+                    p_source = md.get("source")
+                    p_site = point.get("site_id")
+                    match_source = body.source is None or str(p_source) == str(body.source)
+                    match_site = body.site_id is None or str(p_site) == str(body.site_id)
+                    if match_source and match_site:
+                        continue
+                    kept.append(point)
+                model["points"] = kept
+            ttl_error = _safe_sync_ttl()
+            points_removed = before - len(kept)
+        if ttl_error:
+            return {**out, "points_removed": points_removed, "ttl_sync_warning": ttl_error}
+        return {**out, "points_removed": points_removed}
+
+    return app
+
+
+def run_desktop_bridge(host: str = "127.0.0.1", port: int = 8765) -> None:
+    import uvicorn
+
+    uvicorn.run(create_app(), host=host, port=port, log_level="info")
+
+
+if __name__ == "__main__":
+    run_desktop_bridge()

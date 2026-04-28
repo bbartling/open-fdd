@@ -190,3 +190,9 @@ stack/caddy/certs/
 # Runtime graph + trigger (local dev bind-mount patterns)
 config/data_model.ttl
 config/.run_fdd_now
+
+# Tauri + React desktop UI build artifacts
+apps/desktop-ui/node_modules/
+apps/desktop-ui/dist/
+apps/desktop-ui/src-tauri/target/
+apps/desktop-ui/src-tauri/gen/

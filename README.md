@@ -23,6 +23,53 @@ This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detec
 pip install open-fdd
 ```
 
+## Desktop App
+
+Desktop mode is under active development. Current recommended launcher on Windows is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
+```
+
+Daily startup (without reinstalling deps):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
+```
+
+macOS/Linux bash equivalent is planned.
+
+```bash
+pip install "open-fdd[desktop]"
+```
+
+Launch from Python:
+
+```python
+import open_fdd
+open_fdd.GUI()
+```
+
+Or CLI:
+
+```bash
+open-fdd-desktop
+```
+
+Tauri + React desktop (installer-first track):
+
+```bash
+# terminal 1 (python bridge)
+open-fdd-desktop-bridge
+
+# terminal 2
+cd apps/desktop-ui
+npm install
+npm run tauri dev
+# or package
+npm run tauri build
+```
+
 ---
 
 ## Online Documentation
@@ -57,6 +104,8 @@ python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -U pip
 pip install -e ".[dev]"
+# if you are working on desktop UI/storage/tests:
+pip install -e ".[dev,desktop]"
 pytest
 ```
 
@@ -64,7 +113,7 @@ pytest
 
 ## Dependencies
 
-* Python 3.12+
+* Python 3.9+
 * `pandas`
 * `numpy`
 * `pyyaml`
