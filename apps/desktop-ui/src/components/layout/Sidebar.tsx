@@ -1,0 +1,70 @@
+import { NavLink } from "react-router-dom";
+import { useTheme } from "../../contexts/theme-context";
+
+const navItems = [
+  { to: "/site-management", icon: "🏢", label: "Site Management" },
+  { to: "/", icon: "📊", label: "Overview", end: true },
+  { to: "/config", icon: "⚙️", label: "OpenFDD Config" },
+  { to: "/csv-import", icon: "📤", label: "CSV Import" },
+  { to: "/rule-setup", icon: "🧩", label: "FDD Rule Setup" },
+  { to: "/bacnet-tools", icon: "📡", label: "BACnet tools" },
+  { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
+  { to: "/energy-engineering", icon: "⚡", label: "Energy Engineering" },
+  { to: "/data-model-testing", icon: "🔎", label: "Data Model Testing" },
+  { to: "/faults", icon: "🚨", label: "Faults" },
+  { to: "/plots", icon: "📈", label: "Plots" },
+  { to: "/weather", icon: "🌤️", label: "Weather data" },
+  { to: "/analytics", icon: "📉", label: "Analytics" },
+  { to: "/system", icon: "🖥️", label: "System resources" },
+];
+
+export function Sidebar() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <aside className="sidebar">
+      <div className="brand-row">
+        <span className="brand">Open-FDD</span>
+        <span className="brand-chip">Desktop</span>
+      </div>
+      <nav className="sidebar-nav">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+          >
+            <span className="nav-icon" aria-hidden="true">
+              {item.icon}
+            </span>
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+      <div className="theme-switcher">
+        <button
+          className={`theme-btn ${theme === "light" ? "active" : ""}`}
+          type="button"
+          onClick={() => setTheme("light")}
+        >
+          Light
+        </button>
+        <button
+          className={`theme-btn ${theme === "dark" ? "active" : ""}`}
+          type="button"
+          onClick={() => setTheme("dark")}
+        >
+          Dark
+        </button>
+        <button
+          className={`theme-btn ${theme === "system" ? "active" : ""}`}
+          type="button"
+          onClick={() => setTheme("system")}
+        >
+          System
+        </button>
+      </div>
+    </aside>
+  );
+}

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Protocol
 
 import pandas as pd
 
-from open_fdd.desktop.storage.feather_store import FeatherStore
+class FrameStore(Protocol):
+    def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
 
 
 @dataclass
@@ -14,7 +16,7 @@ class WeatherFetchResult:
     source: str = "synthetic"
 
 
-def run_weather_fetch(*, store: FeatherStore, site_id: str, days_back: int = 1) -> WeatherFetchResult:
+def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) -> WeatherFetchResult:
     # TODO: Replace with live Open-Meteo HTTP ingestion.
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(days=max(1, int(days_back)))

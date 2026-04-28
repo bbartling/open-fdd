@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
+    "plotly.js-dist-min": "^3.5.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1"

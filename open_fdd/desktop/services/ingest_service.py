@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.model_service import ModelService
@@ -30,9 +32,16 @@ class IngestService:
         dropped_rows = int(result.get("dropped_rows", 0))
         target = str(result.get("storage_path", ""))
         feather_path = str(result.get("feather_path", ""))
+        storage_ref = str(result.get("storage_ref") or target)
         with self.model_service.transaction() as model:
             for metric in metric_columns:
-                self._upsert_point_for_metric(model=model, site_id=site_id, metric=metric, source=source)
+                self._upsert_point_for_metric(
+                    model=model,
+                    site_id=site_id,
+                    metric=metric,
+                    source=source,
+                    storage_ref=storage_ref,
+                )
         return {
             "rows": rows,
             "storage_path": target,
@@ -42,12 +51,12 @@ class IngestService:
         }
 
     def ingest_weather(self, *, site_id: str, days_back: int = 1) -> dict[str, Any]:
-        result = run_weather_fetch(store=self.feather_store, site_id=site_id, days_back=days_back)
+        result = run_weather_fetch(store=self.connector, site_id=site_id, days_back=days_back)
         return {"rows": result.rows, "source": result.source}
 
     def ingest_onboard(self, *, site_id: str) -> dict[str, Any]:
-        result = run_onboard_scrape(store=self.feather_store, site_id=site_id)
-        return {"rows": result.rows, "source": "onboard"}
+        result = run_onboard_scrape(store=self.connector, site_id=site_id)
+        return {"rows": result.rows, "source": result.source}
 
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.connector.read_frame(source=source, site_id=site_id)
@@ -62,6 +71,7 @@ class IngestService:
         site_id: str,
         metric: str,
         source: str,
+        storage_ref: str,
     ) -> None:
         existing = next(
             (
@@ -76,7 +86,7 @@ class IngestService:
         )
         if existing:
             md = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
-            md["external_ref"] = f"feather://{source}/{site_id}/{metric}"
+            md["external_ref"] = storage_ref
             md["source"] = source
             existing["metadata"] = md
             return
@@ -90,7 +100,7 @@ class IngestService:
                 "fdd_input": None,
                 "unit": None,
                 "metadata": {
-                    "external_ref": f"feather://{source}/{site_id}/{metric}",
+                    "external_ref": storage_ref,
                     "source": source,
                 },
             }

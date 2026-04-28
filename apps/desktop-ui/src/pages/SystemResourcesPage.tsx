@@ -15,12 +15,40 @@ type TtlStatus = {
   last_sync_error: string;
 };
 
+type SystemResources = {
+  memory: {
+    total_bytes: number;
+    available_bytes: number;
+    used_bytes: number;
+    used_percent: number;
+  };
+  disk: {
+    path: string;
+    total_bytes: number;
+    free_bytes: number;
+    used_bytes: number;
+    used_percent: number;
+  };
+};
+
+function fmtBytes(value: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let n = value;
+  let idx = 0;
+  while (n >= 1024 && idx < units.length - 1) {
+    n /= 1024;
+    idx += 1;
+  }
+  return `${n.toFixed(1)} ${units[idx]}`;
+}
+
 export function SystemResourcesPage() {
   const [stats, setStats] = useState<TimeseriesStats | null>(null);
   const [ttl, setTtl] = useState<TtlStatus | null>(null);
   const [siteId, setSiteId] = useState("");
   const [source, setSource] = useState("");
   const [prunePoints, setPrunePoints] = useState(false);
+  const [resources, setResources] = useState<SystemResources | null>(null);
   const [status, setStatus] = useState("Manage timeseries Feather storage and TTL sync status.");
 
   async function refresh() {
@@ -31,6 +59,8 @@ export function SystemResourcesPage() {
       ]);
       setStats(s);
       setTtl(t);
+      const r = await desktopFetch<SystemResources>("/system/resources");
+      setResources(r);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }
@@ -79,6 +109,22 @@ export function SystemResourcesPage() {
             value={
               stats
                 ? `files=${stats.file_count}\nsources=${stats.source_count}\nsites=${stats.site_count}\nbytes=${stats.bytes_total}`
+                : "Loading..."
+            }
+            style={{ minHeight: 120 }}
+          />
+        </div>
+        <div>
+          <h3>Host resources</h3>
+          <textarea
+            readOnly
+            value={
+              resources
+                ? `Memory used: ${resources.memory.used_percent}%\n`
+                  + `Memory avail: ${fmtBytes(resources.memory.available_bytes)} / ${fmtBytes(resources.memory.total_bytes)}\n`
+                  + `Disk used: ${resources.disk.used_percent}%\n`
+                  + `Disk free: ${fmtBytes(resources.disk.free_bytes)} / ${fmtBytes(resources.disk.total_bytes)}\n`
+                  + `Disk path: ${resources.disk.path}`
                 : "Loading..."
             }
             style={{ minHeight: 120 }}

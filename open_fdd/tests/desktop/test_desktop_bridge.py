@@ -11,10 +11,10 @@ from open_fdd.desktop_bridge.server import create_app
 
 def test_desktop_bridge_health() -> None:
     app = create_app()
-    client = TestClient(app)
-    res = client.get("/health")
-    assert res.status_code == 200
-    assert res.json().get("status") == "ok"
+    with TestClient(app) as client:
+        res = client.get("/health")
+        assert res.status_code == 200
+        assert res.json().get("status") == "ok"
 
 
 def test_desktop_bridge_sites_and_sparql() -> None:
@@ -35,7 +35,7 @@ SELECT (COUNT(?s) AS ?count) WHERE { ?s a brick:Site . }"""
     )
     assert sparql.status_code == 200
     body = sparql.json()
-    assert "rows" in body
+    assert len(body.get("rows", [])) > 0
     defaults = client.get("/rules/defaults")
     assert defaults.status_code == 200
     assert defaults.json().get("rule_pack") == "ahu_vav"
@@ -79,7 +79,7 @@ def test_desktop_bridge_purge_can_prune_matching_points() -> None:
     imported = client.post(
         "/model/import",
         json={
-            "replace": False,
+            "replace": True,
             "payload": {
                 "sites": [],
                 "equipment": [],

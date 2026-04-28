@@ -129,7 +129,6 @@ class DesktopMainWindow:
         QVBoxLayout = self._qt["QVBoxLayout"]
         QLabel = self._qt["QLabel"]
         panel = QWidget()
-        self.ingest_drop_host = panel
         lay = QVBoxLayout(panel)
         heading = QLabel(title)
         heading.setStyleSheet("font-size:18px;font-weight:700;color:#e8edf6;")
@@ -255,6 +254,7 @@ class DesktopMainWindow:
         QTextEdit = self._qt["QTextEdit"]
 
         panel = QWidget()
+        self.ingest_drop_host = panel
         lay = QVBoxLayout(panel)
 
         helper = QLabel("Drag and drop CSV files below or pick with the button.")

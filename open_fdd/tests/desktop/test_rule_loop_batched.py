@@ -54,5 +54,11 @@ def test_rule_loop_batched_rolling_window_needs_overlap(tmp_path: Path) -> None:
     out_small = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=str(rules_dir), chunk_rows=100))
 
     # Current chunking has no overlap; rolling windows near boundaries can diverge.
-    assert not out_large["rolling_test_flag"].equals(out_small["rolling_test_flag"])
+    assert out_large.index.equals(out_small.index)
+    assert len(out_large.index) == len(out_small.index)
+    assert out_large["rolling_test_flag"].dtype == out_small["rolling_test_flag"].dtype
+    boundary_slice = slice(220, 280)
+    assert not out_large["rolling_test_flag"].iloc[boundary_slice].equals(
+        out_small["rolling_test_flag"].iloc[boundary_slice]
+    )
 

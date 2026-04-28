@@ -31,5 +31,5 @@ def test_csv_ingest_creates_feather_refs(tmp_path: Path) -> None:
     model = model_service.load()
     assert any(p.get("external_id") == "sa_temp" for p in model["points"])
     sa_point = next(p for p in model["points"] if p.get("external_id") == "sa_temp")
-    assert "feather://csv/" in sa_point.get("metadata", {}).get("external_ref", "")
+    assert sa_point.get("metadata", {}).get("external_ref", "") == out["storage_path"]
 

@@ -31,6 +31,16 @@ def _safe_brick_type(value: str, fallback: str) -> str:
     return token
 
 
+def _sanitize_local_name(value: Any) -> str | None:
+    token = re.sub(r"[^A-Za-z0-9_]+", "_", str(value).strip())
+    token = re.sub(r"_+", "_", token).strip("_")
+    if not token:
+        return None
+    if token[0].isdigit():
+        token = f"_{token}"
+    return token
+
+
 @dataclass
 class TtlService:
     model_store: ModelStore = field(default_factory=ModelStore)
@@ -46,7 +56,14 @@ class TtlService:
             "",
         ]
         for site in model.get("sites", []):
-            sid = str(site["id"]).replace("-", "_")
+            if not isinstance(site, dict):
+                _log.warning("Skipping invalid site row (expected dict): %r", site)
+                continue
+            raw_site_id = site.get("id")
+            sid = _sanitize_local_name(raw_site_id)
+            if sid is None:
+                _log.warning("Skipping site with invalid id: %r", raw_site_id)
+                continue
             lines.append(f":site_{sid} a brick:Site ;")
             lines.append(f'  rdfs:label "{_escape(str(site.get("name", "Site")))}" ;')
             site_metadata = site.get("metadata") if isinstance(site.get("metadata"), dict) else {}
@@ -56,20 +73,39 @@ class TtlService:
             lines[-1] = lines[-1].rstrip(" ;") + " ."
             lines.append("")
         for eq in model.get("equipment", []):
-            eid = str(eq["id"]).replace("-", "_")
-            sid = str(eq["site_id"]).replace("-", "_")
+            if not isinstance(eq, dict):
+                _log.warning("Skipping invalid equipment row (expected dict): %r", eq)
+                continue
+            raw_eq_id = eq.get("id")
+            raw_site_id = eq.get("site_id")
+            eid = _sanitize_local_name(raw_eq_id)
+            sid = _sanitize_local_name(raw_site_id)
+            if eid is None or sid is None:
+                _log.warning("Skipping equipment with invalid id/site_id: id=%r site_id=%r", raw_eq_id, raw_site_id)
+                continue
             et = _safe_brick_type(str(eq.get("equipment_type") or "Equipment"), "Equipment")
             lines.append(f":eq_{eid} a brick:{et} ;")
             lines.append(f'  rdfs:label "{_escape(str(eq.get("name", "Equipment")))}" ;')
             lines.append(f'  brick:isPartOf :site_{sid} .')
             lines.append("")
         for pt in model.get("points", []):
-            pid = str(pt["id"]).replace("-", "_")
+            if not isinstance(pt, dict):
+                _log.warning("Skipping invalid point row (expected dict): %r", pt)
+                continue
+            raw_point_id = pt.get("id")
+            pid = _sanitize_local_name(raw_point_id)
+            if pid is None:
+                _log.warning("Skipping point with invalid id: %r", raw_point_id)
+                continue
             bt = _safe_brick_type(str(pt.get("brick_type") or "Point"), "Point")
             lines.append(f":pt_{pid} a brick:{bt} ;")
             lines.append(f'  rdfs:label "{_escape(str(pt.get("external_id", "")))}" ;')
             if pt.get("equipment_id"):
-                lines.append(f'  brick:isPointOf :eq_{str(pt["equipment_id"]).replace("-", "_")} ;')
+                eid = _sanitize_local_name(pt.get("equipment_id"))
+                if eid is None:
+                    _log.warning("Skipping point equipment_id link with invalid value: %r", pt.get("equipment_id"))
+                else:
+                    lines.append(f"  brick:isPointOf :eq_{eid} ;")
             if pt.get("fdd_input"):
                 lines.append(f'  ofdd:mapsToRuleInput "{_escape(str(pt["fdd_input"]))}" ;')
             ext = pt.get("metadata", {}).get("external_ref") if isinstance(pt.get("metadata"), dict) else None

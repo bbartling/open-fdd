@@ -5,11 +5,18 @@ import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
+import tempfile
 from typing import Any
 import logging
+import os
+import ctypes
 
 from fastapi import FastAPI
+from fastapi import File
+from fastapi import Form
 from fastapi import HTTPException
+from fastapi import Response
+from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -71,6 +78,11 @@ class TimeseriesPurgeBody(BaseModel):
     prune_points: bool = False
 
 
+class RuleUploadBody(BaseModel):
+    filename: str
+    content: str
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="open-fdd desktop bridge")
     app.add_middleware(
@@ -86,13 +98,77 @@ def create_app() -> FastAPI:
         allow_credentials=True,
     )
     services = _build_services()
+
+    def _rules_dir() -> Path:
+        path = default_rules_root() / "ahu_vav"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _safe_rule_filename(filename: str) -> str:
+        name = Path(filename).name
+        if name != filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        lower = name.lower()
+        if not (lower.endswith(".yaml") or lower.endswith(".yml")):
+            raise HTTPException(status_code=400, detail="Rule file must end with .yaml or .yml")
+        return name
     def _safe_sync_ttl() -> str | None:
         try:
-            path = services.ttl.sync()
-            return str(path)
+            services.ttl.sync()
+            return None
         except Exception as exc:  # noqa: BLE001
             _log.exception("TTL sync failed")
             return str(exc)
+
+    def _memory_info() -> dict[str, int | float]:
+        if os.name == "nt":
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            total = int(stat.ullTotalPhys)
+            avail = int(stat.ullAvailPhys)
+        else:
+            pages = int(os.sysconf("SC_PHYS_PAGES"))
+            page_size = int(os.sysconf("SC_PAGE_SIZE"))
+            avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            total = pages * page_size
+            avail = avail_pages * page_size
+        used = max(0, total - avail)
+        pct = round((used / total) * 100, 2) if total > 0 else 0.0
+        return {
+            "total_bytes": total,
+            "available_bytes": avail,
+            "used_bytes": used,
+            "used_percent": pct,
+        }
+
+    def _disk_info() -> dict[str, int | float | str]:
+        target = Path.home()
+        usage = shutil.disk_usage(target)
+        total = int(usage.total)
+        free = int(usage.free)
+        used = int(usage.used)
+        pct = round((used / total) * 100, 2) if total > 0 else 0.0
+        return {
+            "path": str(target),
+            "total_bytes": total,
+            "free_bytes": free,
+            "used_bytes": used,
+            "used_percent": pct,
+        }
 
     app.state.ttl_sync_interval_seconds = 30
     app.state.last_ttl_sync_iso = ""
@@ -164,7 +240,25 @@ def create_app() -> FastAPI:
 
     @app.post("/model/import")
     def model_import(body: ModelImportBody) -> dict[str, int]:
-        return services.model.import_json(body.payload, replace=body.replace)
+        normalized = {
+            "sites": body.payload.get("sites", []) if isinstance(body.payload.get("sites"), list) else [],
+            "equipment": body.payload.get("equipment", []) if isinstance(body.payload.get("equipment"), list) else [],
+            "points": body.payload.get("points", []) if isinstance(body.payload.get("points"), list) else [],
+        }
+        with services.model.transaction() as model:
+            if body.replace:
+                model["sites"] = normalized["sites"]
+                model["equipment"] = normalized["equipment"]
+                model["points"] = normalized["points"]
+            else:
+                model["sites"].extend(normalized["sites"])
+                model["equipment"].extend(normalized["equipment"])
+                model["points"].extend(normalized["points"])
+        return {
+            "sites": len(normalized["sites"]),
+            "equipment": len(normalized["equipment"]),
+            "points": len(normalized["points"]),
+        }
 
     @app.post("/model/ttl/sync")
     def model_ttl_sync() -> dict[str, str]:
@@ -201,6 +295,28 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/ingest/csv/upload")
+    async def ingest_csv_upload(
+        site_id: str = Form(...),
+        source: str = Form("csv"),
+        file: UploadFile = File(...),
+    ) -> dict[str, Any]:
+        suffix = Path(file.filename or "").suffix or ".csv"
+        fd, tmp_name = tempfile.mkstemp(prefix="openfdd_upload_", suffix=suffix)
+        tmp_path = Path(tmp_name)
+        try:
+            content = await file.read()
+            with os.fdopen(fd, mode="wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            return services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            with contextlib.suppress(Exception):
+                tmp_path.unlink(missing_ok=True)
+
     @app.post("/rules/run")
     def rules_run(body: RuleRunBody) -> dict[str, Any]:
         frame = services.ingest.load_source_frame(source=body.source, site_id=body.site_id)
@@ -219,6 +335,20 @@ def create_app() -> FastAPI:
             "columns": [str(c) for c in out.columns],
             "fault_totals": fault_totals,
             "preview": preview,
+        }
+
+    @app.get("/plots/frame")
+    def plots_frame(site_id: str, source: str = "csv", limit: int = 5000) -> dict[str, Any]:
+        frame = services.ingest.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return {"columns": [], "rows": []}
+        cap = max(1, min(int(limit), 20_000))
+        frame = frame.tail(cap).copy()
+        if "timestamp" in frame.columns:
+            frame["timestamp"] = frame["timestamp"].astype(str)
+        return {
+            "columns": [str(c) for c in frame.columns],
+            "rows": frame.to_dict(orient="records"),
         }
 
     @app.get("/data-model/testing/predefined")
@@ -297,9 +427,54 @@ LIMIT 50""",
             copied.append(src.name)
         return {"rule_pack": "ahu_vav", "rules_path": str(dest_dir), "copied": copied}
 
+    @app.get("/rules")
+    def list_rules() -> dict[str, Any]:
+        rules_dir = _rules_dir()
+        files = sorted(
+            [p.name for p in rules_dir.iterdir() if p.is_file() and p.suffix.lower() in {".yaml", ".yml"}]
+        )
+        return {"rules_dir": str(rules_dir), "files": files}
+
+    @app.get("/rules/{filename}")
+    def get_rule_file(filename: str) -> Response:
+        safe = _safe_rule_filename(filename)
+        path = _rules_dir() / safe
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
+        return Response(content=path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+
+    @app.post("/rules")
+    def upload_rule_file(body: RuleUploadBody) -> dict[str, Any]:
+        safe = _safe_rule_filename(body.filename.strip())
+        path = _rules_dir() / safe
+        path.write_text(body.content, encoding="utf-8")
+        return {"filename": safe, "size": len(body.content)}
+
+    @app.delete("/rules/{filename}")
+    def delete_rule_file(filename: str) -> dict[str, str]:
+        safe = _safe_rule_filename(filename)
+        path = _rules_dir() / safe
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
+        path.unlink()
+        return {"deleted": safe}
+
+    @app.post("/rules/sync-definitions")
+    def sync_rule_definitions() -> dict[str, Any]:
+        # Desktop bridge does not persist separate DB fault definitions.
+        # This endpoint mirrors AFDD frontend UX and is a no-op.
+        return {"synced": 0, "mode": "desktop_noop"}
+
     @app.get("/storage/timeseries/stats")
     def timeseries_stats() -> dict[str, int]:
         return services.ingest.feather_store.stats()
+
+    @app.get("/system/resources")
+    def system_resources() -> dict[str, Any]:
+        return {
+            "memory": _memory_info(),
+            "disk": _disk_info(),
+        }
 
     @app.post("/storage/timeseries/purge")
     def timeseries_purge(body: TimeseriesPurgeBody) -> dict[str, Any]:
