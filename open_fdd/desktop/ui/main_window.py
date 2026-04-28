@@ -18,6 +18,7 @@ class DesktopMainWindow:
     def __init__(self) -> None:
         from PySide6.QtWidgets import (
             QCheckBox,
+            QDateTimeEdit,
             QFileDialog,
             QHBoxLayout,
             QLabel,
@@ -33,7 +34,7 @@ class DesktopMainWindow:
             QVBoxLayout,
             QWidget,
         )
-        from PySide6.QtCore import Qt, QEvent, QObject, QRunnable, QThreadPool, Signal
+        from PySide6.QtCore import Qt, QDateTime, QEvent, QObject, QRunnable, QThreadPool, Signal
         from PySide6.QtGui import QFont
 
         self._qt = {
@@ -52,7 +53,9 @@ class DesktopMainWindow:
             "QTableWidgetItem": QTableWidgetItem,
             "QFileDialog": QFileDialog,
             "QCheckBox": QCheckBox,
+            "QDateTimeEdit": QDateTimeEdit,
             "Qt": Qt,
+            "QDateTime": QDateTime,
             "QEvent": QEvent,
             "QObject": QObject,
             "QRunnable": QRunnable,
@@ -359,6 +362,8 @@ class DesktopMainWindow:
         QPushButton = self._qt["QPushButton"]
         QLabel = self._qt["QLabel"]
         QLineEdit = self._qt["QLineEdit"]
+        QDateTimeEdit = self._qt["QDateTimeEdit"]
+        QDateTime = self._qt["QDateTime"]
         QTextEdit = self._qt["QTextEdit"]
 
         panel = QWidget()
@@ -370,6 +375,16 @@ class DesktopMainWindow:
         self.source_input.setPlaceholderText("source name (csv/weather/onboard)")
         self.chunk_size_input = QLineEdit()
         self.chunk_size_input.setPlaceholderText("chunk rows (optional)")
+        self.rules_start_dt = QDateTimeEdit()
+        self.rules_start_dt.setCalendarPopup(True)
+        self.rules_start_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.rules_start_dt.setDateTime(QDateTime.currentDateTime())
+        self.rules_end_dt = QDateTimeEdit()
+        self.rules_end_dt.setCalendarPopup(True)
+        self.rules_end_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.rules_end_dt.setDateTime(QDateTime.currentDateTime())
+        bounds_btn = QPushButton("Use Data Bounds")
+        bounds_btn.clicked.connect(self._on_rules_use_data_bounds)
         run_btn = QPushButton("Run Rules")
         run_btn.clicked.connect(self._on_run_rules)
         self._run_rules_button = run_btn
@@ -379,6 +394,11 @@ class DesktopMainWindow:
         row.addWidget(self.source_input)
         row.addWidget(QLabel("Chunk"))
         row.addWidget(self.chunk_size_input)
+        row.addWidget(QLabel("Start"))
+        row.addWidget(self.rules_start_dt)
+        row.addWidget(QLabel("End"))
+        row.addWidget(self.rules_end_dt)
+        row.addWidget(bounds_btn)
         row.addWidget(run_btn)
         lay.addLayout(row)
         self.rules_out = QTextEdit()
@@ -691,26 +711,72 @@ class DesktopMainWindow:
                 chunk = int(self.chunk_size_input.text().strip() or 0)
             except ValueError:
                 chunk = 0
+            Qt = self._qt["Qt"]
+            start_ts = self.rules_start_dt.dateTime().toString(Qt.ISODate)
+            end_ts = self.rules_end_dt.dateTime().toString(Qt.ISODate)
             self.rules_out.setPlainText("Running rule loop...")
             self._set_busy(True)
             self._run_in_background(
-                lambda: self._run_rules_job(site_id=site_id, source=source, rules_path=rules_path, chunk=chunk),
+                lambda: self._run_rules_job(
+                    site_id=site_id,
+                    source=source,
+                    rules_path=rules_path,
+                    chunk=chunk,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                ),
                 on_success=lambda payload: self.rules_out.setPlainText(str(payload)),
                 on_error=lambda exc, tb: self.rules_out.setPlainText(f"Rule run failed: {exc}\n{tb}"),
             )
         except Exception as exc:
             self.rules_out.setPlainText(f"Rule run failed: {exc}\n{traceback.format_exc()}")
 
-    def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int) -> str:
-        frame = self.ingest_service.load_source_frame(source=source, site_id=site_id)
+    def _on_rules_use_data_bounds(self) -> None:
+        site_id = self._site_id_for_ingest()
+        source = self.source_input.text().strip() or "csv"
+        if not site_id:
+            self.rules_out.setPlainText("Set a site id first.")
+            return
+        try:
+            Qt = self._qt["Qt"]
+            QDateTime = self._qt["QDateTime"]
+            info = self.ingest_service.source_time_bounds(source=source, site_id=site_id)
+            if not info.get("rows"):
+                self.rules_out.setPlainText(f"No data found for site='{site_id}' source='{source}'.")
+                return
+            if not info.get("start") or not info.get("end"):
+                self.rules_out.setPlainText("Data found, but no parseable timestamp bounds were available.")
+                return
+            start_dt = QDateTime.fromString(str(info["start"]), Qt.ISODate)
+            end_dt = QDateTime.fromString(str(info["end"]), Qt.ISODate)
+            if start_dt.isValid():
+                self.rules_start_dt.setDateTime(start_dt)
+            if end_dt.isValid():
+                self.rules_end_dt.setDateTime(end_dt)
+            self.rules_out.setPlainText(
+                f"Loaded bounds for source '{source}' ({info['rows']} rows)\n"
+                f"Start: {self.rules_start_dt.dateTime().toString(Qt.ISODate)}\n"
+                f"End: {self.rules_end_dt.dateTime().toString(Qt.ISODate)}"
+            )
+        except Exception as exc:
+            self.rules_out.setPlainText(f"Failed to load data bounds: {exc}\n{traceback.format_exc()}")
+
+    def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int, start_ts: str, end_ts: str) -> str:
+        frame = self.ingest_service.load_source_frame_window(
+            source=source,
+            site_id=site_id,
+            start_ts=start_ts or None,
+            end_ts=end_ts or None,
+        )
         if frame.empty:
-            return "No Feather data found for site/source."
+            return "No Feather data found for site/source in selected time window."
         out = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk))
         fault_cols = [c for c in out.columns if c.endswith("_flag")]
         fault_totals = {c: int(out[c].sum()) for c in fault_cols}
         tail_preview = out.tail(10).to_string(index=False)
         return (
             f"Input rows: {len(frame.index)}\nOutput rows: {len(out.index)}\nColumns: {list(out.columns)}\n"
+            f"Window: {start_ts} -> {end_ts}\n"
             f"Fault totals: {fault_totals}\nTTL: {model_ttl_path()}\n\nPreview:\n{tail_preview}"
         )
 

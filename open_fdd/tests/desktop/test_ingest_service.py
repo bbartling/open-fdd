@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import warnings
 
 from open_fdd.desktop.services.ingest_service import IngestService
 from open_fdd.desktop.services.model_service import ModelService
@@ -66,4 +67,64 @@ def test_ingest_service_ml_baseline_returns_metrics(tmp_path: Path) -> None:
     assert isinstance(out["r2"], float)
     assert 0.8 <= out["r2"] <= 1.0
     assert out["output_source"].startswith("ml_sat")
+
+
+def test_ingest_service_time_bounds_and_window_filter(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_path = tmp_path / "sample_window.csv"
+    pd.DataFrame(
+        {
+            "timestamp": [
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T01:00:00Z",
+                "2026-01-01T02:00:00Z",
+                "2026-01-01T03:00:00Z",
+            ],
+            "sat": [54.0, 55.0, 56.0, 57.0],
+        }
+    ).to_csv(csv_path, index=False)
+
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("HQ Window")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    ingest.ingest_csv(csv_path=csv_path, site_id=site["id"], source="csv")
+
+    bounds = ingest.source_time_bounds(site_id=site["id"], source="csv")
+    assert bounds["rows"] == 4
+    assert str(bounds["start"]).startswith("2026-01-01T00:00:00")
+    assert str(bounds["end"]).startswith("2026-01-01T03:00:00")
+
+    window = ingest.load_source_frame_window(
+        site_id=site["id"],
+        source="csv",
+        start_ts="2026-01-01T01:00:00Z",
+        end_ts="2026-01-01T02:00:00Z",
+    )
+    assert len(window.index) == 2
+    assert [float(v) for v in window["sat"].tolist()] == [55.0, 56.0]
+
+
+def test_ingest_service_time_bounds_handles_unparseable_timestamps(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_path = tmp_path / "sample_bad_ts.csv"
+    pd.DataFrame(
+        {
+            "timestamp": ["not-a-date", "still-not-a-date"],
+            "sat": [55.0, 56.0],
+        }
+    ).to_csv(csv_path, index=False)
+
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("HQ Bad TS")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Could not infer format")
+        ingest.ingest_csv(csv_path=csv_path, site_id=site["id"], source="csv")
+
+    bounds = ingest.source_time_bounds(site_id=site["id"], source="csv")
+    assert bounds["rows"] == 0
+    assert bounds["start"] is None
+    assert bounds["end"] is None
 

@@ -84,6 +84,45 @@ class IngestService:
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.connector.read_frame(source=source, site_id=site_id)
 
+    def load_source_frame_window(
+        self,
+        *,
+        source: str,
+        site_id: str,
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+    ) -> pd.DataFrame:
+        frame = self.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return frame
+        ts_col = "timestamp" if "timestamp" in frame.columns else str(frame.columns[0])
+        parsed = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+        out = frame[parsed.notna()].copy()
+        out[ts_col] = parsed[parsed.notna()]
+        if start_ts:
+            start = pd.to_datetime(start_ts, errors="raise", utc=True)
+            out = out[out[ts_col] >= start]
+        if end_ts:
+            end = pd.to_datetime(end_ts, errors="raise", utc=True)
+            out = out[out[ts_col] <= end]
+        return out.sort_values(ts_col).reset_index(drop=True)
+
+    def source_time_bounds(self, *, source: str, site_id: str) -> dict[str, Any]:
+        frame = self.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return {"rows": 0, "timestamp_col": None, "start": None, "end": None}
+        ts_col = "timestamp" if "timestamp" in frame.columns else str(frame.columns[0])
+        parsed = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+        valid = parsed[parsed.notna()]
+        if valid.empty:
+            return {"rows": int(len(frame.index)), "timestamp_col": ts_col, "start": None, "end": None}
+        return {
+            "rows": int(len(frame.index)),
+            "timestamp_col": ts_col,
+            "start": valid.min().isoformat(),
+            "end": valid.max().isoformat(),
+        }
+
     def purge_timeseries(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         return self.connector.purge(source=source, site_id=site_id)
 
