@@ -1,4 +1,4 @@
-"""Compatibility shim: implementation moved to ``open_fdd.gateway.server``."""
+"""FastAPI HTTP gateway (bridge) for local Open-FDD desktop stack."""
 
 from open_fdd.gateway.server import create_app, run_desktop_bridge, run_gateway
 

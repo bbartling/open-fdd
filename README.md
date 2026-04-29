@@ -29,6 +29,10 @@ In active development.
 
 **OpenClaw + local desktop:** [`scripts/OPENCLAW_RUNBOOK.md`](scripts/OPENCLAW_RUNBOOK.md) — run Open-FDD on the host (`bootstrap-desktop.ps1` / `.sh`); OpenClaw in Docker as HTTP client (`host.docker.internal`); smoke prompts, Phase 2, BACnet.
 
+**Drivers:** `open_fdd/platform/drivers/` — headless BACnet: `open-fdd-headless-bacnet`; bridge `GET /config/drivers/export` + `POST /config/drivers/validate` for LLM-assisted setup.
+
+**HTTP gateway:** `open_fdd/gateway/` (`open-fdd-gateway` / `open-fdd-desktop-bridge`); `open_fdd/desktop_bridge/` is a thin compatibility shim.
+
 ---
 
 ## Online Documentation

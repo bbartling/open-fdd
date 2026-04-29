@@ -9,7 +9,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
-from open_fdd.desktop_bridge.server import create_app
+from open_fdd.gateway.server import create_app
 
 
 def test_desktop_bridge_health() -> None:

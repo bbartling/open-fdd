@@ -46,9 +46,9 @@ For robust prompts, import schema guidance, and operator-safe pre-flight checks,
 
 ---
 
-## Desktop bridge note (open-fdd repo)
+## Local HTTP gateway note (open-fdd repo)
 
-The desktop bridge now supports agent-friendly backend operations such as:
+The FastAPI **gateway** (`open_fdd.gateway`, CLI `open-fdd-gateway` / `open-fdd-desktop-bridge`) supports agent-friendly backend operations such as:
 
 - model export/import/validate,
 - SPARQL query endpoints (`/data-model/sparql`, `/data-model/sparql/upload`),

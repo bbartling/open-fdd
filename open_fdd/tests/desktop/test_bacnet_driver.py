@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from open_fdd.desktop.drivers.bacnet_driver import run_bacnet_scrape
+from open_fdd.platform.drivers.bacnet_driver import run_bacnet_scrape
 
 
 class _MemStore:
@@ -58,7 +58,7 @@ def test_bacnet_includes_string_true_polling(monkeypatch: pytest.MonkeyPatch) ->
 
         return _Resp()
 
-    monkeypatch.setattr("open_fdd.desktop.drivers.bacnet_driver.urllib.request.urlopen", _fake_urlopen)
+    monkeypatch.setattr("open_fdd.platform.drivers.bacnet_driver.urllib.request.urlopen", _fake_urlopen)
     store = _MemStore()
     out = run_bacnet_scrape(
         store=store,

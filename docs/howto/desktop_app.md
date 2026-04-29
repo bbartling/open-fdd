@@ -2,10 +2,10 @@
 
 ## Goal
 
-Run Open-FDD locally with a Python bridge + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local bootstrap + client-to-host networking).
+Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local bootstrap + client-to-host networking).
 
-This repository includes a React UI workspace at `apps/desktop-ui` that talks to a local Python bridge.
-The recommended automation path is web-first (bridge + MCP + React UI) on the machine where Open-FDD runs.
+This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
+The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
 
 ## Install
 
@@ -15,7 +15,7 @@ pip install "open-fdd[desktop]"
 
 ## Launch
 
-### Web launch (bridge + MCP + React UI)
+### Web launch (gateway + MCP + React UI)
 
 Recommended launcher on Windows:
 
@@ -30,11 +30,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
 ```
 
 `bootstrap-desktop.ps1` launches by default:
-- terminal 1: `open-fdd-desktop-bridge`
+- terminal 1: `open-fdd-desktop-bridge` (same as `open-fdd-gateway`; package: `open_fdd.gateway`)
 - terminal 2: `open-fdd-mcp-rag`
 - terminal 3: React UI (static mode by default)
-- bridge Swagger: `http://127.0.0.1:8765/docs`
-- bridge OpenAPI: `http://127.0.0.1:8765/openapi.json`
+- gateway Swagger: `http://127.0.0.1:8765/docs`
+- gateway OpenAPI: `http://127.0.0.1:8765/openapi.json`
 - MCP API: `http://127.0.0.1:8090`
 - Web UI: `http://127.0.0.1:8080`
 
@@ -97,18 +97,18 @@ Bridge URL consistency:
 - Bootstrap sets `OFDD_BRIDGE_URL` for the bridge process and `VITE_DESKTOP_BRIDGE_BASE` for the UI build so both target the same base URL (override with `--bridge-url` / `-BridgeUrl` or `OFDD_BRIDGE_URL`).
 - The bridge entrypoint also reads optional `OFDD_BRIDGE_HOST` / `OFDD_BRIDGE_PORT` if you prefer host/port env vars instead of a full URL.
 
-### Desktop bridge Swagger/OpenAPI
+### Gateway HTTP API (Swagger / OpenAPI)
 
-Once bridge is running locally:
+Once the gateway is running locally:
 
 - Swagger UI: `http://127.0.0.1:8765/docs`
 - OpenAPI JSON: `http://127.0.0.1:8765/openapi.json`
 
-Use Swagger for endpoint discovery, request body examples, and quick local API testing for OpenClaw or other assistants.
+Use Swagger for endpoint discovery, request body examples, and quick local API testing for OpenClaw or other assistants. The Python package lives at `open_fdd/gateway/`; `open_fdd/desktop_bridge/` is a thin compatibility shim for older imports.
 
 ## MCP RAG service (OpenClaw/agents)
 
-`open-fdd` includes an MCP-style RAG HTTP service that can index local `docs/` and proxy driver/model tools to the desktop bridge API.
+`open-fdd` includes an MCP-style RAG HTTP service that can index local `docs/` and proxy driver/model tools to the **gateway** HTTP API.
 
 Build the local retrieval index:
 
@@ -133,7 +133,13 @@ Key env vars:
 Docker image scaffold:
 - `stack/Dockerfile.mcp_rag`
 
-## Data ingest quickstart (desktop bridge API)
+**Platform drivers:** ingest implementations live under `open_fdd/platform/drivers/` (BACnet DIY JSON-RPC, Open-Meteo, Onboard, CSV). `open_fdd/desktop/drivers/` re-exports the same symbols for backward compatibility.
+
+**Headless BACnet loop (cron-friendly):** after `pip install -e ".[desktop]"`, run `open-fdd-headless-bacnet once` or `loop` (see `python -m open_fdd.platform.drivers.headless_bacnet -h`). Modes: `local` uses `IngestService` on disk; `bridge` POSTs to the running gateway at `/ingest/bacnet`.
+
+**AI-assisted driver setup:** `GET /config/drivers/export` returns a sanitized JSON bundle; `POST /config/drivers/validate` checks a proposed bundle without applying. MCP exposes read tools `drivers_export` and `drivers_validate` that proxy those routes.
+
+## Data ingest quickstart (gateway HTTP API)
 
 Base URL:
 
@@ -249,7 +255,7 @@ If import fails, fix timestamp formatting and retry.
 - Feather path layout is source/site scoped:
   - `open-fdd-desktop/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
 - Storage remains append/chunk-based (many files per site/source) for reliability and backfill workflows.
-- The desktop bridge can still present a site-level joined view for plotting (multi-source virtual merge by timestamp), so operators get a single logical trend frame without rewriting raw files.
+- The gateway can still present a site-level joined view for plotting (multi-source virtual merge by timestamp), so operators get a single logical trend frame without rewriting raw files.
 - Time-series reads for rules concatenate all Feather files for a selected `(source, site_id)` pair.
 - Point metadata supports external refs like:
   - `feather://<source>/<site_id>/<metric>`

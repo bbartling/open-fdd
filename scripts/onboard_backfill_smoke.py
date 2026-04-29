@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _onboard_cli import fallback_api_key_from_env_files
-from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
+from open_fdd.platform.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.storage.connectors import FeatherConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 

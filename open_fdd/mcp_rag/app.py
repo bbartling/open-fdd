@@ -204,6 +204,8 @@ def manifest() -> dict[str, Any]:
             {"name": "search_api_capabilities", "route": "/tools/search_api_capabilities", "mode": "read"},
             {"name": "bridge_health", "route": "/tools/bridge_health", "mode": "write_guarded"},
             {"name": "drivers_health", "route": "/tools/drivers_health", "mode": "write_guarded"},
+            {"name": "drivers_export", "route": "/tools/drivers_export", "mode": "read"},
+            {"name": "drivers_validate", "route": "/tools/drivers_validate", "mode": "read"},
             {"name": "weather_config_get", "route": "/tools/weather_config_get", "mode": "write_guarded"},
             {"name": "weather_config_set", "route": "/tools/weather_config_set", "mode": "write_guarded"},
             {"name": "weather_ingest_run", "route": "/tools/weather_ingest_run", "mode": "write_guarded"},
@@ -239,6 +241,18 @@ def get_doc_section(req: GetSectionRequest) -> dict[str, Any]:
 def search_api_capabilities(req: SearchApiCapabilitiesRequest) -> dict[str, Any]:
     idx = _load_index()
     return _serialize_results(req.query, idx.search(req.query, top_k=req.top_k, tags=["api"]))
+
+
+@app.post("/tools/drivers_export")
+def drivers_export() -> dict[str, Any]:
+    """Sanitized driver bundle from bridge (read-only; for LLM-assisted driver setup)."""
+    return _json_request("GET", "/config/drivers/export")
+
+
+@app.post("/tools/drivers_validate")
+def drivers_validate(req: DriverConfigRequest) -> dict[str, Any]:
+    """Validate a proposed driver bundle JSON without applying (dry-run)."""
+    return _json_request("POST", "/config/drivers/validate", body=req.payload)
 
 
 @app.post("/tools/bridge_health", dependencies=[Depends(require_action_tools_auth)])

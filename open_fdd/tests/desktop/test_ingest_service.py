@@ -177,7 +177,7 @@ def test_ingest_service_time_bounds_handles_unparseable_timestamps(tmp_path: Pat
 
 def test_ingest_service_bacnet_ingest_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("pyarrow")
-    from open_fdd.desktop.drivers.bacnet_driver import BacnetScrapeResult
+    from open_fdd.platform.drivers.bacnet_driver import BacnetScrapeResult
 
     model_store = ModelStore(path=tmp_path / "model.json")
     model_service = ModelService(store=model_store)

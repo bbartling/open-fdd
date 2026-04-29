@@ -49,6 +49,8 @@ def test_mcp_manifest_contains_driver_tools(monkeypatch: pytest.MonkeyPatch) -> 
     assert "search_docs" in tools
     assert "drivers_health" in tools
     assert "bacnet_config_set" in tools
+    assert "drivers_export" in tools
+    assert "drivers_validate" in tools
 
 
 def test_mcp_search_docs_reads_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,6 +63,32 @@ def test_mcp_search_docs_reads_index(tmp_path: Path, monkeypatch: pytest.MonkeyP
     body = response.json()
     assert int(body.get("count", 0)) >= 1
     assert body.get("results", [])[0].get("chunk_id") == "chunk-1"
+
+
+def test_mcp_drivers_export_proxies_bridge_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    def _fake_request(method: str, url: str, **kwargs):  # noqa: ARG001
+        captured["method"] = method.upper()
+        captured["url"] = url
+
+        class _R:
+            status_code = 200
+            text = '{"schema_version":1}'
+            headers = {"content-type": "application/json"}
+
+            def json(self):
+                return {"schema_version": 1, "weather": {}}
+
+        return _R()
+
+    monkeypatch.setattr(mcp_app_module.requests, "request", _fake_request)
+    client = TestClient(mcp_api)
+    res = client.post("/tools/drivers_export")
+    assert res.status_code == 200
+    assert res.json().get("schema_version") == 1
+    assert captured["method"] == "GET"
+    assert captured["url"].endswith("/config/drivers/export")
 
 
 def test_mcp_action_tool_blocked_when_disabled() -> None:

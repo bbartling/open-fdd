@@ -34,7 +34,7 @@ class FeatherConnector:
         return self.store.read_site_frames(source=source, site_id=site_id)
 
     def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict:
-        from open_fdd.desktop.drivers.csv_driver import ingest_csv_to_feather
+        from open_fdd.platform.drivers.csv_driver import ingest_csv_to_feather
 
         result = ingest_csv_to_feather(csv_path=csv_path, source=source, site_id=site_id, store=self.store)
         return {
