@@ -80,7 +80,8 @@ def test_mcp_health_hints_loopback_and_typo_warning(tmp_path: Path, monkeypatch:
     assert res.status_code == 200
     j = res.json()
     assert j.get("ok") is True
-    assert "127.0.0.1:8090" in str(j.get("mcp_listen_hint", ""))
+    hint = str(j.get("mcp_listen_hint", ""))
+    assert "127.0.0.1" in hint and ":8090" in hint and "/health" in hint
     assert "url_warnings" not in j
 
     monkeypatch.setattr(mcp_app_module, "OFDD_API_URL", "http://127.0.1:8765")

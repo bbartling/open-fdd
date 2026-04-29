@@ -186,7 +186,7 @@ class IngestService:
         """
         cleaned = [str(s).strip() for s in sources if str(s).strip()]
         if not cleaned:
-            return pd.DataFrame()
+            return pd.DataFrame(), []
         parts: list[tuple[str, pd.DataFrame]] = []
         for src in cleaned:
             fr = self.load_source_frame_window(

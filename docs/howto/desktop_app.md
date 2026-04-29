@@ -127,6 +127,7 @@ open-fdd-mcp-rag
 ```
 
 Key env vars:
+- `OFDD_MCP_LISTEN_HOST` / `OFDD_MCP_LISTEN_PORT` (defaults `127.0.0.1` / `8090`; bind address for `open-fdd-mcp-rag` and for `/health`’s `mcp_listen_hint`)
 - `OFDD_MCP_OFDD_API_URL` (default `http://127.0.0.1:8765`)
 - `OFDD_MCP_OFDD_API_KEY`
 - `OFDD_MCP_ENABLE_ACTION_TOOLS=true` (required for write/config/ingest proxy tools)

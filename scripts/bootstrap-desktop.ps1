@@ -128,6 +128,7 @@ if (-not $NoUi) {
             "if (Test-Path '$VenvActivate') { . '$VenvActivate' }",
             "Set-Location '$WebUiDir'",
             "`$env:VITE_DESKTOP_BRIDGE_BASE='$BridgeUrl'",
+            "`$env:NPM_CONFIG_PRODUCTION='false'",
             "npm run dev -- --host 0.0.0.0 --port $UiPort"
         ) -join "; "
         Start-Process powershell -ArgumentList @("-NoExit", "-Command", $uiCommand) | Out-Null
@@ -138,6 +139,7 @@ if (-not $NoUi) {
             "if (Test-Path '$VenvActivate') { . '$VenvActivate' }",
             "Set-Location '$WebUiDir'",
             "`$env:VITE_DESKTOP_BRIDGE_BASE='$BridgeUrl'",
+            "`$env:NPM_CONFIG_PRODUCTION='false'",
             "npm run build",
             "python -m http.server $UiPort --directory dist --bind 0.0.0.0"
         ) -join "; "
