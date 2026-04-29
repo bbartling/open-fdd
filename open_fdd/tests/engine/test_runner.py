@@ -1,9 +1,12 @@
 """Tests for config-driven RuleRunner."""
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from open_fdd.engine import RuleRunner
+from open_fdd.engine.runner import load_rule
 
 
 @pytest.fixture
@@ -438,3 +441,23 @@ def test_runner_col_map_for_rule_exported():
         "inputs": {"a": {"column": "col_a"}},
     }
     assert col_map_for_rule(rule, {}) == {"a": "col_a"}
+
+
+def test_runner_aligns_index_to_timestamp_for_schedule_style_expressions(sample_df, fc1_rule):
+    """Default rules use ``Series.index.dayofweek`` / ``.hour``; frame index must be DatetimeIndex."""
+    runner = RuleRunner(rules=[fc1_rule])
+    out = runner.run(sample_df)
+    assert isinstance(out.index, pd.DatetimeIndex)
+    assert "timestamp" in out.columns
+    assert "rule_a_flag" in out.columns
+
+
+def test_runner_default_vav_zone_temp_bounds_rule_with_timestamp_index():
+    """Regression: bundled VAV rule uses ``.index.dayofweek`` on mapped series (needs DatetimeIndex)."""
+    pkg = Path(__file__).resolve().parent.parent.parent
+    rule = load_rule(pkg / "default_rules" / "ahu_vav" / "01_vav_zone_temp_bounds_occupied.yaml")
+    ts = pd.date_range("2024-01-02 09:00", periods=12, freq="h")
+    df = pd.DataFrame({"timestamp": ts, "zone_temp": [72.0] * 12})
+    col_map = {"Zone_Air_Temperature_Sensor": "zone_temp"}
+    out = RuleRunner(rules=[rule]).run(df, timestamp_col="timestamp", column_map=col_map)
+    assert "vav_zone_temp_bounds_occ_fault" in out.columns

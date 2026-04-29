@@ -82,6 +82,8 @@ if ($InstallDeps) {
     Write-Step "Installing web UI npm deps..."
     Push-Location $WebUiDir
     try {
+        # Install devDependencies even when NODE_ENV=production (Docker images often set it).
+        $env:NPM_CONFIG_PRODUCTION = "false"
         if (Test-Path (Join-Path $WebUiDir "package-lock.json")) {
             Invoke-Checked { npm ci } "npm ci failed."
         } else {

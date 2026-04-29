@@ -12,6 +12,10 @@ from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
+from open_fdd.desktop.services.timeseries_merge import (
+    DEFAULT_SITE_DRIVER_SOURCES,
+    merge_site_frames_on_timestamp,
+)
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
@@ -159,6 +163,45 @@ class IngestService:
             end = pd.to_datetime(end_ts, errors="raise", utc=True)
             out = out[out[ts_col] <= end]
         return out.sort_values(ts_col).reset_index(drop=True)
+
+    def load_merged_sources_frame_window(
+        self,
+        *,
+        site_id: str,
+        sources: list[str],
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+        join_how: str = "outer",
+    ) -> tuple[pd.DataFrame, list[str]]:
+        """
+        Load each driver ``source`` for ``site_id`` (same optional time window as
+        :meth:`load_source_frame_window`), then merge on ``timestamp``.
+
+        Returns the merged frame and the list of driver tags that contributed at least
+        one row (subset of ``sources``, order preserved).
+
+        When only one source has rows, column names are unchanged. When two or more
+        contribute rows, non-timestamp columns become ``<metric>_<source>`` to avoid
+        collisions across BACnet / CSV / weather / onboard / future drivers.
+        """
+        cleaned = [str(s).strip() for s in sources if str(s).strip()]
+        if not cleaned:
+            return pd.DataFrame()
+        parts: list[tuple[str, pd.DataFrame]] = []
+        for src in cleaned:
+            fr = self.load_source_frame_window(
+                site_id=site_id,
+                source=src,
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+            parts.append((src, fr))
+        return merge_site_frames_on_timestamp(parts, join_how=join_how)
+
+    @staticmethod
+    def default_merge_driver_order() -> tuple[str, ...]:
+        """Built-in driver source tags, in a stable merge order (override via explicit ``sources``)."""
+        return DEFAULT_SITE_DRIVER_SOURCES
 
     def source_time_bounds(self, *, source: str, site_id: str) -> dict[str, Any]:
         frame = self.load_source_frame(source=source, site_id=site_id)

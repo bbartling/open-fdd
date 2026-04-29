@@ -14,6 +14,7 @@ import os
 import ctypes
 import warnings
 
+import pandas as pd
 from fastapi import FastAPI
 from fastapi import File
 from fastapi import Form
@@ -65,6 +66,11 @@ class RuleRunBody(BaseModel):
     start_ts: str | None = None
     end_ts: str | None = None
     target_memory_fraction: float = 0.25
+    #: When set (non-empty), load and merge these driver sources on ``timestamp`` instead
+    #: of using ``source`` alone. Tags match ingest storage (e.g. ``csv``, ``weather``,
+    #: ``onboard``, ``bacnet``, or any future driver ``source`` string).
+    sources: list[str] | None = None
+    join_how: Literal["inner", "left", "outer", "right"] = "outer"
 
 
 class SiteRecord(BaseModel):
@@ -611,17 +617,40 @@ def create_app() -> FastAPI:
 
     @app.post("/rules/run", tags=["rules"])
     def rules_run(body: RuleRunBody) -> dict[str, Any]:
+        merge_sources = [str(s).strip() for s in (body.sources or []) if str(s).strip()]
         try:
-            frame = services.ingest.load_source_frame_window(
-                source=body.source,
-                site_id=body.site_id,
-                start_ts=body.start_ts,
-                end_ts=body.end_ts,
-            )
+            if merge_sources:
+                frame, merge_used = services.ingest.load_merged_sources_frame_window(
+                    site_id=body.site_id,
+                    sources=merge_sources,
+                    start_ts=body.start_ts,
+                    end_ts=body.end_ts,
+                    join_how=str(body.join_how),
+                )
+                load_meta: dict[str, Any] = {
+                    "load_mode": "merged",
+                    "sources": merge_used,
+                    "join_how": body.join_how,
+                }
+            else:
+                frame = services.ingest.load_source_frame_window(
+                    source=body.source,
+                    site_id=body.site_id,
+                    start_ts=body.start_ts,
+                    end_ts=body.end_ts,
+                )
+                load_meta = {"load_mode": "single", "source": body.source}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if frame.empty:
-            return {"input_rows": 0, "output_rows": 0, "columns": [], "fault_totals": {}, "preview": ""}
+            return {
+                "input_rows": 0,
+                "output_rows": 0,
+                "columns": [],
+                "fault_totals": {},
+                "preview": "",
+                **load_meta,
+            }
         out = run_rule_loop_batched(
             frame,
             RuleLoopConfig(
@@ -630,8 +659,12 @@ def create_app() -> FastAPI:
                 target_memory_fraction=float(body.target_memory_fraction or 0.25),
             ),
         )
-        fault_cols = [c for c in out.columns if c.endswith("_flag")]
-        fault_totals = {c: int(out[c].sum()) for c in fault_cols}
+        fault_cols = [
+            c
+            for c in out.columns
+            if c.endswith("_flag") or c.endswith("_fault")
+        ]
+        fault_totals = {c: int(pd.to_numeric(out[c], errors="coerce").fillna(0).sum()) for c in fault_cols}
         preview = out.tail(10).to_string(index=False)
         return {
             "input_rows": len(frame.index),
@@ -639,6 +672,7 @@ def create_app() -> FastAPI:
             "columns": [str(c) for c in out.columns],
             "fault_totals": fault_totals,
             "preview": preview,
+            **load_meta,
         }
 
     @app.post("/ingest/weather", tags=["ingest"])
@@ -865,39 +899,26 @@ def create_app() -> FastAPI:
 
     @app.get("/plots/site-frame", tags=["timeseries"])
     def plots_site_frame(site_id: str, sources: str = "csv,weather,onboard,bacnet", limit: int = 5000) -> dict[str, Any]:
-        import pandas as pd
-
         cap = max(1, min(int(limit), 20_000))
         source_list = [s.strip() for s in str(sources).split(",") if s.strip()]
         if not source_list:
             source_list = ["csv"]
-        merged: pd.DataFrame | None = None
-        ts_col = "timestamp"
-        used_sources: list[str] = []
-        for src in source_list:
-            frame = services.ingest.load_source_frame(source=src, site_id=site_id)
-            if frame.empty:
-                continue
-            local_ts = infer_timestamp_column(frame)
-            copy = frame.tail(cap).copy()
-            if local_ts != ts_col:
-                copy = copy.rename(columns={local_ts: ts_col})
-            rename_map = {c: f"{c}_{src}" for c in copy.columns if c != ts_col}
-            copy = copy.rename(columns=rename_map)
-            if ts_col in copy.columns:
-                copy[ts_col] = copy[ts_col].astype(str)
-            if merged is None:
-                merged = copy
-            else:
-                merged = merged.merge(copy, on=ts_col, how="outer")
-            used_sources.append(src)
-
-        if merged is None or merged.empty:
+        merged, used_sources = services.ingest.load_merged_sources_frame_window(
+            site_id=site_id,
+            sources=source_list,
+            start_ts=None,
+            end_ts=None,
+            join_how="outer",
+        )
+        if merged.empty:
             return {"columns": [], "rows": [], "sources": []}
-        merged = merged.tail(cap)
+        ts_col = infer_timestamp_column(merged)
+        out = merged.tail(cap).copy()
+        if ts_col in out.columns:
+            out[ts_col] = out[ts_col].astype(str)
         return {
-            "columns": [str(c) for c in merged.columns],
-            "rows": merged.to_dict(orient="records"),
+            "columns": [str(c) for c in out.columns],
+            "rows": out.to_dict(orient="records"),
             "sources": used_sources,
         }
 
