@@ -51,7 +51,7 @@ jobs:
         run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
 
       - name: Open PR with updated bundle (if changed)
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: chore/docs-pdf-refresh
           commit-message: "chore(docs): regenerate PDF and text bundle"
