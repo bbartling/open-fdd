@@ -123,6 +123,8 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
   step "Installing web UI npm deps..."
   (
     cd "${WEB_UI_DIR}"
+    # Install devDependencies even when NODE_ENV=production (Docker/OpenClaw images often set it).
+    export NPM_CONFIG_PRODUCTION=false
     if [[ -f package-lock.json ]]; then
       npm ci
     else
@@ -173,6 +175,8 @@ if [[ "${NO_UI}" -eq 0 ]]; then
     (
       cd "${WEB_UI_DIR}"
       export VITE_DESKTOP_BRIDGE_BASE="${BRIDGE_URL}"
+      # Ensure devDependencies (tsc, vite) are on PATH even if parent shell set NODE_ENV=production before install.
+      export NPM_CONFIG_PRODUCTION=false
       npm run build
       nohup "${VENV_PYTHON}" -m http.server "${UI_PORT}" --directory dist --bind "${UI_HOST}" > "${REPO_ROOT}/.openfdd-ui.log" 2>&1 &
       echo "[open-fdd] ui pid=$! log=.openfdd-ui.log mode=static"

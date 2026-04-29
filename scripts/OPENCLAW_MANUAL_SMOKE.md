@@ -4,6 +4,37 @@ Use this in a **Linux** environment (container shell or VM) with **bash**, **git
 
 ---
 
+## Docker / OpenClaw gateway (host one-shot)
+
+If OpenClaw runs inside a **minimal** image (no Python venv tooling, no `curl`/`git`), install packages **as root** on the running container **once**, then use an interactive shell inside that container for the smoke test.
+
+Replace `CONTAINER` with your gateway container name or ID (example: `openclaw-openclaw-gateway-run-32838e488b28`).
+
+```bash
+docker exec -u 0 -it CONTAINER sh -lc \
+  'apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv build-essential \
+    curl ca-certificates git \
+    nodejs npm'
+```
+
+- **`build-essential`**: some `pip` wheels compile native extensions.
+- **`nodejs` + `npm`**: required for `scripts/bootstrap-desktop.sh --install-deps` (desktop UI build). If `apt` ships an old Node and the UI build fails, install a current **Node 20+** LTS by your org’s standard (e.g. NodeSource) and re-run bootstrap.
+
+### Containers with `NODE_ENV=production`
+
+Many images set `NODE_ENV=production`, which makes `npm ci` / `npm install` **skip devDependencies**. The Open-FDD UI build needs those (TypeScript, Vite, etc.). **`scripts/bootstrap-desktop.sh` sets `NPM_CONFIG_PRODUCTION=false` for the UI install and static build** so `tsc` / `vite` are available. If you still see `tsc: not found`, remove `apps/desktop-ui/node_modules` and re-run `bash scripts/bootstrap-desktop.sh --install-deps --no-launch`.
+
+### Bridge URL typo
+
+Use **`127.0.0.1`** (four octets), not `127.0.1` — a typo breaks the UI’s `VITE_DESKTOP_BRIDGE_BASE` and fetches fail.
+
+### `docker cp` from Windows → Linux
+
+If you copy `*.sh` from a Windows path without LF line endings, bash can fail on `set -euo pipefail` (CRLF). Prefer checking out the repo with **`.gitattributes`** forcing `*.sh` to LF, or run **`dos2unix scripts/bootstrap-desktop.sh`** inside the container once after copy.
+
+---
+
 ## Prompt to paste into OpenClaw
 
 ```text
@@ -12,6 +43,12 @@ You are helping me manually smoke-test Open-FDD inside this environment (Docker/
 Goal: clone the repo, run the bootstrap script so the FastAPI bridge, MCP RAG service, and web dashboard all start; verify health; ingest a CSV into Feather storage; then exercise AI-assisted data modeling and fault detection (FDD) via the bridge + MCP. Report pass/fail with concrete URLs, curl output snippets, and any stack traces from logs.
 
 Do this in order:
+
+0) If you are in a minimal Docker/OpenClaw gateway container (no python3 venv / curl / git / npm), ask the human to run on the **Docker host** (replace CONTAINER):
+
+   docker exec -u 0 -it CONTAINER sh -lc 'apt-get update && apt-get install -y python3 python3-pip python3-venv build-essential curl ca-certificates git nodejs npm'
+
+   Then continue inside the container (or `docker exec -it CONTAINER bash`). If `npm run build` fails on an old Node, stop and report; the human may need a newer Node LTS.
 
 1) Clone and enter the repo
    - git clone https://github.com/bbartling/open-fdd.git

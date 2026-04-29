@@ -105,6 +105,41 @@ def test_ingest_service_time_bounds_and_window_filter(tmp_path: Path) -> None:
     assert [float(v) for v in window["sat"].tolist()] == [55.0, 56.0]
 
 
+def test_load_merged_sources_frame_window_outer_join(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("HQ Merge")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+
+    csv_path = tmp_path / "a.csv"
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+            "sat": [54.0, 55.0],
+        }
+    ).to_csv(csv_path, index=False)
+    ingest.ingest_csv(csv_path=csv_path, site_id=site["id"], source="csv")
+
+    wx_path = tmp_path / "wx.csv"
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+            "oat": [20.0, 21.0],
+        }
+    ).to_csv(wx_path, index=False)
+    ingest.ingest_csv(csv_path=wx_path, site_id=site["id"], source="weather")
+
+    merged, used = ingest.load_merged_sources_frame_window(
+        site_id=site["id"],
+        sources=["csv", "weather"],
+    )
+    assert set(used) == {"csv", "weather"}
+    assert "sat_csv" in merged.columns
+    assert "oat_weather" in merged.columns
+    assert len(merged) == 2
+
+
 def test_ingest_service_time_bounds_handles_unparseable_timestamps(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     csv_path = tmp_path / "sample_bad_ts.csv"

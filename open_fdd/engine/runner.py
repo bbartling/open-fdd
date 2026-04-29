@@ -187,8 +187,15 @@ class RuleRunner:
             DataFrame with original columns plus fault flag columns (e.g. rule_name_flag).
         """
         result = df.copy()
-        if timestamp_col is None and "timestamp" in df.columns:
+        if timestamp_col is None and "timestamp" in result.columns:
             timestamp_col = "timestamp"
+        # Expression rules often use ``<alias>.index.dayofweek`` / ``.hour``; those require a
+        # DatetimeIndex on each Series (same as the working frame). Align index from timestamp_col
+        # while keeping the timestamp column for downstream I/O.
+        if timestamp_col and timestamp_col in result.columns:
+            parsed = pd.to_datetime(result[timestamp_col], errors="coerce", utc=False)
+            if bool(parsed.notna().any()):
+                result.index = parsed
         run_params = params or {}
         skip_missing = skip_missing_columns
         global_col_map = column_map or {}
