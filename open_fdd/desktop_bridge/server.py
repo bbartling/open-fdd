@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import tempfile
@@ -195,6 +196,24 @@ class RuleUploadBody(BaseModel):
     content: str
 
 
+def _driver_health_entry(*, last_run: str = "", rows: int = 0, success: bool | None = None, last_error: str = "") -> dict[str, Any]:
+    return {
+        "last_run": last_run,
+        "rows": int(rows),
+        "success": success,
+        "last_error": last_error,
+    }
+
+
+def _driver_health_update(status_map: dict[str, dict[str, Any]], *, driver: str, rows: int = 0, success: bool | None = None, error: str = "") -> None:
+    status_map[driver] = _driver_health_entry(
+        last_run=datetime.now(timezone.utc).isoformat(),
+        rows=int(rows),
+        success=success,
+        last_error=str(error or ""),
+    )
+
+
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -325,15 +344,26 @@ def create_app() -> FastAPI:
     app.state.last_ttl_sync_iso = ""
     app.state.ttl_sync_error = ""
     app.state.bacnet_poll_enabled = os.getenv("OFDD_BACNET_POLL_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+    raw_bacnet_interval = os.getenv("OFDD_BACNET_POLL_INTERVAL_SECONDS", "300")
+    try:
+        bacnet_interval = int(raw_bacnet_interval or "300")
+    except (TypeError, ValueError):
+        bacnet_interval = 300
     app.state.bacnet_poll_interval_seconds = max(
         5,
-        int(os.getenv("OFDD_BACNET_POLL_INTERVAL_SECONDS", "300") or "300"),
+        bacnet_interval,
     )
     app.state.bacnet_site_id = (os.getenv("OFDD_BACNET_SITE_ID", "") or "").strip()
     app.state.bacnet_server_url = (os.getenv("OFDD_BACNET_SERVER_URL", "") or "").strip()
     app.state.bacnet_api_key = (os.getenv("OFDD_BACNET_SERVER_API_KEY", "") or "").strip()
     app.state.last_bacnet_poll = {}
     app.state.bacnet_poll_error = ""
+    app.state.driver_health = {
+        "csv": _driver_health_entry(),
+        "weather": _driver_health_entry(),
+        "bacnet": _driver_health_entry(),
+        "onboard": _driver_health_entry(),
+    }
 
     async def _ttl_sync_loop(app_ref: FastAPI) -> None:
         while True:
@@ -366,10 +396,33 @@ def create_app() -> FastAPI:
                         app_ref.state.last_bacnet_poll = result
                         if result.get("success", False):
                             app_ref.state.bacnet_poll_error = ""
+                            _driver_health_update(
+                                app_ref.state.driver_health,
+                                driver="bacnet",
+                                rows=int(result.get("rows", 0) or 0),
+                                success=True,
+                                error="",
+                            )
                         else:
-                            app_ref.state.bacnet_poll_error = str(result.get("error") or "BACnet polling failed.")
+                            poll_error = str(result.get("error") or "BACnet polling failed.")
+                            app_ref.state.bacnet_poll_error = poll_error
+                            _driver_health_update(
+                                app_ref.state.driver_health,
+                                driver="bacnet",
+                                rows=int(result.get("rows", 0) or 0),
+                                success=False,
+                                error=poll_error,
+                            )
             except Exception as exc:  # pragma: no cover - defensive runtime loop
-                app_ref.state.bacnet_poll_error = str(exc)
+                loop_error = str(exc)
+                app_ref.state.bacnet_poll_error = loop_error
+                _driver_health_update(
+                    app_ref.state.driver_health,
+                    driver="bacnet",
+                    rows=0,
+                    success=False,
+                    error=loop_error,
+                )
             await asyncio.sleep(interval)
 
     @app.get("/health", tags=["health"])
@@ -445,6 +498,7 @@ def create_app() -> FastAPI:
         points = payload.get("points", []) if isinstance(payload.get("points"), list) else []
         issues: list[str] = []
         site_ids = {str(s.get("id")) for s in sites if s.get("id")}
+        equipment_ids = {str(e.get("id")) for e in equipment if e.get("id")}
         for idx, e in enumerate(equipment):
             sid = e.get("site_id")
             if sid and str(sid) not in site_ids:
@@ -453,6 +507,9 @@ def create_app() -> FastAPI:
             sid = p.get("site_id")
             if sid and str(sid) not in site_ids:
                 issues.append(f"points[{idx}] references missing site_id={sid}")
+            eqid = p.get("equipment_id")
+            if eqid and str(eqid) not in equipment_ids:
+                issues.append(f"points[{idx}] references missing equipment_id={eqid}")
         return {
             "valid": len(issues) == 0,
             "issues": issues,
@@ -492,10 +549,20 @@ def create_app() -> FastAPI:
                 ),
             )
         try:
-            return services.ingest.ingest_csv(csv_path=csv_path, site_id=body.site_id, source=body.source)
+            out = services.ingest.ingest_csv(csv_path=csv_path, site_id=body.site_id, source=body.source)
+            _driver_health_update(
+                app.state.driver_health,
+                driver="csv",
+                rows=int(out.get("rows", 0) or 0),
+                success=True,
+                error="",
+            )
+            return out
         except FileNotFoundError as exc:
+            _driver_health_update(app.state.driver_health, driver="csv", rows=0, success=False, error=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
+            _driver_health_update(app.state.driver_health, driver="csv", rows=0, success=False, error=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/ingest/csv/upload", tags=["ingest"])
@@ -517,8 +584,17 @@ def create_app() -> FastAPI:
                     handle.write(chunk)
                 handle.flush()
                 os.fsync(handle.fileno())
-            return services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
+            out = services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
+            _driver_health_update(
+                app.state.driver_health,
+                driver="csv",
+                rows=int(out.get("rows", 0) or 0),
+                success=True,
+                error="",
+            )
+            return out
         except ValueError as exc:
+            _driver_health_update(app.state.driver_health, driver="csv", rows=0, success=False, error=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:
             with contextlib.suppress(Exception):
@@ -555,11 +631,28 @@ def create_app() -> FastAPI:
 
     @app.post("/ingest/weather", tags=["ingest"])
     def ingest_weather(body: WeatherIngestBody) -> dict[str, Any]:
-        return services.ingest.ingest_weather(site_id=body.site_id, days_back=max(1, int(body.days_back)))
+        out = services.ingest.ingest_weather(site_id=body.site_id, days_back=max(1, int(body.days_back)))
+        _driver_health_update(
+            app.state.driver_health,
+            driver="weather",
+            rows=int(out.get("rows", 0) or 0),
+            success=True,
+            error="",
+        )
+        return out
 
     @app.post("/ingest/onboard", tags=["ingest"])
     def ingest_onboard(body: OnboardIngestBody) -> dict[str, Any]:
-        return services.ingest.ingest_onboard(site_id=body.site_id)
+        out = services.ingest.ingest_onboard(site_id=body.site_id)
+        ok = bool(out.get("success", False))
+        _driver_health_update(
+            app.state.driver_health,
+            driver="onboard",
+            rows=int(out.get("rows", 0) or 0),
+            success=ok,
+            error=str(out.get("error") or ""),
+        )
+        return out
 
     @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
@@ -577,9 +670,24 @@ def create_app() -> FastAPI:
         )
         app.state.last_bacnet_poll = result
         if not result.get("success", False):
-            app.state.bacnet_poll_error = str(result.get("error") or "BACnet ingest failed.")
+            bacnet_error = str(result.get("error") or "BACnet ingest failed.")
+            app.state.bacnet_poll_error = bacnet_error
+            _driver_health_update(
+                app.state.driver_health,
+                driver="bacnet",
+                rows=int(result.get("rows", 0) or 0),
+                success=False,
+                error=bacnet_error,
+            )
         else:
             app.state.bacnet_poll_error = ""
+            _driver_health_update(
+                app.state.driver_health,
+                driver="bacnet",
+                rows=int(result.get("rows", 0) or 0),
+                success=True,
+                error="",
+            )
         return result
 
     @app.post("/ml/train", tags=["ingest"])
@@ -611,7 +719,7 @@ def create_app() -> FastAPI:
             )
             if frame.empty:
                 continue
-            ts_col = "timestamp" if "timestamp" in frame.columns else str(frame.columns[0])
+            ts_col = infer_timestamp_column(frame)
             frame[ts_col] = frame[ts_col].astype(str)
             want_cols = [c for c in (body.columns or []) if c in frame.columns and c != ts_col]
             if want_cols:
@@ -633,12 +741,12 @@ def create_app() -> FastAPI:
 
         join_how = str(body.join_how)
         base_src, merged = frames[0]
-        ts_col = "timestamp" if "timestamp" in merged.columns else str(merged.columns[0])
+        ts_col = infer_timestamp_column(merged)
         rename = {c: f"{c}_{base_src}" for c in merged.columns if c != ts_col}
         merged = merged.rename(columns=rename)
         for src, frm in frames[1:]:
             rhs = frm.copy()
-            rhs_ts = "timestamp" if "timestamp" in rhs.columns else str(rhs.columns[0])
+            rhs_ts = infer_timestamp_column(rhs)
             if rhs_ts != ts_col:
                 rhs = rhs.rename(columns={rhs_ts: ts_col})
             rhs = rhs.rename(columns={c: f"{c}_{src}" for c in rhs.columns if c != ts_col})
@@ -688,13 +796,23 @@ def create_app() -> FastAPI:
         app.state.bacnet_api_key = str(body.api_key or "").strip()
         if app.state.bacnet_server_url:
             os.environ["OFDD_BACNET_SERVER_URL"] = str(app.state.bacnet_server_url)
+        else:
+            os.environ.pop("OFDD_BACNET_SERVER_URL", None)
         if app.state.bacnet_api_key:
             os.environ["OFDD_BACNET_SERVER_API_KEY"] = str(app.state.bacnet_api_key)
+        else:
+            os.environ.pop("OFDD_BACNET_SERVER_API_KEY", None)
         os.environ["OFDD_BACNET_POLL_INTERVAL_SECONDS"] = str(app.state.bacnet_poll_interval_seconds)
         os.environ["OFDD_BACNET_POLL_ENABLED"] = "true" if app.state.bacnet_poll_enabled else "false"
         if app.state.bacnet_site_id:
             os.environ["OFDD_BACNET_SITE_ID"] = str(app.state.bacnet_site_id)
+        else:
+            os.environ.pop("OFDD_BACNET_SITE_ID", None)
         return bacnet_config_get()
+
+    @app.get("/config/drivers/health", tags=["config"])
+    def drivers_health_get() -> dict[str, Any]:
+        return dict(app.state.driver_health)
 
     @app.get("/config/onboard", tags=["config"])
     def onboard_config_get() -> dict[str, Any]:

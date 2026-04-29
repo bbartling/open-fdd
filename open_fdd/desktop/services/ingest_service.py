@@ -146,7 +146,10 @@ class IngestService:
         if frame.empty:
             return frame
         ts_col = infer_timestamp_column(frame)
-        parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        try:
+            parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        except ValueError:
+            return frame.iloc[0:0].copy()
         out = frame[parsed.notna()].copy()
         out[ts_col] = parsed[parsed.notna()]
         if start_ts:
@@ -162,7 +165,10 @@ class IngestService:
         if frame.empty:
             return {"rows": 0, "timestamp_col": None, "start": None, "end": None}
         ts_col = infer_timestamp_column(frame)
-        parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        try:
+            parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        except ValueError:
+            return {"rows": len(frame.index), "timestamp_col": ts_col, "start": None, "end": None}
         valid = parsed[parsed.notna()]
         if valid.empty:
             return {"rows": len(frame.index), "timestamp_col": ts_col, "start": None, "end": None}

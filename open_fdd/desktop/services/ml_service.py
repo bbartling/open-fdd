@@ -142,7 +142,10 @@ class MLService:
         scored["ml_residual"] = scored[target_col] - scored["ml_prediction"]
         scored["ml_abs_residual"] = scored["ml_residual"].abs()
         threshold = _to_float(scored["ml_abs_residual"].quantile(max(0.5, min(0.999, residual_quantile))))
-        scored["ml_residual_fault"] = (scored["ml_abs_residual"] >= threshold).astype(int)
+        # Numerical jitter in perfect-fit scenarios can produce tiny non-zero residuals.
+        # Apply a small tolerance so fault flags are stable across Python/numpy builds.
+        threshold_eps = max(1e-12, abs(threshold) * 1e-9)
+        scored["ml_residual_fault"] = (scored["ml_abs_residual"] >= (threshold - threshold_eps)).astype(int)
 
         overlap = 0
         if rule_flag_col and rule_flag_col in df.columns:

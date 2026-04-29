@@ -10,9 +10,8 @@ const navItems = [
   { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
   { to: "/energy-engineering", icon: "⚡", label: "Energy Engineering" },
   { to: "/data-model-testing", icon: "🔎", label: "Data Model Testing" },
-  { to: "/weather", icon: "🌤️", label: "Weather data" },
   { to: "/plots", icon: "📈", label: "Plots" },
-  { to: "/analytics", icon: "📉", label: "Analytics" },
+  { to: "/ml-lab", icon: "🤖", label: "ML Lab" },
   { to: "/system", icon: "🖥️", label: "System resources" },
 ];
 

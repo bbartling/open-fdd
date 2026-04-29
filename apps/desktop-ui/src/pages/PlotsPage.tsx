@@ -99,10 +99,14 @@ export function PlotsPage() {
 
   function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
     const set = new Set<string>();
+    const baseName = (col: string) => {
+      const idx = col.lastIndexOf("_");
+      return idx > 0 ? col.slice(0, idx) : col;
+    };
     for (const ext of externalIds) {
       if (currentSource === "all") {
         for (const col of columns) {
-          if (col === ext || col.startsWith(`${ext}_`)) {
+          if (col === ext || baseName(col) === ext) {
             set.add(col);
           }
         }
@@ -175,6 +179,7 @@ export function PlotsPage() {
     try {
       await desktopFetch(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
       await siteContext.refreshSites();
+      setSiteId("");
       setFrame(null);
       setYColumns([]);
       setStatus(`Deleted site "${siteName}" and associated data model rows.`);

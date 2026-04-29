@@ -8,8 +8,8 @@ import { SystemResourcesPage } from "./pages/SystemResourcesPage";
 import { SiteManagementPage } from "./pages/SiteManagementPage";
 import { AppLayout } from "./components/layout/AppLayout";
 import { PlotsPage } from "./pages/PlotsPage";
-import { WeatherPage } from "./pages/WeatherPage";
 import { DriversPage } from "./pages/DriversPage";
+import { MlLabPage } from "./pages/MlLabPage";
 
 export default function App() {
   return (
@@ -25,8 +25,9 @@ export default function App() {
         <Route path="/energy-engineering" element={<PlaceholderPage title="Energy Engineering" description="Engineering workflow page scaffold." />} />
         <Route path="/data-model-testing" element={<DataModelTestingPage />} />
         <Route path="/plots" element={<PlotsPage />} />
-        <Route path="/weather" element={<WeatherPage />} />
-        <Route path="/analytics" element={<PlaceholderPage title="Analytics" description="Analytics page scaffold." />} />
+        <Route path="/weather" element={<Navigate to="/drivers" replace />} />
+        <Route path="/ml-lab" element={<MlLabPage />} />
+        <Route path="/analytics" element={<Navigate to="/ml-lab" replace />} />
         <Route path="/system" element={<SystemResourcesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/site-management" replace />} />

@@ -141,6 +141,8 @@ export function RuleSetupPage() {
         setRunOutput("Rules directory is not ready yet. Install defaults or refresh rules.");
         return;
       }
+      const parsedChunkRows = Number.parseInt(chunkRows || "0", 10);
+      const safeChunkRows = Number.isFinite(parsedChunkRows) && parsedChunkRows >= 0 ? parsedChunkRows : 0;
       const out = await desktopFetch<{
         input_rows: number;
         output_rows: number;
@@ -154,7 +156,7 @@ export function RuleSetupPage() {
           site_id: effectiveSiteId,
           source: runSource,
           rules_path: rulesPath,
-          chunk_rows: Number(chunkRows || "0"),
+          chunk_rows: safeChunkRows,
           start_ts: startTs || null,
           end_ts: endTs || null,
         }),

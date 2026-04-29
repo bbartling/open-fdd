@@ -25,59 +25,23 @@ pip install open-fdd
 
 ## Desktop App
 
-Desktop mode is under active development. The primary desktop workflow is Tauri + React UI with the Python bridge API.
-
-Recommended launcher on Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
-```
-
-Daily startup (without reinstalling deps):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
-```
-
-`bootstrap-desktop.ps1` launches both services by default:
-- terminal 1: `open-fdd-desktop-bridge`
-- terminal 2: `npm run tauri dev` in `apps/desktop-ui`
-- bridge Swagger: `http://127.0.0.1:8765/docs`
-- bridge OpenAPI: `http://127.0.0.1:8765/openapi.json`
-
-Equivalent manual flow:
-
-```bash
-# terminal 1 (python bridge)
-open-fdd-desktop-bridge
-
-# terminal 2
-cd apps/desktop-ui
-npm install
-npm run tauri dev
-# or package
-npm run tauri build
-```
-
-macOS/Linux bash bootstrap equivalent is planned.
+Desktop mode is under active development. The primary desktop workflow is Tauri + React UI with the Python bridge API. See documentation for the current build.
 
 ---
 
 ## Online Documentation
 
-This application is part of a broader ecosystem that together forms the **Open FDD AFDD Stack**, enabling a fully orchestrated, edge-deployable analytics and optimization platform for building automation systems.
+* 📘 **Open FDD Fault Detection Engine**
+  Core rules engine with `RuleRunner`, YAML-based fault logic, and pandas workflows.
+  [Documentation](https://bbartling.github.io/open-fdd/) · [GitHub](https://github.com/bbartling/open-fdd) · [PyPI](https://pypi.org/project/open-fdd/)
+
+## Other Useful Applications
+
+Optional companion projects for BACnet integrations and HVAC optimization workflows.
 
 * 🔗 **DIY BACnet Server**
   Lightweight BACnet server with JSON-RPC and MQTT support for IoT integrations.
   [Documentation](https://bbartling.github.io/diy-bacnet-server/) · [GitHub](https://github.com/bbartling/diy-bacnet-server)
-
-* 📖 **Open FDD AFDD Stack**
-  Full AFDD framework with Docker bootstrap, API services, drivers, and React web UI.
-  [Documentation](https://bbartling.github.io/open-fdd-afdd-stack/) · [GitHub](https://github.com/bbartling/open-fdd-afdd-stack)
-
-* 📘 **Open FDD Fault Detection Engine**
-  Core rules engine with `RuleRunner`, YAML-based fault logic, and pandas workflows.
-  [Documentation](https://bbartling.github.io/open-fdd/) · [GitHub](https://github.com/bbartling/open-fdd) · [PyPI](https://pypi.org/project/open-fdd/)
 
 * ⚙️ **easy-aso Framework**
   Lightweight framework for Automated Supervisory Optimization (ASO) algorithms at the IoT edge.

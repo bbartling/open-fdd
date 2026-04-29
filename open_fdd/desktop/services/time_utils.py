@@ -92,7 +92,9 @@ def normalize_known_timezone_abbreviations(series: pd.Series) -> pd.Series:
     """
 
     def _normalize(value: object) -> object:
-        text = str(value or "").strip()
+        if pd.isna(value):
+            return value
+        text = str(value).strip()
         if not text:
             return value
         match = _TZ_SUFFIX_RE.match(text)

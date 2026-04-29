@@ -42,11 +42,13 @@ export function DataModelPage() {
 
   async function doViewTtl() {
     setTtlLoading(true);
+    setTtlText("");
     try {
       const ttl = await desktopFetchText("/data-model/ttl?save=false", { headers: { Accept: "text/plain" } });
       setTtlText(ttl);
       setOut("Loaded full TTL graph below.");
     } catch (error) {
+      setTtlText("");
       const message = error instanceof Error ? error.message : String(error);
       setOut(`TTL view failed: ${message}`);
     } finally {

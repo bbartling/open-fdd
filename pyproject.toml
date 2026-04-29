@@ -34,6 +34,7 @@ dependencies = [
     "numpy",
     "pyyaml",
     "pydantic>=2.4,<3",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -59,6 +60,7 @@ dev = [
 [project.scripts]
 open-fdd-desktop = "open_fdd.desktop:main"
 open-fdd-desktop-bridge = "open_fdd.desktop_bridge:run_desktop_bridge"
+open-fdd-mcp-rag = "open_fdd.mcp_rag:run_mcp_rag"
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"

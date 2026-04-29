@@ -43,6 +43,7 @@ export function PointsTreePanel({
   pointFilter?: (point: ModelPoint) => boolean;
 }) {
   const groups = useMemo(() => {
+    const isUsableExternalId = (value: unknown) => String(value ?? "").trim().length > 0;
     const byEquip = new Map<string, Group>();
     const out: Group[] = [];
     const equipById = new Map<string, ModelEquipment>();
@@ -69,6 +70,7 @@ export function PointsTreePanel({
     };
 
     for (const point of points) {
+      if (!isUsableExternalId(point.external_id)) continue;
       if (String(point.site_id || "") !== String(selectedSiteId || "")) continue;
       if (pointFilter && !pointFilter(point)) continue;
       const eqId = String(point.equipment_id || "");

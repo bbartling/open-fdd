@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 from typing import Any, Protocol
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pandas as pd
@@ -122,6 +123,18 @@ def run_bacnet_scrape(
             devices_polled=0,
             points_polled=0,
         )
+    parsed_base = urllib.parse.urlparse(base)
+    if parsed_base.scheme not in {"http", "https"}:
+        return BacnetScrapeResult(
+            rows=0,
+            source="bacnet",
+            metrics=[],
+            storage_ref=None,
+            success=False,
+            error=f"Invalid or unsupported server URL scheme: {server_url}",
+            devices_polled=0,
+            points_polled=0,
+        )
 
     headers = {"Content-Type": "application/json", "accept": "application/json"}
     token = str(api_key or "").strip()
@@ -177,6 +190,12 @@ def run_bacnet_scrape(
             external_id = str(point.get("external_id") or "").strip()
             if not external_id:
                 continue
+            if external_id in row or external_id in point_meta:
+                namespaced = f"{external_id}_{device_instance}_{idx}"
+                errors.append(
+                    f"Duplicate external_id '{external_id}' for device,{device_instance} object={point.get('object_identifier')}; using '{namespaced}'."
+                )
+                external_id = namespaced
             raw_val = item.get("value") if isinstance(item, dict) else None
             val = _to_float(raw_val)
             if val is None:

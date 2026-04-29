@@ -759,7 +759,7 @@ expression: |
   & (normalize_cmd(Valve_Command) >= cooling_cmd_on_min)
 ```
 
-### Starter: OA damper too open in hot or very cold ambient
+### Starter: OA damper too open in hot (OAT > 70 F / 21.1 C) or cold (OAT < 40 F / 4.4 C) ambient
 
 This captures two common waste/comfort risk conditions:
 

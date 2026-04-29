@@ -378,11 +378,11 @@ class DesktopMainWindow:
         self.rules_start_dt = QDateTimeEdit()
         self.rules_start_dt.setCalendarPopup(True)
         self.rules_start_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.rules_start_dt.setDateTime(QDateTime.currentDateTime())
         self.rules_end_dt = QDateTimeEdit()
         self.rules_end_dt.setCalendarPopup(True)
         self.rules_end_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
-        self.rules_end_dt.setDateTime(QDateTime.currentDateTime())
+        self.rules_use_window = QCheckBox("Use time window")
+        self.rules_use_window.setChecked(False)
         bounds_btn = QPushButton("Use Data Bounds")
         bounds_btn.clicked.connect(self._on_rules_use_data_bounds)
         run_btn = QPushButton("Run Rules")
@@ -398,6 +398,7 @@ class DesktopMainWindow:
         row.addWidget(self.rules_start_dt)
         row.addWidget(QLabel("End"))
         row.addWidget(self.rules_end_dt)
+        row.addWidget(self.rules_use_window)
         row.addWidget(bounds_btn)
         row.addWidget(run_btn)
         lay.addLayout(row)
@@ -725,8 +726,12 @@ class DesktopMainWindow:
             except ValueError:
                 chunk = 0
             Qt = self._qt["Qt"]
-            start_ts = self.rules_start_dt.dateTime().toString(Qt.ISODate)
-            end_ts = self.rules_end_dt.dateTime().toString(Qt.ISODate)
+            if self.rules_use_window.isChecked():
+                start_ts = self.rules_start_dt.dateTime().toString(Qt.ISODate)
+                end_ts = self.rules_end_dt.dateTime().toString(Qt.ISODate)
+            else:
+                start_ts = ""
+                end_ts = ""
             self.rules_out.setPlainText("Running rule loop...")
             self._set_busy(True)
             self._run_in_background(
@@ -766,6 +771,7 @@ class DesktopMainWindow:
                 self.rules_start_dt.setDateTime(start_dt)
             if end_dt.isValid():
                 self.rules_end_dt.setDateTime(end_dt)
+            self.rules_use_window.setChecked(True)
             self.rules_out.setPlainText(
                 f"Loaded bounds for source '{source}' ({info['rows']} rows)\n"
                 f"Start: {self.rules_start_dt.dateTime().toString(Qt.ISODate)}\n"

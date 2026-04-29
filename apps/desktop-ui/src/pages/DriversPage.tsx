@@ -26,6 +26,15 @@ type OnboardConfig = {
   allow_synthetic: boolean;
 };
 
+type DriverHealthEntry = {
+  last_run: string;
+  rows: number;
+  success: boolean | null;
+  last_error: string;
+};
+
+type DriverHealthMap = Record<string, DriverHealthEntry>;
+
 export function DriversPage() {
   const { sites, selectedSiteId } = useSite();
   const [siteId, setSiteId] = useState("");
@@ -52,6 +61,7 @@ export function DriversPage() {
   const [onboardApiKey, setOnboardApiKey] = useState("");
   const [onboardApiKeySet, setOnboardApiKeySet] = useState(false);
   const [onboardAllowSynthetic, setOnboardAllowSynthetic] = useState(false);
+  const [driverHealth, setDriverHealth] = useState<DriverHealthMap>({});
 
   useEffect(() => {
     if (!siteId && selectedSiteId) {
@@ -65,10 +75,11 @@ export function DriversPage() {
 
   async function refreshConfigs() {
     try {
-      const [weatherCfg, bacnetCfg, onboardCfg] = await Promise.all([
+      const [weatherCfg, bacnetCfg, onboardCfg, health] = await Promise.all([
         desktopFetch<WeatherConfig>("/config/weather"),
         desktopFetch<BacnetConfig>("/config/bacnet"),
         desktopFetch<OnboardConfig>("/config/onboard"),
+        desktopFetch<DriverHealthMap>("/config/drivers/health"),
       ]);
       setWeather({
         latitude: weatherCfg.latitude ?? "",
@@ -89,19 +100,26 @@ export function DriversPage() {
       setOnboardLookbackHours(String(onboardCfg.lookback_hours || 24));
       setOnboardApiKeySet(Boolean(onboardCfg.api_key_set));
       setOnboardAllowSynthetic(Boolean(onboardCfg.allow_synthetic));
+      setDriverHealth(health || {});
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
 
   async function saveWeatherConfig() {
+    const latitude = Number(weather.latitude);
+    const longitude = Number(weather.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setStatus("Latitude and longitude must be valid numbers.");
+      return;
+    }
     try {
       await desktopFetch("/config/weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          latitude: Number(weather.latitude),
-          longitude: Number(weather.longitude),
+          latitude,
+          longitude,
           timezone: String(weather.timezone || "UTC"),
           base_url: String(weather.base_url || "https://archive-api.open-meteo.com/v1/archive"),
         }),
@@ -118,13 +136,19 @@ export function DriversPage() {
       setStatus("Select a site first.");
       return;
     }
+    const parsedDaysBack = Number(daysBack || "7");
+    if (!Number.isFinite(parsedDaysBack) || parsedDaysBack <= 0) {
+      setStatus("Days back must be a valid positive number.");
+      return;
+    }
     try {
       const out = await desktopFetch<{ rows: number; source: string }>("/ingest/weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site_id: effectiveSiteId, days_back: Number(daysBack || "7") }),
+        body: JSON.stringify({ site_id: effectiveSiteId, days_back: parsedDaysBack }),
       });
       setStatus(`Weather ingest complete: rows=${out.rows}, source=${out.source}.`);
+      await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -132,13 +156,18 @@ export function DriversPage() {
 
   async function saveBacnetConfig() {
     const effectiveSiteId = siteId || selectedSiteId || "";
+    const parsedInterval = Number(bacnetInterval || "300");
+    if (!Number.isFinite(parsedInterval) || parsedInterval < 5) {
+      setStatus("BACnet polling interval must be a valid number >= 5 seconds.");
+      return;
+    }
     try {
       const out = await desktopFetch<BacnetConfig>("/config/bacnet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled: bacnetEnabled,
-          interval_seconds: Number(bacnetInterval || "300"),
+          interval_seconds: parsedInterval,
           site_id: effectiveSiteId,
           server_url: bacnetServerUrl.trim(),
           api_key: bacnetApiKey.trim() || undefined,
@@ -148,6 +177,7 @@ export function DriversPage() {
       setBacnetApiKeySet(Boolean(out.api_key_set));
       setBacnetLastError(String(out.last_error || ""));
       setStatus("Saved BACnet driver config.");
+      await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -177,6 +207,11 @@ export function DriversPage() {
   }
 
   async function saveOnboardConfig() {
+    const parsedLookback = Number(onboardLookbackHours || "24");
+    if (!Number.isFinite(parsedLookback) || parsedLookback < 1) {
+      setStatus("Onboard lookback hours must be a valid number >= 1.");
+      return;
+    }
     try {
       const out = await desktopFetch<OnboardConfig>("/config/onboard", {
         method: "POST",
@@ -184,7 +219,7 @@ export function DriversPage() {
         body: JSON.stringify({
           base_url: onboardBaseUrl.trim(),
           building_ids: onboardBuildingIds.trim(),
-          lookback_hours: Number(onboardLookbackHours || "24"),
+          lookback_hours: parsedLookback,
           api_key: onboardApiKey.trim() || undefined,
           allow_synthetic: onboardAllowSynthetic,
         }),
@@ -192,6 +227,7 @@ export function DriversPage() {
       setOnboardApiKey("");
       setOnboardApiKeySet(Boolean(out.api_key_set));
       setStatus("Saved Onboard driver config.");
+      await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -214,6 +250,7 @@ export function DriversPage() {
           ? `Onboard ingest complete: rows=${out.rows}, source=${out.source}.`
           : `Onboard ingest failed: ${out.error || "Missing credentials or source error."}`,
       );
+      await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -236,6 +273,25 @@ export function DriversPage() {
               </option>
             ))}
           </select>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <h3 className="title" style={{ marginTop: 0 }}>Driver health</h3>
+          <div className="grid-two">
+            {["csv", "weather", "bacnet", "onboard"].map((driver) => {
+              const h = driverHealth[driver];
+              return (
+                <div key={driver} className="card" style={{ padding: 10 }}>
+                  <strong style={{ textTransform: "uppercase" }}>{driver}</strong>
+                  <div style={{ fontSize: 13, marginTop: 6 }}>
+                    <div>Last run: {h?.last_run ? new Date(h.last_run).toLocaleString() : "Never"}</div>
+                    <div>Rows ingested: {typeof h?.rows === "number" ? h.rows : 0}</div>
+                    <div>Status: {h?.success === null || h?.success === undefined ? "Unknown" : h.success ? "OK" : "Error"}</div>
+                    <div>Last error: {h?.last_error || "-"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -300,7 +356,12 @@ export function DriversPage() {
           </div>
           <div>
             <label>API key (optional to update)</label>
-            <input value={bacnetApiKey} onChange={(e) => setBacnetApiKey(e.target.value)} placeholder={bacnetApiKeySet ? "Saved key present" : "Paste token"} />
+            <input
+              type="password"
+              value={bacnetApiKey}
+              onChange={(e) => setBacnetApiKey(e.target.value)}
+              placeholder={bacnetApiKeySet ? "Saved key present" : "Paste token"}
+            />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -336,6 +397,7 @@ export function DriversPage() {
           <div>
             <label>API key (optional to update)</label>
             <input
+              type="password"
               value={onboardApiKey}
               onChange={(e) => setOnboardApiKey(e.target.value)}
               placeholder={onboardApiKeySet ? "Saved key present" : "Paste token"}

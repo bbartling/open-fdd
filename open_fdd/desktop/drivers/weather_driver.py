@@ -29,6 +29,9 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
             end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
             start = end - timedelta(days=max(1, int(days_back)))
             base_url = os.getenv("OFDD_OPEN_METEO_BASE_URL", "https://archive-api.open-meteo.com/v1/archive").strip()
+            parsed_base = urllib.parse.urlparse(base_url)
+            if parsed_base.scheme not in {"http", "https"}:
+                raise ValueError(f"Invalid Open-Meteo base URL scheme: {base_url}")
             params = {
                 "latitude": float(lat),
                 "longitude": float(lon),
@@ -45,9 +48,16 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
             ts = hourly.get("time") or []
             temp = hourly.get("temperature_2m") or []
             rh = hourly.get("relative_humidity_2m") or []
+            utc_offset_seconds = body.get("utc_offset_seconds") if isinstance(body, dict) else None
+            if utc_offset_seconds is not None:
+                parsed_ts = pd.to_datetime(ts, errors="coerce")
+                offset = timezone(timedelta(seconds=int(utc_offset_seconds)))
+                parsed_ts = parsed_ts.dt.tz_localize(offset).dt.tz_convert("UTC")
+            else:
+                parsed_ts = pd.to_datetime(ts, errors="coerce", utc=True)
             frame = pd.DataFrame(
                 {
-                    "timestamp": pd.to_datetime(ts, errors="coerce", utc=True),
+                    "timestamp": parsed_ts,
                     "outside_air_temp_c": pd.to_numeric(temp, errors="coerce"),
                     "outside_air_rh_pct": pd.to_numeric(rh, errors="coerce"),
                 }

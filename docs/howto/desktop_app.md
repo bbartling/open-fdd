@@ -17,6 +17,24 @@ pip install "open-fdd[desktop]"
 
 ### Tauri + React desktop UI
 
+Recommended launcher on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
+```
+
+Daily startup (without reinstalling deps):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
+```
+
+`bootstrap-desktop.ps1` launches both services by default:
+- terminal 1: `open-fdd-desktop-bridge`
+- terminal 2: `npm run tauri dev` in `apps/desktop-ui`
+- bridge Swagger: `http://127.0.0.1:8765/docs`
+- bridge OpenAPI: `http://127.0.0.1:8765/openapi.json`
+
 ```bash
 # terminal 1
 open-fdd-desktop-bridge
@@ -27,6 +45,15 @@ npm install
 npm run dev
 ```
 
+Packaging:
+
+```bash
+cd apps/desktop-ui
+npm run tauri build
+```
+
+macOS/Linux bash bootstrap equivalent is planned.
+
 ### Desktop bridge Swagger/OpenAPI
 
 Once bridge is running locally:
@@ -35,6 +62,32 @@ Once bridge is running locally:
 - OpenAPI JSON: `http://127.0.0.1:8765/openapi.json`
 
 Use Swagger for endpoint discovery, request body examples, and quick local API testing for OpenClaw or other assistants.
+
+## MCP RAG service (OpenClaw/agents)
+
+`open-fdd` includes an MCP-style RAG HTTP service that can index local `docs/` and proxy driver/model tools to the desktop bridge API.
+
+Build the local retrieval index:
+
+```bash
+python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
+```
+
+Run MCP RAG locally:
+
+```bash
+open-fdd-mcp-rag
+# serves on http://127.0.0.1:8090
+```
+
+Key env vars:
+- `OFDD_MCP_OFDD_API_URL` (default `http://127.0.0.1:8765`)
+- `OFDD_MCP_OFDD_API_KEY`
+- `OFDD_MCP_ENABLE_ACTION_TOOLS=true` (required for write/config/ingest proxy tools)
+- `OFDD_MCP_RAG_INDEX_PATH` (default `./stack/mcp-rag/index/rag_index.json`)
+
+Docker image scaffold:
+- `stack/Dockerfile.mcp_rag`
 
 ## Data ingest quickstart (desktop bridge API)
 
@@ -81,6 +134,16 @@ curl -X POST http://127.0.0.1:8765/ingest/weather \
 ```
 
 ### 4) Onboard ingest
+
+Prerequisite: configure Onboard first (fresh desktop defaults are usually not enough):
+
+```bash
+curl -X POST http://127.0.0.1:8765/config/onboard \
+  -H "Content-Type: application/json" \
+  -d "{\"base_url\":\"https://api.onboarddata.io\",\"building_ids\":\"123,456\",\"api_key\":\"<token>\",\"lookback_hours\":24,\"allow_synthetic\":false}"
+```
+
+Required onboarding keys are `base_url`, `building_ids`, and `api_key` (either via `/config/onboard` or env vars) before `/ingest/onboard`.
 
 ```bash
 curl -X POST http://127.0.0.1:8765/ingest/onboard \
@@ -136,7 +199,7 @@ If import fails, fix timestamp formatting and retry.
 
 ## Feather-first ingestion
 
-- CSV, weather, and onboard drivers write pandas frames into timestamped Feather files under `open-fdd-desktop/feather_store`.
+- CSV, weather, onboard, and BACnet drivers write pandas frames into timestamped Feather files under `open-fdd-desktop/feather_store`.
 - Feather path layout is source/site scoped:
   - `open-fdd-desktop/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
 - Storage remains append/chunk based (many files per site/source) for reliability and backfill workflows.

@@ -135,7 +135,12 @@ class SqliteConnector:
                     utc=True,
                 )
             frame = frame[frame[ts_col].notna()].copy()
-            metrics = [str(c) for c in frame.columns if str(c) != ts_col]
+            if ts_col != "timestamp":
+                frame = frame.rename(columns={ts_col: "timestamp"})
+                ts_col = "timestamp"
+            ordered = [ts_col] + [c for c in frame.columns if c != ts_col]
+            frame = frame[ordered]
+            metrics = [str(c) for c in frame.columns if str(c) != "timestamp"]
             rows = len(frame.index)
             dropped_rows = original_len - rows
         out = self.write_frame(source=source, site_id=site_id, frame=frame)

@@ -40,3 +40,16 @@ def test_normalize_known_timezone_abbreviations_rewrites_suffix() -> None:
     out = normalize_known_timezone_abbreviations(series)
     assert str(out.iloc[0]).endswith("-04:00")
     assert str(out.iloc[1]) == "2026-03-18T21:00:00Z"
+
+
+def test_timezone_normalization_handles_na_and_blank_values() -> None:
+    frame = pd.DataFrame({"timestamp": ["18-Mar-26 9:00:00 PM EDT", pd.NA, ""]})
+    normalized = normalize_known_timezone_abbreviations(frame["timestamp"])
+    assert str(normalized.iloc[0]).endswith("-04:00")
+    assert pd.isna(normalized.iloc[1])
+    parsed = parse_timestamp_series(
+        pd.DataFrame({"timestamp": normalized}),
+        timestamp_col="timestamp",
+        policy=TimestampParsePolicy(min_valid_ratio=0.3, normalize_known_tz_abbreviations=True),
+    )
+    assert parsed.notna().sum() == 1
