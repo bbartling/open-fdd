@@ -69,3 +69,25 @@ def test_mcp_action_tool_blocked_when_disabled() -> None:
     assert response.status_code == 403
     assert "disabled" in str(response.json().get("detail", "")).lower()
 
+
+def test_mcp_health_hints_loopback_and_typo_warning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    idx_path = _write_index(tmp_path)
+    monkeypatch.setattr(mcp_app_module, "INDEX_PATH", idx_path)
+    monkeypatch.setattr(mcp_app_module, "_idx", None)
+    monkeypatch.setattr(mcp_app_module, "OFDD_API_URL", "http://127.0.0.1:8765")
+    client = TestClient(mcp_api)
+    res = client.get("/health")
+    assert res.status_code == 200
+    j = res.json()
+    assert j.get("ok") is True
+    assert "127.0.0.1:8090" in str(j.get("mcp_listen_hint", ""))
+    assert "url_warnings" not in j
+
+    monkeypatch.setattr(mcp_app_module, "OFDD_API_URL", "http://127.0.1:8765")
+    monkeypatch.setattr(mcp_app_module, "_idx", None)
+    res2 = client.get("/health")
+    assert res2.status_code == 200
+    j2 = res2.json()
+    assert j2.get("url_warnings")
+    assert "127.0.0.1" in j2["url_warnings"][0]
+

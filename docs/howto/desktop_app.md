@@ -199,6 +199,8 @@ curl -X POST http://127.0.0.1:8765/ingest/onboard \
 
 ### 5) BACnet ingest (one-shot) and polling
 
+**OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_BACNET_DIY_SERVER.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_BACNET_DIY_SERVER.md) in the repo.
+
 ```bash
 # one-shot pull
 curl -X POST http://127.0.0.1:8765/ingest/bacnet \
