@@ -27,7 +27,13 @@ Many images set `NODE_ENV=production`, which makes `npm ci` / `npm install` **sk
 
 ### Bridge URL typo
 
-Use **`127.0.0.1`** (four octets), not `127.0.1` — a typo breaks the UI’s `VITE_DESKTOP_BRIDGE_BASE` and fetches fail.
+Use **`127.0.0.1`** (four octets), not `127.0.1` — a typo breaks the UI’s `VITE_DESKTOP_BRIDGE_BASE` and fetches fail. The same typo on MCP (**`http://127.0.1:8090`**) makes **`curl` and health checks fail**; always use **`http://127.0.0.1:8090`**.
+
+### What the OpenClaw gateway container must do
+
+1. **Reach itself on loopback:** run smoke `curl` against **`127.0.0.1`** (bridge **8765**, MCP **8090**, UI **8080**) from **inside** the same container where those processes listen.
+2. **Publish ports to the host** if a human uses a browser on Windows/Mac: map **`-p 8765:8765 -p 8090:8090 -p 8080:8080`** (or your chosen host ports) so **`http://localhost:8080`** hits the UI and **`http://localhost:8765`** hits the bridge when the UI was built with a bridge base the browser can reach (often `http://localhost:8765` or `http://host.docker.internal:8765` — see desktop docs).
+3. **Do not** put **`127.0.1`** in any URL or env var (`OFDD_MCP_OFDD_API_URL`, prompts, or runbooks).
 
 ### `docker cp` from Windows → Linux
 
@@ -67,8 +73,9 @@ Do this in order:
 
 5) Health checks (must succeed)
    - curl -sS http://127.0.0.1:8765/health
-   - curl -sS http://127.0.0.1:8090/health
+   - curl -sS http://127.0.0.1:8090/health   (MCP: MUST be 127.0.0.1 — http://127.0.1:8090 is invalid and will fail)
    - curl -sS http://127.0.0.1:8080/ | head -n 5   (should return HTML for the React app)
+   - MCP /health JSON may include mcp_listen_hint and url_warnings if OFDD_MCP_OFDD_API_URL was mistyped.
 
 6) If running inside Docker, ensure ports 8765, 8090, 8080 are published to the host (-p 8765:8765 -p 8090:8090 -p 8080:8080) and tell the human the host URLs to open the dashboard (e.g. http://localhost:8080).
 
@@ -112,3 +119,5 @@ Deliverable: a short checklist table (step → pass/fail), any defects to open a
 Logs in repo root: `.openfdd-bridge.log`, `.openfdd-mcp.log`, `.openfdd-ui.log`.
 
 Bootstrap help: `bash scripts/bootstrap-desktop.sh --help`
+
+**Phase 2 (git pull, dashboard CSV, merged series, modeling + FDD):** [OPENCLAW_DASHBOARD_PHASE2_PROMPT.md](OPENCLAW_DASHBOARD_PHASE2_PROMPT.md).

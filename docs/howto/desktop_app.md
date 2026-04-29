@@ -127,6 +127,7 @@ open-fdd-mcp-rag
 ```
 
 Key env vars:
+- `OFDD_MCP_LISTEN_HOST` / `OFDD_MCP_LISTEN_PORT` (defaults `127.0.0.1` / `8090`; bind address for `open-fdd-mcp-rag` and for `/health`’s `mcp_listen_hint`)
 - `OFDD_MCP_OFDD_API_URL` (default `http://127.0.0.1:8765`)
 - `OFDD_MCP_OFDD_API_KEY`
 - `OFDD_MCP_ENABLE_ACTION_TOOLS=true` (required for write/config/ingest proxy tools)
@@ -198,6 +199,8 @@ curl -X POST http://127.0.0.1:8765/ingest/onboard \
 ```
 
 ### 5) BACnet ingest (one-shot) and polling
+
+**OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_BACNET_DIY_SERVER.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_BACNET_DIY_SERVER.md) in the repo.
 
 ```bash
 # one-shot pull

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from pathlib import Path
 from typing import Annotated, Any
@@ -16,6 +17,40 @@ from .retrieval import RagIndex
 INDEX_PATH = Path(os.getenv("OFDD_MCP_RAG_INDEX_PATH", "./stack/mcp-rag/index/rag_index.json"))
 OFDD_API_URL = os.getenv("OFDD_MCP_OFDD_API_URL", "http://127.0.0.1:8765").rstrip("/")
 OFDD_API_KEY = os.getenv("OFDD_MCP_OFDD_API_KEY", "")
+
+
+def _loopback_typo_warning(url: str) -> str | None:
+    """
+    Detect the common typo ``127.0.1`` (missing ``.0`` before the final octet).
+
+    Valid loopback is ``127.0.0.1``. ``http://127.0.1:8090`` fails DNS/connect in most setups.
+    """
+    u = str(url or "").strip()
+    if not u:
+        return None
+    # e.g. http://127.0.1:8765 — third octet is "1" immediately followed by :port (not .0.1)
+    if re.search(r"://127\.0\.1:\d", u):
+        return (
+            "bridge_url looks like a typo: use 127.0.0.1 (four octets), "
+            "e.g. http://127.0.0.1:8765 — not http://127.0.1:8765"
+        )
+    return None
+
+
+def mcp_listen_host() -> str:
+    """Bind host for MCP (must match ``run_mcp_rag`` / health hint)."""
+    h = os.getenv("OFDD_MCP_LISTEN_HOST", "127.0.0.1").strip()
+    return h or "127.0.0.1"
+
+
+def mcp_listen_port() -> int:
+    raw = os.getenv("OFDD_MCP_LISTEN_PORT", "8090")
+    try:
+        return int(raw)
+    except ValueError:
+        return 8090
+
+
 ENABLE_ACTION_TOOLS = os.getenv("OFDD_MCP_ENABLE_ACTION_TOOLS", "false").lower() == "true"
 _timeout_value = os.getenv("OFDD_MCP_HTTP_TIMEOUT_SEC")
 try:
@@ -141,14 +176,20 @@ def health() -> dict[str, Any] | JSONResponse:
         "index_path": str(INDEX_PATH),
         "action_tools_enabled": ENABLE_ACTION_TOOLS,
         "bridge_url": OFDD_API_URL,
+        # Hint uses OFDD_MCP_LISTEN_HOST / OFDD_MCP_LISTEN_PORT (defaults 127.0.0.1:8090).
+        "mcp_listen_hint": (
+            f"This MCP service: curl http://{mcp_listen_host()}:{mcp_listen_port()}/health "
+            "(use 127.0.0.1 in URLs, not 127.0.1)."
+        ),
     }
+    typo = _loopback_typo_warning(OFDD_API_URL)
+    if typo:
+        body["url_warnings"] = [typo]
     try:
         _load_index()
     except HTTPException as exc:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"ok": False, **body, "error": str(exc.detail)},
-        )
+        err_body = {"ok": False, **body, "error": str(exc.detail)}
+        return JSONResponse(status_code=exc.status_code, content=err_body)
     return {"ok": True, **body}
 
 
@@ -270,9 +311,11 @@ def sparql_validate(req: SparqlRequest) -> dict[str, Any]:
     return _json_request("POST", "/data-model/sparql", body={"query": req.query})
 
 
-def run_mcp_rag(host: str = "127.0.0.1", port: int = 8090) -> None:
+def run_mcp_rag(host: str | None = None, port: int | None = None) -> None:
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    bind_host = host if host is not None else mcp_listen_host()
+    bind_port = port if port is not None else mcp_listen_port()
+    uvicorn.run(app, host=bind_host, port=bind_port, log_level="info")
 
 

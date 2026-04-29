@@ -105,6 +105,17 @@ def test_ingest_service_time_bounds_and_window_filter(tmp_path: Path) -> None:
     assert [float(v) for v in window["sat"].tolist()] == [55.0, 56.0]
 
 
+def test_load_merged_sources_frame_window_empty_sources_returns_tuple(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("HQ Empty merge")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    merged, used = ingest.load_merged_sources_frame_window(site_id=site["id"], sources=[])
+    assert merged.empty
+    assert used == []
+
+
 def test_load_merged_sources_frame_window_outer_join(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     model_store = ModelStore(path=tmp_path / "model.json")
@@ -134,7 +145,7 @@ def test_load_merged_sources_frame_window_outer_join(tmp_path: Path) -> None:
         site_id=site["id"],
         sources=["csv", "weather"],
     )
-    assert set(used) == {"csv", "weather"}
+    assert used == ["csv", "weather"]
     assert "sat_csv" in merged.columns
     assert "oat_weather" in merged.columns
     assert len(merged) == 2

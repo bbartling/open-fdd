@@ -16,6 +16,13 @@ from open_fdd.desktop.services.time_utils import infer_timestamp_column
 DEFAULT_SITE_DRIVER_SOURCES: tuple[str, ...] = ("csv", "weather", "onboard", "bacnet")
 
 
+def _normalize_timestamp_for_merge(df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
+    """UTC-coerce timestamp column and drop NaT (same as multi-source merge path)."""
+    out = df.copy()
+    out[timestamp_col] = pd.to_datetime(out[timestamp_col], utc=True, errors="coerce")
+    return out[out[timestamp_col].notna()].copy()
+
+
 def merge_site_frames_on_timestamp(
     parts: Iterable[tuple[str, pd.DataFrame]],
     *,
@@ -51,7 +58,8 @@ def merge_site_frames_on_timestamp(
         tc = infer_timestamp_column(df)
         if tc != timestamp_col and tc in df.columns:
             df = df.rename(columns={tc: timestamp_col})
-        out = df.sort_values(timestamp_col).reset_index(drop=True)
+        out = _normalize_timestamp_for_merge(df, timestamp_col)
+        out = out.sort_values(timestamp_col).reset_index(drop=True)
         return out, [src]
 
     how = join_how if join_how in ("inner", "left", "outer", "right") else "outer"
@@ -61,8 +69,7 @@ def merge_site_frames_on_timestamp(
         tc = infer_timestamp_column(work)
         if tc != timestamp_col:
             work = work.rename(columns={tc: timestamp_col})
-        work[timestamp_col] = pd.to_datetime(work[timestamp_col], utc=True, errors="coerce")
-        work = work[work[timestamp_col].notna()].copy()
+        work = _normalize_timestamp_for_merge(work, timestamp_col)
         rename_map = {c: f"{c}_{src}" for c in work.columns if c != timestamp_col}
         work = work.rename(columns=rename_map)
         if merged is None:
