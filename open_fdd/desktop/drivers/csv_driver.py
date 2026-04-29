@@ -5,6 +5,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from open_fdd.desktop.services.time_utils import (
+    infer_timestamp_column,
+    normalize_known_timezone_abbreviations,
+    parse_timestamp_series,
+)
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
 
@@ -15,16 +20,6 @@ class CsvIngestResult:
     file_path: Path
     timestamp_column: str
     metric_columns: list[str]
-
-
-def infer_timestamp_column(columns: list[str]) -> str:
-    for col in columns:
-        if str(col).strip().casefold() == "timestamp":
-            return str(col)
-    for col in columns:
-        if "timestamp" in str(col).strip().casefold():
-            return str(col)
-    raise ValueError("CSV missing timestamp column")
 
 
 def ingest_csv_to_feather(
@@ -38,9 +33,13 @@ def ingest_csv_to_feather(
     if frame.empty:
         out = store.write_frame(source=source, site_id=site_id, frame=frame)
         return CsvIngestResult(rows=0, dropped_rows=0, file_path=out, timestamp_column="", metric_columns=[])
-    ts_col = infer_timestamp_column([str(c) for c in frame.columns])
+    ts_col = infer_timestamp_column(frame, candidate_names=("timestamp", "time", "date", "datetime"))
     original_len = len(frame.index)
-    frame[ts_col] = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+    try:
+        frame[ts_col] = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.35)
+    except ValueError:
+        # Keep ingest resilient for messy CSV files: fallback to best-effort parse and drop bad rows.
+        frame[ts_col] = pd.to_datetime(normalize_known_timezone_abbreviations(frame[ts_col]), errors="coerce", utc=True)
     frame = frame[frame[ts_col].notna()].copy()
     kept_len = len(frame.index)
     metric_columns = [str(c) for c in frame.columns if str(c) != ts_col]

@@ -15,19 +15,6 @@ pip install "open-fdd[desktop]"
 
 ## Launch
 
-### Python shell
-
-```python
-import open_fdd
-open_fdd.GUI()
-```
-
-### CLI
-
-```bash
-open-fdd-desktop
-```
-
 ### Tauri + React desktop UI
 
 ```bash
@@ -39,6 +26,106 @@ cd apps/desktop-ui
 npm install
 npm run dev
 ```
+
+### Desktop bridge Swagger/OpenAPI
+
+Once bridge is running locally:
+
+- Swagger UI: `http://127.0.0.1:8765/docs`
+- OpenAPI JSON: `http://127.0.0.1:8765/openapi.json`
+
+Use Swagger for endpoint discovery, request body examples, and quick local API testing for OpenClaw or other assistants.
+
+## Data ingest quickstart (desktop bridge API)
+
+Base URL:
+
+- `http://127.0.0.1:8765`
+
+### 1) Create or list sites
+
+```bash
+curl http://127.0.0.1:8765/sites
+curl -X POST http://127.0.0.1:8765/sites -H "Content-Type: application/json" -d "{\"name\":\"HQ\"}"
+```
+
+### 2) CSV ingest (file path or upload)
+
+```bash
+# direct path
+curl -X POST http://127.0.0.1:8765/ingest/csv \
+  -H "Content-Type: application/json" \
+  -d "{\"site_id\":\"<site-id>\",\"source\":\"csv\",\"csv_path\":\"C:/data/site.csv\"}"
+```
+
+```bash
+# multipart upload
+curl -X POST http://127.0.0.1:8765/ingest/csv/upload \
+  -F "site_id=<site-id>" \
+  -F "source=csv" \
+  -F "file=@C:/data/site.csv"
+```
+
+### 3) Open-Meteo weather ingest
+
+```bash
+# set weather config once
+curl -X POST http://127.0.0.1:8765/config/weather \
+  -H "Content-Type: application/json" \
+  -d "{\"latitude\":42.36,\"longitude\":-71.06,\"timezone\":\"America/New_York\",\"base_url\":\"https://archive-api.open-meteo.com/v1/archive\"}"
+
+# ingest weather rows
+curl -X POST http://127.0.0.1:8765/ingest/weather \
+  -H "Content-Type: application/json" \
+  -d "{\"site_id\":\"<site-id>\",\"days_back\":7}"
+```
+
+### 4) Onboard ingest
+
+```bash
+curl -X POST http://127.0.0.1:8765/ingest/onboard \
+  -H "Content-Type: application/json" \
+  -d "{\"site_id\":\"<site-id>\"}"
+```
+
+### 5) BACnet ingest (one-shot) and polling
+
+```bash
+# one-shot pull
+curl -X POST http://127.0.0.1:8765/ingest/bacnet \
+  -H "Content-Type: application/json" \
+  -d "{\"site_id\":\"<site-id>\",\"server_url\":\"http://192.168.204.18:8080\",\"api_key\":\"<token>\"}"
+
+# enable 5-minute poll loop
+curl -X POST http://127.0.0.1:8765/config/bacnet \
+  -H "Content-Type: application/json" \
+  -d "{\"enabled\":true,\"interval_seconds\":300,\"site_id\":\"<site-id>\",\"server_url\":\"http://192.168.204.18:8080\",\"api_key\":\"<token>\"}"
+```
+
+### 6) Join sources for analysis/plots
+
+```bash
+curl -X POST http://127.0.0.1:8765/timeseries/query \
+  -H "Content-Type: application/json" \
+  -d "{\"site_id\":\"<site-id>\",\"sources\":[\"csv\",\"weather\",\"onboard\",\"bacnet\"],\"join_on_timestamp\":true,\"join_how\":\"outer\",\"limit\":10000}"
+```
+
+## CSV timestamp parsing expectations
+
+Desktop CSV ingest is strict enough to catch bad files but flexible on common field formats:
+
+- Timestamp column auto-detection prefers `timestamp`, then other time/date-like headers.
+- Known timezone abbreviations like `EDT`, `EST`, `CDT`, `PDT`, etc. are normalized to UTC offsets before parsing.
+- Parsing uses UTC-normalized datetimes and drops rows with unparseable timestamps.
+- A minimum valid timestamp ratio is enforced; files with mostly bad timestamps return a clear validation error instead of silently importing junk data.
+
+Recommended CSV practice:
+
+- Include a dedicated timestamp column (`timestamp` preferred).
+- Use ISO 8601 when possible (example: `2026-03-18T21:00:00-04:00`).
+- Avoid mixed timestamp formats inside one file.
+
+If import fails, fix timestamp formatting and retry.
 
 ## Data model + BRICK
 
@@ -52,6 +139,8 @@ npm run dev
 - CSV, weather, and onboard drivers write pandas frames into timestamped Feather files under `open-fdd-desktop/feather_store`.
 - Feather path layout is source/site scoped:
   - `open-fdd-desktop/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
+- Storage remains append/chunk based (many files per site/source) for reliability and backfill workflows.
+- The desktop bridge can still present a site-level joined view for plotting (multi-source virtual merge by timestamp), so operators get a single logical trend frame without rewriting raw files.
 - Time-series reads for rules concatenate all Feather files for a selected `(source, site_id)` pair.
 - Point metadata supports external refs like:
   - `feather://<source>/<site_id>/<metric>`

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { bridgeBase, desktopFetch } from "../lib/api";
+import { bridgeBase } from "../lib/api";
 import { useOptionalSite } from "../contexts/site-context";
 
 type IngestResponse = {
@@ -65,8 +65,15 @@ export function CsvImportPage() {
       <h2 className="title">CSV Import</h2>
       <div className="grid-two">
         <div>
-          <label>Site ID</label>
-          <input value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder="site id" />
+          <label>Site</label>
+          <select value={siteId || siteContext?.selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
+            {(siteContext?.sites ?? []).length === 0 && <option value="">No sites</option>}
+            {(siteContext?.sites ?? []).map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
           {!siteId && siteContext?.selectedSiteId && (
             <small className="muted">Using selected site from top bar.</small>
           )}
@@ -78,7 +85,7 @@ export function CsvImportPage() {
       </div>
       <div style={{ marginBottom: 10 }}>
         <label style={{ display: "inline-block", cursor: "pointer" }}>
-          <span style={{ display: "inline-block", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 9 }}>
+          <span className="file-picker-btn">
             Choose CSV file
           </span>
           <input

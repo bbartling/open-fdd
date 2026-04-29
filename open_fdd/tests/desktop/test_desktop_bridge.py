@@ -17,6 +17,10 @@ def test_desktop_bridge_health() -> None:
         res = client.get("/health")
         assert res.status_code == 200
         assert res.json().get("status") == "ok"
+        docs = client.get("/docs")
+        assert docs.status_code == 200
+        openapi = client.get("/openapi.json")
+        assert openapi.status_code == 200
 
 
 def test_desktop_bridge_sites_and_sparql() -> None:
@@ -187,6 +191,33 @@ def test_desktop_bridge_weather_config_roundtrip() -> None:
     body = get_resp.json()
     assert str(body.get("latitude")) != ""
     assert str(body.get("longitude")) != ""
+
+
+def test_desktop_bridge_onboard_config_roundtrip() -> None:
+    app = create_app()
+    client = TestClient(app)
+    set_resp = client.post(
+        "/config/onboard",
+        json={
+            "base_url": "https://api.onboarddata.io",
+            "building_ids": "123,456",
+            "lookback_hours": 12,
+            "api_key": "test-token",
+            "allow_synthetic": False,
+        },
+    )
+    assert set_resp.status_code == 200
+    body = set_resp.json()
+    assert str(body.get("base_url", "")).startswith("https://")
+    assert str(body.get("building_ids")) == "123,456"
+    assert int(body.get("lookback_hours", 0)) == 12
+    assert body.get("api_key_set") is True
+
+    get_resp = client.get("/config/onboard")
+    assert get_resp.status_code == 200
+    fetched = get_resp.json()
+    assert str(fetched.get("building_ids")) == "123,456"
+    assert int(fetched.get("lookback_hours", 0)) == 12
 
 
 def test_desktop_bridge_sparql_endpoints() -> None:

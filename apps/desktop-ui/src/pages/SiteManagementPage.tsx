@@ -78,8 +78,8 @@ export function SiteManagementPage() {
       setSiteName("");
       setStatus(
         ttlWarning
-          ? `Created site ${site.name} (${site.id.slice(0, 8)}). TTL warning: ${ttlWarning}`
-          : `Created site ${site.name} (${site.id.slice(0, 8)}), TTL synced.`,
+          ? `Created site ${site.name}. TTL warning: ${ttlWarning}`
+          : `Created site ${site.name}, TTL synced.`,
       );
       setSelectedSiteId(site.id);
       void refresh();
@@ -94,8 +94,8 @@ export function SiteManagementPage() {
       const ttlWarning = extractTtlWarning(out);
       setStatus(
         ttlWarning
-          ? `Deleted site ${id.slice(0, 8)}. TTL warning: ${ttlWarning}`
-          : `Deleted site ${id.slice(0, 8)}, TTL synced.`,
+          ? `Deleted site. TTL warning: ${ttlWarning}`
+          : "Deleted site, TTL synced.",
       );
       if (selectedSiteId === id) {
         setSelectedSiteId("");
@@ -128,7 +128,6 @@ export function SiteManagementPage() {
             <div key={site.id} className={`site-row ${selectedSiteId === site.id ? "active" : ""}`}>
               <button className="site-select" onClick={() => setSelectedSiteId(site.id)}>
                 <strong>{site.name}</strong>
-                <span className="muted">{site.id}</span>
               </button>
               <button className="danger-btn" onClick={() => void onDelete(site.id)}>
                 Delete

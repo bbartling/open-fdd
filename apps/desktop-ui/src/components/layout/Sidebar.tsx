@@ -4,16 +4,14 @@ import { useTheme } from "../../contexts/theme-context";
 const navItems = [
   { to: "/site-management", icon: "🏢", label: "Site Management" },
   { to: "/", icon: "📊", label: "Overview", end: true },
-  { to: "/config", icon: "⚙️", label: "OpenFDD Config" },
   { to: "/csv-import", icon: "📤", label: "CSV Import" },
   { to: "/rule-setup", icon: "🧩", label: "FDD Rule Setup" },
-  { to: "/bacnet-tools", icon: "📡", label: "BACnet tools" },
+  { to: "/drivers", icon: "🧰", label: "Drivers" },
   { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
   { to: "/energy-engineering", icon: "⚡", label: "Energy Engineering" },
   { to: "/data-model-testing", icon: "🔎", label: "Data Model Testing" },
-  { to: "/faults", icon: "🚨", label: "Faults" },
-  { to: "/plots", icon: "📈", label: "Plots" },
   { to: "/weather", icon: "🌤️", label: "Weather data" },
+  { to: "/plots", icon: "📈", label: "Plots" },
   { to: "/analytics", icon: "📉", label: "Analytics" },
   { to: "/system", icon: "🖥️", label: "System resources" },
 ];

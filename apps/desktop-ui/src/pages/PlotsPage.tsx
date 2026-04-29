@@ -1,11 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { desktopFetch } from "../lib/api";
-import { useOptionalSite } from "../contexts/site-context";
+import { useSite } from "../contexts/site-context";
 import { purgeTimeseries } from "../lib/crud-api";
+import { PointsTreePanel } from "../components/site/PointsTreePanel";
 
 type PlotFrameResponse = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+};
+
+type ModelExportResponse = {
+  equipment: Array<{ id?: string; site_id?: string; name?: string; equipment_type?: string | null }>;
+  points: Array<{
+    id?: string;
+    site_id?: string;
+    equipment_id?: string | null;
+    external_id?: string;
+    brick_type?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }>;
 };
 
 type PlotMode = "lines" | "points" | "both";
@@ -53,43 +66,81 @@ function PlotlyCanvas({
 }
 
 export function PlotsPage() {
-  const siteContext = useOptionalSite();
-  const [siteId, setSiteId] = useState(() => siteContext?.selectedSiteId ?? "");
-  const [source, setSource] = useState("csv");
+  const siteContext = useSite();
+  const [siteId, setSiteId] = useState(() => siteContext.selectedSiteId ?? "");
+  const [source, setSource] = useState("all");
   const [plotMode, setPlotMode] = useState<PlotMode>("lines");
   const [frame, setFrame] = useState<PlotFrameResponse | null>(null);
   const [yColumns, setYColumns] = useState<string[]>([]);
   const [status, setStatus] = useState("Load data, choose columns, then plot.");
   const [prunePoints, setPrunePoints] = useState(false);
   const [purging, setPurging] = useState(false);
+  const [modelPoints, setModelPoints] = useState<ModelExportResponse["points"]>([]);
+  const [modelEquipment, setModelEquipment] = useState<ModelExportResponse["equipment"]>([]);
+  const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!siteId && siteContext?.selectedSiteId) {
+    if (!siteId && siteContext.selectedSiteId) {
       setSiteId(siteContext.selectedSiteId);
     }
-  }, [siteId, siteContext?.selectedSiteId]);
+  }, [siteId, siteContext.selectedSiteId]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const model = await desktopFetch<ModelExportResponse>("/model/export");
+        setModelPoints(model.points || []);
+        setModelEquipment(model.equipment || []);
+      } catch {
+        // non-fatal for plots UX
+      }
+    })();
+  }, []);
+
+  function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
+    const set = new Set<string>();
+    for (const ext of externalIds) {
+      if (currentSource === "all") {
+        for (const col of columns) {
+          if (col === ext || col.startsWith(`${ext}_`)) {
+            set.add(col);
+          }
+        }
+      } else if (columns.includes(ext)) {
+        set.add(ext);
+      }
+    }
+    return Array.from(set);
+  }
 
   async function loadData() {
     try {
-      const effectiveSiteId = siteId || siteContext?.selectedSiteId || "";
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
       if (!effectiveSiteId) {
         setStatus("Set or select a site first.");
         return;
       }
-      const out = await desktopFetch<PlotFrameResponse>(
-        `/plots/frame?site_id=${encodeURIComponent(effectiveSiteId)}&source=${encodeURIComponent(source)}&limit=5000`,
-      );
+      const out = source === "all"
+        ? await desktopFetch<PlotFrameResponse>(
+            `/plots/site-frame?site_id=${encodeURIComponent(effectiveSiteId)}&sources=${encodeURIComponent(
+              "csv,weather,onboard,bacnet",
+            )}&limit=5000`,
+          )
+        : await desktopFetch<PlotFrameResponse>(
+            `/plots/frame?site_id=${encodeURIComponent(effectiveSiteId)}&source=${encodeURIComponent(source)}&limit=5000`,
+          );
       setFrame(out);
+      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, source);
       const defaults = out.columns.filter((c) => c !== "timestamp").slice(0, 6);
-      setYColumns(defaults);
-      setStatus(`Loaded ${out.rows.length} rows from ${source}.`);
+      setYColumns(fromTree.length > 0 ? fromTree : defaults);
+      setStatus(`Loaded ${out.rows.length} rows from ${source === "all" ? "all sources (joined)" : source}.`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }
   }
 
   async function purgeSiteTimeseries() {
-    const effectiveSiteId = siteId || siteContext?.selectedSiteId || "";
+    const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
     if (!effectiveSiteId) {
       setStatus("Set or select a site first.");
       return;
@@ -110,6 +161,25 @@ export function PlotsPage() {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {
       setPurging(false);
+    }
+  }
+
+  async function deleteEntireSite() {
+    const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+    if (!effectiveSiteId) {
+      setStatus("Set or select a site first.");
+      return;
+    }
+    const siteName = siteContext.sites.find((s) => s.id === effectiveSiteId)?.name ?? "selected site";
+    if (!window.confirm(`Delete site "${siteName}" and all associated data? This is destructive.`)) return;
+    try {
+      await desktopFetch(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
+      await siteContext.refreshSites();
+      setFrame(null);
+      setYColumns([]);
+      setStatus(`Deleted site "${siteName}" and associated data model rows.`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -144,15 +214,31 @@ export function PlotsPage() {
     <div className="stack-page">
       <div className="card">
         <h2 className="title">Plots</h2>
-        <p className="muted">AFDD-style Plotly trend view for desktop timeseries.</p>
+        <p className="muted">Plotly trend view for Feather-backed site data (single source or joined multi-source).</p>
         <div className="grid-two">
-          <input value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder="site id" />
-          <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="source (csv/weather/onboard)" />
+          <select value={siteId || siteContext.selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
+            {siteContext.sites.length === 0 && <option value="">No sites</option>}
+            {siteContext.sites.map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.name}
+              </option>
+            ))}
+          </select>
+          <select value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="all">All sources (joined)</option>
+            <option value="csv">CSV</option>
+            <option value="weather">Weather</option>
+            <option value="onboard">Onboard</option>
+            <option value="bacnet">BACnet</option>
+          </select>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button onClick={() => void loadData()}>Load Data from Database</button>
+          <button onClick={() => void loadData()}>Load Site Data (Feather)</button>
           <button className="secondary-btn" onClick={() => void purgeSiteTimeseries()} disabled={purging}>
             {purging ? "Purging..." : "Purge timeseries (site)"}
+          </button>
+          <button className="danger-btn" onClick={() => void deleteEntireSite()}>
+            Delete entire site
           </button>
           <select value={plotMode} onChange={(e) => setPlotMode(e.target.value as PlotMode)} style={{ width: 160 }}>
             <option value="lines">Lines</option>
@@ -171,7 +257,7 @@ export function PlotsPage() {
         </label>
         {!prunePoints && (
           <p className="muted" style={{ marginTop: 0 }}>
-            Default purge is site-scoped timeseries only; data model (sites/equipment/points) is retained.
+            Default purge is site-scoped timeseries only; data model (sites/equipment/points) is retained. Use Delete entire site for full wipe.
           </p>
         )}
         {frame && frame.columns.length > 0 && (
@@ -189,6 +275,23 @@ export function PlotsPage() {
             </select>
           </div>
         )}
+        <div style={{ marginTop: 10 }}>
+          <PointsTreePanel
+            points={modelPoints}
+            equipment={modelEquipment}
+            selectedSiteId={siteId || siteContext.selectedSiteId || ""}
+            selectedExternalIds={selectedExternalIds}
+            onSelectedExternalIdsChange={(ids) => {
+              setSelectedExternalIds(ids);
+              if (frame) {
+                const matched = resolveColumnsFromExternalIds(frame.columns, ids, source);
+                if (matched.length > 0) setYColumns(matched);
+              }
+            }}
+            title="Points tree (quick pick)"
+            description="Pick grouped points by equipment/site to quickly populate plotted columns."
+          />
+        </div>
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 70 }} />
       </div>
 

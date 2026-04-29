@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
 from open_fdd.desktop.services.ingest_service import IngestService
 from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import default_rules_root
 
@@ -159,6 +160,14 @@ class BacnetConfigBody(BaseModel):
     api_key: str | None = None
 
 
+class OnboardConfigBody(BaseModel):
+    base_url: str = "https://api.onboarddata.io"
+    building_ids: str = ""
+    lookback_hours: int = 24
+    api_key: str | None = None
+    allow_synthetic: bool = False
+
+
 class SiteCreateBody(BaseModel):
     name: str
 
@@ -205,7 +214,29 @@ def create_app() -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await task_bacnet
 
-    app = FastAPI(title="open-fdd desktop bridge", lifespan=_lifespan)
+    app = FastAPI(
+        title="open-fdd desktop bridge",
+        description=(
+            "Local desktop bridge API for model management, ingestion (CSV/weather/onboard/BACnet), "
+            "timeseries joins, rules backfill, and Plotly-friendly views."
+        ),
+        version="0.1.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "health", "description": "Bridge health and readiness."},
+            {"name": "sites", "description": "Site lifecycle and site-level rule pack config."},
+            {"name": "model", "description": "Desktop model export/import/validate and TTL controls."},
+            {"name": "ingest", "description": "CSV, weather, onboard, BACnet ingestion endpoints."},
+            {"name": "timeseries", "description": "Feather-backed query, bounds, plots, and purge endpoints."},
+            {"name": "rules", "description": "Rule execution, rule file management, and defaults."},
+            {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
+            {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
+            {"name": "system", "description": "Resource and storage stats."},
+        ],
+        lifespan=_lifespan,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -341,19 +372,19 @@ def create_app() -> FastAPI:
                 app_ref.state.bacnet_poll_error = str(exc)
             await asyncio.sleep(interval)
 
-    @app.get("/health")
+    @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.get("/model/export")
+    @app.get("/model/export", tags=["model"])
     def model_export() -> dict[str, Any]:
         return services.model.load()
 
-    @app.get("/sites")
+    @app.get("/sites", tags=["sites"])
     def list_sites() -> list[dict[str, Any]]:
         return services.model.load().get("sites", [])
 
-    @app.post("/sites")
+    @app.post("/sites", tags=["sites"])
     def create_site(body: SiteCreateBody) -> dict[str, Any]:
         site = services.model.create_site(body.name.strip() or "Site")
         ttl_error = _safe_sync_ttl()
@@ -361,7 +392,7 @@ def create_app() -> FastAPI:
             site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
         return site
 
-    @app.delete("/sites/{site_id}")
+    @app.delete("/sites/{site_id}", tags=["sites"])
     def delete_site(site_id: str) -> dict[str, Any]:
         out = services.model.delete_site(site_id)
         ttl_error = _safe_sync_ttl()
@@ -369,7 +400,7 @@ def create_app() -> FastAPI:
             return {**out, "ttl_sync_warning": ttl_error}
         return out
 
-    @app.post("/sites/{site_id}/rule-pack")
+    @app.post("/sites/{site_id}/rule-pack", tags=["sites"])
     def set_site_rule_pack(site_id: str, body: SiteRulePackBody) -> dict[str, Any]:
         with services.model.transaction() as model:
             site = next((s for s in model.get("sites", []) if str(s.get("id")) == str(site_id)), None)
@@ -383,7 +414,7 @@ def create_app() -> FastAPI:
             site = {**site, "warning": f"TTL sync failed: {ttl_error}"}
         return site
 
-    @app.post("/model/import")
+    @app.post("/model/import", tags=["model"])
     def model_import(body: ModelImportBody) -> dict[str, int]:
         payload = body.payload.model_dump(mode="python")
         normalized = {
@@ -406,7 +437,7 @@ def create_app() -> FastAPI:
             "points": len(normalized["points"]),
         }
 
-    @app.post("/model/validate")
+    @app.post("/model/validate", tags=["model"])
     def model_validate(body: ModelValidateBody) -> dict[str, Any]:
         payload = body.payload.model_dump(mode="python")
         sites = payload.get("sites", []) if isinstance(payload.get("sites"), list) else []
@@ -432,12 +463,12 @@ def create_app() -> FastAPI:
             },
         }
 
-    @app.post("/model/ttl/sync")
+    @app.post("/model/ttl/sync", tags=["model"])
     def model_ttl_sync() -> dict[str, str]:
         path = services.ttl.sync()
         return {"path": str(path)}
 
-    @app.get("/model/ttl/status")
+    @app.get("/model/ttl/status", tags=["model"])
     def model_ttl_status() -> dict[str, Any]:
         return {
             "ttl_path": str(services.ttl.ttl_path),
@@ -446,7 +477,7 @@ def create_app() -> FastAPI:
             "last_sync_error": app.state.ttl_sync_error,
         }
 
-    @app.post("/ingest/csv")
+    @app.post("/ingest/csv", tags=["ingest"])
     def ingest_csv(body: CsvIngestBody) -> dict[str, Any]:
         csv_path = Path(body.csv_path).expanduser()
         if not csv_path.is_absolute():
@@ -467,7 +498,7 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.post("/ingest/csv/upload")
+    @app.post("/ingest/csv/upload", tags=["ingest"])
     async def ingest_csv_upload(
         site_id: str = Form(...),
         source: str = Form("csv"),
@@ -493,7 +524,7 @@ def create_app() -> FastAPI:
             with contextlib.suppress(Exception):
                 tmp_path.unlink(missing_ok=True)
 
-    @app.post("/rules/run")
+    @app.post("/rules/run", tags=["rules"])
     def rules_run(body: RuleRunBody) -> dict[str, Any]:
         frame = services.ingest.load_source_frame_window(
             source=body.source,
@@ -522,15 +553,15 @@ def create_app() -> FastAPI:
             "preview": preview,
         }
 
-    @app.post("/ingest/weather")
+    @app.post("/ingest/weather", tags=["ingest"])
     def ingest_weather(body: WeatherIngestBody) -> dict[str, Any]:
         return services.ingest.ingest_weather(site_id=body.site_id, days_back=max(1, int(body.days_back)))
 
-    @app.post("/ingest/onboard")
+    @app.post("/ingest/onboard", tags=["ingest"])
     def ingest_onboard(body: OnboardIngestBody) -> dict[str, Any]:
         return services.ingest.ingest_onboard(site_id=body.site_id)
 
-    @app.post("/ingest/bacnet")
+    @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
         server_url = str(body.server_url or app.state.bacnet_server_url or "").strip()
         if not server_url:
@@ -551,7 +582,7 @@ def create_app() -> FastAPI:
             app.state.bacnet_poll_error = ""
         return result
 
-    @app.post("/ml/train")
+    @app.post("/ml/train", tags=["ingest"])
     def ml_train(body: MlTrainBody) -> dict[str, Any]:
         return services.ingest.train_ml_baseline(
             site_id=body.site_id,
@@ -564,7 +595,7 @@ def create_app() -> FastAPI:
             output_source=body.output_source,
         )
 
-    @app.post("/timeseries/query")
+    @app.post("/timeseries/query", tags=["timeseries"])
     def timeseries_query(body: TimeseriesQueryBody) -> dict[str, Any]:
         sources = [str(s).strip() for s in body.sources if str(s).strip()]
         if not sources:
@@ -615,11 +646,11 @@ def create_app() -> FastAPI:
         merged = merged.tail(cap)
         return {"columns": [str(c) for c in merged.columns], "rows": merged.to_dict(orient="records")}
 
-    @app.post("/timeseries/bounds")
+    @app.post("/timeseries/bounds", tags=["timeseries"])
     def timeseries_bounds(body: TimeseriesBoundsBody) -> dict[str, Any]:
         return services.ingest.source_time_bounds(source=body.source, site_id=body.site_id)
 
-    @app.get("/config/weather")
+    @app.get("/config/weather", tags=["config"])
     def weather_config_get() -> dict[str, Any]:
         return {
             "latitude": os.getenv("OFDD_OPEN_METEO_LATITUDE", ""),
@@ -628,7 +659,7 @@ def create_app() -> FastAPI:
             "base_url": os.getenv("OFDD_OPEN_METEO_BASE_URL", "https://archive-api.open-meteo.com/v1/archive"),
         }
 
-    @app.post("/config/weather")
+    @app.post("/config/weather", tags=["config"])
     def weather_config_set(body: WeatherConfigBody) -> dict[str, Any]:
         os.environ["OFDD_OPEN_METEO_LATITUDE"] = str(body.latitude)
         os.environ["OFDD_OPEN_METEO_LONGITUDE"] = str(body.longitude)
@@ -636,7 +667,7 @@ def create_app() -> FastAPI:
         os.environ["OFDD_OPEN_METEO_BASE_URL"] = str(body.base_url or "https://archive-api.open-meteo.com/v1/archive")
         return weather_config_get()
 
-    @app.get("/config/bacnet")
+    @app.get("/config/bacnet", tags=["config"])
     def bacnet_config_get() -> dict[str, Any]:
         return {
             "enabled": bool(app.state.bacnet_poll_enabled),
@@ -648,7 +679,7 @@ def create_app() -> FastAPI:
             "last_error": str(app.state.bacnet_poll_error or ""),
         }
 
-    @app.post("/config/bacnet")
+    @app.post("/config/bacnet", tags=["config"])
     def bacnet_config_set(body: BacnetConfigBody) -> dict[str, Any]:
         app.state.bacnet_poll_enabled = bool(body.enabled)
         app.state.bacnet_poll_interval_seconds = max(5, int(body.interval_seconds or 300))
@@ -665,7 +696,27 @@ def create_app() -> FastAPI:
             os.environ["OFDD_BACNET_SITE_ID"] = str(app.state.bacnet_site_id)
         return bacnet_config_get()
 
-    @app.get("/plots/frame")
+    @app.get("/config/onboard", tags=["config"])
+    def onboard_config_get() -> dict[str, Any]:
+        return {
+            "base_url": os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io"),
+            "building_ids": os.getenv("OFDD_ONBOARD_BUILDING_IDS", ""),
+            "lookback_hours": int(os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24") or "24"),
+            "api_key_set": bool(str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()),
+            "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
+        }
+
+    @app.post("/config/onboard", tags=["config"])
+    def onboard_config_set(body: OnboardConfigBody) -> dict[str, Any]:
+        os.environ["OFDD_ONBOARD_API_BASE_URL"] = str(body.base_url or "https://api.onboarddata.io").strip()
+        os.environ["OFDD_ONBOARD_BUILDING_IDS"] = str(body.building_ids or "").strip()
+        os.environ["OFDD_ONBOARD_LOOKBACK_HOURS"] = str(max(1, int(body.lookback_hours or 24)))
+        os.environ["OFDD_ONBOARD_ALLOW_SYNTHETIC"] = "true" if bool(body.allow_synthetic) else "false"
+        if body.api_key is not None:
+            os.environ["OFDD_ONBOARD_API_KEY"] = str(body.api_key).strip()
+        return onboard_config_get()
+
+    @app.get("/plots/frame", tags=["timeseries"])
     def plots_frame(site_id: str, source: str = "csv", limit: int = 5000) -> dict[str, Any]:
         frame = services.ingest.load_source_frame(source=source, site_id=site_id)
         if frame.empty:
@@ -679,7 +730,45 @@ def create_app() -> FastAPI:
             "rows": frame.to_dict(orient="records"),
         }
 
-    @app.get("/data-model/testing/predefined")
+    @app.get("/plots/site-frame", tags=["timeseries"])
+    def plots_site_frame(site_id: str, sources: str = "csv,weather,onboard,bacnet", limit: int = 5000) -> dict[str, Any]:
+        import pandas as pd
+
+        cap = max(1, min(int(limit), 20_000))
+        source_list = [s.strip() for s in str(sources).split(",") if s.strip()]
+        if not source_list:
+            source_list = ["csv"]
+        merged: pd.DataFrame | None = None
+        ts_col = "timestamp"
+        used_sources: list[str] = []
+        for src in source_list:
+            frame = services.ingest.load_source_frame(source=src, site_id=site_id)
+            if frame.empty:
+                continue
+            local_ts = infer_timestamp_column(frame)
+            copy = frame.tail(cap).copy()
+            if local_ts != ts_col:
+                copy = copy.rename(columns={local_ts: ts_col})
+            rename_map = {c: f"{c}_{src}" for c in copy.columns if c != ts_col}
+            copy = copy.rename(columns=rename_map)
+            if ts_col in copy.columns:
+                copy[ts_col] = copy[ts_col].astype(str)
+            if merged is None:
+                merged = copy
+            else:
+                merged = merged.merge(copy, on=ts_col, how="outer")
+            used_sources.append(src)
+
+        if merged is None or merged.empty:
+            return {"columns": [], "rows": [], "sources": []}
+        merged = merged.tail(cap)
+        return {
+            "columns": [str(c) for c in merged.columns],
+            "rows": merged.to_dict(orient="records"),
+            "sources": used_sources,
+        }
+
+    @app.get("/data-model/testing/predefined", tags=["sparql"])
     def data_model_testing_predefined() -> list[dict[str, str]]:
         return [
             {
@@ -715,7 +804,7 @@ LIMIT 50""",
             },
         ]
 
-    @app.post("/data-model/testing/query")
+    @app.post("/data-model/testing/query", tags=["sparql"])
     def data_model_testing_query(body: SparqlQueryBody) -> dict[str, Any]:
         try:
             from rdflib import Graph
@@ -740,7 +829,7 @@ LIMIT 50""",
             rows.append({k: str(v) for k, v in row_map.items()})
         return {"columns": columns, "rows": rows}
 
-    @app.post("/data-model/sparql")
+    @app.post("/data-model/sparql", tags=["sparql"])
     def data_model_sparql(body: SparqlTextBody) -> dict[str, Any]:
         """
         AFDD-stack style SPARQL endpoint for agent compatibility.
@@ -749,21 +838,21 @@ LIMIT 50""",
         result = data_model_testing_query(SparqlQueryBody(query=body.query))
         return {"bindings": result.get("rows", [])}
 
-    @app.post("/data-model/sparql/upload")
+    @app.post("/data-model/sparql/upload", tags=["sparql"])
     async def data_model_sparql_upload(file: UploadFile = File(...)) -> dict[str, Any]:
         if not file.filename or not file.filename.lower().endswith(".sparql"):
             raise HTTPException(status_code=400, detail="Upload a .sparql file")
         query = (await file.read()).decode("utf-8")
         return data_model_sparql(SparqlTextBody(query=query))
 
-    @app.get("/data-model/ttl")
+    @app.get("/data-model/ttl", tags=["model"])
     def data_model_ttl(save: bool = False) -> Response:
         ttl = services.ttl.build_ttl()
         if save:
             services.ttl.sync()
         return Response(content=ttl, media_type="text/plain; charset=utf-8")
 
-    @app.get("/rules/defaults")
+    @app.get("/rules/defaults", tags=["rules"])
     def list_default_rules() -> dict[str, Any]:
         source_dir = Path(__file__).resolve().parents[1] / "default_rules" / "ahu_vav"
         files = sorted(source_dir.glob("*.yaml"))
@@ -773,7 +862,7 @@ LIMIT 50""",
             "files": [f.name for f in files],
         }
 
-    @app.post("/rules/defaults/install")
+    @app.post("/rules/defaults/install", tags=["rules"])
     def install_default_rules() -> dict[str, Any]:
         source_dir = Path(__file__).resolve().parents[1] / "default_rules" / "ahu_vav"
         dest_dir = default_rules_root() / "ahu_vav"
@@ -785,7 +874,7 @@ LIMIT 50""",
             copied.append(src.name)
         return {"rule_pack": "ahu_vav", "rules_path": str(dest_dir), "copied": copied}
 
-    @app.get("/rules")
+    @app.get("/rules", tags=["rules"])
     def list_rules() -> dict[str, Any]:
         rules_dir = _rules_dir()
         files = sorted(
@@ -793,7 +882,7 @@ LIMIT 50""",
         )
         return {"rules_dir": str(rules_dir), "files": files}
 
-    @app.get("/rules/{filename}")
+    @app.get("/rules/{filename}", tags=["rules"])
     def get_rule_file(filename: str) -> Response:
         safe = _safe_rule_filename(filename)
         path = _rules_dir() / safe
@@ -801,14 +890,14 @@ LIMIT 50""",
             raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
         return Response(content=path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
 
-    @app.post("/rules")
+    @app.post("/rules", tags=["rules"])
     def upload_rule_file(body: RuleUploadBody) -> dict[str, Any]:
         safe = _safe_rule_filename(body.filename.strip())
         path = _rules_dir() / safe
         path.write_text(body.content, encoding="utf-8")
         return {"filename": safe, "size": len(body.content)}
 
-    @app.delete("/rules/{filename}")
+    @app.delete("/rules/{filename}", tags=["rules"])
     def delete_rule_file(filename: str) -> dict[str, str]:
         safe = _safe_rule_filename(filename)
         path = _rules_dir() / safe
@@ -817,24 +906,24 @@ LIMIT 50""",
         path.unlink()
         return {"deleted": safe}
 
-    @app.post("/rules/sync-definitions")
+    @app.post("/rules/sync-definitions", tags=["rules"])
     def sync_rule_definitions() -> dict[str, Any]:
         # Desktop bridge does not persist separate DB fault definitions.
         # This endpoint mirrors AFDD frontend UX and is a no-op.
         return {"synced": 0, "mode": "desktop_noop"}
 
-    @app.get("/storage/timeseries/stats")
+    @app.get("/storage/timeseries/stats", tags=["timeseries"])
     def timeseries_stats() -> dict[str, int]:
         return services.ingest.feather_store.stats()
 
-    @app.get("/system/resources")
+    @app.get("/system/resources", tags=["system"])
     def system_resources() -> dict[str, Any]:
         return {
             "memory": _memory_info(),
             "disk": _disk_info(),
         }
 
-    @app.post("/storage/timeseries/purge")
+    @app.post("/storage/timeseries/purge", tags=["timeseries"])
     def timeseries_purge(body: TimeseriesPurgeBody) -> dict[str, Any]:
         out = services.ingest.purge_timeseries(source=body.source, site_id=body.site_id)
         points_removed = 0

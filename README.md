@@ -25,7 +25,9 @@ pip install open-fdd
 
 ## Desktop App
 
-Desktop mode is under active development. Current recommended launcher on Windows is:
+Desktop mode is under active development. The primary desktop workflow is Tauri + React UI with the Python bridge API.
+
+Recommended launcher on Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
@@ -37,26 +39,13 @@ Daily startup (without reinstalling deps):
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
 ```
 
-macOS/Linux bash equivalent is planned.
+`bootstrap-desktop.ps1` launches both services by default:
+- terminal 1: `open-fdd-desktop-bridge`
+- terminal 2: `npm run tauri dev` in `apps/desktop-ui`
+- bridge Swagger: `http://127.0.0.1:8765/docs`
+- bridge OpenAPI: `http://127.0.0.1:8765/openapi.json`
 
-```bash
-pip install "open-fdd[desktop]"
-```
-
-Launch from Python:
-
-```python
-import open_fdd
-open_fdd.GUI()
-```
-
-Or CLI:
-
-```bash
-open-fdd-desktop
-```
-
-Tauri + React desktop (installer-first track):
+Equivalent manual flow:
 
 ```bash
 # terminal 1 (python bridge)
@@ -69,6 +58,8 @@ npm run tauri dev
 # or package
 npm run tauri build
 ```
+
+macOS/Linux bash bootstrap equivalent is planned.
 
 ---
 
