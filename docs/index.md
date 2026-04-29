@@ -18,6 +18,8 @@ The **`open-fdd`** package (**`open_fdd/`** in this repository) is a **rules eng
 - **Maps** **Brick**, **Haystack**, **DBO**, **223P**, or vendor names to DataFrame columns via **`column_map`** (dict, manifest, or composite resolvers) — same YAML can target different ontologies by swapping the map.
 - **Runs** checks over time-indexed or ordered data and returns structured **fault results** (see **`open_fdd.schema`**).
 
+Desktop mode is also available and under active construction in this repository. The current desktop path uses local Feather-backed ingestion plus optional batched rule execution for large datasets.
+
 Bring your own data: CSV exports, historian extracts, lab benches, or notebooks. The engine does **not** connect to databases or field buses by itself.
 
 ---
@@ -51,6 +53,7 @@ See **[Getting started](getting_started)** and **`examples/README.md`** in the r
 | [Expression rule cookbook](expression_rule_cookbook) | Expressions, ontology labels, schedule & weather gates |
 | [Column map resolvers](column_map_resolvers) | Brick / Haystack / DBO / 223P → columns |
 | [Engine API](api/engine) | `RuleRunner`, loaders, resolvers |
+| [Desktop app (under construction)](howto/desktop_app) | Local desktop workflow, Feather storage, batched rule runs |
 | [Data modeling & platform (pointer)](modeling/index) | Full stack docs live in **open-fdd-afdd-stack** |
 | [How-to guides](howto/index) | PyPI releases, verification, operations |
 | [Appendix](appendix/index) | Technical reference, developer guide |

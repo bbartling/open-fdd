@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -19,13 +22,57 @@ jobs:
       matrix:
         include:
           - profile: core
+            python-version: "3.10"
+            install-extras: '.[dev]'
+            numpy-spec: ""
+          - profile: core
+            python-version: "3.11"
+            install-extras: '.[dev]'
+            numpy-spec: ""
+          - profile: core
+            python-version: "3.12"
+            install-extras: '.[dev]'
+            numpy-spec: ""
+          - profile: core
+            python-version: "3.13"
+            install-extras: '.[dev]'
+            numpy-spec: ""
+          - profile: core
             python-version: "3.14"
             install-extras: '.[dev]'
             numpy-spec: ""
           - profile: desktop-numpy1
+            python-version: "3.10"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=1,<2"
+          - profile: desktop-numpy1
+            python-version: "3.11"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=1,<2"
+          - profile: desktop-numpy1
+            python-version: "3.12"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=1,<2"
+          - profile: desktop-numpy1
             python-version: "3.14"
             install-extras: '.[dev,desktop]'
             numpy-spec: "numpy>=1,<2"
+          - profile: desktop-numpy2
+            python-version: "3.10"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=2,<3"
+          - profile: desktop-numpy2
+            python-version: "3.11"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=2,<3"
+          - profile: desktop-numpy2
+            python-version: "3.12"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=2,<3"
+          - profile: desktop-numpy2
+            python-version: "3.13"
+            install-extras: '.[dev,desktop]'
+            numpy-spec: "numpy>=2,<3"
           - profile: desktop-numpy2
             python-version: "3.14"
             install-extras: '.[dev,desktop]'
@@ -33,10 +80,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"

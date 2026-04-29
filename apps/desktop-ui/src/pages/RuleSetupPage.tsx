@@ -27,10 +27,16 @@ export function RuleSetupPage() {
   const [status, setStatus] = useState("Install default AHU/VAV YAML rules and attach rule pack to a site.");
   const { data: rulesData, isLoading: rulesLoading, error: rulesError, refresh: refreshRules } = useRulesList();
   const [selectedFile, setSelectedFile] = useState("");
-  const [selectedContent, setSelectedContent] = useState("");
+  const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadContent, setUploadContent] = useState("");
   const [rulesStatus, setRulesStatus] = useState("Upload/view/delete YAML files.");
+  const [runSource, setRunSource] = useState("csv");
+  const [chunkRows, setChunkRows] = useState("0");
+  const [chunkRowsError, setChunkRowsError] = useState("");
+  const [startTs, setStartTs] = useState("");
+  const [endTs, setEndTs] = useState("");
+  const [runOutput, setRunOutput] = useState("Use this panel to run/backfill FDD faults over a site/source/time window.");
 
   useEffect(() => {
     desktopFetch<RuleDefaults>("/rules/defaults")
@@ -107,7 +113,7 @@ export function RuleSetupPage() {
       setRulesStatus(`Deleted ${filename}`);
       if (selectedFile === filename) {
         setSelectedFile("");
-        setSelectedContent("");
+        setSelectedContent(null);
       }
       await refreshRules();
     } catch (e) {
@@ -121,6 +127,59 @@ export function RuleSetupPage() {
       setRulesStatus(`Synced definitions (${out.mode}, count=${out.synced}).`);
     } catch (e) {
       setRulesStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function runRulesWindow() {
+    try {
+      const effectiveSiteId = siteId || siteContext?.selectedSiteId || "";
+      if (!effectiveSiteId) {
+        setRunOutput("Select a site first.");
+        return;
+      }
+      const rulesPath = rulesData?.rules_dir || installedPath;
+      if (!rulesPath) {
+        setRunOutput("Rules directory is not ready yet. Install defaults or refresh rules.");
+        return;
+      }
+      const trimmed = (chunkRows || "").trim();
+      if (trimmed !== "" && !/^\d+$/.test(trimmed)) {
+        setChunkRowsError("Chunk rows must be empty or a non-negative integer (0 = auto).");
+        setRunOutput("Fix chunk rows before running backfill.");
+        return;
+      }
+      setChunkRowsError("");
+      const safeChunkRows = trimmed === "" ? 0 : Number.parseInt(trimmed, 10);
+      if (!Number.isFinite(safeChunkRows) || safeChunkRows < 0) {
+        setChunkRowsError("Chunk rows must be empty or a non-negative integer (0 = auto).");
+        setRunOutput("Fix chunk rows before running backfill.");
+        return;
+      }
+      const out = await desktopFetch<{
+        input_rows: number;
+        output_rows: number;
+        columns: string[];
+        fault_totals: Record<string, number>;
+        preview: string;
+      }>("/rules/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: effectiveSiteId,
+          source: runSource,
+          rules_path: rulesPath,
+          chunk_rows: safeChunkRows,
+          start_ts: startTs || null,
+          end_ts: endTs || null,
+        }),
+      });
+      setRunOutput(
+        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n`
+        + `Columns: ${out.columns.join(", ")}\n`
+        + `Fault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
+      );
+    } catch (e) {
+      setRunOutput(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -163,6 +222,46 @@ export function RuleSetupPage() {
         }
         style={{ marginTop: 10, minHeight: 180 }}
       />
+
+      <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        <h3 className="title" style={{ marginBottom: 6 }}>Run / backfill faults</h3>
+        <p className="muted">Run FDD rules on a selected source and optional time window for historical backfill.</p>
+        <div className="grid-two">
+          <div>
+            <label>Source</label>
+            <select value={runSource} onChange={(e) => setRunSource(e.target.value)}>
+              <option value="csv">CSV</option>
+              <option value="weather">Weather</option>
+              <option value="onboard">Onboard</option>
+              <option value="bacnet">BACnet</option>
+            </select>
+          </div>
+          <div>
+            <label>Chunk rows (0 = auto/full)</label>
+            <input
+              value={chunkRows}
+              onChange={(e) => {
+                setChunkRows(e.target.value);
+                setChunkRowsError("");
+              }}
+              placeholder="0"
+            />
+            {chunkRowsError ? <small style={{ color: "var(--danger)", display: "block", marginTop: 4 }}>{chunkRowsError}</small> : null}
+          </div>
+          <div>
+            <label>Start timestamp (optional, ISO)</label>
+            <input value={startTs} onChange={(e) => setStartTs(e.target.value)} placeholder="2026-03-01T00:00:00Z" />
+          </div>
+          <div>
+            <label>End timestamp (optional, ISO)</label>
+            <input value={endTs} onChange={(e) => setEndTs(e.target.value)} placeholder="2026-03-31T23:59:59Z" />
+          </div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => void runRulesWindow()}>Run FDD backfill</button>
+        </div>
+        <textarea readOnly value={runOutput} style={{ marginTop: 10, minHeight: 180 }} />
+      </div>
 
       <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
         <h3 className="title" style={{ marginBottom: 6 }}>FDD rule files (YAML)</h3>
@@ -219,12 +318,21 @@ export function RuleSetupPage() {
           <button onClick={() => void onUploadRule()}>Upload</button>
         </div>
         <textarea readOnly value={rulesStatus} style={{ marginTop: 10, minHeight: 70 }} />
-        <textarea
-          readOnly
-          value={selectedContent}
-          placeholder="Click a YAML filename to preview."
-          style={{ marginTop: 10, minHeight: 160, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
-        />
+        <div
+          style={{
+            marginTop: 10,
+            minHeight: 420,
+            padding: 12,
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            background: "var(--input-bg)",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            whiteSpace: "pre-wrap",
+            overflowX: "auto",
+          }}
+        >
+          {selectedContent ?? "Click a YAML filename to preview."}
+        </div>
       </div>
     </div>
   );

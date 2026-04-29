@@ -6,9 +6,12 @@ from typing import Any
 
 import pandas as pd
 
+from open_fdd.desktop.drivers.bacnet_driver import run_bacnet_scrape
 from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
+from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
@@ -80,11 +83,141 @@ class IngestService:
                 )
         return {"rows": result.rows, "source": result.source, "success": True}
 
+    def ingest_bacnet(
+        self,
+        *,
+        site_id: str,
+        server_url: str,
+        api_key: str = "",
+    ) -> dict[str, Any]:
+        model = self.model_service.load()
+        result = run_bacnet_scrape(
+            store=self.connector,
+            model=model,
+            site_id=site_id,
+            server_url=server_url,
+            api_key=api_key,
+        )
+        if not result.success:
+            return {
+                "rows": result.rows,
+                "source": result.source,
+                "success": False,
+                "error": result.error or "BACnet ingest failed.",
+                "devices_polled": result.devices_polled,
+                "points_polled": result.points_polled,
+            }
+        metrics = [str(m) for m in (result.metrics or [])]
+        storage_ref = str(result.storage_ref or "")
+        with self.model_service.transaction() as model_tx:
+            for metric in metrics:
+                md = (result.point_metadata or {}).get(metric, {})
+                self._upsert_point_for_metric(
+                    model=model_tx,
+                    site_id=site_id,
+                    metric=metric,
+                    source=result.source,
+                    storage_ref=storage_ref,
+                    brick_type_override=str(md.get("brick_type") or "Point"),
+                    fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
+                    unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
+                )
+        return {
+            "rows": result.rows,
+            "source": result.source,
+            "success": True,
+            "devices_polled": result.devices_polled,
+            "points_polled": result.points_polled,
+            "warning": result.error,
+        }
+
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.connector.read_frame(source=source, site_id=site_id)
 
+    def load_source_frame_window(
+        self,
+        *,
+        source: str,
+        site_id: str,
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+    ) -> pd.DataFrame:
+        frame = self.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return frame
+        ts_col = infer_timestamp_column(frame)
+        try:
+            parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        except ValueError:
+            return frame.iloc[0:0].copy()
+        out = frame[parsed.notna()].copy()
+        out[ts_col] = parsed[parsed.notna()]
+        if start_ts:
+            start = pd.to_datetime(start_ts, errors="raise", utc=True)
+            out = out[out[ts_col] >= start]
+        if end_ts:
+            end = pd.to_datetime(end_ts, errors="raise", utc=True)
+            out = out[out[ts_col] <= end]
+        return out.sort_values(ts_col).reset_index(drop=True)
+
+    def source_time_bounds(self, *, source: str, site_id: str) -> dict[str, Any]:
+        frame = self.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return {"rows": 0, "timestamp_col": None, "start": None, "end": None}
+        ts_col = infer_timestamp_column(frame)
+        try:
+            parsed = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.05)
+        except ValueError:
+            return {"rows": len(frame.index), "timestamp_col": ts_col, "start": None, "end": None}
+        valid = parsed[parsed.notna()]
+        if valid.empty:
+            return {"rows": len(frame.index), "timestamp_col": ts_col, "start": None, "end": None}
+        return {
+            "rows": len(frame.index),
+            "timestamp_col": ts_col,
+            "start": valid.min().isoformat(),
+            "end": valid.max().isoformat(),
+        }
+
     def purge_timeseries(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         return self.connector.purge(source=source, site_id=site_id)
+
+    def train_ml_baseline(
+        self,
+        *,
+        site_id: str,
+        source: str,
+        target_col: str,
+        feature_cols: list[str] | None = None,
+        lag_cols: list[str] | None = None,
+        residual_quantile: float = 0.95,
+        rule_flag_col: str | None = None,
+        output_source: str | None = None,
+    ) -> dict[str, Any]:
+        ml = MLService(connector=self.connector)
+        result = ml.train_baseline(
+            site_id=site_id,
+            source=source,
+            target_col=target_col,
+            feature_cols=feature_cols,
+            lag_cols=lag_cols,
+            residual_quantile=residual_quantile,
+            rule_flag_col=rule_flag_col,
+            output_source=output_source,
+        )
+        return {
+            "rows_train": result.rows_train,
+            "rows_test": result.rows_test,
+            "rows_scored": result.rows_scored,
+            "model_name": result.model_name,
+            "mae": result.mae,
+            "rmse": result.rmse,
+            "r2": result.r2,
+            "residual_threshold": result.residual_threshold,
+            "output_source": result.output_source,
+            "storage_ref": result.storage_ref,
+            "overlap_with_rule_flag": result.overlap_with_rule_flag,
+        }
 
     def _upsert_point_for_metric(
         self,

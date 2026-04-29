@@ -112,7 +112,11 @@ class SqliteConnector:
         return wide
 
     def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict:
-        from open_fdd.desktop.drivers.csv_driver import infer_timestamp_column
+        from open_fdd.desktop.services.time_utils import (
+            infer_timestamp_column,
+            normalize_known_timezone_abbreviations,
+            parse_timestamp_series,
+        )
 
         frame = pd.read_csv(csv_path)
         original_len = len(frame.index)
@@ -121,10 +125,22 @@ class SqliteConnector:
             dropped_rows = 0
             rows = 0
         else:
-            ts_col = infer_timestamp_column([str(c) for c in frame.columns])
-            frame[ts_col] = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+            ts_col = infer_timestamp_column(frame, candidate_names=("timestamp", "time", "date", "datetime"))
+            try:
+                frame[ts_col] = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.35)
+            except ValueError:
+                frame[ts_col] = pd.to_datetime(
+                    normalize_known_timezone_abbreviations(frame[ts_col]),
+                    errors="coerce",
+                    utc=True,
+                )
             frame = frame[frame[ts_col].notna()].copy()
-            metrics = [str(c) for c in frame.columns if str(c) != ts_col]
+            if ts_col != "timestamp":
+                frame = frame.rename(columns={ts_col: "timestamp"})
+                ts_col = "timestamp"
+            ordered = [ts_col] + [c for c in frame.columns if c != ts_col]
+            frame = frame[ordered]
+            metrics = [str(c) for c in frame.columns if str(c) != "timestamp"]
             rows = len(frame.index)
             dropped_rows = original_len - rows
         out = self.write_frame(source=source, site_id=site_id, frame=frame)

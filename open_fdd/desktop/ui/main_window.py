@@ -18,6 +18,7 @@ class DesktopMainWindow:
     def __init__(self) -> None:
         from PySide6.QtWidgets import (
             QCheckBox,
+            QDateTimeEdit,
             QFileDialog,
             QHBoxLayout,
             QLabel,
@@ -33,7 +34,7 @@ class DesktopMainWindow:
             QVBoxLayout,
             QWidget,
         )
-        from PySide6.QtCore import Qt, QEvent, QObject, QRunnable, QThreadPool, Signal
+        from PySide6.QtCore import Qt, QDateTime, QEvent, QObject, QRunnable, QThreadPool, Signal
         from PySide6.QtGui import QFont
 
         self._qt = {
@@ -52,7 +53,9 @@ class DesktopMainWindow:
             "QTableWidgetItem": QTableWidgetItem,
             "QFileDialog": QFileDialog,
             "QCheckBox": QCheckBox,
+            "QDateTimeEdit": QDateTimeEdit,
             "Qt": Qt,
+            "QDateTime": QDateTime,
             "QEvent": QEvent,
             "QObject": QObject,
             "QRunnable": QRunnable,
@@ -64,6 +67,7 @@ class DesktopMainWindow:
         self._active_jobs = 0
         self._run_weather_button = None
         self._run_onboard_button = None
+        self._run_ml_button = None
         self._run_rules_button = None
         self.window = QMainWindow()
         self.window.setWindowTitle("Open-FDD Desktop")
@@ -300,8 +304,11 @@ class DesktopMainWindow:
         weather_btn.clicked.connect(self._on_run_weather)
         onboard_btn = QPushButton("Run Onboard Scrape")
         onboard_btn.clicked.connect(self._on_run_onboard)
+        ml_btn = QPushButton("Train ML Baseline")
+        ml_btn.clicked.connect(self._on_run_ml_baseline)
         self._run_weather_button = weather_btn
         self._run_onboard_button = onboard_btn
+        self._run_ml_button = ml_btn
         refresh_sites_btn = QPushButton("Refresh Sites")
         refresh_sites_btn.clicked.connect(self._refresh_site_selector)
         row.addWidget(QLabel("Site"))
@@ -313,8 +320,36 @@ class DesktopMainWindow:
         row.addWidget(pick_btn)
         row.addWidget(weather_btn)
         row.addWidget(onboard_btn)
+        row.addWidget(ml_btn)
         row.addWidget(refresh_sites_btn)
         lay.addLayout(row)
+
+        ml_row = QHBoxLayout()
+        self.ml_target_input = QLineEdit()
+        self.ml_target_input.setPlaceholderText("ML target (e.g. SAT (°F))")
+        self.ml_features_input = QLineEdit()
+        self.ml_features_input.setPlaceholderText("features csv (blank = all numeric)")
+        self.ml_lags_input = QLineEdit()
+        self.ml_lags_input.setPlaceholderText("lag cols csv (optional)")
+        self.ml_rule_flag_input = QLineEdit()
+        self.ml_rule_flag_input.setPlaceholderText("rule flag column for overlap (optional)")
+        self.ml_quantile_input = QLineEdit()
+        self.ml_quantile_input.setPlaceholderText("residual quantile (0.95)")
+        self.ml_output_source_input = QLineEdit()
+        self.ml_output_source_input.setPlaceholderText("output source (optional)")
+        ml_row.addWidget(QLabel("ML target"))
+        ml_row.addWidget(self.ml_target_input)
+        ml_row.addWidget(QLabel("Features"))
+        ml_row.addWidget(self.ml_features_input)
+        ml_row.addWidget(QLabel("Lags"))
+        ml_row.addWidget(self.ml_lags_input)
+        ml_row.addWidget(QLabel("Rule flag"))
+        ml_row.addWidget(self.ml_rule_flag_input)
+        ml_row.addWidget(QLabel("Q"))
+        ml_row.addWidget(self.ml_quantile_input)
+        ml_row.addWidget(QLabel("Out source"))
+        ml_row.addWidget(self.ml_output_source_input)
+        lay.addLayout(ml_row)
         self.ingest_out = QTextEdit()
         self.ingest_out.setReadOnly(True)
         lay.addWidget(self.ingest_out)
@@ -327,6 +362,9 @@ class DesktopMainWindow:
         QPushButton = self._qt["QPushButton"]
         QLabel = self._qt["QLabel"]
         QLineEdit = self._qt["QLineEdit"]
+        QDateTimeEdit = self._qt["QDateTimeEdit"]
+        QCheckBox = self._qt["QCheckBox"]
+        QDateTime = self._qt["QDateTime"]
         QTextEdit = self._qt["QTextEdit"]
 
         panel = QWidget()
@@ -338,6 +376,16 @@ class DesktopMainWindow:
         self.source_input.setPlaceholderText("source name (csv/weather/onboard)")
         self.chunk_size_input = QLineEdit()
         self.chunk_size_input.setPlaceholderText("chunk rows (optional)")
+        self.rules_start_dt = QDateTimeEdit()
+        self.rules_start_dt.setCalendarPopup(True)
+        self.rules_start_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.rules_end_dt = QDateTimeEdit()
+        self.rules_end_dt.setCalendarPopup(True)
+        self.rules_end_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.rules_use_window = QCheckBox("Use time window")
+        self.rules_use_window.setChecked(False)
+        bounds_btn = QPushButton("Use Data Bounds")
+        bounds_btn.clicked.connect(self._on_rules_use_data_bounds)
         run_btn = QPushButton("Run Rules")
         run_btn.clicked.connect(self._on_run_rules)
         self._run_rules_button = run_btn
@@ -347,6 +395,12 @@ class DesktopMainWindow:
         row.addWidget(self.source_input)
         row.addWidget(QLabel("Chunk"))
         row.addWidget(self.chunk_size_input)
+        row.addWidget(QLabel("Start"))
+        row.addWidget(self.rules_start_dt)
+        row.addWidget(QLabel("End"))
+        row.addWidget(self.rules_end_dt)
+        row.addWidget(self.rules_use_window)
+        row.addWidget(bounds_btn)
         row.addWidget(run_btn)
         lay.addLayout(row)
         self.rules_out = QTextEdit()
@@ -589,6 +643,73 @@ class DesktopMainWindow:
             on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
         )
 
+    def _on_run_ml_baseline(self) -> None:
+        site_id = self._site_id_for_ingest()
+        if not site_id:
+            self.ingest_out.setPlainText("Set a site id first.")
+            return
+        target_col = self.ml_target_input.text().strip()
+        if not target_col:
+            self.ingest_out.setPlainText("Set ML target column first.")
+            return
+        source = self.source_input_ingest.text().strip() or "csv"
+        feature_cols = [c.strip() for c in self.ml_features_input.text().split(",") if c.strip()]
+        lag_cols = [c.strip() for c in self.ml_lags_input.text().split(",") if c.strip()]
+        rule_flag = self.ml_rule_flag_input.text().strip() or None
+        output_source = self.ml_output_source_input.text().strip() or None
+        q_text = self.ml_quantile_input.text().strip()
+        try:
+            q = float(q_text or 0.95)
+        except ValueError:
+            self.ingest_out.setPlainText("Invalid residual quantile. Enter a number between 0 and 1 (for example 0.95).")
+            return
+        if not (0.0 < q < 1.0):
+            self.ingest_out.setPlainText("Residual quantile must be between 0 and 1 (exclusive).")
+            return
+
+        self.ingest_out.setPlainText("Training ML baseline...")
+        self._set_busy(True)
+        self._run_in_background(
+            lambda: self.ingest_service.train_ml_baseline(
+                site_id=site_id,
+                source=source,
+                target_col=target_col,
+                feature_cols=feature_cols or None,
+                lag_cols=lag_cols or None,
+                residual_quantile=q,
+                rule_flag_col=rule_flag,
+                output_source=output_source,
+            ),
+            on_success=lambda result: self._on_ml_worker_success(result),
+            on_error=lambda exc, tb: self.ingest_out.setPlainText(f"ML run failed: {exc}\n{tb}"),
+        )
+
+    def _on_ml_worker_success(self, result: dict) -> None:
+        def _f(name: str) -> float:
+            val = result.get(name)
+            if val is None:
+                raise ValueError(f"Missing ML result value: {name}")
+            return float(val)
+
+        model_name = str(result.get("model_name") or "unknown")
+        rows_train = int(result.get("rows_train") or 0)
+        rows_test = int(result.get("rows_test") or 0)
+        rows_scored = int(result.get("rows_scored") or 0)
+        overlap = int(result.get("overlap_with_rule_flag") or 0)
+        output_source = str(result.get("output_source") or "")
+        storage_ref = str(result.get("storage_ref") or "")
+        self.ingest_out.setPlainText(
+            "ML baseline completed\n"
+            f"Model: {model_name}\n"
+            f"Rows train/test/scored: {rows_train}/{rows_test}/{rows_scored}\n"
+            f"R2: {_f('r2'):.4f}  MAE: {_f('mae'):.4f}  RMSE: {_f('rmse'):.4f}\n"
+            f"Residual threshold: {_f('residual_threshold'):.4f}\n"
+            f"Rule overlap rows: {overlap}\n"
+            f"Output source: {output_source}\n"
+            f"Storage: {storage_ref}"
+        )
+        self._refresh_model_views()
+
     def _on_run_rules(self) -> None:
         site_id = self._site_id_for_ingest()
         source = self.source_input.text().strip() or "csv"
@@ -605,31 +726,89 @@ class DesktopMainWindow:
                 chunk = int(self.chunk_size_input.text().strip() or 0)
             except ValueError:
                 chunk = 0
+            Qt = self._qt["Qt"]
+            if self.rules_use_window.isChecked():
+                start_ts = self.rules_start_dt.dateTime().toString(Qt.ISODate)
+                end_ts = self.rules_end_dt.dateTime().toString(Qt.ISODate)
+            else:
+                start_ts = ""
+                end_ts = ""
             self.rules_out.setPlainText("Running rule loop...")
             self._set_busy(True)
             self._run_in_background(
-                lambda: self._run_rules_job(site_id=site_id, source=source, rules_path=rules_path, chunk=chunk),
+                lambda: self._run_rules_job(
+                    site_id=site_id,
+                    source=source,
+                    rules_path=rules_path,
+                    chunk=chunk,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                ),
                 on_success=lambda payload: self.rules_out.setPlainText(str(payload)),
                 on_error=lambda exc, tb: self.rules_out.setPlainText(f"Rule run failed: {exc}\n{tb}"),
             )
         except Exception as exc:
             self.rules_out.setPlainText(f"Rule run failed: {exc}\n{traceback.format_exc()}")
 
-    def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int) -> str:
-        frame = self.ingest_service.load_source_frame(source=source, site_id=site_id)
+    def _on_rules_use_data_bounds(self) -> None:
+        site_id = self._site_id_for_ingest()
+        source = self.source_input.text().strip() or "csv"
+        if not site_id:
+            self.rules_out.setPlainText("Set a site id first.")
+            return
+        self.rules_out.setPlainText("Loading data bounds...")
+
+        def _job() -> dict:
+            return self.ingest_service.source_time_bounds(source=source, site_id=site_id)
+
+        def _on_ok(info: dict) -> None:
+            Qt = self._qt["Qt"]
+            QDateTime = self._qt["QDateTime"]
+            if not info.get("rows"):
+                self.rules_out.setPlainText(f"No data found for site='{site_id}' source='{source}'.")
+                return
+            if not info.get("start") or not info.get("end"):
+                self.rules_out.setPlainText("Data found, but no parseable timestamp bounds were available.")
+                return
+            start_dt = QDateTime.fromString(str(info["start"]), Qt.ISODate)
+            end_dt = QDateTime.fromString(str(info["end"]), Qt.ISODate)
+            if start_dt.isValid():
+                self.rules_start_dt.setDateTime(start_dt)
+            if end_dt.isValid():
+                self.rules_end_dt.setDateTime(end_dt)
+            self.rules_use_window.setChecked(True)
+            self.rules_out.setPlainText(
+                f"Loaded bounds for source '{source}' ({info['rows']} rows)\n"
+                f"Start: {self.rules_start_dt.dateTime().toString(Qt.ISODate)}\n"
+                f"End: {self.rules_end_dt.dateTime().toString(Qt.ISODate)}"
+            )
+
+        def _on_err(exc: str, tb: str) -> None:
+            self.rules_out.setPlainText(f"Failed to load data bounds: {exc}\n{tb}")
+
+        self._run_in_background(_job, on_success=_on_ok, on_error=_on_err)
+
+    def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int, start_ts: str, end_ts: str) -> str:
+        frame = self.ingest_service.load_source_frame_window(
+            source=source,
+            site_id=site_id,
+            start_ts=start_ts or None,
+            end_ts=end_ts or None,
+        )
         if frame.empty:
-            return "No Feather data found for site/source."
+            return "No Feather data found for site/source in selected time window."
         out = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk))
         fault_cols = [c for c in out.columns if c.endswith("_flag")]
         fault_totals = {c: int(out[c].sum()) for c in fault_cols}
         tail_preview = out.tail(10).to_string(index=False)
         return (
             f"Input rows: {len(frame.index)}\nOutput rows: {len(out.index)}\nColumns: {list(out.columns)}\n"
+            f"Window: {start_ts} -> {end_ts}\n"
             f"Fault totals: {fault_totals}\nTTL: {model_ttl_path()}\n\nPreview:\n{tail_preview}"
         )
 
     def _set_busy(self, busy: bool) -> None:
-        for btn in (self._run_weather_button, self._run_onboard_button, self._run_rules_button):
+        for btn in (self._run_weather_button, self._run_onboard_button, self._run_ml_button, self._run_rules_button):
             if btn is not None:
                 btn.setEnabled(not busy)
 
