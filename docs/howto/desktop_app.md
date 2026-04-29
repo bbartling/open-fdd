@@ -2,10 +2,10 @@
 
 ## Goal
 
-Run Open-FDD as a pure Python desktop app with no web server and no Docker runtime.
+Run Open-FDD locally with a Python bridge + MCP + web UI, including container-friendly workflows for OpenClaw.
 
-This repository now includes a Tauri + React desktop UI workspace at `apps/desktop-ui` that talks to a local Python bridge.
-The desktop app is under active construction; core ingest/model/rules paths are working, while UX and packaging continue to evolve.
+This repository includes a React UI workspace at `apps/desktop-ui` that talks to a local Python bridge.
+The recommended automation path is now web-first (bridge + MCP + React UI), which works cleanly in Docker/container environments.
 
 ## Install
 
@@ -15,7 +15,7 @@ pip install "open-fdd[desktop]"
 
 ## Launch
 
-### Tauri + React desktop UI
+### Container-friendly web launch (bridge + MCP + React UI)
 
 Recommended launcher on Windows:
 
@@ -29,30 +29,71 @@ Daily startup (without reinstalling deps):
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
 ```
 
-`bootstrap-desktop.ps1` launches both services by default:
+`bootstrap-desktop.ps1` launches by default:
 - terminal 1: `open-fdd-desktop-bridge`
-- terminal 2: `npm run tauri dev` in `apps/desktop-ui`
+- terminal 2: `open-fdd-mcp-rag`
+- terminal 3: React UI (static mode by default)
 - bridge Swagger: `http://127.0.0.1:8765/docs`
 - bridge OpenAPI: `http://127.0.0.1:8765/openapi.json`
+- MCP API: `http://127.0.0.1:8090`
+- Web UI: `http://127.0.0.1:8080`
 
 ```bash
 # terminal 1
 open-fdd-desktop-bridge
 
 # terminal 2
+open-fdd-mcp-rag
+
+# terminal 3
 cd apps/desktop-ui
 npm install
-npm run dev
+npm run build
+python -m http.server 8080 --directory dist --bind 0.0.0.0
 ```
 
-Packaging:
+Use Vite dev mode instead of static:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -UiMode dev -UiPort 5173
+```
+
+Linux/macOS/bash launcher (including container shells):
 
 ```bash
-cd apps/desktop-ui
-npm run tauri build
+bash ./scripts/bootstrap-desktop.sh --install-deps
 ```
 
-macOS/Linux bash bootstrap equivalent is planned.
+Daily startup:
+
+```bash
+bash ./scripts/bootstrap-desktop.sh
+```
+
+Useful flags:
+
+- `--no-bridge`
+- `--no-mcp`
+- `--no-ui`
+- `--no-launch`
+- `--ui-mode static|dev`
+- `--ui-port 8080`
+- `--bridge-url http://127.0.0.1:8765`
+
+PowerShell equivalents:
+
+- `-NoBridge`
+- `-NoMcp`
+- `-NoUi`
+- `-NoLaunch`
+- `-UiMode static|dev`
+- `-UiPort 8080`
+- `-BridgeUrl http://127.0.0.1:8765`
+
+Container note:
+
+- Static mode (`UiMode=static` / `--ui-mode static`) is preferred for repeatable container startup.
+- Dev mode is useful when actively editing UI code.
 
 ### Desktop bridge Swagger/OpenAPI
 

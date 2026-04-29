@@ -150,7 +150,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--openapi-json", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--chunk-size", type=int, default=220)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if int(args.chunk_size) <= 0:
+        parser.error("--chunk-size must be > 0")
+    return args
 
 
 def main() -> int:

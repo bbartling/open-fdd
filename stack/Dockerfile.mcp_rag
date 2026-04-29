@@ -10,7 +10,7 @@ COPY scripts /app/scripts
 COPY docs /app/docs
 COPY stack /app/stack
 
-RUN pip install --no-cache-dir . \
+RUN pip install --no-cache-dir ".[desktop]" \
  && chown -R appuser:appuser /app
 
 USER appuser

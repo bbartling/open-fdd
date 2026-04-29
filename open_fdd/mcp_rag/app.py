@@ -109,7 +109,10 @@ def _json_request(method: str, path: str, *, body: dict[str, Any] | None = None)
         raise HTTPException(status_code=response.status_code, detail=response.text)
     if not (response.text or "").strip():
         return {"ok": True}
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        return {"ok": True, "text": response.text}
 
 
 def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:

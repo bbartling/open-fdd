@@ -22,10 +22,6 @@ jobs:
       matrix:
         include:
           - profile: core
-            python-version: "3.9"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: core
             python-version: "3.10"
             install-extras: '.[dev]'
             numpy-spec: ""
@@ -46,10 +42,6 @@ jobs:
             install-extras: '.[dev]'
             numpy-spec: ""
           - profile: desktop-numpy1
-            python-version: "3.9"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy1
             python-version: "3.10"
             install-extras: '.[dev,desktop]'
             numpy-spec: "numpy>=1,<2"
@@ -69,10 +61,6 @@ jobs:
             python-version: "3.14"
             install-extras: '.[dev,desktop]'
             numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy2
-            python-version: "3.9"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
           - profile: desktop-numpy2
             python-version: "3.10"
             install-extras: '.[dev,desktop]'

@@ -602,12 +602,15 @@ def create_app() -> FastAPI:
 
     @app.post("/rules/run", tags=["rules"])
     def rules_run(body: RuleRunBody) -> dict[str, Any]:
-        frame = services.ingest.load_source_frame_window(
-            source=body.source,
-            site_id=body.site_id,
-            start_ts=body.start_ts,
-            end_ts=body.end_ts,
-        )
+        try:
+            frame = services.ingest.load_source_frame_window(
+                source=body.source,
+                site_id=body.site_id,
+                start_ts=body.start_ts,
+                end_ts=body.end_ts,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if frame.empty:
             return {"input_rows": 0, "output_rows": 0, "columns": [], "fault_totals": {}, "preview": ""}
         out = run_rule_loop_batched(
@@ -711,12 +714,15 @@ def create_app() -> FastAPI:
         cap = max(1, min(int(body.limit), 50_000))
         frames: list[tuple[str, Any]] = []
         for src in sources:
-            frame = services.ingest.load_source_frame_window(
-                source=src,
-                site_id=body.site_id,
-                start_ts=body.start_ts,
-                end_ts=body.end_ts,
-            )
+            try:
+                frame = services.ingest.load_source_frame_window(
+                    source=src,
+                    site_id=body.site_id,
+                    start_ts=body.start_ts,
+                    end_ts=body.end_ts,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             if frame.empty:
                 continue
             ts_col = infer_timestamp_column(frame)
@@ -933,13 +939,16 @@ LIMIT 50""",
         graph.parse(ttl_path, format="turtle")
         rows = []
         columns: list[str] = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="'count' is passed as positional argument",
-                category=DeprecationWarning,
-            )
-            query_rows = list(graph.query(body.query))
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="'count' is passed as positional argument",
+                    category=DeprecationWarning,
+                )
+                query_rows = list(graph.query(body.query))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid SPARQL query: {exc}") from exc
         for row in query_rows:
             row_map = row.asdict() if hasattr(row, "asdict") else {}
             if not columns:
@@ -960,7 +969,10 @@ LIMIT 50""",
     async def data_model_sparql_upload(file: UploadFile = File(...)) -> dict[str, Any]:
         if not file.filename or not file.filename.lower().endswith(".sparql"):
             raise HTTPException(status_code=400, detail="Upload a .sparql file")
-        query = (await file.read()).decode("utf-8")
+        try:
+            query = (await file.read()).decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Uploaded file must be UTF-8 encoded") from exc
         return data_model_sparql(SparqlTextBody(query=query))
 
     @app.get("/data-model/ttl", tags=["model"])

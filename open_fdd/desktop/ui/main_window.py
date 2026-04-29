@@ -363,6 +363,7 @@ class DesktopMainWindow:
         QLabel = self._qt["QLabel"]
         QLineEdit = self._qt["QLineEdit"]
         QDateTimeEdit = self._qt["QDateTimeEdit"]
+        QCheckBox = self._qt["QCheckBox"]
         QDateTime = self._qt["QDateTime"]
         QTextEdit = self._qt["QTextEdit"]
 

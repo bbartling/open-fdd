@@ -124,7 +124,7 @@ def run_bacnet_scrape(
             points_polled=0,
         )
     parsed_base = urllib.parse.urlparse(base)
-    if parsed_base.scheme not in {"http", "https"}:
+    if parsed_base.scheme not in {"http", "https"} or not parsed_base.netloc:
         return BacnetScrapeResult(
             rows=0,
             source="bacnet",
@@ -173,7 +173,7 @@ def run_bacnet_scrape(
         try:
             with urllib.request.urlopen(req, timeout=25) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, json.JSONDecodeError) as exc:
             errors.append(f"device,{device_instance}: {exc}")
             continue
 

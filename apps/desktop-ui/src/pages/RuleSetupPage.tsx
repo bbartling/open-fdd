@@ -27,7 +27,7 @@ export function RuleSetupPage() {
   const [status, setStatus] = useState("Install default AHU/VAV YAML rules and attach rule pack to a site.");
   const { data: rulesData, isLoading: rulesLoading, error: rulesError, refresh: refreshRules } = useRulesList();
   const [selectedFile, setSelectedFile] = useState("");
-  const [selectedContent, setSelectedContent] = useState("");
+  const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [uploadFilename, setUploadFilename] = useState("");
   const [uploadContent, setUploadContent] = useState("");
   const [rulesStatus, setRulesStatus] = useState("Upload/view/delete YAML files.");
@@ -112,7 +112,7 @@ export function RuleSetupPage() {
       setRulesStatus(`Deleted ${filename}`);
       if (selectedFile === filename) {
         setSelectedFile("");
-        setSelectedContent("");
+        setSelectedContent(null);
       }
       await refreshRules();
     } catch (e) {
@@ -311,7 +311,7 @@ export function RuleSetupPage() {
             overflowX: "auto",
           }}
         >
-          {selectedContent || "Click a YAML filename to preview."}
+          {selectedContent ?? "Click a YAML filename to preview."}
         </div>
       </div>
     </div>

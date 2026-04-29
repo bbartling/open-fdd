@@ -68,6 +68,16 @@ function parseCsvList(value: string): string[] | null {
   return parts.length > 0 ? parts : null;
 }
 
+function detectTimeKey(frame: PlotFrameResponse | null): string | null {
+  if (!frame || frame.rows.length === 0) return null;
+  const first = frame.rows[0];
+  const keys = Object.keys(first);
+  const exact = keys.find((k) => k === "timestamp" || k === "time");
+  if (exact) return exact;
+  const fuzzy = keys.find((k) => /time|timestamp/i.test(k));
+  return fuzzy ?? null;
+}
+
 export function MlLabPage() {
   const siteContext = useSite();
   const [siteId, setSiteId] = useState(() => siteContext.selectedSiteId ?? "");
@@ -164,7 +174,8 @@ export function MlLabPage() {
       const target = out.columns.find((c) => c.includes("target_actual")) || "";
       const prediction = out.columns.find((c) => c.includes("ml_prediction")) || "";
       const defaults = [target, prediction, ruleFault, mlFault].filter(Boolean);
-      setCompareColumns(defaults.length > 0 ? defaults : out.columns.filter((c) => c !== "timestamp").slice(0, 6));
+      const timeKey = detectTimeKey(out);
+      setCompareColumns(defaults.length > 0 ? defaults : out.columns.filter((c) => c !== timeKey).slice(0, 6));
       setStatus(`Loaded ${out.rows.length} joined rows for rule-vs-ML comparison.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -173,11 +184,13 @@ export function MlLabPage() {
 
   const traces = useMemo(() => {
     if (!frame || frame.rows.length === 0 || compareColumns.length === 0) return [];
+    const timeKey = detectTimeKey(frame);
+    if (!timeKey) return [];
     return compareColumns.map((col, idx) => {
       const x: Array<string | number> = [];
       const y: number[] = [];
       for (const row of frame.rows) {
-        const xv = row.timestamp;
+        const xv = row[timeKey];
         const yv = row[col];
         const num = typeof yv === "number" ? yv : Number(yv);
         if ((typeof xv === "string" || typeof xv === "number") && Number.isFinite(num)) {
@@ -286,18 +299,24 @@ export function MlLabPage() {
         {frame && frame.columns.length > 0 ? (
           <div style={{ marginTop: 10 }}>
             <label>Comparison columns (multi-select)</label>
+            {(() => {
+              const timeKey = detectTimeKey(frame);
+              const selectable = frame.columns.filter((c) => c !== timeKey);
+              return (
             <select
               multiple
               value={compareColumns}
               onChange={(e) => setCompareColumns(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
               style={{ minHeight: 120 }}
             >
-              {frame.columns.filter((c) => c !== "timestamp").map((c) => (
+              {selectable.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
+              );
+            })()}
           </div>
         ) : null}
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 80 }} />

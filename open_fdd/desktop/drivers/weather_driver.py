@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 from typing import Protocol
 import urllib.parse
 import urllib.request
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 class FrameStore(Protocol):
     def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
@@ -52,7 +55,7 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
             if utc_offset_seconds is not None:
                 parsed_ts = pd.to_datetime(ts, errors="coerce")
                 offset = timezone(timedelta(seconds=int(utc_offset_seconds)))
-                parsed_ts = parsed_ts.dt.tz_localize(offset).dt.tz_convert("UTC")
+                parsed_ts = parsed_ts.tz_localize(offset).tz_convert("UTC")
             else:
                 parsed_ts = pd.to_datetime(ts, errors="coerce", utc=True)
             frame = pd.DataFrame(
@@ -63,11 +66,12 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
                 }
             )
             frame = frame[frame["timestamp"].notna()].copy()
-            store.write_frame(source="weather", site_id=site_id, frame=frame)
-            return WeatherFetchResult(rows=len(frame.index), source="open_meteo")
-        except Exception:
+            source = "weather"
+            store.write_frame(source=source, site_id=site_id, frame=frame)
+            return WeatherFetchResult(rows=len(frame.index), source=source)
+        except Exception as exc:
             # Fall through to synthetic weather if live fetch fails.
-            pass
+            logger.exception("Open-Meteo live fetch failed, falling back to synthetic weather: %s", exc)
 
     # Fallback synthetic weather profile.
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
