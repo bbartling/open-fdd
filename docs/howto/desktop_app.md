@@ -2,10 +2,10 @@
 
 ## Goal
 
-Run Open-FDD locally with a Python bridge + MCP + web UI, including container-friendly workflows for OpenClaw.
+Run Open-FDD locally with a Python bridge + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local bootstrap + client-to-host networking).
 
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to a local Python bridge.
-The recommended automation path is now web-first (bridge + MCP + React UI), which works cleanly in Docker/container environments.
+The recommended automation path is web-first (bridge + MCP + React UI) on the machine where Open-FDD runs.
 
 ## Install
 
@@ -15,7 +15,7 @@ pip install "open-fdd[desktop]"
 
 ## Launch
 
-### Container-friendly web launch (bridge + MCP + React UI)
+### Web launch (bridge + MCP + React UI)
 
 Recommended launcher on Windows:
 
@@ -58,7 +58,7 @@ Use Vite dev mode instead of static:
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -UiMode dev -UiPort 5173
 ```
 
-Linux/macOS/bash launcher (including container shells):
+Linux/macOS/bash launcher (including WSL):
 
 ```bash
 bash ./scripts/bootstrap-desktop.sh --install-deps
@@ -90,10 +90,7 @@ PowerShell equivalents:
 - `-UiPort 8080`
 - `-BridgeUrl http://127.0.0.1:8765`
 
-Container note:
-
-- Static mode (`UiMode=static` / `--ui-mode static`) is preferred for repeatable container startup.
-- Dev mode is useful when actively editing UI code.
+Static mode (`UiMode=static` / `--ui-mode static`) is the default for repeatable startup; dev mode is useful when actively editing UI code. For **slim CI Linux images** only, use the same scripts with Node 20+ and `NPM_CONFIG_PRODUCTION=false` if `NODE_ENV=production` is set globally.
 
 Bridge URL consistency:
 
@@ -200,7 +197,7 @@ curl -X POST http://127.0.0.1:8765/ingest/onboard \
 
 ### 5) BACnet ingest (one-shot) and polling
 
-**OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_BACNET_DIY_SERVER.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_BACNET_DIY_SERVER.md) in the repo.
+**OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) section **6) DIY BACnet server contract**.
 
 ```bash
 # one-shot pull

@@ -27,6 +27,8 @@ pip install open-fdd
 
 In active development.
 
+**OpenClaw + local desktop:** [`scripts/OPENCLAW_RUNBOOK.md`](scripts/OPENCLAW_RUNBOOK.md) — run Open-FDD on the host (`bootstrap-desktop.ps1` / `.sh`); OpenClaw in Docker as HTTP client (`host.docker.internal`); smoke prompts, Phase 2, BACnet.
+
 ---
 
 ## Online Documentation

@@ -123,7 +123,7 @@ if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
   step "Installing web UI npm deps..."
   (
     cd "${WEB_UI_DIR}"
-    # Install devDependencies even when NODE_ENV=production (Docker/OpenClaw images often set it).
+      # Install devDependencies even when NODE_ENV=production (Docker/CI images often set it).
     export NPM_CONFIG_PRODUCTION=false
     if [[ -f package-lock.json ]]; then
       npm ci
