@@ -1,15 +1,9 @@
-# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs or the builder change.
-# Opens a PR (protected master cannot receive direct pushes from GITHUB_TOKEN).
+# Regenerate pdf/open-fdd-docs.pdf (+ .txt) and open a PR when you run this workflow manually.
+# (No automatic runs on push — avoids extra PR noise; use Actions → Docs PDF → Run workflow.)
 
 name: Docs PDF
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "docs/**"
-      - "scripts/build_docs_pdf.py"
-      - ".github/workflows/docs-pdf.yml"
   workflow_dispatch:
 
 permissions:
