@@ -13,6 +13,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
 class FrameStore(Protocol):
     def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
 
@@ -28,6 +29,7 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
     lat = os.getenv("OFDD_OPEN_METEO_LATITUDE", "").strip()
     lon = os.getenv("OFDD_OPEN_METEO_LONGITUDE", "").strip()
     if lat and lon:
+        live_frame: pd.DataFrame | None = None
         try:
             end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
             start = end - timedelta(days=max(1, int(days_back)))
@@ -58,20 +60,26 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
                 parsed_ts = parsed_ts.tz_localize(offset).tz_convert("UTC")
             else:
                 parsed_ts = pd.to_datetime(ts, errors="coerce", utc=True)
-            frame = pd.DataFrame(
+            live_frame = pd.DataFrame(
                 {
                     "timestamp": parsed_ts,
                     "outside_air_temp_c": pd.to_numeric(temp, errors="coerce"),
                     "outside_air_rh_pct": pd.to_numeric(rh, errors="coerce"),
                 }
             )
-            frame = frame[frame["timestamp"].notna()].copy()
-            source = "weather"
-            store.write_frame(source=source, site_id=site_id, frame=frame)
-            return WeatherFetchResult(rows=len(frame.index), source=source)
+            live_frame = live_frame[live_frame["timestamp"].notna()].copy()
         except Exception as exc:
-            # Fall through to synthetic weather if live fetch fails.
-            logger.exception("Open-Meteo live fetch failed, falling back to synthetic weather: %s", exc)
+            logger.exception("Open-Meteo live fetch or parse failed, falling back to synthetic weather: %s", exc)
+            live_frame = None
+
+        if live_frame is not None and len(live_frame.index) > 0:
+            source = "weather"
+            try:
+                store.write_frame(source=source, site_id=site_id, frame=live_frame)
+            except Exception:
+                logger.exception("Failed to persist Open-Meteo weather frame for site_id=%s", site_id)
+                raise
+            return WeatherFetchResult(rows=len(live_frame.index), source=source)
 
     # Fallback synthetic weather profile.
     end = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
@@ -86,4 +94,3 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
     )
     store.write_frame(source="weather", site_id=site_id, frame=frame)
     return WeatherFetchResult(rows=len(frame.index))
-

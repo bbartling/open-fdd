@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 import re
+import warnings
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
@@ -73,7 +74,14 @@ def parse_timestamp_series(
     series = frame[timestamp_col]
     if cfg.normalize_known_tz_abbreviations:
         series = normalize_known_timezone_abbreviations(series)
-    parsed = pd.to_datetime(series, errors="coerce", utc=True)
+    # CSV timestamps are often heterogeneous; pandas warns on ambiguous multi-format input.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Could not infer format",
+            category=UserWarning,
+        )
+        parsed = pd.to_datetime(series, errors="coerce", utc=True)
     if len(parsed.index) == 0:
         raise ValueError(f"No rows available in timestamp column '{timestamp_col}'.")
     valid_ratio = float(parsed.notna().mean())

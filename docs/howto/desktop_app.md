@@ -95,6 +95,11 @@ Container note:
 - Static mode (`UiMode=static` / `--ui-mode static`) is preferred for repeatable container startup.
 - Dev mode is useful when actively editing UI code.
 
+Bridge URL consistency:
+
+- Bootstrap sets `OFDD_BRIDGE_URL` for the bridge process and `VITE_DESKTOP_BRIDGE_BASE` for the UI build so both target the same base URL (override with `--bridge-url` / `-BridgeUrl` or `OFDD_BRIDGE_URL`).
+- The bridge entrypoint also reads optional `OFDD_BRIDGE_HOST` / `OFDD_BRIDGE_PORT` if you prefer host/port env vars instead of a full URL.
+
 ### Desktop bridge Swagger/OpenAPI
 
 Once bridge is running locally:
@@ -243,7 +248,7 @@ If import fails, fix timestamp formatting and retry.
 - CSV, weather, onboard, and BACnet drivers write pandas frames into timestamped Feather files under `open-fdd-desktop/feather_store`.
 - Feather path layout is source/site scoped:
   - `open-fdd-desktop/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
-- Storage remains append/chunk based (many files per site/source) for reliability and backfill workflows.
+- Storage remains append/chunk-based (many files per site/source) for reliability and backfill workflows.
 - The desktop bridge can still present a site-level joined view for plotting (multi-source virtual merge by timestamp), so operators get a single logical trend frame without rewriting raw files.
 - Time-series reads for rules concatenate all Feather files for a selected `(source, site_id)` pair.
 - Point metadata supports external refs like:

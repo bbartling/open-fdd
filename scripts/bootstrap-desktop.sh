@@ -70,7 +70,9 @@ Options:
   -h, --help             Show this help
 
 Environment:
-  OFDD_BRIDGE_URL        Same as --bridge-url
+  OFDD_BRIDGE_URL        Same as --bridge-url (also used by the bridge process bind when set)
+  OFDD_BRIDGE_HOST       Optional host override for bridge (if not using OFDD_BRIDGE_URL)
+  OFDD_BRIDGE_PORT       Optional port override for bridge (if not using OFDD_BRIDGE_URL)
   OFDD_UI_HOST           Bind host for UI server (default: 0.0.0.0)
 
 Logs:
@@ -135,11 +137,12 @@ if [[ "${NO_LAUNCH}" -eq 1 ]]; then
 fi
 
 if [[ "${NO_BRIDGE}" -eq 0 ]]; then
-  step "Starting FastAPI bridge on 127.0.0.1:8765..."
+  step "Starting FastAPI bridge (${BRIDGE_URL})..."
   (
     cd "${REPO_ROOT}"
     # shellcheck disable=SC1091
     source "${VENV_ACTIVATE}"
+    export OFDD_BRIDGE_URL="${BRIDGE_URL}"
     nohup open-fdd-desktop-bridge > "${REPO_ROOT}/.openfdd-bridge.log" 2>&1 &
     echo "[open-fdd] bridge pid=$! log=.openfdd-bridge.log"
   )

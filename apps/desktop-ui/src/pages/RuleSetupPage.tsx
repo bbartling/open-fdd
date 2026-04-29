@@ -33,6 +33,7 @@ export function RuleSetupPage() {
   const [rulesStatus, setRulesStatus] = useState("Upload/view/delete YAML files.");
   const [runSource, setRunSource] = useState("csv");
   const [chunkRows, setChunkRows] = useState("0");
+  const [chunkRowsError, setChunkRowsError] = useState("");
   const [startTs, setStartTs] = useState("");
   const [endTs, setEndTs] = useState("");
   const [runOutput, setRunOutput] = useState("Use this panel to run/backfill FDD faults over a site/source/time window.");
@@ -141,8 +142,19 @@ export function RuleSetupPage() {
         setRunOutput("Rules directory is not ready yet. Install defaults or refresh rules.");
         return;
       }
-      const parsedChunkRows = Number.parseInt(chunkRows || "0", 10);
-      const safeChunkRows = Number.isFinite(parsedChunkRows) && parsedChunkRows >= 0 ? parsedChunkRows : 0;
+      const trimmed = (chunkRows || "").trim();
+      if (trimmed !== "" && !/^\d+$/.test(trimmed)) {
+        setChunkRowsError("Chunk rows must be empty or a non-negative integer (0 = auto).");
+        setRunOutput("Fix chunk rows before running backfill.");
+        return;
+      }
+      setChunkRowsError("");
+      const safeChunkRows = trimmed === "" ? 0 : Number.parseInt(trimmed, 10);
+      if (!Number.isFinite(safeChunkRows) || safeChunkRows < 0) {
+        setChunkRowsError("Chunk rows must be empty or a non-negative integer (0 = auto).");
+        setRunOutput("Fix chunk rows before running backfill.");
+        return;
+      }
       const out = await desktopFetch<{
         input_rows: number;
         output_rows: number;
@@ -226,7 +238,15 @@ export function RuleSetupPage() {
           </div>
           <div>
             <label>Chunk rows (0 = auto/full)</label>
-            <input value={chunkRows} onChange={(e) => setChunkRows(e.target.value)} placeholder="0" />
+            <input
+              value={chunkRows}
+              onChange={(e) => {
+                setChunkRows(e.target.value);
+                setChunkRowsError("");
+              }}
+              placeholder="0"
+            />
+            {chunkRowsError ? <small style={{ color: "var(--danger)", display: "block", marginTop: 4 }}>{chunkRowsError}</small> : null}
           </div>
           <div>
             <label>Start timestamp (optional, ISO)</label>

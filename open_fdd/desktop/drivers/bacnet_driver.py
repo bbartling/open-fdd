@@ -54,6 +54,22 @@ def _to_float(value: object) -> float | None:
         return None
 
 
+def _bacnet_point_polling_enabled(raw: object) -> bool:
+    """Treat JSON/YAML string flags explicitly; unknown non-empty strings do not poll."""
+    if raw is None:
+        return True
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return raw != 0
+    s = str(raw).strip().lower()
+    if s in {"true", "1", "on", "yes"}:
+        return True
+    if s in {"false", "0", "off", "no", ""}:
+        return False
+    return False
+
+
 def _default_brick_type(object_identifier: str) -> str:
     oid = str(object_identifier or "").split(",")[0].strip().lower()
     if oid.startswith("analog-"):
@@ -78,7 +94,7 @@ def run_bacnet_scrape(
         and str(p.get("external_id") or "").strip()
         and str(p.get("bacnet_device_id") or "").strip()
         and str(p.get("object_identifier") or "").strip()
-        and bool(p.get("polling", True))
+        and _bacnet_point_polling_enabled(p.get("polling", True))
     ]
     if not points:
         return BacnetScrapeResult(
@@ -172,8 +188,18 @@ def run_bacnet_scrape(
         )
         try:
             with urllib.request.urlopen(req, timeout=25) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, json.JSONDecodeError) as exc:
+                raw_bytes = resp.read()
+        except urllib.error.URLError as exc:
+            errors.append(f"device,{device_instance}: {exc}")
+            continue
+        try:
+            text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            errors.append(f"device,{device_instance}: non-UTF-8 response: {exc}")
+            continue
+        try:
+            body = json.loads(text)
+        except json.JSONDecodeError as exc:
             errors.append(f"device,{device_instance}: {exc}")
             continue
 

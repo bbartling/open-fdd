@@ -54,10 +54,6 @@ jobs:
             install-extras: '.[dev,desktop]'
             numpy-spec: "numpy>=1,<2"
           - profile: desktop-numpy1
-            python-version: "3.13"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy1
             python-version: "3.14"
             install-extras: '.[dev,desktop]'
             numpy-spec: "numpy>=1,<2"

@@ -126,6 +126,12 @@ export function MlLabPage() {
       setStatus("Set target column before training.");
       return;
     }
+    const qRaw = (residualQuantile || "").trim();
+    const q = Number(qRaw || "0.95");
+    if (!Number.isFinite(q) || q <= 0 || q >= 1) {
+      setStatus("Residual quantile must be a number strictly between 0 and 1 (for example 0.95).");
+      return;
+    }
     try {
       const out = await desktopFetch<MlTrainResponse>("/ml/train", {
         method: "POST",
@@ -136,7 +142,7 @@ export function MlLabPage() {
           target_col: targetCol.trim(),
           feature_cols: parseCsvList(featureCols),
           lag_cols: parseCsvList(lagCols),
-          residual_quantile: Number(residualQuantile || "0.95"),
+          residual_quantile: q,
           rule_flag_col: ruleFlagCol.trim() || null,
           output_source: outputSource.trim() || null,
         }),

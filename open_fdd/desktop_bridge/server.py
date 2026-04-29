@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import tempfile
+import urllib.parse
 from typing import Any, Literal
 import logging
 import os
@@ -368,7 +369,7 @@ def create_app() -> FastAPI:
     async def _ttl_sync_loop(app_ref: FastAPI) -> None:
         while True:
             try:
-                path = services.ttl.sync()
+                path = await asyncio.to_thread(services.ttl.sync)
                 app_ref.state.last_ttl_sync_iso = str(path)
                 app_ref.state.ttl_sync_error = ""
             except Exception as exc:  # pragma: no cover - defensive runtime loop
@@ -385,7 +386,15 @@ def create_app() -> FastAPI:
                         model_sites = services.model.load().get("sites", [])
                         site_id = str(model_sites[0].get("id")) if model_sites else ""
                     if not site_id:
-                        app_ref.state.bacnet_poll_error = "BACnet polling enabled but no site is configured."
+                        poll_msg = "BACnet polling enabled but no site is configured."
+                        app_ref.state.bacnet_poll_error = poll_msg
+                        _driver_health_update(
+                            app_ref.state.driver_health,
+                            driver="bacnet",
+                            rows=0,
+                            success=False,
+                            error=poll_msg,
+                        )
                     else:
                         result = await asyncio.to_thread(
                             services.ingest.ingest_bacnet,
@@ -1083,6 +1092,21 @@ LIMIT 50""",
 
 def run_desktop_bridge(host: str = "127.0.0.1", port: int = 8765) -> None:
     import uvicorn
+
+    url = (os.environ.get("OFDD_BRIDGE_URL") or os.environ.get("OFDD_DESKTOP_BRIDGE_BASE") or "").strip()
+    if url:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.hostname:
+            host = parsed.hostname
+        if parsed.port is not None:
+            port = int(parsed.port)
+    else:
+        env_host = (os.environ.get("OFDD_BRIDGE_HOST") or "").strip()
+        env_port = (os.environ.get("OFDD_BRIDGE_PORT") or "").strip()
+        if env_host:
+            host = env_host
+        if env_port:
+            port = int(env_port)
 
     uvicorn.run(create_app(), host=host, port=port, log_level="info")
 

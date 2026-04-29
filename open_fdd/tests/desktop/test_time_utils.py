@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-import warnings
 
 from open_fdd.desktop.services.time_utils import (
     TimestampParsePolicy,
@@ -19,10 +18,8 @@ def test_infer_timestamp_column_prefers_timestamp() -> None:
 
 def test_parse_timestamp_series_raises_when_invalid_ratio_low() -> None:
     frame = pd.DataFrame({"not_time": ["a", "b", "c", "2026-01-01"]})
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Could not infer format")
-        with pytest.raises(ValueError, match="No valid timestamp column found"):
-            parse_timestamp_series(frame, timestamp_col="not_time", min_valid_ratio=0.5)
+    with pytest.raises(ValueError, match="No valid timestamp column found"):
+        parse_timestamp_series(frame, timestamp_col="not_time", min_valid_ratio=0.5)
 
 
 def test_parse_timestamp_series_normalizes_known_timezone_abbrev() -> None:

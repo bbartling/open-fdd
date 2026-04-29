@@ -756,10 +756,14 @@ class DesktopMainWindow:
         if not site_id:
             self.rules_out.setPlainText("Set a site id first.")
             return
-        try:
+        self.rules_out.setPlainText("Loading data bounds...")
+
+        def _job() -> dict:
+            return self.ingest_service.source_time_bounds(source=source, site_id=site_id)
+
+        def _on_ok(info: dict) -> None:
             Qt = self._qt["Qt"]
             QDateTime = self._qt["QDateTime"]
-            info = self.ingest_service.source_time_bounds(source=source, site_id=site_id)
             if not info.get("rows"):
                 self.rules_out.setPlainText(f"No data found for site='{site_id}' source='{source}'.")
                 return
@@ -778,8 +782,11 @@ class DesktopMainWindow:
                 f"Start: {self.rules_start_dt.dateTime().toString(Qt.ISODate)}\n"
                 f"End: {self.rules_end_dt.dateTime().toString(Qt.ISODate)}"
             )
-        except Exception as exc:
-            self.rules_out.setPlainText(f"Failed to load data bounds: {exc}\n{traceback.format_exc()}")
+
+        def _on_err(exc: str, tb: str) -> None:
+            self.rules_out.setPlainText(f"Failed to load data bounds: {exc}\n{tb}")
+
+        self._run_in_background(_job, on_success=_on_ok, on_error=_on_err)
 
     def _run_rules_job(self, site_id: str, source: str, rules_path: str, chunk: int, start_ts: str, end_ts: str) -> str:
         frame = self.ingest_service.load_source_frame_window(

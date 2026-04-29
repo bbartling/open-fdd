@@ -98,10 +98,11 @@ if ($NoLaunch) {
 }
 
 if (-not $NoBridge) {
-    Write-Step "Starting FastAPI desktop bridge in a new terminal..."
+    Write-Step "Starting FastAPI bridge in a new terminal ($BridgeUrl)..."
     $bridgeCommand = @(
         "Set-Location '$RepoRoot'",
         "if (Test-Path '$VenvActivate') { . '$VenvActivate' }",
+        "`$env:OFDD_BRIDGE_URL='$BridgeUrl'",
         "open-fdd-desktop-bridge"
     ) -join "; "
     Start-Process powershell -ArgumentList @("-NoExit", "-Command", $bridgeCommand) | Out-Null
@@ -121,6 +122,8 @@ if (-not $NoUi) {
     if ($UiMode -eq "dev") {
         Write-Step "Starting web UI (Vite dev) in a new terminal..."
         $uiCommand = @(
+            "Set-Location '$RepoRoot'",
+            "if (Test-Path '$VenvActivate') { . '$VenvActivate' }",
             "Set-Location '$WebUiDir'",
             "`$env:VITE_DESKTOP_BRIDGE_BASE='$BridgeUrl'",
             "npm run dev -- --host 0.0.0.0 --port $UiPort"
@@ -129,6 +132,8 @@ if (-not $NoUi) {
     } else {
         Write-Step "Building and serving static web UI in a new terminal..."
         $uiCommand = @(
+            "Set-Location '$RepoRoot'",
+            "if (Test-Path '$VenvActivate') { . '$VenvActivate' }",
             "Set-Location '$WebUiDir'",
             "`$env:VITE_DESKTOP_BRIDGE_BASE='$BridgeUrl'",
             "npm run build",
