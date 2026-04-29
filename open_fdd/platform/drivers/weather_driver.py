@@ -5,17 +5,14 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
-from typing import Protocol
 import urllib.parse
 import urllib.request
 
 import pandas as pd
 
+from open_fdd.platform.drivers.frame_store import FrameStore
+
 logger = logging.getLogger(__name__)
-
-
-class FrameStore(Protocol):
-    def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
 
 
 @dataclass

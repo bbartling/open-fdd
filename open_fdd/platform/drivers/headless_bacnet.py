@@ -28,6 +28,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -69,19 +70,30 @@ def _run_local_once(
     return svc.ingest_bacnet(site_id=site_id, server_url=server_url, api_key=api_key)
 
 
-def _run_bridge_once(
+def run_bridge_once(
     *,
     bridge: str,
     site_id: str,
     server_url: str | None,
     api_key: str | None,
 ) -> dict[str, Any]:
+    raw = str(bridge or "").strip()
+    if not raw:
+        return {"ok": False, "success": False, "error": "empty bridge URL"}
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        return {
+            "ok": False,
+            "success": False,
+            "error": f"bridge URL must use http or https, got scheme={parsed.scheme!r}",
+        }
+    bridge_base = raw.rstrip("/")
     body: dict[str, Any] = {"site_id": site_id}
     if server_url:
         body["server_url"] = server_url
     if api_key:
         body["api_key"] = api_key
-    return _post_json(f"{bridge.rstrip('/')}/ingest/bacnet", body)
+    return _post_json(f"{bridge_base}/ingest/bacnet", body)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -119,10 +131,18 @@ def main(argv: list[str] | None = None) -> None:
             help="Bearer token for DIY server (optional).",
         )
 
+    def _interval_default() -> int:
+        raw = os.getenv("OFDD_BACNET_HEADLESS_INTERVAL", "300")
+        try:
+            v = int(str(raw).strip(), 10)
+            return v if v >= 1 else 300
+        except (TypeError, ValueError):
+            return 300
+
     loop.add_argument(
         "--interval",
         type=int,
-        default=int(os.getenv("OFDD_BACNET_HEADLESS_INTERVAL", "300")),
+        default=_interval_default(),
         help="Seconds between runs (default 300).",
     )
 
@@ -134,7 +154,7 @@ def main(argv: list[str] | None = None) -> None:
 
     def run_one() -> dict[str, Any]:
         if args.mode == "bridge":
-            return _run_bridge_once(
+            return run_bridge_once(
                 bridge=args.bridge_url,
                 site_id=site_id,
                 server_url=str(args.server_url).strip() or None,

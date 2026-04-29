@@ -3,16 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
-from typing import Any, Protocol
+from typing import Any
 import urllib.error
 import urllib.parse
 import urllib.request
 
 import pandas as pd
 
-
-class FrameStore(Protocol):
-    def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
+from open_fdd.platform.drivers.frame_store import FrameStore
 
 
 @dataclass
@@ -180,14 +178,28 @@ def run_bacnet_scrape(
                 }
             },
         }
+        request_url = f"{base}/client_read_multiple"
         req = urllib.request.Request(
-            f"{base}/client_read_multiple",
+            request_url,
             method="POST",
             headers=headers,
             data=json.dumps(payload).encode("utf-8"),
         )
         try:
             with urllib.request.urlopen(req, timeout=25) as resp:
+                final = resp.geturl() if hasattr(resp, "geturl") else request_url
+                parsed_final = urllib.parse.urlparse(final)
+                if parsed_final.scheme not in {"http", "https"}:
+                    errors.append(
+                        f"device,{device_instance}: redirect or response used unsupported scheme {parsed_final.scheme!r}"
+                    )
+                    continue
+                if parsed_final.netloc != parsed_base.netloc:
+                    errors.append(
+                        f"device,{device_instance}: response host {parsed_final.netloc!r} "
+                        f"does not match configured server {parsed_base.netloc!r}"
+                    )
+                    continue
                 raw_bytes = resp.read()
         except urllib.error.URLError as exc:
             errors.append(f"device,{device_instance}: {exc}")

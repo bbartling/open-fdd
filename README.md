@@ -27,7 +27,7 @@ pip install open-fdd
 
 In active development.
 
-**OpenClaw + local desktop:** [`scripts/OPENCLAW_RUNBOOK.md`](scripts/OPENCLAW_RUNBOOK.md) — run Open-FDD on the host (`bootstrap-desktop.ps1` / `.sh`); OpenClaw in Docker as HTTP client (`host.docker.internal`); smoke prompts, Phase 2, BACnet.
+**OpenClaw + local desktop:** [`scripts/OPENCLAW_RUNBOOK.md`](scripts/OPENCLAW_RUNBOOK.md) — run Open-FDD on the host (`bootstrap-desktop.ps1` / `.sh`); OpenClaw in Docker as HTTP client (`host.docker.internal`); Phase 0 (gateway + Codex OAuth + env); smoke prompts, Phase 2, BACnet. Architecture: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md); skills: [`contrib/openclaw-skills/`](contrib/openclaw-skills/).
 
 **Drivers:** `open_fdd/platform/drivers/` — headless BACnet: `open-fdd-headless-bacnet`; bridge `GET /config/drivers/export` + `POST /config/drivers/validate` for LLM-assisted setup.
 

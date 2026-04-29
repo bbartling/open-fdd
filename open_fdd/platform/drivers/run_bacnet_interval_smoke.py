@@ -17,17 +17,50 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
 
-from open_fdd.platform.drivers.headless_bacnet import _run_bridge_once
+from open_fdd.platform.drivers.headless_bacnet import run_bridge_once
+
+_log = logging.getLogger(__name__)
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return int(str(raw).strip(), 10)
+    except (TypeError, ValueError):
+        _log.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+
+
+def _safe_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return float(str(raw).strip())
+    except (TypeError, ValueError):
+        _log.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
 
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Smoke: repeated bridge BACnet ingest with short sleep.")
-    p.add_argument("--iterations", type=int, default=int(os.getenv("OFDD_BACNET_SMOKE_ITERATIONS", "3")))
-    p.add_argument("--sleep", type=float, default=float(os.getenv("OFDD_BACNET_SMOKE_SLEEP_SEC", "2")))
+    p.add_argument(
+        "--iterations",
+        type=int,
+        default=_safe_int_env("OFDD_BACNET_SMOKE_ITERATIONS", 3),
+    )
+    p.add_argument(
+        "--sleep",
+        type=float,
+        default=_safe_float_env("OFDD_BACNET_SMOKE_SLEEP_SEC", 2.0),
+    )
     p.add_argument("--bridge-url", default=os.getenv("OFDD_BRIDGE_URL", "http://127.0.0.1:8765").rstrip("/"))
     p.add_argument("--site-id", default=os.getenv("OFDD_BACNET_SITE_ID", "").strip())
     args = p.parse_args(argv)
@@ -37,7 +70,7 @@ def main(argv: list[str] | None = None) -> None:
     n = max(1, int(args.iterations))
     delay = max(0.0, float(args.sleep))
     for i in range(1, n + 1):
-        out = _run_bridge_once(
+        out = run_bridge_once(
             bridge=args.bridge_url,
             site_id=args.site_id,
             server_url=None,

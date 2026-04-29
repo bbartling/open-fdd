@@ -6,6 +6,7 @@ Single reference for **local bootstrap**, **OpenClaw-as-client networking**, **f
 
 **Contents**
 
+0. [Phase 0 — OpenClaw gateway, Codex OAuth, Open-FDD wiring](#0-phase-0--openclaw-gateway-codex-oauth-open-fdd-wiring)
 1. [Run Open-FDD on the host](#1-run-open-fdd-on-the-host)
 2. [OpenClaw / Docker as HTTP client to the host](#2-openclaw--docker-as-http-client-to-the-host)
 3. [Quick reference (URLs & logs)](#3-quick-reference-urls--logs)
@@ -13,6 +14,49 @@ Single reference for **local bootstrap**, **OpenClaw-as-client networking**, **f
 5. [Prompt — Phase 2](#5-prompt--phase-2)
 6. [DIY BACnet server contract](#6-diy-bacnet-server-contract)
 7. [Prompt — BACnet wiring](#7-prompt--bacnet-wiring)
+
+---
+
+## 0) Phase 0 — OpenClaw gateway, Codex OAuth, Open-FDD wiring
+
+Do this **after** the Open-FDD bridge + MCP + UI are up ([§1](#1-run-open-fdd-on-the-host)) so URLs and health checks succeed.
+
+### 0a) Install and onboard OpenClaw
+
+- Install the **OpenClaw** CLI per [OpenClaw Getting started](https://docs.openclaw.ai/start/getting-started) (Node **24** recommended, or **22.14+**).
+- Run **`openclaw onboard`** (optionally **`--install-daemon`**) so `~/.openclaw/openclaw.json` and the gateway exist.
+- Start the gateway (example): **`openclaw gateway --port 18789 --verbose`** — default port is often **18789**.
+
+### 0b) ChatGPT / Codex subscription auth (same OAuth path as OpenClaw)
+
+- Run **`openclaw models auth login --provider openai-codex`** and complete the browser/device flow.
+- Optional: merge an **`auth.profiles`** / **`auth.order`** block for **`openai-codex:default`** into `openclaw.json` so subscription models are explicit (see **[Open FDD Claw architecture — reference fragment](../docs/open-fdd-claw-architecture.md)**).
+- Default agent model can stay on an **`openai-codex/<model>`** ref per [OpenClaw OpenAI provider docs](https://docs.openclaw.ai/providers/openai).
+
+### 0c) OpenAI-compatible HTTP on the gateway (for Python / other clients)
+
+If you want **`open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient`** or any OpenAI-style client to call **through** the gateway (so **Codex OAuth stays in OpenClaw**), enable chat completions in OpenClaw config:
+
+```json5
+{
+  gateway: {
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+  },
+}
+```
+
+See [OpenClaw: OpenAI chat completions](https://docs.openclaw.ai/gateway/openai-http-api). Call **`POST http://127.0.0.1:18789/v1/chat/completions`** with **`Authorization: Bearer <OPENCLAW_GATEWAY_TOKEN>`** (or `gateway.auth.token`) and header **`x-openclaw-model: openai-codex/<model>`**; request body uses **`model: "openclaw/default"`** per that doc.
+
+Set on the host where Python runs: **`OFDD_OPENCLAW_GATEWAY_URL`**, **`OFDD_OPENCLAW_GATEWAY_TOKEN`**, optional **`OFDD_OPENCLAW_BACKEND_MODEL`** (defaults to **`openai-codex/gpt-5.5`** in code).
+
+### 0d) MCP / Open-FDD automation surface
+
+- **`open-fdd-mcp-rag`** on **8090** is **REST** (`GET /manifest`, `POST /tools/search_docs`, …), not yet a native Streamable HTTP MCP server. Configure the agent with these **URLs** (prompts / `TOOLS.md` / fetch), or add a **small MCP adapter** and then register it under **`mcp.servers`** in `openclaw.json` (see architecture doc).
+- **Copy skills** from this repo **`contrib/openclaw-skills/`** into **`~/.openclaw/workspace/skills/`** (see **`contrib/openclaw-skills/README.md`**).
 
 ---
 
@@ -106,6 +150,8 @@ Logs in repo root: `.openfdd-bridge.log`, `.openfdd-mcp.log`, `.openfdd-ui.log`.
 
 ```text
 You are helping me manually smoke-test Open-FDD on the human's machine (prefer Windows PowerShell + scripts/bootstrap-desktop.ps1, or bash + scripts/bootstrap-desktop.sh on macOS/Linux/WSL).
+
+If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under contrib/openclaw-skills).
 
 Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (Node 20, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
 

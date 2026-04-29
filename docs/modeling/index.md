@@ -26,6 +26,8 @@ Semantic modeling and TTL/SQL integration are **not** part of the **`open-fdd`**
 
 ## AI-assisted modeling workflows
 
+For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
+
 For AI-assisted data modeling (OpenClaw, ChatGPT, or human-in-the-loop review), use a simple loop:
 
 1. Export model JSON from your backend (`/model/export` or stack export endpoint).

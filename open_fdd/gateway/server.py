@@ -272,11 +272,24 @@ def create_app() -> FastAPI:
         ],
         lifespan=_lifespan,
     )
+    _ui_port_raw = (os.environ.get("OFDD_UI_PORT") or "8080").strip() or "8080"
+    try:
+        _ui_port = int(_ui_port_raw)
+        if not (1 <= _ui_port <= 65535):
+            raise ValueError
+    except ValueError:
+        _ui_port = 8080
+        _log.warning("Invalid OFDD_UI_PORT=%r; using 8080 for CORS static UI origins", _ui_port_raw)
+    _static_ui_origins = (
+        f"http://127.0.0.1:{_ui_port}",
+        f"http://localhost:{_ui_port}",
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            *_static_ui_origins,
             "tauri://localhost",
             "https://tauri.localhost",
         ],
@@ -1170,28 +1183,16 @@ LIMIT 50""",
 
 
 def run_gateway(host: str = "127.0.0.1", port: int = 8765) -> None:
-    import uvicorn
+    """Run the ASGI server (requires ``pip install 'open-fdd[desktop]'``)."""
+    from open_fdd.gateway.cli import run_gateway as _run
 
-    url = (os.environ.get("OFDD_BRIDGE_URL") or os.environ.get("OFDD_DESKTOP_BRIDGE_BASE") or "").strip()
-    if url:
-        parsed = urllib.parse.urlparse(url)
-        if parsed.hostname:
-            host = parsed.hostname
-        if parsed.port is not None:
-            port = int(parsed.port)
-    else:
-        env_host = (os.environ.get("OFDD_BRIDGE_HOST") or "").strip()
-        env_port = (os.environ.get("OFDD_BRIDGE_PORT") or "").strip()
-        if env_host:
-            host = env_host
-        if env_port:
-            port = int(env_port)
-
-    uvicorn.run(create_app(), host=host, port=port, log_level="info")
+    _run(host=host, port=port)
 
 
 run_desktop_bridge = run_gateway
 
 
 if __name__ == "__main__":
-    run_gateway()
+    from open_fdd.gateway.cli import run_gateway as _run_main
+
+    _run_main()

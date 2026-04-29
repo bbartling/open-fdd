@@ -5,14 +5,13 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
-from typing import Protocol
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pandas as pd
 
-class FrameStore(Protocol):
-    def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
+from open_fdd.platform.drivers.frame_store import FrameStore
 
 
 @dataclass
@@ -31,7 +30,13 @@ def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResul
     base_url = os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io").rstrip("/")
     api_key = os.getenv("OFDD_ONBOARD_API_KEY", "").strip()
     building_ids_raw = os.getenv("OFDD_ONBOARD_BUILDING_IDS", "").strip()
-    lookback_hours = int(os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24"))
+    _lb_raw = os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24")
+    try:
+        lookback_hours = int(str(_lb_raw).strip())
+        if lookback_hours < 1:
+            lookback_hours = 24
+    except (TypeError, ValueError):
+        lookback_hours = 24
     allow_synthetic = os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"}
 
     if not api_key:
@@ -52,6 +57,9 @@ def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResul
 
     def _request_json(path: str, *, method: str = "GET", payload: dict | None = None) -> list[dict]:
         url = f"{base_url}{path}"
+        parsed_req = urllib.parse.urlparse(url)
+        if parsed_req.scheme not in {"http", "https"}:
+            raise ValueError(f"Onboard API URL must use http or https, got scheme={parsed_req.scheme!r}")
         headers = {"X-OB-Api": api_key, "Content-Type": "application/json"}
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, method=method, headers=headers, data=data)
