@@ -61,7 +61,7 @@ def resolve_gateway_bind(default_host: str = "127.0.0.1", default_port: int = 87
             port = vp
         else:
             _log.warning(
-                "Ignoring invalid OFDD_BRIDGE_PORT=%r (expected 1–65535); using default %s",
+                "Ignoring invalid OFDD_BRIDGE_PORT=%r (expected 1-65535); using default %s",
                 env_port_raw,
                 default_port,
             )

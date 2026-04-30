@@ -6,7 +6,6 @@ operator token (e.g. OPENCLAW_GATEWAY_TOKEN). See docs/open-fdd-claw-architectur
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -78,13 +77,12 @@ class OpenClawGatewayChatClient:
 
         headers = {
             "Authorization": f"Bearer {self.gateway_token}",
-            "Content-Type": "application/json",
             "Accept": "application/json",
             "x-openclaw-model": self.backend_model,
         }
 
         resp = self._session.post(
-            url, headers=headers, data=json.dumps(body), timeout=self.timeout_s
+            url, headers=headers, json=body, timeout=self.timeout_s
         )
         if resp.status_code >= 400:
             raise RuntimeError(

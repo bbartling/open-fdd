@@ -29,6 +29,8 @@ In active development.
 
 **OpenClaw + local desktop:** [`scripts/OPENCLAW_RUNBOOK.md`](scripts/OPENCLAW_RUNBOOK.md) — run Open-FDD on the host (`bootstrap-desktop.ps1` / `.sh`); OpenClaw in Docker as HTTP client (`host.docker.internal`); Phase 0 (gateway + Codex OAuth + env); smoke prompts, Phase 2, BACnet. Architecture: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md); skills: [`contrib/openclaw-skills/`](contrib/openclaw-skills/).
 
+**OpenClaw UI in desktop dashboard:** `apps/desktop-ui` includes an **OpenClaw Chat** page (`/openclaw-chat`) that embeds OpenClaw Web UI (default `http://127.0.0.1:18789/webchat`) plus an operations panel that generates Cron/Memory/Skills maintenance commands. Configure with `apps/desktop-ui/.env` using `VITE_OPENCLAW_UI_URL` (see `.env.example`).
+
 **Drivers:** `open_fdd/platform/drivers/` — headless BACnet: `open-fdd-headless-bacnet`; bridge `GET /config/drivers/export` + `POST /config/drivers/validate` for LLM-assisted setup.
 
 **HTTP gateway:** `open_fdd/gateway/` (`open-fdd-gateway` / `open-fdd-desktop-bridge`); `open_fdd/desktop_bridge/` is a thin compatibility shim.

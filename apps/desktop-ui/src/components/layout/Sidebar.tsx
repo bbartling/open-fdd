@@ -12,6 +12,7 @@ const navItems = [
   { to: "/data-model-testing", icon: "🔎", label: "Data Model Testing" },
   { to: "/plots", icon: "📈", label: "Plots" },
   { to: "/ml-lab", icon: "🤖", label: "ML Lab" },
+  { to: "/openclaw-chat", icon: "🦞", label: "OpenClaw Chat" },
   { to: "/system", icon: "🖥️", label: "System resources" },
 ];
 

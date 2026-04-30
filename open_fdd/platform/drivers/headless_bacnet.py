@@ -46,16 +46,18 @@ def _post_json(url: str, body: dict[str, Any], *, timeout: float = 120.0) -> dic
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-        raise SystemExit(f"HTTP {exc.code} from {url}: {detail}") from exc
+        return {"success": False, "error": f"HTTP {exc.code} from {url}", "detail": detail[:2000]}
     except urllib.error.URLError as exc:
-        raise SystemExit(f"Request failed {url}: {exc}") from exc
+        return {"success": False, "error": f"Request failed {url}", "detail": str(exc)}
     if not raw.strip():
-        return {}
+        return {"success": False, "error": "empty response"}
     try:
         out = json.loads(raw)
-        return out if isinstance(out, dict) else {"raw": out}
+        if isinstance(out, dict):
+            return out
+        return {"success": False, "error": "invalid json shape", "detail": "expected object", "raw": out}
     except json.JSONDecodeError:
-        return {"ok": False, "text": raw[:2000]}
+        return {"success": False, "error": "invalid json", "text": raw[:2000]}
 
 
 def _run_local_once(

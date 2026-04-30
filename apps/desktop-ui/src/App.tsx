@@ -10,6 +10,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { PlotsPage } from "./pages/PlotsPage";
 import { DriversPage } from "./pages/DriversPage";
 import { MlLabPage } from "./pages/MlLabPage";
+import { OpenClawChatPage } from "./pages/OpenClawChatPage";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/plots" element={<PlotsPage />} />
         <Route path="/weather" element={<Navigate to="/drivers" replace />} />
         <Route path="/ml-lab" element={<MlLabPage />} />
+        <Route path="/openclaw-chat" element={<OpenClawChatPage />} />
         <Route path="/analytics" element={<Navigate to="/ml-lab" replace />} />
         <Route path="/system" element={<SystemResourcesPage />} />
       </Route>

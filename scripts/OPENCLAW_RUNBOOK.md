@@ -23,7 +23,7 @@ Do this **after** the Open-FDD bridge + MCP + UI are up ([§1](#1-run-open-fdd-o
 
 ### 0a) Install and onboard OpenClaw
 
-- Install the **OpenClaw** CLI per [OpenClaw Getting started](https://docs.openclaw.ai/start/getting-started) (Node **24** recommended, or **22.14+**).
+- Install the **OpenClaw** CLI per [OpenClaw Getting started](https://docs.openclaw.ai/start/getting-started) (**Node 22.14+ minimum, Node 24 recommended**).
 - Run **`openclaw onboard`** (optionally **`--install-daemon`**) so `~/.openclaw/openclaw.json` and the gateway exist.
 - Start the gateway (example): **`openclaw gateway --port 18789 --verbose`** — default port is often **18789**.
 
@@ -62,7 +62,7 @@ Set on the host where Python runs: **`OFDD_OPENCLAW_GATEWAY_URL`**, **`OFDD_OPEN
 
 ## 1) Run Open-FDD on the host
 
-Requirements: **Python 3.10+**, **Node.js 20 LTS** (for Vite/static build), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI **`http://127.0.0.1:8080`**.
+Requirements: **Python 3.10+**, **Node.js 20+ for Open-FDD desktop build** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI **`http://127.0.0.1:8080`**.
 
 ### Windows (recommended here)
 
@@ -96,7 +96,7 @@ bash scripts/bootstrap-desktop.sh
 
 ### Linux / Raspberry Pi (native)
 
-Install `python3`, `python3-venv`, `python3-pip`, `build-essential`, `git`, `curl`, and **Node 20** (NodeSource or nvm if distro Node is too old). Then the same `bash` flow as macOS.
+Install `python3`, `python3-venv`, `python3-pip`, `build-essential`, `git`, `curl`, and **Node 20+** (NodeSource or nvm if distro Node is too old; use **Node 22.14+** if installing OpenClaw CLI on the same host). Then the same `bash` flow as macOS.
 
 On a **Pi**, if the browser is on another device, rebuild the static UI once with  
 `bash scripts/bootstrap-desktop.sh --bridge-url http://<pi-lan-ip>:8765`.
@@ -105,7 +105,7 @@ On a **Pi**, if the browser is on another device, rebuild the static UI once wit
 
 ### Optional: slim Linux container (CI only)
 
-For **automated tests or CI**, not for co-hosting inside OpenClaw: use a normal Linux image with bash, git, python3, node 20+, then the same `bootstrap-desktop.sh` steps. Set `NPM_CONFIG_PRODUCTION=false` if the image sets `NODE_ENV=production` (the bootstrap script already does this for npm). If `tsc: not found`, delete `apps/desktop-ui/node_modules` and re-run `--install-deps`.
+For **automated tests or CI**, not for co-hosting inside OpenClaw: use a normal Linux image with bash, git, python3, **Node 20+** (or **Node 22.14+** if the same image also installs OpenClaw CLI), then the same `bootstrap-desktop.sh` steps. Set `NPM_CONFIG_PRODUCTION=false` if the image sets `NODE_ENV=production` (the bootstrap script already does this for npm). If `tsc: not found`, delete `apps/desktop-ui/node_modules` and re-run `--install-deps`.
 
 ### Loopback typo
 
@@ -153,7 +153,7 @@ You are helping me manually smoke-test Open-FDD on the human's machine (prefer W
 
 If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under contrib/openclaw-skills).
 
-Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (Node 20, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
+Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (**Node 20+ for Open-FDD; Node 22.14+ if also installing OpenClaw CLI**, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
 
 Goal: clone the repo, run bootstrap so the FastAPI bridge, MCP RAG service, and web dashboard start; verify health; ingest a CSV into Feather storage; then exercise AI-assisted data modeling and fault detection (FDD) via the bridge + MCP. Report pass/fail with concrete URLs, curl output snippets, and any stack traces from logs.
 

@@ -55,7 +55,7 @@ def test_resolve_env_host_port(clean_bridge_env: None, monkeypatch: pytest.Monke
     assert p == 9000
 
 
-def test_url_wins_over_host_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_url_wins_over_host_env(clean_bridge_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OFDD_BRIDGE_URL", "http://from-url:1111")
     monkeypatch.setenv("OFDD_BRIDGE_HOST", "ignored-host")
     monkeypatch.setenv("OFDD_BRIDGE_PORT", "2222")

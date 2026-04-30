@@ -95,6 +95,19 @@ class SparqlRequest(BaseModel):
     query: str
 
 
+class OpenClawCronValidateRequest(BaseModel):
+    expression: str
+
+
+class OpenClawOpsTemplateRequest(BaseModel):
+    shell: str = "posix"
+    name: str = "Open-FDD Site Sweep"
+    cron: str = "0 */6 * * *"
+    tz: str = "America/Chicago"
+    session: str = "isolated"
+    message: str = "Run Open-FDD health checks, ingest checks, and FDD summary for active sites."
+
+
 def _load_index() -> RagIndex:
     global _idx
     if _idx is None:
@@ -169,6 +182,63 @@ def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:
     }
 
 
+def _validate_cron_expression(expr: str) -> dict[str, Any]:
+    value = str(expr or "").strip()
+    if not value:
+        return {"valid": False, "hints": ["Cron expression is required."]}
+    if value.startswith("@"):
+        ok = {"@yearly", "@annually", "@monthly", "@weekly", "@daily", "@hourly", "@reboot"}
+        if value.lower() in ok:
+            return {"valid": True, "hints": ["Shorthand schedule detected."]}
+        return {"valid": False, "hints": ["Unknown shorthand. Try @hourly, @daily, or a 5-field cron."]}
+    fields = value.split()
+    if len(fields) not in {5, 6}:
+        return {"valid": False, "hints": ["Use 5 fields (or 6 fields with seconds)."]}
+    allowed = re.compile(r"^[\d*/,\-?A-Za-z#L]+$")
+    for token in fields:
+        if not allowed.match(token):
+            return {"valid": False, "hints": [f"Invalid token '{token}'. Use digits, *, /, -, commas, ?, names."]}
+    hints = [
+        "5-field cron: minute hour day month weekday."
+        if len(fields) == 5
+        else "6-field cron: seconds minute hour day month weekday."
+    ]
+    return {"valid": True, "hints": hints}
+
+
+def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
+    shell = str(req.shell or "posix").strip().lower()
+    cont = " `" if shell == "powershell" else " \\"
+    cron_cmd = [
+        "openclaw cron add",
+        f'--name "{req.name}"',
+        f'--cron "{req.cron}"',
+        f'--tz "{req.tz}"',
+        f"--session {req.session}",
+    ]
+    if str(req.session).strip().lower() == "main":
+        cron_cmd += [f'--system-event "{req.message}"', "--wake now"]
+    else:
+        cron_cmd += [f'--message "{req.message}"', "--announce"]
+    joined = f"{cont}\n  ".join(cron_cmd)
+    memory = (
+        "Set-Content \"$HOME/.openclaw/workspace/MEMORY.md\" -Value \"\"\n"
+        "Remove-Item \"$HOME/.openclaw/workspace/memory/*.md\" -ErrorAction SilentlyContinue"
+        if shell == "powershell"
+        else "truncate -s 0 ~/.openclaw/workspace/MEMORY.md\nrm -f ~/.openclaw/workspace/memory/*.md"
+    )
+    return {
+        "cron_add": joined,
+        "cron_cleanup": "openclaw cron list\n# remove one:\nopenclaw cron remove <job-id>",
+        "skills_refresh": (
+            "openclaw skills list --eligible\nopenclaw skills update --all\n"
+            "# optional clean reinstall path\n# rm -rf ~/.openclaw/workspace/skills/<skill-name>\n"
+            "# openclaw skills install <skill-slug>"
+        ),
+        "memory_cleanup": memory,
+    }
+
+
 @app.get("/health", response_model=None)
 def health() -> dict[str, Any] | JSONResponse:
     body: dict[str, Any] = {
@@ -218,6 +288,8 @@ def manifest() -> dict[str, Any]:
             {"name": "data_model_export", "route": "/tools/data_model_export", "mode": "write_guarded"},
             {"name": "data_model_import", "route": "/tools/data_model_import", "mode": "write_guarded"},
             {"name": "sparql_validate", "route": "/tools/sparql_validate", "mode": "write_guarded"},
+            {"name": "openclaw_cron_validate", "route": "/tools/openclaw_cron_validate", "mode": "read"},
+            {"name": "openclaw_ops_templates", "route": "/tools/openclaw_ops_templates", "mode": "read"},
         ],
     }
 
@@ -323,6 +395,18 @@ def import_data_model(req: ImportRequest) -> dict[str, Any]:
 @app.post("/tools/sparql_validate", dependencies=[Depends(require_action_tools_auth)])
 def sparql_validate(req: SparqlRequest) -> dict[str, Any]:
     return _json_request("POST", "/data-model/sparql", body={"query": req.query})
+
+
+@app.post("/tools/openclaw_cron_validate")
+def openclaw_cron_validate(req: OpenClawCronValidateRequest) -> dict[str, Any]:
+    return _validate_cron_expression(req.expression)
+
+
+@app.post("/tools/openclaw_ops_templates")
+def openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
+    payload = _build_openclaw_ops_templates(req)
+    payload["shell"] = req.shell
+    return payload
 
 
 def run_mcp_rag(host: str | None = None, port: int | None = None) -> None:

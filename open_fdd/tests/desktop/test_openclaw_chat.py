@@ -1,7 +1,6 @@
 """Tests for OpenClaw gateway chat client (mocked HTTP)."""
 
 from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pytest
@@ -46,7 +45,7 @@ def test_complete_parses_choice(monkeypatch: pytest.MonkeyPatch) -> None:
     headers = call_kw[1]["headers"]
     assert headers["Authorization"] == "Bearer tok"
     assert headers["x-openclaw-model"] == "openai-codex/gpt-5.5"
-    body = __import__("json").loads(call_kw[1]["data"])
+    body = call_kw[1]["json"]
     assert body["model"] == "openclaw/default"
     assert body["messages"][0]["content"] == "ping"
     assert body["user"] == "fdd-smoke"

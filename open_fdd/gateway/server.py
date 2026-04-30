@@ -342,7 +342,11 @@ def create_app() -> FastAPI:
         else:
             pages = int(os.sysconf("SC_PHYS_PAGES"))
             page_size = int(os.sysconf("SC_PAGE_SIZE"))
-            avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            try:
+                avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+            except (ValueError, OSError):
+                # Darwin can omit SC_AVPHYS_PAGES; use total pages as conservative fallback.
+                avail_pages = pages
             total = pages * page_size
             avail = avail_pages * page_size
         used = max(0, total - avail)
@@ -794,7 +798,7 @@ def create_app() -> FastAPI:
             frame[ts_col] = frame[ts_col].astype(str)
             want_cols = [c for c in (body.columns or []) if c in frame.columns and c != ts_col]
             if want_cols:
-                frame = frame[[ts_col] + want_cols]
+                frame = frame[[ts_col, *want_cols]]
             frame = frame.tail(cap).copy()
             frames.append((src, frame))
         if not frames:

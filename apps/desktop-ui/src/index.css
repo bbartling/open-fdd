@@ -301,6 +301,56 @@ select {
   font-size: 12px;
 }
 
+.openclaw-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.link-btn {
+  display: inline-block;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.openclaw-frame-card {
+  min-height: 68vh;
+  display: flex;
+}
+
+.openclaw-iframe {
+  width: 100%;
+  min-height: 64vh;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.cron-hint-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+}
+
+.cron-hint-box ul {
+  margin: 8px 0 0 18px;
+  padding: 0;
+}
+
+.cron-hint-box.ok {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+.cron-hint-box.warn {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
 .danger-btn {
   background: color-mix(in srgb, var(--danger) 88%, #000 12%);
 }

@@ -51,6 +51,8 @@ def test_mcp_manifest_contains_driver_tools(monkeypatch: pytest.MonkeyPatch) -> 
     assert "bacnet_config_set" in tools
     assert "drivers_export" in tools
     assert "drivers_validate" in tools
+    assert "openclaw_cron_validate" in tools
+    assert "openclaw_ops_templates" in tools
 
 
 def test_mcp_search_docs_reads_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,4 +121,34 @@ def test_mcp_health_hints_loopback_and_typo_warning(tmp_path: Path, monkeypatch:
     j2 = res2.json()
     assert j2.get("url_warnings")
     assert "127.0.0.1" in j2["url_warnings"][0]
+
+
+def test_mcp_openclaw_cron_validate() -> None:
+    client = TestClient(mcp_api)
+    bad = client.post("/tools/openclaw_cron_validate", json={"expression": "* * *"})
+    assert bad.status_code == 200
+    assert bad.json().get("valid") is False
+    good = client.post("/tools/openclaw_cron_validate", json={"expression": "0 */6 * * *"})
+    assert good.status_code == 200
+    assert good.json().get("valid") is True
+
+
+def test_mcp_openclaw_ops_templates_powershell() -> None:
+    client = TestClient(mcp_api)
+    res = client.post(
+        "/tools/openclaw_ops_templates",
+        json={
+            "shell": "powershell",
+            "name": "Morning Sweep",
+            "cron": "0 7 * * *",
+            "tz": "UTC",
+            "session": "isolated",
+            "message": "Run checks",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert "cron_add" in body and "memory_cleanup" in body
+    assert "`\n  --name" in body["cron_add"]
+    assert "Set-Content" in body["memory_cleanup"]
 
