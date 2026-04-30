@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 
 import pytest
+import pandas as pd
 
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
@@ -390,3 +391,79 @@ def test_desktop_bridge_bacnet_interval_env_invalid_falls_back(monkeypatch: pyte
     app = create_app()
     with TestClient(app):
         assert int(app.state.bacnet_poll_interval_seconds) == 300
+
+
+def test_desktop_bridge_ttl_status_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_MODEL_TTL_PATH", str(tmp_path / "custom.ttl"))
+    monkeypatch.setenv("OFDD_MODEL_TTL_MIRROR_PATH", str(tmp_path / "mirror" / "custom.ttl"))
+    monkeypatch.setenv("OFDD_TTL_SYNC_INTERVAL_SECONDS", "5")
+    app = create_app()
+    with TestClient(app) as client:
+        status = client.get("/model/ttl/status")
+        assert status.status_code == 200
+        body = status.json()
+        assert str(body.get("ttl_path", "")).endswith("custom.ttl")
+        assert str(body.get("ttl_mirror_path", "")).endswith("mirror\\custom.ttl") or str(
+            body.get("ttl_mirror_path", "")
+        ).endswith("mirror/custom.ttl")
+        assert int(body.get("sync_interval_seconds", 0)) == 5
+
+
+def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+
+    def _fake_load_source_frame_window(self, *, source: str, site_id: str, start_ts=None, end_ts=None):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+            }
+        )
+
+    def _fake_run_rule_loop_batched(*args, **kwargs):  # noqa: ARG001
+        raise RuntimeError("Rule 'x' failed (missing column?): name 'Zone_Air_Temperature_Sensor' is not defined")
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.load_source_frame_window",
+        _fake_load_source_frame_window,
+    )
+    monkeypatch.setattr("open_fdd.gateway.server.run_rule_loop_batched", _fake_run_rule_loop_batched)
+
+    with TestClient(app) as client:
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": "dummy",
+                "chunk_rows": 0,
+            },
+        )
+        assert res.status_code == 400
+        detail = str(res.json().get("detail", ""))
+        assert "missing column" in detail.lower()
+        assert "try source='all'" in detail.lower()
+
+
+def test_data_model_predefined_queries_include_hvac_presets() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/data-model/testing/predefined")
+        assert res.status_code == 200
+        data = res.json()
+        ids = {str(item.get("id", "")) for item in data}
+        assert "plant_equipment_counts" in ids
+        assert "feeds_relationships" in ids
+        assert "dcv_co2_summary" in ids
+
+
+def test_data_model_health_summary_endpoint_shape() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/data-model/testing/health-summary")
+        assert res.status_code == 200
+        body = res.json()
+        assert "score" in body
+        assert "counts" in body
+        assert "summary" in body
+        assert "orphan_equipment" in body["counts"]

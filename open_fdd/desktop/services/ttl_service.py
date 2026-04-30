@@ -9,7 +9,7 @@ import tempfile
 from typing import Any
 
 from open_fdd.desktop.storage.model_store import ModelStore
-from open_fdd.desktop.storage.paths import model_ttl_path
+from open_fdd.desktop.storage.paths import model_ttl_mirror_path, model_ttl_path
 
 _log = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ def _sanitize_local_name(value: Any) -> str | None:
 class TtlService:
     model_store: ModelStore = field(default_factory=ModelStore)
     ttl_path: Path = field(default_factory=model_ttl_path)
+    ttl_mirror_path: Path | None = field(default_factory=model_ttl_mirror_path)
 
     def build_ttl(self) -> str:
         model = self.model_store.load()
@@ -130,5 +131,8 @@ class TtlService:
             if tmp_path.exists():
                 tmp_path.unlink()
             raise
+        if self.ttl_mirror_path is not None:
+            self.ttl_mirror_path.parent.mkdir(parents=True, exist_ok=True)
+            self.ttl_mirror_path.write_text(ttl, encoding="utf-8")
         return self.ttl_path
 

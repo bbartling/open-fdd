@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { desktopFetch } from "../lib/api";
 import { useSite } from "../contexts/site-context";
+import { DriversPage } from "./DriversPage";
 
 type Site = {
   id: string;
@@ -141,6 +142,12 @@ export function SiteManagementPage() {
       <section className="card">
         <h3 style={{ marginTop: 0 }}>Status</h3>
         <textarea readOnly value={status} style={{ minHeight: 90 }} />
+      </section>
+
+      <section className="card">
+        <h3 style={{ marginTop: 0 }}>Drivers</h3>
+        <p className="muted">Driver configuration and ingest controls are now managed directly in Site Management.</p>
+        <DriversPage embedded />
       </section>
     </div>
   );

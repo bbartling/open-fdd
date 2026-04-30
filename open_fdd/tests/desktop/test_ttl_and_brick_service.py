@@ -34,3 +34,17 @@ def test_ttl_sync_and_brick_map(tmp_path: Path) -> None:
     cmap = brick.resolve_column_map()
     assert cmap.get("sat") == "sa_temp"
 
+
+def test_ttl_sync_writes_optional_mirror(tmp_path: Path) -> None:
+    store = ModelStore(path=tmp_path / "model.json")
+    svc = ModelService(store=store)
+    site = svc.create_site("Mirror Site")
+    svc.create_equipment(site_id=site["id"], name="AHU", equipment_type="AHU")
+    ttl_path = tmp_path / "model.ttl"
+    mirror_path = tmp_path / "mirror" / "data_model.ttl"
+    ttl = TtlService(model_store=store, ttl_path=ttl_path, ttl_mirror_path=mirror_path)
+    out = ttl.sync()
+    assert out.exists()
+    assert mirror_path.exists()
+    assert mirror_path.read_text(encoding="utf-8") == ttl_path.read_text(encoding="utf-8")
+

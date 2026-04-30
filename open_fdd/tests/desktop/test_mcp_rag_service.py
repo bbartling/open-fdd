@@ -53,6 +53,9 @@ def test_mcp_manifest_contains_driver_tools(monkeypatch: pytest.MonkeyPatch) -> 
     assert "drivers_validate" in tools
     assert "openclaw_cron_validate" in tools
     assert "openclaw_ops_templates" in tools
+    assert "openclaw_observability_baseline" in tools
+    assert "openclaw_memory_governance" in tools
+    assert "openclaw_subagent_lanes" in tools
 
 
 def test_mcp_search_docs_reads_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,11 +147,77 @@ def test_mcp_openclaw_ops_templates_powershell() -> None:
             "tz": "UTC",
             "session": "isolated",
             "message": "Run checks",
+            "failure_destination": "ops-alerts",
+            "alert_on_skipped": True,
+            "idempotency_key": "morning-v1",
+            "reconcile_tag": "portfolio-a",
+            "correlation_id_prefix": "ofdd",
         },
     )
     assert res.status_code == 200
     body = res.json()
     assert "cron_add" in body and "memory_cleanup" in body
     assert "`\n  --name" in body["cron_add"]
+    assert "--alert-on-skipped" in body["cron_add"]
+    assert "--idempotency-key" in body["cron_add"]
     assert "Set-Content" in body["memory_cleanup"]
+
+
+def test_mcp_openclaw_ops_templates_shell_escaping() -> None:
+    client = TestClient(mcp_api)
+    res = client.post(
+        "/tools/openclaw_ops_templates",
+        json={
+            "shell": "posix",
+            "name": "Plant A",
+            "cron": "0 7 * * *",
+            "tz": "UTC",
+            "session": "isolated",
+            "message": "check O'Brien AHU",
+            "idempotency_key": "plant-a-v1",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert "O'\"'\"'Brien" in body["cron_add"]
+
+
+def test_mcp_openclaw_observability_baseline() -> None:
+    client = TestClient(mcp_api)
+    res = client.post(
+        "/tools/openclaw_observability_baseline",
+        json={
+            "gateway_url": "http://127.0.0.1:18789",
+            "bridge_url": "http://127.0.0.1:8765",
+            "mcp_url": "http://127.0.0.1:8090",
+        },
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body.get("checks", [])) == 3
+    assert "cron_success_rate_7d" in body.get("slo_targets", {})
+    assert "correlation_id" in body.get("run_reconciliation", {}).get("required_fields", [])
+
+
+def test_mcp_openclaw_memory_governance() -> None:
+    client = TestClient(mcp_api)
+    res = client.post(
+        "/tools/openclaw_memory_governance",
+        json={"site_name": "Plant A", "timezone": "UTC"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert "memory_md_template" in body
+    assert "Plant A HVAC Memory" in body["memory_md_template"]
+    assert body.get("freshness_policy", {}).get("stale_days") == 30
+
+
+def test_mcp_openclaw_subagent_lanes() -> None:
+    client = TestClient(mcp_api)
+    res = client.post("/tools/openclaw_subagent_lanes", json={"lane_count": 3})
+    assert res.status_code == 200
+    body = res.json()
+    env = body.get("env", {})
+    assert env.get("OFDD_OPENCLAW_ROUTE_SIMPLE_LANES") == "simple-1,simple-2,simple-3"
+    assert env.get("OFDD_OPENCLAW_ROUTE_COMPLEX_LANES") == "complex-1,complex-2,complex-3"
 

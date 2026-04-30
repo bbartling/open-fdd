@@ -35,7 +35,7 @@ type DriverHealthEntry = {
 
 type DriverHealthMap = Record<string, DriverHealthEntry>;
 
-export function DriversPage() {
+export function DriversPage({ embedded = false }: { embedded?: boolean }) {
   const { sites, selectedSiteId } = useSite();
   const [siteId, setSiteId] = useState("");
   const [status, setStatus] = useState("Configure drivers and run ingest jobs from one place.");
@@ -256,10 +256,10 @@ export function DriversPage() {
     }
   }
 
-  return (
-    <div className="stack-page">
+  const content = (
+    <>
       <div className="card">
-        <h2 className="title">Drivers</h2>
+        <h2 className="title">{embedded ? "Driver Control Center" : "Drivers"}</h2>
         <p className="muted">
           Supported now: CSV import, Open-Meteo weather, BACnet via diy-bacnet-server, and Onboard API ingest.
         </p>
@@ -421,6 +421,10 @@ export function DriversPage() {
       <div className="card">
         <textarea readOnly value={status} style={{ minHeight: 96 }} />
       </div>
-    </div>
+    </>
   );
+  if (embedded) {
+    return <div className="stack-page">{content}</div>;
+  }
+  return <div className="stack-page">{content}</div>;
 }

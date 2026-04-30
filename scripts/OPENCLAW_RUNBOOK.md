@@ -58,6 +58,60 @@ Set on the host where Python runs: **`OFDD_OPENCLAW_GATEWAY_URL`**, **`OFDD_OPEN
 - **`open-fdd-mcp-rag`** on **8090** is **REST** (`GET /manifest`, `POST /tools/search_docs`, …), not yet a native Streamable HTTP MCP server. Configure the agent with these **URLs** (prompts / `TOOLS.md` / fetch), or add a **small MCP adapter** and then register it under **`mcp.servers`** in `openclaw.json` (see architecture doc).
 - **Copy skills** from this repo **`contrib/openclaw-skills/`** into **`~/.openclaw/workspace/skills/`** (see **`contrib/openclaw-skills/README.md`**).
 
+### 0e) Safe defaults (routing + security) for production-like operation
+
+These defaults are strongly recommended before unattended cron automation:
+
+1. **Model routing policy**
+   - Keep two OpenClaw agents: `simple` and `complex`.
+   - In Open-FDD, route by task class with `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient.complete_for_task(...)`.
+   - Default class should be **simple** unless signals match complex diagnostics.
+2. **Gateway auth**
+   - Treat `OPENCLAW_GATEWAY_TOKEN` as an **operator secret**, not an app convenience token.
+   - Store it in host secret storage or protected env, never in repo files.
+3. **Network posture**
+   - Keep gateway and Open-FDD on loopback/private ingress (no direct public exposure).
+4. **Tool safety**
+   - For non-main sessions, prefer sandbox/allowlists and require approvals for mutating tools (`exec`, config writes, imports).
+5. **Audit cadence**
+   - Run `openclaw doctor` plus security checks regularly; keep diagnostics export runbooks ready for incidents.
+
+### 0f) Phase 2 reliability + alerting + observability defaults
+
+For scheduled building-watch workflows, require these cron controls:
+
+- Set **failure destination** for every production job (pager/channel/webhook route).
+- Enable **skipped-run alerts** for recurring jobs.
+- Set an **idempotency key** for jobs that can overlap on retries/restarts.
+- Add a **reconcile tag** and **correlation prefix** so run logs can be replayed across OpenClaw -> Open-FDD tools.
+- Reconcile regularly with `openclaw cron runs --recent 200` and flag gaps/skips vs expected schedule.
+
+Minimum observability baseline:
+
+- Health checks every 30s:
+  - `GET <gateway>/health`
+  - `GET <bridge>/health`
+  - `GET <mcp>/health`
+- SLO starter targets:
+  - cron success rate 7d: >=99%
+  - skipped-run rate 7d: <1%
+  - p95 tool latency: <5s
+
+### 0g) Phase 3 memory governance + MCP adapter + optional subagent lanes
+
+- **Memory governance profile**
+  - Keep `MEMORY.md` for durable building truths (equipment, controls, quirks + evidence).
+  - Keep daily notes in `memory/*.md` for transient incidents and operator actions.
+  - Apply freshness/drift policy (recommended 30-day revalidation for claims).
+- **Native MCP adapter**
+  - Run `open-fdd-mcp-adapter` for a thin stdio MCP bridge over `open-fdd-mcp-rag`.
+  - Set `OFDD_MCP_RAG_REST_BASE` when adapter and REST service are on different hosts.
+- **Optional subagent lanes (multi-site scale)**
+  - Configure lane env vars:
+    - `OFDD_OPENCLAW_ROUTE_SIMPLE_LANES=simple-1,simple-2`
+    - `OFDD_OPENCLAW_ROUTE_COMPLEX_LANES=complex-1,complex-2`
+  - Pass `site_id` into routing calls so lane selection is deterministic per site.
+
 ---
 
 ## 1) Run Open-FDD on the host
@@ -280,7 +334,7 @@ Constraints: use 127.0.0.1 (not 127.0.1). Do not invent API keys. Do not pkill b
 
 ## 6) DIY BACnet server contract
 
-Open-FDD does **not** speak BACnet on the wire. It calls your **[DIY BACnet Server](https://github.com/bbartling/diy-bacnet-server)** (or a compatible gateway) over **HTTP JSON-RPC** in `open_fdd/desktop/drivers/bacnet_driver.py`.
+Open-FDD does **not** speak BACnet on the wire. It calls your **[DIY BACnet Server](https://github.com/bbartling/diy-bacnet-server)** (or a compatible gateway) over **HTTP JSON-RPC** in `open_fdd/platform/drivers/bacnet_driver.py`.
 
 **If paths or JSON differ**, paste **OpenAPI/Swagger** so the agent can diff against this contract.
 

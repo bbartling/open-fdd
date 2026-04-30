@@ -3,6 +3,7 @@ import { desktopFetch } from "../lib/api";
 import { useSite } from "../contexts/site-context";
 import { purgeTimeseries } from "../lib/crud-api";
 import { PointsTreePanel } from "../components/site/PointsTreePanel";
+import { useRulesList } from "../hooks/use-rules";
 
 type PlotFrameResponse = {
   columns: string[];
@@ -22,6 +23,7 @@ type ModelExportResponse = {
 };
 
 type PlotMode = "lines" | "points" | "both";
+type BoundsResponse = { start: string | null; end: string | null };
 
 const COLORS = ["#1d4ed8", "#be185d", "#15803d", "#d97706", "#7c3aed", "#0891b2"];
 
@@ -78,6 +80,13 @@ export function PlotsPage() {
   const [modelPoints, setModelPoints] = useState<ModelExportResponse["points"]>([]);
   const [modelEquipment, setModelEquipment] = useState<ModelExportResponse["equipment"]>([]);
   const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
+  const [runSource, setRunSource] = useState("all");
+  const [joinHow, setJoinHow] = useState<"inner" | "left" | "outer" | "right">("outer");
+  const [startTs, setStartTs] = useState("");
+  const [endTs, setEndTs] = useState("");
+  const [boundsStatus, setBoundsStatus] = useState("");
+  const [runOutput, setRunOutput] = useState("Use this panel to run/backfill FDD faults over a site/source/time window.");
+  const { data: rulesData } = useRulesList();
 
   useEffect(() => {
     if (!siteId && siteContext.selectedSiteId) {
@@ -96,6 +105,32 @@ export function PlotsPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    async function loadBounds() {
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+      if (!effectiveSiteId) return;
+      try {
+        if (runSource === "all") {
+          setBoundsStatus("Joined source mode uses combined window; bounds auto-population is source-specific.");
+          return;
+        }
+        const bounds = await desktopFetch<BoundsResponse>("/timeseries/bounds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ site_id: effectiveSiteId, source: runSource }),
+        });
+        const start = String(bounds.start || "");
+        const end = String(bounds.end || "");
+        setStartTs(start);
+        setEndTs(end);
+        setBoundsStatus(start && end ? "Auto-populated from loaded dataset bounds." : "No bounds found yet.");
+      } catch (e) {
+        setBoundsStatus(e instanceof Error ? e.message : String(e));
+      }
+    }
+    void loadBounds();
+  }, [siteId, siteContext.selectedSiteId, runSource]);
 
   function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
     const set = new Set<string>();
@@ -185,6 +220,53 @@ export function PlotsPage() {
       setStatus(`Deleted site "${siteName}" and associated data model rows.`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function runRulesWindow() {
+    try {
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+      if (!effectiveSiteId) {
+        setRunOutput("Select a site first.");
+        return;
+      }
+      const rulesPath = rulesData?.rules_dir || "";
+      if (!rulesPath) {
+        setRunOutput("Rules directory is not ready yet. Load YAML files in FDD Rule Setup and refresh.");
+        return;
+      }
+      const out = await desktopFetch<{
+        input_rows: number;
+        output_rows: number;
+        columns: string[];
+        fault_totals: Record<string, number>;
+        preview: string;
+      }>("/rules/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: effectiveSiteId,
+          source: runSource === "all" ? "csv" : runSource,
+          sources: runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : undefined,
+          join_how: runSource === "all" ? joinHow : undefined,
+          rules_path: rulesPath,
+          chunk_rows: 0,
+          start_ts: startTs || null,
+          end_ts: endTs || null,
+        }),
+      });
+      setRunOutput(
+        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n`
+          + `Columns: ${out.columns.join(", ")}\n`
+          + `Fault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
+      );
+      // Re-render plot against the same data context after backfill.
+      if (runSource !== source) {
+        setSource(runSource);
+      }
+      await loadData();
+    } catch (e) {
+      setRunOutput(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -298,6 +380,53 @@ export function PlotsPage() {
           />
         </div>
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 70 }} />
+      </div>
+
+      <div className="card">
+        <h3 className="title" style={{ marginBottom: 6 }}>Run / backfill faults</h3>
+        <p className="muted">Run FDD rules on a selected source and optional time window for historical backfill.</p>
+        <p className="muted">Chunk sizing is automatic and adapts to available local hardware resources.</p>
+        {boundsStatus ? <p className="muted">{boundsStatus}</p> : null}
+        <div className="grid-two">
+          <div>
+            <label>Source</label>
+            <select value={runSource} onChange={(e) => setRunSource(e.target.value)}>
+              <option value="all">All sources (joined)</option>
+              <option value="csv">CSV</option>
+              <option value="weather">Weather</option>
+              <option value="onboard">Onboard</option>
+              <option value="bacnet">BACnet</option>
+            </select>
+          </div>
+          {runSource === "all" ? (
+            <div>
+              <label>Join mode (joined sources)</label>
+              <select value={joinHow} onChange={(e) => setJoinHow(e.target.value as "inner" | "left" | "outer" | "right")}>
+                <option value="outer">outer</option>
+                <option value="inner">inner</option>
+                <option value="left">left</option>
+                <option value="right">right</option>
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label>Rules</label>
+              <input readOnly value="Loaded from FDD Rule Setup" />
+            </div>
+          )}
+          <div>
+            <label>Start timestamp (optional, ISO)</label>
+            <input value={startTs} onChange={(e) => setStartTs(e.target.value)} placeholder="2026-03-01T00:00:00Z" />
+          </div>
+          <div>
+            <label>End timestamp (optional, ISO)</label>
+            <input value={endTs} onChange={(e) => setEndTs(e.target.value)} placeholder="2026-03-31T23:59:59Z" />
+          </div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => void runRulesWindow()}>Run FDD backfill</button>
+        </div>
+        <textarea readOnly value={runOutput} style={{ marginTop: 10, minHeight: 180 }} />
       </div>
 
       <div className="card">

@@ -1,5 +1,7 @@
 export const openClawGatewayBase =
-  import.meta.env.VITE_OPENCLAW_GATEWAY_BASE ?? "http://127.0.0.1:18789";
+  import.meta.env.VITE_OPENFDDCLAW_GATEWAY_BASE
+  ?? import.meta.env.VITE_OPENCLAW_GATEWAY_BASE
+  ?? "http://127.0.0.1:18789";
 
 export type OpenClawCronApiPayload = {
   name: string;
@@ -7,6 +9,11 @@ export type OpenClawCronApiPayload = {
   tz: string;
   session: "isolated" | "main";
   message: string;
+  failureDestination?: string;
+  alertOnSkipped?: boolean;
+  idempotencyKey?: string;
+  reconcileTag?: string;
+  correlationIdPrefix?: string;
 };
 
 export type OpenClawCronEndpointPreset = {
@@ -19,15 +26,16 @@ export type OpenClawCronEndpointPreset = {
 export const OPENCLAW_CRON_ENDPOINT_PRESETS: OpenClawCronEndpointPreset[] = [
   {
     id: "native-openclaw-cron",
-    label: "Native OpenClaw cron API (recommended)",
+    label: "Native Open-FDD Claw cron API (recommended)",
     endpointPath: "api/cron/jobs",
-    notes: "Expected payload shape: name, cron, tz, session, message.",
+    notes:
+      "Expected payload shape: name, cron, tz, session, message (+ optional failureDestination, alertOnSkipped, idempotencyKey, reconcileTag, correlationIdPrefix).",
   },
   {
     id: "custom-relay",
     label: "Custom relay endpoint",
     endpointPath: "api/openfdd/openclaw/cron/create",
-    notes: "Use this if you deploy an adapter route in front of OpenClaw.",
+    notes: "Use this if you deploy an adapter route in front of Open-FDD Claw (OpenClaw-inspired gateway).",
   },
 ];
 
@@ -39,12 +47,15 @@ export function buildCronApiPreview(params: {
   const endpointPath = params.endpointPath.trim();
   const url = `${openClawGatewayBase.replace(/\/+$/, "")}/${endpointPath.replace(/^\/+/, "")}`;
   const headerLine = params.token?.trim()
-    ? `  -H "Authorization: Bearer ${params.token.trim()}" \\\n`
+    ? '  -H "Authorization: Bearer <REDACTED_TOKEN>" \\\n'
     : "";
+  const payloadJson = JSON.stringify(params.payload, null, 2);
   return [
     `curl -X POST "${url}" \\`,
     '  -H "Content-Type: application/json" \\',
-    `${headerLine}  -d '${JSON.stringify(params.payload, null, 2)}'`,
+    `${headerLine}  --data-binary @- <<'EOF'`,
+    payloadJson,
+    "EOF",
   ].join("\n");
 }
 

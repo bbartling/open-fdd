@@ -293,6 +293,7 @@ def create_app() -> FastAPI:
             "tauri://localhost",
             "https://tauri.localhost",
         ],
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=True,
@@ -340,15 +341,19 @@ def create_app() -> FastAPI:
             total = int(stat.ullTotalPhys)
             avail = int(stat.ullAvailPhys)
         else:
-            pages = int(os.sysconf("SC_PHYS_PAGES"))
-            page_size = int(os.sysconf("SC_PAGE_SIZE"))
             try:
-                avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
-            except (ValueError, OSError):
-                # Darwin can omit SC_AVPHYS_PAGES; use total pages as conservative fallback.
-                avail_pages = pages
-            total = pages * page_size
-            avail = avail_pages * page_size
+                pages = int(os.sysconf("SC_PHYS_PAGES"))
+                page_size = int(os.sysconf("SC_PAGE_SIZE"))
+                try:
+                    avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+                except (ValueError, OSError, KeyError):
+                    # Darwin can omit SC_AVPHYS_PAGES; use total pages as conservative fallback.
+                    avail_pages = pages
+                total = pages * page_size
+                avail = avail_pages * page_size
+            except (ValueError, OSError, KeyError):
+                total = 0
+                avail = 0
         used = max(0, total - avail)
         pct = round((used / total) * 100, 2) if total > 0 else 0.0
         return {
@@ -373,7 +378,12 @@ def create_app() -> FastAPI:
             "used_percent": pct,
         }
 
-    app.state.ttl_sync_interval_seconds = 30
+    raw_ttl_interval = os.getenv("OFDD_TTL_SYNC_INTERVAL_SECONDS", "30")
+    try:
+        ttl_interval = int(raw_ttl_interval or "30")
+    except (TypeError, ValueError):
+        ttl_interval = 30
+    app.state.ttl_sync_interval_seconds = max(1, ttl_interval)
     app.state.last_ttl_sync_iso = ""
     app.state.ttl_sync_error = ""
     app.state.bacnet_poll_enabled = os.getenv("OFDD_BACNET_POLL_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -570,6 +580,7 @@ def create_app() -> FastAPI:
     def model_ttl_status() -> dict[str, Any]:
         return {
             "ttl_path": str(services.ttl.ttl_path),
+            "ttl_mirror_path": str(services.ttl.ttl_mirror_path) if services.ttl.ttl_mirror_path else "",
             "sync_interval_seconds": int(app.state.ttl_sync_interval_seconds),
             "last_sync_path": app.state.last_ttl_sync_iso,
             "last_sync_error": app.state.ttl_sync_error,
@@ -677,14 +688,23 @@ def create_app() -> FastAPI:
                 "preview": "",
                 **load_meta,
             }
-        out = run_rule_loop_batched(
-            frame,
-            RuleLoopConfig(
-                rules_path=body.rules_path,
-                chunk_rows=int(body.chunk_rows or 0),
-                target_memory_fraction=float(body.target_memory_fraction or 0.25),
-            ),
-        )
+        try:
+            out = run_rule_loop_batched(
+                frame,
+                RuleLoopConfig(
+                    rules_path=body.rules_path,
+                    chunk_rows=int(body.chunk_rows or 0),
+                    target_memory_fraction=float(body.target_memory_fraction or 0.25),
+                ),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{exc}. Hint: this usually means a rule references a sensor column not present "
+                    "in the selected source/window; try source='all' (joined) or map/upload matching points."
+                ),
+            ) from exc
         fault_cols = [
             c
             for c in out.columns
@@ -807,7 +827,7 @@ def create_app() -> FastAPI:
         if len(frames) == 1 or not body.join_on_timestamp:
             out_rows: list[dict[str, Any]] = []
             for src, frm in frames:
-                copy = frm.copy()
+                copy = frm.copy().where(pd.notnull(frm), None)
                 copy["source"] = src
                 out_rows.extend(copy.to_dict(orient="records"))
             out = out_rows[-cap:]
@@ -827,6 +847,7 @@ def create_app() -> FastAPI:
             rhs = rhs.rename(columns={c: f"{c}_{src}" for c in rhs.columns if c != ts_col})
             merged = merged.merge(rhs, on=ts_col, how=join_how)
         merged = merged.tail(cap)
+        merged = merged.where(pd.notnull(merged), None)
         return {"columns": [str(c) for c in merged.columns], "rows": merged.to_dict(orient="records")}
 
     @app.post("/timeseries/bounds", tags=["timeseries"])
@@ -940,10 +961,16 @@ def create_app() -> FastAPI:
 
     @app.get("/config/onboard", tags=["config"])
     def onboard_config_get() -> dict[str, Any]:
+        raw_lookback = os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24")
+        try:
+            lookback_hours = int(str(raw_lookback).strip() or "24")
+        except (TypeError, ValueError):
+            lookback_hours = 24
+        lookback_hours = max(1, min(lookback_hours, 24 * 30))
         return {
             "base_url": os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io"),
             "building_ids": os.getenv("OFDD_ONBOARD_BUILDING_IDS", ""),
-            "lookback_hours": int(os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24") or "24"),
+            "lookback_hours": lookback_hours,
             "api_key_set": bool(str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()),
             "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
         }
@@ -1031,7 +1058,244 @@ GROUP BY ?type
 ORDER BY DESC(?count)
 LIMIT 50""",
             },
+            {
+                "id": "vav_count",
+                "label": "Count VAV boxes",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?vav) AS ?count) WHERE {
+  ?vav a ?t .
+  VALUES ?t { brick:Variable_Air_Volume_Box brick:Variable_Air_Volume_Box_With_Reheat }
+}""",
+            },
+            {
+                "id": "ahu_vav_system_counts",
+                "label": "AHU + VAV system counts",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?system_type (COUNT(?e) AS ?count) WHERE {
+  ?e a ?t .
+  VALUES (?t ?system_type) {
+    (brick:Air_Handling_Unit "AHU")
+    (brick:Variable_Air_Volume_Box "VAV")
+    (brick:Variable_Air_Volume_Box_With_Reheat "VAV_Reheat")
+  }
+}
+GROUP BY ?system_type
+ORDER BY ?system_type""",
+            },
+            {
+                "id": "plant_equipment_counts",
+                "label": "Central plant counts (chiller/boiler/tower)",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?plant_type (COUNT(?e) AS ?count) WHERE {
+  ?e a ?t .
+  VALUES (?t ?plant_type) {
+    (brick:Chiller "Chiller")
+    (brick:Boiler "Boiler")
+    (brick:Cooling_Tower "Cooling_Tower")
+  }
+}
+GROUP BY ?plant_type
+ORDER BY ?plant_type""",
+            },
+            {
+                "id": "water_cooled_chiller_plant_counts",
+                "label": "Water-cooled chiller plant proxy counts",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?plant_component (COUNT(?e) AS ?count) WHERE {
+  ?e a ?t .
+  VALUES (?t ?plant_component) {
+    (brick:Chiller "Chiller")
+    (brick:Cooling_Tower "Cooling_Tower")
+    (brick:Condenser_Water_Loop "Condenser_Water_Loop")
+    (brick:Chilled_Water_Loop "Chilled_Water_Loop")
+  }
+}
+GROUP BY ?plant_component
+ORDER BY ?plant_component""",
+            },
+            {
+                "id": "heat_pump_vrf_counts",
+                "label": "Heat pump / VRF counts",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?equip_type (COUNT(?e) AS ?count) WHERE {
+  ?e a ?t .
+  VALUES (?t ?equip_type) {
+    (brick:Heat_Pump "Heat_Pump")
+    (brick:VRF "VRF")
+    (brick:Variable_Refrigerant_Flow_Unit "Variable_Refrigerant_Flow_Unit")
+  }
+}
+GROUP BY ?equip_type
+ORDER BY ?equip_type""",
+            },
+            {
+                "id": "feeds_relationships",
+                "label": "feeds / isFedBy relationships",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?src ?rel ?dst WHERE {
+  {
+    ?src brick:feeds ?dst .
+    BIND("feeds" AS ?rel)
+  }
+  UNION
+  {
+    ?src brick:isFedBy ?dst .
+    BIND("isFedBy" AS ?rel)
+  }
+}
+ORDER BY ?rel ?src ?dst
+LIMIT 200""",
+            },
+            {
+                "id": "ahu_setpoints",
+                "label": "AHU SAT + duct pressure setpoints",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?ahu ?ahu_label ?sp ?sp_type WHERE {
+  ?ahu a brick:Air_Handling_Unit .
+  OPTIONAL { ?ahu <http://www.w3.org/2000/01/rdf-schema#label> ?ahu_label . }
+  ?sp brick:isPointOf ?ahu .
+  ?sp a ?sp_type .
+  VALUES ?sp_type {
+    brick:Supply_Air_Temperature_Setpoint
+    brick:Supply_Air_Static_Pressure_Setpoint
+  }
+}
+ORDER BY ?ahu ?sp_type""",
+            },
+            {
+                "id": "chiller_leaving_temp",
+                "label": "Chiller leaving temp sensors/setpoints",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?chiller ?point ?point_type WHERE {
+  ?chiller a brick:Chiller .
+  ?point brick:isPointOf ?chiller .
+  ?point a ?point_type .
+  VALUES ?point_type {
+    brick:Chilled_Water_Supply_Temperature_Sensor
+    brick:Chilled_Water_Supply_Temperature_Setpoint
+    brick:Leaving_Chilled_Water_Temperature_Sensor
+  }
+}
+ORDER BY ?chiller ?point_type""",
+            },
+            {
+                "id": "dcv_co2_summary",
+                "label": "DCV / CO2 sensor summary",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?co2_type (COUNT(?p) AS ?count) WHERE {
+  ?p a ?co2_type .
+  VALUES ?co2_type {
+    brick:CO2_Sensor
+    brick:CO2_Level_Sensor
+    brick:Zone_Air_CO2_Sensor
+    brick:Return_Air_CO2_Sensor
+  }
+}
+GROUP BY ?co2_type
+ORDER BY ?co2_type""",
+            },
+            {
+                "id": "economizer_free_cooling_summary",
+                "label": "Free cooling / economizer points",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?point_type (COUNT(?p) AS ?count) WHERE {
+  ?p a ?point_type .
+  VALUES ?point_type {
+    brick:Economizer_Enable_Command
+    brick:Economizer_Status
+    brick:Outside_Air_Damper_Position_Command
+    brick:Outside_Air_Damper_Position_Sensor
+  }
+}
+GROUP BY ?point_type
+ORDER BY ?point_type""",
+            },
+            {
+                "id": "mechanical_system_summary",
+                "label": "Mechanical system summary",
+                "query": """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT ?class (COUNT(?e) AS ?count) WHERE {
+  ?e a ?class .
+  VALUES ?class {
+    brick:Air_Handling_Unit
+    brick:Variable_Air_Volume_Box
+    brick:Variable_Air_Volume_Box_With_Reheat
+    brick:Heat_Pump
+    brick:Chiller
+    brick:Boiler
+    brick:Cooling_Tower
+  }
+}
+GROUP BY ?class
+ORDER BY DESC(?count)""",
+            },
         ]
+
+    @app.get("/data-model/testing/health-summary", tags=["sparql"])
+    def data_model_testing_health_summary() -> dict[str, Any]:
+        model = services.model.load()
+        sites = model.get("sites", []) if isinstance(model.get("sites"), list) else []
+        equipment = model.get("equipment", []) if isinstance(model.get("equipment"), list) else []
+        points = model.get("points", []) if isinstance(model.get("points"), list) else []
+
+        site_ids = {str(s.get("id")) for s in sites if isinstance(s, dict) and s.get("id")}
+        equipment_ids = {str(e.get("id")) for e in equipment if isinstance(e, dict) and e.get("id")}
+
+        orphan_equipment = 0
+        for eq in equipment:
+            if not isinstance(eq, dict):
+                continue
+            sid = eq.get("site_id")
+            if sid and str(sid) not in site_ids:
+                orphan_equipment += 1
+
+        orphan_points_site = 0
+        orphan_points_equipment = 0
+        missing_brick_type = 0
+        missing_fdd_input = 0
+        duplicate_map: dict[tuple[str, str, str], int] = {}
+        for pt in points:
+            if not isinstance(pt, dict):
+                continue
+            sid = pt.get("site_id")
+            eqid = pt.get("equipment_id")
+            if sid and str(sid) not in site_ids:
+                orphan_points_site += 1
+            if eqid and str(eqid) not in equipment_ids:
+                orphan_points_equipment += 1
+            if not str(pt.get("brick_type") or "").strip():
+                missing_brick_type += 1
+            if not str(pt.get("fdd_input") or "").strip():
+                missing_fdd_input += 1
+            key = (
+                str(pt.get("site_id") or ""),
+                str(pt.get("equipment_id") or ""),
+                str(pt.get("external_id") or ""),
+            )
+            duplicate_map[key] = duplicate_map.get(key, 0) + 1
+        duplicate_external_ids = sum(1 for count in duplicate_map.values() if count > 1)
+
+        critical = orphan_equipment + orphan_points_site + orphan_points_equipment
+        warning = missing_brick_type + missing_fdd_input + duplicate_external_ids
+        score = max(0, 100 - (critical * 10) - (warning * 2))
+        return {
+            "score": score,
+            "counts": {
+                "sites": len(sites),
+                "equipment": len(equipment),
+                "points": len(points),
+                "orphan_equipment": orphan_equipment,
+                "orphan_points_site": orphan_points_site,
+                "orphan_points_equipment": orphan_points_equipment,
+                "missing_brick_type": missing_brick_type,
+                "missing_fdd_input": missing_fdd_input,
+                "duplicate_external_ids": duplicate_external_ids,
+            },
+            "summary": (
+                f"Health score={score}; critical={critical}; warnings={warning}. "
+                "Check orphan links, missing BRICK/FDD mappings, and duplicate external IDs."
+            ),
+        }
 
     @app.post("/data-model/testing/query", tags=["sparql"])
     def data_model_testing_query(body: SparqlQueryBody) -> dict[str, Any]:

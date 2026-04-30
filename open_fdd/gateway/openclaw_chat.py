@@ -12,6 +12,11 @@ from typing import Any
 from urllib.parse import urljoin
 
 import requests
+from open_fdd.gateway.openclaw_routing import (
+    TaskClass,
+    decide_route,
+    load_route_policy,
+)
 
 
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:18789"
@@ -25,6 +30,8 @@ class OpenClawChatResponse:
 
     content: str
     raw: dict[str, Any]
+    task_class: TaskClass | None = None
+    route_reason: str | None = None
 
 
 class OpenClawGatewayChatClient:
@@ -42,9 +49,23 @@ class OpenClawGatewayChatClient:
         self.base_url = (base_url or os.getenv("OFDD_OPENCLAW_GATEWAY_URL") or DEFAULT_GATEWAY_URL).rstrip(
             "/"
         )
-        self.gateway_token = (gateway_token or os.getenv("OFDD_OPENCLAW_GATEWAY_TOKEN") or "").strip()
+        if not base_url:
+            self.base_url = (
+                os.getenv("OFDD_CLAW_GATEWAY_URL")
+                or os.getenv("OFDD_OPENCLAW_GATEWAY_URL")
+                or DEFAULT_GATEWAY_URL
+            ).rstrip("/")
+        self.gateway_token = (
+            gateway_token
+            or os.getenv("OFDD_CLAW_GATEWAY_TOKEN")
+            or os.getenv("OFDD_OPENCLAW_GATEWAY_TOKEN")
+            or ""
+        ).strip()
         self.backend_model = (
-            backend_model or os.getenv("OFDD_OPENCLAW_BACKEND_MODEL") or DEFAULT_BACKEND_MODEL
+            backend_model
+            or os.getenv("OFDD_CLAW_BACKEND_MODEL")
+            or os.getenv("OFDD_OPENCLAW_BACKEND_MODEL")
+            or DEFAULT_BACKEND_MODEL
         ).strip()
         self.timeout_s = timeout_s
         self._session = session or requests.Session()
@@ -55,18 +76,22 @@ class OpenClawGatewayChatClient:
         *,
         user: str | None = None,
         temperature: float | None = None,
+        model_target: str = OPENAI_AGENT_MODEL,
+        backend_model: str | None = None,
+        task_class: TaskClass | None = None,
+        route_reason: str | None = None,
     ) -> OpenClawChatResponse:
         if not self.gateway_token:
             raise ValueError(
                 "Missing gateway token: set OFDD_OPENCLAW_GATEWAY_TOKEN or pass gateway_token= "
-                "(same secret as OPENCLAW_GATEWAY_TOKEN / gateway.auth.token)."
+                "(same secret as OFDD_CLAW_GATEWAY_TOKEN / OPENCLAW_GATEWAY_TOKEN / gateway.auth.token)."
             )
         if not messages:
             raise ValueError("messages must be a non-empty list of {role, content} dicts")
 
         url = urljoin(self.base_url + "/", "v1/chat/completions")
         body: dict[str, Any] = {
-            "model": OPENAI_AGENT_MODEL,
+            "model": model_target,
             "messages": messages,
             "stream": False,
         }
@@ -78,7 +103,7 @@ class OpenClawGatewayChatClient:
         headers = {
             "Authorization": f"Bearer {self.gateway_token}",
             "Accept": "application/json",
-            "x-openclaw-model": self.backend_model,
+            "x-openclaw-model": backend_model or self.backend_model,
         }
 
         resp = self._session.post(
@@ -103,4 +128,33 @@ class OpenClawGatewayChatClient:
         if not isinstance(content, str):
             content = str(content)
 
-        return OpenClawChatResponse(content=content, raw=data)
+        return OpenClawChatResponse(
+            content=content,
+            raw=data,
+            task_class=task_class,
+            route_reason=route_reason,
+        )
+
+    def complete_for_task(
+        self,
+        *,
+        task_summary: str,
+        messages: list[dict[str, str]],
+        user: str | None = None,
+        temperature: float | None = None,
+        forced_class: TaskClass | None = None,
+        site_id: str | None = None,
+    ) -> OpenClawChatResponse:
+        policy = load_route_policy()
+        route = decide_route(
+            policy=policy, task_summary=task_summary, forced_class=forced_class, site_id=site_id
+        )
+        return self.complete(
+            messages,
+            user=user,
+            temperature=temperature,
+            model_target=route.agent_target,
+            backend_model=route.backend_model,
+            task_class=route.task_class,
+            route_reason=route.reason,
+        )

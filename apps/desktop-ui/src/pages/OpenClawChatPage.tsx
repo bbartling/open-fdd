@@ -1,4 +1,4 @@
-import { openClawUiUrl } from "../lib/openclaw";
+import { openClawUiUrl } from "../lib/openfdd-claw";
 import {
   type CronDraft,
   type CronValidation,
@@ -8,13 +8,21 @@ import {
   buildMemoryCleanupCommands,
   buildSkillsRefreshCommands,
   validateCronExpression,
-} from "../lib/openclaw-ops";
+} from "../lib/openfdd-claw-ops";
 import { useMemo, useState } from "react";
 import {
   OPENCLAW_CRON_ENDPOINT_PRESETS,
   buildCronApiPreview,
   createCronJobViaApi,
-} from "../lib/openclaw-gateway";
+} from "../lib/openfdd-claw-gateway";
+import {
+  PHASE2_CRON_RELAXED_PRESET,
+  PHASE2_CRON_STRICT_PRESET,
+  PHASE3_MEMORY_GOVERNANCE_PRESET,
+  PHASE3_SUBAGENT_LANES_PRESET,
+  SECURITY_SAFE_DEFAULTS_PRESET,
+  SIMPLE_COMPLEX_POLICY_PRESET,
+} from "../lib/openfdd-claw-policy";
 
 export function OpenClawChatPage() {
   const [draft, setDraft] = useState<CronDraft>({
@@ -23,6 +31,11 @@ export function OpenClawChatPage() {
     tz: "America/Chicago",
     message: "Run Open-FDD health checks, ingest checks, and FDD summary for active sites.",
     session: "isolated",
+    failureDestination: "ops-alerts",
+    alertOnSkipped: true,
+    idempotencyKey: "open-fdd-site-sweep-v1",
+    reconcileTag: "portfolio-default",
+    correlationIdPrefix: "ofdd",
   });
   const [shell, setShell] = useState<ShellFlavor>("posix");
   const [mode, setMode] = useState<"commands" | "api">("commands");
@@ -47,6 +60,9 @@ export function OpenClawChatPage() {
         "",
         "# Cron cleanup",
         cronCleanup,
+        "",
+        "# Reconciliation visibility",
+        "openclaw cron runs --recent 20",
         "",
         "# Skills refresh",
         skillsOps,
@@ -77,6 +93,11 @@ export function OpenClawChatPage() {
           tz: draft.tz,
           session: draft.session,
           message: draft.message,
+          failureDestination: draft.failureDestination || undefined,
+          alertOnSkipped: draft.alertOnSkipped,
+          idempotencyKey: draft.idempotencyKey || undefined,
+          reconcileTag: draft.reconcileTag || undefined,
+          correlationIdPrefix: draft.correlationIdPrefix || undefined,
         },
       }),
     [apiEndpointPath, apiToken, draft],
@@ -118,6 +139,11 @@ export function OpenClawChatPage() {
           tz: draft.tz,
           session: draft.session,
           message: draft.message,
+          failureDestination: draft.failureDestination || undefined,
+          alertOnSkipped: draft.alertOnSkipped,
+          idempotencyKey: draft.idempotencyKey || undefined,
+          reconcileTag: draft.reconcileTag || undefined,
+          correlationIdPrefix: draft.correlationIdPrefix || undefined,
         },
       });
       setApiResult(`HTTP ${out.status}\n${out.body}`);
@@ -132,12 +158,12 @@ export function OpenClawChatPage() {
   return (
     <section className="stack-page">
       <div className="card">
-        <h2 className="title">OpenClaw Chat</h2>
+        <h2 className="title">Open-FDD Claw Chat</h2>
         <p className="muted">
-          Embedded OpenClaw UI for operator chat and agent workflows.
+          Open-FDD Claw workspace (OpenClaw-inspired) for operator chat and agent workflows.
         </p>
         <p className="muted">
-          Set <code>VITE_OPENCLAW_UI_URL</code> to point at your OpenClaw UI,
+          Set <code>VITE_OPENFDDCLAW_UI_URL</code> (or legacy <code>VITE_OPENCLAW_UI_URL</code>) to point at your Open-FDD Claw UI,
           for example <code>http://127.0.0.1:18789/webchat</code>.
         </p>
         <div className="openclaw-actions">
@@ -150,8 +176,8 @@ export function OpenClawChatPage() {
       <div className="card">
         <h3 className="title">Operations (Cron / Memory / Skills)</h3>
         <p className="muted">
-          OpenClaw Cron runs in the gateway and can wake the agent on schedule.
-          Use these generated commands in your terminal or in OpenClaw operator workflows.
+          Open-FDD Claw Cron runs in the gateway and can wake the agent on schedule.
+          Use these generated commands in your terminal or in Open-FDD Claw operator workflows.
         </p>
         <div className="openclaw-actions">
           <span className="inline-label">Runbook shell:</span>
@@ -232,7 +258,81 @@ export function OpenClawChatPage() {
               {example}
             </button>
           ))}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() =>
+              setDraft((prev) => ({
+                ...prev,
+                failureDestination: "ops-alerts",
+                alertOnSkipped: true,
+                idempotencyKey: "open-fdd-site-sweep-v1",
+                reconcileTag: "portfolio-default",
+                correlationIdPrefix: "ofdd",
+              }))
+            }
+          >
+            Apply strict cron fallback
+          </button>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() =>
+              setDraft((prev) => ({
+                ...prev,
+                failureDestination: "",
+                alertOnSkipped: false,
+                idempotencyKey: "",
+                reconcileTag: "ad-hoc",
+                correlationIdPrefix: "ofdd",
+              }))
+            }
+          >
+            Apply relaxed fallback
+          </button>
         </div>
+        <div className="grid-two">
+          <label>
+            Failure destination
+            <input
+              value={draft.failureDestination}
+              onChange={(e) => setDraft((prev) => ({ ...prev, failureDestination: e.target.value }))}
+              placeholder="ops-alerts"
+            />
+          </label>
+          <label>
+            Idempotency key
+            <input
+              value={draft.idempotencyKey}
+              onChange={(e) => setDraft((prev) => ({ ...prev, idempotencyKey: e.target.value }))}
+              placeholder="open-fdd-site-sweep-v1"
+            />
+          </label>
+          <label>
+            Reconcile tag
+            <input
+              value={draft.reconcileTag}
+              onChange={(e) => setDraft((prev) => ({ ...prev, reconcileTag: e.target.value }))}
+              placeholder="portfolio-default"
+            />
+          </label>
+          <label>
+            Correlation ID prefix
+            <input
+              value={draft.correlationIdPrefix}
+              onChange={(e) => setDraft((prev) => ({ ...prev, correlationIdPrefix: e.target.value }))}
+              placeholder="ofdd"
+            />
+          </label>
+        </div>
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.alertOnSkipped}
+            onChange={(e) => setDraft((prev) => ({ ...prev, alertOnSkipped: e.target.checked }))}
+          />{" "}
+          Alert on skipped runs
+        </label>
         <label>
           Message
           <textarea
@@ -290,7 +390,7 @@ export function OpenClawChatPage() {
                 {apiBusy ? "Creating..." : "Create This Job via API"}
               </button>
               <span className="muted">
-                Uses VITE_OPENCLAW_GATEWAY_BASE + endpoint path.
+                Uses VITE_OPENFDDCLAW_GATEWAY_BASE (or legacy VITE_OPENCLAW_GATEWAY_BASE) + endpoint path.
               </span>
             </div>
             <label>
@@ -368,9 +468,75 @@ export function OpenClawChatPage() {
           </>
         ) : null}
       </div>
+      <div className="card">
+        <h3 className="title">Phase 1 policy presets (routing + security)</h3>
+        <p className="muted">
+          Use these presets to enforce simple/complex model lanes and safe gateway defaults.
+        </p>
+        <div className="grid-two">
+          <label>
+            Runtime route map env preset
+            <textarea readOnly rows={9} value={SIMPLE_COMPLEX_POLICY_PRESET} />
+            <div className="openclaw-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void copyText("route-preset", SIMPLE_COMPLEX_POLICY_PRESET)}
+              >
+                {copiedKey === "route-preset" ? "Copied" : "Copy route preset"}
+              </button>
+            </div>
+          </label>
+          <label>
+            Security safe-defaults preset
+            <textarea readOnly rows={9} value={SECURITY_SAFE_DEFAULTS_PRESET} />
+            <div className="openclaw-actions">
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void copyText("security-preset", SECURITY_SAFE_DEFAULTS_PRESET)}
+              >
+                {copiedKey === "security-preset" ? "Copied" : "Copy security preset"}
+              </button>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="title">Phase 2 reliability presets</h3>
+        <p className="muted">
+          Production default: set failure destinations, skipped-run alerts, idempotency, and reconciliation tags.
+        </p>
+        <div className="grid-two">
+          <label>
+            Strict fallback preset
+            <textarea readOnly rows={8} value={PHASE2_CRON_STRICT_PRESET} />
+          </label>
+          <label>
+            Relaxed fallback preset
+            <textarea readOnly rows={8} value={PHASE2_CRON_RELAXED_PRESET} />
+          </label>
+        </div>
+      </div>
+      <div className="card">
+        <h3 className="title">Phase 3 memory + multi-site presets</h3>
+        <p className="muted">
+          Templates for durable-vs-transient memory governance and optional lane-based subagent scaling.
+        </p>
+        <div className="grid-two">
+          <label>
+            Memory governance preset
+            <textarea readOnly rows={9} value={PHASE3_MEMORY_GOVERNANCE_PRESET} />
+          </label>
+          <label>
+            Subagent lanes preset
+            <textarea readOnly rows={9} value={PHASE3_SUBAGENT_LANES_PRESET} />
+          </label>
+        </div>
+      </div>
       <div className="card openclaw-frame-card">
         <iframe
-          title="OpenClaw UI"
+          title="Open-FDD Claw UI"
           src={openClawUiUrl}
           className="openclaw-iframe"
           loading="lazy"

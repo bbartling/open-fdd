@@ -25,6 +25,8 @@ describe("openclaw gateway API helper", () => {
         tz: "UTC",
         session: "isolated",
         message: "run checks",
+        failureDestination: "ops-alerts",
+        alertOnSkipped: true,
       },
     });
 
@@ -43,12 +45,18 @@ describe("openclaw gateway API helper", () => {
         tz: "UTC",
         session: "isolated",
         message: "run checks",
+        idempotencyKey: "morning-sweep-v1",
+        reconcileTag: "portfolio-a",
       },
     });
     expect(out).toContain("curl -X POST");
     expect(out).toContain("api/cron/jobs");
-    expect(out).toContain("Authorization: Bearer abc");
+    expect(out).toContain("Authorization: Bearer <REDACTED_TOKEN>");
+    expect(out).not.toContain("Authorization: Bearer abc");
+    expect(out).toContain("--data-binary @- <<'EOF'");
+    expect(out).toContain("\nEOF");
     expect(out).toContain('"name": "Morning Sweep"');
+    expect(out).toContain('"idempotencyKey": "morning-sweep-v1"');
   });
 });
 

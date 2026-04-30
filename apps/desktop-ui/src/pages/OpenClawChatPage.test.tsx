@@ -5,9 +5,9 @@ import { OpenClawChatPage } from "./OpenClawChatPage";
 describe("OpenClawChatPage", () => {
   it("renders embedded OpenClaw frame and operations sections", () => {
     render(<OpenClawChatPage />);
-    expect(screen.getByText("OpenClaw Chat")).toBeInTheDocument();
+    expect(screen.getByText("Open-FDD Claw Chat")).toBeInTheDocument();
     expect(screen.getByText("Operations (Cron / Memory / Skills)")).toBeInTheDocument();
-    expect(screen.getByTitle("OpenClaw UI")).toBeInTheDocument();
+    expect(screen.getByTitle("Open-FDD Claw UI")).toBeInTheDocument();
   });
 
   it("updates cron command preview when draft changes", () => {
@@ -48,6 +48,36 @@ describe("OpenClawChatPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "@hourly" })[0]);
     const cronInput = screen.getAllByLabelText("Cron schedule")[0] as HTMLInputElement;
     expect(cronInput.value).toBe("@hourly");
+  });
+
+  it("applies strict cron fallback preset", () => {
+    render(<OpenClawChatPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply strict cron fallback" })[0]);
+    const failureDestination = screen.getAllByLabelText("Failure destination")[0] as HTMLInputElement;
+    const skipped = screen.getAllByLabelText("Alert on skipped runs")[0] as HTMLInputElement;
+    expect(failureDestination.value).toBe("ops-alerts");
+    expect(skipped.checked).toBe(true);
+  });
+
+  it("renders phase 1 policy presets", () => {
+    render(<OpenClawChatPage />);
+    expect(screen.getAllByText(/Phase 1 policy presets/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Runtime route map env preset")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Security safe-defaults preset")[0]).toBeInTheDocument();
+  });
+
+  it("renders phase 2 reliability presets", () => {
+    render(<OpenClawChatPage />);
+    expect(screen.getAllByText(/Phase 2 reliability presets/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Strict fallback preset")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Relaxed fallback preset")[0]).toBeInTheDocument();
+  });
+
+  it("renders phase 3 memory and subagent presets", () => {
+    render(<OpenClawChatPage />);
+    expect(screen.getAllByText(/Phase 3 memory \+ multi-site presets/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Memory governance preset")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Subagent lanes preset")[0]).toBeInTheDocument();
   });
 });
 

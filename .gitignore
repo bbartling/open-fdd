@@ -190,6 +190,7 @@ stack/caddy/certs/
 # Runtime graph + trigger (local dev bind-mount patterns)
 config/data_model.ttl
 config/.run_fdd_now
+stack/local-data/
 open-fdd-desktop/feather_store/
 open-fdd-desktop/**/*.feather
 tmp_ml_smoke/

@@ -2,6 +2,8 @@
 
 | Script | Purpose |
 |--------|---------|
+| **`start-local.ps1`** | Windows launcher that sets repo-local desktop data defaults (`stack/local-data`) and starts gateway/MCP/UI (or individual roles). |
+| **`start-local.sh`** | Bash launcher with the same repo-local defaults; can run all services in background with logs under `stack/local-data/logs`. |
 | **`build_docs_pdf.py`** | Maintainer helper to combine Markdown docs and build `pdf/open-fdd-docs.pdf` (optional Pandoc / WeasyPrint). Also writes `pdf/open-fdd-docs.txt` with `--no-pdf`. |
 | **`bootstrap-desktop.ps1`** | Windows bootstrap/launcher for desktop mode. Can create venv, install deps, and launch FastAPI bridge + Tauri desktop UI in separate terminals. |
 | **`onboard_list_metadata.py`** | Lists Onboard buildings and sample point metadata from the API. |
@@ -18,6 +20,18 @@ Windows desktop bootstrap:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
+```
+
+Windows local launcher (repo-local synced data paths):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+Bash local launcher:
+
+```bash
+bash ./scripts/start-local.sh
 ```
 
 Useful flags:

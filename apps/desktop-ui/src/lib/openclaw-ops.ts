@@ -4,6 +4,11 @@ export type CronDraft = {
   tz: string;
   message: string;
   session: "isolated" | "main";
+  failureDestination: string;
+  alertOnSkipped: boolean;
+  idempotencyKey: string;
+  reconcileTag: string;
+  correlationIdPrefix: string;
 };
 
 export type ShellFlavor = "posix" | "powershell";
@@ -12,24 +17,45 @@ export type CronValidation = {
   hints: string[];
 };
 
-function quote(value: string): string {
-  return `"${value.replaceAll('"', '\\"')}"`;
+function quote(value: string, shell: ShellFlavor): string {
+  if (shell === "powershell") {
+    return `'${String(value).replaceAll("'", "''")}'`;
+  }
+  // POSIX single-quote escaping: 'foo'"'"'bar'
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
 }
 
 export function buildCronAddCommand(draft: CronDraft, shell: ShellFlavor = "posix"): string {
   const pieces = [
     "openclaw cron add",
-    `--name ${quote(draft.name || "Open-FDD task")}`,
-    `--cron ${quote(draft.schedule || "0 */6 * * *")}`,
-    `--tz ${quote(draft.tz || "UTC")}`,
+    `--name ${quote(draft.name || "Open-FDD task", shell)}`,
+    `--cron ${quote(draft.schedule || "0 */6 * * *", shell)}`,
+    `--tz ${quote(draft.tz || "UTC", shell)}`,
     `--session ${draft.session || "isolated"}`,
   ];
   if (draft.session === "isolated") {
-    pieces.push(`--message ${quote(draft.message || "Run Open-FDD health + FDD checks for all active sites.")}`);
+    pieces.push(
+      `--message ${quote(draft.message || "Run Open-FDD health + FDD checks for all active sites.", shell)}`,
+    );
     pieces.push("--announce");
   } else {
-    pieces.push(`--system-event ${quote(draft.message || "Run Open-FDD reminder task.")}`);
+    pieces.push(`--system-event ${quote(draft.message || "Run Open-FDD reminder task.", shell)}`);
     pieces.push("--wake now");
+  }
+  if ((draft.failureDestination || "").trim()) {
+    pieces.push(`--failure-destination ${quote(draft.failureDestination, shell)}`);
+  }
+  if (draft.alertOnSkipped) {
+    pieces.push("--alert-on-skipped");
+  }
+  if ((draft.idempotencyKey || "").trim()) {
+    pieces.push(`--idempotency-key ${quote(draft.idempotencyKey, shell)}`);
+  }
+  if ((draft.reconcileTag || "").trim()) {
+    pieces.push(`--reconcile-tag ${quote(draft.reconcileTag, shell)}`);
+  }
+  if ((draft.correlationIdPrefix || "").trim()) {
+    pieces.push(`--correlation-prefix ${quote(draft.correlationIdPrefix, shell)}`);
   }
   if (shell === "powershell") {
     return pieces.join(" `\n  ");
@@ -40,6 +66,8 @@ export function buildCronAddCommand(draft: CronDraft, shell: ShellFlavor = "posi
 export function buildCronCleanupCommand(): string {
   return [
     "openclaw cron list",
+    "# reconcile last executions for drift/skip visibility:",
+    "openclaw cron runs --recent 20",
     "# remove one:",
     "openclaw cron remove <job-id>",
   ].join("\n");
@@ -108,6 +136,9 @@ export function validateCronExpression(input: string): CronValidation {
   }
   if (fields[2] === "*" && fields[1] === "*" && fields[0].includes("*/")) {
     hints.push("High frequency detected; confirm this won't overload your gateway.");
+  }
+  if (fields[0] === "*" && fields[1] === "*") {
+    hints.push("Every-minute cadence can generate skipped runs if execution lasts >60s.");
   }
   return { valid: true, hints };
 }

@@ -106,6 +106,28 @@ class OpenClawOpsTemplateRequest(BaseModel):
     tz: str = "America/Chicago"
     session: str = "isolated"
     message: str = "Run Open-FDD health checks, ingest checks, and FDD summary for active sites."
+    failure_destination: str = "ops-alerts"
+    alert_on_skipped: bool = True
+    idempotency_key: str = "open-fdd-site-sweep-v1"
+    reconcile_tag: str = "portfolio-default"
+    correlation_id_prefix: str = "ofdd"
+
+
+class OpenClawObservabilityRequest(BaseModel):
+    gateway_url: str = "http://127.0.0.1:18789"
+    bridge_url: str = "http://127.0.0.1:8765"
+    mcp_url: str = "http://127.0.0.1:8090"
+
+
+class OpenClawMemoryGovernanceRequest(BaseModel):
+    site_name: str = "Site A"
+    timezone: str = "America/Chicago"
+
+
+class OpenClawSubagentLanesRequest(BaseModel):
+    lane_count: int = Field(default=2, ge=1, le=16)
+    class_prefix: str = "simple"
+    complex_prefix: str = "complex"
 
 
 def _load_index() -> RagIndex:
@@ -208,18 +230,38 @@ def _validate_cron_expression(expr: str) -> dict[str, Any]:
 
 def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
     shell = str(req.shell or "posix").strip().lower()
+    session = str(req.session or "isolated").strip().lower()
+    if session not in {"isolated", "main"}:
+        session = "isolated"
+
+    def _quote_for_shell(value: object, current_shell: str) -> str:
+        text = str(value or "")
+        if current_shell == "powershell":
+            return "'" + text.replace("'", "''") + "'"
+        return "'" + text.replace("'", "'\"'\"'") + "'"
+
     cont = " `" if shell == "powershell" else " \\"
     cron_cmd = [
         "openclaw cron add",
-        f'--name "{req.name}"',
-        f'--cron "{req.cron}"',
-        f'--tz "{req.tz}"',
-        f"--session {req.session}",
+        f"--name {_quote_for_shell(req.name, shell)}",
+        f"--cron {_quote_for_shell(req.cron, shell)}",
+        f"--tz {_quote_for_shell(req.tz, shell)}",
+        f"--session {session}",
     ]
-    if str(req.session).strip().lower() == "main":
-        cron_cmd += [f'--system-event "{req.message}"', "--wake now"]
+    if session == "main":
+        cron_cmd += [f"--system-event {_quote_for_shell(req.message, shell)}", "--wake now"]
     else:
-        cron_cmd += [f'--message "{req.message}"', "--announce"]
+        cron_cmd += [f"--message {_quote_for_shell(req.message, shell)}", "--announce"]
+    if str(req.failure_destination or "").strip():
+        cron_cmd += [f"--failure-destination {_quote_for_shell(req.failure_destination, shell)}"]
+    if bool(req.alert_on_skipped):
+        cron_cmd += ["--alert-on-skipped"]
+    if str(req.idempotency_key or "").strip():
+        cron_cmd += [f"--idempotency-key {_quote_for_shell(req.idempotency_key, shell)}"]
+    if str(req.reconcile_tag or "").strip():
+        cron_cmd += [f"--reconcile-tag {_quote_for_shell(req.reconcile_tag, shell)}"]
+    if str(req.correlation_id_prefix or "").strip():
+        cron_cmd += [f"--correlation-prefix {_quote_for_shell(req.correlation_id_prefix, shell)}"]
     joined = f"{cont}\n  ".join(cron_cmd)
     memory = (
         "Set-Content \"$HOME/.openclaw/workspace/MEMORY.md\" -Value \"\"\n"
@@ -229,13 +271,93 @@ def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, 
     )
     return {
         "cron_add": joined,
-        "cron_cleanup": "openclaw cron list\n# remove one:\nopenclaw cron remove <job-id>",
+        "cron_cleanup": (
+            "openclaw cron list\n"
+            "# run reconciliation / skipped-run visibility:\n"
+            "openclaw cron runs --recent 20\n"
+            "# remove one:\n"
+            "openclaw cron remove <job-id>"
+        ),
         "skills_refresh": (
             "openclaw skills list --eligible\nopenclaw skills update --all\n"
             "# optional clean reinstall path\n# rm -rf ~/.openclaw/workspace/skills/<skill-name>\n"
             "# openclaw skills install <skill-slug>"
         ),
         "memory_cleanup": memory,
+    }
+
+
+def _build_observability_baseline(req: OpenClawObservabilityRequest) -> dict[str, Any]:
+    gateway = str(req.gateway_url or "").rstrip("/")
+    bridge = str(req.bridge_url or "").rstrip("/")
+    mcp = str(req.mcp_url or "").rstrip("/")
+    checks = [
+        {"name": "openclaw_gateway_health", "url": f"{gateway}/health", "interval_sec": 30},
+        {"name": "openfdd_bridge_health", "url": f"{bridge}/health", "interval_sec": 30},
+        {"name": "openfdd_mcp_health", "url": f"{mcp}/health", "interval_sec": 30},
+    ]
+    return {
+        "checks": checks,
+        "slo_targets": {
+            "cron_success_rate_7d": ">=99%",
+            "skipped_run_rate_7d": "<1%",
+            "p95_tool_latency_ms": "<5000",
+        },
+        "run_reconciliation": {
+            "required_fields": ["job_id", "scheduled_at", "started_at", "finished_at", "status", "correlation_id"],
+            "query_hint": "openclaw cron runs --recent 200 --json",
+        },
+    }
+
+
+def _build_memory_governance_profile(req: OpenClawMemoryGovernanceRequest) -> dict[str, Any]:
+    site = str(req.site_name or "Site A")
+    tz = str(req.timezone or "America/Chicago")
+    memory_md = "\n".join(
+        [
+            f"# {site} HVAC Memory",
+            "",
+            "## Durable Facts (long-lived truths)",
+            "- Equipment inventory (AHUs, RTUs, boilers, chillers, pumps, VAV groups).",
+            "- Controls topology (BAS points, overrides, schedules, lockouts).",
+            "- Known quirks with evidence (sensor offsets, bad relays, recurring nuisance faults).",
+            "",
+            "## Daily Notes (transient incidents)",
+            "- Date/time-localized events, alarms, weather anomalies, maintenance actions.",
+            "- Close or roll up stale notes weekly into durable facts only when verified.",
+            "",
+            "## Claim Governance",
+            "- Every claim includes: source, timestamp, confidence, and contradiction links.",
+            "- Drift policy: if a claim is not reconfirmed in 30 days, mark as stale.",
+            "",
+            "## Correlation",
+            "- Record correlation IDs from OpenClaw run -> Open-FDD tools -> stored logs.",
+            f"- Default timezone: {tz}.",
+        ]
+    )
+    return {
+        "memory_md_template": memory_md,
+        "daily_note_template": (
+            "## Incident note\n"
+            "- when:\n- site:\n- equipment:\n- symptoms:\n- actions:\n- outcome:\n- correlation_id:\n"
+        ),
+        "freshness_policy": {"stale_days": 30, "review_cadence": "weekly"},
+    }
+
+
+def _build_subagent_lanes(req: OpenClawSubagentLanesRequest) -> dict[str, Any]:
+    count = int(req.lane_count)
+    simple = [f"{req.class_prefix}-{idx + 1}" for idx in range(count)]
+    complex_lanes = [f"{req.complex_prefix}-{idx + 1}" for idx in range(count)]
+    return {
+        "env": {
+            "OFDD_OPENCLAW_ROUTE_SIMPLE_LANES": ",".join(simple),
+            "OFDD_OPENCLAW_ROUTE_COMPLEX_LANES": ",".join(complex_lanes),
+        },
+        "notes": [
+            "Route by site_id for deterministic lane selection.",
+            "Keep lane count small first (2-4) and scale after observing queue pressure.",
+        ],
     }
 
 
@@ -290,6 +412,9 @@ def manifest() -> dict[str, Any]:
             {"name": "sparql_validate", "route": "/tools/sparql_validate", "mode": "write_guarded"},
             {"name": "openclaw_cron_validate", "route": "/tools/openclaw_cron_validate", "mode": "read"},
             {"name": "openclaw_ops_templates", "route": "/tools/openclaw_ops_templates", "mode": "read"},
+            {"name": "openclaw_observability_baseline", "route": "/tools/openclaw_observability_baseline", "mode": "read"},
+            {"name": "openclaw_memory_governance", "route": "/tools/openclaw_memory_governance", "mode": "read"},
+            {"name": "openclaw_subagent_lanes", "route": "/tools/openclaw_subagent_lanes", "mode": "read"},
         ],
     }
 
@@ -407,6 +532,21 @@ def openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
     payload = _build_openclaw_ops_templates(req)
     payload["shell"] = req.shell
     return payload
+
+
+@app.post("/tools/openclaw_observability_baseline")
+def openclaw_observability_baseline(req: OpenClawObservabilityRequest) -> dict[str, Any]:
+    return _build_observability_baseline(req)
+
+
+@app.post("/tools/openclaw_memory_governance")
+def openclaw_memory_governance(req: OpenClawMemoryGovernanceRequest) -> dict[str, Any]:
+    return _build_memory_governance_profile(req)
+
+
+@app.post("/tools/openclaw_subagent_lanes")
+def openclaw_subagent_lanes(req: OpenClawSubagentLanesRequest) -> dict[str, Any]:
+    return _build_subagent_lanes(req)
 
 
 def run_mcp_rag(host: str | None = None, port: int | None = None) -> None:

@@ -61,6 +61,7 @@ open-fdd-desktop = "open_fdd.desktop:main"
 open-fdd-desktop-bridge = "open_fdd.gateway.cli:run_desktop_bridge"
 open-fdd-gateway = "open_fdd.gateway.cli:run_gateway"
 open-fdd-mcp-rag = "open_fdd.mcp_rag:run_mcp_rag"
+open-fdd-mcp-adapter = "open_fdd.mcp_rag:run_mcp_adapter"
 open-fdd-headless-bacnet = "open_fdd.platform.drivers.headless_bacnet:main"
 
 [project.urls]
