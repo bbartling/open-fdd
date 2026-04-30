@@ -113,6 +113,8 @@ export function PlotsPage() {
       try {
         if (runSource === "all") {
           setBoundsStatus("Joined source mode uses combined window; bounds auto-population is source-specific.");
+          setStartTs("");
+          setEndTs("");
           return;
         }
         const bounds = await desktopFetch<BoundsResponse>("/timeseries/bounds", {
@@ -152,27 +154,28 @@ export function PlotsPage() {
     return Array.from(set);
   }
 
-  async function loadData() {
+  async function loadData(sourceOverride?: string) {
     try {
       const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
       if (!effectiveSiteId) {
         setStatus("Set or select a site first.");
         return;
       }
-      const out = source === "all"
+      const sourceToLoad = sourceOverride ?? source;
+      const out = sourceToLoad === "all"
         ? await desktopFetch<PlotFrameResponse>(
             `/plots/site-frame?site_id=${encodeURIComponent(effectiveSiteId)}&sources=${encodeURIComponent(
               "csv,weather,onboard,bacnet",
             )}&limit=5000`,
           )
         : await desktopFetch<PlotFrameResponse>(
-            `/plots/frame?site_id=${encodeURIComponent(effectiveSiteId)}&source=${encodeURIComponent(source)}&limit=5000`,
+            `/plots/frame?site_id=${encodeURIComponent(effectiveSiteId)}&source=${encodeURIComponent(sourceToLoad)}&limit=5000`,
           );
       setFrame(out);
-      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, source);
+      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, sourceToLoad);
       const defaults = out.columns.filter((c) => c !== "timestamp").slice(0, 6);
       setYColumns(fromTree.length > 0 ? fromTree : defaults);
-      setStatus(`Loaded ${out.rows.length} rows from ${source === "all" ? "all sources (joined)" : source}.`);
+      setStatus(`Loaded ${out.rows.length} rows from ${sourceToLoad === "all" ? "all sources (joined)" : sourceToLoad}.`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }
@@ -264,7 +267,7 @@ export function PlotsPage() {
       if (runSource !== source) {
         setSource(runSource);
       }
-      await loadData();
+      await loadData(runSource);
     } catch (e) {
       setRunOutput(e instanceof Error ? e.message : String(e));
     }

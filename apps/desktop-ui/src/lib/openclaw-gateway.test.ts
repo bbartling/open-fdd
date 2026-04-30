@@ -17,7 +17,7 @@ describe("openclaw gateway API helper", () => {
     );
 
     const out = await createCronJobViaApi({
-      endpointPath: "api/cron/jobs",
+      endpointPath: "tools/openclaw_ops_templates",
       token: "abc",
       payload: {
         name: "Morning Sweep",
@@ -37,7 +37,7 @@ describe("openclaw gateway API helper", () => {
 
   it("builds curl preview with endpoint and payload", () => {
     const out = buildCronApiPreview({
-      endpointPath: "api/cron/jobs",
+      endpointPath: "tools/openclaw_ops_templates",
       token: "abc",
       payload: {
         name: "Morning Sweep",
@@ -50,7 +50,7 @@ describe("openclaw gateway API helper", () => {
       },
     });
     expect(out).toContain("curl -X POST");
-    expect(out).toContain("api/cron/jobs");
+    expect(out).toContain("tools/openclaw_ops_templates");
     expect(out).toContain("Authorization: Bearer <REDACTED_TOKEN>");
     expect(out).not.toContain("Authorization: Bearer abc");
     expect(out).toContain("--data-binary @- <<'EOF'");

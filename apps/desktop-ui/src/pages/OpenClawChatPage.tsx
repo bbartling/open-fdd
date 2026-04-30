@@ -40,7 +40,7 @@ export function OpenClawChatPage() {
   const [shell, setShell] = useState<ShellFlavor>("posix");
   const [mode, setMode] = useState<"commands" | "api">("commands");
   const [copiedKey, setCopiedKey] = useState<string>("");
-  const [apiEndpointPath, setApiEndpointPath] = useState<string>("api/cron/jobs");
+  const [apiEndpointPath, setApiEndpointPath] = useState<string>(OPENCLAW_CRON_ENDPOINT_PRESETS[0]?.endpointPath ?? "");
   const [apiToken, setApiToken] = useState<string>("");
   const [apiBusy, setApiBusy] = useState(false);
   const [apiResult, setApiResult] = useState<string>("");

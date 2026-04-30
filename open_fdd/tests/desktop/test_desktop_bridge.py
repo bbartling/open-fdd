@@ -467,3 +467,47 @@ def test_data_model_health_summary_endpoint_shape() -> None:
         assert "counts" in body
         assert "summary" in body
         assert "orphan_equipment" in body["counts"]
+
+
+def test_plots_site_frame_returns_json_serializable_rows(tmp_path: Path) -> None:
+    """Merged plot frames carry numpy dtypes; response must encode as JSON (regression for 500)."""
+    pytest.importorskip("pyarrow")
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "Plot Site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+
+        csv_a = tmp_path / "plot_a.csv"
+        csv_b = tmp_path / "plot_b.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "sat": [54.0, 55.0],
+            }
+        ).to_csv(csv_a, index=False)
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": [20.0, 21.0],
+            }
+        ).to_csv(csv_b, index=False)
+
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_a)},
+        ).status_code == 200
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "weather", "csv_path": str(csv_b)},
+        ).status_code == 200
+
+        res = client.get(
+            f"/plots/site-frame?site_id={site_id}&sources=csv,weather&limit=500",
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body.get("sources") == ["csv", "weather"]
+        assert "sat_csv" in body.get("columns", [])
+        assert "oat_weather" in body.get("columns", [])
+        assert len(body.get("rows", [])) == 2

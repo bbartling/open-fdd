@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +33,19 @@ from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import default_rules_root
 
 _log = logging.getLogger(__name__)
+
+
+def _plot_frame_records_json_safe(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """Return rows as plain Python JSON types (numpy/pandas scalars break FastAPI JSON encode)."""
+    if frame.empty:
+        return []
+    try:
+        blob = frame.to_json(orient="records", date_format="iso", double_precision=15)
+    except (TypeError, ValueError):
+        work = frame.astype(object).where(pd.notnull(frame), None)
+        blob = work.to_json(orient="records", date_format="iso", double_precision=15)
+    return json.loads(blob) if blob else []
+
 
 @dataclass
 class BridgeServices:
@@ -992,11 +1006,12 @@ def create_app() -> FastAPI:
             return {"columns": [], "rows": []}
         cap = max(1, min(int(limit), 20_000))
         frame = frame.tail(cap).copy()
+        frame = frame.where(pd.notnull(frame), None)
         if "timestamp" in frame.columns:
             frame["timestamp"] = frame["timestamp"].astype(str)
         return {
             "columns": [str(c) for c in frame.columns],
-            "rows": frame.to_dict(orient="records"),
+            "rows": _plot_frame_records_json_safe(frame),
         }
 
     @app.get("/plots/site-frame", tags=["timeseries"])
@@ -1016,11 +1031,12 @@ def create_app() -> FastAPI:
             return {"columns": [], "rows": [], "sources": []}
         ts_col = infer_timestamp_column(merged)
         out = merged.tail(cap).copy()
+        out = out.where(pd.notnull(out), None)
         if ts_col in out.columns:
             out[ts_col] = out[ts_col].astype(str)
         return {
             "columns": [str(c) for c in out.columns],
-            "rows": out.to_dict(orient="records"),
+            "rows": _plot_frame_records_json_safe(out),
             "sources": used_sources,
         }
 

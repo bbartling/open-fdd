@@ -16,33 +16,49 @@ $ttlMirrorPath = Join-Path $localDataDir "data_model.mirror.ttl"
 
 New-Item -ItemType Directory -Path $localDataDir -Force | Out-Null
 
-if (-not (Test-Path $venvActivate)) {
+function Escape-PSLiteral([string]$value) {
+  return $value.Replace("'", "''")
+}
+
+function Needs-PythonVenv([string]$roleValue) {
+  return $roleValue -ne "ui"
+}
+
+if ((Needs-PythonVenv $Role) -and -not (Test-Path $venvActivate)) {
   throw "Missing venv activation script: $venvActivate"
 }
 
-function New-ServiceCommand([string]$serviceCommand, [string]$cwd) {
+function New-ServiceCommand([string]$serviceCommand, [string]$cwd, [bool]$activateVenv) {
+  $escapedCwd = Escape-PSLiteral $cwd
+  $escapedVenv = Escape-PSLiteral $venvActivate
+  $escapedLocalDataDir = Escape-PSLiteral $localDataDir
+  $escapedTtlPath = Escape-PSLiteral $ttlPath
+  $escapedTtlMirrorPath = Escape-PSLiteral $ttlMirrorPath
+  $escapedSyncIntervalSeconds = Escape-PSLiteral $SyncIntervalSeconds
+  $escapedBridgeUrl = Escape-PSLiteral $BridgeUrl
+  $activateLine = if ($activateVenv) { ". '$escapedVenv'" } else { "" }
   return @"
-Set-Location '$cwd'
-. '$venvActivate'
-`$env:OFDD_DESKTOP_DATA_DIR = '$localDataDir'
-`$env:OFDD_MODEL_TTL_PATH = '$ttlPath'
-`$env:OFDD_MODEL_TTL_MIRROR_PATH = '$ttlMirrorPath'
-`$env:OFDD_TTL_SYNC_INTERVAL_SECONDS = '$SyncIntervalSeconds'
-`$env:OFDD_BRIDGE_URL = '$BridgeUrl'
+Set-Location '$escapedCwd'
+$activateLine
+`$env:OFDD_DESKTOP_DATA_DIR = '$escapedLocalDataDir'
+`$env:OFDD_MODEL_TTL_PATH = '$escapedTtlPath'
+`$env:OFDD_MODEL_TTL_MIRROR_PATH = '$escapedTtlMirrorPath'
+`$env:OFDD_TTL_SYNC_INTERVAL_SECONDS = '$escapedSyncIntervalSeconds'
+`$env:OFDD_BRIDGE_URL = '$escapedBridgeUrl'
 $serviceCommand
 "@
 }
 
-function Start-ServiceWindow([string]$title, [string]$serviceCommand, [string]$cwd) {
-  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd
+function Start-ServiceWindow([string]$title, [string]$serviceCommand, [string]$cwd, [bool]$activateVenv) {
+  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv
   Start-Process powershell -ArgumentList @("-NoExit", "-Command", $cmd) -WorkingDirectory $cwd | Out-Null
   Write-Host "Started $title"
 }
 
 if ($Role -eq "all") {
-  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot
-  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot
-  Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir
+  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true
+  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true
+  Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false
   Write-Host "All services launched with repo-local data defaults."
   exit 0
 }
@@ -56,5 +72,5 @@ $singleCommand = switch ($Role) {
 }
 
 $singleCwd = if ($Role -eq "ui") { $desktopUiDir } else { $repoRoot }
-$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd
+$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role)
 Invoke-Expression $scriptBody

@@ -120,16 +120,18 @@ def run_mcp_adapter() -> None:
         line = raw.strip()
         if not line:
             continue
+        req_id: object = None
         try:
             req = json.loads(line)
             if not isinstance(req, dict):
                 out = _jsonrpc_error(None, -32600, "Invalid Request")
             else:
+                req_id = req.get("id")
                 out = handle_jsonrpc_request(req, adapter)
         except json.JSONDecodeError:
             out = _jsonrpc_error(None, -32700, "Parse error")
         except Exception as exc:  # pragma: no cover
-            out = _jsonrpc_error(None, -32000, str(exc))
+            out = _jsonrpc_error(req_id, -32000, str(exc))
         if out is not None:
             sys.stdout.write(json.dumps(out, ensure_ascii=True) + "\n")
             sys.stdout.flush()

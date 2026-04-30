@@ -6,6 +6,9 @@ type NavItem = { to: string; icon: string; label: string; end?: boolean };
 const navItems: NavItem[] = [
   { to: "/site-management", icon: "🏢", label: "Site Management" },
   { to: "/csv-import", icon: "📤", label: "CSV Import" },
+  { to: "/weather", icon: "🌤️", label: "Open-Meteo Driver" },
+  { to: "/bacnet-tools", icon: "📡", label: "BACnet Driver" },
+  { to: "/onboard-driver", icon: "🛰️", label: "Onboard Driver" },
   { to: "/rule-setup", icon: "🧩", label: "FDD Rule Setup" },
   { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
   { to: "/data-model-testing", icon: "🔎", label: "Data Model Testing" },

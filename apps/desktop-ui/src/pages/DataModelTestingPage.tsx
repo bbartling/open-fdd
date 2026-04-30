@@ -69,10 +69,12 @@ export function DataModelTestingPage() {
   async function runHealthCheck() {
     try {
       setStatus("Running compact data model health check...");
+      setHealth(null);
       const out = await desktopFetch<HealthSummary>("/data-model/testing/health-summary");
       setHealth(out);
       setStatus("Health check complete.");
     } catch (e) {
+      setHealth(null);
       setStatus(`Health check failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }

@@ -6,6 +6,7 @@ operator token (e.g. OPENCLAW_GATEWAY_TOKEN). See docs/open-fdd-claw-architectur
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -106,15 +107,22 @@ class OpenClawGatewayChatClient:
             "x-openclaw-model": backend_model or self.backend_model,
         }
 
-        resp = self._session.post(
-            url, headers=headers, json=body, timeout=self.timeout_s
-        )
+        try:
+            resp = self._session.post(
+                url, headers=headers, json=body, timeout=self.timeout_s
+            )
+        except requests.RequestException as exc:
+            raise RuntimeError(f"OpenClaw gateway request failed for {url}: {exc}") from exc
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"OpenClaw gateway chat failed HTTP {resp.status_code}: {resp.text[:2000]}"
             )
-
-        data = resp.json()
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                f"OpenClaw gateway returned invalid JSON for {url} (HTTP {resp.status_code}): {exc}"
+            ) from exc
         choices = data.get("choices") or []
         if not choices:
             snippet = repr(data)[:2000]

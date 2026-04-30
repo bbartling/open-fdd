@@ -139,25 +139,28 @@ def decide_route(
     forced_class: TaskClass | None = None,
     site_id: str | None = None,
 ) -> OpenClawRouteDecision:
+    strict_suffix = ""
     if forced_class is not None:
         task_class: TaskClass = forced_class
         reason = "forced class override"
     else:
         task_class, reason = classify_task(task_summary, default_class=policy.default_class)
+        if policy.strict_mode and reason == "no specific pattern -> default class":
+            strict_suffix = "; strict mode enabled"
     if task_class == "complex":
         complex_target = _pick_lane_target(policy.complex_agent_id, policy.complex_lane_agents, site_id)
         return OpenClawRouteDecision(
             task_class=task_class,
             agent_target=f"openclaw/{complex_target}",
             backend_model=policy.complex_backend_model,
-            reason=_with_lane_reason(reason, site_id, complex_target),
+            reason=_with_lane_reason(f"{reason}{strict_suffix}", site_id, complex_target),
         )
     simple_target = _pick_lane_target(policy.simple_agent_id, policy.simple_lane_agents, site_id)
     return OpenClawRouteDecision(
         task_class=task_class,
         agent_target=f"openclaw/{simple_target}",
         backend_model=policy.simple_backend_model,
-        reason=_with_lane_reason(reason, site_id, simple_target),
+        reason=_with_lane_reason(f"{reason}{strict_suffix}", site_id, simple_target),
     )
 
 

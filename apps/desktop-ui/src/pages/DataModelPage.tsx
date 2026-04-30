@@ -9,6 +9,7 @@ type ModelPayload = {
 };
 
 export function DataModelPage() {
+  const [activeTab, setActiveTab] = useState<"export" | "import">("export");
   const [jsonText, setJsonText] = useState("");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
@@ -17,15 +18,23 @@ export function DataModelPage() {
 
   async function copyText(key: string, value: string) {
     try {
+      let copied = false;
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
+        copied = true;
       } else {
         const el = document.createElement("textarea");
         el.value = value;
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand("copy");
-        document.body.removeChild(el);
+        try {
+          document.body.appendChild(el);
+          el.select();
+          copied = document.execCommand("copy");
+        } finally {
+          document.body.removeChild(el);
+        }
+      }
+      if (!copied) {
+        throw new Error("Clipboard copy was blocked.");
       }
       setCopiedKey(key);
       window.setTimeout(() => setCopiedKey(""), 1200);
@@ -43,6 +52,25 @@ export function DataModelPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOut(`Export failed: ${message}`);
+    }
+  }
+
+  function downloadJsonFile() {
+    try {
+      const payload = parseImportPayload(jsonText);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "open-fdd-data-model.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setOut("Downloaded open-fdd-data-model.json");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOut(`Download failed: ${message}`);
     }
   }
 
@@ -73,6 +101,20 @@ export function DataModelPage() {
     }
   }
 
+  async function onImportJsonFile(file: File | null) {
+    if (!file) {
+      return;
+    }
+    try {
+      const text = await file.text();
+      setJsonText(text);
+      setOut(`Loaded JSON file: ${file.name}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setOut(`File load failed: ${message}`);
+    }
+  }
+
   async function doViewTtl() {
     setTtlLoading(true);
     setTtlText("");
@@ -92,17 +134,61 @@ export function DataModelPage() {
   return (
     <div className="card">
       <h2 className="title">Data Model BRICK</h2>
-      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-        <button onClick={() => void doExport()}>Export JSON</button>
-        <button className="secondary-btn" onClick={() => void copyImportReadyJson()}>
-          {copiedKey === "import-ready" ? "Copied Import JSON" : "Copy Import JSON"}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button
+          className={activeTab === "export" ? "" : "secondary-btn"}
+          type="button"
+          onClick={() => setActiveTab("export")}
+        >
+          Export
         </button>
-        <button onClick={() => void doImport()}>Import JSON</button>
+        <button
+          className={activeTab === "import" ? "" : "secondary-btn"}
+          type="button"
+          onClick={() => setActiveTab("import")}
+        >
+          Import
+        </button>
       </div>
+
+      {activeTab === "export" ? (
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <button onClick={() => void doExport()}>Export JSON</button>
+          <button className="secondary-btn" onClick={() => void downloadJsonFile()}>
+            Export file
+          </button>
+          <button className="secondary-btn" onClick={() => void copyImportReadyJson()}>
+            {copiedKey === "import-ready" ? "Copied JSON" : "Copy JSON"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={() => void doImport()}>Import JSON</button>
+            <label className="secondary-btn" style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}>
+              Upload JSON file
+              <input
+                type="file"
+                accept=".json,application/json,text/plain"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  void onImportJsonFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <div className="muted">
+            Paste JSON directly or upload an LLM-generated JSON file, then click Import JSON.
+          </div>
+        </div>
+      )}
+
       <textarea
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
-        placeholder="Paste AI-tagged model JSON here"
+        placeholder={activeTab === "import" ? "Paste or upload LLM JSON here" : "Exported model JSON appears here"}
         style={{ minHeight: 260 }}
       />
       <textarea readOnly value={out} style={{ marginTop: 10, minHeight: 64 }} />
@@ -142,7 +228,11 @@ function parseImportPayload(input: string): ModelPayload {
 function parseJsonLenient(raw: string): unknown {
   const attempts: string[] = [raw];
   const fenced = extractJsonFence(raw);
-  if (fenced) attempts.push(fenced);
+  if (fenced) {
+    attempts.push(fenced);
+    const escapedFenced = escapeBackslashesInLikelyPathFields(fenced);
+    if (escapedFenced !== fenced) attempts.push(escapedFenced);
+  }
   const withEscapedRefs = escapeBackslashesInLikelyPathFields(raw);
   if (withEscapedRefs !== raw) attempts.push(withEscapedRefs);
   for (const candidate of attempts) {

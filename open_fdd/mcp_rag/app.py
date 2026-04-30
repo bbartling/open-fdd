@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .retrieval import RagIndex
 
@@ -111,6 +111,26 @@ class OpenClawOpsTemplateRequest(BaseModel):
     idempotency_key: str = "open-fdd-site-sweep-v1"
     reconcile_tag: str = "portfolio-default"
     correlation_id_prefix: str = "ofdd"
+
+    @field_validator("shell", mode="before")
+    @classmethod
+    def _normalize_shell(cls, value: Any) -> str:
+        shell = str(value or "posix").strip().lower()
+        aliases = {"pwsh": "powershell", "powershell": "powershell", "posix": "posix", "cmd": "cmd"}
+        normalized = aliases.get(shell)
+        if normalized is None:
+            raise ValueError("shell must be one of: posix, powershell, pwsh, cmd")
+        return normalized
+
+    @field_validator("session", mode="before")
+    @classmethod
+    def _normalize_session(cls, value: Any) -> str:
+        session = str(value or "isolated").strip().lower()
+        aliases = {"isolated": "isolated", "main": "main", "shared": "main"}
+        normalized = aliases.get(session)
+        if normalized is None:
+            raise ValueError("session must be one of: isolated, main, shared")
+        return normalized
 
 
 class OpenClawObservabilityRequest(BaseModel):
@@ -229,10 +249,8 @@ def _validate_cron_expression(expr: str) -> dict[str, Any]:
 
 
 def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
-    shell = str(req.shell or "posix").strip().lower()
-    session = str(req.session or "isolated").strip().lower()
-    if session not in {"isolated", "main"}:
-        session = "isolated"
+    shell = req.shell
+    session = req.session
 
     def _quote_for_shell(value: object, current_shell: str) -> str:
         text = str(value or "")
@@ -531,6 +549,7 @@ def openclaw_cron_validate(req: OpenClawCronValidateRequest) -> dict[str, Any]:
 def openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, Any]:
     payload = _build_openclaw_ops_templates(req)
     payload["shell"] = req.shell
+    payload["session"] = req.session
     return payload
 
 

@@ -132,7 +132,10 @@ class TtlService:
                 tmp_path.unlink()
             raise
         if self.ttl_mirror_path is not None:
-            self.ttl_mirror_path.parent.mkdir(parents=True, exist_ok=True)
-            self.ttl_mirror_path.write_text(ttl, encoding="utf-8")
+            try:
+                self.ttl_mirror_path.parent.mkdir(parents=True, exist_ok=True)
+                self.ttl_mirror_path.write_text(ttl, encoding="utf-8")
+            except Exception:  # noqa: BLE001 - mirror path is best-effort
+                _log.exception("Failed writing optional TTL mirror path: %s", self.ttl_mirror_path)
         return self.ttl_path
 

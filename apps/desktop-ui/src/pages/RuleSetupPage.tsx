@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { desktopFetchText } from "../lib/api";
 import { useRulesList } from "../hooks/use-rules";
 import { deleteRule, syncRuleDefinitions, uploadRule } from "../lib/crud-api";
@@ -8,6 +8,7 @@ export function RuleSetupPage() {
   const [selectedFile, setSelectedFile] = useState("");
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [rulesStatus, setRulesStatus] = useState("Load a directory of YAML files, then view/delete as needed.");
+  const directoryInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void refreshRules();
@@ -88,10 +89,16 @@ export function RuleSetupPage() {
           <button className="secondary-btn" onClick={() => void refreshRules()}>Refresh</button>
           <button className="secondary-btn" onClick={() => void onSyncDefinitions()}>Sync definitions</button>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <span className="secondary-btn" style={{ padding: "8px 12px", cursor: "pointer" }}>
+            <button
+              type="button"
+              className="secondary-btn"
+              aria-label="Load rules from directory"
+              onClick={() => directoryInputRef.current?.click()}
+            >
               Load rules from directory
-            </span>
+            </button>
             <input
+              ref={directoryInputRef}
               type="file"
               accept=".yaml,.yml,text/yaml,text/x-yaml"
               multiple

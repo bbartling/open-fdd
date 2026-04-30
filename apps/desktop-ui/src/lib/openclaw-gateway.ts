@@ -25,19 +25,22 @@ export type OpenClawCronEndpointPreset = {
 
 export const OPENCLAW_CRON_ENDPOINT_PRESETS: OpenClawCronEndpointPreset[] = [
   {
-    id: "native-openclaw-cron",
-    label: "Native Open-FDD Claw cron API (recommended)",
-    endpointPath: "api/cron/jobs",
+    id: "mcp-openclaw-ops-templates",
+    label: "MCP Open-FDD Claw ops template endpoint",
+    endpointPath: "tools/openclaw_ops_templates",
     notes:
-      "Expected payload shape: name, cron, tz, session, message (+ optional failureDestination, alertOnSkipped, idempotencyKey, reconcileTag, correlationIdPrefix).",
+      "Existing backend route: returns generated ops commands/templates. For actual cron-job creation, deploy and use a relay endpoint.",
   },
   {
     id: "custom-relay",
     label: "Custom relay endpoint",
     endpointPath: "api/openfdd/openclaw/cron/create",
-    notes: "Use this if you deploy an adapter route in front of Open-FDD Claw (OpenClaw-inspired gateway).",
+    notes:
+      "Use this only when your deployment provides a relay route that creates jobs from payload: name, cron, tz, session, message (+ optional failureDestination, alertOnSkipped, idempotencyKey, reconcileTag, correlationIdPrefix).",
   },
 ];
+
+const DEFAULT_API_TIMEOUT_MS = 15_000;
 
 export function buildCronApiPreview(params: {
   endpointPath: string;
@@ -63,6 +66,7 @@ export async function createCronJobViaApi(params: {
   endpointPath: string;
   token?: string;
   payload: OpenClawCronApiPayload;
+  timeoutMs?: number;
 }): Promise<{ ok: boolean; status: number; body: string }> {
   const endpointPath = params.endpointPath.trim();
   if (!endpointPath) {
@@ -76,12 +80,22 @@ export async function createCronJobViaApi(params: {
   if (params.token?.trim()) {
     headers.Authorization = `Bearer ${params.token.trim()}`;
   }
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(params.payload),
-  });
-  const body = await res.text();
-  return { ok: res.ok, status: res.status, body };
+  const timeoutMs = Number.isFinite(params.timeoutMs) ? Number(params.timeoutMs) : DEFAULT_API_TIMEOUT_MS;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(params.payload),
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    return { ok: res.ok, status: res.status, body };
+  } catch (error) {
+    return { ok: false, status: 0, body: String(error) };
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
