@@ -13,7 +13,7 @@ One-page cheat sheet for the **`open-fdd`** rules engine. Deeper detail: [Verifi
 
 ## What it is
 
-**`open-fdd`** evaluates **YAML** fault rules on **pandas** `DataFrame`s. Install with **`pip install open-fdd`**. There is no bundled database, Docker stack, or HTTP API in this repository.
+**`open-fdd`** evaluates **YAML** fault rules on **pandas** `DataFrame`s. Install with **`pip install open-fdd`**. The base wheel has no bundled database or Docker stack; optional **`pip install "open-fdd[desktop]"`** adds the local FastAPI gateway and desktop storage (see [Desktop app](desktop_app)).
 
 ---
 

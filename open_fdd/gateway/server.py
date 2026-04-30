@@ -31,6 +31,7 @@ from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import default_rules_root
+from open_fdd.gateway import codex_device_login
 
 _log = logging.getLogger(__name__)
 
@@ -213,6 +214,10 @@ class SparqlTextBody(BaseModel):
 
 class SiteRulePackBody(BaseModel):
     rule_pack: str
+
+
+class CodexDevicePollBody(BaseModel):
+    session_id: str
 
 
 class TimeseriesPurgeBody(BaseModel):
@@ -493,6 +498,17 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
+    def codex_device_start() -> dict[str, Any]:
+        try:
+            return codex_device_login.start_device_login()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.post("/openfdd-claw/codex/device/poll", tags=["openfdd-claw"])
+    def codex_device_poll(body: CodexDevicePollBody) -> dict[str, Any]:
+        return codex_device_login.poll_device_login(body.session_id.strip())
 
     @app.get("/model/export", tags=["model"])
     def model_export() -> dict[str, Any]:

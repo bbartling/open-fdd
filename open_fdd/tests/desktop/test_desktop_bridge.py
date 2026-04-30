@@ -511,3 +511,29 @@ def test_plots_site_frame_returns_json_serializable_rows(tmp_path: Path) -> None
         assert "sat_csv" in body.get("columns", [])
         assert "oat_weather" in body.get("columns", [])
         assert len(body.get("rows", [])) == 2
+
+
+def test_openfdd_claw_codex_start_poll_smoke() -> None:
+    from unittest.mock import MagicMock, patch
+
+    from open_fdd.gateway import codex_device_login as codex
+
+    with patch.object(codex, "requests") as req_pkg:
+        post = MagicMock()
+        post.side_effect = [
+            MagicMock(
+                ok=True,
+                status_code=200,
+                text='{"device_auth_id":"da","user_code":"AB-CD","interval":1}',
+            ),
+            MagicMock(ok=False, status_code=403, text="{}"),
+        ]
+        req_pkg.post = post
+        app = create_app()
+        with TestClient(app) as client:
+            start = client.post("/openfdd-claw/codex/device/start")
+            assert start.status_code == 200
+            sid = start.json()["session_id"]
+            poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": sid})
+            assert poll.status_code == 200
+            assert poll.json()["status"] == "pending"

@@ -1,8 +1,8 @@
 # OpenClaw + Open-FDD runbook
 
-**Architecture we use:** run **Open-FDD on the host** (Windows: `scripts/bootstrap-desktop.ps1`; macOS/Linux/WSL: `scripts/bootstrap-desktop.sh`). Run **OpenClaw in Docker** only if you want; it acts as a **client** and reaches the bridge/MCP over HTTP to the **host OS** (e.g. `http://host.docker.internal:8765` from containers on Docker Desktop). **Do not** bootstrap Open-FDD inside the OpenClaw gateway container for this flow.
+**Architecture we use:** run **Open-FDD on the host** (Windows: `scripts/start-local.ps1`; macOS/Linux/WSL: `scripts/start-local.sh`). Run **OpenClaw in Docker** only if you want; it acts as a **client** and reaches the bridge/MCP over HTTP to the **host OS** (e.g. `http://host.docker.internal:8765` from containers on Docker Desktop). **Do not** run Open-FDD inside the OpenClaw gateway container for this flow.
 
-Single reference for **local bootstrap**, **OpenClaw-as-client networking**, **first-time smoke**, **Phase 2** (git pull, dashboard flows, merged time-series, FDD), and **DIY BACnet** bridge scraping. Paste the **prompt** blocks into OpenClaw as needed.
+Single reference for **local Open-FDD setup**, **OpenClaw-as-client networking**, **first-time smoke**, **Phase 2** (git pull, dashboard flows, merged time-series, FDD), and **DIY BACnet** bridge scraping. Paste the **prompt** blocks into OpenClaw as needed.
 
 **Contents**
 
@@ -116,50 +116,56 @@ Minimum observability baseline:
 
 ## 1) Run Open-FDD on the host
 
-Requirements: **Python 3.10+**, **Node.js 20+ for Open-FDD desktop build** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI **`http://127.0.0.1:8080`**.
+Requirements: **Python 3.10+**, **Node.js 20+ for the desktop UI** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI (**`start-local`**) uses Vite **`npm run dev`** — typically **`http://127.0.0.1:5173`** (not 8080 unless you change ports).
 
 ### Windows (recommended here)
 
-PowerShell at repo root:
+PowerShell at repo root — **first time** create a venv, install Python + UI deps, build the MCP index, then launch:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # if scripts are blocked
-.\scripts\bootstrap-desktop.ps1 -InstallDeps -NoLaunch
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install -U pip
+pip install -e ".[dev,desktop]"
+cd apps\desktop-ui; npm install; cd ..\..
 python scripts\build_mcp_rag_index.py --output stack\mcp-rag\index\rag_index.json
-.\scripts\bootstrap-desktop.ps1 -BridgeUrl "http://127.0.0.1:8765"
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 ```
 
-The script opens separate terminals for bridge, MCP, and UI. Browser: **`http://127.0.0.1:8080`**.
+`start-local.ps1` opens **separate** PowerShell windows for gateway, MCP RAG, and **`npm run dev`** for the UI. Use the Vite URL printed in the UI window (often **`http://127.0.0.1:5173`**).
 
-- **LAN / other PCs:** `-BridgeUrl "http://<this-pc-ip>:8765"` and allow **8765**, **8090**, **8080** in Windows Firewall.
+- **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -BridgeUrl "http://<this-pc-ip>:8765"` and allow **8765**, **8090**, and your **UI port** in Windows Firewall.
 - **Docker on same machine will call the host** — see [§2](#2-openclaw--docker-as-http-client-to-the-host); you may need the bridge/MCP to listen on **`0.0.0.0`** (`OFDD_BRIDGE_HOST`, `OFDD_MCP_LISTEN_HOST`) so `host.docker.internal` can connect.
 
-**Git Bash / WSL:** you can use `bash scripts/bootstrap-desktop.sh` instead; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`.
+**Git Bash / WSL:** use `bash scripts/start-local.sh`; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`. Background services log to **`stack/local-data/logs/*.log`**.
 
 ### macOS
 
 ```bash
 brew install python@3.12 node@20 git   # or equivalent
 cd open-fdd
-bash scripts/bootstrap-desktop.sh --install-deps --no-launch
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev,desktop]"
+cd apps/desktop-ui && npm install && cd ../..
 python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
-bash scripts/bootstrap-desktop.sh
+bash scripts/start-local.sh
 ```
 
 ### Linux / Raspberry Pi (native)
 
 Install `python3`, `python3-venv`, `python3-pip`, `build-essential`, `git`, `curl`, and **Node 20+** (NodeSource or nvm if distro Node is too old; use **Node 22.14+** if installing OpenClaw CLI on the same host). Then the same `bash` flow as macOS.
 
-On a **Pi**, if the browser is on another device, rebuild the static UI once with  
-`bash scripts/bootstrap-desktop.sh --bridge-url http://<pi-lan-ip>:8765`.
+On a **Pi**, if the browser is on another device, set the bridge URL before launch, e.g.  
+`OFDD_BRIDGE_URL=http://<pi-lan-ip>:8765 bash scripts/start-local.sh`.
 
-**RAM:** `npm run build` can need **~1–2 GB** free; add swap on low-RAM boards.
+**RAM:** `npm install` / `npm run dev` can need **~1–2 GB** free; add swap on low-RAM boards.
 
 ### Optional: slim Linux container (CI only)
 
-For **automated tests or CI**, not for co-hosting inside OpenClaw: use a normal Linux image with bash, git, python3, **Node 20+** (or **Node 22.14+** if the same image also installs OpenClaw CLI), then the same `bootstrap-desktop.sh` steps. Set `NPM_CONFIG_PRODUCTION=false` if the image sets `NODE_ENV=production` (the bootstrap script already does this for npm). If `tsc: not found`, delete `apps/desktop-ui/node_modules` and re-run `--install-deps`.
+For **automated tests or CI**, not for co-hosting inside OpenClaw: use a normal Linux image with bash, git, python3, **Node 20+** (or **Node 22.14+** if the same image also installs OpenClaw CLI), then the same venv + `pip install -e ".[dev,desktop]"` + `npm install` + `start-local.sh` steps. Set `NPM_CONFIG_PRODUCTION=false` if the image sets `NODE_ENV=production`. If `tsc: not found`, delete `apps/desktop-ui/node_modules` and re-run `npm install`.
 
 ### Loopback typo
 
@@ -171,13 +177,13 @@ Use **`127.0.0.1`** (four octets), not **`127.0.1`**.
 
 OpenClaw’s **gateway** listens on **18789** (etc.); it does **not** run Open-FDD for you in this setup.
 
-1. **Start Open-FDD on Windows** (or WSL/macOS) with the bootstrap scripts **before** agents need CSV/MCP/bridge.
+1. **Start Open-FDD on Windows** (or WSL/macOS) with **`start-local`** (or manual gateway + MCP) **before** agents need CSV/MCP/bridge.
 2. From a **container on Docker Desktop** (Windows/Mac), the host is usually  
    **`http://host.docker.internal:8765`** (bridge), **`http://host.docker.internal:8090`** (MCP).  
    Configure whatever OpenClaw/tooling uses for “Open-FDD base URL” / MCP URL to those values (or your host LAN IP on Linux Docker without Desktop).
-3. **Windows Firewall:** allow inbound TCP on **8765**, **8090**, **8080** if tools outside localhost connect.
+3. **Windows Firewall:** allow inbound TCP on **8765**, **8090**, and your **UI dev port** (often **5173**) if tools outside localhost connect.
 4. **Binding:** if curls from a container get empty replies, ensure the bridge and MCP bind **`0.0.0.0`** on the host for those ports, e.g.  
-   `OFDD_BRIDGE_HOST=0.0.0.0` and `OFDD_MCP_LISTEN_HOST=0.0.0.0` in the environment **before** starting `open-fdd-desktop-bridge` / `open-fdd-mcp-rag` (UI static server already uses `0.0.0.0` in bootstrap). Rebuild the UI with `-BridgeUrl` / `--bridge-url` pointing at what **your browser** uses (`http://127.0.0.1:8765` on the host).
+   `OFDD_BRIDGE_HOST=0.0.0.0` and `OFDD_MCP_LISTEN_HOST=0.0.0.0` in the environment **before** starting `open-fdd-desktop-bridge` / `open-fdd-mcp-rag`. Set **`OFDD_BRIDGE_URL`** (or **`start-local`’s `-BridgeUrl`**) to whatever **your browser** uses (`http://127.0.0.1:8765` on the host, or the LAN IP). Vite’s dev server binds so other machines can reach it when needed; open the firewall for the UI port if required.
 
 **WSL:** if Open-FDD runs on **Windows** and OpenClaw in **Docker Desktop**, prefer **`host.docker.internal`** from the container to hit the Windows stack. If both stacks run **inside WSL**, use `127.0.0.1` from the same network namespace or the WSL IP from Windows as documented for your setup.
 
@@ -187,29 +193,29 @@ OpenClaw’s **gateway** listens on **18789** (etc.); it does **not** run Open-F
 
 | Service | Default (same machine) |
 |--------|-------------------------|
-| Web UI | `http://127.0.0.1:8080` |
+| Web UI (Vite dev via `start-local`) | `http://127.0.0.1:5173` (see terminal output) |
 | Bridge API + `/docs` | `http://127.0.0.1:8765` |
 | MCP RAG | `http://127.0.0.1:8090` |
 
 From **Docker client to Windows host:** replace host with `host.docker.internal` (see §2).
 
-Logs in repo root: `.openfdd-bridge.log`, `.openfdd-mcp.log`, `.openfdd-ui.log`.
+Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/logs/gateway.log`**, **`mcp-rag.log`**, **`desktop-ui.log`**. On Windows, **`start-local.ps1`** opens separate windows — watch those terminals (no repo-root `.openfdd-*.log` files).
 
-- Bash: `bash scripts/bootstrap-desktop.sh --help`
-- PowerShell: see `scripts/bootstrap-desktop.ps1` parameters
+- Bash roles: `bash scripts/start-local.sh` or `bash scripts/start-local.sh gateway`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway` (see `scripts/README.md`)
 
 ---
 
 ## 4) Prompt — first-time smoke
 
 ```text
-You are helping me manually smoke-test Open-FDD on the human's machine (prefer Windows PowerShell + scripts/bootstrap-desktop.ps1, or bash + scripts/bootstrap-desktop.sh on macOS/Linux/WSL).
+You are helping me manually smoke-test Open-FDD on the human's machine (prefer Windows PowerShell + scripts/start-local.ps1, or bash + scripts/start-local.sh on macOS/Linux/WSL).
 
 If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under contrib/openclaw-skills).
 
 Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (**Node 20+ for Open-FDD; Node 22.14+ if also installing OpenClaw CLI**, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
 
-Goal: clone the repo, run bootstrap so the FastAPI bridge, MCP RAG service, and web dashboard start; verify health; ingest a CSV into Feather storage; then exercise AI-assisted data modeling and fault detection (FDD) via the bridge + MCP. Report pass/fail with concrete URLs, curl output snippets, and any stack traces from logs.
+Goal: clone the repo, run start-local so the FastAPI bridge, MCP RAG service, and web UI (Vite dev) start; verify health; ingest a CSV into Feather storage; then exercise AI-assisted data modeling and fault detection (FDD) via the bridge + MCP. Report pass/fail with concrete URLs, curl output snippets, and any stack traces from logs.
 
 Do this in order:
 
@@ -218,25 +224,25 @@ Do this in order:
    - cd open-fdd
 
 2) First-time setup (creates .venv, pip install, npm install — may take a few minutes)
-   - Windows: powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps -NoLaunch
-   - Unix: bash scripts/bootstrap-desktop.sh --install-deps --no-launch
+   - Windows: python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -U pip; pip install -e ".[dev,desktop]"; cd apps\desktop-ui; npm install; cd ..\..
+   - Unix: python3 -m venv .venv && source .venv/bin/activate && pip install -U pip && pip install -e ".[dev,desktop]" && (cd apps/desktop-ui && npm install && cd ../..)
 
 3) Build the MCP RAG index (otherwise MCP /health may be 503 until an index exists)
    - Windows: .\.venv\Scripts\Activate.ps1  then  python scripts\build_mcp_rag_index.py --output stack\mcp-rag\index\rag_index.json
    - Unix: source .venv/bin/activate && python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
 
-4) Start bridge + MCP + static web UI
-   - Windows: .\scripts\bootstrap-desktop.ps1 -BridgeUrl "http://127.0.0.1:8765"
-   - Unix: bash scripts/bootstrap-desktop.sh
-   - Wait a few seconds, then tail the last lines of: .openfdd-bridge.log .openfdd-mcp.log .openfdd-ui.log
+4) Start bridge + MCP + Vite UI
+   - Windows: powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+   - Unix: bash scripts/start-local.sh
+   - Wait a few seconds. Logs: Unix — tail stack/local-data/logs/gateway.log stack/local-data/logs/mcp-rag.log stack/local-data/logs/desktop-ui.log; Windows — check the three PowerShell windows.
 
 5) Health checks (must succeed on the same host as the processes)
    - curl -sS http://127.0.0.1:8765/health
    - curl -sS http://127.0.0.1:8090/health   (MCP: MUST be 127.0.0.1 — http://127.0.1:8090 is invalid and will fail)
-   - curl -sS http://127.0.0.1:8080/ | head -n 5   (should return HTML for the React app)
+   - curl -sS http://127.0.0.1:5173/ | head -n 5   (Vite dev default; if connection refused, read the UI window for the actual port)
    - MCP /health JSON may include mcp_listen_hint and url_warnings if OFDD_MCP_OFDD_API_URL was mistyped.
 
-6) Tell the human the UI URL (e.g. http://127.0.0.1:8080). If agents run in Docker on the same PC, remind them of http://host.docker.internal:8765 and §2 of the runbook.
+6) Tell the human the UI URL (e.g. http://127.0.0.1:5173). If agents run in Docker on the same PC, remind them of http://host.docker.internal:8765 and §2 of the runbook.
 
 7) CSV ingest (Feather)
    - Create a tiny CSV in /tmp (Unix) or a temp path (Windows) with columns including a parseable timestamp (prefer header `timestamp`) and at least one numeric column (e.g. oat or SAT).
@@ -270,30 +276,28 @@ Deliverable: a short checklist table (step → pass/fail), any defects to open a
 ## 5) Prompt — Phase 2
 
 ```text
-You are continuing Open-FDD validation on the human's host (Windows: bootstrap-desktop.ps1; Unix: bootstrap-desktop.sh). The repo path is wherever they cloned it (e.g. C:\Users\...\open-fdd or ~/open-fdd) — do not assume /home/node/.openclaw/workspace unless the human says Open-FDD lives there.
+You are continuing Open-FDD validation on the human's host (Windows: start-local.ps1; Unix: start-local.sh). The repo path is wherever they cloned it (e.g. C:\Users\...\open-fdd or ~/open-fdd) — do not assume /home/node/.openclaw/workspace unless the human says Open-FDD lives there.
 
-Goal: (1) git pull latest master (or the branch the human names), (2) refresh deps/build only if needed, (3) start or verify bridge + MCP + static UI, (4) prove dashboard-equivalent flows: site + CSV upload + plots + merged time-series + model export/SPARQL + default rules + FDD. Report pass/fail with URLs, curl snippets, and log tails. Stop on first hard failure unless the human asks to continue.
+Goal: (1) git pull latest master (or the branch the human names), (2) refresh deps/build only if needed, (3) start or verify bridge + MCP + Vite UI, (4) prove dashboard-equivalent flows: site + CSV upload + plots + merged time-series + model export/SPARQL + default rules + FDD. Report pass/fail with URLs, curl snippets, and log tails. Stop on first hard failure unless the human asks to continue.
 
 Do in order:
 
 0) Paths and update
    - cd to the open-fdd repo root.
    - git status && git fetch origin && git pull origin master   (or: git pull origin <branch> if the human specifies another branch)
-   - If bootstrap-desktop.sh fails with CRLF errors on Linux: dos2unix scripts/bootstrap-desktop.sh 2>/dev/null || sed -i 's/\r$//' scripts/bootstrap-desktop.sh
+   - If start-local.sh fails with CRLF errors on Linux: dos2unix scripts/start-local.sh 2>/dev/null || sed -i 's/\r$//' scripts/start-local.sh
 
 1) Dependencies / stack (skip heavy steps if unchanged and last run was recent)
-   - If pyproject.toml, package-lock.json, or bootstrap scripts changed, or UI/build fails:
-     - Unix: bash scripts/bootstrap-desktop.sh --install-deps --no-launch
-     - Windows: .\scripts\bootstrap-desktop.ps1 -InstallDeps -NoLaunch
+   - If pyproject.toml, package-lock.json, or launcher scripts changed, or UI/build fails: re-run venv activate + pip install -e ".[dev,desktop]" + (cd apps/desktop-ui && npm install)
    - If MCP index missing or stale: activate venv, then python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
-   - Start services: bash scripts/bootstrap-desktop.sh   OR   .\scripts\bootstrap-desktop.ps1 -BridgeUrl "http://127.0.0.1:8765"
-   - If the human's browser needs a different bridge base (LAN), use --bridge-url / -BridgeUrl accordingly.
-   - Tail last ~30 lines of .openfdd-bridge.log .openfdd-mcp.log .openfdd-ui.log
+   - Start services: bash scripts/start-local.sh   OR   powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+   - If the human's browser needs a different bridge base (LAN), use OFDD_BRIDGE_URL or start-local -BridgeUrl accordingly.
+   - Logs: Unix — tail stack/local-data/logs/*.log; Windows — check service windows.
 
 2) Health
    - curl -sS http://127.0.0.1:8765/health
    - curl -sS http://127.0.0.1:8090/health   (exact host: 127.0.0.1 — NOT 127.0.1)
-   - curl -sS http://127.0.0.1:8080/ | head -n 5
+   - curl -sS http://127.0.0.1:5173/ | head -n 5   (or the Vite port shown in the UI terminal)
 
 3) Site + CSV (same as UI “upload”)
    - POST http://127.0.0.1:8765/sites with JSON {"name":"Phase2 Site"} — save site_id.
@@ -326,7 +330,7 @@ Constraints: use 127.0.0.1 (not 127.0.1). Do not invent API keys. Do not pkill b
 
 | Topic | Detail |
 |--------|--------|
-| **Dashboard CSV** | Ready when **`/health`**, **`/ingest/csv/upload`**, **`/plots/frame`** work; open **`http://127.0.0.1:8080`** (or your chosen `--bridge-url` / firewall setup). |
+| **Dashboard CSV** | Ready when **`/health`**, **`/ingest/csv/upload`**, **`/plots/frame`** work; open the Vite URL from **`start-local`** (often **`http://127.0.0.1:5173`**) or your chosen **`-BridgeUrl`** / firewall setup. |
 | **Default-bundle FDD** | Needs CSV columns (or **column_map**) aligned with bundled YAML. |
 | **Merged `/rules/run`** | Use **`"sources": ["csv","weather",...]`**; with 2+ contributing drivers, metrics are **`metric_sourcetag`**. |
 

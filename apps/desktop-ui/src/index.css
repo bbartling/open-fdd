@@ -331,6 +331,53 @@ select {
   background: var(--panel-soft);
 }
 
+.openfdd-codex-card .openfdd-codex-steps {
+  margin: 0 0 12px 20px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.openfdd-user-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  display: inline-block;
+  margin: 8px 0;
+  background: var(--panel-soft);
+}
+
+.openfdd-token-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.openfdd-token-details textarea {
+  width: 100%;
+  margin-top: 8px;
+}
+
+details.openfdd-advanced > summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 0;
+}
+
+.inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.mono.small {
+  font-size: 11px;
+}
+
 .cron-hint-box {
   border: 1px solid var(--border);
   border-radius: 10px;
