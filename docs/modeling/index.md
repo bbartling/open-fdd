@@ -26,6 +26,8 @@ Semantic modeling and TTL/SQL integration are **not** part of the **`open-fdd`**
 
 ## AI-assisted modeling workflows
 
+For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
+
 For AI-assisted data modeling (OpenClaw, ChatGPT, or human-in-the-loop review), use a simple loop:
 
 1. Export model JSON from your backend (`/model/export` or stack export endpoint).
@@ -46,9 +48,9 @@ For robust prompts, import schema guidance, and operator-safe pre-flight checks,
 
 ---
 
-## Desktop bridge note (open-fdd repo)
+## Local HTTP gateway note (open-fdd repo)
 
-The desktop bridge now supports agent-friendly backend operations such as:
+The FastAPI **gateway** (`open_fdd.gateway`, CLI `open-fdd-gateway` / `open-fdd-desktop-bridge`) supports agent-friendly backend operations such as:
 
 - model export/import/validate,
 - SPARQL query endpoints (`/data-model/sparql`, `/data-model/sparql/upload`),

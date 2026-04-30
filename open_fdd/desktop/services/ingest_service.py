@@ -6,9 +6,9 @@ from typing import Any
 
 import pandas as pd
 
-from open_fdd.desktop.drivers.bacnet_driver import run_bacnet_scrape
-from open_fdd.desktop.drivers.onboard_driver import run_onboard_scrape
-from open_fdd.desktop.drivers.weather_driver import run_weather_fetch
+from open_fdd.platform.drivers.bacnet_driver import run_bacnet_scrape
+from open_fdd.platform.drivers.onboard_driver import run_onboard_scrape
+from open_fdd.platform.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series

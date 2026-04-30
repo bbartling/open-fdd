@@ -35,7 +35,32 @@ type DriverHealthEntry = {
 
 type DriverHealthMap = Record<string, DriverHealthEntry>;
 
-export function DriversPage() {
+type DriversPageSection = "all" | "weather" | "bacnet" | "onboard";
+
+function defaultDateRange(): { start: string; end: string } {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 7);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
+
+function daysBackFromRange(startDate: string, endDate: string): number | null {
+  if (!startDate || !endDate) {
+    return null;
+  }
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start) {
+    return null;
+  }
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1;
+}
+
+export function DriversPage({ embedded = false, section = "all" }: { embedded?: boolean; section?: DriversPageSection }) {
   const { sites, selectedSiteId } = useSite();
   const [siteId, setSiteId] = useState("");
   const [status, setStatus] = useState("Configure drivers and run ingest jobs from one place.");
@@ -46,7 +71,9 @@ export function DriversPage() {
     timezone: "UTC",
     base_url: "https://archive-api.open-meteo.com/v1/archive",
   });
-  const [daysBack, setDaysBack] = useState("7");
+  const initialRange = defaultDateRange();
+  const [weatherStartDate, setWeatherStartDate] = useState(initialRange.start);
+  const [weatherEndDate, setWeatherEndDate] = useState(initialRange.end);
 
   const [bacnetEnabled, setBacnetEnabled] = useState(false);
   const [bacnetInterval, setBacnetInterval] = useState("300");
@@ -64,10 +91,14 @@ export function DriversPage() {
   const [driverHealth, setDriverHealth] = useState<DriverHealthMap>({});
 
   useEffect(() => {
+    if (embedded) {
+      setSiteId(selectedSiteId || "");
+      return;
+    }
     if (!siteId && selectedSiteId) {
       setSiteId(selectedSiteId);
     }
-  }, [siteId, selectedSiteId]);
+  }, [embedded, siteId, selectedSiteId]);
 
   useEffect(() => {
     void refreshConfigs();
@@ -131,14 +162,14 @@ export function DriversPage() {
   }
 
   async function runWeatherIngest() {
-    const effectiveSiteId = siteId || selectedSiteId || "";
+    const effectiveSiteId = embedded ? (selectedSiteId || "") : (siteId || selectedSiteId || "");
     if (!effectiveSiteId) {
       setStatus("Select a site first.");
       return;
     }
-    const parsedDaysBack = Number(daysBack || "7");
-    if (!Number.isFinite(parsedDaysBack) || parsedDaysBack <= 0) {
-      setStatus("Days back must be a valid positive number.");
+    const parsedDaysBack = daysBackFromRange(weatherStartDate, weatherEndDate);
+    if (!parsedDaysBack) {
+      setStatus("Weather date range must be valid and end date must be on/after start date.");
       return;
     }
     try {
@@ -147,7 +178,9 @@ export function DriversPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ site_id: effectiveSiteId, days_back: parsedDaysBack }),
       });
-      setStatus(`Weather ingest complete: rows=${out.rows}, source=${out.source}.`);
+      setStatus(
+        `Weather ingest complete for ${weatherStartDate} to ${weatherEndDate}: rows=${out.rows}, source=${out.source}.`,
+      );
       await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -155,7 +188,7 @@ export function DriversPage() {
   }
 
   async function saveBacnetConfig() {
-    const effectiveSiteId = siteId || selectedSiteId || "";
+    const effectiveSiteId = embedded ? (selectedSiteId || "") : (siteId || selectedSiteId || "");
     const parsedInterval = Number(bacnetInterval || "300");
     if (!Number.isFinite(parsedInterval) || parsedInterval < 5) {
       setStatus("BACnet polling interval must be a valid number >= 5 seconds.");
@@ -184,7 +217,7 @@ export function DriversPage() {
   }
 
   async function runBacnetIngest() {
-    const effectiveSiteId = siteId || selectedSiteId || "";
+    const effectiveSiteId = embedded ? (selectedSiteId || "") : (siteId || selectedSiteId || "");
     if (!effectiveSiteId) {
       setStatus("Select a site first.");
       return;
@@ -234,7 +267,7 @@ export function DriversPage() {
   }
 
   async function runOnboardIngest() {
-    const effectiveSiteId = siteId || selectedSiteId || "";
+    const effectiveSiteId = embedded ? (selectedSiteId || "") : (siteId || selectedSiteId || "");
     if (!effectiveSiteId) {
       setStatus("Select a site first.");
       return;
@@ -256,10 +289,20 @@ export function DriversPage() {
     }
   }
 
-  return (
-    <div className="stack-page">
+  const showWeather = section === "all" || section === "weather";
+  const showBacnet = section === "all" || section === "bacnet";
+  const showOnboard = section === "all" || section === "onboard";
+  const titleBySection: Record<DriversPageSection, string> = {
+    all: embedded ? "Driver Control Center" : "Drivers",
+    weather: "Open-Meteo Driver",
+    bacnet: "BACnet Driver (diy-bacnet-server)",
+    onboard: "Onboard Driver",
+  };
+
+  const content = (
+    <>
       <div className="card">
-        <h2 className="title">Drivers</h2>
+        <h2 className="title">{titleBySection[section]}</h2>
         <p className="muted">
           Supported now: CSV import, Open-Meteo weather, BACnet via diy-bacnet-server, and Onboard API ingest.
         </p>
@@ -295,19 +338,16 @@ export function DriversPage() {
         </div>
       </div>
 
-      <div className="card">
-        <h3 className="title">CSV Driver</h3>
-        <p className="muted">
-          CSV is path/upload driven. Use the CSV Import tab for files. Parsed rows are stored in Feather under source keys (default: csv).
-        </p>
-      </div>
-
-      <div className="card">
+      {showWeather ? <div className="card">
         <h3 className="title">Open-Meteo Driver</h3>
         <div className="grid-two">
           <div>
-            <label>Days back</label>
-            <input value={daysBack} onChange={(e) => setDaysBack(e.target.value)} />
+            <label>Start date</label>
+            <input type="date" value={weatherStartDate} onChange={(e) => setWeatherStartDate(e.target.value)} />
+          </div>
+          <div>
+            <label>End date</label>
+            <input type="date" value={weatherEndDate} onChange={(e) => setWeatherEndDate(e.target.value)} />
           </div>
           <div>
             <label>Timezone</label>
@@ -338,12 +378,12 @@ export function DriversPage() {
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <button onClick={() => void saveWeatherConfig()}>Save weather config</button>
           <button className="secondary-btn" onClick={() => void runWeatherIngest()}>
-            Run weather ingest
+            Run weather ingest now
           </button>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="card">
+      {showBacnet ? <div className="card">
         <h3 className="title">BACnet Driver (diy-bacnet-server)</h3>
         <div className="grid-two">
           <div>
@@ -377,9 +417,9 @@ export function DriversPage() {
             Run BACnet ingest now
           </button>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="card">
+      {showOnboard ? <div className="card">
         <h3 className="title">Onboard Driver</h3>
         <div className="grid-two">
           <div>
@@ -416,11 +456,15 @@ export function DriversPage() {
             Run Onboard ingest now
           </button>
         </div>
-      </div>
+      </div> : null}
 
       <div className="card">
         <textarea readOnly value={status} style={{ minHeight: 96 }} />
       </div>
-    </div>
+    </>
   );
+  if (embedded) {
+    return <div className="stack-page">{content}</div>;
+  }
+  return <div className="stack-page">{content}</div>;
 }
