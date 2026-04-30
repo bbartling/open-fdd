@@ -46,7 +46,12 @@ export function OpenClawChatPage() {
         >
           Advanced — cron helpers, API, and policy presets (optional)
         </summary>
-        {advancedOpen ? <OpenFddClawAdvancedPanel /> : null}
+        <div
+          aria-hidden={!advancedOpen}
+          style={{ display: advancedOpen ? "block" : "none" }}
+        >
+          <OpenFddClawAdvancedPanel />
+        </div>
       </details>
     </section>
   );

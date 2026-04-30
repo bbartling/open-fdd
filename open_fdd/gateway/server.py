@@ -331,6 +331,28 @@ def create_app() -> FastAPI:
         if not (lower.endswith(".yaml") or lower.endswith(".yml")):
             raise HTTPException(status_code=400, detail="Rule file must end with .yaml or .yml")
         return name
+
+    def _safe_rules_path(raw_path: str) -> str:
+        candidate = str(raw_path or "").strip()
+        if not candidate:
+            raise HTTPException(status_code=400, detail="rules_path is required")
+        rules_root = _rules_dir().resolve()
+        if candidate in {".", "./"}:
+            return str(rules_root)
+        direct_file = rules_root / _safe_rule_filename(candidate)
+        if direct_file.exists() and direct_file.is_file():
+            return str(direct_file)
+        try:
+            candidate_path = Path(candidate).expanduser()
+            if not candidate_path.is_absolute():
+                candidate_path = (rules_root / candidate_path).resolve()
+            else:
+                candidate_path = candidate_path.resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid rules_path: {candidate}") from exc
+        if rules_root == candidate_path or rules_root in candidate_path.parents:
+            return str(candidate_path)
+        raise HTTPException(status_code=400, detail="rules_path must be inside managed rules directory")
     def _safe_sync_ttl() -> str | None:
         try:
             services.ttl.sync()
@@ -719,10 +741,11 @@ def create_app() -> FastAPI:
                 **load_meta,
             }
         try:
+            safe_rules_path = _safe_rules_path(body.rules_path)
             out = run_rule_loop_batched(
                 frame,
                 RuleLoopConfig(
-                    rules_path=body.rules_path,
+                    rules_path=safe_rules_path,
                     chunk_rows=int(body.chunk_rows or 0),
                     target_memory_fraction=float(body.target_memory_fraction or 0.25),
                 ),
@@ -778,13 +801,17 @@ def create_app() -> FastAPI:
 
     @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
-        server_url = str(body.server_url or app.state.bacnet_server_url or "").strip()
+        explicit_server_url = str(body.server_url or "").strip()
+        server_url = explicit_server_url or str(app.state.bacnet_server_url or "").strip()
         if not server_url:
             raise HTTPException(
                 status_code=400,
                 detail="Missing BACnet server URL. Set /config/bacnet.server_url or pass server_url in request.",
             )
-        api_key = str(body.api_key or app.state.bacnet_api_key or "").strip()
+        if explicit_server_url:
+            api_key = str(body.api_key or "").strip()
+        else:
+            api_key = str(body.api_key or app.state.bacnet_api_key or "").strip()
         result = services.ingest.ingest_bacnet(
             site_id=body.site_id,
             server_url=server_url,

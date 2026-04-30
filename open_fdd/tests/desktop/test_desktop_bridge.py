@@ -435,7 +435,7 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
             json={
                 "site_id": "site-a",
                 "source": "csv",
-                "rules_path": "dummy",
+                "rules_path": "dummy.yaml",
                 "chunk_rows": 0,
             },
         )

@@ -33,6 +33,7 @@ export function OpenFddCodexSignIn() {
   const [statusLine, setStatusLine] = useState("");
   const [tokensJson, setTokensJson] = useState("");
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPollingRef = useRef(false);
 
   const stopPoll = useCallback(() => {
     if (pollTimer.current) {
@@ -43,6 +44,10 @@ export function OpenFddCodexSignIn() {
 
   const pollOnce = useCallback(
     async (sid: string) => {
+      if (isPollingRef.current) {
+        return;
+      }
+      isPollingRef.current = true;
       try {
         const res = await fetch(`${bridgeBase}/openfdd-claw/codex/device/poll`, {
           method: "POST",
@@ -81,6 +86,8 @@ export function OpenFddCodexSignIn() {
         stopPoll();
         setPhase("err");
         setErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        isPollingRef.current = false;
       }
     },
     [stopPoll],
@@ -130,6 +137,7 @@ export function OpenFddCodexSignIn() {
 
   function reset() {
     stopPoll();
+    isPollingRef.current = false;
     setPhase("idle");
     setErr("");
     setUserCode("");

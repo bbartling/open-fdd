@@ -89,9 +89,10 @@ _sessions: dict[str, _Session] = {}
 
 def _gc_sessions() -> None:
     cutoff = time.time() - OPENAI_CODEX_DEVICE_CODE_TIMEOUT_S - 120
-    dead = [sid for sid, s in _sessions.items() if s.created < cutoff]
-    for sid in dead:
-        _sessions.pop(sid, None)
+    with _lock:
+        dead = [sid for sid, s in _sessions.items() if s.created < cutoff]
+        for sid in dead:
+            _sessions.pop(sid, None)
 
 
 def start_device_login() -> dict[str, Any]:
@@ -158,23 +159,50 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
     if sess.phase == "exchanging":
         return {"status": "pending", "message": "Exchanging authorization code…"}
 
+    with _lock:
+        sess = _sessions.get(session_id)
+        if sess is None:
+            return {"status": "error", "message": "Unknown or expired session. Start sign-in again."}
+        if sess.phase == "complete" and sess.access_token and sess.refresh_token:
+            return {
+                "status": "complete",
+                "message": "Authorized.",
+                "access_token": sess.access_token,
+                "refresh_token": sess.refresh_token,
+                "expires_at_ms": sess.expires_at_ms,
+            }
+        if sess.phase == "error":
+            return {"status": "error", "message": sess.error or "Device login failed."}
+        if sess.phase == "exchanging":
+            return {"status": "pending", "message": "Exchanging authorization code…"}
+        if sess.phase != "pending":
+            return {"status": "pending", "message": "Authorization still pending…"}
+        sess.phase = "exchanging"
+        device_auth_id = sess.device_auth_id
+        user_code = sess.user_code
+        created_at = sess.created
+
     token_url = f"{OPENAI_AUTH_BASE_URL}/api/accounts/deviceauth/token"
     r = requests.post(
         token_url,
-        json={"device_auth_id": sess.device_auth_id, "user_code": sess.user_code},
+        json={"device_auth_id": device_auth_id, "user_code": user_code},
         headers={"Content-Type": "application/json"},
         timeout=30,
     )
     text = r.text
 
     if r.status_code in (403, 404):
-        if time.time() - sess.created > OPENAI_CODEX_DEVICE_CODE_TIMEOUT_S:
+        if time.time() - created_at > OPENAI_CODEX_DEVICE_CODE_TIMEOUT_S:
             with _lock:
                 s2 = _sessions.get(session_id)
                 if s2:
                     s2.phase = "error"
                     s2.error = "Timed out waiting for browser authorization (15 minutes)."
             return {"status": "error", "message": "Timed out waiting for browser authorization (15 minutes)."}
+        with _lock:
+            s2 = _sessions.get(session_id)
+            if s2 and s2.phase == "exchanging":
+                s2.phase = "pending"
         return {"status": "pending", "message": "Waiting for you to finish sign-in in the browser…"}
 
     if not r.ok:
@@ -195,11 +223,6 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
                 s2.phase = "error"
                 s2.error = "OpenAI response missing authorization_code or code_verifier."
         return {"status": "error", "message": "Invalid authorization response from OpenAI."}
-
-    with _lock:
-        s2 = _sessions.get(session_id)
-        if s2:
-            s2.phase = "exchanging"
 
     oauth_url = f"{OPENAI_AUTH_BASE_URL}/oauth/token"
     r2 = requests.post(

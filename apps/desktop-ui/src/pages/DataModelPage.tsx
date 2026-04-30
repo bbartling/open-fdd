@@ -89,6 +89,13 @@ export function DataModelPage() {
   async function doImport() {
     try {
       const payload = parseImportPayload(jsonText);
+      const confirmed = window.confirm(
+        "Import with replace=true will overwrite the existing model. Continue?",
+      );
+      if (!confirmed) {
+        setOut("Import canceled.");
+        return;
+      }
       const resp = await desktopFetch<{ sites: number; equipment: number; points: number }>("/model/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -78,9 +78,11 @@ def test_mcp_drivers_export_proxies_bridge_get(monkeypatch: pytest.MonkeyPatch) 
         captured["url"] = url
 
         class _R:
+            def __init__(self):
+                self.headers = {"content-type": "application/json"}
+
             status_code = 200
             text = '{"schema_version":1}'
-            headers = {"content-type": "application/json"}
 
             def json(self):
                 return {"schema_version": 1, "weather": {}}

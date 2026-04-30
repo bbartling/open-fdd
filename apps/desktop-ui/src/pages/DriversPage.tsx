@@ -38,12 +38,18 @@ type DriverHealthMap = Record<string, DriverHealthEntry>;
 type DriversPageSection = "all" | "weather" | "bacnet" | "onboard";
 
 function defaultDateRange(): { start: string; end: string } {
+  const toLocalDateInput = (value: Date) => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - 7);
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: toLocalDateInput(start),
+    end: toLocalDateInput(end),
   };
 }
 
@@ -51,13 +57,32 @@ function daysBackFromRange(startDate: string, endDate: string): number | null {
   if (!startDate || !endDate) {
     return null;
   }
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start) {
+  const parseUtcMidnight = (raw: string): number | null => {
+    const [yearText, monthText, dayText] = raw.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+      return null;
+    }
+    const utc = Date.UTC(year, month - 1, day);
+    const check = new Date(utc);
+    if (
+      check.getUTCFullYear() !== year
+      || check.getUTCMonth() !== month - 1
+      || check.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return utc;
+  };
+  const startUtc = parseUtcMidnight(startDate);
+  const endUtc = parseUtcMidnight(endDate);
+  if (startUtc === null || endUtc === null || endUtc < startUtc) {
     return null;
   }
   const msPerDay = 24 * 60 * 60 * 1000;
-  return Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1;
+  return Math.floor((endUtc - startUtc) / msPerDay) + 1;
 }
 
 export function DriversPage({ embedded = false, section = "all" }: { embedded?: boolean; section?: DriversPageSection }) {
@@ -306,17 +331,19 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
         <p className="muted">
           Supported now: CSV import, Open-Meteo weather, BACnet via diy-bacnet-server, and Onboard API ingest.
         </p>
-        <div style={{ marginTop: 8 }}>
-          <label>Site</label>
-          <select value={siteId || selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
-            {sites.length === 0 && <option value="">No sites</option>}
-            {sites.map((site) => (
-              <option key={site.id} value={site.id}>
-                {site.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!embedded ? (
+          <div style={{ marginTop: 8 }}>
+            <label>Site</label>
+            <select value={siteId || selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
+              {sites.length === 0 && <option value="">No sites</option>}
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         <div style={{ marginTop: 12 }}>
           <h3 className="title" style={{ marginTop: 0 }}>Driver health</h3>
           <div className="grid-two">

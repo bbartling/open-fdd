@@ -24,17 +24,21 @@ function advancedPanel(container: HTMLElement) {
 
 describe("OpenClawChatPage", () => {
   it("renders chat-first layout with iframe and advanced section collapsed", () => {
-    render(<OpenClawChatPage />);
+    const { container } = render(<OpenClawChatPage />);
     expect(screen.getByText("Open-FDD Claw")).toBeInTheDocument();
     expect(screen.getByTitle("Open-FDD Claw UI")).toBeInTheDocument();
     expect(screen.getByText(/Sign in with ChatGPT \/ Codex/i)).toBeInTheDocument();
-    expect(screen.queryByText("Operations (Cron / Memory / Skills)")).not.toBeInTheDocument();
+    const advancedHost = container.querySelector("[data-testid='ofdd-claw-advanced'] > div");
+    expect(advancedHost).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("reveals advanced cron panel when details is expanded", async () => {
+  it("reveals advanced cron panel when details is expanded", () => {
     const { container } = render(<OpenClawChatPage />);
     expandAdvanced(container);
-    expect(await screen.findByText("Operations (Cron / Memory / Skills)")).toBeInTheDocument();
+    const advancedHost = container.querySelector("[data-testid='ofdd-claw-advanced'] > div");
+    expect(advancedHost).toHaveAttribute("aria-hidden", "false");
+    const panel = advancedPanel(container);
+    expect(panel.getByText("Operations (Cron / Memory / Skills)")).toBeInTheDocument();
   });
 
   it("updates cron command preview when draft changes inside advanced", async () => {
