@@ -41,5 +41,12 @@ F) "import_ready_json_file": provide the same import JSON as a downloadable arti
 Important constraints:
 - Do not invent sensors/equipment unless clearly justified; flag uncertain items.
 - Prefer deterministic mappings based on uploaded YAML and existing model.
-- If rule references are missing in model, include explicit remediation suggestions.`;
+- If rule references are missing in model, include explicit remediation suggestions.
+
+Open-FDD /model/import requirements (must satisfy import_ready_json):
+- Always include a non-empty "sites" array: every point.site_id must appear as sites[].id (create or preserve the site row).
+- Always include "equipment" rows for every distinct points[].equipment_id you set (or set equipment_id to null and accept "Unassigned" grouping in the UI). Never reference an equipment UUID that is missing from "equipment".
+- For every point used by FDD YAML rules, set "fdd_input" to the rule input key when it differs from brick_type (e.g. Zone_Air_Temperature_Sensor). If fdd_input matches brick_type, you may omit fdd_input only when brick_type is the exact Brick class token the rule expects; otherwise set fdd_input explicitly.
+- Keep "external_id" equal to the CSV / Feather column header used at runtime (joined frames may suffix columns as metric_source when multiple drivers exist).
+- "import_ready_json" must be a single JSON object with ONLY keys sites, equipment, points (no prose inside that object).`;
 

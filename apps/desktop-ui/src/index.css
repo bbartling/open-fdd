@@ -429,6 +429,175 @@ details.openfdd-advanced > summary {
   margin-bottom: 12px;
 }
 
+/* Data model testing — health / lineage / SPARQL sections */
+.dm-test-result-panel {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft);
+  min-height: 100px;
+  padding: 12px 14px;
+}
+
+.dm-test-result-panel.dm-test-result-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 120px;
+}
+
+.dm-lineage-tree {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dm-lineage-meta {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.dm-lineage-tree details.dm-lineage-rule {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.dm-lineage-tree details.dm-lineage-rule > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.dm-lineage-tree details.dm-lineage-rule > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dm-lineage-file {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--primary-strong);
+}
+
+.dm-lineage-flag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dm-lineage-tree details.dm-lineage-input {
+  margin: 6px 0 6px 12px;
+  padding: 6px 8px 6px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 45%, var(--border));
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--primary) 6%, var(--panel-soft));
+}
+
+.dm-lineage-tree details.dm-lineage-input > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 500;
+}
+
+.dm-lineage-tree details.dm-lineage-input > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dm-lineage-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dm-lineage-badge.ok {
+  background: color-mix(in srgb, #22a06b 22%, var(--panel));
+  color: #6ee7b7;
+}
+
+[data-theme="light"] .dm-lineage-badge.ok {
+  color: #0d5c3d;
+}
+
+.dm-lineage-badge.warn {
+  background: color-mix(in srgb, var(--danger) 22%, var(--panel));
+  color: #fca5a5;
+}
+
+[data-theme="light"] .dm-lineage-badge.warn {
+  color: #991b1b;
+}
+
+.dm-lineage-point {
+  margin: 6px 0 6px 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  background: var(--panel);
+}
+
+.dm-lineage-point-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 4px;
+}
+
+.dm-sparql-explorer {
+  margin-top: 4px;
+}
+
+.dm-sparql-grid {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 960px) {
+  .dm-sparql-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.dm-sparql-category {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+}
+
+.dm-sparql-category .dm-sparql-cat-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dm-sparql-category .dm-sparql-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     flex-direction: column;

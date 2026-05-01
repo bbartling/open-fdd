@@ -8,6 +8,8 @@ type RuleResponse = {
   columns: string[];
   fault_totals: Record<string, number>;
   preview: string;
+  rule_files_filter?: string[] | null;
+  skip_missing_columns?: boolean;
 };
 
 type RulesListResponse = {
@@ -35,6 +37,8 @@ export function FaultsPage() {
   const [ruleFilename, setRuleFilename] = useState("");
   const [ruleContent, setRuleContent] = useState("");
   const [ruleStatus, setRuleStatus] = useState("Load, view, upload, and delete rule YAML files.");
+  const [backfillRuleFiles, setBackfillRuleFiles] = useState<string[]>([]);
+  const [skipMissingRules, setSkipMissingRules] = useState(false);
 
   const effectiveRulesPath = useMemo(() => rulesPath || rulesDir, [rulesPath, rulesDir]);
 
@@ -46,6 +50,7 @@ export function FaultsPage() {
       if (!rulesPath) {
         setRulesPath(out.rules_dir);
       }
+      setBackfillRuleFiles((prev) => prev.filter((f) => out.files.includes(f)));
       if (selectedRule && !out.files.includes(selectedRule)) {
         setSelectedRule("");
         setSelectedRuleContent("");
@@ -67,10 +72,17 @@ export function FaultsPage() {
           source,
           rules_path: effectiveRulesPath,
           chunk_rows: Number(chunkRows || "0"),
+          rule_files: backfillRuleFiles.length > 0 ? backfillRuleFiles : undefined,
+          skip_missing_columns: skipMissingRules,
         }),
       });
+      const head = out.rule_files_filter?.length
+        ? `Rule files: ${out.rule_files_filter.join(", ")}\n`
+        : "Rule files: (all in directory)\n";
+      const skip = `Skip missing columns: ${out.skip_missing_columns ? "yes" : "no"}\n`;
       setOutput(
-        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
+        `${head}${skip}\n` +
+          `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
           `Columns: ${out.columns.join(", ")}\nFault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
       );
     } catch (error) {
@@ -168,6 +180,30 @@ export function FaultsPage() {
           <input value={rulesPath} onChange={(e) => setRulesPath(e.target.value)} placeholder="rules path directory" />
           <input value={chunkRows} onChange={(e) => setChunkRows(e.target.value)} placeholder="chunk rows" />
         </div>
+        {ruleFiles.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <label>Run only these rule files (optional)</label>
+            <select
+              multiple
+              value={backfillRuleFiles}
+              onChange={(e) => setBackfillRuleFiles(Array.from(e.target.selectedOptions).map((o) => o.value))}
+              style={{ minHeight: 90, width: "100%", maxWidth: 520 }}
+            >
+              {ruleFiles.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <input
+            style={{ width: "auto" }}
+            type="checkbox"
+            checked={skipMissingRules}
+            onChange={(e) => setSkipMissingRules(e.target.checked)}
+          />
+          Skip rules with missing columns
+        </label>
         <div style={{ marginTop: 12 }}>
           <button onClick={() => void runRules()}>Run Rules</button>
         </div>

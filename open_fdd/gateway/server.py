@@ -86,6 +86,10 @@ class RuleRunBody(BaseModel):
     #: ``onboard``, ``bacnet``, or any future driver ``source`` string).
     sources: list[str] | None = None
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
+    #: YAML basenames under ``rules_path`` (e.g. ``["ahu_sat.yaml"]``). Omit or empty = all rules.
+    rule_files: list[str] | None = None
+    #: If True, rules that need columns missing from the frame are skipped (logged) instead of failing the run.
+    skip_missing_columns: bool = False
 
 
 class SiteRecord(BaseModel):
@@ -249,6 +253,48 @@ def _driver_health_update(status_map: dict[str, dict[str, Any]], *, driver: str,
     )
 
 
+def _normalize_import_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Best-effort repair for LLM-shaped imports: ensure site rows exist for point site_ids
+    and minimal equipment rows for referenced equipment_ids (common when ChatGPT emits points-only JSON).
+    """
+    sites = [dict(s) for s in (payload.get("sites") or []) if isinstance(s, dict)]
+    equipment = [dict(e) for e in (payload.get("equipment") or []) if isinstance(e, dict)]
+    points = [dict(p) for p in (payload.get("points") or []) if isinstance(p, dict)]
+
+    site_ids_pts = {str(p.get("site_id")) for p in points if p.get("site_id")}
+    site_ids_existing = {str(s.get("id")) for s in sites if s.get("id")}
+    missing_sites = site_ids_pts - site_ids_existing
+    for sid in sorted(missing_sites):
+        sites.append({"id": sid, "name": "Imported site"})
+
+    site_ids_existing = {str(s.get("id")) for s in sites if s.get("id")}
+    eq_ids_pts = {
+        str(p.get("equipment_id"))
+        for p in points
+        if p.get("equipment_id") and str(p.get("equipment_id")).strip()
+    }
+    eq_ids_existing = {str(e.get("id")) for e in equipment if e.get("id")}
+    for eqid in sorted(eq_ids_pts - eq_ids_existing):
+        sid = next(
+            (str(p.get("site_id")) for p in points if str(p.get("equipment_id") or "") == eqid and p.get("site_id")),
+            None,
+        )
+        if not sid:
+            sid = next(iter(sorted(site_ids_existing)), None)
+        if not sid:
+            continue
+        equipment.append(
+            {
+                "id": eqid,
+                "site_id": sid,
+                "name": "Equipment (auto)",
+                "equipment_type": "Air_Handling_Unit",
+            },
+        )
+    return {"sites": sites, "equipment": equipment, "points": points}
+
+
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -339,9 +385,6 @@ def create_app() -> FastAPI:
         rules_root = _rules_dir().resolve()
         if candidate in {".", "./"}:
             return str(rules_root)
-        direct_file = rules_root / _safe_rule_filename(candidate)
-        if direct_file.exists() and direct_file.is_file():
-            return str(direct_file)
         try:
             candidate_path = Path(candidate).expanduser()
             if not candidate_path.is_absolute():
@@ -352,6 +395,12 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=f"Invalid rules_path: {candidate}") from exc
         if rules_root == candidate_path or rules_root in candidate_path.parents:
             return str(candidate_path)
+        _log.warning(
+            "rules_path rejected: outside managed rules directory (candidate=%r resolved=%r rules_root=%r)",
+            candidate,
+            str(candidate_path),
+            str(rules_root),
+        )
         raise HTTPException(status_code=400, detail="rules_path must be inside managed rules directory")
     def _safe_sync_ttl() -> str | None:
         try:
@@ -578,6 +627,7 @@ def create_app() -> FastAPI:
             "equipment": payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else [],
             "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
         }
+        normalized = _normalize_import_model_payload(normalized)
         with services.model.transaction() as model:
             if body.replace:
                 model["sites"] = normalized["sites"]
@@ -738,16 +788,30 @@ def create_app() -> FastAPI:
                 "columns": [],
                 "fault_totals": {},
                 "preview": "",
+                "rule_files_filter": None,
+                "skip_missing_columns": bool(body.skip_missing_columns),
                 **load_meta,
             }
         try:
             safe_rules_path = _safe_rules_path(body.rules_path)
+            rule_files_norm: list[str] | None = None
+            if body.rule_files:
+                seen: list[str] = []
+                for raw in body.rule_files:
+                    base = Path(str(raw or "").strip()).name
+                    if not base.lower().endswith((".yaml", ".yml")):
+                        continue
+                    if base not in seen:
+                        seen.append(base)
+                rule_files_norm = seen or None
             out = run_rule_loop_batched(
                 frame,
                 RuleLoopConfig(
                     rules_path=safe_rules_path,
                     chunk_rows=int(body.chunk_rows or 0),
                     target_memory_fraction=float(body.target_memory_fraction or 0.25),
+                    rule_files=rule_files_norm,
+                    skip_missing_columns=bool(body.skip_missing_columns),
                 ),
             )
         except RuntimeError as exc:
@@ -755,7 +819,9 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail=(
                     f"{exc}. Hint: this usually means a rule references a sensor column not present "
-                    "in the selected source/window; try source='all' (joined) or map/upload matching points."
+                    "in the selected source/window; try source='all' (joined), map/upload matching points, "
+                    "narrow rule_files to one YAML, or set skip_missing_columns=true to skip incompatible rules. "
+                    "Joined frames suffix metrics as metric_driver (e.g. _csv); the engine maps BRICK labels to those automatically when possible."
                 ),
             ) from exc
         fault_cols = [
@@ -771,6 +837,8 @@ def create_app() -> FastAPI:
             "columns": [str(c) for c in out.columns],
             "fault_totals": fault_totals,
             "preview": preview,
+            "rule_files_filter": rule_files_norm,
+            "skip_missing_columns": bool(body.skip_missing_columns),
             **load_meta,
         }
 
@@ -1355,6 +1423,17 @@ ORDER BY DESC(?count)""",
                 "Check orphan links, missing BRICK/FDD mappings, and duplicate external IDs."
             ),
         }
+
+    @app.get("/data-model/testing/rule-data-lineage", tags=["sparql"])
+    def data_model_testing_rule_data_lineage(site_id: str | None = None) -> dict[str, Any]:
+        """Rule YAML inputs × TTL column map × model points (Feather external_ref) for operator debugging."""
+        from open_fdd.desktop.services.fdd_data_lineage import build_fdd_rule_data_lineage
+
+        ttl_path = services.ttl.sync()
+        model = services.model.load()
+        rules_dir = _rules_dir()
+        sid = str(site_id).strip() if site_id and str(site_id).strip() else None
+        return build_fdd_rule_data_lineage(model=model, ttl_path=ttl_path, rules_dir=rules_dir, site_id=sid)
 
     @app.post("/data-model/testing/query", tags=["sparql"])
     def data_model_testing_query(body: SparqlQueryBody) -> dict[str, Any]:

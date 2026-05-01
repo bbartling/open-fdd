@@ -107,8 +107,11 @@ class TtlService:
                     _log.warning("Skipping point equipment_id link with invalid value: %r", pt.get("equipment_id"))
                 else:
                     lines.append(f"  brick:isPointOf :eq_{eid} ;")
-            if pt.get("fdd_input"):
-                lines.append(f'  ofdd:mapsToRuleInput "{_escape(str(pt["fdd_input"]))}" ;')
+            maps_rule_input = str(pt.get("fdd_input") or "").strip()
+            if not maps_rule_input and bt and bt != "Point":
+                maps_rule_input = str(bt).strip()
+            if maps_rule_input:
+                lines.append(f'  ofdd:mapsToRuleInput "{_escape(maps_rule_input)}" ;')
             ext = pt.get("metadata", {}).get("external_ref") if isinstance(pt.get("metadata"), dict) else None
             if ext:
                 lines.append(f'  ofdd:externalReference "{_escape(str(ext))}" ;')

@@ -116,6 +116,38 @@ def test_desktop_bridge_purge_can_prune_matching_points() -> None:
         assert "p2" in point_ids
 
 
+def test_model_import_auto_heals_missing_sites_and_equipment() -> None:
+    app = create_app()
+    sid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    eid = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    with TestClient(app) as client:
+        res = client.post(
+            "/model/import",
+            json={
+                "replace": True,
+                "payload": {
+                    "sites": [],
+                    "equipment": [],
+                    "points": [
+                        {
+                            "id": "p-auto-1",
+                            "site_id": sid,
+                            "equipment_id": eid,
+                            "external_id": "RTU_11_DA_T(°F)",
+                            "brick_type": "Supply_Air_Temperature_Sensor",
+                        },
+                    ],
+                },
+            },
+        )
+        assert res.status_code == 200
+        exported = client.get("/model/export")
+        assert exported.status_code == 200
+        body = exported.json()
+        assert any(str(s.get("id")) == sid for s in body.get("sites", []))
+        assert any(str(e.get("id")) == eid for e in body.get("equipment", []))
+
+
 def test_desktop_bridge_model_validate_and_import_strict_payload() -> None:
     app = create_app()
     with TestClient(app) as client:
@@ -409,6 +441,50 @@ def test_desktop_bridge_ttl_status_env_overrides(monkeypatch: pytest.MonkeyPatch
         assert int(body.get("sync_interval_seconds", 0)) == 5
 
 
+def test_rules_run_accepts_absolute_rules_directory_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Desktop UI sends rules_dir from GET /rules (absolute path); rules_path must accept directories."""
+    app = create_app()
+
+    def _fake_load_source_frame_window(self, *, source, site_id, start_ts=None, end_ts=None):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+            }
+        )
+
+    def _fake_run_rule_loop_batched(frame, cfg):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+                "example_fault": [0],
+            }
+        )
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.load_source_frame_window",
+        _fake_load_source_frame_window,
+    )
+    monkeypatch.setattr("open_fdd.gateway.server.run_rule_loop_batched", _fake_run_rule_loop_batched)
+
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        assert rules_dir
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": rules_dir,
+                "chunk_rows": 0,
+            },
+        )
+        assert res.status_code == 200, res.text
+
+
 def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPatch) -> None:
     app = create_app()
 
@@ -443,6 +519,18 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         detail = str(res.json().get("detail", ""))
         assert "missing column" in detail.lower()
         assert "try source='all'" in detail.lower()
+
+
+def test_data_model_testing_rule_data_lineage_returns_shape() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/data-model/testing/rule-data-lineage")
+        assert res.status_code == 200
+        body = res.json()
+        assert "rules" in body
+        assert "column_map_size" in body
+        assert "ttl_path" in body
+        assert isinstance(body["rules"], list)
 
 
 def test_data_model_predefined_queries_include_hvac_presets() -> None:

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { desktopFetch } from "../lib/api";
 import { useSite } from "../contexts/site-context";
-import { purgeTimeseries } from "../lib/crud-api";
 import { PointsTreePanel } from "../components/site/PointsTreePanel";
 import { useRulesList } from "../hooks/use-rules";
 
@@ -27,12 +26,27 @@ type BoundsResponse = { start: string | null; end: string | null };
 
 const COLORS = ["#1d4ed8", "#be185d", "#15803d", "#d97706", "#7c3aed", "#0891b2"];
 
+function isFaultColumn(name: string) {
+  return /_flag$/i.test(name) || /_fault$/i.test(name);
+}
+
+function coerceFaultY(yv: unknown): number | null {
+  if (yv === true || yv === "true" || yv === 1 || yv === "1") return 1;
+  if (yv === false || yv === "false" || yv === 0 || yv === "0") return 0;
+  if (yv === "" || yv === null || yv === undefined) return null;
+  const n = typeof yv === "number" ? yv : Number(yv);
+  if (!Number.isFinite(n)) return null;
+  return n > 0 ? 1 : 0;
+}
+
 function PlotlyCanvas({
   traces,
   title,
+  secondaryAxis,
 }: {
   traces: Record<string, unknown>[];
   title: string;
+  secondaryAxis: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -49,11 +63,28 @@ function PlotlyCanvas({
         {
           title,
           autosize: true,
-          margin: { t: 50, r: 24, b: 48, l: 56 },
+          margin: { t: 50, r: secondaryAxis ? 72 : 24, b: 48, l: 56 },
           paper_bgcolor: "transparent",
           plot_bgcolor: "transparent",
           xaxis: { title: "Timestamp", automargin: true },
-          yaxis: { title: "Value", automargin: true },
+          yaxis: {
+            title: secondaryAxis ? "Sensors" : "Value",
+            automargin: true,
+          },
+          ...(secondaryAxis
+            ? {
+                yaxis2: {
+                  title: "Faults (0/1)",
+                  overlaying: "y",
+                  side: "right",
+                  range: [-0.08, 1.08],
+                  tickmode: "array",
+                  tickvals: [0, 1],
+                  ticktext: ["false", "true"],
+                  automargin: true,
+                },
+              }
+            : {}),
           legend: { orientation: "h" },
         },
         { responsive: true, displaylogo: false },
@@ -63,7 +94,7 @@ function PlotlyCanvas({
     return () => {
       mounted = false;
     };
-  }, [traces, title]);
+  }, [traces, title, secondaryAxis]);
   return <div ref={ref} style={{ height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10 }} />;
 }
 
@@ -75,8 +106,6 @@ export function PlotsPage() {
   const [frame, setFrame] = useState<PlotFrameResponse | null>(null);
   const [yColumns, setYColumns] = useState<string[]>([]);
   const [status, setStatus] = useState("Load data, choose columns, then plot.");
-  const [prunePoints, setPrunePoints] = useState(false);
-  const [purging, setPurging] = useState(false);
   const [modelPoints, setModelPoints] = useState<ModelExportResponse["points"]>([]);
   const [modelEquipment, setModelEquipment] = useState<ModelExportResponse["equipment"]>([]);
   const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
@@ -86,6 +115,8 @@ export function PlotsPage() {
   const [endTs, setEndTs] = useState("");
   const [boundsStatus, setBoundsStatus] = useState("");
   const [runOutput, setRunOutput] = useState("Use this panel to run/backfill FDD faults over a site/source/time window.");
+  const [selectedRuleFiles, setSelectedRuleFiles] = useState<string[]>([]);
+  const [skipMissingRules, setSkipMissingRules] = useState(false);
   const { data: rulesData } = useRulesList();
 
   useEffect(() => {
@@ -134,6 +165,11 @@ export function PlotsPage() {
     void loadBounds();
   }, [siteId, siteContext.selectedSiteId, runSource]);
 
+  useEffect(() => {
+    const files = rulesData?.files ?? [];
+    setSelectedRuleFiles((prev) => prev.filter((f) => files.includes(f)));
+  }, [rulesData?.files]);
+
   function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
     const set = new Set<string>();
     const baseName = (col: string) => {
@@ -181,51 +217,6 @@ export function PlotsPage() {
     }
   }
 
-  async function purgeSiteTimeseries() {
-    const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-    if (!effectiveSiteId) {
-      setStatus("Set or select a site first.");
-      return;
-    }
-    const msg = prunePoints
-      ? "Purge timeseries for selected site and remove matching model points? This WILL alter the data model and trigger BRICK TTL sync."
-      : "Purge timeseries for selected site? This keeps sites/equipment/points and BRICK model/TTL intact.";
-    if (!window.confirm(msg)) return;
-    try {
-      setPurging(true);
-      const out = await purgeTimeseries(effectiveSiteId, prunePoints);
-      setFrame(null);
-      setYColumns([]);
-      setStatus(
-        `Purged site timeseries: files=${out.files_deleted}, dirs=${out.dirs_deleted}, bytes=${out.bytes_deleted}, points_removed=${out.points_removed}`,
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPurging(false);
-    }
-  }
-
-  async function deleteEntireSite() {
-    const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-    if (!effectiveSiteId) {
-      setStatus("Set or select a site first.");
-      return;
-    }
-    const siteName = siteContext.sites.find((s) => s.id === effectiveSiteId)?.name ?? "selected site";
-    if (!window.confirm(`Delete site "${siteName}" and all associated data? This is destructive.`)) return;
-    try {
-      await desktopFetch(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
-      await siteContext.refreshSites();
-      setSiteId("");
-      setFrame(null);
-      setYColumns([]);
-      setStatus(`Deleted site "${siteName}" and associated data model rows.`);
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }
-
   async function runRulesWindow() {
     try {
       const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
@@ -244,6 +235,8 @@ export function PlotsPage() {
         columns: string[];
         fault_totals: Record<string, number>;
         preview: string;
+        rule_files_filter?: string[] | null;
+        skip_missing_columns?: boolean;
       }>("/rules/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -256,14 +249,20 @@ export function PlotsPage() {
           chunk_rows: 0,
           start_ts: startTs || null,
           end_ts: endTs || null,
+          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : undefined,
+          skip_missing_columns: skipMissingRules,
         }),
       });
+      const filterLine = out.rule_files_filter?.length
+        ? `Rule files: ${out.rule_files_filter.join(", ")}\n`
+        : "Rule files: (all YAML in pack)\n";
+      const skipLine = `Skip missing columns: ${out.skip_missing_columns ? "yes" : "no"}\n`;
       setRunOutput(
-        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n`
+        `${filterLine}${skipLine}\n`
+          + `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n`
           + `Columns: ${out.columns.join(", ")}\n`
           + `Fault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
       );
-      // Re-render plot against the same data context after backfill.
       if (runSource !== source) {
         setSource(runSource);
       }
@@ -273,17 +272,28 @@ export function PlotsPage() {
     }
   }
 
-  const traces = useMemo(() => {
-    if (!frame || frame.rows.length === 0 || yColumns.length === 0) return [];
+  const { traces, secondaryAxis } = useMemo(() => {
+    if (!frame || frame.rows.length === 0 || yColumns.length === 0) {
+      return { traces: [] as Record<string, unknown>[], secondaryAxis: false };
+    }
     const mode = plotMode === "both" ? "lines+markers" : plotMode === "points" ? "markers" : "lines";
-    return yColumns.map((col, idx) => {
+    const hasFaultAxis = yColumns.some((c) => isFaultColumn(c));
+    const built = yColumns.map((col, idx) => {
+      const faultCol = isFaultColumn(col);
       const x: Array<string | number> = [];
       const y: number[] = [];
       for (const row of frame.rows) {
         const xv = row.timestamp;
-        const yv = row[col];
-        const num = typeof yv === "number" ? yv : Number(yv);
-        if ((typeof xv === "string" || typeof xv === "number") && Number.isFinite(num)) {
+        if (typeof xv !== "string" && typeof xv !== "number") continue;
+        if (faultCol) {
+          const fv = coerceFaultY(row[col]);
+          if (fv === null) continue;
+          x.push(xv);
+          y.push(fv);
+        } else {
+          const yv = row[col];
+          const num = typeof yv === "number" ? yv : Number(yv);
+          if (!Number.isFinite(num)) continue;
           x.push(xv);
           y.push(num);
         }
@@ -294,17 +304,31 @@ export function PlotsPage() {
         type: "scatter",
         mode,
         name: col,
-        line: { color: COLORS[idx % COLORS.length], width: 2 },
-        marker: { color: COLORS[idx % COLORS.length], size: 5 },
+        yaxis: faultCol && hasFaultAxis ? "y2" : "y",
+        line: {
+          color: COLORS[idx % COLORS.length],
+          width: 2,
+          ...(faultCol ? { shape: "hv" as const } : {}),
+        },
+        marker: { color: COLORS[idx % COLORS.length], size: faultCol ? 6 : 5 },
       };
     });
+    return { traces: built, secondaryAxis: hasFaultAxis };
   }, [frame, yColumns, plotMode]);
 
   return (
     <div className="stack-page">
       <div className="card">
         <h2 className="title">Plots</h2>
-        <p className="muted">Plotly trend view for Feather-backed site data (single source or joined multi-source).</p>
+        <p className="muted">
+          Plotly trend view for Feather-backed site data (single source or joined multi-source). Columns whose names end in
+          {" "}
+          <code>_fault</code> or <code>_flag</code> render on a right-hand 0/1 axis so they align with sensor trends after a backfill.
+        </p>
+        <p className="muted">
+          Destructive storage and model cleanup lives under{" "}
+          <strong>Data &amp; model maintenance</strong> in the sidebar.
+        </p>
         <div className="grid-two">
           <select value={siteId || siteContext.selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
             {siteContext.sites.length === 0 && <option value="">No sites</option>}
@@ -322,34 +346,14 @@ export function PlotsPage() {
             <option value="bacnet">BACnet</option>
           </select>
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button onClick={() => void loadData()}>Load Site Data (Feather)</button>
-          <button className="secondary-btn" onClick={() => void purgeSiteTimeseries()} disabled={purging}>
-            {purging ? "Purging..." : "Purge timeseries (site)"}
-          </button>
-          <button className="danger-btn" onClick={() => void deleteEntireSite()}>
-            Delete entire site
-          </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => void loadData()}>Load Site Data (Feather)</button>
           <select value={plotMode} onChange={(e) => setPlotMode(e.target.value as PlotMode)} style={{ width: 160 }}>
             <option value="lines">Lines</option>
             <option value="points">Points</option>
             <option value="both">Both</option>
           </select>
         </div>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 2 }}>
-          <input
-            style={{ width: "auto" }}
-            type="checkbox"
-            checked={prunePoints}
-            onChange={(e) => setPrunePoints(e.target.checked)}
-          />
-          Also remove matching points from model and resync BRICK TTL (destructive)
-        </label>
-        {!prunePoints && (
-          <p className="muted" style={{ marginTop: 0 }}>
-            Default purge is site-scoped timeseries only; data model (sites/equipment/points) is retained. Use Delete entire site for full wipe.
-          </p>
-        )}
         {frame && frame.columns.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <label>Y columns (multi-select)</label>
@@ -379,16 +383,36 @@ export function PlotsPage() {
               }
             }}
             title="Points tree (quick pick)"
-            description="Pick grouped points by equipment/site to quickly populate plotted columns."
+            description={
+              "Pick sensors by equipment to set plotted Y columns. "
+              + "Unassigned means the point has no equipment_id or the UUID is not in the model—assign equipment in Data Model BRICK or import so equipment[].id matches. "
+              + "Second line shows brick_type; rules resolve columns via TTL maps (ofdd:mapsToRuleInput) and these labels. "
+              + "If joined backfill fails with a missing name, use Data Model Testing → lineage or align external_id with the Feather column (see _csv suffixes when multiple drivers load)."
+            }
           />
         </div>
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 70 }} />
       </div>
 
       <div className="card">
+        {traces.length > 0 ? (
+          <PlotlyCanvas traces={traces} title="Open-FDD Trends" secondaryAxis={secondaryAxis} />
+        ) : (
+          <div style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+            Load data and select columns to render Plotly charts.
+          </div>
+        )}
+      </div>
+
+      <div className="card">
         <h3 className="title" style={{ marginBottom: 6 }}>Run / backfill faults</h3>
         <p className="muted">Run FDD rules on a selected source and optional time window for historical backfill.</p>
         <p className="muted">Chunk sizing is automatic and adapts to available local hardware resources.</p>
+        <p className="muted">
+          Pick specific rule YAML files to test one fault at a time, or leave the list empty to run the whole pack.
+          Use <strong>All sources (joined)</strong> when a rule needs columns from more than one driver. Enable skip-missing
+          to run every selected rule that can bind to your frame and quietly skip the rest (good for wide packs while the model is incomplete).
+        </p>
         {boundsStatus ? <p className="muted">{boundsStatus}</p> : null}
         <div className="grid-two">
           <div>
@@ -413,8 +437,8 @@ export function PlotsPage() {
             </div>
           ) : (
             <div>
-              <label>Rules</label>
-              <input readOnly value="Loaded from FDD Rule Setup" />
+              <label>Rules directory</label>
+              <input readOnly value="From FDD Rule Setup (see file list below)" />
             </div>
           )}
           <div>
@@ -426,20 +450,39 @@ export function PlotsPage() {
             <input value={endTs} onChange={(e) => setEndTs(e.target.value)} placeholder="2026-03-31T23:59:59Z" />
           </div>
         </div>
+        {(rulesData?.files?.length ?? 0) > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <label>Rule YAML files (optional)</label>
+            <select
+              multiple
+              value={selectedRuleFiles}
+              onChange={(e) => setSelectedRuleFiles(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
+              style={{ minHeight: 100, width: "100%", maxWidth: 560 }}
+            >
+              {(rulesData?.files ?? []).map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            <p className="muted" style={{ marginTop: 4 }}>
+              None selected = run every <code>.yaml</code> / <code>.yml</code> in the pack. Hold Ctrl/Cmd to pick several.
+            </p>
+          </div>
+        ) : (
+          <p className="muted" style={{ marginTop: 10 }}>No rule files in the managed directory yet — add some under FDD Rule Setup.</p>
+        )}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <input
+            style={{ width: "auto" }}
+            type="checkbox"
+            checked={skipMissingRules}
+            onChange={(e) => setSkipMissingRules(e.target.checked)}
+          />
+          Skip rules whose sensors are missing from this source/window (log warning, no 400)
+        </label>
         <div style={{ marginTop: 10 }}>
-          <button onClick={() => void runRulesWindow()}>Run FDD backfill</button>
+          <button type="button" onClick={() => void runRulesWindow()}>Run FDD backfill</button>
         </div>
         <textarea readOnly value={runOutput} style={{ marginTop: 10, minHeight: 180 }} />
-      </div>
-
-      <div className="card">
-        {traces.length > 0 ? (
-          <PlotlyCanvas traces={traces} title="Open-FDD Trends" />
-        ) : (
-          <div style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-            Load data and select columns to render Plotly charts.
-          </div>
-        )}
       </div>
     </div>
   );

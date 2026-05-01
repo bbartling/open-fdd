@@ -128,6 +128,42 @@ def load_rules_from_dir(path: Union[str, Path]) -> List[Dict[str, Any]]:
     return rules
 
 
+def adapt_rule_column_map_to_dataframe(df: pd.DataFrame, col_map: Dict[str, str]) -> Dict[str, str]:
+    """
+    Map rule aliases to actual DataFrame columns.
+
+    After multi-source merge (:func:`open_fdd.desktop.services.timeseries_merge.merge_site_frames_on_timestamp`),
+    metrics become ``<metric>_<source>`` when more than one driver contributes rows. BRICK / TTL maps still
+    reference the unsuffixed metric name — adapt so expression eval receives real column Series.
+    """
+    if df is None or df.empty:
+        return dict(col_map)
+    out: Dict[str, str] = {}
+    cols = list(df.columns)
+    for alias, logical in col_map.items():
+        if not logical:
+            continue
+        if logical in cols:
+            out[alias] = logical
+            continue
+        prefix = f"{logical}_"
+        candidates = [c for c in cols if c.startswith(prefix)]
+        if not candidates:
+            out[alias] = logical
+            continue
+        prefer_order = ("_csv", "_bacnet", "_onboard", "_weather")
+        chosen: str | None = None
+        for suf in prefer_order:
+            hit = next((c for c in candidates if c.endswith(suf)), None)
+            if hit:
+                chosen = hit
+                break
+        if chosen is None:
+            chosen = sorted(candidates)[0]
+        out[alias] = chosen
+    return out
+
+
 class RuleRunner:
     """
     Runs config-driven fault rules against pandas DataFrames.
@@ -207,7 +243,8 @@ class RuleRunner:
 
         for rule in self._rules:
             flag_name = rule.get("flag", f"{rule.get('name', 'rule')}_flag")
-            col_map = col_map_for_rule(rule, global_col_map)
+            col_map_raw = col_map_for_rule(rule, global_col_map)
+            col_map = adapt_rule_column_map_to_dataframe(result, col_map_raw)
             rule_eff = dict(rule)
             merged_p = {**(rule.get("params") or {}), **run_params}
             if coerce_rule_params:
@@ -235,7 +272,7 @@ class RuleRunner:
                 # Params are already merged + coerced into rule_eff["params"]; do not pass
                 # run_params again or raw overrides would bypass coercion.
                 mask = self._evaluate_rule(
-                    rule_eff, result, timestamp_col, global_col_map
+                    rule_eff, result, timestamp_col, global_col_map, col_map_adapted=col_map
                 )
                 # Per-rule rolling_window (params.rolling_window), else global
                 rw = (rule.get("params") or {}).get("rolling_window")
@@ -272,6 +309,7 @@ class RuleRunner:
         df: pd.DataFrame,
         timestamp_col: Optional[str],
         column_map: Optional[Dict[str, str]] = None,
+        col_map_adapted: Optional[Dict[str, str]] = None,
     ) -> pd.Series:
         """Evaluate a single rule and return boolean fault mask."""
         rule_type = rule.get("type", "expression")
@@ -281,10 +319,14 @@ class RuleRunner:
 
         # Map logical input keys (e.g. Brick class names) → DataFrame columns via column_map.
         # External Brick/TTL tooling can build that map; engine-only callers pass a dict or manifest.
-        col_map = {
-            key: _resolve_input_column(key, val, global_col_map)
-            for key, val in inputs.items()
-        }
+        if col_map_adapted is not None:
+            col_map = col_map_adapted
+        else:
+            col_map = {
+                key: _resolve_input_column(key, val, global_col_map)
+                for key, val in inputs.items()
+            }
+            col_map = adapt_rule_column_map_to_dataframe(df, col_map)
 
         if rule_type == "bounds":
             return self._run_bounds(rule, df, col_map, params)

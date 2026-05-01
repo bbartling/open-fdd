@@ -20,6 +20,60 @@ def _write_rule(rules_dir: Path) -> None:
     (rules_dir / "sat.yaml").write_text(yaml.safe_dump(rule), encoding="utf-8")
 
 
+def test_rule_loop_batched_rule_files_filters_which_yaml_loads(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules_pick"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    ok_rule = {
+        "name": "sat_bounds",
+        "type": "bounds",
+        "inputs": {"sat": {"column": "sat", "bounds": [50, 65]}},
+        "flag": "sat_flag",
+    }
+    bad_rule = {
+        "name": "needs_missing",
+        "type": "expression",
+        "inputs": {"x": {"column": "no_such_column"}},
+        "expression": "x > 0",
+        "flag": "missing_flag",
+    }
+    (rules_dir / "sat.yaml").write_text(yaml.safe_dump(ok_rule), encoding="utf-8")
+    (rules_dir / "bad.yaml").write_text(yaml.safe_dump(bad_rule), encoding="utf-8")
+    frame = pd.DataFrame({"timestamp": pd.date_range("2026-01-01", periods=5, freq="1min"), "sat": [60.0] * 5})
+    out_one = run_rule_loop_batched(
+        frame,
+        RuleLoopConfig(rules_path=str(rules_dir), chunk_rows=10_000, rule_files=["sat.yaml"]),
+    )
+    assert "sat_flag" in out_one.columns
+    assert "missing_flag" not in out_one.columns
+
+
+def test_rule_loop_batched_skip_missing_columns(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules_skip"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    ok_rule = {
+        "name": "sat_bounds",
+        "type": "bounds",
+        "inputs": {"sat": {"column": "sat", "bounds": [50, 65]}},
+        "flag": "sat_flag",
+    }
+    bad_rule = {
+        "name": "needs_missing",
+        "type": "expression",
+        "inputs": {"x": {"column": "no_such_column"}},
+        "expression": "x > 0",
+        "flag": "missing_flag",
+    }
+    (rules_dir / "sat.yaml").write_text(yaml.safe_dump(ok_rule), encoding="utf-8")
+    (rules_dir / "bad.yaml").write_text(yaml.safe_dump(bad_rule), encoding="utf-8")
+    frame = pd.DataFrame({"timestamp": pd.date_range("2026-01-01", periods=5, freq="1min"), "sat": [60.0] * 5})
+    out = run_rule_loop_batched(
+        frame,
+        RuleLoopConfig(rules_path=str(rules_dir), chunk_rows=10_000, skip_missing_columns=True),
+    )
+    assert "sat_flag" in out.columns
+    assert "missing_flag" not in out.columns
+
+
 def test_rule_loop_batched_matches_full(tmp_path: Path) -> None:
     rules_dir = tmp_path / "rules"
     _write_rule(rules_dir)
