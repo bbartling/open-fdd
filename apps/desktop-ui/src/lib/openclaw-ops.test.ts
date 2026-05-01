@@ -121,9 +121,17 @@ describe("openclaw ops command builders", () => {
     expect(good.valid).toBe(true);
     expect(good.hints.join(" ")).toMatch(/5-field cron/i);
 
+    const shorthand = validateCronExpression("@daily");
+    expect(shorthand.valid).toBe(true);
+    expect(shorthand.hints.join(" ")).toMatch(/@daily|shorthand/i);
+
     const everyMinute = validateCronExpression("* * * * *");
     expect(everyMinute.valid).toBe(true);
     expect(everyMinute.hints.join(" ")).toMatch(/skipped runs/i);
+
+    const sixField = validateCronExpression("0 * * * * *");
+    expect(sixField.valid).toBe(true);
+    expect(sixField.hints.join(" ")).toMatch(/6-field|seconds/i);
   });
 });
 

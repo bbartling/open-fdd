@@ -4,10 +4,12 @@ from pathlib import Path
 import traceback
 
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
+from open_fdd.desktop.services.brick_service import BrickService
 from open_fdd.desktop.services.ingest_service import IngestService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import model_ttl_path
+from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
 
 
 class DesktopMainWindow:
@@ -797,7 +799,16 @@ class DesktopMainWindow:
         )
         if frame.empty:
             return "No Feather data found for site/source in selected time window."
-        out = run_rule_loop_batched(frame, RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk))
+        model = self.model_service.load()
+        by_model = build_column_map_from_model_points(model, site_id)
+        # ``resolve_column_map`` returns {} when rdflib is missing or the TTL file is absent; parse/query
+        # failures propagate so corrupt TTL is not silently ignored.
+        ttl_map = BrickService(ttl_path=self.ttl_service.ttl_path).resolve_column_map()
+        cmap = {**ttl_map, **by_model}
+        out = run_rule_loop_batched(
+            frame,
+            RuleLoopConfig(rules_path=rules_path, chunk_rows=chunk, column_map=cmap or None),
+        )
         fault_cols = [c for c in out.columns if c.endswith("_flag")]
         fault_totals = {c: int(out[c].sum()) for c in fault_cols}
         tail_preview = out.tail(10).to_string(index=False)

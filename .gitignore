@@ -14,6 +14,7 @@
 !examples/*.csv
 !examples/data/*.csv
 !examples/AHU/*.csv
+examples/AHU/.openfdd_demo/
 examples/run_all_rules_output.csv
 .vscode/
 
@@ -200,3 +201,4 @@ apps/desktop-ui/node_modules/
 apps/desktop-ui/dist/
 apps/desktop-ui/src-tauri/target/
 apps/desktop-ui/src-tauri/gen/
+apps/desktop-ui/tsconfig.app.tsbuildinfo

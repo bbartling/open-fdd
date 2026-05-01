@@ -70,7 +70,7 @@ export function SystemResourcesPage() {
   return (
     <div className="card">
       <h2 className="title">System resources</h2>
-      <p className="muted">Data deletion controls live on the Plots page to avoid duplicated destructive actions.</p>
+      <p className="muted">Data deletion and model purge controls live on the Data &amp; model maintenance page.</p>
       <div className="grid-two">
         <div>
           <h3>Timeseries store</h3>

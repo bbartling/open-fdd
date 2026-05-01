@@ -4,10 +4,11 @@ async function desktopFetchRaw(path: string, init?: RequestInit): Promise<Respon
   let res: Response;
   try {
     res = await fetch(`${bridgeBase}${path}`, init);
-  } catch (_err) {
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Request failed to ${bridgeBase}${path}. `
-        + `Bridge may be offline, blocked by CORS, or endpoint crashed. `
+      `Request failed to ${bridgeBase}${path}. (${detail}) `
+        + `Bridge may be offline, blocked by CORS, or the process exited while handling the request. `
         + `If needed, restart bridge: open-fdd-desktop-bridge`,
     );
   }

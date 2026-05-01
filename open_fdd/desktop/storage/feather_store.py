@@ -10,6 +10,7 @@ import shutil
 
 import pandas as pd
 
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.storage.paths import feather_root
 
 
@@ -51,7 +52,8 @@ class FeatherStore:
         if not files:
             return pd.DataFrame()
         frames = [pd.read_feather(f) for f in files]
-        return pd.concat(frames, ignore_index=True)
+        merged = pd.concat(frames, ignore_index=True)
+        return dedupe_dataframe_columns(merged)
 
     def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         files_deleted = 0

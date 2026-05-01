@@ -8,6 +8,7 @@ import { SystemResourcesPage } from "./pages/SystemResourcesPage";
 import { SiteManagementPage } from "./pages/SiteManagementPage";
 import { AppLayout } from "./components/layout/AppLayout";
 import { PlotsPage } from "./pages/PlotsPage";
+import { DataMaintenancePage } from "./pages/DataMaintenancePage";
 import { MlLabPage } from "./pages/MlLabPage";
 import { OpenClawChatPage } from "./pages/OpenClawChatPage";
 import { WeatherDriverPage } from "./pages/WeatherDriverPage";
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/energy-engineering" element={<PlaceholderPage title="Energy Engineering" description="Engineering workflow page scaffold." />} />
         <Route path="/data-model-testing" element={<DataModelTestingPage />} />
         <Route path="/plots" element={<PlotsPage />} />
+        <Route path="/data-maintenance" element={<DataMaintenancePage />} />
         <Route path="/ml-lab" element={<MlLabPage />} />
         <Route path="/openfdd-claw-chat" element={<OpenClawChatPage />} />
         <Route path="/openclaw-chat" element={<Navigate to="/openfdd-claw-chat" replace />} />

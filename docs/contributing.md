@@ -134,7 +134,7 @@ To contribute a rule or cookbook change:
 ## Your First Code Contribution
 
 - Look for issues labeled `good first issue` or `help wanted` (if we've added them).
-- The codebase targets **Python 3.9+** (see `pyproject.toml`), with **pandas** / **NumPy** at the core. See [Getting started](getting_started) and the README for setup.
+- The codebase targets **Python 3.10+** (see `pyproject.toml`), with **pandas** / **NumPy** at the core. See [Getting started](getting_started) and the README for setup.
 - For rule or engine changes, run **`pytest`** and, when possible, a small **`RuleRunner`** smoke test on sample CSV data before submitting a PR.
 
 ---

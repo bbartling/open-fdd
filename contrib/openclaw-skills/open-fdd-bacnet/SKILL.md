@@ -33,4 +33,4 @@ Full tables and examples: **`scripts/OPENCLAW_RUNBOOK.md`** section **6) DIY BAC
 
 ## References
 
-- `scripts/OPENCLAW_RUNBOOK.md` §6–7, `docs/howto/desktop_app.md`, `open_fdd/desktop/drivers/bacnet_driver.py`.
+- `scripts/OPENCLAW_RUNBOOK.md` §6–7, `docs/howto/desktop_app.md`, `open_fdd/platform/drivers/bacnet_driver.py`.

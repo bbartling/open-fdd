@@ -91,6 +91,13 @@ class ImportRequest(BaseModel):
     replace: bool = True
 
 
+class ApplySiteProfilesBridgeRequest(BaseModel):
+    """Absolute path to ``site_profiles.yaml`` under the repo ``examples/`` tree."""
+
+    profiles_yaml: str
+    reset: bool = True
+
+
 class SparqlRequest(BaseModel):
     query: str
 
@@ -116,10 +123,10 @@ class OpenClawOpsTemplateRequest(BaseModel):
     @classmethod
     def _normalize_shell(cls, value: Any) -> str:
         shell = str(value or "posix").strip().lower()
-        aliases = {"pwsh": "powershell", "powershell": "powershell", "posix": "posix", "cmd": "cmd"}
+        aliases = {"pwsh": "powershell", "powershell": "powershell", "posix": "posix"}
         normalized = aliases.get(shell)
         if normalized is None:
-            raise ValueError("shell must be one of: posix, powershell, pwsh, cmd")
+            raise ValueError("shell must be one of: posix, powershell, pwsh")
         return normalized
 
     @field_validator("session", mode="before")
@@ -225,6 +232,62 @@ def _serialize_results(query: str, rows: list[Any]) -> dict[str, Any]:
 
 
 def _validate_cron_expression(expr: str) -> dict[str, Any]:
+    def _validate_numeric_token(
+        token: str,
+        *,
+        low: int,
+        high: int,
+        names: dict[str, int] | None = None,
+    ) -> bool:
+        raw_parts = token.split(",")
+        if not raw_parts:
+            return False
+        if any(not p.strip() for p in raw_parts):
+            return False
+        for part in raw_parts:
+            if not _validate_part(part.strip(), low=low, high=high, names=names):
+                return False
+        return True
+
+    def _parse_atom(raw: str, *, names: dict[str, int] | None, low: int, high: int) -> int | None:
+        text = raw.strip()
+        if text == "":
+            return None
+        if names and text.lower() in names:
+            return names[text.lower()]
+        if text.lstrip("+-").isdigit():
+            try:
+                value = int(text, 10)
+            except ValueError:
+                return None
+            if low <= value <= high:
+                return value
+        return None
+
+    def _validate_part(part: str, *, low: int, high: int, names: dict[str, int] | None) -> bool:
+        if part in {"*", "?"}:
+            return True
+        base = part
+        step_value: int | None = None
+        if "/" in part:
+            base, step = part.split("/", 1)
+            if not step.isdigit():
+                return False
+            step_value = int(step, 10)
+            if step_value <= 0:
+                return False
+        if base == "*" or base == "?":
+            return True
+        if "-" in base:
+            left, right = base.split("-", 1)
+            left_value = _parse_atom(left, names=names, low=low, high=high)
+            right_value = _parse_atom(right, names=names, low=low, high=high)
+            if left_value is None or right_value is None:
+                return False
+            return left_value <= right_value
+        atom = _parse_atom(base, names=names, low=low, high=high)
+        return atom is not None
+
     value = str(expr or "").strip()
     if not value:
         return {"valid": False, "hints": ["Cron expression is required."]}
@@ -240,6 +303,35 @@ def _validate_cron_expression(expr: str) -> dict[str, Any]:
     for token in fields:
         if not allowed.match(token):
             return {"valid": False, "hints": [f"Invalid token '{token}'. Use digits, *, /, -, commas, ?, names."]}
+    month_names = {
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+        "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    }
+    weekday_names = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
+    if len(fields) == 5:
+        specs = [
+            ("minute", 0, 59, None),
+            ("hour", 0, 23, None),
+            ("day", 1, 31, None),
+            ("month", 1, 12, month_names),
+            ("weekday", 0, 6, weekday_names),
+        ]
+    else:
+        specs = [
+            ("seconds", 0, 59, None),
+            ("minute", 0, 59, None),
+            ("hour", 0, 23, None),
+            ("day", 1, 31, None),
+            ("month", 1, 12, month_names),
+            ("weekday", 0, 6, weekday_names),
+        ]
+    for idx, (label, low, high, names) in enumerate(specs):
+        token = fields[idx]
+        if not _validate_numeric_token(token, low=low, high=high, names=names):
+            return {
+                "valid": False,
+                "hints": [f"Invalid {label} token '{token}'. Expected values in {low}-{high} for {label}."],
+            }
     hints = [
         "5-field cron: minute hour day month weekday."
         if len(fields) == 5
@@ -287,6 +379,17 @@ def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, 
         if shell == "powershell"
         else "truncate -s 0 ~/.openclaw/workspace/MEMORY.md\nrm -f ~/.openclaw/workspace/memory/*.md"
     )
+    skills_refresh = (
+        "openclaw skills list --eligible\nopenclaw skills update --all\n"
+        "# optional clean reinstall path\n"
+        "# Remove-Item -Recurse -Force ~/.openclaw/workspace/skills/<skill-name>\n"
+        "# openclaw skills install <skill-slug>"
+        if shell == "powershell"
+        else "openclaw skills list --eligible\nopenclaw skills update --all\n"
+        "# optional clean reinstall path\n"
+        "# rm -rf ~/.openclaw/workspace/skills/<skill-name>\n"
+        "# openclaw skills install <skill-slug>"
+    )
     return {
         "cron_add": joined,
         "cron_cleanup": (
@@ -296,11 +399,7 @@ def _build_openclaw_ops_templates(req: OpenClawOpsTemplateRequest) -> dict[str, 
             "# remove one:\n"
             "openclaw cron remove <job-id>"
         ),
-        "skills_refresh": (
-            "openclaw skills list --eligible\nopenclaw skills update --all\n"
-            "# optional clean reinstall path\n# rm -rf ~/.openclaw/workspace/skills/<skill-name>\n"
-            "# openclaw skills install <skill-slug>"
-        ),
+        "skills_refresh": skills_refresh,
         "memory_cleanup": memory,
     }
 
@@ -413,6 +512,8 @@ def manifest() -> dict[str, Any]:
             {"name": "get_doc_section", "route": "/tools/get_doc_section", "mode": "read"},
             {"name": "search_api_capabilities", "route": "/tools/search_api_capabilities", "mode": "read"},
             {"name": "bridge_health", "route": "/tools/bridge_health", "mode": "write_guarded"},
+            {"name": "bridge_readiness", "route": "/tools/bridge_readiness", "mode": "write_guarded"},
+            {"name": "bridge_apply_site_profiles", "route": "/tools/bridge_apply_site_profiles", "mode": "write_guarded"},
             {"name": "drivers_health", "route": "/tools/drivers_health", "mode": "write_guarded"},
             {"name": "drivers_export", "route": "/tools/drivers_export", "mode": "read"},
             {"name": "drivers_validate", "route": "/tools/drivers_validate", "mode": "read"},
@@ -473,6 +574,22 @@ def drivers_validate(req: DriverConfigRequest) -> dict[str, Any]:
 @app.post("/tools/bridge_health", dependencies=[Depends(require_action_tools_auth)])
 def bridge_health() -> dict[str, Any]:
     return _json_request("GET", "/health")
+
+
+@app.post("/tools/bridge_readiness", dependencies=[Depends(require_action_tools_auth)])
+def bridge_readiness() -> dict[str, Any]:
+    """Handoff payload for chat: UI links, site summary, markdown snippet, suggested yes/no follow-up."""
+    return _json_request("GET", "/assistant/readiness")
+
+
+@app.post("/tools/bridge_apply_site_profiles", dependencies=[Depends(require_action_tools_auth)])
+def bridge_apply_site_profiles(req: ApplySiteProfilesBridgeRequest) -> dict[str, Any]:
+    """Run a declarative ``site_profiles.yaml`` pack (CSV ingest + BRICK mapping + optional rules copy)."""
+    return _json_request(
+        "POST",
+        "/assistant/apply-site-profiles",
+        body={"profiles_yaml": req.profiles_yaml, "reset": bool(req.reset)},
+    )
 
 
 @app.post("/tools/drivers_health", dependencies=[Depends(require_action_tools_auth)])

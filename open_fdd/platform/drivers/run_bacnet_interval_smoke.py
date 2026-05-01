@@ -50,6 +50,8 @@ def _safe_float_env(name: str, default: float) -> float:
 
 
 def main(argv: list[str] | None = None) -> None:
+    bridge_env = (os.getenv("OFDD_BRIDGE_URL", "") or "").strip()
+    bridge_default = (bridge_env or "http://127.0.0.1:8765").rstrip("/")
     p = argparse.ArgumentParser(description="Smoke: repeated bridge BACnet ingest with short sleep.")
     p.add_argument(
         "--iterations",
@@ -61,7 +63,7 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=_safe_float_env("OFDD_BACNET_SMOKE_SLEEP_SEC", 2.0),
     )
-    p.add_argument("--bridge-url", default=os.getenv("OFDD_BRIDGE_URL", "http://127.0.0.1:8765").rstrip("/"))
+    p.add_argument("--bridge-url", default=bridge_default)
     p.add_argument("--site-id", default=os.getenv("OFDD_BACNET_SITE_ID", "").strip())
     args = p.parse_args(argv)
     if not args.site_id:

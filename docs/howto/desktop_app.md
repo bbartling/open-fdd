@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local bootstrap + client-to-host networking). For **gateway + Codex subscription auth + skills**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** and copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills). Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
+Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** and copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills). Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
 
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
 The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
@@ -15,28 +15,42 @@ pip install "open-fdd[desktop]"
 
 ## Launch
 
-### Web launch (gateway + MCP + React UI)
+### Recommended: `start-local` (repo-local data under `stack/local-data`)
 
-Recommended launcher on Windows:
+From the repository root, **`scripts/start-local.ps1`** (Windows) and **`scripts/start-local.sh`** (bash) export **`OFDD_DESKTOP_DATA_DIR`**, **`OFDD_MODEL_TTL_PATH`**, **`OFDD_MODEL_TTL_MIRROR_PATH`**, **`OFDD_TTL_SYNC_INTERVAL_SECONDS`**, and **`OFDD_BRIDGE_URL`** so **`model.json`**, Feather chunks, and **`data_model.ttl`** live under **`stack/local-data/`** (gitignored) instead of per-user app data.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -InstallDeps
-```
-
-Daily startup (without reinstalling deps):
+Windows — gateway, MCP RAG, and Vite dev UI each in a new PowerShell window:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 ```
 
-`bootstrap-desktop.ps1` launches by default:
-- terminal 1: `open-fdd-desktop-bridge` (same as `open-fdd-gateway`; package: `open_fdd.gateway`)
-- terminal 2: `open-fdd-mcp-rag`
-- terminal 3: React UI (static mode by default)
-- gateway Swagger: `http://127.0.0.1:8765/docs`
-- gateway OpenAPI: `http://127.0.0.1:8765/openapi.json`
-- MCP API: `http://127.0.0.1:8090`
-- Web UI: `http://127.0.0.1:8080`
+Single role in the current shell (`gateway` \| `mcp` \| `ui` \| `adapter`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway
+```
+
+Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**.
+
+Bash — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**:
+
+```bash
+bash ./scripts/start-local.sh
+bash ./scripts/start-local.sh gateway   # foreground gateway only
+```
+
+First-time UI: **`cd apps/desktop-ui && npm install`** once; the launcher runs **`npm run dev`** for the UI role.
+
+After startup you should have:
+
+- Gateway (same CLI as **`open-fdd-desktop-bridge`**): **`open_fdd.gateway`** — Swagger **`http://127.0.0.1:8765/docs`**, OpenAPI **`http://127.0.0.1:8765/openapi.json`**
+- MCP RAG: **`http://127.0.0.1:8090`**
+- Web UI: Vite default (typically **`http://127.0.0.1:5173`**); align **`OFDD_BRIDGE_URL`** / UI env with your bridge if you change ports.
+
+### Manual start (no launcher)
+
+If you run **`open-fdd-desktop-bridge`** / **`open-fdd-gateway`** without **`start-local`**, writable storage defaults to the per-user **`open-fdd-desktop`** directory (see **Data model + BRICK**). Set **`OFDD_DESKTOP_DATA_DIR`** (and optionally **`OFDD_MODEL_TTL_PATH`**) yourself if you want a custom root.
 
 ```bash
 # terminal 1
@@ -45,57 +59,17 @@ open-fdd-desktop-bridge
 # terminal 2
 open-fdd-mcp-rag
 
-# terminal 3
+# terminal 3 — after npm install in apps/desktop-ui
 cd apps/desktop-ui
-npm install
-npm run build
-python -m http.server 8080 --directory dist --bind 0.0.0.0
+npm run dev
 ```
 
-Use Vite dev mode instead of static:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-desktop.ps1 -UiMode dev -UiPort 5173
-```
-
-Linux/macOS/bash launcher (including WSL):
-
-```bash
-bash ./scripts/bootstrap-desktop.sh --install-deps
-```
-
-Daily startup:
-
-```bash
-bash ./scripts/bootstrap-desktop.sh
-```
-
-Useful flags:
-
-- `--no-bridge`
-- `--no-mcp`
-- `--no-ui`
-- `--no-launch`
-- `--ui-mode static|dev`
-- `--ui-port 8080`
-- `--bridge-url http://127.0.0.1:8765`
-
-PowerShell equivalents:
-
-- `-NoBridge`
-- `-NoMcp`
-- `-NoUi`
-- `-NoLaunch`
-- `-UiMode static|dev`
-- `-UiPort 8080`
-- `-BridgeUrl http://127.0.0.1:8765`
-
-Static mode (`UiMode=static` / `--ui-mode static`) is the default for repeatable startup; dev mode is useful when actively editing UI code. For **slim CI Linux images** only, use the same scripts with Node 20+ and `NPM_CONFIG_PRODUCTION=false` if `NODE_ENV=production` is set globally.
+Production-style static UI (build + static server) is optional; see **`apps/desktop-ui`** README for **`npm run build`** and static hosting.
 
 Bridge URL consistency:
 
-- Bootstrap sets `OFDD_BRIDGE_URL` for the bridge process and `VITE_DESKTOP_BRIDGE_BASE` for the UI build so both target the same base URL (override with `--bridge-url` / `-BridgeUrl` or `OFDD_BRIDGE_URL`).
-- The bridge entrypoint also reads optional `OFDD_BRIDGE_HOST` / `OFDD_BRIDGE_PORT` if you prefer host/port env vars instead of a full URL.
+- **`start-local`** sets **`OFDD_BRIDGE_URL`** for child processes; match the UI’s bridge base URL (e.g. **`VITE_DESKTOP_BRIDGE_BASE`** at build time) to the same host/port.
+- The gateway also honors **`OFDD_BRIDGE_HOST`** / **`OFDD_BRIDGE_PORT`** if you prefer host/port env vars instead of a full URL.
 
 ### Gateway HTTP API (Swagger / OpenAPI)
 
@@ -244,16 +218,16 @@ If import fails, fix timestamp formatting and retry.
 
 ## Data model + BRICK
 
-- Desktop stores model data in user-writable app-data (`open-fdd-desktop/model.json`).
-- BRICK TTL is generated to `open-fdd-desktop/data_model.ttl`.
-- App-data root is platform-specific (`%APPDATA%` on Windows, `~/.local/share` on Linux, `~/Library/Application Support` on macOS) and is resolved by `open_fdd.desktop.storage.paths.desktop_data_dir`.
-- BRICK input mapping for rules resolves through `open_fdd.desktop.services.BrickService`.
+- **`model.json`** is the operational on-disk model (CRUD via gateway). Path: **`<desktop_data_dir>/model.json`**, where **`desktop_data_dir`** is **`OFDD_DESKTOP_DATA_DIR`** if set, otherwise a per-user directory **`open-fdd-desktop`** under the OS app-data root (`%APPDATA%` on Windows, `~/.local/share` on Linux, `~/Library/Application Support` on macOS) — see **`open_fdd.desktop.storage.paths.desktop_data_dir`**.
+- Generated BRICK TTL defaults to **`<desktop_data_dir>/data_model.ttl`**, unless **`OFDD_MODEL_TTL_PATH`** is set (optional mirror: **`OFDD_MODEL_TTL_MIRROR_PATH`**; interval: **`OFDD_TTL_SYNC_INTERVAL_SECONDS`**).
+- **`scripts/start-local.*`** points both model and TTL at **`stack/local-data/`** in the clone so development data stays with the repo.
+- BRICK input mapping for rules resolves through **`open_fdd.desktop.services.BrickService`**.
 
 ## Feather-first ingestion
 
-- CSV, weather, onboard, and BACnet drivers write pandas frames into timestamped Feather files under `open-fdd-desktop/feather_store`.
+- CSV, weather, onboard, and BACnet drivers write pandas frames into timestamped Feather files under **`<desktop_data_dir>/feather_store`** (same **`desktop_data_dir`** as above — e.g. **`stack/local-data/feather_store`** when using **`start-local`**).
 - Feather path layout is source/site scoped:
-  - `open-fdd-desktop/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
+  - `<desktop_data_dir>/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
 - Storage remains append/chunk-based (many files per site/source) for reliability and backfill workflows.
 - The gateway can still present a site-level joined view for plotting (multi-source virtual merge by timestamp), so operators get a single logical trend frame without rewriting raw files.
 - Time-series reads for rules concatenate all Feather files for a selected `(source, site_id)` pair.

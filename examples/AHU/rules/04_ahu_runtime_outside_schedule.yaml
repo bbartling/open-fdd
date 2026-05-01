@@ -1,0 +1,33 @@
+name: ahu_runtime_outside_7_to_5
+version: 1
+type: expression
+description: AHU supply fan status indicates running outside the intended Monday-Friday 7:00-17:00 operating schedule.
+equipment_type:
+  - Air_Handling_Unit
+  - AHU
+  - VAV_AHU
+inputs:
+  Supply_Fan_Status:
+    brick: Supply_Fan_Status
+params:
+  fan_on_threshold: 0.5
+  occupied_start_hour: 7
+  occupied_end_hour: 17
+rolling_window: 3
+expression: |
+  (
+    (Supply_Fan_Status > fan_on_threshold)
+    & (
+      (Supply_Fan_Status.index.dayofweek >= 5)
+      |
+      (
+        (Supply_Fan_Status.index.dayofweek < 5)
+        & (
+          (Supply_Fan_Status.index.hour < occupied_start_hour)
+          | (Supply_Fan_Status.index.hour >= occupied_end_hour)
+        )
+      )
+    )
+  )
+flag: ahu_runtime_outside_schedule_fault
+severity: warning

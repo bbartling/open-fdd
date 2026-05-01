@@ -63,14 +63,16 @@ export function SiteManagementPage() {
 
   async function refresh() {
     try {
-      const [out, health] = await Promise.all([
-        refreshGlobalSites(),
-        desktopFetch<DriverHealthMap>("/config/drivers/health"),
-      ]);
+      const out = await refreshGlobalSites();
       setSites(out);
-      setDriverHealth(health || {});
       if (out.length > 0 && !out.some((site) => site.id === selectedSiteId)) {
         setSelectedSiteId(out[0].id);
+      }
+      try {
+        const health = await desktopFetch<DriverHealthMap>("/config/drivers/health");
+        setDriverHealth(health || {});
+      } catch {
+        setDriverHealth({});
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));

@@ -55,9 +55,21 @@ export function DataModelPage() {
     }
   }
 
-  function downloadJsonFile() {
+  async function ensureExportJsonInEditor(): Promise<string> {
+    const trimmed = String(jsonText || "").trim();
+    if (trimmed) {
+      return jsonText;
+    }
+    const model = await desktopFetch<ModelPayload>("/model/export");
+    const text = JSON.stringify(model, null, 2);
+    setJsonText(text);
+    return text;
+  }
+
+  async function downloadJsonFile() {
     try {
-      const payload = parseImportPayload(jsonText);
+      const source = await ensureExportJsonInEditor();
+      const payload = parseImportPayload(source);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -76,7 +88,8 @@ export function DataModelPage() {
 
   async function copyImportReadyJson() {
     try {
-      const payload = parseImportPayload(jsonText);
+      const source = await ensureExportJsonInEditor();
+      const payload = parseImportPayload(source);
       const text = JSON.stringify(payload, null, 2);
       await copyText("import-ready", text);
       setOut("Copied import-ready JSON (sites/equipment/points only).");
@@ -89,6 +102,13 @@ export function DataModelPage() {
   async function doImport() {
     try {
       const payload = parseImportPayload(jsonText);
+      const confirmed = window.confirm(
+        "Import with replace=true will overwrite the existing model. Continue?",
+      );
+      if (!confirmed) {
+        setOut("Import canceled.");
+        return;
+      }
       const resp = await desktopFetch<{ sites: number; equipment: number; points: number }>("/model/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

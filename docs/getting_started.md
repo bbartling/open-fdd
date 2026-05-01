@@ -15,7 +15,7 @@ Use this page to install **`open-fdd`**, run the test suite from a checkout, and
 pip install open-fdd
 ```
 
-Python **3.9+** is supported (see `pyproject.toml` classifiers).
+Python **3.10+** is required (see `requires-python` in `pyproject.toml`).
 
 ---
 
@@ -28,6 +28,7 @@ python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -U pip
 pip install -e ".[dev]"
+# optional: gateway, MCP, desktop UI tests — pip install -e ".[dev,desktop]"
 python -c "import open_fdd; print('open_fdd import OK')"
 pytest
 ```
@@ -46,4 +47,5 @@ See **`examples/README.md`** in the repository for CSV-driven demos, ontology ex
 - [Column map resolvers](column_map_resolvers)
 - [Engine API](api/engine)
 - [How-to: engine-only IoT](howto/engine_only_iot)
+- [How-to: desktop app](howto/desktop_app) — local gateway, MCP, **`start-local`** and `stack/local-data`
 - [Contributing](contributing)

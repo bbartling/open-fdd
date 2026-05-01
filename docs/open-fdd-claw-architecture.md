@@ -1,7 +1,7 @@
 ---
 title: Open FDD Claw architecture
 nav_order: 8
-description: "OpenClaw features mapped to Open-FDD, bootstrap order, and Codex-aligned LLM auth via the Gateway."
+description: "OpenClaw features mapped to Open-FDD, host startup order, and Codex-aligned LLM auth via the Gateway."
 ---
 
 # Open FDD Claw architecture
@@ -19,7 +19,7 @@ flowchart LR
   subgraph host [Host_OS]
     OFBridge[OpenFDD_bridge_8765]
     OFMCP[OpenFDD_MCP_RAG_8090]
-    OFUI[OpenFDD_UI_8080]
+    OFUI[OpenFDD_UI_Vite]
     OCGW[OpenClaw_Gateway_18789]
   end
   subgraph optional [Optional]
@@ -155,9 +155,9 @@ Install: `pip install "open-fdd[desktop]"` (bridge already pulls desktop deps).
 
 ---
 
-## Bootstrap order (summary)
+## Host startup order (summary)
 
-1. Open-FDD on host: `scripts/bootstrap-desktop.ps1` or `bootstrap-desktop.sh` (see runbook §1).  
+1. Open-FDD on host: `scripts/start-local.ps1` or `scripts/start-local.sh` from the repo root (see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) §1).  
 2. OpenClaw: `openclaw onboard` (or your install path); enable chat completions if you need the HTTP client.  
 3. Codex OAuth: `openclaw models auth login --provider openai-codex`.  
 4. Register MCP: merge `mcp.servers.openfdd` into `openclaw.json` (this doc + runbook Phase 0).  

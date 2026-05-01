@@ -26,20 +26,26 @@ function quote(value: string, shell: ShellFlavor): string {
 }
 
 export function buildCronAddCommand(draft: CronDraft, shell: ShellFlavor = "posix"): string {
+  const effectiveSession: CronDraft["session"] = draft.session || "isolated";
+  const effectiveMessage = draft.message || (
+    effectiveSession === "isolated"
+      ? "Run Open-FDD health + FDD checks for all active sites."
+      : "Run Open-FDD reminder task."
+  );
   const pieces = [
     "openclaw cron add",
     `--name ${quote(draft.name || "Open-FDD task", shell)}`,
     `--cron ${quote(draft.schedule || "0 */6 * * *", shell)}`,
     `--tz ${quote(draft.tz || "UTC", shell)}`,
-    `--session ${draft.session || "isolated"}`,
+    `--session ${effectiveSession}`,
   ];
-  if (draft.session === "isolated") {
+  if (effectiveSession === "isolated") {
     pieces.push(
-      `--message ${quote(draft.message || "Run Open-FDD health + FDD checks for all active sites.", shell)}`,
+      `--message ${quote(effectiveMessage, shell)}`,
     );
     pieces.push("--announce");
   } else {
-    pieces.push(`--system-event ${quote(draft.message || "Run Open-FDD reminder task.", shell)}`);
+    pieces.push(`--system-event ${quote(effectiveMessage, shell)}`);
     pieces.push("--wake now");
   }
   if ((draft.failureDestination || "").trim()) {
@@ -138,7 +144,11 @@ export function validateCronExpression(input: string): CronValidation {
     hints.push("High frequency detected; confirm this won't overload your gateway.");
   }
   if (fields[0] === "*" && fields[1] === "*") {
-    hints.push("Every-minute cadence can generate skipped runs if execution lasts >60s.");
+    hints.push(
+      fields.length === 6
+        ? "Every-second cadence can generate skipped runs if execution lasts >1s."
+        : "Every-minute cadence can generate skipped runs if execution lasts >60s.",
+    );
   }
   return { valid: true, hints };
 }

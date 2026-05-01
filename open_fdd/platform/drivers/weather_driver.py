@@ -89,5 +89,6 @@ def run_weather_fetch(*, store: FrameStore, site_id: str, days_back: int = 1) ->
             "outside_air_rh_pct": [55.0] * len(rng),
         }
     )
-    store.write_frame(source="weather", site_id=site_id, frame=frame)
-    return WeatherFetchResult(rows=len(frame.index))
+    source = "weather"
+    store.write_frame(source=source, site_id=site_id, frame=frame)
+    return WeatherFetchResult(rows=len(frame.index), source=source)
