@@ -8,6 +8,7 @@ Single reference for **local Open-FDD setup**, **OpenClaw-as-client networking**
 
 0. [Phase 0 — OpenClaw gateway, Codex OAuth, Open-FDD wiring](#0-phase-0--openclaw-gateway-codex-oauth-open-fdd-wiring)
 1. [Run Open-FDD on the host](#1-run-open-fdd-on-the-host)
+   - [1b) Desired workflow — AI vs manual](#1b-desired-workflow--ai-vs-manual)
 2. [OpenClaw / Docker as HTTP client to the host](#2-openclaw--docker-as-http-client-to-the-host)
 3. [Quick reference (URLs & logs)](#3-quick-reference-urls--logs)
 4. [Prompt — first-time smoke](#4-prompt--first-time-smoke)
@@ -118,6 +119,19 @@ Minimum observability baseline:
 
 Requirements: **Python 3.10+**, **Node.js 20+ for the desktop UI** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI (**`start-local`**) uses Vite **`npm run dev`** — typically **`http://127.0.0.1:5173`** (not 8080 unless you change ports).
 
+### 1b) Desired workflow — AI vs manual
+
+**Neither path is deprecated.** Pick what fits the operator.
+
+| Mode | Who starts the stack | Typical flow |
+|------|------------------------|--------------|
+| **AI-assisted (Open-FDD Claw / OpenClaw)** | Human or agent runs **`start-local.ps1`** / **`start-local.sh`** once on the host (or the agent runs the same commands over SSH / runbook). The AI then calls the **bridge** (`/health`, `/assistant/readiness`, `POST /assistant/apply-site-profiles`, `POST /plots/fdd-frame`, `POST /plots/share`, …) and points the human to **Plots** links from readiness (`plots_quicklinks`, `?fdd=1`, or `?share=`). |
+| **Fully manual** | Same **`start-local`** scripts — no AI required. Use the **web UI** and **bridge `/docs`**, or **`curl`** / Postman against localhost. Export **`GET /model/export`** JSON (or other bridge endpoints) and paste into ChatGPT or any other tool if you want analysis **outside** this repo; that is optional and not coupled to OpenClaw. |
+
+**Practical order (both modes):** install deps once → **`start-local`** → wait for **`/health` OK** → ingest or apply site profiles → open **Plots** (or **`GET /assistant/readiness`** for copy-paste links) → run FDD overlay or save a **`POST /plots/share`** handoff for someone else to open **`/plots?share=…`**.
+
+Agents should **not** assume they started the UI until **`/health`** succeeds; **`ERR_CONNECTION_REFUSED`** means the gateway is down or the wrong URL/port.
+
 ### Windows (recommended here)
 
 PowerShell at repo root — **first time** create a venv, install Python + UI deps, build the MCP index, then launch:
@@ -138,7 +152,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 - **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -BridgeUrl "http://<this-pc-ip>:8765"` and allow **8765**, **8090**, and your **UI port** in Windows Firewall.
 - **Docker on same machine will call the host** — see [§2](#2-openclaw--docker-as-http-client-to-the-host); you may need the bridge/MCP to listen on **`0.0.0.0`** (`OFDD_BRIDGE_HOST`, `OFDD_MCP_LISTEN_HOST`) so `host.docker.internal` can connect.
 
-**Git Bash / WSL:** use `bash scripts/start-local.sh`; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`. Background services log to **`stack/local-data/logs/*.log`**.
+**Git Bash / WSL:** use `bash scripts/start-local.sh`; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`. Background services log to **`stack/local-data/logs/*.log`**. The script prints **UI / Plots / readiness / health** URLs and waits on **`curl`** or **`wget`** for **`/health`** (install **`curl`** for the wait loop).
 
 ### macOS
 

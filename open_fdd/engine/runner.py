@@ -159,7 +159,12 @@ def adapt_rule_column_map_to_dataframe(df: pd.DataFrame, col_map: Dict[str, str]
                 chosen = hit
                 break
         if chosen is None:
-            chosen = sorted(candidates)[0]
+            if len(candidates) == 1:
+                chosen = candidates[0]
+            else:
+                # Ambiguous merged columns; keep logical name so callers/rules can surface the conflict.
+                out[alias] = logical
+                continue
         out[alias] = chosen
     return out
 

@@ -34,6 +34,51 @@ def test_load_site_profiles_roundtrip(tmp_path: Path) -> None:
     )
     data = load_site_profiles(yml)
     assert len(data["sites"]) == 1
+    assert data["version"] == 1
+    assert data["sites"][0]["display_name"] == "S"
+    assert data["sites"][0]["csv"]["path"] == "a.csv"
+    assert data["sites"][0]["csv"]["source"] == "csv"
+    assert data["sites"][0]["equipment"]["name"] == "E"
+    assert data["sites"][0]["equipment"]["type"] == "AHU"
+    assert data["sites"][0]["brick_mappings"][0]["external_id"] == "c1"
+    assert data["sites"][0]["brick_mappings"][0]["brick_type"] == "Outside_Air_Temperature_Sensor"
+
+
+def test_load_site_profiles_rejects_path_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "dd"))
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    outside = tmp_path / "secret.csv"
+    outside.write_text("x", encoding="utf-8")
+    yml = pack / "site_profiles.yaml"
+    yml.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "sites": [
+                    {
+                        "display_name": "Bad",
+                        "csv": {"path": "../secret.csv", "source": "csv"},
+                        "equipment": {"name": "E", "type": "AHU"},
+                        "brick_mappings": [{"external_id": "c1", "brick_type": "Outside_Air_Temperature_Sensor"}],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    model = ModelService()
+    ingest = IngestService(model_service=model)
+    ttl = TtlService(model_store=model.store)
+    with pytest.raises(ValueError, match="must stay under profile directory"):
+        apply_site_profiles_file(profiles_yaml=yml, model=model, ingest=ingest, ttl=ttl, reset=True)
+
+
+def test_load_site_profiles_invalid_yaml(tmp_path: Path) -> None:
+    yml = tmp_path / "bad.yml"
+    yml.write_text("{ not: valid yaml [[", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid YAML"):
+        load_site_profiles(yml)
 
 
 def test_apply_site_profiles_minimal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

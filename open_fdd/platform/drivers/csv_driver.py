@@ -104,6 +104,9 @@ def ingest_csv_to_feather(
         )
     frame = frame[frame[ts_col].notna()].copy()
     kept_len = len(frame.index)
+    if ts_col != "timestamp":
+        frame = frame.rename(columns={ts_col: "timestamp"})
+        ts_col = "timestamp"
     metric_columns = [str(c) for c in frame.columns if str(c) != ts_col]
     out = store.write_frame(source=source, site_id=site_id, frame=frame)
     return CsvIngestResult(

@@ -801,10 +801,9 @@ class DesktopMainWindow:
             return "No Feather data found for site/source in selected time window."
         model = self.model_service.load()
         by_model = build_column_map_from_model_points(model, site_id)
-        try:
-            ttl_map = BrickService(ttl_path=self.ttl_service.ttl_path).resolve_column_map()
-        except Exception:
-            ttl_map = {}
+        # ``resolve_column_map`` returns {} when rdflib is missing or the TTL file is absent; parse/query
+        # failures propagate so corrupt TTL is not silently ignored.
+        ttl_map = BrickService(ttl_path=self.ttl_service.ttl_path).resolve_column_map()
         cmap = {**ttl_map, **by_model}
         out = run_rule_loop_batched(
             frame,

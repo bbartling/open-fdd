@@ -38,19 +38,39 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
             },
         )
 
+    def _plots_fdd_url(site_id: str, *, run_source: str = "csv") -> str:
+        q = f"site_id={site_id}&fdd=1&skipMissing=1&runSource={run_source}"
+        return f"{ui}/plots?{q}"
+
     deep_links = {
         "plots": f"{ui}/plots",
         "plots_fdd_hint": "On Plots, use **Load + FDD overlay** after choosing source/join in the backfill panel.",
+        "plots_fdd_csv": f"{ui}/plots?fdd=1&skipMissing=1&runSource=csv",
         "csv_import": f"{ui}/csv-import",
         "data_model": f"{ui}/data-model",
         "site_management": f"{ui}/site-management",
         "openfdd_claw_chat": f"{ui}/openfdd-claw-chat",
     }
 
+    plots_quicklinks: list[dict[str, str]] = []
+    for s in sites_out:
+        sid = str(s.get("id") or "").strip()
+        if not sid:
+            continue
+        name = str(s.get("name") or sid)
+        plots_quicklinks.append(
+            {
+                "site_id": sid,
+                "label": name,
+                "href": _plots_fdd_url(sid, run_source="csv"),
+            },
+        )
+
     suggested_actions = [
         "Open **Plots** → pick a site → **Load + FDD overlay** to see sensors + fault columns together.",
         "Tune YAML thresholds under **FDD Rule Setup**, then re-run overlay or **Run FDD backfill**.",
         "When weather/onboard/BACnet are configured, ingest those drivers so **All sources (joined)** reflects multi-stream data.",
+        "Persist a reopenable view for Open-FDD Claw: **POST /plots/share** (same JSON as **/plots/fdd-frame**), then open the returned **plots_open_url** or **GET /plots/share/{id}**.",
     ]
 
     lines = [
@@ -69,6 +89,10 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
                 f"- **{s['name']}** (`{s['id']}`) - {s['point_count']} points, "
                 f"{s['brick_mapped_points']} with BRICK/fdd mapping",
             )
+        lines.append("")
+        lines.append("**Plots with FDD overlay (pre-wired query string)**")
+        for q in plots_quicklinks:
+            lines.append(f"- [{q['label']}]({q['href']})")
     lines.extend(
         [
             "",
@@ -86,6 +110,7 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         "ui_public_base_url": ui,
         "sites": sites_out,
         "deep_links": deep_links,
+        "plots_quicklinks": plots_quicklinks,
         "suggested_actions": suggested_actions,
         "message_markdown": message_md,
         "conversation": {

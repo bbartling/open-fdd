@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-Bootstrap workshop CSVs using the declarative pack ``examples/AHU/site_profiles.yaml``.
+Bootstrap workshop CSVs using a declarative ``site_profiles*.yaml`` under ``examples/AHU/``.
 
 Usage (from repo root)::
 
     python scripts/bootstrap_ahu_examples.py --reset
 
-See ``examples/AHU/README.md`` for viewing Plots + FDD with ``start-local.ps1``.
+RTU 11 with sensor bounds + flatline on AHU supply/mixed/outside/return temps only::
+
+    python scripts/bootstrap_ahu_examples.py --reset --profiles examples/AHU/site_profiles_rtu11_temp.yaml
+
+See ``examples/AHU/README.md`` for purge notes and Plots + FDD.
 """
 
 from __future__ import annotations
@@ -24,8 +28,14 @@ def _repo_root() -> Path:
 def main() -> int:
     repo = _repo_root()
     default_demo = repo / "examples" / "AHU" / ".openfdd_demo"
-    profiles = repo / "examples" / "AHU" / "site_profiles.yaml"
-    ap = argparse.ArgumentParser(description="Apply examples/AHU/site_profiles.yaml to a desktop data directory.")
+    default_profiles = repo / "examples" / "AHU" / "site_profiles.yaml"
+    ap = argparse.ArgumentParser(description="Apply an AHU examples site_profiles YAML to a desktop data directory.")
+    ap.add_argument(
+        "--profiles",
+        type=Path,
+        default=None,
+        help="Path to site_profiles YAML (default: examples/AHU/site_profiles.yaml)",
+    )
     ap.add_argument(
         "--desktop-dir",
         type=Path,
@@ -38,6 +48,8 @@ def main() -> int:
     demo_dir.mkdir(parents=True, exist_ok=True)
     os.environ["OFDD_DESKTOP_DATA_DIR"] = str(demo_dir)
 
+    profiles_arg = args.profiles if args.profiles is not None else default_profiles
+    profiles = (profiles_arg if profiles_arg.is_absolute() else (repo / profiles_arg)).resolve()
     if not profiles.is_file():
         print(f"Missing profile pack: {profiles}", file=sys.stderr)
         return 2

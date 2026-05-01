@@ -4,9 +4,12 @@ import { desktopFetch } from "../lib/api";
 import { OpenFddClawAdvancedPanel } from "./OpenFddClawAdvancedPanel";
 import { OpenFddCodexSignIn } from "./OpenFddCodexSignIn";
 
+type PlotsQuicklink = { site_id: string; label: string; href: string };
+
 type ReadinessPayload = {
   message_markdown?: string;
   deep_links?: Record<string, string>;
+  plots_quicklinks?: PlotsQuicklink[];
   suggested_actions?: string[];
 };
 
@@ -14,13 +17,16 @@ export function OpenClawChatPage() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [handoffMd, setHandoffMd] = useState("");
   const [handoffErr, setHandoffErr] = useState("");
+  const [plotsQuicklinks, setPlotsQuicklinks] = useState<PlotsQuicklink[]>([]);
 
   const fetchLocalHandoff = useCallback(async () => {
     setHandoffErr("");
     setHandoffMd("");
+    setPlotsQuicklinks([]);
     try {
       const data = await desktopFetch<ReadinessPayload>("/assistant/readiness");
       setHandoffMd(data.message_markdown ?? "");
+      setPlotsQuicklinks(Array.isArray(data.plots_quicklinks) ? data.plots_quicklinks : []);
     } catch (e) {
       setHandoffErr(e instanceof Error ? e.message : String(e));
     }
@@ -50,7 +56,8 @@ export function OpenClawChatPage() {
         <h3 className="title" style={{ marginBottom: 8 }}>Local bridge handoff (stand-in for OpenClaw)</h3>
         <p className="muted">
           Until the remote agent is wired end-to-end, pull a **readiness snippet** from the Open-FDD bridge: sites, deep links to Plots / CSV import / data model,
-          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no).
+          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no). Use **Plots with FDD overlay** links to land on trends
+          with faults already merged, or **POST /plots/share** from Plots to mint a reopenable <code>?share=</code> handoff for the team.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           <button type="button" className="secondary-btn" onClick={() => void fetchLocalHandoff()}>
@@ -58,6 +65,20 @@ export function OpenClawChatPage() {
           </button>
         </div>
         {handoffErr ? <p className="muted" style={{ marginTop: 8, color: "var(--danger)" }}>{handoffErr}</p> : null}
+        {plotsQuicklinks.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <p className="muted" style={{ marginBottom: 6 }}>Plots + FDD (one click per site)</p>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              {plotsQuicklinks.map((q) => (
+                <li key={q.site_id} style={{ marginBottom: 4 }}>
+                  <a href={q.href} target="_blank" rel="noreferrer">
+                    {q.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {handoffMd ? (
           <textarea
             readOnly

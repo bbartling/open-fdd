@@ -19,6 +19,16 @@ from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.storage.paths import default_rules_root
 
 
+def _assert_path_under(base: Path, target: Path, *, what: str) -> None:
+    """Reject symlink/path tricks that escape the profile directory (``base``)."""
+    base_r = base.resolve()
+    target_r = target.resolve()
+    try:
+        target_r.relative_to(base_r)
+    except ValueError as exc:
+        raise ValueError(f"{what} must stay under profile directory {base_r}: got {target_r}") from exc
+
+
 def _apply_brick_mappings(model: dict[str, Any], *, site_id: str, mappings: list[dict[str, Any]]) -> int:
     by_ext = {str(m["external_id"]).strip(): str(m["brick_type"]).strip() for m in mappings if m.get("external_id")}
     n = 0
@@ -38,7 +48,10 @@ def _apply_brick_mappings(model: dict[str, Any], *, site_id: str, mappings: list
 
 
 def load_site_profiles(path: Path) -> dict[str, Any]:
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"site_profiles: invalid YAML: {exc}") from exc
     if not isinstance(raw, dict):
         raise ValueError("site_profiles: root must be a mapping")
     if int(raw.get("version", 1)) != 1:
@@ -97,6 +110,7 @@ def apply_site_profiles_file(
         )
         csv_block = site_cfg["csv"]
         csv_path = (base / str(csv_block["path"]).strip()).resolve()
+        _assert_path_under(base, csv_path, what="CSV path")
         if not csv_path.is_file():
             raise FileNotFoundError(f"CSV not found for site {name!r}: {csv_path}")
         source = str(csv_block.get("source") or "csv").strip() or "csv"
@@ -122,13 +136,16 @@ def apply_site_profiles_file(
     rules_sub = data.get("copy_rules_from")
     if rules_sub:
         src_dir = (base / str(rules_sub).strip()).resolve()
+        _assert_path_under(base, src_dir, what="copy_rules_from directory")
         if not src_dir.is_dir():
             raise FileNotFoundError(f"copy_rules_from not a directory: {src_dir}")
         dest_dir = default_rules_root() / "ahu_vav"
         dest_dir.mkdir(parents=True, exist_ok=True)
         for src in sorted(src_dir.glob("*.yaml")):
+            src_res = src.resolve()
+            _assert_path_under(base, src_res, what="copy_rules_from rule file")
             dst = dest_dir / src.name
-            shutil.copy2(src, dst)
+            shutil.copy2(src_res, dst)
             copied.append(src.name)
 
     return {"sites": site_summaries, "rules_copied": copied, "profiles_file": str(profiles_yaml)}

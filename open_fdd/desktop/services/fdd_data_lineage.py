@@ -17,11 +17,15 @@ def _summarize_point(pt: dict[str, Any]) -> dict[str, Any]:
     ref = str(meta.get("external_ref") or "")
     if len(ref) > 160:
         ref = ref[:157] + "..."
+    pid = pt.get("id")
+    sid = pt.get("site_id")
+    ext = pt.get("external_id")
+    brick = pt.get("brick_type")
     return {
-        "point_id": str(pt.get("id", "")),
-        "site_id": str(pt.get("site_id", "")),
-        "external_id": str(pt.get("external_id", "")),
-        "brick_type": str(pt.get("brick_type", "")),
+        "point_id": "" if pid is None else str(pid),
+        "site_id": "" if sid is None else str(sid),
+        "external_id": "" if ext is None else str(ext),
+        "brick_type": "" if brick is None else str(brick),
         "fdd_input": str(pt.get("fdd_input") or ""),
         "feather_or_ref": ref,
     }

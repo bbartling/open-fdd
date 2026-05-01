@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
 
@@ -34,6 +35,14 @@ def test_feather_store_read_multiple_files_keeps_unique_columns(tmp_path: Path) 
     merged = store.read_site_frames(source="csv", site_id="site-1")
     assert merged.columns.is_unique
     assert len(merged.index) == 2
+
+
+def test_dedupe_dataframe_columns_renames_duplicate_labels() -> None:
+    """``read_site_frames`` relies on :func:`dedupe_dataframe_columns` when concat yields duplicate headers."""
+    dup = pd.DataFrame([[1, 2, 3]], columns=["timestamp", "value", "value"])
+    out = dedupe_dataframe_columns(dup)
+    assert out.columns.is_unique
+    assert list(out.columns) == ["timestamp", "value", "value__1"]
 
 
 def test_feather_store_stats_and_targeted_purge(tmp_path: Path) -> None:

@@ -1,6 +1,14 @@
 # AHU workshop CSVs and rules
 
-This folder holds two sample trend exports (`AHU7.csv`, `RTU11.csv`) and a small **YAML rule pack** under `rules/` (`sensor_bounds`, `sensor_flatline`, `sat_operating_band_when_fan_on`).
+This folder holds two sample trend exports (`AHU7.csv`, `RTU11.csv`) and YAML rule packs: the full workshop set under `rules/`, and **`rules_rtu11_temp_only/`** (sensor bounds + flatline on **AHU supply / mixed / outside / return air temperatures** only).
+
+## Purge data and the JSON model
+
+| Where you work | What to do |
+|----------------|------------|
+| **Isolated AHU demo** (`examples/AHU/.openfdd_demo`) | Run `python scripts/bootstrap_ahu_examples.py --reset` (Feather purged + model cleared, then pack re-applied). |
+| **Local stack** (`stack/local-data` via `start-local`) | Use the UI sidebar **Data & model maintenance** to wipe storage/model, or delete that folder while services are stopped. |
+| **Bridge API** | `POST /assistant/apply-site-profiles` with `"reset": true` (same as bootstrap: purge + empty model before ingest). |
 
 ## One-command demo workspace
 
@@ -10,9 +18,15 @@ From the **repository root**:
 python scripts/bootstrap_ahu_examples.py --reset
 ```
 
-The pack is **declarative** (`site_profiles.yaml` next to this README): CSV paths, equipment, and `brick_mappings` live in YAML — no workshop-specific logic in Python. Add new sites or files by editing that pack (or add another YAML under `examples/` and point the bridge at it).
+**RTU 11 only** — one site, `RTU11.csv`, BRICK mapping on the four AHU air-stream temp columns only, and **two** rules copied into the managed pack (`sensor_bounds.yaml`, `sensor_flatline.yaml` from `rules_rtu11_temp_only/`):
 
-This will:
+```powershell
+python scripts/bootstrap_ahu_examples.py --reset --profiles examples/AHU/site_profiles_rtu11_temp.yaml
+```
+
+The pack is **declarative** (`site_profiles.yaml` or `site_profiles_rtu11_temp.yaml` next to this README): CSV paths, equipment, and `brick_mappings` live in YAML — no workshop-specific logic in Python. Add new sites or files by editing that pack (or add another YAML under `examples/` and point the bridge at it).
+
+The default bootstrap will:
 
 - Use an isolated store under `examples/AHU/.openfdd_demo` (override with `--desktop-dir` if you want).
 - Purge old Feather data and **empty the JSON model** when `--reset` is set.
@@ -36,7 +50,7 @@ MCP RAG (when action tools are enabled) exposes `bridge_readiness` and `bridge_a
 
    (Adjust the path to your clone; on Unix use `export OFDD_DESKTOP_DATA_DIR=…`.)
 
-2. Open the **Plots** page in the desktop UI, pick **AHU7 workshop demo** or **RTU11 workshop demo** in the site selector.
+2. Open the **Plots** page in the desktop UI, pick **AHU7 workshop demo** or **RTU 11** in the site selector.
 
 3. Use **Load Site Data (Feather)** for raw trends, or **Load + FDD overlay** to fetch the same window **with fault columns** in one request (uses the **Run / backfill** panel’s source, join mode, time window, and rule file filter).
 

@@ -239,11 +239,13 @@ def _validate_cron_expression(expr: str) -> dict[str, Any]:
         high: int,
         names: dict[str, int] | None = None,
     ) -> bool:
-        parts = [p for p in token.split(",") if p]
-        if not parts:
+        raw_parts = token.split(",")
+        if not raw_parts:
             return False
-        for part in parts:
-            if not _validate_part(part, low=low, high=high, names=names):
+        if any(not p.strip() for p in raw_parts):
+            return False
+        for part in raw_parts:
+            if not _validate_part(part.strip(), low=low, high=high, names=names):
                 return False
         return True
 

@@ -24,8 +24,10 @@ sites:
         brick_type: Supply_Air_Static_Pressure_Sensor
       - external_id: "SF Spd Cmd (%)"
         brick_type: Supply_Fan_Speed_Command
+      - external_id: "SF Sts"
+        brick_type: Supply_Fan_Status
 
-  - display_name: RTU11 workshop demo
+  - display_name: RTU 11
     csv:
       path: RTU11.csv
       source: csv
@@ -41,7 +43,3 @@ sites:
         brick_type: Outside_Air_Temperature_Sensor
       - external_id: "RTU_11_RA_T(°F)"
         brick_type: Return_Air_Temperature_Sensor
-      - external_id: "RTU_11_DA1_P(in/wc)"
-        brick_type: Supply_Air_Static_Pressure_Sensor
-      - external_id: "RTU_11_SF_O(%)"
-        brick_type: Supply_Fan_Speed_Command

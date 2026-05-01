@@ -454,9 +454,13 @@ def create_app() -> FastAPI:
         except OSError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid rules_path: {candidate}") from exc
         if rules_root == candidate_path or rules_root in candidate_path.parents:
+            if not candidate_path.exists():
+                raise HTTPException(status_code=400, detail=f"rules_path does not exist: {candidate}")
             return str(candidate_path)
         ex_root = _examples_pack_root()
         if ex_root is not None and (ex_root == candidate_path or ex_root in candidate_path.parents):
+            if not candidate_path.exists():
+                raise HTTPException(status_code=400, detail=f"rules_path does not exist: {candidate}")
             return str(candidate_path)
         _log.warning(
             "rules_path rejected: outside managed rules directory (candidate=%r resolved=%r rules_root=%r)",
@@ -859,6 +863,10 @@ def create_app() -> FastAPI:
                 load_meta = {"load_mode": "single", "source": body.source}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        try:
+            safe_rules_path = _safe_rules_path(body.rules_path)
+        except HTTPException:
+            raise
         if frame.empty:
             return {
                 "input_rows": 0,
@@ -870,19 +878,18 @@ def create_app() -> FastAPI:
                 "skip_missing_columns": bool(body.skip_missing_columns),
                 **load_meta,
             }
+        rule_files_norm: list[str] | None = None
+        if body.rule_files:
+            seen: list[str] = []
+            for raw in body.rule_files:
+                base = Path(str(raw or "").strip()).name
+                if not base.lower().endswith((".yaml", ".yml")):
+                    continue
+                if base not in seen:
+                    seen.append(base)
+            rule_files_norm = seen or None
+        cmap = _column_map_for_rules_run(services, body.site_id)
         try:
-            safe_rules_path = _safe_rules_path(body.rules_path)
-            rule_files_norm: list[str] | None = None
-            if body.rule_files:
-                seen: list[str] = []
-                for raw in body.rule_files:
-                    base = Path(str(raw or "").strip()).name
-                    if not base.lower().endswith((".yaml", ".yml")):
-                        continue
-                    if base not in seen:
-                        seen.append(base)
-                rule_files_norm = seen or None
-            cmap = _column_map_for_rules_run(services, body.site_id)
             out = run_rule_loop_batched(
                 frame,
                 RuleLoopConfig(
@@ -1231,8 +1238,7 @@ def create_app() -> FastAPI:
             "sources": used_sources,
         }
 
-    @app.post("/plots/fdd-frame", tags=["timeseries"])
-    def plots_fdd_frame(body: PlotsFddFrameBody) -> dict[str, Any]:
+    def _plots_fdd_payload(body: PlotsFddFrameBody) -> dict[str, Any]:
         """
         Merged timeseries for plotting plus FDD fault columns (same row cap as ``/plots/site-frame``).
 
@@ -1253,6 +1259,7 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if merged.empty:
+            _ = _safe_rules_path(body.rules_path)
             return {
                 "columns": [],
                 "rows": [],
@@ -1299,6 +1306,50 @@ def create_app() -> FastAPI:
             "fault_totals": fault_totals,
             "rule_files_filter": rule_files_norm,
         }
+
+    @app.post("/plots/fdd-frame", tags=["timeseries"])
+    def plots_fdd_frame(body: PlotsFddFrameBody) -> dict[str, Any]:
+        return _plots_fdd_payload(body)
+
+    @app.post("/plots/share", tags=["timeseries"])
+    def plots_share_create(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """Run the same pipeline as ``/plots/fdd-frame`` and persist parameters for a reopenable Claw handoff."""
+        from open_fdd.assistant.readiness import ui_public_base_url
+        from open_fdd.desktop.storage.plot_share_store import save_plot_share
+
+        result = _plots_fdd_payload(body)
+        safe_rules = _safe_rules_path(body.rules_path)
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()] or ["csv"]
+        share_id = save_plot_share(
+            {
+                "site_id": body.site_id,
+                "rules_path": safe_rules,
+                "sources": cleaned,
+                "limit": int(body.limit),
+                "join_how": str(body.join_how),
+                "start_ts": body.start_ts,
+                "end_ts": body.end_ts,
+                "rule_files": body.rule_files,
+                "skip_missing_columns": bool(body.skip_missing_columns),
+                "chunk_rows": int(body.chunk_rows or 0),
+                "fault_totals": result.get("fault_totals") or {},
+                "columns": result.get("columns") or [],
+                "row_count": len(result.get("rows") or []),
+            },
+        )
+        result["share_id"] = share_id
+        result["plots_open_url"] = f"{ui_public_base_url().rstrip('/')}/plots?share={urllib.parse.quote(share_id, safe='')}"
+        return result
+
+    @app.get("/plots/share/{share_id}", tags=["timeseries"])
+    def plots_share_get(share_id: str) -> dict[str, Any]:
+        """Return a saved plot+FDD session (no rows); use with ``POST /plots/fdd-frame`` or Plots ``?share=``."""
+        from open_fdd.desktop.storage.plot_share_store import load_plot_share
+
+        rec = load_plot_share(share_id)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="share not found")
+        return rec
 
     @app.get("/assistant/readiness", tags=["assistant"])
     def assistant_readiness() -> dict[str, Any]:

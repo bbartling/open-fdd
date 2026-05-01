@@ -38,14 +38,14 @@ export function FaultsPage() {
   const [ruleContent, setRuleContent] = useState("");
   const [ruleStatus, setRuleStatus] = useState("Load, view, upload, and delete rule YAML files.");
   const [backfillRuleFiles, setBackfillRuleFiles] = useState<string[]>([]);
-  const [skipMissingRules, setSkipMissingRules] = useState(false);
+  const [skipMissingRules, setSkipMissingRules] = useState(true);
 
   const effectiveRulesPath = useMemo(() => rulesPath || rulesDir, [rulesPath, rulesDir]);
 
   /** Rule file list comes from GET /rules (managed ``rules_dir``). Only allow a filter when the run path matches that directory. */
   const ruleFilesFilterMatchesRun = useMemo(() => {
     if (!rulesDir.trim()) return false;
-    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/u, "");
     return norm(effectiveRulesPath) === norm(rulesDir);
   }, [effectiveRulesPath, rulesDir]);
 
@@ -60,8 +60,9 @@ export function FaultsPage() {
       setBackfillRuleFiles((prev) => {
         const next = prev.filter((f) => out.files.includes(f));
         const runPath = (rulesPath || out.rules_dir).trim() || out.rules_dir.trim();
-        const sameDir = runPath.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase()
-          === out.rules_dir.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+        const normRun = runPath.replace(/\\/g, "/").replace(/\/+$/u, "");
+        const normListed = out.rules_dir.replace(/\\/g, "/").replace(/\/+$/u, "");
+        const sameDir = normRun === normListed;
         return sameDir ? next : [];
       });
       if (selectedRule && !out.files.includes(selectedRule)) {

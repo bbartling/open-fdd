@@ -89,6 +89,20 @@ def test_adapt_rule_column_map_zero_rows_still_uses_columns() -> None:
     assert out["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)_csv"
 
 
+def test_adapt_rule_column_map_ambiguous_suffixes_keep_logical() -> None:
+    """When several ``metric_*`` columns exist but none use a preferred driver suffix, do not guess."""
+    df = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2026-01-01", tz="UTC")],
+            "oat_foo": [40.0],
+            "oat_bar": [41.0],
+        }
+    )
+    col_map = {"Outside_Air_Temperature_Sensor": "oat"}
+    out = adapt_rule_column_map_to_dataframe(df, col_map)
+    assert out["Outside_Air_Temperature_Sensor"] == "oat"
+
+
 def test_runner_expression_rule(sample_df, fc1_rule):
     """RuleRunner evaluates expression rules correctly."""
     runner = RuleRunner(rules=[fc1_rule])

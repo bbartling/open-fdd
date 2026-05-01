@@ -138,6 +138,13 @@ def test_mcp_openclaw_cron_validate() -> None:
     assert good.json().get("valid") is True
 
 
+def test_mcp_openclaw_cron_validate_rejects_empty_list_elements() -> None:
+    client = TestClient(mcp_api)
+    r = client.post("/tools/openclaw_cron_validate", json={"expression": "0 1,,2 * * *"})
+    assert r.status_code == 200
+    assert r.json().get("valid") is False
+
+
 def test_mcp_openclaw_ops_templates_powershell() -> None:
     client = TestClient(mcp_api)
     res = client.post(

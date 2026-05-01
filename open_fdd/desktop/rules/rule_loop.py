@@ -31,9 +31,9 @@ def _load_rules_for_config(rules_path: str, rule_files: list[str] | None) -> lis
         if not wanted:
             wanted = None
     if path.is_file():
-        if wanted is not None and path.name not in wanted:
+        if wanted is not None and set(wanted) != {path.name}:
             raise RuntimeError(
-                f"rule_files filter does not include {path.name!r}; wanted={sorted(wanted)}",
+                f"rule_files filter does not match single rule file {path.name!r}; wanted={sorted(wanted)}",
             )
         return [load_rule(path)]
     if not path.is_dir():

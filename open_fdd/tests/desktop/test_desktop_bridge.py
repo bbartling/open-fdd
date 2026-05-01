@@ -509,12 +509,16 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("open_fdd.gateway.server.run_rule_loop_batched", _fake_run_rule_loop_batched)
 
     with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        assert rules_dir
         res = client.post(
             "/rules/run",
             json={
                 "site_id": "site-a",
                 "source": "csv",
-                "rules_path": "dummy.yaml",
+                "rules_path": rules_dir,
                 "chunk_rows": 0,
             },
         )
@@ -522,6 +526,28 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         detail = str(res.json().get("detail", ""))
         assert "missing column" in detail.lower()
         assert "try source='all'" in detail.lower()
+
+
+def test_rules_path_nonexistent_returns_400(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = Path(str(rules.json().get("rules_dir", "")))
+        ghost = rules_dir / "missing_rules_pack_xyz"
+        assert not ghost.exists()
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": str(ghost),
+                "chunk_rows": 0,
+            },
+        )
+        assert res.status_code == 400
+        assert "does not exist" in str(res.json().get("detail", "")).lower()
 
 
 def test_rules_run_resolves_brick_inputs_from_model_points(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -664,6 +690,8 @@ def test_assistant_readiness_returns_markdown() -> None:
         body = res.json()
         assert "message_markdown" in body
         assert "/plots" in body.get("message_markdown", "")
+        assert "plots_quicklinks" in body
+        assert "deep_links" in body and "plots_fdd_csv" in body["deep_links"]
 
 
 def test_assistant_apply_site_profiles_under_examples(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

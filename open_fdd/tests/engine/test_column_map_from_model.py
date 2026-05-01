@@ -10,19 +10,21 @@ def test_build_column_map_from_model_points_maps_brick_and_fdd_input() -> None:
                 "site_id": "s1",
                 "external_id": "RTU_11_DA_T(°F)",
                 "brick_type": "Supply_Air_Temperature_Sensor",
-                "fdd_input": "Supply_Air_Temperature_Sensor",
+                "fdd_input": "FDD_Supply_Temp",
             },
             {
                 "site_id": "s1",
                 "external_id": "RTU_11_MA_T(°F)",
                 "brick_type": "Mixed_Air_Temperature_Sensor",
-                "fdd_input": "Mixed_Air_Temperature_Sensor",
+                "fdd_input": "FDD_Mixed_Temp",
             },
         ],
     }
     m = build_column_map_from_model_points(model, "s1")
     assert m["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)"
     assert m["Mixed_Air_Temperature_Sensor"] == "RTU_11_MA_T(°F)"
+    assert m["FDD_Supply_Temp"] == "RTU_11_DA_T(°F)"
+    assert m["FDD_Mixed_Temp"] == "RTU_11_MA_T(°F)"
 
 
 def test_build_column_map_from_model_points_filters_by_site() -> None:
