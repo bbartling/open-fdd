@@ -125,8 +125,8 @@ Requirements: **Python 3.10+**, **Node.js 20+ for the desktop UI** (**Node 22.14
 
 | Mode | Who starts the stack | Typical flow |
 |------|------------------------|--------------|
-| **AI-assisted (Open-FDD Claw / OpenClaw)** | Human or agent runs **`start-local.ps1`** / **`start-local.sh`** once on the host (or the agent runs the same commands over SSH / runbook). The AI then calls the **bridge** (`/health`, `/assistant/readiness`, `POST /assistant/apply-site-profiles`, `POST /plots/fdd-frame`, `POST /plots/share`, …) and points the human to **Plots** links from readiness (`plots_quicklinks`, `?fdd=1`, or `?share=`). |
-| **Fully manual** | Same **`start-local`** scripts — no AI required. Use the **web UI** and **bridge `/docs`**, or **`curl`** / Postman against localhost. Export **`GET /model/export`** JSON (or other bridge endpoints) and paste into ChatGPT or any other tool if you want analysis **outside** this repo; that is optional and not coupled to OpenClaw. |
+| **AI-assisted (Open-FDD Claw / OpenClaw)** | Human or agent runs **`start-local.ps1`** or **`start-local.sh`** once on the host (or over SSH). | The AI calls **bridge** endpoints (`/health`, `/assistant/readiness`, `/plots/fdd-frame`, `/plots/share`, …) and points humans to **Plots** readiness links (`plots_quicklinks`, `?fdd=1`, `?share=`). |
+| **Fully manual** | Same **`start-local`** scripts; no AI. | Use the **web UI**, **`/docs`**, or **`curl`** / Postman. Optionally export **`GET /model/export`** JSON into ChatGPT or another tool; optional and not tied to OpenClaw. |
 
 **Practical order (both modes):** install deps once → **`start-local`** → wait for **`/health` OK** → ingest or apply site profiles → open **Plots** (or **`GET /assistant/readiness`** for copy-paste links) → run FDD overlay or save a **`POST /plots/share`** handoff for someone else to open **`/plots?share=…`**.
 

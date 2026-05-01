@@ -23,7 +23,7 @@ from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
 from open_fdd.desktop.services.ingest_service import IngestService
@@ -34,6 +34,28 @@ from open_fdd.desktop.storage.paths import default_rules_root
 from open_fdd.gateway import codex_device_login
 
 _log = logging.getLogger(__name__)
+
+
+def _normalize_rule_files_basenames(rule_files: list[str] | None) -> list[str] | None:
+    """
+    When ``rule_files`` is omitted or empty, return None (all YAML in the rules dir).
+    When it is non-empty but every entry is filtered out (non-.yaml/.yml), raise 400.
+    """
+    if not rule_files:
+        return None
+    seen: list[str] = []
+    for raw in rule_files:
+        base = Path(str(raw or "").strip()).name
+        if not base.lower().endswith((".yaml", ".yml")):
+            continue
+        if base not in seen:
+            seen.append(base)
+    if not seen:
+        raise HTTPException(
+            status_code=400,
+            detail="rule_files contained no valid YAML basenames (.yaml/.yml).",
+        )
+    return seen
 
 
 def _plot_frame_records_json_safe(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -263,6 +285,14 @@ class SiteRulePackBody(BaseModel):
 
 class CodexDevicePollBody(BaseModel):
     session_id: str
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_nonempty(cls, v: str) -> str:
+        s = str(v).strip()
+        if not s:
+            raise ValueError("session_id must not be empty or whitespace-only")
+        return s
 
 
 class TimeseriesPurgeBody(BaseModel):
@@ -647,7 +677,7 @@ def create_app() -> FastAPI:
 
     @app.post("/openfdd-claw/codex/device/poll", tags=["openfdd-claw"])
     def codex_device_poll(body: CodexDevicePollBody) -> dict[str, Any]:
-        return codex_device_login.poll_device_login(body.session_id.strip())
+        return codex_device_login.poll_device_login(body.session_id)
 
     @app.get("/model/export", tags=["model"])
     def model_export() -> dict[str, Any]:
@@ -867,6 +897,7 @@ def create_app() -> FastAPI:
             safe_rules_path = _safe_rules_path(body.rules_path)
         except HTTPException:
             raise
+        rule_files_norm = _normalize_rule_files_basenames(body.rule_files)
         if frame.empty:
             return {
                 "input_rows": 0,
@@ -874,20 +905,10 @@ def create_app() -> FastAPI:
                 "columns": [],
                 "fault_totals": {},
                 "preview": "",
-                "rule_files_filter": None,
+                "rule_files_filter": rule_files_norm,
                 "skip_missing_columns": bool(body.skip_missing_columns),
                 **load_meta,
             }
-        rule_files_norm: list[str] | None = None
-        if body.rule_files:
-            seen: list[str] = []
-            for raw in body.rule_files:
-                base = Path(str(raw or "").strip()).name
-                if not base.lower().endswith((".yaml", ".yml")):
-                    continue
-                if base not in seen:
-                    seen.append(base)
-            rule_files_norm = seen or None
         cmap = _column_map_for_rules_run(services, body.site_id)
         try:
             out = run_rule_loop_batched(
@@ -1258,28 +1279,18 @@ def create_app() -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        safe_rules = _safe_rules_path(body.rules_path)
+        rule_files_norm = _normalize_rule_files_basenames(body.rule_files)
         if merged.empty:
-            _ = _safe_rules_path(body.rules_path)
             return {
                 "columns": [],
                 "rows": [],
                 "sources": [],
                 "fault_totals": {},
-                "rule_files_filter": None,
+                "rule_files_filter": rule_files_norm,
             }
         ts_col = infer_timestamp_column(merged)
         work = merged.tail(cap).copy()
-        safe_rules = _safe_rules_path(body.rules_path)
-        rule_files_norm: list[str] | None = None
-        if body.rule_files:
-            seen: list[str] = []
-            for raw in body.rule_files:
-                base = Path(str(raw or "").strip()).name
-                if not base.lower().endswith((".yaml", ".yml")):
-                    continue
-                if base not in seen:
-                    seen.append(base)
-            rule_files_norm = seen or None
         cmap = _column_map_for_rules_run(services, body.site_id)
         try:
             evaluated = run_rule_loop_batched(

@@ -103,7 +103,8 @@ export function FaultsPage() {
       const head = out.rule_files_filter?.length
         ? `Rule files: ${out.rule_files_filter.join(", ")}\n`
         : "Rule files: (all in directory)\n";
-      const skip = `Skip missing columns: ${out.skip_missing_columns ? "yes" : "no"}\n`;
+      const skipVal = out.skip_missing_columns ?? skipMissingRules;
+      const skip = `Skip missing columns: ${skipVal ? "yes" : "no"}\n`;
       setOutput(
         `${head}${skip}\n` +
           `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +

@@ -17,28 +17,33 @@ def plot_shares_root() -> Path:
     return root
 
 
+_RESERVED_SHARE_KEYS = frozenset({"version", "id", "created_at"})
+
+
 def save_plot_share(payload: dict[str, Any]) -> str:
     """Write ``payload`` under a new UUID file; returns share id."""
     share_id = str(uuid.uuid4())
-    path = plot_shares_root() / f"{share_id}.json"
+    safe_payload = {k: v for k, v in (payload or {}).items() if k not in _RESERVED_SHARE_KEYS}
+    canonical_id = str(uuid.UUID(share_id))
+    path = plot_shares_root() / f"{canonical_id}.json"
     record: dict[str, Any] = {
         "version": 1,
-        "id": share_id,
+        "id": canonical_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
-        **payload,
+        **safe_payload,
     }
     path.write_text(json.dumps(record, indent=2), encoding="utf-8")
-    return share_id
+    return canonical_id
 
 
 def load_plot_share(share_id: str) -> dict[str, Any] | None:
     """Load share JSON; returns ``None`` if missing or corrupt."""
     raw = str(share_id or "").strip()
     try:
-        uuid.UUID(raw)
+        canonical = str(uuid.UUID(raw))
     except ValueError:
         return None
-    path = plot_shares_root() / f"{raw}.json"
+    path = plot_shares_root() / f"{canonical}.json"
     if not path.is_file():
         return None
     try:

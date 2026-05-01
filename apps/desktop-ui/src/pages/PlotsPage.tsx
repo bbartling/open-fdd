@@ -48,8 +48,8 @@ type BoundsResponse = { start: string | null; end: string | null };
 const COLORS = ["#1d4ed8", "#be185d", "#15803d", "#d97706", "#7c3aed", "#0891b2"];
 
 function isFaultColumn(name: string) {
-  const parts = name.split("_").map((p) => p.toLowerCase());
-  return parts.some((p) => p === "flag" || p === "fault");
+  const n = name.toLowerCase();
+  return n.endsWith("_flag") || n.endsWith("_fault");
 }
 
 function coerceFaultY(yv: unknown): number | null {
@@ -571,9 +571,7 @@ export function PlotsPage() {
       <div className="card">
         <h2 className="title">Plots</h2>
         <p className="muted">
-          Plotly trend view for Feather-backed site data (single source or joined multi-source). Columns whose names contain
-          {" "}
-          <code>fault</code> or <code>flag</code> as underscore-separated tokens render on a right-hand 0/1 axis so they align with sensor trends.
+          Plotly trend view for Feather-backed site data (single source or joined multi-source).           Columns whose names end with <code>_fault</code> or <code>_flag</code> (same convention as the bridge fault totals) render on a right-hand 0/1 axis so they align with sensor trends.
         </p>
         <p className="muted">
           Destructive storage and model cleanup lives under{" "}

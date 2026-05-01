@@ -62,7 +62,8 @@ def _merge_matches(
             return pid
         ext = str(row.get("external_id") or "").strip()
         fi = str(row.get("fdd_input") or "").strip()
-        return f"__missing_id__:{ext or fi or id(row)}"
+        sid = str(row.get("site_id") or "").strip()
+        return f"__missing_id__:{sid}:{ext or fi or id(row)}"
 
     for row in by_external.get(resolved_column, []):
         merged[_dedupe_key(row)] = row
@@ -115,8 +116,22 @@ def build_fdd_rule_data_lineage(
         except Exception as exc:  # noqa: BLE001
             rules_out.append({"yaml": path.name, "error": str(exc)})
             continue
-        cmap = col_map_for_rule(rule, column_map)
-        inputs_block = rule.get("inputs", {})
+        if not isinstance(rule, dict):
+            rules_out.append({"yaml": path.name, "error": "rule root must be a mapping"})
+            continue
+        raw_inputs = rule.get("inputs")
+        if raw_inputs is None:
+            inputs_block: dict[str, Any] = {}
+        elif isinstance(raw_inputs, dict):
+            inputs_block = raw_inputs
+        else:
+            rules_out.append({"yaml": path.name, "error": "inputs must be a mapping"})
+            continue
+        try:
+            cmap = col_map_for_rule(rule, column_map)
+        except Exception as exc:  # noqa: BLE001
+            rules_out.append({"yaml": path.name, "error": str(exc)})
+            continue
         input_rows: list[dict[str, Any]] = []
         for input_key, resolved_col in cmap.items():
             inp = inputs_block.get(input_key)

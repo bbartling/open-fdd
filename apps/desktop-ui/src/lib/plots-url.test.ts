@@ -7,7 +7,7 @@ describe("parsePlotsSearch", () => {
     expect(a.autoFddOverlay).toBe(true);
     expect(a.siteId).toBe("abc-123");
     expect(a.runSource).toBe("csv");
-    expect(a.skipMissingRules).not.toBe(false);
+    expect(a.skipMissingRules).toBe(true);
   });
 
   it("honors skipMissing=0", () => {

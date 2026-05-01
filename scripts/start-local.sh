@@ -57,8 +57,8 @@ case "${ROLE}" in
     )
     echo "All services launched with repo-local data defaults."
     echo ""
-    echo "Open-FDD UI:        http://127.0.0.1:5173"
-    echo "Plots (FDD-ready):  http://127.0.0.1:5173/plots?fdd=1&skipMissing=1&runSource=csv"
+    echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
+    echo "Plots (FDD-ready):  ${OFDD_UI_PUBLIC_BASE}/plots?fdd=1&skipMissing=1&runSource=csv"
     echo "  Add site_id=<uuid> after you ingest (see GET ${BRIDGE_URL}/assistant/readiness) for one-click overlay."
     echo "Bridge health:      ${BRIDGE_URL}/health"
     echo "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."

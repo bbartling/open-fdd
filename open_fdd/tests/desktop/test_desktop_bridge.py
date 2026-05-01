@@ -528,6 +528,40 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         assert "try source='all'" in detail.lower()
 
 
+def test_rules_run_rejects_rule_files_with_no_valid_yaml_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+
+    def _fake_load_source_frame_window(self, *, source, site_id, start_ts=None, end_ts=None):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+            }
+        )
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.load_source_frame_window",
+        _fake_load_source_frame_window,
+    )
+
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": rules_dir,
+                "chunk_rows": 0,
+                "rule_files": ["not_yaml.txt", "readme.md"],
+            },
+        )
+        assert res.status_code == 400
+        assert "yaml" in str(res.json().get("detail", "")).lower()
+
+
 def test_rules_path_nonexistent_returns_400(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "dd"))
     app = create_app()
@@ -881,6 +915,13 @@ def test_plots_site_frame_returns_json_serializable_rows(tmp_path: Path) -> None
         assert "sat_csv" in body.get("columns", [])
         assert "oat_weather" in body.get("columns", [])
         assert len(body.get("rows", [])) == 2
+
+
+def test_openfdd_claw_codex_poll_rejects_blank_session_id() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": "   "})
+        assert poll.status_code == 422
 
 
 def test_openfdd_claw_codex_start_poll_smoke() -> None:
