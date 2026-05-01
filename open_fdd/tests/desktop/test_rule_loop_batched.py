@@ -6,6 +6,8 @@ import pandas as pd
 from pandas.testing import assert_series_equal
 import yaml
 
+import pytest
+
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
 
 
@@ -45,6 +47,17 @@ def test_rule_loop_batched_rule_files_filters_which_yaml_loads(tmp_path: Path) -
     )
     assert "sat_flag" in out_one.columns
     assert "missing_flag" not in out_one.columns
+
+
+def test_rule_loop_batched_rule_files_missing_name_raises(tmp_path: Path) -> None:
+    rules_dir = tmp_path / "rules_missing"
+    _write_rule(rules_dir)
+    frame = pd.DataFrame({"timestamp": pd.date_range("2026-01-01", periods=3, freq="1min"), "sat": [60.0] * 3})
+    with pytest.raises(RuntimeError, match="not found"):
+        run_rule_loop_batched(
+            frame,
+            RuleLoopConfig(rules_path=str(rules_dir), chunk_rows=10_000, rule_files=["nope.yaml"]),
+        )
 
 
 def test_rule_loop_batched_skip_missing_columns(tmp_path: Path) -> None:

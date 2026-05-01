@@ -7,6 +7,8 @@ import { useRulesList } from "../hooks/use-rules";
 type PlotFrameResponse = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  sources?: string[];
+  fault_totals?: Record<string, number>;
 };
 
 type ModelExportResponse = {
@@ -27,7 +29,8 @@ type BoundsResponse = { start: string | null; end: string | null };
 const COLORS = ["#1d4ed8", "#be185d", "#15803d", "#d97706", "#7c3aed", "#0891b2"];
 
 function isFaultColumn(name: string) {
-  return /_flag$/i.test(name) || /_fault$/i.test(name);
+  const parts = name.split("_").map((p) => p.toLowerCase());
+  return parts.some((p) => p === "flag" || p === "fault");
 }
 
 function coerceFaultY(yv: unknown): number | null {
@@ -217,6 +220,56 @@ export function PlotsPage() {
     }
   }
 
+  async function loadDataWithFddOverlay() {
+    try {
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+      if (!effectiveSiteId) {
+        setStatus("Set or select a site first.");
+        return;
+      }
+      const rulesPath = rulesData?.rules_dir || "";
+      if (!rulesPath) {
+        setStatus("Rules directory is not ready yet (FDD Rule Setup).");
+        return;
+      }
+      const sources =
+        runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : [runSource];
+      const out = await desktopFetch<PlotFrameResponse>("/plots/fdd-frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: effectiveSiteId,
+          rules_path: rulesPath,
+          sources,
+          limit: 5000,
+          join_how: runSource === "all" ? joinHow : "outer",
+          start_ts: startTs || null,
+          end_ts: endTs || null,
+          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : null,
+          skip_missing_columns: skipMissingRules,
+        }),
+      });
+      setFrame(out);
+      const overlaySource = runSource === "all" ? "all" : runSource;
+      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, overlaySource);
+      const faultCols = out.columns.filter((c) => isFaultColumn(c));
+      const defaultYs = [...fromTree.filter((c) => !isFaultColumn(c)).slice(0, 4), ...faultCols.slice(0, 3)];
+      const fallback = [...out.columns.filter((c) => c !== "timestamp" && !isFaultColumn(c)).slice(0, 4), ...faultCols];
+      setYColumns(defaultYs.length > 0 ? defaultYs : fallback);
+      const ft = out.fault_totals && Object.keys(out.fault_totals).length > 0
+        ? ` Fault totals: ${JSON.stringify(out.fault_totals)}`
+        : "";
+      setStatus(
+        `Loaded ${out.rows.length} rows with FDD columns (${overlaySource}).${ft} Pick Y columns to plot sensors and faults together.`,
+      );
+      if (runSource !== source) {
+        setSource(runSource === "all" ? "all" : runSource);
+      }
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function runRulesWindow() {
     try {
       const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
@@ -321,9 +374,9 @@ export function PlotsPage() {
       <div className="card">
         <h2 className="title">Plots</h2>
         <p className="muted">
-          Plotly trend view for Feather-backed site data (single source or joined multi-source). Columns whose names end in
+          Plotly trend view for Feather-backed site data (single source or joined multi-source). Columns whose names contain
           {" "}
-          <code>_fault</code> or <code>_flag</code> render on a right-hand 0/1 axis so they align with sensor trends after a backfill.
+          <code>fault</code> or <code>flag</code> as underscore-separated tokens render on a right-hand 0/1 axis so they align with sensor trends.
         </p>
         <p className="muted">
           Destructive storage and model cleanup lives under{" "}
@@ -346,8 +399,14 @@ export function PlotsPage() {
             <option value="bacnet">BACnet</option>
           </select>
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
           <button type="button" onClick={() => void loadData()}>Load Site Data (Feather)</button>
+          <button type="button" className="secondary-btn" onClick={() => void loadDataWithFddOverlay()}>
+            Load + FDD overlay
+          </button>
+          <span className="muted" style={{ fontSize: 12 }}>
+            Overlay uses the <strong>Run / backfill</strong> source/join, time window, rule file filter, and skip-missing settings below.
+          </span>
           <select value={plotMode} onChange={(e) => setPlotMode(e.target.value as PlotMode)} style={{ width: 160 }}>
             <option value="lines">Lines</option>
             <option value="points">Points</option>

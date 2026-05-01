@@ -82,6 +82,13 @@ def test_adapt_rule_column_map_merge_suffix_prefers_csv() -> None:
     assert out["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)_csv"
 
 
+def test_adapt_rule_column_map_zero_rows_still_uses_columns() -> None:
+    df = pd.DataFrame(columns=["RTU_11_DA_T(°F)_csv", "RTU_11_DA_T(°F)_weather"])
+    col_map = {"Supply_Air_Temperature_Sensor": "RTU_11_DA_T(°F)"}
+    out = adapt_rule_column_map_to_dataframe(df, col_map)
+    assert out["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)_csv"
+
+
 def test_runner_expression_rule(sample_df, fc1_rule):
     """RuleRunner evaluates expression rules correctly."""
     runner = RuleRunner(rules=[fc1_rule])

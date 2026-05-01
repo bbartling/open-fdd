@@ -11,6 +11,7 @@ from open_fdd.platform.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.platform.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
 from open_fdd.desktop.services.timeseries_merge import (
     DEFAULT_SITE_DRIVER_SOURCES,
@@ -136,7 +137,8 @@ class IngestService:
         }
 
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
-        return self.connector.read_frame(source=source, site_id=site_id)
+        frame = self.connector.read_frame(source=source, site_id=site_id)
+        return dedupe_dataframe_columns(frame)
 
     def load_source_frame_window(
         self,

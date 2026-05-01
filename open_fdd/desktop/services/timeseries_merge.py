@@ -9,6 +9,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.services.time_utils import infer_timestamp_column
 
 # Typical driver `source` tags used with FeatherStore / ingest. Future drivers use
@@ -18,9 +19,17 @@ DEFAULT_SITE_DRIVER_SOURCES: tuple[str, ...] = ("csv", "weather", "onboard", "ba
 
 def _normalize_timestamp_for_merge(df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
     """UTC-coerce timestamp column and drop NaT (same as multi-source merge path)."""
-    out = df.copy()
-    out[timestamp_col] = pd.to_datetime(out[timestamp_col], utc=True, errors="coerce")
-    return out[out[timestamp_col].notna()].copy()
+    out = dedupe_dataframe_columns(df)
+    ts = out[timestamp_col]
+    if isinstance(ts, pd.DataFrame):
+        ts = ts.iloc[:, 0]
+    out = out.copy()
+    out[timestamp_col] = pd.to_datetime(ts, utc=True, errors="coerce")
+    out = out[out[timestamp_col].notna()].copy()
+    # Duplicate timestamps in a driver multiply rows on outer merge (Cartesian product); keep last row per ts.
+    if not out.empty and timestamp_col in out.columns:
+        out = out.drop_duplicates(subset=[timestamp_col], keep="last").copy()
+    return out
 
 
 def merge_site_frames_on_timestamp(

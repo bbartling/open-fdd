@@ -24,6 +24,18 @@ def test_feather_store_roundtrip(tmp_path: Path) -> None:
     assert "value" in merged.columns
 
 
+def test_feather_store_read_multiple_files_keeps_unique_columns(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    store = FeatherStore(root=tmp_path / "feather")
+    t = pd.Timestamp("2026-01-01T00:00:00Z", tz="UTC")
+    frame = pd.DataFrame({"timestamp": [t], "value": [1.0]})
+    store.write_frame(source="csv", site_id="site-1", frame=frame)
+    store.write_frame(source="csv", site_id="site-1", frame=frame)
+    merged = store.read_site_frames(source="csv", site_id="site-1")
+    assert merged.columns.is_unique
+    assert len(merged.index) == 2
+
+
 def test_feather_store_stats_and_targeted_purge(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     store = FeatherStore(root=tmp_path / "feather")

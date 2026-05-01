@@ -62,6 +62,25 @@ def _build_services() -> BridgeServices:
     return BridgeServices(model=model, ingest=ingest, ttl=ttl)
 
 
+def _column_map_for_rules_run(services: BridgeServices, site_id: str) -> dict[str, str]:
+    """
+    Merge TTL-derived BRICK→column labels with model points (``brick_type`` / ``fdd_input`` → ``external_id``).
+
+    Model entries win on key collision so CSV headers stay aligned with the JSON the operator edited.
+    """
+    from open_fdd.desktop.services.brick_service import BrickService
+    from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+
+    model = services.model.load()
+    by_model = build_column_map_from_model_points(model, site_id)
+    try:
+        ttl_map = BrickService(ttl_path=services.ttl.ttl_path).resolve_column_map()
+    except Exception:
+        _log.debug("Brick column map from TTL unavailable", exc_info=True)
+        ttl_map = {}
+    return {**ttl_map, **by_model}
+
+
 class CsvIngestBody(BaseModel):
     site_id: str
     source: str = "csv"
@@ -71,6 +90,28 @@ class CsvIngestBody(BaseModel):
 class ModelImportBody(BaseModel):
     payload: "ModelPayload"
     replace: bool = True
+
+
+class PlotsFddFrameBody(BaseModel):
+    """Load a merged timeseries window and append FDD fault columns for Plotly (same row cap as plot endpoints)."""
+
+    site_id: str
+    rules_path: str
+    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "onboard", "bacnet"])
+    limit: int = 5000
+    join_how: Literal["inner", "left", "outer", "right"] = "outer"
+    start_ts: str | None = None
+    end_ts: str | None = None
+    rule_files: list[str] | None = None
+    skip_missing_columns: bool = True
+    chunk_rows: int = 0
+
+
+class ApplySiteProfilesBody(BaseModel):
+    """Apply a declarative ``site_profiles.yaml`` from the repository ``examples/`` tree (ingest + BRICK map + rules copy)."""
+
+    profiles_yaml: str
+    reset: bool = True
 
 
 class RuleRunBody(BaseModel):
@@ -253,10 +294,18 @@ def _driver_health_update(status_map: dict[str, dict[str, Any]], *, driver: str,
     )
 
 
-def _normalize_import_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _normalize_import_model_payload(
+    payload: dict[str, Any],
+    *,
+    existing_site_ids: frozenset[str] | None = None,
+    existing_equipment_ids: frozenset[str] | None = None,
+) -> dict[str, Any]:
     """
     Best-effort repair for LLM-shaped imports: ensure site rows exist for point site_ids
     and minimal equipment rows for referenced equipment_ids (common when ChatGPT emits points-only JSON).
+
+    When appending to an existing model, pass ``existing_site_ids`` / ``existing_equipment_ids`` so rows
+    already on disk are not duplicated by synthesis.
     """
     sites = [dict(s) for s in (payload.get("sites") or []) if isinstance(s, dict)]
     equipment = [dict(e) for e in (payload.get("equipment") or []) if isinstance(e, dict)]
@@ -264,6 +313,8 @@ def _normalize_import_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     site_ids_pts = {str(p.get("site_id")) for p in points if p.get("site_id")}
     site_ids_existing = {str(s.get("id")) for s in sites if s.get("id")}
+    if existing_site_ids:
+        site_ids_existing |= set(existing_site_ids)
     missing_sites = site_ids_pts - site_ids_existing
     for sid in sorted(missing_sites):
         sites.append({"id": sid, "name": "Imported site"})
@@ -275,6 +326,8 @@ def _normalize_import_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if p.get("equipment_id") and str(p.get("equipment_id")).strip()
     }
     eq_ids_existing = {str(e.get("id")) for e in equipment if e.get("id")}
+    if existing_equipment_ids:
+        eq_ids_existing |= set(existing_equipment_ids)
     for eqid in sorted(eq_ids_pts - eq_ids_existing):
         sid = next(
             (str(p.get("site_id")) for p in points if str(p.get("equipment_id") or "") == eqid and p.get("site_id")),
@@ -293,6 +346,12 @@ def _normalize_import_model_payload(payload: dict[str, Any]) -> dict[str, Any]:
             },
         )
     return {"sites": sites, "equipment": equipment, "points": points}
+
+
+def _examples_pack_root() -> Path | None:
+    """Repository ``examples/`` directory (bundled CSV + profile packs); ``None`` if missing."""
+    root = Path(__file__).resolve().parents[2] / "examples"
+    return root.resolve() if root.is_dir() else None
 
 
 def create_app() -> FastAPI:
@@ -329,11 +388,12 @@ def create_app() -> FastAPI:
             {"name": "sites", "description": "Site lifecycle and site-level rule pack config."},
             {"name": "model", "description": "Desktop model export/import/validate and TTL controls."},
             {"name": "ingest", "description": "CSV, weather, onboard, BACnet ingestion endpoints."},
-            {"name": "timeseries", "description": "Feather-backed query, bounds, plots, and purge endpoints."},
+            {"name": "timeseries", "description": "Feather-backed query, bounds, plots, FDD overlay frame, and purge endpoints."},
             {"name": "rules", "description": "Rule execution, rule file management, and defaults."},
             {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
             {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
             {"name": "system", "description": "Resource and storage stats."},
+            {"name": "assistant", "description": "Agent/human handoff: readiness links and declarative site profile apply."},
         ],
         lifespan=_lifespan,
     )
@@ -395,6 +455,9 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=f"Invalid rules_path: {candidate}") from exc
         if rules_root == candidate_path or rules_root in candidate_path.parents:
             return str(candidate_path)
+        ex_root = _examples_pack_root()
+        if ex_root is not None and (ex_root == candidate_path or ex_root in candidate_path.parents):
+            return str(candidate_path)
         _log.warning(
             "rules_path rejected: outside managed rules directory (candidate=%r resolved=%r rules_root=%r)",
             candidate,
@@ -402,6 +465,7 @@ def create_app() -> FastAPI:
             str(rules_root),
         )
         raise HTTPException(status_code=400, detail="rules_path must be inside managed rules directory")
+
     def _safe_sync_ttl() -> str | None:
         try:
             services.ttl.sync()
@@ -627,7 +691,21 @@ def create_app() -> FastAPI:
             "equipment": payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else [],
             "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
         }
-        normalized = _normalize_import_model_payload(normalized)
+        if body.replace:
+            normalized = _normalize_import_model_payload(normalized)
+        else:
+            cur = services.model.load()
+            ext_sites = frozenset(
+                str(s.get("id")) for s in (cur.get("sites") or []) if isinstance(s, dict) and s.get("id")
+            )
+            ext_eq = frozenset(
+                str(e.get("id")) for e in (cur.get("equipment") or []) if isinstance(e, dict) and e.get("id")
+            )
+            normalized = _normalize_import_model_payload(
+                normalized,
+                existing_site_ids=ext_sites,
+                existing_equipment_ids=ext_eq,
+            )
         with services.model.transaction() as model:
             if body.replace:
                 model["sites"] = normalized["sites"]
@@ -804,6 +882,7 @@ def create_app() -> FastAPI:
                     if base not in seen:
                         seen.append(base)
                 rule_files_norm = seen or None
+            cmap = _column_map_for_rules_run(services, body.site_id)
             out = run_rule_loop_batched(
                 frame,
                 RuleLoopConfig(
@@ -812,6 +891,7 @@ def create_app() -> FastAPI:
                     target_memory_fraction=float(body.target_memory_fraction or 0.25),
                     rule_files=rule_files_norm,
                     skip_missing_columns=bool(body.skip_missing_columns),
+                    column_map=cmap or None,
                 ),
             )
         except RuntimeError as exc:
@@ -1150,6 +1230,121 @@ def create_app() -> FastAPI:
             "rows": _plot_frame_records_json_safe(out),
             "sources": used_sources,
         }
+
+    @app.post("/plots/fdd-frame", tags=["timeseries"])
+    def plots_fdd_frame(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """
+        Merged timeseries for plotting plus FDD fault columns (same row cap as ``/plots/site-frame``).
+
+        Rules execute on the **tail** ``limit`` rows of the merged window (aligned with the plot load path).
+        """
+        cap = max(1, min(int(body.limit), 20_000))
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()]
+        if not cleaned:
+            cleaned = ["csv"]
+        try:
+            merged, used_sources = services.ingest.load_merged_sources_frame_window(
+                site_id=body.site_id,
+                sources=cleaned,
+                start_ts=body.start_ts,
+                end_ts=body.end_ts,
+                join_how=str(body.join_how),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if merged.empty:
+            return {
+                "columns": [],
+                "rows": [],
+                "sources": [],
+                "fault_totals": {},
+                "rule_files_filter": None,
+            }
+        ts_col = infer_timestamp_column(merged)
+        work = merged.tail(cap).copy()
+        safe_rules = _safe_rules_path(body.rules_path)
+        rule_files_norm: list[str] | None = None
+        if body.rule_files:
+            seen: list[str] = []
+            for raw in body.rule_files:
+                base = Path(str(raw or "").strip()).name
+                if not base.lower().endswith((".yaml", ".yml")):
+                    continue
+                if base not in seen:
+                    seen.append(base)
+            rule_files_norm = seen or None
+        cmap = _column_map_for_rules_run(services, body.site_id)
+        try:
+            evaluated = run_rule_loop_batched(
+                work,
+                RuleLoopConfig(
+                    rules_path=safe_rules,
+                    chunk_rows=int(body.chunk_rows or 0),
+                    rule_files=rule_files_norm,
+                    skip_missing_columns=bool(body.skip_missing_columns),
+                    column_map=cmap or None,
+                ),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        out = evaluated.where(pd.notnull(evaluated), None)
+        if ts_col in out.columns:
+            out[ts_col] = out[ts_col].astype(str)
+        fault_cols = [c for c in out.columns if c.endswith("_flag") or c.endswith("_fault")]
+        fault_totals = {c: int(pd.to_numeric(out[c], errors="coerce").fillna(0).sum()) for c in fault_cols}
+        return {
+            "columns": [str(c) for c in out.columns],
+            "rows": _plot_frame_records_json_safe(out),
+            "sources": used_sources,
+            "fault_totals": fault_totals,
+            "rule_files_filter": rule_files_norm,
+        }
+
+    @app.get("/assistant/readiness", tags=["assistant"])
+    def assistant_readiness() -> dict[str, Any]:
+        """Copy-paste handoff for humans or chat agents: deep links, site summary, suggested follow-up."""
+        from open_fdd.assistant.readiness import build_readiness_payload
+
+        return build_readiness_payload(services.model.load())
+
+    @app.post("/assistant/apply-site-profiles", tags=["assistant"])
+    def assistant_apply_site_profiles(body: ApplySiteProfilesBody) -> dict[str, Any]:
+        """
+        Run ingest + equipment + BRICK mappings from a YAML pack under ``examples/`` (same schema as the workshop file).
+
+        Intended for agents / OpenClaw-style automation; paths are restricted to the repo ``examples/`` directory.
+        """
+        from open_fdd.assistant.site_profiles_runner import apply_site_profiles_file
+
+        raw = str(body.profiles_yaml or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="profiles_yaml is required")
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            raise HTTPException(status_code=400, detail="profiles_yaml must be an absolute path")
+        resolved = candidate.resolve()
+        ex_root = _examples_pack_root()
+        if ex_root is None:
+            raise HTTPException(status_code=400, detail="examples directory is not available on this install")
+        if ex_root not in resolved.parents and resolved != ex_root:
+            raise HTTPException(
+                status_code=400,
+                detail="profiles_yaml must be located under the repository examples/ directory",
+            )
+        try:
+            out = apply_site_profiles_file(
+                profiles_yaml=resolved,
+                model=services.model,
+                ingest=services.ingest,
+                ttl=services.ttl,
+                reset=bool(body.reset),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        ttl_err = _safe_sync_ttl()
+        if ttl_err:
+            out["ttl_sync_warning"] = ttl_err
+        return out
 
     @app.get("/data-model/testing/predefined", tags=["sparql"])
     def data_model_testing_predefined() -> list[dict[str, str]]:

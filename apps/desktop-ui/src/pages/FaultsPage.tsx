@@ -42,6 +42,13 @@ export function FaultsPage() {
 
   const effectiveRulesPath = useMemo(() => rulesPath || rulesDir, [rulesPath, rulesDir]);
 
+  /** Rule file list comes from GET /rules (managed ``rules_dir``). Only allow a filter when the run path matches that directory. */
+  const ruleFilesFilterMatchesRun = useMemo(() => {
+    if (!rulesDir.trim()) return false;
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+    return norm(effectiveRulesPath) === norm(rulesDir);
+  }, [effectiveRulesPath, rulesDir]);
+
   async function refreshRuleFiles() {
     try {
       const out = await desktopFetch<RulesListResponse>("/rules");
@@ -50,7 +57,13 @@ export function FaultsPage() {
       if (!rulesPath) {
         setRulesPath(out.rules_dir);
       }
-      setBackfillRuleFiles((prev) => prev.filter((f) => out.files.includes(f)));
+      setBackfillRuleFiles((prev) => {
+        const next = prev.filter((f) => out.files.includes(f));
+        const runPath = (rulesPath || out.rules_dir).trim() || out.rules_dir.trim();
+        const sameDir = runPath.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase()
+          === out.rules_dir.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
+        return sameDir ? next : [];
+      });
       if (selectedRule && !out.files.includes(selectedRule)) {
         setSelectedRule("");
         setSelectedRuleContent("");
@@ -61,9 +74,19 @@ export function FaultsPage() {
     }
   }
 
+  useEffect(() => {
+    if (!ruleFilesFilterMatchesRun) {
+      setBackfillRuleFiles([]);
+    }
+  }, [ruleFilesFilterMatchesRun]);
+
   async function runRules() {
     try {
       const effectiveSiteId = siteId || siteContext?.selectedSiteId || "";
+      const ruleFilesArg =
+        ruleFilesFilterMatchesRun && backfillRuleFiles.length > 0
+          ? backfillRuleFiles.filter((f) => ruleFiles.includes(f))
+          : undefined;
       const out = await desktopFetch<RuleResponse>("/rules/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,7 +95,7 @@ export function FaultsPage() {
           source,
           rules_path: effectiveRulesPath,
           chunk_rows: Number(chunkRows || "0"),
-          rule_files: backfillRuleFiles.length > 0 ? backfillRuleFiles : undefined,
+          rule_files: ruleFilesArg,
           skip_missing_columns: skipMissingRules,
         }),
       });
@@ -185,6 +208,7 @@ export function FaultsPage() {
             <label>Run only these rule files (optional)</label>
             <select
               multiple
+              disabled={!ruleFilesFilterMatchesRun}
               value={backfillRuleFiles}
               onChange={(e) => setBackfillRuleFiles(Array.from(e.target.selectedOptions).map((o) => o.value))}
               style={{ minHeight: 90, width: "100%", maxWidth: 520 }}
@@ -193,6 +217,11 @@ export function FaultsPage() {
                 <option key={f} value={f}>{f}</option>
               ))}
             </select>
+            {!ruleFilesFilterMatchesRun ? (
+              <p className="muted" style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
+                File filter is disabled when the rules path above does not match the managed rules directory (list is for that directory only).
+              </p>
+            ) : null}
           </div>
         ) : null}
         <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>

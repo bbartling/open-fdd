@@ -29,9 +29,11 @@ export function DataMaintenancePage() {
     try {
       setPurging(true);
       const out = await purgeTimeseries(effectiveSiteId, prunePoints);
-      setStatus(
-        `Purged site timeseries: files=${out.files_deleted}, dirs=${out.dirs_deleted}, bytes=${out.bytes_deleted}, points_removed=${out.points_removed}`,
-      );
+      let msg = `Purged site timeseries: files=${out.files_deleted}, dirs=${out.dirs_deleted}, bytes=${out.bytes_deleted}, points_removed=${out.points_removed}`;
+      if (out.ttl_sync_warning) {
+        msg += ` TTL sync warning: ${out.ttl_sync_warning}`;
+      }
+      setStatus(msg);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {

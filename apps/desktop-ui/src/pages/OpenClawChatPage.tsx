@@ -1,10 +1,31 @@
 import { openClawUiUrl } from "../lib/openfdd-claw";
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { desktopFetch } from "../lib/api";
 import { OpenFddClawAdvancedPanel } from "./OpenFddClawAdvancedPanel";
 import { OpenFddCodexSignIn } from "./OpenFddCodexSignIn";
 
+type ReadinessPayload = {
+  message_markdown?: string;
+  deep_links?: Record<string, string>;
+  suggested_actions?: string[];
+};
+
 export function OpenClawChatPage() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [handoffMd, setHandoffMd] = useState("");
+  const [handoffErr, setHandoffErr] = useState("");
+
+  const fetchLocalHandoff = useCallback(async () => {
+    setHandoffErr("");
+    setHandoffMd("");
+    try {
+      const data = await desktopFetch<ReadinessPayload>("/assistant/readiness");
+      setHandoffMd(data.message_markdown ?? "");
+    } catch (e) {
+      setHandoffErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   return (
     <section className="stack-page">
       <div className="card">
@@ -23,6 +44,28 @@ export function OpenClawChatPage() {
           Optional: set <code className="inline-code">VITE_OPENFDDCLAW_UI_URL</code> (or <code className="inline-code">VITE_OPENCLAW_UI_URL</code>)
           if your OpenClaw UI is not at the default. Current: <code className="inline-code">{openClawUiUrl}</code>
         </p>
+      </div>
+
+      <div className="card">
+        <h3 className="title" style={{ marginBottom: 8 }}>Local bridge handoff (stand-in for OpenClaw)</h3>
+        <p className="muted">
+          Until the remote agent is wired end-to-end, pull a **readiness snippet** from the Open-FDD bridge: sites, deep links to Plots / CSV import / data model,
+          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no).
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <button type="button" className="secondary-btn" onClick={() => void fetchLocalHandoff()}>
+            Fetch readiness from bridge
+          </button>
+        </div>
+        {handoffErr ? <p className="muted" style={{ marginTop: 8, color: "var(--danger)" }}>{handoffErr}</p> : null}
+        {handoffMd ? (
+          <textarea
+            readOnly
+            value={handoffMd}
+            style={{ marginTop: 10, width: "100%", minHeight: 220, fontFamily: "ui-monospace, monospace", fontSize: 13 }}
+            aria-label="Readiness markdown for chat handoff"
+          />
+        ) : null}
       </div>
 
       <OpenFddCodexSignIn />

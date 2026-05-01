@@ -136,7 +136,7 @@ def adapt_rule_column_map_to_dataframe(df: pd.DataFrame, col_map: Dict[str, str]
     metrics become ``<metric>_<source>`` when more than one driver contributes rows. BRICK / TTL maps still
     reference the unsuffixed metric name — adapt so expression eval receives real column Series.
     """
-    if df is None or df.empty:
+    if df is None:
         return dict(col_map)
     out: Dict[str, str] = {}
     cols = list(df.columns)

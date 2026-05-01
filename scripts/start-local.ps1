@@ -45,6 +45,7 @@ $activateLine
 `$env:OFDD_MODEL_TTL_MIRROR_PATH = '$escapedTtlMirrorPath'
 `$env:OFDD_TTL_SYNC_INTERVAL_SECONDS = '$escapedSyncIntervalSeconds'
 `$env:OFDD_BRIDGE_URL = '$escapedBridgeUrl'
+`$env:OFDD_UI_PUBLIC_BASE = 'http://127.0.0.1:5173'
 $serviceCommand
 "@
 }

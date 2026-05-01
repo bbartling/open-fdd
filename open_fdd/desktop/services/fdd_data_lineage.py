@@ -51,14 +51,19 @@ def _merge_matches(
     input_key: str,
 ) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
+
+    def _dedupe_key(row: dict[str, Any]) -> str:
+        pid = str(row.get("point_id") or "").strip()
+        if pid:
+            return pid
+        ext = str(row.get("external_id") or "").strip()
+        fi = str(row.get("fdd_input") or "").strip()
+        return f"__missing_id__:{ext or fi or id(row)}"
+
     for row in by_external.get(resolved_column, []):
-        pid = row.get("point_id") or ""
-        if pid:
-            merged[pid] = row
+        merged[_dedupe_key(row)] = row
     for row in by_fdd.get(input_key, []):
-        pid = row.get("point_id") or ""
-        if pid:
-            merged[pid] = row
+        merged[_dedupe_key(row)] = row
     return list(merged.values())
 
 

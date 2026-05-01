@@ -143,8 +143,8 @@ function LineageTreeView({ data }: { data: LineagePayload }) {
                     No model point matched <code>external_id</code> or <code>fdd_input</code> for this input.
                   </div>
                 ) : (
-                  inp.model_points.map((pt) => (
-                    <div key={pt.point_id} className="dm-lineage-point">
+                  inp.model_points.map((pt, pi) => (
+                    <div key={pt.point_id ? pt.point_id : `row-${pi}-${pt.external_id}`} className="dm-lineage-point">
                       <div><strong>Point</strong> <span className="inline-code">{pt.external_id}</span></div>
                       <div className="dm-lineage-point-row">
                         <span className="muted">id</span>{" "}
@@ -177,7 +177,8 @@ function LineageTreeView({ data }: { data: LineagePayload }) {
 
 export function DataModelTestingPage() {
   const siteContext = useSite();
-  const [lineageSiteId, setLineageSiteId] = useState(() => siteContext.selectedSiteId ?? "");
+  /** `null` = all sites (not filtered). Never fall back to top-bar site in the select value (avoids overwriting explicit “All sites”). */
+  const [lineageSiteId, setLineageSiteId] = useState<string | null>(() => siteContext.selectedSiteId ?? null);
   const [lineageData, setLineageData] = useState<LineagePayload | null>(null);
   const [lineageRawJson, setLineageRawJson] = useState("");
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([]);
@@ -189,12 +190,6 @@ export function DataModelTestingPage() {
     "Build a rule → BRICK → Feather linkage map for the managed YAML pack and current TTL.",
   );
   const [sparqlPanelMessage, setSparqlPanelMessage] = useState("Run SPARQL against your local desktop TTL graph.");
-
-  useEffect(() => {
-    if (!lineageSiteId && siteContext.selectedSiteId) {
-      setLineageSiteId(siteContext.selectedSiteId);
-    }
-  }, [lineageSiteId, siteContext.selectedSiteId]);
 
   useEffect(() => {
     desktopFetch<PredefinedQuery[]>("/data-model/testing/predefined")
@@ -235,7 +230,7 @@ export function DataModelTestingPage() {
       setLineagePanelMessage("Building FDD rule ↔ BRICK ↔ Feather lineage report…");
       setLineageData(null);
       setLineageRawJson("");
-      const q = lineageSiteId.trim()
+      const q = lineageSiteId && lineageSiteId.trim()
         ? `?site_id=${encodeURIComponent(lineageSiteId.trim())}`
         : "";
       const raw = await desktopFetch<Record<string, unknown>>(`/data-model/testing/rule-data-lineage${q}`);
@@ -355,12 +350,15 @@ export function DataModelTestingPage() {
           <label className="muted" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             Site filter
             <select
-              value={lineageSiteId || siteContext.selectedSiteId || ""}
-              onChange={(e) => setLineageSiteId(e.target.value)}
+              value={lineageSiteId === null ? "__ALL__" : lineageSiteId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setLineageSiteId(v === "__ALL__" ? null : v);
+              }}
               style={{ width: "auto", minWidth: 220 }}
               aria-label="Site filter for lineage report"
             >
-              <option value="">All sites</option>
+              <option value="__ALL__">All sites</option>
               {siteContext.sites.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
