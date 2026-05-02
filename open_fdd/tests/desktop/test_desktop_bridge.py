@@ -525,7 +525,7 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         assert res.status_code == 400
         detail = str(res.json().get("detail", ""))
         assert "missing column" in detail.lower()
-        assert "try source='all'" in detail.lower()
+        assert "sources" in detail.lower()
 
 
 def test_rules_run_rejects_rule_files_with_no_valid_yaml_names(monkeypatch: pytest.MonkeyPatch) -> None:
