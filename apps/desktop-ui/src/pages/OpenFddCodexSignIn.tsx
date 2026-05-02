@@ -148,11 +148,13 @@ export function OpenFddCodexSignIn() {
   }
 
   return (
-    <div className="card openfdd-codex-card">
-      <h3 className="title">Sign in with ChatGPT / Codex</h3>
+    <div className="card openfdd-codex-card" id="openfdd-codex-auth">
+      <h3 className="title">Sign in to OpenAI (ChatGPT / Codex)</h3>
       <p className="muted">
-        Same device login OpenClaw uses for <code>openai-codex</code>: we request a short code, you finish in the browser,
-        then OpenClaw can call models with your subscription. On a headless Pi, open the link on your phone or laptop.
+        One browser flow — same OAuth device endpoints OpenClaw uses for <code>openai-codex</code>. Click{" "}
+        <strong>Start sign-in</strong>, then <strong>Open sign-in page</strong>, log into OpenAI, and return here while
+        we poll. After completion, use the <strong>OpenClaw chat</strong> iframe below. On a headless host, open the
+        verification link on your phone or laptop.
       </p>
       <ol className="openfdd-codex-steps">
         <li>Click <strong>Start sign-in</strong> below.</li>
@@ -172,8 +174,8 @@ export function OpenFddCodexSignIn() {
       </ol>
       {phase === "idle" || phase === "err" ? (
         <div className="openclaw-actions">
-          <button type="button" className="link-btn" disabled={busy} onClick={() => void startSignIn()}>
-            {busy ? "Starting…" : "Start sign-in"}
+          <button type="button" disabled={busy} onClick={() => void startSignIn()}>
+            {busy ? "Starting…" : "Start sign-in to OpenAI"}
           </button>
           {phase === "err" ? (
             <button type="button" className="secondary-btn" onClick={reset}>

@@ -19,6 +19,12 @@ cp -R contrib/openclaw-skills/open-fdd-bacnet ~/.openclaw/workspace/skills/
 
 Restart or reload the gateway if required by your OpenClaw version.
 
+## Workspace bootstrap (SOUL / MEMORY / AGENTS)
+
+For OpenClaw’s Markdown bootstrap context (same idea as upstream `SOUL.md`, `MEMORY.md`, `AGENTS.md`), copy:
+
+- [`../openclaw-workspace/`](../openclaw-workspace/README.md)
+
 ## Related docs
 
 - [`scripts/OPENCLAW_RUNBOOK.md`](../../scripts/OPENCLAW_RUNBOOK.md) — `start-local`, MCP URLs, smoke prompts  
