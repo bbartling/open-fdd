@@ -39,20 +39,19 @@ export function OpenClawChatPage() {
         <p className="muted">
           Same stack as OpenClaw desktop: <strong>Codex / ChatGPT</strong> in the embedded UI below, plus Open-FDD bridge
           on <code className="inline-code">8765</code> and gateway usually on <code className="inline-code">18789</code>.
-          One browser sign-in to OpenAI unlocks models; then use the chat iframe.
+          Use <strong>ChatGPT sign-in</strong> below if the chat asks you to log in; otherwise jump straight to the chat.
         </p>
         <div className="openclaw-actions">
           <a href={openClawUiUrl} target="_blank" rel="noreferrer" className="link-btn">
             Open Claw chat (new tab)
           </a>
           <a href="#openfdd-codex-auth" className="link-btn">
-            Sign in to OpenAI (Codex)
+            ChatGPT sign-in
           </a>
         </div>
         <p className="muted" style={{ marginTop: 10 }}>
-          <strong>Flow:</strong> optional <strong>Sign in to OpenAI</strong> → section below starts device login → then
-          embedded <strong>OpenClaw</strong> chat. Copy <code>contrib/openclaw-workspace/</code> into your OpenClaw
-          workspace for <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, and tool hints.
+          Optional: copy <code>contrib/openclaw-workspace/</code> into your OpenClaw workspace for{" "}
+          <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, and tool hints.
         </p>
         <p className="muted" style={{ marginTop: 6 }}>
           Optional: set <code className="inline-code">VITE_OPENFDDCLAW_UI_URL</code> (or{" "}

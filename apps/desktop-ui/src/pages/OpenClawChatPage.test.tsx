@@ -27,8 +27,9 @@ describe("OpenClawChatPage", () => {
     const { container } = render(<OpenClawChatPage />);
     expect(screen.getByText("Open-FDD Claw")).toBeInTheDocument();
     expect(screen.getByTitle("Open-FDD Claw UI")).toBeInTheDocument();
-    expect(screen.getByText(/Sign in to OpenAI \(ChatGPT \/ Codex\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Sign in to OpenAI \(Codex\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /ChatGPT sign-in/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Continue with ChatGPT/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ChatGPT sign-in/i })).toBeInTheDocument();
     const advancedHost = container.querySelector("[data-testid='ofdd-claw-advanced'] > div");
     expect(advancedHost).toHaveAttribute("aria-hidden", "true");
   });

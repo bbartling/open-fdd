@@ -17,12 +17,23 @@ type PollResponse = {
   expires_at_ms?: number;
 };
 
-const OPENCLAW_CODEX_DOC = "https://docs.openclaw.ai/providers/openai";
-const OPENAI_CODEX_DEVICE_AUTH_DOC = "https://developers.openai.com/codex/auth";
+/** Where users fix the one-time “allow Codex device sign-in” switch (same account as ChatGPT). */
+const CHATGPT_HOME = "https://chatgpt.com/";
+
+function looksLikeDevicePolicyBlock(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("device code") ||
+    m.includes("device auth") ||
+    m.includes("enable device") ||
+    m.includes("security settings") ||
+    m.includes("codex login")
+  );
+}
 
 /**
- * Browser-assisted ChatGPT / Codex device login (same OpenAI device endpoints as OpenClaw).
- * Completes in the Open-FDD bridge; use only on a trusted localhost setup.
+ * One-tap ChatGPT / Codex device login: same OpenAI endpoints as OpenClaw.
+ * Opens the verification tab automatically after the bridge returns a session.
  */
 export function OpenFddCodexSignIn() {
   const [phase, setPhase] = useState<"idle" | "waiting" | "done" | "err">("idle");
@@ -33,6 +44,7 @@ export function OpenFddCodexSignIn() {
   const [sessionId, setSessionId] = useState("");
   const [statusLine, setStatusLine] = useState("");
   const [tokensJson, setTokensJson] = useState("");
+  const [popupBlocked, setPopupBlocked] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPollingRef = useRef(false);
 
@@ -62,7 +74,7 @@ export function OpenFddCodexSignIn() {
         if (data.status === "complete" && data.access_token && data.refresh_token) {
           stopPoll();
           setPhase("done");
-          setStatusLine(data.message ?? "Signed in.");
+          setStatusLine("Signed in with ChatGPT.");
           setTokensJson(
             JSON.stringify(
               {
@@ -79,10 +91,10 @@ export function OpenFddCodexSignIn() {
         if (data.status === "error") {
           stopPoll();
           setPhase("err");
-          setErr(data.message ?? "Sign-in failed.");
+          setErr(data.message ?? "Sign-in did not complete.");
           return;
         }
-        setStatusLine(data.message ?? "Waiting for browser…");
+        setStatusLine("Waiting for ChatGPT to finish…");
       } catch (e) {
         stopPoll();
         setPhase("err");
@@ -96,7 +108,12 @@ export function OpenFddCodexSignIn() {
 
   useEffect(() => () => stopPoll(), [stopPoll]);
 
-  async function startSignIn() {
+  function openVerificationTab(url: string) {
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    setPopupBlocked(!w || w.closed);
+  }
+
+  async function continueWithChatGPT() {
     setBusy(true);
     setErr("");
     setTokensJson("");
@@ -104,6 +121,7 @@ export function OpenFddCodexSignIn() {
     setVerificationUrl("");
     setSessionId("");
     setStatusLine("");
+    setPopupBlocked(false);
     stopPoll();
     try {
       const res = await fetch(`${bridgeBase}/openfdd-claw/codex/device/start`, { method: "POST" });
@@ -117,7 +135,8 @@ export function OpenFddCodexSignIn() {
       setUserCode(data.user_code);
       setVerificationUrl(data.verification_url);
       setPhase("waiting");
-      setStatusLine("Open the sign-in page and log in with your ChatGPT account.");
+      setStatusLine("Use the tab that just opened to sign in with ChatGPT.");
+      openVerificationTab(data.verification_url);
       pollTimer.current = setInterval(() => {
         void pollOnce(data.session_id);
       }, Math.max(1500, data.interval_ms ?? 5000));
@@ -127,12 +146,6 @@ export function OpenFddCodexSignIn() {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
-    }
-  }
-
-  function openBrowser() {
-    if (verificationUrl) {
-      window.open(verificationUrl, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -146,98 +159,108 @@ export function OpenFddCodexSignIn() {
     setSessionId("");
     setStatusLine("");
     setTokensJson("");
+    setPopupBlocked(false);
   }
+
+  const showChatgptSettingsHint = phase === "err" && err && looksLikeDevicePolicyBlock(err);
 
   return (
     <div className="card openfdd-codex-card" id="openfdd-codex-auth">
-      <h3 className="title">Sign in to OpenAI (ChatGPT / Codex)</h3>
-      <p className="muted">
-        One browser flow — same OAuth device endpoints OpenClaw uses for <code>openai-codex</code>. Click{" "}
-        <strong>Start sign-in</strong>, then <strong>Open sign-in page</strong>, log into OpenAI, and return here while
-        we poll. After completion, use the <strong>OpenClaw chat</strong> iframe below. On a headless host, open the
-        verification link on your phone or laptop.
+      <h3 className="title">ChatGPT sign-in</h3>
+      <p className="muted" style={{ marginBottom: 14 }}>
+        Same sign-in flow as OpenClaw: we open ChatGPT in a new tab. Log in there; this page waits and turns green when
+        it is done.
       </p>
-      <p className="cron-hint-box warn" style={{ fontSize: 13 }}>
-        If OpenAI shows a message about enabling device code for Codex (or tells you to run{" "}
-        <code className="inline-code">codex login --device-auth</code> again): turn on{" "}
-        <strong>device code authorization for Codex</strong> in your{" "}
-        <strong>ChatGPT → Settings → security / Codex</strong> area (wording varies by account).{" "}
-        <strong>ChatGPT Business / Enterprise</strong> may require a workspace admin to allow CLI / device login. See{" "}
-        <a href={OPENAI_CODEX_DEVICE_AUTH_DOC} target="_blank" rel="noreferrer">
-          OpenAI Codex authentication
-        </a>
-        . This is an OpenAI account policy — not something Open-FDD can bypass.
-      </p>
-      <ol className="openfdd-codex-steps">
-        <li>
-          (Once per account) Confirm <strong>device code</strong> for Codex is allowed in ChatGPT settings — link above.
-        </li>
-        <li>Click <strong>Start sign-in</strong> below.</li>
-        <li>
-          Click <strong>Open sign-in page</strong> and log in with OpenAI (enter the code if the page asks for it).
-        </li>
-        <li>Return here — we detect when you are done.</li>
-        <li>
-          Keep using <strong>OpenClaw chat</strong> below. If the gateway still says re-auth, run once on the OpenClaw
-          host:{" "}
-          <code className="inline-code">openclaw models auth login --provider openai-codex</code> — or merge tokens per{" "}
-          <a href={OPENCLAW_CODEX_DOC} target="_blank" rel="noreferrer">
-            OpenClaw OpenAI provider docs
-          </a>
-          .
-        </li>
-      </ol>
+
       {phase === "idle" || phase === "err" ? (
-        <div className="openclaw-actions">
-          <button type="button" disabled={busy} onClick={() => void startSignIn()}>
-            {busy ? "Starting…" : "Start sign-in to OpenAI"}
+        <div className="openclaw-actions" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+          <button
+            type="button"
+            data-testid="ofdd-codex-continue"
+            disabled={busy}
+            onClick={() => void continueWithChatGPT()}
+          >
+            {busy ? "Opening ChatGPT…" : "Continue with ChatGPT"}
           </button>
           {phase === "err" ? (
             <button type="button" className="secondary-btn" onClick={reset}>
-              Try again
+              Start over
             </button>
           ) : null}
         </div>
       ) : null}
-      {err ? <p className="cron-hint-box warn">{err}</p> : null}
+
+      {err ? (
+        <div style={{ marginTop: 12 }}>
+          <p className="cron-hint-box warn" style={{ marginBottom: showChatgptSettingsHint ? 10 : 0 }}>
+            {err}
+          </p>
+          {showChatgptSettingsHint ? (
+            <div className="openclaw-actions" style={{ flexWrap: "wrap" }}>
+              <a className="link-btn" href={CHATGPT_HOME} target="_blank" rel="noreferrer">
+                Open ChatGPT
+              </a>
+              <span className="muted" style={{ fontSize: 13, flex: "1 1 220px" }}>
+                In ChatGPT: <strong>Settings</strong> → find the switch for <strong>Codex</strong> /{" "}
+                <strong>device</strong> / <strong>CLI</strong> sign-in and turn it <strong>on</strong> (one time per
+                account). Then press <strong>Continue with ChatGPT</strong> again here.
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {phase === "waiting" ? (
-        <div className="openfdd-codex-active">
-          <div className="openfdd-user-code">{userCode}</div>
-          <p className="muted">{statusLine}</p>
-          <div className="openclaw-actions">
-            <button type="button" className="link-btn" onClick={openBrowser} disabled={!verificationUrl}>
-              Open sign-in page
-            </button>
+        <div className="openfdd-codex-active" style={{ marginTop: 12 }}>
+          {popupBlocked ? (
+            <p className="cron-hint-box warn" style={{ marginBottom: 10 }}>
+              Your browser blocked the new tab. Use the button below to open ChatGPT.
+            </p>
+          ) : null}
+          <div className="openclaw-actions" style={{ flexWrap: "wrap", marginBottom: 8 }}>
+            <a className="link-btn" href={verificationUrl || "#"} target="_blank" rel="noreferrer">
+              Open ChatGPT sign-in
+            </a>
             <button type="button" className="secondary-btn" onClick={reset}>
               Cancel
             </button>
-            <span className="muted mono small">session: {sessionId.slice(0, 12)}…</span>
           </div>
+          <p className="muted" style={{ marginBottom: 6 }}>
+            {statusLine}
+          </p>
+          {userCode ? (
+            <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+              If ChatGPT asks for a code, use: <span className="openfdd-user-code" style={{ fontSize: "1rem" }}>{userCode}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
-      {phase === "done" ? <p className="cron-hint-box ok">{statusLine || "Signed in."}</p> : null}
-      {phase === "done" && tokensJson ? (
-        <details className="openfdd-token-details">
-          <summary>Advanced: OAuth token JSON (local use only)</summary>
-          <p className="muted">
-            For most setups you do not need this — OpenClaw stores profiles after{" "}
-            <code>openclaw models auth login</code>. Power users can merge into <code>~/.openclaw/</code> per OpenClaw
-            docs.
+
+      {phase === "done" ? (
+        <div style={{ marginTop: 8 }}>
+          <p className="cron-hint-box ok">{statusLine || "Signed in."}</p>
+          <p className="muted" style={{ marginTop: 8 }}>
+            Scroll down to the OpenClaw chat. If it still asks you to sign in, do that once inside the chat frame.
           </p>
-          <textarea readOnly rows={8} className="mono" value={tokensJson} />
-          <div className="openclaw-actions">
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void navigator.clipboard?.writeText(tokensJson)}
-            >
-              Copy JSON
-            </button>
-            <button type="button" className="secondary-btn" onClick={reset}>
-              Done
-            </button>
-          </div>
-        </details>
+          {tokensJson ? (
+            <details className="openfdd-token-details" style={{ marginTop: 10 }}>
+              <summary className="muted">Technical: token JSON (optional)</summary>
+              <textarea readOnly rows={6} className="mono" value={tokensJson} spellCheck={false} />
+              <div className="openclaw-actions" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => void navigator.clipboard?.writeText(tokensJson)}
+                >
+                  Copy
+                </button>
+                <button type="button" className="secondary-btn" onClick={reset}>
+                  Done
+                </button>
+              </div>
+            </details>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
