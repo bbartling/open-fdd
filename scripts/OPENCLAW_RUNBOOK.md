@@ -226,6 +226,8 @@ OpenClaw’s **gateway** listens on **18789** (etc.); it does **not** run Open-F
 | Bridge API + `/docs` | `http://127.0.0.1:8765` |
 | MCP RAG | `http://127.0.0.1:8090` |
 
+**Readiness / plot deep links:** `GET /assistant/readiness` uses **`OFDD_UI_PUBLIC_BASE`** (both `start-local` scripts default it to the Vite URL above) so links match the UI. If you omit it, the bridge falls back to **`OFDD_UI_PORT`** (see gateway CORS defaults).
+
 From **Docker client to Windows host:** replace host with `host.docker.internal` (see §2).
 
 Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/logs/gateway.log`**, **`mcp-rag.log`**, **`desktop-ui.log`**. On Windows, **`start-local.ps1`** opens separate windows — watch those terminals (no repo-root `.openfdd-*.log` files).
@@ -240,7 +242,7 @@ Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/
 ```text
 You are helping me manually smoke-test Open-FDD on the human's machine (prefer Windows PowerShell + scripts/start-local.ps1, or bash + scripts/start-local.sh on macOS/Linux/WSL).
 
-If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under contrib/openclaw-skills).
+If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under `contrib/openclaw-skills/`, workspace bootstrap Markdown under `contrib/openclaw-workspace/`).
 
 Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (**Node 20+ for Open-FDD; Node 22.14+ if also installing OpenClaw CLI**, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
 

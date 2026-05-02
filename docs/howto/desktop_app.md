@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** and copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills). Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
+Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills + workspace bootstrap**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)**, copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills), and copy bootstrap Markdown from [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-workspace) into your OpenClaw workspace root. Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
 
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
 The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
@@ -47,6 +47,17 @@ After startup you should have:
 - Gateway (same CLI as **`open-fdd-desktop-bridge`**): **`open_fdd.gateway`** — Swagger **`http://127.0.0.1:8765/docs`**, OpenAPI **`http://127.0.0.1:8765/openapi.json`**
 - MCP RAG: **`http://127.0.0.1:8090`**
 - Web UI: Vite default (typically **`http://127.0.0.1:5173`**); align **`OFDD_BRIDGE_URL`** / UI env with your bridge if you change ports.
+
+**Readiness deep links:** `GET /assistant/readiness` builds UI URLs using **`OFDD_UI_PUBLIC_BASE`** (preferred) or **`OFDD_UI_PORT`** (defaults to **8080** in code if unset). With **`start-local`**, set **`OFDD_UI_PUBLIC_BASE=http://127.0.0.1:5173`** (the Windows script does this) so plot/data-model links match the Vite dev server.
+
+### Open-FDD Claw (embedded OpenClaw + Codex device login)
+
+In the React app, **Open-FDD Claw** embeds the OpenClaw web UI (iframe) and offers **ChatGPT / Codex** device login via the bridge:
+
+- `POST /openfdd-claw/codex/device/start`
+- `POST /openfdd-claw/codex/device/poll`
+
+That mirrors the same OAuth device flow as `openclaw models auth login --provider openai-codex` on the OpenClaw host; tokens are shown in the UI only for localhost-trusted setups. See **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** for policy (keep subscription OAuth in OpenClaw / gateway).
 
 ### Manual start (no launcher)
 
