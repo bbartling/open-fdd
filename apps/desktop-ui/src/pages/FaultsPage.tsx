@@ -8,6 +8,8 @@ type RuleResponse = {
   columns: string[];
   fault_totals: Record<string, number>;
   preview: string;
+  rule_files_filter?: string[] | null;
+  skip_missing_columns?: boolean;
 };
 
 type RulesListResponse = {
@@ -35,8 +37,17 @@ export function FaultsPage() {
   const [ruleFilename, setRuleFilename] = useState("");
   const [ruleContent, setRuleContent] = useState("");
   const [ruleStatus, setRuleStatus] = useState("Load, view, upload, and delete rule YAML files.");
+  const [backfillRuleFiles, setBackfillRuleFiles] = useState<string[]>([]);
+  const [skipMissingRules, setSkipMissingRules] = useState(true);
 
   const effectiveRulesPath = useMemo(() => rulesPath || rulesDir, [rulesPath, rulesDir]);
+
+  /** Rule file list comes from GET /rules (managed ``rules_dir``). Only allow a filter when the run path matches that directory. */
+  const ruleFilesFilterMatchesRun = useMemo(() => {
+    if (!rulesDir.trim()) return false;
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/u, "");
+    return norm(effectiveRulesPath) === norm(rulesDir);
+  }, [effectiveRulesPath, rulesDir]);
 
   async function refreshRuleFiles() {
     try {
@@ -46,6 +57,14 @@ export function FaultsPage() {
       if (!rulesPath) {
         setRulesPath(out.rules_dir);
       }
+      setBackfillRuleFiles((prev) => {
+        const next = prev.filter((f) => out.files.includes(f));
+        const runPath = (rulesPath || out.rules_dir).trim() || out.rules_dir.trim();
+        const normRun = runPath.replace(/\\/g, "/").replace(/\/+$/u, "");
+        const normListed = out.rules_dir.replace(/\\/g, "/").replace(/\/+$/u, "");
+        const sameDir = normRun === normListed;
+        return sameDir ? next : [];
+      });
       if (selectedRule && !out.files.includes(selectedRule)) {
         setSelectedRule("");
         setSelectedRuleContent("");
@@ -56,9 +75,19 @@ export function FaultsPage() {
     }
   }
 
+  useEffect(() => {
+    if (!ruleFilesFilterMatchesRun) {
+      setBackfillRuleFiles([]);
+    }
+  }, [ruleFilesFilterMatchesRun]);
+
   async function runRules() {
     try {
       const effectiveSiteId = siteId || siteContext?.selectedSiteId || "";
+      const ruleFilesArg =
+        ruleFilesFilterMatchesRun && backfillRuleFiles.length > 0
+          ? backfillRuleFiles.filter((f) => ruleFiles.includes(f))
+          : undefined;
       const out = await desktopFetch<RuleResponse>("/rules/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,10 +96,18 @@ export function FaultsPage() {
           source,
           rules_path: effectiveRulesPath,
           chunk_rows: Number(chunkRows || "0"),
+          rule_files: ruleFilesArg,
+          skip_missing_columns: skipMissingRules,
         }),
       });
+      const head = out.rule_files_filter?.length
+        ? `Rule files: ${out.rule_files_filter.join(", ")}\n`
+        : "Rule files: (all in directory)\n";
+      const skipVal = out.skip_missing_columns ?? skipMissingRules;
+      const skip = `Skip missing columns: ${skipVal ? "yes" : "no"}\n`;
       setOutput(
-        `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
+        `${head}${skip}\n` +
+          `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n` +
           `Columns: ${out.columns.join(", ")}\nFault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
       );
     } catch (error) {
@@ -168,6 +205,36 @@ export function FaultsPage() {
           <input value={rulesPath} onChange={(e) => setRulesPath(e.target.value)} placeholder="rules path directory" />
           <input value={chunkRows} onChange={(e) => setChunkRows(e.target.value)} placeholder="chunk rows" />
         </div>
+        {ruleFiles.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <label>Run only these rule files (optional)</label>
+            <select
+              multiple
+              disabled={!ruleFilesFilterMatchesRun}
+              value={backfillRuleFiles}
+              onChange={(e) => setBackfillRuleFiles(Array.from(e.target.selectedOptions).map((o) => o.value))}
+              style={{ minHeight: 90, width: "100%", maxWidth: 520 }}
+            >
+              {ruleFiles.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+            {!ruleFilesFilterMatchesRun ? (
+              <p className="muted" style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
+                File filter is disabled when the rules path above does not match the managed rules directory (list is for that directory only).
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+          <input
+            style={{ width: "auto" }}
+            type="checkbox"
+            checked={skipMissingRules}
+            onChange={(e) => setSkipMissingRules(e.target.checked)}
+          />
+          Skip rules with missing columns
+        </label>
         <div style={{ marginTop: 12 }}>
           <button onClick={() => void runRules()}>Run Rules</button>
         </div>

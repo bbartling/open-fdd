@@ -27,8 +27,8 @@ export function RuleSetupPage() {
 
   async function openRule(filename: string) {
     try {
-      setSelectedFile(filename);
       const text = await desktopFetchText(`/rules/${encodeURIComponent(filename)}`);
+      setSelectedFile(filename);
       setSelectedContent(text);
       lastSyncedContent.current = text;
     } catch (e) {
@@ -68,12 +68,33 @@ export function RuleSetupPage() {
     }
     try {
       let uploaded = 0;
+      const basenameCounts = new Map<string, number>();
       for (const file of files) {
+        basenameCounts.set(file.name, (basenameCounts.get(file.name) ?? 0) + 1);
+      }
+      const duplicateBasenames = Array.from(basenameCounts.entries())
+        .filter(([, count]) => count > 1)
+        .map(([name]) => name);
+      const uploadNameCounts = new Map<string, number>();
+      for (const file of files) {
+        const sourceId = (file.webkitRelativePath || file.name).replaceAll("\\", "/");
+        const baseUploadName = sourceId.replaceAll("/", "__");
+        const keyCount = (uploadNameCounts.get(baseUploadName) ?? 0) + 1;
+        uploadNameCounts.set(baseUploadName, keyCount);
+        const uploadName = keyCount > 1
+          ? `${baseUploadName.replace(/(\.[^.]+)?$/, (_m, ext = "") => `-${keyCount}${ext}`)}`
+          : baseUploadName;
         const text = await file.text();
-        await uploadRule(file.name, text);
+        await uploadRule(uploadName, text);
         uploaded += 1;
       }
-      setRulesStatus(`Loaded ${uploaded} YAML files from selected directory.`);
+      if (duplicateBasenames.length > 0) {
+        setRulesStatus(
+          `Loaded ${uploaded} YAML files. Duplicate basenames detected and disambiguated: ${duplicateBasenames.join(", ")}`,
+        );
+      } else {
+        setRulesStatus(`Loaded ${uploaded} YAML files from selected directory.`);
+      }
       await refreshRules();
     } catch (e) {
       setRulesStatus(e instanceof Error ? e.message : String(e));

@@ -27,28 +27,34 @@ def resolve_gateway_bind(default_host: str = "127.0.0.1", default_port: int = 87
     """Resolve host/port from OFDD_BRIDGE_URL / OFDD_DESKTOP_BRIDGE_BASE or OFDD_BRIDGE_* env."""
     host, port = default_host, default_port
     url = (os.environ.get("OFDD_BRIDGE_URL") or os.environ.get("OFDD_DESKTOP_BRIDGE_BASE") or "").strip()
+    url_applied = False
     if url:
         try:
             parsed = urllib.parse.urlparse(url)
         except ValueError:
             _log.warning("Ignoring malformed OFDD_BRIDGE_URL/OFDD_DESKTOP_BRIDGE_BASE: %r", url)
-            return host, port
-        if parsed.hostname:
-            host = parsed.hostname
-        try:
-            parsed_port = parsed.port
-        except ValueError:
-            _log.warning("Ignoring out-of-range port in bridge URL: %r", url)
-            return host, port
-        if parsed_port is not None:
-            vp = _valid_tcp_port(parsed_port)
-            if vp is not None:
-                port = vp
-            else:
-                _log.warning(
-                    "Ignoring invalid port in OFDD_BRIDGE_URL/OFDD_DESKTOP_BRIDGE_BASE: %r",
-                    parsed_port,
-                )
+        else:
+            if parsed.hostname:
+                host = parsed.hostname
+            try:
+                parsed_port = parsed.port
+            except ValueError:
+                _log.warning("Ignoring out-of-range port in bridge URL: %r", url)
+                parsed_port = None
+            if parsed_port is not None:
+                vp = _valid_tcp_port(parsed_port)
+                if vp is not None:
+                    port = vp
+                    url_applied = True
+                else:
+                    _log.warning(
+                        "Ignoring invalid port in OFDD_BRIDGE_URL/OFDD_DESKTOP_BRIDGE_BASE: %r",
+                        parsed_port,
+                    )
+            elif parsed.hostname:
+                url_applied = True
+
+    if url_applied:
         return host, port
 
     env_host = (os.environ.get("OFDD_BRIDGE_HOST") or "").strip()

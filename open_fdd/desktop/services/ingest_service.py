@@ -11,6 +11,7 @@ from open_fdd.platform.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.platform.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.services.time_utils import infer_timestamp_column, parse_timestamp_series
 from open_fdd.desktop.services.timeseries_merge import (
     DEFAULT_SITE_DRIVER_SOURCES,
@@ -21,7 +22,7 @@ from open_fdd.desktop.services.timeseries_numeric_clean import (
     preview_rows_json,
     suggest_coercible_columns,
 )
-from open_fdd.desktop.storage.connectors import TimeSeriesConnector
+from open_fdd.desktop.storage.connectors import FeatherConnector, TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
 
@@ -33,8 +34,6 @@ class IngestService:
 
     def __post_init__(self) -> None:
         if self.connector is None:
-            from open_fdd.desktop.storage.connectors import FeatherConnector
-
             self.connector = FeatherConnector(self.feather_store)
 
     def ingest_csv(self, *, csv_path: str | Path, site_id: str, source: str = "csv") -> dict[str, Any]:
@@ -146,7 +145,8 @@ class IngestService:
         }
 
     def load_source_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
-        return self.connector.read_frame(source=source, site_id=site_id)
+        frame = self.connector.read_frame(source=source, site_id=site_id)
+        return dedupe_dataframe_columns(frame)
 
     def load_source_frame_window(
         self,
@@ -258,7 +258,7 @@ class IngestService:
                 "message": "No Feather timeseries for this site_id and source.",
             }
         suggested = suggest_coercible_columns(frame)
-        target_cols = set(columns) if columns else set(suggested)
+        target_cols = set(suggested) if columns is None else set(columns)
         if not target_cols:
             return {
                 "ok": True,
@@ -282,9 +282,15 @@ class IngestService:
             "row_count": int(len(cleaned.index)),
         }
         if commit:
-            self.connector.purge(source=source, site_id=site_id)
-            storage_path = self.connector.write_frame(source=source, site_id=site_id, frame=cleaned)
-            out["storage_path"] = str(storage_path)
+            if isinstance(self.connector, FeatherConnector):
+                storage_path = self.feather_store.replace_site_frame(
+                    source=source, site_id=site_id, frame=cleaned
+                )
+                out["storage_path"] = str(storage_path)
+            else:
+                self.connector.purge(source=source, site_id=site_id)
+                storage_path = self.connector.write_frame(source=source, site_id=site_id, frame=cleaned)
+                out["storage_path"] = str(storage_path)
         return out
 
     def train_ml_baseline(

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from open_fdd.engine import RuleRunner
-from open_fdd.engine.runner import load_rule
+from open_fdd.engine.runner import adapt_rule_column_map_to_dataframe, load_rule
 
 
 @pytest.fixture
@@ -43,6 +43,64 @@ def fc1_rule():
         },
         "expression": "(duct_static < duct_static_setpoint - static_err_thres) & (supply_vfd_speed >= vfd_max - vfd_err_thres)",
     }
+
+
+def test_runner_ahu_internal_bounds_with_merge_suffixed_columns(tmp_path: Path) -> None:
+    """Regression: merged multi-source frames use metric_<source>; expressions must still resolve."""
+    rules_dir = tmp_path / "ahu_bounds_only"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    src = Path(__file__).resolve().parents[2] / "default_rules" / "ahu_vav" / "06_ahu_internal_temp_sensor_bounds.yaml"
+    (rules_dir / "06_ahu_internal_temp_sensor_bounds.yaml").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2026-01-01", periods=8, freq="1h"),
+            "RTU_11_DA_T(°F)_csv": [60.0] * 8,
+            "RTU_11_MA_T(°F)_csv": [58.0] * 8,
+            "RTU_11_RA_T(°F)_csv": [72.0] * 8,
+        }
+    )
+    cmap = {
+        "Supply_Air_Temperature_Sensor": "RTU_11_DA_T(°F)",
+        "Mixed_Air_Temperature_Sensor": "RTU_11_MA_T(°F)",
+        "Return_Air_Temperature_Sensor": "RTU_11_RA_T(°F)",
+    }
+    runner = RuleRunner(rules_path=str(rules_dir))
+    out = runner.run(df, column_map=cmap)
+    assert "ahu_internal_temp_sensor_bounds_fault" in out.columns
+
+
+def test_adapt_rule_column_map_merge_suffix_prefers_csv() -> None:
+    df = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2026-01-01", tz="UTC")],
+            "RTU_11_DA_T(°F)_csv": [55.0],
+            "RTU_11_DA_T(°F)_weather": [54.0],
+        }
+    )
+    col_map = {"Supply_Air_Temperature_Sensor": "RTU_11_DA_T(°F)"}
+    out = adapt_rule_column_map_to_dataframe(df, col_map)
+    assert out["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)_csv"
+
+
+def test_adapt_rule_column_map_zero_rows_still_uses_columns() -> None:
+    df = pd.DataFrame(columns=["RTU_11_DA_T(°F)_csv", "RTU_11_DA_T(°F)_weather"])
+    col_map = {"Supply_Air_Temperature_Sensor": "RTU_11_DA_T(°F)"}
+    out = adapt_rule_column_map_to_dataframe(df, col_map)
+    assert out["Supply_Air_Temperature_Sensor"] == "RTU_11_DA_T(°F)_csv"
+
+
+def test_adapt_rule_column_map_ambiguous_suffixes_keep_logical() -> None:
+    """When several ``metric_*`` columns exist but none use a preferred driver suffix, do not guess."""
+    df = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2026-01-01", tz="UTC")],
+            "oat_foo": [40.0],
+            "oat_bar": [41.0],
+        }
+    )
+    col_map = {"Outside_Air_Temperature_Sensor": "oat"}
+    out = adapt_rule_column_map_to_dataframe(df, col_map)
+    assert out["Outside_Air_Temperature_Sensor"] == "oat"
 
 
 def test_runner_expression_rule(sample_df, fc1_rule):

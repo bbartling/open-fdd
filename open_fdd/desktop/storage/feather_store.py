@@ -10,6 +10,7 @@ import shutil
 
 import pandas as pd
 
+from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.storage.paths import feather_root
 
 
@@ -40,6 +41,36 @@ class FeatherStore:
         frame.reset_index(drop=True).to_feather(out)
         return out
 
+    def replace_site_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> Path:
+        """
+        Atomically replace all Feather shards for ``source`` + ``site_id`` with ``frame``.
+
+        Writes to a ``*.feather.tmp`` file in the site directory, verifies it can be read back,
+        removes existing ``*.feather`` shards, then renames the temp file to ``*.feather``.
+        Avoids data loss if the write fails before the old files are removed.
+        """
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError as exc:
+            raise RuntimeError(
+                "Feather support requires pyarrow. Install desktop extras: pip install open-fdd[desktop]"
+            ) from exc
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        nonce = uuid4().hex[:8]
+        path = self.root / _safe_name(source) / _safe_name(site_id)
+        path.mkdir(parents=True, exist_ok=True)
+        tmp = path / f"{ts}_{nonce}.feather.tmp"
+        final = path / f"{ts}_{nonce}.feather"
+        frame.reset_index(drop=True).to_feather(tmp)
+        pd.read_feather(tmp)
+        for f in path.glob("*.feather"):
+            f.unlink(missing_ok=True)
+        for f in path.glob("*.feather.tmp"):
+            if f.resolve() != tmp.resolve():
+                f.unlink(missing_ok=True)
+        tmp.rename(final)
+        return final
+
     def iter_site_files(self, *, source: str, site_id: str) -> Iterable[Path]:
         path = self.root / _safe_name(source) / _safe_name(site_id)
         if not path.exists():
@@ -51,7 +82,8 @@ class FeatherStore:
         if not files:
             return pd.DataFrame()
         frames = [pd.read_feather(f) for f in files]
-        return pd.concat(frames, ignore_index=True)
+        merged = pd.concat(frames, ignore_index=True)
+        return dedupe_dataframe_columns(merged)
 
     def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         files_deleted = 0

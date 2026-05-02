@@ -1,0 +1,53 @@
+name: ahu_internal_temp_sensor_flatline
+version: 1
+type: expression
+description: AHU internal temperature sensor appears flatlined over the configured rolling sample window.
+equipment_type:
+  - Air_Handling_Unit
+  - AHU
+  - VAV_AHU
+inputs:
+  Supply_Air_Temperature_Sensor:
+    brick: Supply_Air_Temperature_Sensor
+  Mixed_Air_Temperature_Sensor:
+    brick: Mixed_Air_Temperature_Sensor
+  Return_Air_Temperature_Sensor:
+    brick: Return_Air_Temperature_Sensor
+params:
+  roll_samples: 12
+  flatline_tolerance_f: 0.05
+rolling_window: 12
+expression: |
+  (
+    (
+      (Supply_Air_Temperature_Sensor.rolling(window=roll_samples).count() >= roll_samples)
+      & (
+        (
+          Supply_Air_Temperature_Sensor.rolling(window=roll_samples).max()
+          - Supply_Air_Temperature_Sensor.rolling(window=roll_samples).min()
+        ) <= flatline_tolerance_f
+      )
+    )
+    |
+    (
+      (Mixed_Air_Temperature_Sensor.rolling(window=roll_samples).count() >= roll_samples)
+      & (
+        (
+          Mixed_Air_Temperature_Sensor.rolling(window=roll_samples).max()
+          - Mixed_Air_Temperature_Sensor.rolling(window=roll_samples).min()
+        ) <= flatline_tolerance_f
+      )
+    )
+    |
+    (
+      (Return_Air_Temperature_Sensor.rolling(window=roll_samples).count() >= roll_samples)
+      & (
+        (
+          Return_Air_Temperature_Sensor.rolling(window=roll_samples).max()
+          - Return_Air_Temperature_Sensor.rolling(window=roll_samples).min()
+        ) <= flatline_tolerance_f
+      )
+    )
+  )
+flag: ahu_internal_temp_sensor_flatline_fault
+severity: warning

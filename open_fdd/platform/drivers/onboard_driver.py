@@ -157,11 +157,28 @@ def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResul
                 row[metric] = val
 
     if not rows_by_ts:
-        frame = pd.DataFrame({"timestamp": [end.isoformat()]})
-    else:
-        frame = pd.DataFrame(list(rows_by_ts.values())).sort_values("timestamp")
-    storage_ref = store.write_frame(source="onboard", site_id=site_id, frame=frame)
+        return OnboardScrapeResult(
+            rows=0,
+            source="onboard",
+            metrics=[],
+            storage_ref=None,
+            point_metadata=point_meta,
+            success=False,
+            error="No onboard metrics were returned for the selected window.",
+        )
+    frame = pd.DataFrame(list(rows_by_ts.values())).sort_values("timestamp")
     metrics = [str(c) for c in frame.columns if str(c) != "timestamp"]
+    if not metrics:
+        return OnboardScrapeResult(
+            rows=0,
+            source="onboard",
+            metrics=[],
+            storage_ref=None,
+            point_metadata=point_meta,
+            success=False,
+            error="No onboard metric columns were present in scraped results.",
+        )
+    storage_ref = store.write_frame(source="onboard", site_id=site_id, frame=frame)
     return OnboardScrapeResult(
         rows=len(frame.index),
         source="onboard",

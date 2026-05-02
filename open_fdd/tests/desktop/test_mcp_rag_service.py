@@ -78,9 +78,11 @@ def test_mcp_drivers_export_proxies_bridge_get(monkeypatch: pytest.MonkeyPatch) 
         captured["url"] = url
 
         class _R:
+            def __init__(self):
+                self.headers = {"content-type": "application/json"}
+
             status_code = 200
             text = '{"schema_version":1}'
-            headers = {"content-type": "application/json"}
 
             def json(self):
                 return {"schema_version": 1, "weather": {}}
@@ -134,6 +136,13 @@ def test_mcp_openclaw_cron_validate() -> None:
     good = client.post("/tools/openclaw_cron_validate", json={"expression": "0 */6 * * *"})
     assert good.status_code == 200
     assert good.json().get("valid") is True
+
+
+def test_mcp_openclaw_cron_validate_rejects_empty_list_elements() -> None:
+    client = TestClient(mcp_api)
+    r = client.post("/tools/openclaw_cron_validate", json={"expression": "0 1,,2 * * *"})
+    assert r.status_code == 200
+    assert r.json().get("valid") is False
 
 
 def test_mcp_openclaw_ops_templates_powershell() -> None:

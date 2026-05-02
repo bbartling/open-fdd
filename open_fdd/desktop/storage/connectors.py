@@ -149,7 +149,17 @@ class SqliteConnector:
             rows = len(frame.index)
             dropped_rows = original_len - rows
         out = self.write_frame(source=source, site_id=site_id, frame=frame)
-        return {"rows": rows, "dropped_rows": dropped_rows, "storage_path": out, "feather_path": "", "metrics": metrics}
+        ret: dict[str, Any] = {
+            "rows": rows,
+            "dropped_rows": dropped_rows,
+            "storage_path": out,
+            "feather_path": "",
+            "metrics": metrics,
+        }
+        from open_fdd.desktop.services.timeseries_numeric_clean import preview_rows_json
+
+        ret["preview_rows"] = preview_rows_json(frame, 8) if not frame.empty else []
+        return ret
 
     def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         import sqlite3

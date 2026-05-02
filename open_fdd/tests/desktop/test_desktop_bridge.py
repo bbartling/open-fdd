@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import shutil
 
 import pytest
 import pandas as pd
@@ -10,6 +11,8 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
+from open_fdd.desktop.storage.paths import default_rules_root
+import open_fdd.gateway.server as gateway_server
 from open_fdd.gateway.server import create_app
 
 
@@ -114,6 +117,38 @@ def test_desktop_bridge_purge_can_prune_matching_points() -> None:
         point_ids = {str(p.get("id")) for p in points}
         assert "p1" not in point_ids
         assert "p2" in point_ids
+
+
+def test_model_import_auto_heals_missing_sites_and_equipment() -> None:
+    app = create_app()
+    sid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    eid = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    with TestClient(app) as client:
+        res = client.post(
+            "/model/import",
+            json={
+                "replace": True,
+                "payload": {
+                    "sites": [],
+                    "equipment": [],
+                    "points": [
+                        {
+                            "id": "p-auto-1",
+                            "site_id": sid,
+                            "equipment_id": eid,
+                            "external_id": "RTU_11_DA_T(°F)",
+                            "brick_type": "Supply_Air_Temperature_Sensor",
+                        },
+                    ],
+                },
+            },
+        )
+        assert res.status_code == 200
+        exported = client.get("/model/export")
+        assert exported.status_code == 200
+        body = exported.json()
+        assert any(str(s.get("id")) == sid for s in body.get("sites", []))
+        assert any(str(e.get("id")) == eid for e in body.get("equipment", []))
 
 
 def test_desktop_bridge_model_validate_and_import_strict_payload() -> None:
@@ -409,6 +444,50 @@ def test_desktop_bridge_ttl_status_env_overrides(monkeypatch: pytest.MonkeyPatch
         assert int(body.get("sync_interval_seconds", 0)) == 5
 
 
+def test_rules_run_accepts_absolute_rules_directory_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Desktop UI sends rules_dir from GET /rules (absolute path); rules_path must accept directories."""
+    app = create_app()
+
+    def _fake_load_source_frame_window(self, *, source, site_id, start_ts=None, end_ts=None):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+            }
+        )
+
+    def _fake_run_rule_loop_batched(frame, cfg):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+                "example_fault": [0],
+            }
+        )
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.load_source_frame_window",
+        _fake_load_source_frame_window,
+    )
+    monkeypatch.setattr("open_fdd.gateway.server.run_rule_loop_batched", _fake_run_rule_loop_batched)
+
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        assert rules_dir
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": rules_dir,
+                "chunk_rows": 0,
+            },
+        )
+        assert res.status_code == 200, res.text
+
+
 def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPatch) -> None:
     app = create_app()
 
@@ -430,12 +509,16 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("open_fdd.gateway.server.run_rule_loop_batched", _fake_run_rule_loop_batched)
 
     with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        assert rules_dir
         res = client.post(
             "/rules/run",
             json={
                 "site_id": "site-a",
                 "source": "csv",
-                "rules_path": "dummy",
+                "rules_path": rules_dir,
                 "chunk_rows": 0,
             },
         )
@@ -443,6 +526,170 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         detail = str(res.json().get("detail", ""))
         assert "missing column" in detail.lower()
         assert "try source='all'" in detail.lower()
+
+
+def test_rules_run_rejects_rule_files_with_no_valid_yaml_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+
+    def _fake_load_source_frame_window(self, *, source, site_id, start_ts=None, end_ts=None):  # noqa: ARG001
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "supply_air_temp": [55.0],
+            }
+        )
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.load_source_frame_window",
+        _fake_load_source_frame_window,
+    )
+
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": rules_dir,
+                "chunk_rows": 0,
+                "rule_files": ["not_yaml.txt", "readme.md"],
+            },
+        )
+        assert res.status_code == 400
+        assert "yaml" in str(res.json().get("detail", "")).lower()
+
+
+def test_rules_path_nonexistent_returns_400(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = Path(str(rules.json().get("rules_dir", "")))
+        ghost = rules_dir / "missing_rules_pack_xyz"
+        assert not ghost.exists()
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": "site-a",
+                "source": "csv",
+                "rules_path": str(ghost),
+                "chunk_rows": 0,
+            },
+        )
+        assert res.status_code == 400
+        assert "does not exist" in str(res.json().get("detail", "")).lower()
+
+
+def test_rules_run_resolves_brick_inputs_from_model_points(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Regression: /rules/run must pass a column_map built from model points or BRICK rules fail at eval."""
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "desktop_data"))
+    rules_pack = default_rules_root() / "ahu_vav"
+    rules_pack.mkdir(parents=True, exist_ok=True)
+    src = Path(__file__).resolve().parents[2] / "default_rules" / "ahu_vav" / "06_ahu_internal_temp_sensor_bounds.yaml"
+    shutil.copy(src, rules_pack / "06_ahu_internal_temp_sensor_bounds.yaml")
+
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "AHU column-map site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+
+        csv_path = tmp_path / "ahu_ts.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "RTU_11_DA_T(°F)": [60.0, 61.0],
+                "RTU_11_MA_T(°F)": [58.0, 59.0],
+                "RTU_11_RA_T(°F)": [72.0, 73.0],
+            },
+        ).to_csv(csv_path, index=False)
+        ing = client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        )
+        assert ing.status_code == 200, ing.text
+
+        imported = client.post(
+            "/model/import",
+            json={
+                "replace": True,
+                "payload": {
+                    "sites": [{"id": site_id, "name": "AHU column-map site"}],
+                    "equipment": [
+                        {
+                            "id": "e-ahu-1",
+                            "site_id": site_id,
+                            "name": "RTU_11",
+                            "equipment_type": "Air_Handling_Unit",
+                        },
+                    ],
+                    "points": [
+                        {
+                            "id": "p-sat",
+                            "site_id": site_id,
+                            "equipment_id": "e-ahu-1",
+                            "external_id": "RTU_11_DA_T(°F)",
+                            "brick_type": "Supply_Air_Temperature_Sensor",
+                            "fdd_input": "Supply_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p-mat",
+                            "site_id": site_id,
+                            "equipment_id": "e-ahu-1",
+                            "external_id": "RTU_11_MA_T(°F)",
+                            "brick_type": "Mixed_Air_Temperature_Sensor",
+                            "fdd_input": "Mixed_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p-rat",
+                            "site_id": site_id,
+                            "equipment_id": "e-ahu-1",
+                            "external_id": "RTU_11_RA_T(°F)",
+                            "brick_type": "Return_Air_Temperature_Sensor",
+                            "fdd_input": "Return_Air_Temperature_Sensor",
+                        },
+                    ],
+                },
+            },
+        )
+        assert imported.status_code == 200, imported.text
+
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        assert rules_dir
+
+        res = client.post(
+            "/rules/run",
+            json={
+                "site_id": site_id,
+                "source": "csv",
+                "rules_path": rules_dir,
+                "chunk_rows": 0,
+                "rule_files": ["06_ahu_internal_temp_sensor_bounds.yaml"],
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body.get("input_rows") == 2
+        assert "ahu_internal_temp_sensor_bounds_fault" in body.get("columns", [])
+
+
+def test_data_model_testing_rule_data_lineage_returns_shape() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/data-model/testing/rule-data-lineage")
+        assert res.status_code == 200
+        body = res.json()
+        assert "rules" in body
+        assert "column_map_size" in body
+        assert "ttl_path" in body
+        assert isinstance(body["rules"], list)
 
 
 def test_data_model_predefined_queries_include_hvac_presets() -> None:

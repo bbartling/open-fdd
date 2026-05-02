@@ -26,7 +26,7 @@ from fastapi import Query
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from open_fdd.desktop.rules.rule_loop import RuleLoopConfig, run_rule_loop_batched
 from open_fdd.desktop.services.ingest_service import IngestService
@@ -35,8 +35,31 @@ from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.services.plot_readiness import TimeseriesPlotReadiness, analyze_dataframe_for_plot
 from open_fdd.desktop.storage.paths import default_rules_root
+from open_fdd.gateway import codex_device_login
 
 _log = logging.getLogger(__name__)
+
+
+def _normalize_rule_files_basenames(rule_files: list[str] | None) -> list[str] | None:
+    """
+    When ``rule_files`` is omitted or empty, return None (all YAML in the rules dir).
+    When it is non-empty but every entry is filtered out (non-.yaml/.yml), raise 400.
+    """
+    if not rule_files:
+        return None
+    seen: list[str] = []
+    for raw in rule_files:
+        base = Path(str(raw or "").strip()).name
+        if not base.lower().endswith((".yaml", ".yml")):
+            continue
+        if base not in seen:
+            seen.append(base)
+    if not seen:
+        raise HTTPException(
+            status_code=400,
+            detail="rule_files contained no valid YAML basenames (.yaml/.yml).",
+        )
+    return seen
 
 
 def _plot_frame_records_json_safe(frame: pd.DataFrame) -> list[dict[str, Any]]:
@@ -63,6 +86,25 @@ def _build_services() -> BridgeServices:
     ingest = IngestService(model_service=model)
     ttl = TtlService(model_store=model.store)
     return BridgeServices(model=model, ingest=ingest, ttl=ttl)
+
+
+def _column_map_for_rules_run(services: BridgeServices, site_id: str) -> dict[str, str]:
+    """
+    Merge TTL-derived BRICK→column labels with model points (``brick_type`` / ``fdd_input`` → ``external_id``).
+
+    Model entries win on key collision so CSV headers stay aligned with the JSON the operator edited.
+    """
+    from open_fdd.desktop.services.brick_service import BrickService
+    from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+
+    model = services.model.load()
+    by_model = build_column_map_from_model_points(model, site_id)
+    try:
+        ttl_map = BrickService(ttl_path=services.ttl.ttl_path).resolve_column_map()
+    except Exception:
+        _log.debug("Brick column map from TTL unavailable", exc_info=True)
+        ttl_map = {}
+    return {**ttl_map, **by_model}
 
 
 class CsvIngestBody(BaseModel):
@@ -125,6 +167,10 @@ class RuleRunBody(BaseModel):
     #: ``onboard``, ``bacnet``, or any future driver ``source`` string).
     sources: list[str] | None = None
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
+    #: YAML basenames under ``rules_path`` (e.g. ``["ahu_sat.yaml"]``). Omit or empty = all rules.
+    rule_files: list[str] | None = None
+    #: If True, rules that need columns missing from the frame are skipped (logged) instead of failing the run.
+    skip_missing_columns: bool = False
 
 
 class SiteRecord(BaseModel):
@@ -277,6 +323,18 @@ class SiteRulePackBody(BaseModel):
     rule_pack: str
 
 
+class CodexDevicePollBody(BaseModel):
+    session_id: str
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_nonempty(cls, v: str) -> str:
+        s = str(v).strip()
+        if not s:
+            raise ValueError("session_id must not be empty or whitespace-only")
+        return s
+
+
 class TimeseriesPurgeBody(BaseModel):
     source: str | None = None
     site_id: str | None = None
@@ -316,6 +374,66 @@ def _driver_health_update(status_map: dict[str, dict[str, Any]], *, driver: str,
         success=success,
         last_error=str(error or ""),
     )
+
+
+def _normalize_import_model_payload(
+    payload: dict[str, Any],
+    *,
+    existing_site_ids: frozenset[str] | None = None,
+    existing_equipment_ids: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Best-effort repair for LLM-shaped imports: ensure site rows exist for point site_ids
+    and minimal equipment rows for referenced equipment_ids (common when ChatGPT emits points-only JSON).
+
+    When appending to an existing model, pass ``existing_site_ids`` / ``existing_equipment_ids`` so rows
+    already on disk are not duplicated by synthesis.
+    """
+    sites = [dict(s) for s in (payload.get("sites") or []) if isinstance(s, dict)]
+    equipment = [dict(e) for e in (payload.get("equipment") or []) if isinstance(e, dict)]
+    points = [dict(p) for p in (payload.get("points") or []) if isinstance(p, dict)]
+
+    site_ids_pts = {str(p.get("site_id")) for p in points if p.get("site_id")}
+    site_ids_existing = {str(s.get("id")) for s in sites if s.get("id")}
+    if existing_site_ids:
+        site_ids_existing |= set(existing_site_ids)
+    missing_sites = site_ids_pts - site_ids_existing
+    for sid in sorted(missing_sites):
+        sites.append({"id": sid, "name": "Imported site"})
+
+    site_ids_existing = {str(s.get("id")) for s in sites if s.get("id")}
+    eq_ids_pts = {
+        str(p.get("equipment_id"))
+        for p in points
+        if p.get("equipment_id") and str(p.get("equipment_id")).strip()
+    }
+    eq_ids_existing = {str(e.get("id")) for e in equipment if e.get("id")}
+    if existing_equipment_ids:
+        eq_ids_existing |= set(existing_equipment_ids)
+    for eqid in sorted(eq_ids_pts - eq_ids_existing):
+        sid = next(
+            (str(p.get("site_id")) for p in points if str(p.get("equipment_id") or "") == eqid and p.get("site_id")),
+            None,
+        )
+        if not sid:
+            sid = next(iter(sorted(site_ids_existing)), None)
+        if not sid:
+            continue
+        equipment.append(
+            {
+                "id": eqid,
+                "site_id": sid,
+                "name": "Equipment (auto)",
+                "equipment_type": "Air_Handling_Unit",
+            },
+        )
+    return {"sites": sites, "equipment": equipment, "points": points}
+
+
+def _examples_pack_root() -> Path | None:
+    """Repository ``examples/`` directory (bundled CSV + profile packs); ``None`` if missing."""
+    root = Path(__file__).resolve().parents[2] / "examples"
+    return root.resolve() if root.is_dir() else None
 
 
 def create_app() -> FastAPI:
@@ -361,6 +479,7 @@ def create_app() -> FastAPI:
             {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
             {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
             {"name": "system", "description": "Resource and storage stats."},
+            {"name": "assistant", "description": "Agent/human handoff: readiness links and declarative site profile apply."},
         ],
         lifespan=_lifespan,
     )
@@ -404,6 +523,39 @@ def create_app() -> FastAPI:
         if not (lower.endswith(".yaml") or lower.endswith(".yml")):
             raise HTTPException(status_code=400, detail="Rule file must end with .yaml or .yml")
         return name
+
+    def _safe_rules_path(raw_path: str) -> str:
+        candidate = str(raw_path or "").strip()
+        if not candidate:
+            raise HTTPException(status_code=400, detail="rules_path is required")
+        rules_root = _rules_dir().resolve()
+        if candidate in {".", "./"}:
+            return str(rules_root)
+        try:
+            candidate_path = Path(candidate).expanduser()
+            if not candidate_path.is_absolute():
+                candidate_path = (rules_root / candidate_path).resolve()
+            else:
+                candidate_path = candidate_path.resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid rules_path: {candidate}") from exc
+        if rules_root == candidate_path or rules_root in candidate_path.parents:
+            if not candidate_path.exists():
+                raise HTTPException(status_code=400, detail=f"rules_path does not exist: {candidate}")
+            return str(candidate_path)
+        ex_root = _examples_pack_root()
+        if ex_root is not None and (ex_root == candidate_path or ex_root in candidate_path.parents):
+            if not candidate_path.exists():
+                raise HTTPException(status_code=400, detail=f"rules_path does not exist: {candidate}")
+            return str(candidate_path)
+        _log.warning(
+            "rules_path rejected: outside managed rules directory (candidate=%r resolved=%r rules_root=%r)",
+            candidate,
+            str(candidate_path),
+            str(rules_root),
+        )
+        raise HTTPException(status_code=400, detail="rules_path must be inside managed rules directory")
+
     def _safe_sync_ttl() -> str | None:
         try:
             services.ttl.sync()
@@ -572,6 +724,17 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
+    def codex_device_start() -> dict[str, Any]:
+        try:
+            return codex_device_login.start_device_login()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.post("/openfdd-claw/codex/device/poll", tags=["openfdd-claw"])
+    def codex_device_poll(body: CodexDevicePollBody) -> dict[str, Any]:
+        return codex_device_login.poll_device_login(body.session_id)
+
     @app.get("/model/export", tags=["model"])
     def model_export() -> dict[str, Any]:
         return services.model.load()
@@ -618,6 +781,21 @@ def create_app() -> FastAPI:
             "equipment": payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else [],
             "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
         }
+        if body.replace:
+            normalized = _normalize_import_model_payload(normalized)
+        else:
+            cur = services.model.load()
+            ext_sites = frozenset(
+                str(s.get("id")) for s in (cur.get("sites") or []) if isinstance(s, dict) and s.get("id")
+            )
+            ext_eq = frozenset(
+                str(e.get("id")) for e in (cur.get("equipment") or []) if isinstance(e, dict) and e.get("id")
+            )
+            normalized = _normalize_import_model_payload(
+                normalized,
+                existing_site_ids=ext_sites,
+                existing_equipment_ids=ext_eq,
+            )
         with services.model.transaction() as model:
             if body.replace:
                 model["sites"] = normalized["sites"]
@@ -771,6 +949,11 @@ def create_app() -> FastAPI:
                 load_meta = {"load_mode": "single", "source": body.source}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        try:
+            safe_rules_path = _safe_rules_path(body.rules_path)
+        except HTTPException:
+            raise
+        rule_files_norm = _normalize_rule_files_basenames(body.rule_files)
         if frame.empty:
             return {
                 "input_rows": 0,
@@ -778,15 +961,21 @@ def create_app() -> FastAPI:
                 "columns": [],
                 "fault_totals": {},
                 "preview": "",
+                "rule_files_filter": rule_files_norm,
+                "skip_missing_columns": bool(body.skip_missing_columns),
                 **load_meta,
             }
+        cmap = _column_map_for_rules_run(services, body.site_id)
         try:
             out = run_rule_loop_batched(
                 frame,
                 RuleLoopConfig(
-                    rules_path=body.rules_path,
+                    rules_path=safe_rules_path,
                     chunk_rows=int(body.chunk_rows or 0),
                     target_memory_fraction=float(body.target_memory_fraction or 0.25),
+                    rule_files=rule_files_norm,
+                    skip_missing_columns=bool(body.skip_missing_columns),
+                    column_map=cmap or None,
                 ),
             )
         except RuntimeError as exc:
@@ -813,6 +1002,8 @@ def create_app() -> FastAPI:
             "columns": [str(c) for c in out.columns],
             "fault_totals": fault_totals,
             "preview": preview,
+            "rule_files_filter": rule_files_norm,
+            "skip_missing_columns": bool(body.skip_missing_columns),
             **load_meta,
         }
 
@@ -843,13 +1034,17 @@ def create_app() -> FastAPI:
 
     @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
-        server_url = str(body.server_url or app.state.bacnet_server_url or "").strip()
+        explicit_server_url = str(body.server_url or "").strip()
+        server_url = explicit_server_url or str(app.state.bacnet_server_url or "").strip()
         if not server_url:
             raise HTTPException(
                 status_code=400,
                 detail="Missing BACnet server URL. Set /config/bacnet.server_url or pass server_url in request.",
             )
-        api_key = str(body.api_key or app.state.bacnet_api_key or "").strip()
+        if explicit_server_url:
+            api_key = str(body.api_key or "").strip()
+        else:
+            api_key = str(body.api_key or app.state.bacnet_api_key or "").strip()
         result = services.ingest.ingest_bacnet(
             site_id=body.site_id,
             server_url=server_url,
@@ -1412,6 +1607,155 @@ def create_app() -> FastAPI:
             "openclaw_route_reason": resp.route_reason,
         }
 
+    def _plots_fdd_payload(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """
+        Merged timeseries for plotting plus FDD fault columns (same row cap as ``/plots/site-frame``).
+
+        Rules execute on the **tail** ``limit`` rows of the merged window (aligned with the plot load path).
+        """
+        cap = max(1, min(int(body.limit), 20_000))
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()]
+        if not cleaned:
+            cleaned = ["csv"]
+        try:
+            merged, used_sources = services.ingest.load_merged_sources_frame_window(
+                site_id=body.site_id,
+                sources=cleaned,
+                start_ts=body.start_ts,
+                end_ts=body.end_ts,
+                join_how=str(body.join_how),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        safe_rules = _safe_rules_path(body.rules_path)
+        rule_files_norm = _normalize_rule_files_basenames(body.rule_files)
+        if merged.empty:
+            return {
+                "columns": [],
+                "rows": [],
+                "sources": [],
+                "fault_totals": {},
+                "rule_files_filter": rule_files_norm,
+            }
+        ts_col = infer_timestamp_column(merged)
+        work = merged.tail(cap).copy()
+        cmap = _column_map_for_rules_run(services, body.site_id)
+        try:
+            evaluated = run_rule_loop_batched(
+                work,
+                RuleLoopConfig(
+                    rules_path=safe_rules,
+                    chunk_rows=int(body.chunk_rows or 0),
+                    rule_files=rule_files_norm,
+                    skip_missing_columns=bool(body.skip_missing_columns),
+                    column_map=cmap or None,
+                ),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        out = evaluated.where(pd.notnull(evaluated), None)
+        if ts_col in out.columns:
+            out[ts_col] = out[ts_col].astype(str)
+        fault_cols = [c for c in out.columns if c.endswith("_flag") or c.endswith("_fault")]
+        fault_totals = {c: int(pd.to_numeric(out[c], errors="coerce").fillna(0).sum()) for c in fault_cols}
+        return {
+            "columns": [str(c) for c in out.columns],
+            "rows": _plot_frame_records_json_safe(out),
+            "sources": used_sources,
+            "fault_totals": fault_totals,
+            "rule_files_filter": rule_files_norm,
+        }
+
+    @app.post("/plots/fdd-frame", tags=["timeseries"])
+    def plots_fdd_frame(body: PlotsFddFrameBody) -> dict[str, Any]:
+        return _plots_fdd_payload(body)
+
+    @app.post("/plots/share", tags=["timeseries"])
+    def plots_share_create(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """Run the same pipeline as ``/plots/fdd-frame`` and persist parameters for a reopenable Claw handoff."""
+        from open_fdd.assistant.readiness import ui_public_base_url
+        from open_fdd.desktop.storage.plot_share_store import save_plot_share
+
+        result = _plots_fdd_payload(body)
+        safe_rules = _safe_rules_path(body.rules_path)
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()] or ["csv"]
+        share_id = save_plot_share(
+            {
+                "site_id": body.site_id,
+                "rules_path": safe_rules,
+                "sources": cleaned,
+                "limit": int(body.limit),
+                "join_how": str(body.join_how),
+                "start_ts": body.start_ts,
+                "end_ts": body.end_ts,
+                "rule_files": body.rule_files,
+                "skip_missing_columns": bool(body.skip_missing_columns),
+                "chunk_rows": int(body.chunk_rows or 0),
+                "fault_totals": result.get("fault_totals") or {},
+                "columns": result.get("columns") or [],
+                "row_count": len(result.get("rows") or []),
+            },
+        )
+        result["share_id"] = share_id
+        result["plots_open_url"] = f"{ui_public_base_url().rstrip('/')}/plots?share={urllib.parse.quote(share_id, safe='')}"
+        return result
+
+    @app.get("/plots/share/{share_id}", tags=["timeseries"])
+    def plots_share_get(share_id: str) -> dict[str, Any]:
+        """Return a saved plot+FDD session (no rows); use with ``POST /plots/fdd-frame`` or Plots ``?share=``."""
+        from open_fdd.desktop.storage.plot_share_store import load_plot_share
+
+        rec = load_plot_share(share_id)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="share not found")
+        return rec
+
+    @app.get("/assistant/readiness", tags=["assistant"])
+    def assistant_readiness() -> dict[str, Any]:
+        """Copy-paste handoff for humans or chat agents: deep links, site summary, suggested follow-up."""
+        from open_fdd.assistant.readiness import build_readiness_payload
+
+        return build_readiness_payload(services.model.load())
+
+    @app.post("/assistant/apply-site-profiles", tags=["assistant"])
+    def assistant_apply_site_profiles(body: ApplySiteProfilesBody) -> dict[str, Any]:
+        """
+        Run ingest + equipment + BRICK mappings from a YAML pack under ``examples/`` (same schema as the workshop file).
+
+        Intended for agents / OpenClaw-style automation; paths are restricted to the repo ``examples/`` directory.
+        """
+        from open_fdd.assistant.site_profiles_runner import apply_site_profiles_file
+
+        raw = str(body.profiles_yaml or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="profiles_yaml is required")
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            raise HTTPException(status_code=400, detail="profiles_yaml must be an absolute path")
+        resolved = candidate.resolve()
+        ex_root = _examples_pack_root()
+        if ex_root is None:
+            raise HTTPException(status_code=400, detail="examples directory is not available on this install")
+        if ex_root not in resolved.parents and resolved != ex_root:
+            raise HTTPException(
+                status_code=400,
+                detail="profiles_yaml must be located under the repository examples/ directory",
+            )
+        try:
+            out = apply_site_profiles_file(
+                profiles_yaml=resolved,
+                model=services.model,
+                ingest=services.ingest,
+                ttl=services.ttl,
+                reset=bool(body.reset),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        ttl_err = _safe_sync_ttl()
+        if ttl_err:
+            out["ttl_sync_warning"] = ttl_err
+        return out
+
     @app.get("/data-model/testing/predefined", tags=["sparql"])
     def data_model_testing_predefined() -> list[dict[str, str]]:
         return [
@@ -1684,6 +2028,17 @@ ORDER BY DESC(?count)""",
                 "Check orphan links, missing BRICK/FDD mappings, and duplicate external IDs."
             ),
         }
+
+    @app.get("/data-model/testing/rule-data-lineage", tags=["sparql"])
+    def data_model_testing_rule_data_lineage(site_id: str | None = None) -> dict[str, Any]:
+        """Rule YAML inputs × TTL column map × model points (Feather external_ref) for operator debugging."""
+        from open_fdd.desktop.services.fdd_data_lineage import build_fdd_rule_data_lineage
+
+        ttl_path = services.ttl.sync()
+        model = services.model.load()
+        rules_dir = _rules_dir()
+        sid = str(site_id).strip() if site_id and str(site_id).strip() else None
+        return build_fdd_rule_data_lineage(model=model, ttl_path=ttl_path, rules_dir=rules_dir, site_id=sid)
 
     @app.post("/data-model/testing/query", tags=["sparql"])
     def data_model_testing_query(body: SparqlQueryBody) -> dict[str, Any]:

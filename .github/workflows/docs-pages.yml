@@ -39,6 +39,8 @@ jobs:
         run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
         env:
           JEKYLL_ENV: production
+          # jekyll-remote-theme uses the GitHub API; without a token, anonymous rate limits can yield an unstyled build.
+          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

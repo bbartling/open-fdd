@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from typing import Any
 
 
@@ -10,7 +11,7 @@ def ui_public_base_url() -> str:
     explicit = (os.environ.get("OFDD_UI_PUBLIC_BASE") or "").strip().rstrip("/")
     if explicit:
         return explicit
-    port = (os.environ.get("OFDD_UI_PORT") or "5173").strip() or "5173"
+    port = (os.environ.get("OFDD_UI_PORT") or "8080").strip() or "8080"
     return f"http://127.0.0.1:{port}"
 
 
@@ -39,7 +40,9 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         )
 
     def _plots_fdd_url(site_id: str, *, run_source: str = "csv") -> str:
-        q = f"site_id={site_id}&fdd=1&skipMissing=1&runSource={run_source}"
+        q = urllib.parse.urlencode(
+            {"site_id": site_id, "fdd": "1", "skipMissing": "1", "runSource": run_source},
+        )
         return f"{ui}/plots?{q}"
 
     deep_links = {

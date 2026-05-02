@@ -1,5 +1,7 @@
 title: "Open-FDD"
 description: "Open-FDD: YAML-defined fault detection rules on pandas (PyPI package open-fdd)."
+# Required together for GitHub Pages project sites (CSS/theme assets resolve under /open-fdd/).
+url: "https://bbartling.github.io"
 baseurl: "/open-fdd"
 remote_theme: just-the-docs/just-the-docs
 color_scheme: "light"

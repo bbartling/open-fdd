@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopFetch } from "../lib/api";
 import { useSite } from "../contexts/site-context";
-import { purgeTimeseries } from "../lib/crud-api";
 import { PointsTreePanel } from "../components/site/PointsTreePanel";
 import { useRulesList } from "../hooks/use-rules";
+import { parsePlotsSearch } from "../lib/plots-url";
 
 type PlotReadiness = {
   ok: boolean;
@@ -96,9 +96,11 @@ function resolveColumnsFromExternalIds(columns: string[], externalIds: string[],
 function PlotlyCanvas({
   traces,
   title,
+  secondaryAxis,
 }: {
   traces: Record<string, unknown>[];
   title: string;
+  secondaryAxis: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -115,11 +117,28 @@ function PlotlyCanvas({
         {
           title,
           autosize: true,
-          margin: { t: 50, r: 24, b: 48, l: 56 },
+          margin: { t: 50, r: secondaryAxis ? 72 : 24, b: 48, l: 56 },
           paper_bgcolor: "transparent",
           plot_bgcolor: "transparent",
           xaxis: { title: "Timestamp", automargin: true },
-          yaxis: { title: "Value", automargin: true },
+          yaxis: {
+            title: secondaryAxis ? "Sensors" : "Value",
+            automargin: true,
+          },
+          ...(secondaryAxis
+            ? {
+                yaxis2: {
+                  title: "Faults (0/1)",
+                  overlaying: "y",
+                  side: "right",
+                  range: [-0.08, 1.08],
+                  tickmode: "array",
+                  tickvals: [0, 1],
+                  ticktext: ["false", "true"],
+                  automargin: true,
+                },
+              }
+            : {}),
           legend: { orientation: "h" },
         },
         { responsive: true, displaylogo: false },
@@ -129,8 +148,18 @@ function PlotlyCanvas({
     return () => {
       mounted = false;
     };
-  }, [traces, title]);
+  }, [traces, title, secondaryAxis]);
   return <div ref={ref} style={{ height: "62vh", minHeight: 420, border: "1px solid var(--border)", borderRadius: 10 }} />;
+}
+
+function initialPlotsFromLocation(): ReturnType<typeof parsePlotsSearch> {
+  if (typeof window === "undefined") return {};
+  return parsePlotsSearch(window.location.search);
+}
+
+function shareIdFromLocation(): string {
+  if (typeof window === "undefined") return "";
+  return (new URLSearchParams(window.location.search).get("share") || "").trim();
 }
 
 export function PlotsPage() {
@@ -143,18 +172,20 @@ export function PlotsPage() {
   const [plotMode, setPlotMode] = useState<PlotMode>("lines");
   const [frame, setFrame] = useState<PlotFrameResponse | null>(null);
   const [status, setStatus] = useState(
-    "Pick a site, choose sensors in the tree, configure source/rules below, then **Run FDD & refresh chart**.",
+    "Pick a site, choose sensors in the tree, configure source/rules below, then Run FDD & refresh chart.",
   );
   const [modelPoints, setModelPoints] = useState<ModelExportResponse["points"]>([]);
   const [modelEquipment, setModelEquipment] = useState<ModelExportResponse["equipment"]>([]);
   const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
-  const [runSource, setRunSource] = useState("all");
-  const [joinHow, setJoinHow] = useState<"inner" | "left" | "outer" | "right">("outer");
+  const [runSource, setRunSource] = useState(() => initialPlots.runSource || "csv");
+  const [joinHow, setJoinHow] = useState<"inner" | "left" | "outer" | "right">(
+    () => initialPlots.joinHow || "outer",
+  );
   const [startTs, setStartTs] = useState("");
   const [endTs, setEndTs] = useState("");
   const [boundsStatus, setBoundsStatus] = useState("");
   const [runOutput, setRunOutput] = useState(
-    "After a successful run, fault totals and column names appear here. For reopenable handoffs, use the bridge **POST /plots/share** (same JSON as **POST /plots/fdd-frame**).",
+    "After a successful run, fault totals and column names appear here. For reopenable handoffs, use the bridge POST /plots/share (same JSON as POST /plots/fdd-frame).",
   );
   const [selectedRuleFiles, setSelectedRuleFiles] = useState<string[]>([]);
   const [skipMissingRules, setSkipMissingRules] = useState(() => initialPlots.skipMissingRules !== false);
@@ -445,9 +476,16 @@ export function PlotsPage() {
       const y: number[] = [];
       for (const row of frame.rows) {
         const xv = row.timestamp;
-        const yv = row[col];
-        const num = typeof yv === "number" ? yv : Number(yv);
-        if ((typeof xv === "string" || typeof xv === "number") && Number.isFinite(num)) {
+        if (typeof xv !== "string" && typeof xv !== "number") continue;
+        if (faultCol) {
+          const fv = coerceFaultY(row[col]);
+          if (fv === null) continue;
+          x.push(xv);
+          y.push(fv);
+        } else {
+          const yv = row[col];
+          const num = typeof yv === "number" ? yv : Number(yv);
+          if (!Number.isFinite(num)) continue;
           x.push(xv);
           y.push(num);
         }
@@ -458,8 +496,13 @@ export function PlotsPage() {
         type: "scatter",
         mode,
         name: col,
-        line: { color: COLORS[idx % COLORS.length], width: 2 },
-        marker: { color: COLORS[idx % COLORS.length], size: 5 },
+        yaxis: faultCol && hasFaultAxis ? "y2" : "y",
+        line: {
+          color: COLORS[idx % COLORS.length],
+          width: 2,
+          ...(faultCol ? { shape: "hv" as const } : {}),
+        },
+        marker: { color: COLORS[idx % COLORS.length], size: faultCol ? 6 : 5 },
       };
     });
     return { traces: built, secondaryAxis: hasFaultAxis };
@@ -750,16 +793,6 @@ export function PlotsPage() {
           </button>
         </div>
         <textarea readOnly value={runOutput} style={{ marginTop: 10, minHeight: 180 }} />
-      </div>
-
-      <div className="card">
-        {traces.length > 0 ? (
-          <PlotlyCanvas traces={traces} title="Open-FDD Trends" />
-        ) : (
-          <div style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-            Load data and select columns to render Plotly charts.
-          </div>
-        )}
       </div>
     </div>
   );

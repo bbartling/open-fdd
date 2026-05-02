@@ -21,5 +21,5 @@ Restart or reload the gateway if required by your OpenClaw version.
 
 ## Related docs
 
-- [`scripts/OPENCLAW_RUNBOOK.md`](../../scripts/OPENCLAW_RUNBOOK.md) — bootstrap, MCP URLs, smoke prompts  
+- [`scripts/OPENCLAW_RUNBOOK.md`](../../scripts/OPENCLAW_RUNBOOK.md) — `start-local`, MCP URLs, smoke prompts  
 - [`docs/open-fdd-claw-architecture.md`](../../docs/open-fdd-claw-architecture.md) — architecture, Codex auth via gateway  

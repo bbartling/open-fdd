@@ -50,6 +50,7 @@ export function CsvImportPage() {
           ok: false,
           message: `Rows: ${out.rows}; Dropped: ${out.dropped_rows ?? 0}. ${out.parse_error}`,
           parseError: out.parse_error,
+          preview: Array.isArray(out.preview_rows) ? out.preview_rows : [],
         };
       }
       const metricsLine =

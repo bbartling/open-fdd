@@ -1,4 +1,5 @@
-export const DATA_MODEL_REDESIGN_PROMPT = `You are an HVAC ontology engineer for Open-FDD.
+/** Shared instructions for BRICK / model redesign (human UI vs automated consumer). */
+const DATA_MODEL_REDESIGN_CORE = `You are an HVAC ontology engineer for Open-FDD.
 
 Task:
 1) Wait until I upload BOTH:
@@ -24,31 +25,13 @@ When files are available:
 - Do not invent sensors or equipment unless clearly justified.
 - Prefer deterministic mappings based on uploaded YAML and existing model.
 - If rule references are missing in the model, include explicit remediation suggestions.
-- Keep the output compatible with Open-FDD /model/import payload shape:
 
-{
-  "sites": [...],
-  "equipment": [...],
-  "points": [...]
-}
-
-Open-FDD /model/import requirements:
-- Always include a non-empty "sites" array.
-- Every point.site_id must appear as sites[].id.
-- Always include "equipment" rows for every distinct points[].equipment_id you set.
-- Never reference an equipment UUID that is missing from "equipment".
-- If equipment is uncertain, set equipment_id to null and accept "Unassigned" grouping in the UI.
-- For every point used by FDD YAML rules, set "fdd_input" to the rule input key when it differs from brick_type.
-- If fdd_input matches brick_type, you may omit fdd_input only when brick_type is the exact Brick class token the rule expects.
-- Otherwise, set fdd_input explicitly.
-- Keep "external_id" equal to the CSV / Feather column header used at runtime.
-- Joined frames may suffix columns as metric_source; preserve those exact names.
-- "import_ready_json" must be a single JSON object with ONLY these keys:
-  {
-    "sites": [...],
-    "equipment": [...],
-    "points": [...]
-  }
+Open-FDD /model/import requirements (must satisfy import_ready_json when you emit it):
+- Always include a non-empty "sites" array: every point.site_id must appear as sites[].id (create or preserve the site row).
+- Always include "equipment" rows for every distinct points[].equipment_id you set (or set equipment_id to null and accept "Unassigned" grouping in the UI). Never reference an equipment UUID that is missing from "equipment".
+- For every point used by FDD YAML rules, set "fdd_input" to the rule input key when it differs from brick_type (e.g. Zone_Air_Temperature_Sensor). If fdd_input matches brick_type, you may omit fdd_input only when brick_type is the exact Brick class token the rule expects; otherwise set fdd_input explicitly.
+- Keep "external_id" equal to the CSV / Feather column header used at runtime (joined frames may suffix columns as metric_source when multiple drivers exist).
+- "import_ready_json" must be a single JSON object with ONLY keys sites, equipment, points (no prose inside that object).
 
 Rule handling:
 - Check whether the uploaded YAML rules actually match the available model points.
@@ -57,9 +40,22 @@ Rule handling:
   1) keep the original rules and report missing model inputs, or
   2) create compatible replacement/additional YAML rules for the available equipment if clearly justified.
 - Any generated YAML rule must use fdd_input keys that exist in the import-ready data model.
-- Any generated YAML rule must preserve clear, human-readable names and descriptions.
+- Any generated YAML rule must preserve clear, human-readable names and descriptions.`;
 
-Preferred final deliverable when artifact/file creation is supported:
+const DATA_MODEL_REDESIGN_OUTPUT_API = `
+
+OUTPUT MODE — machine consumer (API / POST /assistant/data-model-openclaw):
+- Return ONLY one JSON object. No markdown code fences, no "=== FILE:" sections, no explanatory prose outside that object.
+- Required top-level keys: "validation_notes" (string), "relationship_summary" (string), "rule_compatibility_notes" (string), "import_ready_json" (object).
+- "import_ready_json" must contain exactly: { "sites": [...], "equipment": [...], "points": [...] }.
+- Optional keys: "proposed_rule_yamls" (object mapping filename string to YAML string), "readme_md" (string).
+- If uploads are still missing, return the same JSON shape with empty arrays in import_ready_json and explain what is missing in validation_notes.`;
+
+const DATA_MODEL_REDESIGN_OUTPUT_HUMAN = `
+
+OUTPUT MODE — human (chat / Open-FDD UI "Copy LLM Prompt"):
+- Do not return the API-only single JSON envelope described for automated consumers.
+- Preferred final deliverable when artifact/file creation is supported:
 Create a downloadable ZIP package with this structure:
 
 open_fdd_model_and_rules_package/
@@ -114,9 +110,15 @@ Important fallback formatting rules:
 If both model export and rule YAML are attached in one message:
 - If artifact creation is supported, return the ZIP package and a concise summary.
 - If artifact creation is not supported, return the copy/paste file sections.
-- Always ensure the import-ready JSON validates against the Open-FDD /model/import shape.
+- Always ensure the import-ready JSON validates against the Open-FDD /model/import shape.`;
 
-Open-FDD desktop bridge (automated API) note:
-If your reply is consumed by software (e.g. POST /assistant/data-model-openclaw), your entire response must ALSO be parseable as one JSON object with at least:
-  "validation_notes", "relationship_summary", "rule_compatibility_notes", and "import_ready_json"
-where "import_ready_json" is the same object as in the import-ready file above (only sites, equipment, points). Optional keys: "proposed_rule_yamls" (object: filename string -> YAML string), "readme_md" (string). Do not wrap that JSON in markdown fences.`;
+/**
+ * @param consumerDetected When true, prompt the model for a single parseable JSON object (OpenClaw / bridge).
+ * When false, prompt for human-oriented ZIP / === FILE: === sections only (no combined JSON+FILE ambiguity).
+ */
+export function getDataModelRedesignPrompt(consumerDetected: boolean): string {
+  return DATA_MODEL_REDESIGN_CORE + (consumerDetected ? DATA_MODEL_REDESIGN_OUTPUT_API : DATA_MODEL_REDESIGN_OUTPUT_HUMAN);
+}
+
+/** Default prompt copied into the Data Model page (human mode). */
+export const DATA_MODEL_REDESIGN_PROMPT = getDataModelRedesignPrompt(false);
