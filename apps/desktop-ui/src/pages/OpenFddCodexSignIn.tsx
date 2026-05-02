@@ -18,6 +18,7 @@ type PollResponse = {
 };
 
 const OPENCLAW_CODEX_DOC = "https://docs.openclaw.ai/providers/openai";
+const OPENAI_CODEX_DEVICE_AUTH_DOC = "https://developers.openai.com/codex/auth";
 
 /**
  * Browser-assisted ChatGPT / Codex device login (same OpenAI device endpoints as OpenClaw).
@@ -156,7 +157,21 @@ export function OpenFddCodexSignIn() {
         we poll. After completion, use the <strong>OpenClaw chat</strong> iframe below. On a headless host, open the
         verification link on your phone or laptop.
       </p>
+      <p className="cron-hint-box warn" style={{ fontSize: 13 }}>
+        If OpenAI shows a message about enabling device code for Codex (or tells you to run{" "}
+        <code className="inline-code">codex login --device-auth</code> again): turn on{" "}
+        <strong>device code authorization for Codex</strong> in your{" "}
+        <strong>ChatGPT → Settings → security / Codex</strong> area (wording varies by account).{" "}
+        <strong>ChatGPT Business / Enterprise</strong> may require a workspace admin to allow CLI / device login. See{" "}
+        <a href={OPENAI_CODEX_DEVICE_AUTH_DOC} target="_blank" rel="noreferrer">
+          OpenAI Codex authentication
+        </a>
+        . This is an OpenAI account policy — not something Open-FDD can bypass.
+      </p>
       <ol className="openfdd-codex-steps">
+        <li>
+          (Once per account) Confirm <strong>device code</strong> for Codex is allowed in ChatGPT settings — link above.
+        </li>
         <li>Click <strong>Start sign-in</strong> below.</li>
         <li>
           Click <strong>Open sign-in page</strong> and log in with OpenAI (enter the code if the page asks for it).

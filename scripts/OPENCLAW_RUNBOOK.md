@@ -30,6 +30,7 @@ Do this **after** the Open-FDD bridge + MCP + UI are up ([§1](#1-run-open-fdd-o
 
 ### 0b) ChatGPT / Codex subscription auth (same OAuth path as OpenClaw)
 
+- If the browser shows a message about **enabling device code for Codex** or **`codex login --device-auth`**, turn on **device code authorization for Codex** in **ChatGPT settings** (personal) or ask a **workspace admin** (Business / Enterprise). See **[OpenAI Codex authentication](https://developers.openai.com/codex/auth/)** — Open-FDD’s **Open-FDD Claw → Start sign-in** uses the same device flow as the Codex CLI.
 - Run **`openclaw models auth login --provider openai-codex`** and complete the browser/device flow.
 - Optional: merge an **`auth.profiles`** / **`auth.order`** block for **`openai-codex:default`** into `openclaw.json` so subscription models are explicit (see **[Open FDD Claw architecture — reference fragment](../docs/open-fdd-claw-architecture.md)**).
 - Default agent model can stay on an **`openai-codex/<model>`** ref per [OpenClaw OpenAI provider docs](https://docs.openclaw.ai/providers/openai).

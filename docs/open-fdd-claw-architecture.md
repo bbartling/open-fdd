@@ -83,6 +83,8 @@ Human-in-the-loop export → review → validate → import is described in [Dat
 | **Gateway operator HTTP auth** | `OPENCLAW_GATEWAY_TOKEN` (or `gateway.auth.token` in `openclaw.json`). |
 | **Onboard, BACnet DIY, etc.** | Open-FDD bridge env (e.g. `OFDD_ONBOARD_API_KEY`) — **data plane**, not LLM auth. |
 
+**Device-code prerequisite (OpenAI):** ChatGPT may refuse device login until **device code authorization for Codex** is enabled in **ChatGPT security settings** (personal) or allowed by a **workspace admin** (Business / Enterprise). The consent screen can mention `codex login --device-auth` — that is the same device flow as Open-FDD’s **Start sign-in** button. Official steps: [Codex authentication](https://developers.openai.com/codex/auth/).
+
 **Policy:** LLM calls from Python should go to the **OpenClaw Gateway** `POST /v1/chat/completions` with `Authorization: Bearer <gateway token>` and `x-openclaw-model: openai-codex/<model>` so **Codex OAuth stays in OpenClaw**. Do not read `auth-profiles.json` from Open-FDD.
 
 Enable the HTTP surface in OpenClaw (see [OpenClaw OpenAI chat completions](https://docs.openclaw.ai/gateway/openai-http-api)):
