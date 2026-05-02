@@ -27,6 +27,22 @@ def test_sqlite_connector_roundtrip(tmp_path: Path) -> None:
     assert "sa_temp" in out.columns
 
 
+def test_sqlite_connector_replace_frame_atomic(tmp_path: Path) -> None:
+    connector = SqliteConnector(db_path=str(tmp_path / "timeseries.db"))
+    df1 = pd.DataFrame(
+        {
+            "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+            "sa_temp": [55.0, 56.0],
+        }
+    )
+    connector.write_frame(source="csv", site_id="site-1", frame=df1)
+    df2 = pd.DataFrame({"timestamp": ["2026-01-01T02:00:00Z"], "sa_temp": [57.0]})
+    connector.replace_frame(source="csv", site_id="site-1", frame=df2)
+    out = connector.read_frame(source="csv", site_id="site-1")
+    assert len(out.index) == 1
+    assert float(out["sa_temp"].iloc[0]) == 57.0
+
+
 def test_ingest_service_uses_configured_connector(tmp_path: Path) -> None:
     csv_path = tmp_path / "sample.csv"
     pd.DataFrame(

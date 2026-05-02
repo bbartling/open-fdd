@@ -12,6 +12,31 @@ from open_fdd.desktop.storage.feather_store import FeatherStore
 from open_fdd.desktop.storage.model_store import ModelStore
 
 
+def test_csv_ingest_parse_error_does_not_touch_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("pyarrow")
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("Bad CSV")
+    before = len(model_service.load().get("points", []))
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+
+    def fake_ingest_csv(**kwargs: object) -> dict:
+        return {
+            "rows": 0,
+            "dropped_rows": 0,
+            "storage_path": "",
+            "feather_path": "",
+            "metrics": ["would_not_upsert"],
+            "parse_error": "connector parse failed (test double)",
+        }
+
+    monkeypatch.setattr(ingest.connector, "ingest_csv", fake_ingest_csv)
+    out = ingest.ingest_csv(csv_path=tmp_path / "ignored.csv", site_id=site["id"], source="csv")
+    assert out.get("parse_error")
+    after = len(model_service.load().get("points", []))
+    assert after == before
+
+
 def test_csv_ingest_creates_feather_refs(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     csv_path = tmp_path / "sample.csv"

@@ -15,6 +15,7 @@ def test_build_readiness_payload_includes_links_and_follow_up() -> None:
     assert out["sites"][0]["name"] == "Demo"
     assert out["deep_links"]["plots"].endswith("/plots")
     assert out["deep_links"]["plots_fdd_csv"].endswith("runSource=csv")
+    assert out["deep_links"]["fdd_rule_setup"].endswith("/rule-setup")
     assert len(out["plots_quicklinks"]) == 1
     assert "fdd=1" in out["plots_quicklinks"][0]["href"] and "s-1" in out["plots_quicklinks"][0]["href"]
     assert "yes" in out["message_markdown"].lower() and "no" in out["message_markdown"].lower()

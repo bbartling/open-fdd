@@ -8,6 +8,17 @@ export function uploadRule(filename: string, content: string) {
   });
 }
 
+export function saveRule(filename: string, content: string) {
+  return desktopFetch<{ filename: string; size: number; updated: boolean }>(
+    `/rules/${encodeURIComponent(filename)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    },
+  );
+}
+
 export function deleteRule(filename: string) {
   return desktopFetch<{ deleted: string }>(`/rules/${encodeURIComponent(filename)}`, {
     method: "DELETE",

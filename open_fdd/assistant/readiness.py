@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from typing import Any
 
 
@@ -10,7 +11,7 @@ def ui_public_base_url() -> str:
     explicit = (os.environ.get("OFDD_UI_PUBLIC_BASE") or "").strip().rstrip("/")
     if explicit:
         return explicit
-    port = (os.environ.get("OFDD_UI_PORT") or "5173").strip() or "5173"
+    port = (os.environ.get("OFDD_UI_PORT") or "8080").strip() or "8080"
     return f"http://127.0.0.1:{port}"
 
 
@@ -39,7 +40,9 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         )
 
     def _plots_fdd_url(site_id: str, *, run_source: str = "csv") -> str:
-        q = f"site_id={site_id}&fdd=1&skipMissing=1&runSource={run_source}"
+        q = urllib.parse.urlencode(
+            {"site_id": site_id, "fdd": "1", "skipMissing": "1", "runSource": run_source},
+        )
         return f"{ui}/plots?{q}"
 
     deep_links = {
@@ -49,6 +52,7 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         "csv_import": f"{ui}/csv-import",
         "data_model": f"{ui}/data-model",
         "site_management": f"{ui}/site-management",
+        "fdd_rule_setup": f"{ui}/rule-setup",
         "openfdd_claw_chat": f"{ui}/openfdd-claw-chat",
     }
 
@@ -68,9 +72,13 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
 
     suggested_actions = [
         "Open **Plots** → pick a site → **Load + FDD overlay** to see sensors + fault columns together.",
+        "Grafana-style CSVs may keep units in cells (e.g. `69.5 °F`); use **POST /timeseries/clean-metrics** with `commit:false` to preview coercion, then `commit:true` before bounds/flatline rules.",
+        "Agents and the UI share the same rule pack on disk: **GET /rules/export-json** for a JSON snapshot (YAML + parsed fields), **PUT /rules/{filename}** to save edits; humans use **FDD Rule Setup** (`/rule-setup`) to edit and save.",
         "Tune YAML thresholds under **FDD Rule Setup**, then re-run overlay or **Run FDD backfill**.",
         "When weather/onboard/BACnet are configured, ingest those drivers so **All sources (joined)** reflects multi-stream data.",
         "Persist a reopenable view for Open-FDD Claw: **POST /plots/share** (same JSON as **/plots/fdd-frame**), then open the returned **plots_open_url** or **GET /plots/share/{id}**.",
+        "Prefer **POST /plots/fdd-frame** (or **POST /rules/run** for tabular-only) for automation; tune thresholds via **PUT /rules/{file}** or the Rule Setup UI rather than ad-hoc file edits on disk.",
+        "Preview plot health without rules: **GET /plots/frame?...&include_readiness=true** or **POST /timeseries/plot-readiness** (returns a Pydantic-style JSON report: ok, per-column plot_line_ready, recommend_clean_metrics).",
     ]
 
     lines = [

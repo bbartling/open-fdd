@@ -1,0 +1,47 @@
+
+name: berry_es_chw_sensor_bounds
+description: >
+  Plausible imperial bounds for a small school CHW plant in MD after numeric clean
+  (temperatures in °F, CHW differential pressure in psi). Tune for your site.
+type: bounds
+flag: chw_plant_sensor_bounds_fault
+
+inputs:
+  Outside_Air_Temperature_Sensor:
+    brick: Outside_Air_Temperature_Sensor
+    bounds:
+      imperial: [-15, 115]
+
+  Chilled_Water_Supply_Temperature_Sensor:
+    brick: Chilled_Water_Supply_Temperature_Sensor
+    bounds:
+      imperial: [34, 62]
+
+  Chilled_Water_Return_Temperature_Sensor:
+    brick: Chilled_Water_Return_Temperature_Sensor
+    bounds:
+      imperial: [38, 68]
+
+  Condenser_Water_Supply_Temperature_Sensor:
+    brick: Condenser_Water_Supply_Temperature_Sensor
+    bounds:
+      imperial: [45, 105]
+
+  Condenser_Water_Return_Temperature_Sensor:
+    brick: Condenser_Water_Return_Temperature_Sensor
+    bounds:
+      imperial: [45, 115]
+
+  Entering_Condenser_Water_Temperature_Sensor:
+    brick: Entering_Condenser_Water_Temperature_Sensor
+    bounds:
+      imperial: [45, 105]
+
+  Chilled_Water_Differential_Pressure_Sensor:
+    brick: Chilled_Water_Differential_Pressure_Sensor
+    bounds:
+      imperial: [0.0, 45.0]
+
+params:
+  units: imperial
+  rolling_window: 2

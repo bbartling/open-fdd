@@ -1,15 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopFetch } from "../lib/api";
 import { useSite } from "../contexts/site-context";
 import { PointsTreePanel } from "../components/site/PointsTreePanel";
 import { useRulesList } from "../hooks/use-rules";
 import { parsePlotsSearch } from "../lib/plots-url";
 
+type PlotReadiness = {
+  ok: boolean;
+  summary: string;
+  recommend_clean_metrics: boolean;
+  row_count?: number;
+  metric_columns_not_plot_ready?: number;
+  columns?: Array<{
+    name: string;
+    role?: string;
+    plot_line_ready: boolean;
+    quality?: string;
+    recommend_clean_metrics?: boolean;
+    hint?: string;
+  }>;
+};
+
 type PlotFrameResponse = {
   columns: string[];
   rows: Array<Record<string, unknown>>;
   sources?: string[];
   fault_totals?: Record<string, number>;
+  readiness?: PlotReadiness;
 };
 
 type PlotShareRecord = {
@@ -23,11 +40,6 @@ type PlotShareRecord = {
   rule_files?: string[] | null;
   skip_missing_columns?: boolean;
   chunk_rows?: number;
-};
-
-type PlotShareCreateResponse = PlotFrameResponse & {
-  share_id?: string;
-  plots_open_url?: string;
 };
 
 type ModelExportResponse = {
@@ -59,6 +71,26 @@ function coerceFaultY(yv: unknown): number | null {
   const n = typeof yv === "number" ? yv : Number(yv);
   if (!Number.isFinite(n)) return null;
   return n > 0 ? 1 : 0;
+}
+
+function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
+  const set = new Set<string>();
+  const baseName = (col: string) => {
+    const idx = col.lastIndexOf("_");
+    return idx > 0 ? col.slice(0, idx) : col;
+  };
+  for (const ext of externalIds) {
+    if (currentSource === "all") {
+      for (const col of columns) {
+        if (col === ext || baseName(col) === ext) {
+          set.add(col);
+        }
+      }
+    } else if (columns.includes(ext)) {
+      set.add(ext);
+    }
+  }
+  return Array.from(set);
 }
 
 function PlotlyCanvas({
@@ -137,11 +169,11 @@ export function PlotsPage() {
   const [siteId, setSiteId] = useState(
     () => initialPlots.siteId || siteContext.selectedSiteId || "",
   );
-  const [source, setSource] = useState("all");
   const [plotMode, setPlotMode] = useState<PlotMode>("lines");
   const [frame, setFrame] = useState<PlotFrameResponse | null>(null);
-  const [yColumns, setYColumns] = useState<string[]>([]);
-  const [status, setStatus] = useState("Load data, choose columns, then plot.");
+  const [status, setStatus] = useState(
+    "Pick a site, choose sensors in the tree, configure source/rules below, then Run FDD & refresh chart.",
+  );
   const [modelPoints, setModelPoints] = useState<ModelExportResponse["points"]>([]);
   const [modelEquipment, setModelEquipment] = useState<ModelExportResponse["equipment"]>([]);
   const [selectedExternalIds, setSelectedExternalIds] = useState<string[]>([]);
@@ -152,18 +184,31 @@ export function PlotsPage() {
   const [startTs, setStartTs] = useState("");
   const [endTs, setEndTs] = useState("");
   const [boundsStatus, setBoundsStatus] = useState("");
-  const [runOutput, setRunOutput] = useState("Use this panel to run/backfill FDD faults over a site/source/time window.");
+  const [runOutput, setRunOutput] = useState(
+    "After a successful run, fault totals and column names appear here. For reopenable handoffs, use the bridge POST /plots/share (same JSON as POST /plots/fdd-frame).",
+  );
   const [selectedRuleFiles, setSelectedRuleFiles] = useState<string[]>([]);
-  /** Default true so mixed rule packs (VAV + AHU) do not 400 when a site lacks zone points. */
   const [skipMissingRules, setSkipMissingRules] = useState(() => initialPlots.skipMissingRules !== false);
   const { data: rulesData, isLoading: rulesLoading, error: rulesListError, refresh: refreshRulesList } = useRulesList();
 
   const toggleRuleFileForBackfill = useCallback((name: string) => {
     setSelectedRuleFiles((prev) => (prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name]));
   }, []);
-  /** One-shot FDD overlay from `?fdd=1` / `?overlay=1` after rules list is ready (not used with `?share=`). */
   const urlAutoFddPending = useRef(Boolean(initialPlots.autoFddOverlay) && !shareFromUrl);
   const shareHydrated = useRef(false);
+
+  const plotColumns = useMemo(() => {
+    if (!frame?.columns?.length) return [];
+    const overlay = runSource === "all" ? "all" : runSource;
+    const fromTree = resolveColumnsFromExternalIds(frame.columns, selectedExternalIds, overlay);
+    const faultCols = frame.columns.filter((c) => isFaultColumn(c));
+    const metrics = fromTree.filter((c) => !isFaultColumn(c));
+    if (metrics.length === 0) {
+      const fallback = frame.columns.filter((c) => c !== "timestamp" && !isFaultColumn(c));
+      return [...fallback.slice(0, 8), ...faultCols];
+    }
+    return [...metrics, ...faultCols];
+  }, [frame, selectedExternalIds, runSource]);
 
   useEffect(() => {
     if (!siteId && siteContext.selectedSiteId) {
@@ -216,6 +261,104 @@ export function PlotsPage() {
     setSelectedRuleFiles((prev) => prev.filter((f) => files.includes(f)));
   }, [rulesData?.files]);
 
+  const loadAndPlotNoFdd = useCallback(async () => {
+    try {
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+      if (!effectiveSiteId) {
+        setStatus("Set or select a site first.");
+        return;
+      }
+      let url: string;
+      if (runSource === "all") {
+        const p = new URLSearchParams({
+          site_id: effectiveSiteId,
+          sources: "csv,weather,onboard,bacnet",
+          limit: "5000",
+          join_how: joinHow,
+          include_readiness: "true",
+        });
+        if (startTs.trim()) p.set("start_ts", startTs.trim());
+        if (endTs.trim()) p.set("end_ts", endTs.trim());
+        url = `/plots/site-frame?${p.toString()}`;
+      } else {
+        const p = new URLSearchParams({
+          site_id: effectiveSiteId,
+          source: runSource,
+          limit: "5000",
+          include_readiness: "true",
+        });
+        url = `/plots/frame?${p.toString()}`;
+      }
+      const out = await desktopFetch<PlotFrameResponse>(url);
+      setFrame(out);
+      const r = out.readiness;
+      if (r) {
+        const extra = r.recommend_clean_metrics
+          ? " Run POST /timeseries/clean-metrics (preview then commit) so Plotly and FDD see plain floats."
+          : "";
+        setStatus(`${r.summary} Rows: ${out.rows.length}. readiness.ok=${String(r.ok)}.${extra}`);
+      } else {
+        setStatus(`Loaded ${out.rows.length} rows (no readiness in response — update bridge).`);
+      }
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  }, [siteId, siteContext.selectedSiteId, runSource, joinHow, startTs, endTs]);
+
+  const refreshFddChart = useCallback(async (): Promise<PlotFrameResponse | null> => {
+    try {
+      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
+      if (!effectiveSiteId) {
+        setStatus("Set or select a site first.");
+        return null;
+      }
+      const rulesPath = rulesData?.rules_dir || "";
+      if (!rulesPath) {
+        setStatus("Rules directory is not ready yet (FDD Rule Setup).");
+        return null;
+      }
+      const sources = runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : [runSource];
+      const out = await desktopFetch<PlotFrameResponse>("/plots/fdd-frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: effectiveSiteId,
+          rules_path: rulesPath,
+          sources,
+          limit: 5000,
+          join_how: runSource === "all" ? joinHow : "outer",
+          start_ts: startTs || null,
+          end_ts: endTs || null,
+          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : null,
+          skip_missing_columns: skipMissingRules,
+        }),
+      });
+      setFrame(out);
+      const overlaySource = runSource === "all" ? "all" : runSource;
+      const ft =
+        out.fault_totals && Object.keys(out.fault_totals).length > 0
+          ? ` Fault totals: ${JSON.stringify(out.fault_totals)}`
+          : "";
+      setStatus(
+        `Loaded ${out.rows.length} rows with FDD (${overlaySource}).${ft} Chart uses the points tree (and all fault columns).`,
+      );
+      return out;
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+      return null;
+    }
+  }, [
+    siteId,
+    siteContext.selectedSiteId,
+    runSource,
+    joinHow,
+    rulesData?.rules_dir,
+    selectedRuleFiles,
+    skipMissingRules,
+    startTs,
+    endTs,
+  ]);
+
   useEffect(() => {
     if (!shareFromUrl || shareHydrated.current) return;
     shareHydrated.current = true;
@@ -261,15 +404,10 @@ export function PlotsPage() {
         if (cancelled) return;
         setFrame(out);
         const overlaySource = srcs.length > 1 ? "all" : srcs[0];
-        const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, overlaySource);
-        const faultCols = out.columns.filter((c) => isFaultColumn(c));
-        const defaultYs = [...fromTree.filter((c) => !isFaultColumn(c)).slice(0, 4), ...faultCols.slice(0, 3)];
-        const fallback = [...out.columns.filter((c) => c !== "timestamp" && !isFaultColumn(c)).slice(0, 4), ...faultCols];
-        setYColumns(defaultYs.length > 0 ? defaultYs : fallback);
-        setSource(srcs.length > 1 ? "all" : srcs[0]);
-        const ft = out.fault_totals && Object.keys(out.fault_totals).length > 0
-          ? ` Fault totals: ${JSON.stringify(out.fault_totals)}`
-          : "";
+        const ft =
+          out.fault_totals && Object.keys(out.fault_totals).length > 0
+            ? ` Fault totals: ${JSON.stringify(out.fault_totals)}`
+            : "";
         setStatus(`Restored share ${shareFromUrl}: ${out.rows.length} rows with FDD (${overlaySource}).${ft}`);
         if (typeof window !== "undefined") {
           const u = new URL(window.location.href);
@@ -289,167 +427,21 @@ export function PlotsPage() {
     };
   }, [shareFromUrl]);
 
-  function resolveColumnsFromExternalIds(columns: string[], externalIds: string[], currentSource: string): string[] {
-    const set = new Set<string>();
-    const baseName = (col: string) => {
-      const idx = col.lastIndexOf("_");
-      return idx > 0 ? col.slice(0, idx) : col;
-    };
-    for (const ext of externalIds) {
-      if (currentSource === "all") {
-        for (const col of columns) {
-          if (col === ext || baseName(col) === ext) {
-            set.add(col);
-          }
-        }
-      } else if (columns.includes(ext)) {
-        set.add(ext);
-      }
-    }
-    return Array.from(set);
-  }
-
-  async function savePlotFddHandoff() {
-    const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-    const rulesPath = rulesData?.rules_dir || "";
-    if (!effectiveSiteId || !rulesPath) {
-      setStatus("Select a site and wait for the rules directory (FDD Rule Setup) before saving a share.");
-      return;
-    }
-    const sources = runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : [runSource];
-    try {
-      const out = await desktopFetch<PlotShareCreateResponse>("/plots/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          site_id: effectiveSiteId,
-          rules_path: rulesPath,
-          sources,
-          limit: 5000,
-          join_how: runSource === "all" ? joinHow : "outer",
-          start_ts: startTs || null,
-          end_ts: endTs || null,
-          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : null,
-          skip_missing_columns: skipMissingRules,
-        }),
-      });
-      const url = out.plots_open_url || "";
-      setStatus(
-        url
-          ? `Saved plot+FDD handoff (paste into Open-FDD Claw or chat). ${url}`
-          : `Share created (share_id=${String(out.share_id || "")}).`,
-      );
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  async function loadData(sourceOverride?: string) {
-    try {
-      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-      if (!effectiveSiteId) {
-        setStatus("Set or select a site first.");
-        return;
-      }
-      const sourceToLoad = sourceOverride ?? source;
-      const out = sourceToLoad === "all"
-        ? await desktopFetch<PlotFrameResponse>(
-            `/plots/site-frame?site_id=${encodeURIComponent(effectiveSiteId)}&sources=${encodeURIComponent(
-              "csv,weather,onboard,bacnet",
-            )}&limit=5000`,
-          )
-        : await desktopFetch<PlotFrameResponse>(
-            `/plots/frame?site_id=${encodeURIComponent(effectiveSiteId)}&source=${encodeURIComponent(sourceToLoad)}&limit=5000`,
-          );
-      setFrame(out);
-      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, sourceToLoad);
-      const defaults = out.columns.filter((c) => c !== "timestamp").slice(0, 6);
-      setYColumns(fromTree.length > 0 ? fromTree : defaults);
-      setStatus(`Loaded ${out.rows.length} rows from ${sourceToLoad === "all" ? "all sources (joined)" : sourceToLoad}.`);
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  const loadDataWithFddOverlay = useCallback(async (): Promise<boolean> => {
-    try {
-      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-      if (!effectiveSiteId) {
-        setStatus("Set or select a site first.");
-        return false;
-      }
-      const rulesPath = rulesData?.rules_dir || "";
-      if (!rulesPath) {
-        setStatus("Rules directory is not ready yet (FDD Rule Setup).");
-        return false;
-      }
-      const sources =
-        runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : [runSource];
-      const out = await desktopFetch<PlotFrameResponse>("/plots/fdd-frame", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          site_id: effectiveSiteId,
-          rules_path: rulesPath,
-          sources,
-          limit: 5000,
-          join_how: runSource === "all" ? joinHow : "outer",
-          start_ts: startTs || null,
-          end_ts: endTs || null,
-          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : null,
-          skip_missing_columns: skipMissingRules,
-        }),
-      });
-      setFrame(out);
-      const overlaySource = runSource === "all" ? "all" : runSource;
-      const fromTree = resolveColumnsFromExternalIds(out.columns, selectedExternalIds, overlaySource);
-      const faultCols = out.columns.filter((c) => isFaultColumn(c));
-      const defaultYs = [...fromTree.filter((c) => !isFaultColumn(c)).slice(0, 4), ...faultCols.slice(0, 3)];
-      const fallback = [...out.columns.filter((c) => c !== "timestamp" && !isFaultColumn(c)).slice(0, 4), ...faultCols];
-      setYColumns(defaultYs.length > 0 ? defaultYs : fallback);
-      const ft = out.fault_totals && Object.keys(out.fault_totals).length > 0
-        ? ` Fault totals: ${JSON.stringify(out.fault_totals)}`
-        : "";
-      setStatus(
-        `Loaded ${out.rows.length} rows with FDD columns (${overlaySource}).${ft} Pick Y columns to plot sensors and faults together.`,
-      );
-      if (runSource !== source) {
-        setSource(runSource === "all" ? "all" : runSource);
-      }
-      return true;
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-      return false;
-    }
-  }, [
-    siteId,
-    siteContext.selectedSiteId,
-    runSource,
-    joinHow,
-    rulesData?.rules_dir,
-    selectedRuleFiles,
-    skipMissingRules,
-    startTs,
-    endTs,
-    selectedExternalIds,
-    source,
-  ]);
-
   useEffect(() => {
     if (!urlAutoFddPending.current) return;
     if (rulesLoading || !rulesData?.rules_dir) return;
     const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
     if (!effectiveSiteId) {
       setStatus(
-        "This URL requests an FDD overlay (?fdd=1) but no site was selected. Add ?site_id=<uuid> or pick a site, then use Load + FDD overlay.",
+        "This URL requests an FDD chart (?fdd=1) but no site was selected. Add ?site_id=<uuid> or pick a site, then use Run FDD & refresh chart below.",
       );
       urlAutoFddPending.current = false;
       return;
     }
     urlAutoFddPending.current = false;
     void (async () => {
-      const ok = await loadDataWithFddOverlay();
-      if (ok && typeof window !== "undefined") {
+      const out = await refreshFddChart();
+      if (out && typeof window !== "undefined") {
         const u = new URL(window.location.href);
         if (u.searchParams.get("fdd") === "1" || u.searchParams.get("overlay") === "1") {
           u.searchParams.delete("fdd");
@@ -459,76 +451,26 @@ export function PlotsPage() {
         }
       }
     })();
-  }, [
-    rulesLoading,
-    rulesData?.rules_dir,
-    siteId,
-    siteContext.selectedSiteId,
-    loadDataWithFddOverlay,
-  ]);
+  }, [rulesLoading, rulesData?.rules_dir, siteId, siteContext.selectedSiteId, refreshFddChart]);
 
-  async function runRulesWindow() {
-    try {
-      const effectiveSiteId = siteId || siteContext.selectedSiteId || "";
-      if (!effectiveSiteId) {
-        setRunOutput("Select a site first.");
-        return;
-      }
-      const rulesPath = rulesData?.rules_dir || "";
-      if (!rulesPath) {
-        setRunOutput("Rules directory is not ready yet. Load YAML files in FDD Rule Setup and refresh.");
-        return;
-      }
-      const out = await desktopFetch<{
-        input_rows: number;
-        output_rows: number;
-        columns: string[];
-        fault_totals: Record<string, number>;
-        preview: string;
-        rule_files_filter?: string[] | null;
-        skip_missing_columns?: boolean;
-      }>("/rules/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          site_id: effectiveSiteId,
-          source: runSource === "all" ? "csv" : runSource,
-          sources: runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : undefined,
-          join_how: runSource === "all" ? joinHow : undefined,
-          rules_path: rulesPath,
-          chunk_rows: 0,
-          start_ts: startTs || null,
-          end_ts: endTs || null,
-          rule_files: selectedRuleFiles.length > 0 ? selectedRuleFiles : undefined,
-          skip_missing_columns: skipMissingRules,
-        }),
-      });
-      const filterLine = out.rule_files_filter?.length
-        ? `Rule files: ${out.rule_files_filter.join(", ")}\n`
-        : "Rule files: (all YAML in pack)\n";
-      const skipLine = `Skip missing columns: ${out.skip_missing_columns ? "yes" : "no"}\n`;
-      setRunOutput(
-        `${filterLine}${skipLine}\n`
-          + `Input rows: ${out.input_rows}\nOutput rows: ${out.output_rows}\n`
-          + `Columns: ${out.columns.join(", ")}\n`
-          + `Fault totals: ${JSON.stringify(out.fault_totals, null, 2)}\n\nPreview:\n${out.preview}`,
-      );
-      if (runSource !== source) {
-        setSource(runSource);
-      }
-      await loadData(runSource);
-    } catch (e) {
-      setRunOutput(e instanceof Error ? e.message : String(e));
+  async function runFddAndRefreshChart() {
+    const out = await refreshFddChart();
+    if (!out) {
+      setRunOutput("Chart refresh failed — see the Plots status message above for the bridge error.");
+      return;
     }
+    setRunOutput(
+      `Rows: ${out.rows.length}\nColumns: ${out.columns.join(", ")}\n\nFault totals:\n${JSON.stringify(out.fault_totals ?? {}, null, 2)}`,
+    );
   }
 
   const { traces, secondaryAxis } = useMemo(() => {
-    if (!frame || frame.rows.length === 0 || yColumns.length === 0) {
+    if (!frame || frame.rows.length === 0 || plotColumns.length === 0) {
       return { traces: [] as Record<string, unknown>[], secondaryAxis: false };
     }
     const mode = plotMode === "both" ? "lines+markers" : plotMode === "points" ? "markers" : "lines";
-    const hasFaultAxis = yColumns.some((c) => isFaultColumn(c));
-    const built = yColumns.map((col, idx) => {
+    const hasFaultAxis = plotColumns.some((c) => isFaultColumn(c));
+    const built = plotColumns.map((col, idx) => {
       const faultCol = isFaultColumn(col);
       const x: Array<string | number> = [];
       const y: number[] = [];
@@ -564,18 +506,57 @@ export function PlotsPage() {
       };
     });
     return { traces: built, secondaryAxis: hasFaultAxis };
-  }, [frame, yColumns, plotMode]);
+  }, [frame, plotColumns, plotMode]);
+
+  const plotDebugJson = useMemo(() => {
+    if (!frame) {
+      return "";
+    }
+    const sampleN = Math.min(8, frame.rows.length);
+    const sampleRows = frame.rows.slice(0, sampleN);
+    const tracePreview = traces.map((t) => {
+      const x = t.x;
+      const y = t.y;
+      const xa = Array.isArray(x) ? x : [];
+      const ya = Array.isArray(y) ? y : [];
+      return {
+        type: t.type,
+        mode: t.mode,
+        name: t.name,
+        yaxis: t.yaxis,
+        x_len: xa.length,
+        y_len: ya.length,
+        x_head: xa.slice(0, 5),
+        y_head: ya.slice(0, 5),
+      };
+    });
+    return JSON.stringify(
+      {
+        note:
+          "API frame from /plots/frame, /plots/site-frame, or POST /plots/fdd-frame. Traces are built in the browser for Plotly (numeric coercion / fault axis). To normalize messy string metrics before plotting or FDD, use bridge POST /timeseries/clean-metrics (preview then commit).",
+        columns: frame.columns,
+        row_count: frame.rows.length,
+        sample_rows: sampleRows,
+        readiness: frame.readiness ?? null,
+        fault_totals: frame.fault_totals ?? null,
+        sources: frame.sources ?? null,
+        plot_columns_used: plotColumns,
+        plotly_traces_preview: tracePreview,
+      },
+      null,
+      2,
+    );
+  }, [frame, traces, plotColumns]);
 
   return (
     <div className="stack-page">
       <div className="card">
         <h2 className="title">Plots</h2>
         <p className="muted">
-          Plotly trend view for Feather-backed site data (single source or joined multi-source).           Columns whose names end with <code>_fault</code> or <code>_flag</code> (same convention as the bridge fault totals) render on a right-hand 0/1 axis so they align with sensor trends.
+          Plotly trends from Feather data. Fault columns (<code>_fault</code> / <code>_flag</code>) use a right-hand 0/1 axis when present.
         </p>
         <p className="muted">
-          Destructive storage and model cleanup lives under{" "}
-          <strong>Data &amp; model maintenance</strong> in the sidebar.
+          Destructive storage and model cleanup lives under <strong>Data &amp; model maintenance</strong> in the sidebar.
         </p>
         <div className="grid-two">
           <select value={siteId || siteContext.selectedSiteId || ""} onChange={(e) => setSiteId(e.target.value)}>
@@ -586,67 +567,63 @@ export function PlotsPage() {
               </option>
             ))}
           </select>
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="all">All sources (joined)</option>
-            <option value="csv">CSV</option>
-            <option value="weather">Weather</option>
-            <option value="onboard">Onboard</option>
-            <option value="bacnet">BACnet</option>
-          </select>
-        </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button type="button" onClick={() => void loadData()}>Load Site Data (Feather)</button>
-          <button type="button" className="secondary-btn" onClick={() => void loadDataWithFddOverlay()}>
-            Load + FDD overlay
-          </button>
-          <button type="button" className="secondary-btn" onClick={() => void savePlotFddHandoff()}>
-            Save plot+FDD handoff (share link)
-          </button>
-          <span className="muted" style={{ fontSize: 12 }}>
-            Overlay uses the <strong>Run / backfill</strong> source/join, time window, rule file filter, and skip-missing settings below.
-          </span>
-          <select value={plotMode} onChange={(e) => setPlotMode(e.target.value as PlotMode)} style={{ width: 160 }}>
+          <select value={plotMode} onChange={(e) => setPlotMode(e.target.value as PlotMode)}>
             <option value="lines">Lines</option>
             <option value="points">Points</option>
             <option value="both">Both</option>
           </select>
         </div>
-        {frame && frame.columns.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <label>Y columns (multi-select)</label>
-            <select
-              multiple
-              value={yColumns}
-              onChange={(e) => setYColumns(Array.from(e.target.selectedOptions).map((opt) => opt.value))}
-              style={{ minHeight: 120 }}
-            >
-              {frame.columns.filter((c) => c !== "timestamp").map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" onClick={() => void loadAndPlotNoFdd()}>
+            Load &amp; plot (no FDD)
+          </button>
+          <span className="muted" style={{ fontSize: 12 }}>
+            Same source/join/window as the panel below. Response includes a typed <code>readiness</code> object when{" "}
+            <code>include_readiness=true</code> on the bridge.
+          </span>
+        </div>
         <div style={{ marginTop: 10 }}>
           <PointsTreePanel
             points={modelPoints}
             equipment={modelEquipment}
             selectedSiteId={siteId || siteContext.selectedSiteId || ""}
             selectedExternalIds={selectedExternalIds}
-            onSelectedExternalIdsChange={(ids) => {
-              setSelectedExternalIds(ids);
-              if (frame) {
-                const matched = resolveColumnsFromExternalIds(frame.columns, ids, source);
-                if (matched.length > 0) setYColumns(matched);
-              }
-            }}
-            title="Points tree (quick pick)"
+            onSelectedExternalIdsChange={setSelectedExternalIds}
+            title="Points tree"
             description={
-              "Pick sensors by equipment to set plotted Y columns. "
-              + "Unassigned means the point has no equipment_id or the UUID is not in the model—assign equipment in Data Model BRICK or import so equipment[].id matches. "
-              + "Second line shows brick_type; rules resolve columns via TTL maps (ofdd:mapsToRuleInput) and these labels. "
-              + "If joined backfill fails with a missing name, use Data Model Testing → lineage or align external_id with the Feather column (see _csv suffixes when multiple drivers load)."
+              "Check sensors to plot (matched to frame columns by external_id). Leave empty to auto-pick the first metrics plus all fault columns after a run. "
+              + "Rules bind via BRICK / TTL / model maps; joined drivers may suffix columns (e.g. _csv)."
             }
           />
+          <details style={{ marginTop: 12 }} className="plots-raw-debug">
+            <summary className="muted" style={{ cursor: "pointer", fontSize: 13 }}>
+              Raw plot data (JSON) — frame + Plotly trace preview
+            </summary>
+            <p className="muted" style={{ marginTop: 8, marginBottom: 6, fontSize: 12 }}>
+              Shown after <strong>Load &amp; plot</strong> or <strong>Run FDD &amp; refresh chart</strong>. First rows
+              and per-trace samples only; full frames stay on the bridge. Clean string metrics via{" "}
+              <code>POST /timeseries/clean-metrics</code> (same site/source) if readiness warns.
+            </p>
+            <textarea
+              readOnly
+              value={plotDebugJson || "(Run a chart load above — no frame loaded yet.)"}
+              spellCheck={false}
+              style={{
+                marginTop: 4,
+                width: "100%",
+                minHeight: 220,
+                maxHeight: "42vh",
+                boxSizing: "border-box",
+                overflow: "auto",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                fontSize: 12,
+                padding: 10,
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                background: "var(--input-bg)",
+              }}
+            />
+          </details>
         </div>
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 70 }} />
       </div>
@@ -655,25 +632,38 @@ export function PlotsPage() {
         {traces.length > 0 ? (
           <PlotlyCanvas traces={traces} title="Open-FDD Trends" secondaryAxis={secondaryAxis} />
         ) : (
-          <div style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-            Load data and select columns to render Plotly charts.
+          <div
+            style={{
+              minHeight: 360,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--muted)",
+              textAlign: "center",
+              padding: 16,
+            }}
+          >
+            Configure source and rules in the panel below, pick sensors in the tree (optional), then use{" "}
+            <strong>Run FDD &amp; refresh chart</strong>.
           </div>
         )}
       </div>
 
       <div className="card">
-        <h3 className="title" style={{ marginBottom: 6 }}>Run / backfill faults</h3>
-        <p className="muted">Run FDD rules on a selected source and optional time window for historical backfill.</p>
-        <p className="muted">Chunk sizing is automatic and adapts to available local hardware resources.</p>
+        <h3 className="title" style={{ marginBottom: 6 }}>Run FDD &amp; chart</h3>
         <p className="muted">
-          Pick specific rule YAML files to test one fault at a time, or leave the list empty to run the whole pack.
-          Use <strong>All sources (joined)</strong> when a rule needs columns from more than one driver. Enable skip-missing
-          to run every selected rule that can bind to your frame and quietly skip the rest (good for wide packs while the model is incomplete).
+          Use <strong>Load &amp; plot (no FDD)</strong> above to preview raw Feather columns first. This section runs rules and refreshes the chart (same pipeline as bridge{" "}
+          <code>POST /plots/fdd-frame</code>). For automation-only checks without rows, call{" "}
+          <code>POST /timeseries/plot-readiness</code> (Pydantic JSON).
         </p>
         <p className="muted">
-          <strong>Auto-populated from loaded dataset bounds:</strong> when a single timeseries source is selected (not joined{" "}
-          <strong>All sources</strong>), start and end timestamps below are filled from the Feather time range for that source after you pick a site
-          (change them before backfill if you need a narrower window).
+          Pick specific rule YAML files to narrow a test, or leave all unchecked to run the full pack. Grafana-style
+          string numerics are coerced in bounds/flatline checks; values with units still embedded as text should use{" "}
+          <code>POST /timeseries/clean-metrics</code> first.
+        </p>
+        <p className="muted">
+          <strong>Auto-populated bounds:</strong> when a single source is selected (not joined <strong>All sources</strong>
+          ), start/end timestamps are filled from Feather for that source after you pick a site.
         </p>
         {boundsStatus ? <p className="muted">{boundsStatus}</p> : null}
         <div className="grid-two">
@@ -699,8 +689,8 @@ export function PlotsPage() {
             </div>
           ) : (
             <div>
-              <label>Rules directory</label>
-              <input readOnly value="From FDD Rule Setup (see file list below)" />
+              <label>Rules</label>
+              <input readOnly value="Loaded from FDD Rule Setup" />
             </div>
           )}
           <div>
@@ -716,7 +706,7 @@ export function PlotsPage() {
           <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
             <h3 className="title" style={{ marginBottom: 6 }}>FDD rule files (YAML)</h3>
             <p className="muted">
-              Same managed pack as <strong>FDD Rule Setup</strong>. Check rules to include in this backfill only; leave all unchecked to run the whole pack.
+              Same managed pack as <strong>FDD Rule Setup</strong>. Checked names limit the run; empty = all files.
             </p>
             {rulesListError ? <p style={{ color: "var(--danger)", marginTop: 6 }}>{rulesListError}</p> : null}
             <p className="muted" style={{ marginTop: 8 }}>
@@ -784,7 +774,9 @@ export function PlotsPage() {
             </p>
           </div>
         ) : (
-          <p className="muted" style={{ marginTop: 10 }}>No rule files in the managed directory yet — add some under FDD Rule Setup.</p>
+          <p className="muted" style={{ marginTop: 10 }}>
+            No rule files in the managed directory yet — add some under FDD Rule Setup.
+          </p>
         )}
         <label style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10 }}>
           <input
@@ -796,7 +788,9 @@ export function PlotsPage() {
           Skip rules whose sensors are missing from this source/window (log warning, no 400)
         </label>
         <div style={{ marginTop: 10 }}>
-          <button type="button" onClick={() => void runRulesWindow()}>Run FDD backfill</button>
+          <button type="button" onClick={() => void runFddAndRefreshChart()}>
+            Run FDD &amp; refresh chart
+          </button>
         </div>
         <textarea readOnly value={runOutput} style={{ marginTop: 10, minHeight: 180 }} />
       </div>

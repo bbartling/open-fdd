@@ -30,6 +30,7 @@ Do this **after** the Open-FDD bridge + MCP + UI are up ([§1](#1-run-open-fdd-o
 
 ### 0b) ChatGPT / Codex subscription auth (same OAuth path as OpenClaw)
 
+- If the browser shows a message about **enabling device code for Codex** or **`codex login --device-auth`**, turn on **device code authorization for Codex** in **ChatGPT settings** (personal) or ask a **workspace admin** (Business / Enterprise). See **[OpenAI Codex authentication](https://developers.openai.com/codex/auth/)** — Open-FDD’s **Open-FDD Claw → Start sign-in** uses the same device flow as the Codex CLI.
 - Run **`openclaw models auth login --provider openai-codex`** and complete the browser/device flow.
 - Optional: merge an **`auth.profiles`** / **`auth.order`** block for **`openai-codex:default`** into `openclaw.json` so subscription models are explicit (see **[Open FDD Claw architecture — reference fragment](../docs/open-fdd-claw-architecture.md)**).
 - Default agent model can stay on an **`openai-codex/<model>`** ref per [OpenClaw OpenAI provider docs](https://docs.openclaw.ai/providers/openai).
@@ -130,6 +131,21 @@ Requirements: **Python 3.10+**, **Node.js 20+ for the desktop UI** (**Node 22.14
 
 **Practical order (both modes):** install deps once → **`start-local`** → wait for **`/health` OK** → ingest or apply site profiles → open **Plots** (or **`GET /assistant/readiness`** for copy-paste links) → run FDD overlay or save a **`POST /plots/share`** handoff for someone else to open **`/plots?share=…`**.
 
+### 1c) Agent-friendly pipeline: ingest → clean → BRICK → plots → FDD
+
+Typical Grafana CSVs keep **units in cells** (`69.5 °F`, `17.8 psi`). Open-FDD stores those as strings until you coerce them.
+
+| Step | Bridge (or MCP tool) | Notes |
+|------|------------------------|--------|
+| 1. Ingest | **`POST /ingest/csv`** or **`POST /ingest/csv/upload`** | UTF-16 tab + `ts` column supported. |
+| 2. Preview clean | **`POST /timeseries/clean-metrics`** with **`commit: false`** | Returns **`suggested_columns`**, **`preview_before`**, **`preview_after`**. |
+| 3. Commit clean | Same body with **`commit: true`** | **Purges** Feather for that `site_id` + `source`, writes one cleaned frame. Destructive. |
+| 4. BRICK / model | **`GET /model/export`**, **`POST /model/import`**, **`POST /model/ttl/sync`**, or **`POST /assistant/apply-site-profiles`** | Map `external_id` to BRICK types for rule column resolution. |
+| 5. Rules (shared with UI) | **`GET /rules`**, **`GET /rules/export-json`**, **`PUT /rules/{file}.yaml`**, **`POST /rules`** | Same managed pack as **FDD Rule Setup** in the desktop UI; export includes raw YAML plus parsed JSON per file. |
+| 6. Plots + FDD | **`POST /plots/fdd-frame`**, **`POST /rules/run`**, **`POST /plots/share`** | Bounds / flatline rules expect **numeric** sensor columns. |
+
+MCP (action tools): **`bridge_timeseries_clean_metrics`**, **`bridge_rules_list`**, **`bridge_rules_export_json`**, **`bridge_rules_put`** (see MCP `/manifest`).
+
 Agents should **not** assume they started the UI until **`/health`** succeeds; **`ERR_CONNECTION_REFUSED`** means the gateway is down or the wrong URL/port.
 
 ### Windows (recommended here)
@@ -211,6 +227,8 @@ OpenClaw’s **gateway** listens on **18789** (etc.); it does **not** run Open-F
 | Bridge API + `/docs` | `http://127.0.0.1:8765` |
 | MCP RAG | `http://127.0.0.1:8090` |
 
+**Readiness / plot deep links:** `GET /assistant/readiness` uses **`OFDD_UI_PUBLIC_BASE`** (both `start-local` scripts default it to the Vite URL above) so links match the UI. If you omit it, the bridge falls back to **`OFDD_UI_PORT`** (see gateway CORS defaults).
+
 From **Docker client to Windows host:** replace host with `host.docker.internal` (see §2).
 
 Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/logs/gateway.log`**, **`mcp-rag.log`**, **`desktop-ui.log`**. On Windows, **`start-local.ps1`** opens separate windows — watch those terminals (no repo-root `.openfdd-*.log` files).
@@ -225,7 +243,7 @@ Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/
 ```text
 You are helping me manually smoke-test Open-FDD on the human's machine (prefer Windows PowerShell + scripts/start-local.ps1, or bash + scripts/start-local.sh on macOS/Linux/WSL).
 
-If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under contrib/openclaw-skills).
+If the human uses OpenClaw, read section **0) Phase 0** first (gateway, `openclaw models auth login --provider openai-codex`, optional `/v1/chat/completions` enablement, skills under `contrib/openclaw-skills/`, workspace bootstrap Markdown under `contrib/openclaw-workspace/`).
 
 Read scripts/OPENCLAW_RUNBOOK.md section **1) Run Open-FDD on the host** for install hints (**Node 20+ for Open-FDD; Node 22.14+ if also installing OpenClaw CLI**, firewall). OpenClaw-in-Docker is optional and only talks HTTP to the host per section **2)** — do not install Open-FDD inside an OpenClaw container unless the human explicitly asks.
 

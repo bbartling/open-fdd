@@ -37,27 +37,36 @@ export function OpenClawChatPage() {
       <div className="card">
         <h2 className="title">Open-FDD Claw</h2>
         <p className="muted">
-          Chat with your OpenClaw agent for data modeling, FDD, ingest, and SPARQL — the same Codex-backed setup as the
-          OpenClaw desktop. Open-FDD bridge stays on <code className="inline-code">8765</code>; OpenClaw gateway is usually{" "}
-          <code className="inline-code">18789</code>.
+          Same stack as OpenClaw desktop: <strong>Codex / ChatGPT</strong> in the embedded UI below, plus Open-FDD bridge
+          on <code className="inline-code">8765</code> and gateway usually on <code className="inline-code">18789</code>.
+          Use <strong>ChatGPT sign-in</strong> below if the chat asks you to log in; otherwise jump straight to the chat.
         </p>
         <div className="openclaw-actions">
           <a href={openClawUiUrl} target="_blank" rel="noreferrer" className="link-btn">
-            Open chat in new tab
+            Open Claw chat (new tab)
+          </a>
+          <a href="#openfdd-codex-auth" className="link-btn">
+            ChatGPT sign-in
           </a>
         </div>
         <p className="muted" style={{ marginTop: 10 }}>
-          Optional: set <code className="inline-code">VITE_OPENFDDCLAW_UI_URL</code> (or <code className="inline-code">VITE_OPENCLAW_UI_URL</code>)
-          if your OpenClaw UI is not at the default. Current: <code className="inline-code">{openClawUiUrl}</code>
+          Optional: copy <code>contrib/openclaw-workspace/</code> into your OpenClaw workspace for{" "}
+          <code>AGENTS.md</code>, <code>SOUL.md</code>, <code>MEMORY.md</code>, and tool hints.
+        </p>
+        <p className="muted" style={{ marginTop: 6 }}>
+          Optional: set <code className="inline-code">VITE_OPENFDDCLAW_UI_URL</code> (or{" "}
+          <code className="inline-code">VITE_OPENCLAW_UI_URL</code>) if your OpenClaw UI is not at the default. Current:{" "}
+          <code className="inline-code">{openClawUiUrl}</code>
         </p>
       </div>
+
+      <OpenFddCodexSignIn />
 
       <div className="card">
         <h3 className="title" style={{ marginBottom: 8 }}>Local bridge handoff (stand-in for OpenClaw)</h3>
         <p className="muted">
-          Until the remote agent is wired end-to-end, pull a **readiness snippet** from the Open-FDD bridge: sites, deep links to Plots / CSV import / data model,
-          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no). Use **Plots with FDD overlay** links to land on trends
-          with faults already merged, or **POST /plots/share** from Plots to mint a reopenable <code>?share=</code> handoff for the team.
+          Until the remote agent is wired end-to-end, pull a <strong>readiness snippet</strong> from the Open-FDD bridge: sites, deep links to Plots / CSV import / data model,
+          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no). Use <strong>Plots</strong> links with <code>?fdd=1</code> to open trends and auto-run <strong>Run FDD &amp; refresh chart</strong>, or <strong>POST /plots/share</strong> to mint a reopenable <code>?share=</code> handoff for the team.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           <button type="button" className="secondary-btn" onClick={() => void fetchLocalHandoff()}>
@@ -88,8 +97,6 @@ export function OpenClawChatPage() {
           />
         ) : null}
       </div>
-
-      <OpenFddCodexSignIn />
 
       <div className="card openclaw-frame-card">
         <iframe

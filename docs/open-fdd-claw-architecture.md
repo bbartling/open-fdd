@@ -42,7 +42,8 @@ flowchart LR
 | **Gateway + agent loop** | Single place for “operator asks → plan → call bridge/MCP → summarize”. |
 | **`mcp.servers` + MCP adapter** | Stock **8090** service is **REST** `/tools/*`; add a thin MCP shim to use `mcp.servers` (`openfdd__*` tool names), or call REST via fetch/prompts. |
 | **`openclaw mcp serve`** | Optional: IDE MCP clients talk to OpenClaw, which still reaches the host bridge. |
-| **Workspace skills** (`SKILL.md`) | Repo ships skills under [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md); copy into `~/.openclaw/workspace/skills/`. |
+| **Workspace skills** (`SKILL.md`) | Repo ships skills under [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md) — include **`open-fdd-bootstrap`**, **`open-fdd-clean-metrics`** (preview/commit clean-metrics until plot-readiness is green), modeling/drivers/BACnet packs; copy into `~/.openclaw/workspace/skills/`. |
+| **Bootstrap Markdown** (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) | Repo ships starter copies under [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md); merge into your OpenClaw workspace root so the agent loads Open-FDD API context automatically. |
 | **Live Canvas / A2UI** | Dashboards: fault timelines, equipment trees, structured summaries instead of raw tables in chat. |
 | **Thinking / subagents / `sessions_spawn`** | Heavy jobs: multi-site backfill, large SPARQL, BACnet discovery in isolated sessions. |
 | **Cron + webhooks** | Scheduled ingest, nightly FDD, alerts to Slack/Telegram/WebChat. |
@@ -82,6 +83,8 @@ Human-in-the-loop export → review → validate → import is described in [Dat
 | **Gateway operator HTTP auth** | `OPENCLAW_GATEWAY_TOKEN` (or `gateway.auth.token` in `openclaw.json`). |
 | **Onboard, BACnet DIY, etc.** | Open-FDD bridge env (e.g. `OFDD_ONBOARD_API_KEY`) — **data plane**, not LLM auth. |
 
+**Device-code prerequisite (OpenAI):** ChatGPT may refuse device login until **device code authorization for Codex** is enabled in **ChatGPT security settings** (personal) or allowed by a **workspace admin** (Business / Enterprise). The consent screen can mention `codex login --device-auth` — that is the same device flow as Open-FDD’s **Start sign-in** button. Official steps: [Codex authentication](https://developers.openai.com/codex/auth/).
+
 **Policy:** LLM calls from Python should go to the **OpenClaw Gateway** `POST /v1/chat/completions` with `Authorization: Bearer <gateway token>` and `x-openclaw-model: openai-codex/<model>` so **Codex OAuth stays in OpenClaw**. Do not read `auth-profiles.json` from Open-FDD.
 
 Enable the HTTP surface in OpenClaw (see [OpenClaw OpenAI chat completions](https://docs.openclaw.ai/gateway/openai-http-api)):
@@ -118,6 +121,12 @@ Adjust hostnames for Docker (`host.docker.internal`) vs native loopback.
   },
 }
 ```
+
+### Grounding OpenClaw on Open-FDD (MCP + docs + “same screen” as the human)
+
+- **Best default:** give the agent **MCP RAG** (`8090`) plus **`GET /manifest`** so it discovers tool names, then **`search_docs`** / **`search_api_capabilities`** for Jekyll `docs/` and OpenAPI-shaped capability text. That is how it “knows the API” without you pasting Swagger each time — **after** `python scripts/build_mcp_rag_index.py` has been run so the index exists.
+- **Parity with the React UI:** the agent does **not** see the live Vite DOM. Use **`GET /assistant/readiness`** (same payload as **Open-FDD Claw → Fetch readiness**) so links and copy match what the operator sees; combine with repo skills **`open-fdd-bootstrap`** and **`open-fdd-clean-metrics`** (`contrib/openclaw-skills/`) plus workspace **`AGENTS.md`** / **`TOOLS.md`** for first-run health, doc-offline warnings, and **preview → commit → re-check** Feather cleaning.
+- **OpenClaw `mcp.servers`:** still expects a **protocol** MCP server in strict mode; many setups use **fetch** to `8090` tools instead — see runbook.
 
 **Open-FDD MCP RAG service today** — `open-fdd-mcp-rag` exposes **HTTP REST** under `POST /tools/...` and `GET /manifest` on port **8090** (not Streamable HTTP MCP). OpenClaw’s built-in `mcp.servers` entries expect a **protocol MCP** server. Practical options:
 
@@ -161,4 +170,5 @@ Install: `pip install "open-fdd[desktop]"` (bridge already pulls desktop deps).
 2. OpenClaw: `openclaw onboard` (or your install path); enable chat completions if you need the HTTP client.  
 3. Codex OAuth: `openclaw models auth login --provider openai-codex`.  
 4. Register MCP: merge `mcp.servers.openfdd` into `openclaw.json` (this doc + runbook Phase 0).  
-5. Skills: copy [`contrib/openclaw-skills/`](../contrib/openclaw-skills/) skill folders into `~/.openclaw/workspace/skills/`.
+5. Skills: copy [`contrib/openclaw-skills/`](../contrib/openclaw-skills/) skill folders into `~/.openclaw/workspace/skills/`.  
+6. Workspace bootstrap: copy Markdown from [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, etc.) into your OpenClaw workspace root so the agent loads Open-FDD API context on boot.

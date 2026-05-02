@@ -525,7 +525,7 @@ def test_rules_run_returns_400_for_missing_columns(monkeypatch: pytest.MonkeyPat
         assert res.status_code == 400
         detail = str(res.json().get("detail", ""))
         assert "missing column" in detail.lower()
-        assert "try source='all'" in detail.lower()
+        assert "sources" in detail.lower()
 
 
 def test_rules_run_rejects_rule_files_with_no_valid_yaml_names(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -726,6 +726,220 @@ def test_assistant_readiness_returns_markdown() -> None:
         assert "/plots" in body.get("message_markdown", "")
         assert "plots_quicklinks" in body
         assert "deep_links" in body and "plots_fdd_csv" in body["deep_links"]
+        assert body["deep_links"].get("fdd_rule_setup", "").endswith("/rule-setup")
+
+
+def test_timeseries_plot_readiness_and_plots_frame_include_readiness(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "pr_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "pr site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "pr.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.0 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        pr = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr.status_code == 200, pr.text
+        body = pr.json()
+        assert body.get("recommend_clean_metrics") is True
+        assert body.get("ok") is False
+
+        fr = client.get(
+            f"/plots/frame?site_id={site_id}&source=csv&limit=100&include_readiness=true",
+        )
+        assert fr.status_code == 200
+        fj = fr.json()
+        assert "readiness" in fj
+        assert fj["readiness"]["row_count"] == 2
+
+
+def test_rules_export_json_put_and_parsed_query(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "rules_api_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        empty = client.get("/rules/export-json")
+        assert empty.status_code == 200
+        assert empty.json().get("count") == 0
+
+        yaml_a = "name: demo_rule\nversion: 1\nk: 1\n"
+        assert client.post("/rules", json={"filename": "demo.yaml", "content": yaml_a}).status_code == 200
+
+        snap = client.get("/rules/export-json")
+        assert snap.status_code == 200
+        sj = snap.json()
+        assert sj["count"] == 1
+        assert sj["rules"][0]["filename"] == "demo.yaml"
+        assert sj["rules"][0]["yaml"] == yaml_a
+        assert sj["rules"][0]["parsed"] == {"name": "demo_rule", "version": 1, "k": 1}
+        assert sj["rules"][0]["parse_error"] is None
+
+        parsed = client.get("/rules/demo.yaml", params={"parsed": True})
+        assert parsed.status_code == 200
+        pj = parsed.json()
+        assert pj["parsed"]["name"] == "demo_rule"
+
+        raw = client.get("/rules/demo.yaml")
+        assert raw.status_code == 200
+        assert raw.headers.get("content-type", "").startswith("text/plain")
+
+        yaml_b = "name: demo_rule\nversion: 1\nk: 2\n"
+        put = client.put("/rules/demo.yaml", json={"content": yaml_b})
+        assert put.status_code == 200
+        assert put.json().get("updated") is True
+
+        missing = client.put("/rules/does-not-exist.yaml", json={"content": "x: 1\n"})
+        assert missing.status_code == 404
+
+        again = client.get("/rules/export-json").json()
+        assert again["rules"][0]["yaml"] == yaml_b
+        assert again["rules"][0]["parsed"]["k"] == 2
+
+
+def test_timeseries_clean_metrics_preview_and_commit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "clean site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "units.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.2 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        prev = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": False, "preview_limit": 5},
+        )
+        assert prev.status_code == 200, prev.text
+        body = prev.json()
+        assert body.get("ok") is True
+        assert body.get("committed") is False
+        assert "oat" in (body.get("suggested_columns") or [])
+        assert body.get("preview_after") and isinstance(body["preview_after"][0].get("oat"), (int, float))
+
+        com = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": True, "preview_limit": 5},
+        )
+        assert com.status_code == 200, com.text
+        assert com.json().get("committed") is True
+        assert "storage_path" in com.json()
+
+
+def test_clean_metrics_commit_then_plot_readiness_and_frame_rows_are_numeric(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """After commit, Feather-backed plot-readiness and /plots/frame expose float metrics (Open-FDD Claw path)."""
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_plot_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "clean plot site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "messy.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.2 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        pr0 = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr0.status_code == 200, pr0.text
+        assert pr0.json().get("recommend_clean_metrics") is True
+
+        com = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": True, "preview_limit": 8},
+        )
+        assert com.status_code == 200, com.text
+        cj = com.json()
+        assert cj.get("committed") is True
+        assert "oat" in (cj.get("applied_columns") or [])
+
+        pr1 = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr1.status_code == 200, pr1.text
+        assert pr1.json().get("recommend_clean_metrics") is False
+        oat_col = next(c for c in pr1.json().get("columns", []) if c.get("name") == "oat")
+        assert oat_col.get("plot_line_ready") is True
+
+        fr = client.get(
+            f"/plots/frame?site_id={site_id}&source=csv&limit=10&include_readiness=true",
+        )
+        assert fr.status_code == 200
+        rows = fr.json().get("rows") or []
+        assert len(rows) >= 1
+        v = rows[0].get("oat")
+        assert isinstance(v, (int, float))
+
+
+def test_clean_metrics_explicit_empty_columns_performs_no_coercion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """columns: [] must not fall back to auto-suggested columns (intentional no-op)."""
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_empty_cols"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "empty cols site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "units2.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "oat": ["40.0 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        out = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "columns": [], "commit": False, "preview_limit": 5},
+        )
+        assert out.status_code == 200, out.text
+        body = out.json()
+        assert body.get("applied_columns") == []
+        assert body.get("committed") is False
 
 
 def test_assistant_apply_site_profiles_under_examples(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -948,3 +1162,38 @@ def test_openfdd_claw_codex_start_poll_smoke() -> None:
             poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": sid})
             assert poll.status_code == 200
             assert poll.json()["status"] == "pending"
+
+
+def test_assistant_data_model_openclaw_parses_import_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import json
+
+    from open_fdd.gateway import openclaw_chat as oc
+    from open_fdd.gateway.openclaw_chat import OpenClawChatResponse
+
+    inner = {"sites": [{"id": "s-openclaw", "name": "S"}], "equipment": [], "points": []}
+    wrapped = {"import_ready_json": inner}
+
+    class FakeClient:
+        def complete_for_task(self, **kwargs: object) -> OpenClawChatResponse:
+            return OpenClawChatResponse(
+                content=json.dumps(wrapped),
+                raw={},
+                task_class=None,
+                route_reason="test",
+            )
+
+    monkeypatch.setenv("OFDD_OPENCLAW_GATEWAY_TOKEN", "test-token-for-openclaw-bridge")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "claw_dm"))
+    monkeypatch.setattr(oc, "OpenClawGatewayChatClient", lambda *a, **k: FakeClient())
+
+    app = create_app()
+    with TestClient(app) as client:
+        inst = client.post("/rules/defaults/install")
+        assert inst.status_code == 200
+        res = client.post("/assistant/data-model-openclaw", json={})
+        assert res.status_code == 200
+        body = res.json()
+        assert body.get("import_ready_parse_ok") is True
+        assert body.get("import_ready") == inner
+        used = body.get("rule_files_used") or []
+        assert any("sensor_bounds" in str(p) for p in used)

@@ -6,12 +6,16 @@ type IngestResponse = {
   rows: number;
   metrics: string[];
   dropped_rows?: number;
+  preview_rows?: Array<Record<string, unknown>>;
+  parse_error?: string;
 };
 
 type ImportLog = {
   name: string;
   ok: boolean;
   message: string;
+  preview?: Array<Record<string, unknown>>;
+  parseError?: string;
 };
 
 export function CsvImportPage() {
@@ -40,10 +44,22 @@ export function CsvImportPage() {
         return { name: file.name, ok: false, message: `Bridge error ${res.status}: ${await res.text()}` };
       }
       const out = (await res.json()) as IngestResponse;
+      if (out.parse_error) {
+        return {
+          name: file.name,
+          ok: false,
+          message: `Rows: ${out.rows}; Dropped: ${out.dropped_rows ?? 0}. ${out.parse_error}`,
+          parseError: out.parse_error,
+          preview: Array.isArray(out.preview_rows) ? out.preview_rows : [],
+        };
+      }
+      const metricsLine =
+        out.metrics && out.metrics.length > 0 ? out.metrics.join(", ") : "(none — check encoding/delimiter or time column)";
       return {
         name: file.name,
         ok: true,
-        message: `Rows: ${out.rows}; Dropped: ${out.dropped_rows ?? 0}; Metrics: ${out.metrics.join(", ")}`,
+        message: `Rows: ${out.rows}; Dropped: ${out.dropped_rows ?? 0}; Metrics: ${metricsLine}`,
+        preview: Array.isArray(out.preview_rows) && out.preview_rows.length > 0 ? out.preview_rows : undefined,
       };
     } catch (e) {
       return { name: file.name, ok: false, message: e instanceof Error ? e.message : String(e) };
@@ -114,10 +130,41 @@ export function CsvImportPage() {
       {importLogs.length > 0 && (
         <div style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}>
           <strong>Processed files</strong>
-          <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 18, listStyle: "none" }}>
             {importLogs.map((entry) => (
-              <li key={`${entry.name}-${entry.message}`} style={{ color: entry.ok ? "var(--text)" : "var(--danger)" }}>
-                {entry.name}: {entry.message}
+              <li
+                key={`${entry.name}-${entry.message}`}
+                style={{
+                  marginBottom: 12,
+                  color: entry.ok ? "var(--text)" : "var(--danger)",
+                  borderBottom: "1px solid var(--border)",
+                  paddingBottom: 10,
+                }}
+              >
+                <div>
+                  <strong>{entry.name}</strong>: {entry.message}
+                </div>
+                {entry.preview && entry.preview.length > 0 ? (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+                      First rows stored in Feather (timestamp + metrics), same as a pandas <code>head()</code>:
+                    </div>
+                    <pre
+                      style={{
+                        margin: 0,
+                        maxHeight: 220,
+                        overflow: "auto",
+                        padding: 8,
+                        fontSize: 12,
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                        background: "var(--input-bg)",
+                      }}
+                    >
+                      {JSON.stringify(entry.preview, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

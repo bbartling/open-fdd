@@ -1,5 +1,11 @@
-/** Shared instructions for BRICK / model redesign (human UI vs automated consumer). */
-const DATA_MODEL_REDESIGN_CORE = `You are an HVAC ontology engineer for Open-FDD.
+"""System prompts for Open-FDD data model BRICK redesign.
+
+Keep the API variant in sync with ``getDataModelRedesignPrompt(True)`` in
+``apps/desktop-ui/src/lib/llm-prompts.ts``. The human/UI variant lives in that
+file as ``getDataModelRedesignPrompt(False)`` / ``DATA_MODEL_REDESIGN_PROMPT``.
+"""
+
+DATA_MODEL_REDESIGN_CORE = """You are an HVAC ontology engineer for Open-FDD.
 
 Task:
 1) Wait until I upload BOTH:
@@ -40,85 +46,16 @@ Rule handling:
   1) keep the original rules and report missing model inputs, or
   2) create compatible replacement/additional YAML rules for the available equipment if clearly justified.
 - Any generated YAML rule must use fdd_input keys that exist in the import-ready data model.
-- Any generated YAML rule must preserve clear, human-readable names and descriptions.`;
+- Any generated YAML rule must preserve clear, human-readable names and descriptions."""
 
-const DATA_MODEL_REDESIGN_OUTPUT_API = `
+DATA_MODEL_REDESIGN_OUTPUT_API = """
 
 OUTPUT MODE — machine consumer (API / POST /assistant/data-model-openclaw):
 - Return ONLY one JSON object. No markdown code fences, no "=== FILE:" sections, no explanatory prose outside that object.
 - Required top-level keys: "validation_notes" (string), "relationship_summary" (string), "rule_compatibility_notes" (string), "import_ready_json" (object).
 - "import_ready_json" must contain exactly: { "sites": [...], "equipment": [...], "points": [...] }.
 - Optional keys: "proposed_rule_yamls" (object mapping filename string to YAML string), "readme_md" (string).
-- If uploads are still missing, return the same JSON shape with empty arrays in import_ready_json and explain what is missing in validation_notes.`;
+- If uploads are still missing, return the same JSON shape with empty arrays in import_ready_json and explain what is missing in validation_notes."""
 
-const DATA_MODEL_REDESIGN_OUTPUT_HUMAN = `
-
-OUTPUT MODE — human (chat / Open-FDD UI "Copy LLM Prompt"):
-- Do not return the API-only single JSON envelope described for automated consumers.
-- Preferred final deliverable when artifact/file creation is supported:
-Create a downloadable ZIP package with this structure:
-
-open_fdd_model_and_rules_package/
-├── import_ready/
-│   └── open_fdd_data_model_import_ready.json
-├── rules/
-│   ├── 01_<descriptive_rule_name>.yaml
-│   ├── 02_<descriptive_rule_name>.yaml
-│   └── ...
-└── README.md
-
-The README.md must include:
-- What files are included
-- How to import the JSON into Open-FDD
-- Which rules are compatible
-- Which rule inputs were mapped
-- Any assumptions or unresolved mappings
-
-Also provide:
-A) validation_notes
-B) relationship_summary
-C) rule_compatibility_notes
-D) downloadable ZIP link
-E) direct downloadable JSON link, if supported
-
-Fallback final deliverable when artifact/file creation is NOT supported:
-Print the output in easy copy/paste sections using this exact format:
-
-=== FILE: open_fdd_data_model_import_ready.json ===
-<valid JSON only here>
-
-=== FILE: 01_<descriptive_rule_name>.yaml ===
-<valid YAML only here>
-
-=== FILE: 02_<descriptive_rule_name>.yaml ===
-<valid YAML only here>
-
-=== FILE: README.md ===
-<markdown README content here>
-
-Important fallback formatting rules:
-- Do not mix prose inside the JSON file section.
-- Do not wrap file contents in markdown fences unless the platform requires it.
-- Each file section must be complete and copy/paste ready.
-- The JSON file section must contain exactly one JSON object with only:
-  {
-    "sites": [...],
-    "equipment": [...],
-    "points": [...]
-  }
-
-If both model export and rule YAML are attached in one message:
-- If artifact creation is supported, return the ZIP package and a concise summary.
-- If artifact creation is not supported, return the copy/paste file sections.
-- Always ensure the import-ready JSON validates against the Open-FDD /model/import shape.`;
-
-/**
- * @param consumerDetected When true, prompt the model for a single parseable JSON object (OpenClaw / bridge).
- * When false, prompt for human-oriented ZIP / === FILE: === sections only (no combined JSON+FILE ambiguity).
- */
-export function getDataModelRedesignPrompt(consumerDetected: boolean): string {
-  return DATA_MODEL_REDESIGN_CORE + (consumerDetected ? DATA_MODEL_REDESIGN_OUTPUT_API : DATA_MODEL_REDESIGN_OUTPUT_HUMAN);
-}
-
-/** Default prompt copied into the Data Model page (human mode). */
-export const DATA_MODEL_REDESIGN_PROMPT = getDataModelRedesignPrompt(false);
+# Used by ``POST /assistant/data-model-openclaw`` (OpenClaw gateway).
+DATA_MODEL_REDESIGN_SYSTEM_PROMPT = DATA_MODEL_REDESIGN_CORE + DATA_MODEL_REDESIGN_OUTPUT_API
