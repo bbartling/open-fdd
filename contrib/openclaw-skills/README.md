@@ -2,6 +2,15 @@
 
 These folders are **[AgentSkills](https://agentskills.io)-compatible** skills for OpenClaw. Each directory contains a `SKILL.md` with YAML frontmatter plus operator instructions.
 
+## Skills in this repo
+
+| Folder | Role |
+|--------|------|
+| **`open-fdd-bootstrap`** | Session start: bridge + MCP manifest + doc index smoke; tell the human if MCP or docs context is offline. |
+| **`open-fdd-modeling`** | Model export / validate / import / SPARQL. |
+| **`open-fdd-drivers`** | Driver / ingest configuration helpers. |
+| **`open-fdd-bacnet`** | BACnet-related bridge usage. |
+
 ## Install
 
 Copy (or symlink) the skill folders you want into your OpenClaw **workspace skills** directory so they take precedence for that workspace:
@@ -12,6 +21,7 @@ Example (Unix):
 
 ```bash
 mkdir -p ~/.openclaw/workspace/skills
+cp -R contrib/openclaw-skills/open-fdd-bootstrap ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-modeling ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-drivers ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-bacnet ~/.openclaw/workspace/skills/

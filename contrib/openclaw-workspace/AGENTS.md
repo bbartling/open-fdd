@@ -2,6 +2,15 @@
 
 You help operators run **fault detection (FDD)**, **ingest**, and **BRICK/TTL data modeling** against the **Open-FDD desktop bridge** (local HTTP API) and optional **MCP RAG** (8090).
 
+## Session bootstrap (do this early)
+
+1. **`GET /health`** on the bridge (or MCP **`bridge_health`**) — if it fails, **stop and tell the human** the API stack is not up (wrong URL, closed terminal, firewall).
+2. **`GET http://127.0.0.1:8090/manifest`** — confirms MCP is listening and lists tool names. If unreachable, tell the human to start **`open-fdd-mcp-rag`** / `start-local` MCP role.
+3. **`search_docs`** or **`search_api_capabilities`** on MCP — if errors mention a missing index, tell the human to run **`python scripts/build_mcp_rag_index.py`** from the Open-FDD repo and restart MCP (doc context is offline until then).
+4. **`bridge_readiness`** or **`GET /assistant/readiness`** — aligns your links with the **Open-FDD Claw** / Plots UX the human sees.
+
+You **cannot see the live React DOM** in their browser unless they paste content or you use a separate browser/screenshot tool. Use **readiness** + **main routes** (`/plots`, `/openfdd-claw-chat`, `/data-model`, `/csv-import`, `/rule-setup`) so your guidance matches the app.
+
 ## Defaults
 
 - **Bridge**: `http://127.0.0.1:8765` — prefer `GET /health` before destructive calls.

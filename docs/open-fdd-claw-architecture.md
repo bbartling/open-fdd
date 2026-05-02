@@ -122,6 +122,12 @@ Adjust hostnames for Docker (`host.docker.internal`) vs native loopback.
 }
 ```
 
+### Grounding OpenClaw on Open-FDD (MCP + docs + “same screen” as the human)
+
+- **Best default:** give the agent **MCP RAG** (`8090`) plus **`GET /manifest`** so it discovers tool names, then **`search_docs`** / **`search_api_capabilities`** for Jekyll `docs/` and OpenAPI-shaped capability text. That is how it “knows the API” without you pasting Swagger each time — **after** `python scripts/build_mcp_rag_index.py` has been run so the index exists.
+- **Parity with the React UI:** the agent does **not** see the live Vite DOM. Use **`GET /assistant/readiness`** (same payload as **Open-FDD Claw → Fetch readiness**) so links and copy match what the operator sees; combine with repo skill **`open-fdd-bootstrap`** (`contrib/openclaw-skills/open-fdd-bootstrap/`) and workspace **`AGENTS.md`** / **`TOOLS.md`** for first-run health + explicit “tell the human if MCP or doc index is offline” behavior.
+- **OpenClaw `mcp.servers`:** still expects a **protocol** MCP server in strict mode; many setups use **fetch** to `8090` tools instead — see runbook.
+
 **Open-FDD MCP RAG service today** — `open-fdd-mcp-rag` exposes **HTTP REST** under `POST /tools/...` and `GET /manifest` on port **8090** (not Streamable HTTP MCP). OpenClaw’s built-in `mcp.servers` entries expect a **protocol MCP** server. Practical options:
 
 1. **Prompts + fetch** — Teach the agent the base URL (`http://127.0.0.1:8090`) and use OpenClaw’s web/fetch tooling to call `/tools/search_docs` etc. (see runbook smoke steps).
