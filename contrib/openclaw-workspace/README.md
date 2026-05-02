@@ -18,6 +18,7 @@ Then install **skills** (separate from these files):
 ```bash
 mkdir -p ~/.openclaw/workspace/skills
 cp -R contrib/openclaw-skills/open-fdd-bootstrap ~/.openclaw/workspace/skills/
+cp -R contrib/openclaw-skills/open-fdd-clean-metrics ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-modeling ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-drivers ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-bacnet ~/.openclaw/workspace/skills/

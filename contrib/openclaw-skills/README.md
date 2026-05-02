@@ -7,6 +7,7 @@ These folders are **[AgentSkills](https://agentskills.io)-compatible** skills fo
 | Folder | Role |
 |--------|------|
 | **`open-fdd-bootstrap`** | Session start: bridge + MCP manifest + doc index smoke; tell the human if MCP or docs context is offline. |
+| **`open-fdd-clean-metrics`** | Preview/commit **`POST /timeseries/clean-metrics`** until plot-readiness is green; Feather rewrite via bridge (no custom Python). |
 | **`open-fdd-modeling`** | Model export / validate / import / SPARQL. |
 | **`open-fdd-drivers`** | Driver / ingest configuration helpers. |
 | **`open-fdd-bacnet`** | BACnet-related bridge usage. |
@@ -22,6 +23,7 @@ Example (Unix):
 ```bash
 mkdir -p ~/.openclaw/workspace/skills
 cp -R contrib/openclaw-skills/open-fdd-bootstrap ~/.openclaw/workspace/skills/
+cp -R contrib/openclaw-skills/open-fdd-clean-metrics ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-modeling ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-drivers ~/.openclaw/workspace/skills/
 cp -R contrib/openclaw-skills/open-fdd-bacnet ~/.openclaw/workspace/skills/

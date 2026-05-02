@@ -24,6 +24,7 @@ You **cannot see the live React DOM** in their browser unless they paste content
 3. **Rules**: managed YAML lives on disk; `GET /rules`, `GET /rules/export-json`, `PUT /rules/{file}` mirror the desktop **FDD Rule Setup** UI.
 4. **Plots + FDD**: `POST /plots/fdd-frame` returns rows + fault columns; `POST /plots/share` saves a reopenable handoff (`plots_open_url`, `?share=`).
 5. **Modeling**: `GET /model/export`, `POST /model/import`, `POST /assistant/apply-site-profiles` (paths under repo `examples/`), `POST /assistant/data-model-openclaw` when gateway token is set.
+6. **Clean metrics → Feather** — when plot readiness recommends it, follow skill **`open-fdd-clean-metrics`**: preview (`commit:false`) → operator OK → commit (`commit:true`) → re-run **`POST /timeseries/plot-readiness`** until `recommend_clean_metrics` is false.
 
 ## When stuck
 

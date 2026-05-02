@@ -17,6 +17,8 @@ description: First-run checks for Open-FDD + MCP RAG — bridge health, doc inde
 3. **Docs index** — MCP **`search_docs`** with a trivial query (e.g. `open-fdd health`) or **`search_api_capabilities`** with `plots`. If the tool errors about missing index / empty index, **tell the human**: run `python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json` from the repo root (see `scripts/README.md`), then restart MCP.
 4. **Handoff** — MCP **`bridge_readiness`** or `GET /assistant/readiness` — gives the same deep links and markdown the **Open-FDD Claw** page uses so guidance matches the UI.
 
+5. **String metrics → Feather** — if plot readiness recommends **`clean-metrics`**, follow skill **`open-fdd-clean-metrics`** (preview → confirm → **`commit: true`** → re-check readiness).
+
 ## “Seeing” the React UI
 
 You do **not** receive a live DOM or screen pixels from the operator’s browser unless they paste screenshots or you use a **separate** browser tool. Treat **`/assistant/readiness`** + **`plots_quicklinks`** + known routes (`/plots`, `/openfdd-claw-chat`, `/data-model`, `/csv-import`, `/rule-setup`) as the **shared map** so your suggestions align with what the human sees.

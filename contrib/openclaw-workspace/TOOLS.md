@@ -8,7 +8,7 @@
 | Handoff snippet | GET | `/assistant/readiness` |
 | Site profiles pack | POST | `/assistant/apply-site-profiles` — `profiles_yaml` absolute path under repo `examples/` |
 | Ingest CSV | POST | `/ingest/csv` or `/ingest/csv/upload` |
-| Numeric clean | POST | `/timeseries/clean-metrics` — `commit:false` first |
+| Numeric clean | POST | `/timeseries/clean-metrics` — `commit:false` first, then `commit:true` to rewrite Feather (skill **`open-fdd-clean-metrics`**) |
 | Plot frame | GET | `/plots/frame`, `/plots/site-frame` — `include_readiness=true` optional |
 | FDD + frame | POST | `/plots/fdd-frame` |
 | Saved handoff | POST | `/plots/share` — returns `plots_open_url` |

@@ -848,6 +848,97 @@ def test_timeseries_clean_metrics_preview_and_commit(monkeypatch: pytest.MonkeyP
         assert "storage_path" in com.json()
 
 
+def test_clean_metrics_commit_then_plot_readiness_and_frame_rows_are_numeric(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """After commit, Feather-backed plot-readiness and /plots/frame expose float metrics (Open-FDD Claw path)."""
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_plot_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "clean plot site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "messy.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.2 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        pr0 = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr0.status_code == 200, pr0.text
+        assert pr0.json().get("recommend_clean_metrics") is True
+
+        com = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": True, "preview_limit": 8},
+        )
+        assert com.status_code == 200, com.text
+        cj = com.json()
+        assert cj.get("committed") is True
+        assert "oat" in (cj.get("applied_columns") or [])
+
+        pr1 = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr1.status_code == 200, pr1.text
+        assert pr1.json().get("recommend_clean_metrics") is False
+        oat_col = next(c for c in pr1.json().get("columns", []) if c.get("name") == "oat")
+        assert oat_col.get("plot_line_ready") is True
+
+        fr = client.get(
+            f"/plots/frame?site_id={site_id}&source=csv&limit=10&include_readiness=true",
+        )
+        assert fr.status_code == 200
+        rows = fr.json().get("rows") or []
+        assert len(rows) >= 1
+        v = rows[0].get("oat")
+        assert isinstance(v, (int, float))
+
+
+def test_clean_metrics_explicit_empty_columns_performs_no_coercion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """columns: [] must not fall back to auto-suggested columns (intentional no-op)."""
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_empty_cols"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "empty cols site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "units2.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z"],
+                "oat": ["40.0 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        out = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "columns": [], "commit": False, "preview_limit": 5},
+        )
+        assert out.status_code == 200, out.text
+        body = out.json()
+        assert body.get("applied_columns") == []
+        assert body.get("committed") is False
+
+
 def test_assistant_apply_site_profiles_under_examples(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "asst_dd"))
