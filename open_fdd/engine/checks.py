@@ -43,8 +43,12 @@ def normalize_cmd(
 def check_bounds(series: pd.Series, low: float, high: float) -> pd.Series:
     """
     True where values are outside [low, high].
+
+    Coerces with ``pd.to_numeric(..., errors="coerce")`` so Grafana-style string
+    numerics (and object dtype columns) do not raise on comparison.
     """
-    return (series < low) | (series > high)
+    numeric = pd.to_numeric(series, errors="coerce")
+    return (numeric < low) | (numeric > high)
 
 
 def check_flatline(
@@ -55,8 +59,11 @@ def check_flatline(
     """
     True where the rolling spread (max - min) is below tolerance.
     Indicates sensor flatlined.
+
+    Coerces with ``pd.to_numeric`` first (same rationale as :func:`check_bounds`).
     """
-    spread = series.rolling(window=window).apply(
+    numeric = pd.to_numeric(series, errors="coerce")
+    spread = numeric.rolling(window=window).apply(
         lambda x: x.max() - x.min() if len(x) == window else float("nan"),
         raw=True,
     )

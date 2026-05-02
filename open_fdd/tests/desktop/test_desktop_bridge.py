@@ -469,6 +469,283 @@ def test_data_model_health_summary_endpoint_shape() -> None:
         assert "orphan_equipment" in body["counts"]
 
 
+def test_assistant_readiness_returns_markdown() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/assistant/readiness")
+        assert res.status_code == 200
+        body = res.json()
+        assert "message_markdown" in body
+        assert "/plots" in body.get("message_markdown", "")
+        assert "plots_quicklinks" in body
+        assert "deep_links" in body and "plots_fdd_csv" in body["deep_links"]
+        assert body["deep_links"].get("fdd_rule_setup", "").endswith("/rule-setup")
+
+
+def test_timeseries_plot_readiness_and_plots_frame_include_readiness(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "pr_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "pr site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "pr.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.0 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        pr = client.post(
+            "/timeseries/plot-readiness",
+            json={"site_id": site_id, "source": "csv", "limit": 100},
+        )
+        assert pr.status_code == 200, pr.text
+        body = pr.json()
+        assert body.get("recommend_clean_metrics") is True
+        assert body.get("ok") is False
+
+        fr = client.get(
+            f"/plots/frame?site_id={site_id}&source=csv&limit=100&include_readiness=true",
+        )
+        assert fr.status_code == 200
+        fj = fr.json()
+        assert "readiness" in fj
+        assert fj["readiness"]["row_count"] == 2
+
+
+def test_rules_export_json_put_and_parsed_query(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "rules_api_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        empty = client.get("/rules/export-json")
+        assert empty.status_code == 200
+        assert empty.json().get("count") == 0
+
+        yaml_a = "name: demo_rule\nversion: 1\nk: 1\n"
+        assert client.post("/rules", json={"filename": "demo.yaml", "content": yaml_a}).status_code == 200
+
+        snap = client.get("/rules/export-json")
+        assert snap.status_code == 200
+        sj = snap.json()
+        assert sj["count"] == 1
+        assert sj["rules"][0]["filename"] == "demo.yaml"
+        assert sj["rules"][0]["yaml"] == yaml_a
+        assert sj["rules"][0]["parsed"] == {"name": "demo_rule", "version": 1, "k": 1}
+        assert sj["rules"][0]["parse_error"] is None
+
+        parsed = client.get("/rules/demo.yaml", params={"parsed": True})
+        assert parsed.status_code == 200
+        pj = parsed.json()
+        assert pj["parsed"]["name"] == "demo_rule"
+
+        raw = client.get("/rules/demo.yaml")
+        assert raw.status_code == 200
+        assert raw.headers.get("content-type", "").startswith("text/plain")
+
+        yaml_b = "name: demo_rule\nversion: 1\nk: 2\n"
+        put = client.put("/rules/demo.yaml", json={"content": yaml_b})
+        assert put.status_code == 200
+        assert put.json().get("updated") is True
+
+        again = client.get("/rules/export-json").json()
+        assert again["rules"][0]["yaml"] == yaml_b
+        assert again["rules"][0]["parsed"]["k"] == 2
+
+
+def test_timeseries_clean_metrics_preview_and_commit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "clean_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "clean site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "units.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "oat": ["40.0 °F", "41.2 °F"],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+
+        prev = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": False, "preview_limit": 5},
+        )
+        assert prev.status_code == 200, prev.text
+        body = prev.json()
+        assert body.get("ok") is True
+        assert body.get("committed") is False
+        assert "oat" in (body.get("suggested_columns") or [])
+        assert body.get("preview_after") and isinstance(body["preview_after"][0].get("oat"), (int, float))
+
+        com = client.post(
+            "/timeseries/clean-metrics",
+            json={"site_id": site_id, "source": "csv", "commit": True, "preview_limit": 5},
+        )
+        assert com.status_code == 200, com.text
+        assert com.json().get("committed") is True
+        assert "storage_path" in com.json()
+
+
+def test_assistant_apply_site_profiles_under_examples(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "asst_dd"))
+    ex = tmp_path / "examples"
+    pack = ex / "demo_pack"
+    pack.mkdir(parents=True)
+    csvp = pack / "tiny.csv"
+    pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "sat": [55.0]}).to_csv(csvp, index=False)
+    yml = pack / "site_profiles.yaml"
+    yml.write_text(
+        """
+version: 1
+sites:
+  - display_name: Assistant demo
+    csv:
+      path: tiny.csv
+      source: csv
+    equipment:
+      name: RTU
+      type: Air_Handling_Unit
+    brick_mappings:
+      - external_id: sat
+        brick_type: Supply_Air_Temperature_Sensor
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gateway_server, "_examples_pack_root", lambda: ex.resolve())
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.post(
+            "/assistant/apply-site-profiles",
+            json={"profiles_yaml": str(yml.resolve()), "reset": True},
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body.get("sites")
+
+
+def test_plots_fdd_frame_returns_fault_columns(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "fdd_demo"))
+    repo_root = Path(__file__).resolve().parents[3]
+    rules_pack = default_rules_root() / "ahu_vav"
+    rules_pack.mkdir(parents=True, exist_ok=True)
+    ex_rule = repo_root / "examples" / "AHU" / "rules" / "sensor_bounds.yaml"
+    if not ex_rule.is_file():
+        pytest.skip("examples/AHU/rules not in tree")
+    shutil.copy(ex_rule, rules_pack / "sensor_bounds.yaml")
+
+    app = create_app()
+    with TestClient(app) as client:
+        site = client.post("/sites", json={"name": "fdd-frame site"})
+        assert site.status_code == 200
+        site_id = site.json()["id"]
+        csv_path = tmp_path / "s.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "OAT (°F)": [40.0, 41.0],
+                "SAT (°F)": [60.0, 61.0],
+                "MAT (°F)": [58.0, 59.0],
+                "RAT (°F)": [70.0, 71.0],
+                "SA Static Press (inH₂O)": [0.5, 0.5],
+            },
+        ).to_csv(csv_path, index=False)
+        assert client.post(
+            "/ingest/csv",
+            json={"site_id": site_id, "source": "csv", "csv_path": str(csv_path)},
+        ).status_code == 200
+        imp = client.post(
+            "/model/import",
+            json={
+                "replace": True,
+                "payload": {
+                    "sites": [{"id": site_id, "name": "fdd-frame site"}],
+                    "equipment": [
+                        {"id": "eq1", "site_id": site_id, "name": "AHU", "equipment_type": "Air_Handling_Unit"},
+                    ],
+                    "points": [
+                        {
+                            "id": "p1",
+                            "site_id": site_id,
+                            "equipment_id": "eq1",
+                            "external_id": "OAT (°F)",
+                            "brick_type": "Outside_Air_Temperature_Sensor",
+                            "fdd_input": "Outside_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p2",
+                            "site_id": site_id,
+                            "equipment_id": "eq1",
+                            "external_id": "SAT (°F)",
+                            "brick_type": "Supply_Air_Temperature_Sensor",
+                            "fdd_input": "Supply_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p3",
+                            "site_id": site_id,
+                            "equipment_id": "eq1",
+                            "external_id": "MAT (°F)",
+                            "brick_type": "Mixed_Air_Temperature_Sensor",
+                            "fdd_input": "Mixed_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p4",
+                            "site_id": site_id,
+                            "equipment_id": "eq1",
+                            "external_id": "RAT (°F)",
+                            "brick_type": "Return_Air_Temperature_Sensor",
+                            "fdd_input": "Return_Air_Temperature_Sensor",
+                        },
+                        {
+                            "id": "p5",
+                            "site_id": site_id,
+                            "equipment_id": "eq1",
+                            "external_id": "SA Static Press (inH₂O)",
+                            "brick_type": "Supply_Air_Static_Pressure_Sensor",
+                            "fdd_input": "Supply_Air_Static_Pressure_Sensor",
+                        },
+                    ],
+                },
+            },
+        )
+        assert imp.status_code == 200, imp.text
+
+        rules = client.get("/rules")
+        assert rules.status_code == 200
+        rules_dir = str(rules.json().get("rules_dir", ""))
+        res = client.post(
+            "/plots/fdd-frame",
+            json={
+                "site_id": site_id,
+                "rules_path": rules_dir,
+                "sources": ["csv"],
+                "limit": 100,
+                "rule_files": ["sensor_bounds.yaml"],
+                "skip_missing_columns": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert "bad_sensor_flag" in body.get("columns", [])
+        assert body.get("fault_totals", {}).get("bad_sensor_flag") is not None
+
+
 def test_plots_site_frame_returns_json_serializable_rows(tmp_path: Path) -> None:
     """Merged plot frames carry numpy dtypes; response must encode as JSON (regression for 500)."""
     pytest.importorskip("pyarrow")
@@ -511,3 +788,70 @@ def test_plots_site_frame_returns_json_serializable_rows(tmp_path: Path) -> None
         assert "sat_csv" in body.get("columns", [])
         assert "oat_weather" in body.get("columns", [])
         assert len(body.get("rows", [])) == 2
+
+
+def test_openfdd_claw_codex_poll_rejects_blank_session_id() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": "   "})
+        assert poll.status_code == 422
+
+
+def test_openfdd_claw_codex_start_poll_smoke() -> None:
+    from unittest.mock import MagicMock, patch
+
+    from open_fdd.gateway import codex_device_login as codex
+
+    with patch.object(codex, "requests") as req_pkg:
+        post = MagicMock()
+        post.side_effect = [
+            MagicMock(
+                ok=True,
+                status_code=200,
+                text='{"device_auth_id":"da","user_code":"AB-CD","interval":1}',
+            ),
+            MagicMock(ok=False, status_code=403, text="{}"),
+        ]
+        req_pkg.post = post
+        app = create_app()
+        with TestClient(app) as client:
+            start = client.post("/openfdd-claw/codex/device/start")
+            assert start.status_code == 200
+            sid = start.json()["session_id"]
+            poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": sid})
+            assert poll.status_code == 200
+            assert poll.json()["status"] == "pending"
+
+
+def test_assistant_data_model_openclaw_parses_import_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    from open_fdd.gateway import openclaw_chat as oc
+    from open_fdd.gateway.openclaw_chat import OpenClawChatResponse
+
+    inner = {"sites": [{"id": "s-openclaw", "name": "S"}], "equipment": [], "points": []}
+    wrapped = {"import_ready_json": inner}
+
+    class FakeClient:
+        def complete_for_task(self, **kwargs: object) -> OpenClawChatResponse:
+            return OpenClawChatResponse(
+                content=json.dumps(wrapped),
+                raw={},
+                task_class=None,
+                route_reason="test",
+            )
+
+    monkeypatch.setenv("OFDD_OPENCLAW_GATEWAY_TOKEN", "test-token-for-openclaw-bridge")
+    monkeypatch.setattr(oc, "OpenClawGatewayChatClient", lambda *a, **k: FakeClient())
+
+    app = create_app()
+    with TestClient(app) as client:
+        inst = client.post("/rules/defaults/install")
+        assert inst.status_code == 200
+        res = client.post("/assistant/data-model-openclaw", json={})
+        assert res.status_code == 200
+        body = res.json()
+        assert body.get("import_ready_parse_ok") is True
+        assert body.get("import_ready") == inner
+        used = body.get("rule_files_used") or []
+        assert any("sensor_bounds" in str(p) for p in used)

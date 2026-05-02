@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import urllib.parse
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -89,6 +90,30 @@ class IngestRequest(BaseModel):
 class ImportRequest(BaseModel):
     payload: dict[str, Any]
     replace: bool = True
+
+
+class ApplySiteProfilesBridgeRequest(BaseModel):
+    """Absolute path to ``site_profiles.yaml`` under the repo ``examples/`` tree."""
+
+    profiles_yaml: str
+    reset: bool = True
+
+
+class TimeseriesCleanBridgeRequest(BaseModel):
+    """Strip Grafana-style units from Feather metrics (preview or commit)."""
+
+    site_id: str
+    source: str = "csv"
+    columns: list[str] | None = None
+    commit: bool = False
+    preview_limit: int = 12
+
+
+class RulesPutBridgeRequest(BaseModel):
+    """Replace one managed FDD rule YAML (same path as the desktop FDD Rule Setup page)."""
+
+    filename: str
+    content: str
 
 
 class SparqlRequest(BaseModel):
@@ -413,6 +438,12 @@ def manifest() -> dict[str, Any]:
             {"name": "get_doc_section", "route": "/tools/get_doc_section", "mode": "read"},
             {"name": "search_api_capabilities", "route": "/tools/search_api_capabilities", "mode": "read"},
             {"name": "bridge_health", "route": "/tools/bridge_health", "mode": "write_guarded"},
+            {"name": "bridge_readiness", "route": "/tools/bridge_readiness", "mode": "write_guarded"},
+            {"name": "bridge_apply_site_profiles", "route": "/tools/bridge_apply_site_profiles", "mode": "write_guarded"},
+            {"name": "bridge_timeseries_clean_metrics", "route": "/tools/bridge_timeseries_clean_metrics", "mode": "write_guarded"},
+            {"name": "bridge_rules_list", "route": "/tools/bridge_rules_list", "mode": "write_guarded"},
+            {"name": "bridge_rules_export_json", "route": "/tools/bridge_rules_export_json", "mode": "write_guarded"},
+            {"name": "bridge_rules_put", "route": "/tools/bridge_rules_put", "mode": "write_guarded"},
             {"name": "drivers_health", "route": "/tools/drivers_health", "mode": "write_guarded"},
             {"name": "drivers_export", "route": "/tools/drivers_export", "mode": "read"},
             {"name": "drivers_validate", "route": "/tools/drivers_validate", "mode": "read"},
@@ -473,6 +504,61 @@ def drivers_validate(req: DriverConfigRequest) -> dict[str, Any]:
 @app.post("/tools/bridge_health", dependencies=[Depends(require_action_tools_auth)])
 def bridge_health() -> dict[str, Any]:
     return _json_request("GET", "/health")
+
+
+@app.post("/tools/bridge_readiness", dependencies=[Depends(require_action_tools_auth)])
+def bridge_readiness() -> dict[str, Any]:
+    """Handoff payload for chat: UI links, site summary, markdown snippet, suggested yes/no follow-up."""
+    return _json_request("GET", "/assistant/readiness")
+
+
+@app.post("/tools/bridge_apply_site_profiles", dependencies=[Depends(require_action_tools_auth)])
+def bridge_apply_site_profiles(req: ApplySiteProfilesBridgeRequest) -> dict[str, Any]:
+    """Run a declarative ``site_profiles.yaml`` pack (CSV ingest + BRICK mapping + optional rules copy)."""
+    return _json_request(
+        "POST",
+        "/assistant/apply-site-profiles",
+        body={"profiles_yaml": req.profiles_yaml, "reset": bool(req.reset)},
+    )
+
+
+@app.post("/tools/bridge_timeseries_clean_metrics", dependencies=[Depends(require_action_tools_auth)])
+def bridge_timeseries_clean_metrics(req: TimeseriesCleanBridgeRequest) -> dict[str, Any]:
+    """Preview or commit numeric coercion (e.g. ``17.8 psi`` → ``17.8``) for one site+source Feather slice."""
+    return _json_request(
+        "POST",
+        "/timeseries/clean-metrics",
+        body={
+            "site_id": req.site_id,
+            "source": req.source,
+            "columns": req.columns,
+            "commit": bool(req.commit),
+            "preview_limit": int(req.preview_limit),
+        },
+    )
+
+
+@app.post("/tools/bridge_rules_list", dependencies=[Depends(require_action_tools_auth)])
+def bridge_rules_list() -> dict[str, Any]:
+    """List managed rule YAML basenames and ``rules_dir`` (same pack as **FDD Rule Setup**)."""
+    return _json_request("GET", "/rules")
+
+
+@app.post("/tools/bridge_rules_export_json", dependencies=[Depends(require_action_tools_auth)])
+def bridge_rules_export_json() -> dict[str, Any]:
+    """JSON snapshot: every rule file with raw YAML plus parsed structure (for agents / OpenClaw parity with the UI)."""
+    return _json_request("GET", "/rules/export-json")
+
+
+@app.post("/tools/bridge_rules_put", dependencies=[Depends(require_action_tools_auth)])
+def bridge_rules_put(req: RulesPutBridgeRequest) -> dict[str, Any]:
+    """Write one rule file by basename (``.yaml`` / ``.yml``)."""
+    safe = Path(str(req.filename or "").strip()).name
+    return _json_request(
+        "PUT",
+        f"/rules/{urllib.parse.quote(safe, safe='')}",
+        body={"content": str(req.content)},
+    )
 
 
 @app.post("/tools/drivers_health", dependencies=[Depends(require_action_tools_auth)])

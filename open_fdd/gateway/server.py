@@ -16,10 +16,13 @@ import ctypes
 import warnings
 
 import pandas as pd
+import yaml
+
 from fastapi import FastAPI
 from fastapi import File
 from fastapi import Form
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Response
 from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +33,7 @@ from open_fdd.desktop.services.ingest_service import IngestService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
+from open_fdd.desktop.services.plot_readiness import TimeseriesPlotReadiness, analyze_dataframe_for_plot
 from open_fdd.desktop.storage.paths import default_rules_root
 
 _log = logging.getLogger(__name__)
@@ -70,6 +74,42 @@ class CsvIngestBody(BaseModel):
 class ModelImportBody(BaseModel):
     payload: "ModelPayload"
     replace: bool = True
+
+
+class PlotsFddFrameBody(BaseModel):
+    """
+    Load a merged timeseries window and append FDD fault columns for Plotly (same row cap as plot endpoints).
+
+    This is the primary automation surface for “run rules and get a plottable frame”: agents and UIs should POST here
+    instead of shelling out to YAML editors. Bounds/flatline rules coerce numeric strings at evaluation time; values
+    with embedded units still need **POST /timeseries/clean-metrics** (commit) upstream.
+    """
+
+    site_id: str
+    rules_path: str
+    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "onboard", "bacnet"])
+    limit: int = 5000
+    join_how: Literal["inner", "left", "outer", "right"] = "outer"
+    start_ts: str | None = None
+    end_ts: str | None = None
+    rule_files: list[str] | None = None
+    skip_missing_columns: bool = True
+    chunk_rows: int = 0
+
+
+class ApplySiteProfilesBody(BaseModel):
+    """Apply a declarative ``site_profiles.yaml`` from the repository ``examples/`` tree (ingest + BRICK map + rules copy)."""
+
+    profiles_yaml: str
+    reset: bool = True
+
+
+class AssistantDataModelOpenclawBody(BaseModel):
+    """Optional limits for ``POST /assistant/data-model-openclaw``."""
+
+    model_config = ConfigDict(extra="ignore")
+    max_rule_bytes: int = Field(default=800_000, ge=10_000, le=5_000_000)
+    raw_content_max_chars: int = Field(default=400_000, ge=10_000, le=2_000_000)
 
 
 class RuleRunBody(BaseModel):
@@ -167,6 +207,28 @@ class TimeseriesBoundsBody(BaseModel):
     source: str
 
 
+class TimeseriesCleanBody(BaseModel):
+    """Coerce string metrics with embedded units (Grafana exports) to floats for FDD rules."""
+
+    site_id: str
+    source: str = "csv"
+    columns: list[str] | None = None
+    commit: bool = False
+    preview_limit: int = Field(default=12, ge=1, le=200)
+
+
+class TimeseriesPlotReadinessBody(BaseModel):
+    """Same load path as Plots / FDD: single ``source`` or merged ``sources`` + optional time window."""
+
+    site_id: str
+    source: str = "csv"
+    sources: list[str] | None = None
+    join_how: Literal["inner", "left", "outer", "right"] = "outer"
+    start_ts: str | None = None
+    end_ts: str | None = None
+    limit: int = Field(default=5000, ge=1, le=20_000)
+
+
 class WeatherConfigBody(BaseModel):
     latitude: float
     longitude: float
@@ -226,6 +288,18 @@ class RuleUploadBody(BaseModel):
     content: str
 
 
+class RulePutBody(BaseModel):
+    content: str
+
+
+def _try_parse_rule_yaml(text: str) -> tuple[Any, str | None]:
+    try:
+        doc = yaml.safe_load(text)
+        return doc, None
+    except yaml.YAMLError as exc:
+        return None, str(exc)
+
+
 def _driver_health_entry(*, last_run: str = "", rows: int = 0, success: bool | None = None, last_error: str = "") -> dict[str, Any]:
     return {
         "last_run": last_run,
@@ -278,7 +352,11 @@ def create_app() -> FastAPI:
             {"name": "sites", "description": "Site lifecycle and site-level rule pack config."},
             {"name": "model", "description": "Desktop model export/import/validate and TTL controls."},
             {"name": "ingest", "description": "CSV, weather, onboard, BACnet ingestion endpoints."},
-            {"name": "timeseries", "description": "Feather-backed query, bounds, plots, and purge endpoints."},
+            {"name": "timeseries", "description": "Feather-backed query, bounds, plots, FDD overlay frame, and purge endpoints."},
+            {
+                "name": "data_prep",
+                "description": "Agent-friendly timeseries cleaning (strip Grafana-style units) before BRICK mapping and FDD.",
+            },
             {"name": "rules", "description": "Rule execution, rule file management, and defaults."},
             {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
             {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
@@ -716,7 +794,10 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail=(
                     f"{exc}. Hint: this usually means a rule references a sensor column not present "
-                    "in the selected source/window; try source='all' (joined) or map/upload matching points."
+                    "in the selected source/window; try source='all' (joined), map/upload matching points, "
+                    "narrow rule_files to one YAML, or set skip_missing_columns=true to skip incompatible rules. "
+                    "Joined frames suffix metrics as metric_driver (e.g. _csv); the engine maps BRICK labels to those automatically when possible. "
+                    "Bounds/flatline coerce numeric strings; if you still see dtype errors, use POST /timeseries/clean-metrics or fix column dtypes."
                 ),
             ) from exc
         fault_cols = [
@@ -868,6 +949,56 @@ def create_app() -> FastAPI:
     def timeseries_bounds(body: TimeseriesBoundsBody) -> dict[str, Any]:
         return services.ingest.source_time_bounds(source=body.source, site_id=body.site_id)
 
+    @app.post("/timeseries/clean-metrics", tags=["data_prep"])
+    def timeseries_clean_metrics(body: TimeseriesCleanBody) -> dict[str, Any]:
+        """
+        Preview or commit numeric coercion for one driver ``source`` (usually ``csv``).
+
+        Omit ``columns`` to auto-select string columns that look like ``12.3 psi`` / ``70 °F``.
+        Set ``commit:true`` to purge and rewrite Feather for that site+source (destructive).
+        """
+        return services.ingest.clean_timeseries_metrics(
+            site_id=body.site_id,
+            source=body.source,
+            columns=body.columns,
+            commit=bool(body.commit),
+            preview_limit=int(body.preview_limit),
+        )
+
+    @app.post(
+        "/timeseries/plot-readiness",
+        tags=["data_prep"],
+        response_model=TimeseriesPlotReadiness,
+    )
+    def timeseries_plot_readiness(body: TimeseriesPlotReadinessBody) -> TimeseriesPlotReadiness:
+        """
+        Pydantic-validated report: which columns plot as numeric lines vs need ``clean-metrics`` / mapping fixes.
+
+        Agents should call this before ``/plots/fdd-frame`` when diagnosing flat or empty Plotly traces.
+        """
+        merge_sources = [str(s).strip() for s in (body.sources or []) if str(s).strip()]
+        try:
+            if merge_sources:
+                frame, _used = services.ingest.load_merged_sources_frame_window(
+                    site_id=body.site_id,
+                    sources=merge_sources,
+                    start_ts=body.start_ts,
+                    end_ts=body.end_ts,
+                    join_how=str(body.join_how),
+                )
+            else:
+                frame = services.ingest.load_source_frame_window(
+                    source=body.source,
+                    site_id=body.site_id,
+                    start_ts=body.start_ts,
+                    end_ts=body.end_ts,
+                )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        cap = max(1, min(int(body.limit), 20_000))
+        tail = frame.tail(cap) if not frame.empty else frame
+        return analyze_dataframe_for_plot(tail)
+
     @app.get("/config/weather", tags=["config"])
     def weather_config_get() -> dict[str, Any]:
         return {
@@ -1000,44 +1131,285 @@ def create_app() -> FastAPI:
         return onboard_config_get()
 
     @app.get("/plots/frame", tags=["timeseries"])
-    def plots_frame(site_id: str, source: str = "csv", limit: int = 5000) -> dict[str, Any]:
+    def plots_frame(
+        site_id: str,
+        source: str = "csv",
+        limit: int = 5000,
+        include_readiness: bool = False,
+    ) -> dict[str, Any]:
         frame = services.ingest.load_source_frame(source=source, site_id=site_id)
         if frame.empty:
-            return {"columns": [], "rows": []}
+            out: dict[str, Any] = {"columns": [], "rows": []}
+            if include_readiness:
+                out["readiness"] = analyze_dataframe_for_plot(frame).model_dump()
+            return out
         cap = max(1, min(int(limit), 20_000))
-        frame = frame.tail(cap).copy()
-        frame = frame.where(pd.notnull(frame), None)
-        if "timestamp" in frame.columns:
-            frame["timestamp"] = frame["timestamp"].astype(str)
+        work = frame.tail(cap).copy()
+        readiness_dict: dict[str, Any] | None = None
+        if include_readiness:
+            readiness_dict = analyze_dataframe_for_plot(work).model_dump()
+        work = work.where(pd.notnull(work), None)
+        if "timestamp" in work.columns:
+            work["timestamp"] = work["timestamp"].astype(str)
         return {
-            "columns": [str(c) for c in frame.columns],
-            "rows": _plot_frame_records_json_safe(frame),
+            "columns": [str(c) for c in work.columns],
+            "rows": _plot_frame_records_json_safe(work),
+            **({"readiness": readiness_dict} if readiness_dict is not None else {}),
         }
 
     @app.get("/plots/site-frame", tags=["timeseries"])
-    def plots_site_frame(site_id: str, sources: str = "csv,weather,onboard,bacnet", limit: int = 5000) -> dict[str, Any]:
+    def plots_site_frame(
+        site_id: str,
+        sources: str = "csv,weather,onboard,bacnet",
+        limit: int = 5000,
+        join_how: str = "outer",
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+        include_readiness: bool = False,
+    ) -> dict[str, Any]:
         cap = max(1, min(int(limit), 20_000))
         source_list = [s.strip() for s in str(sources).split(",") if s.strip()]
         if not source_list:
             source_list = ["csv"]
-        merged, used_sources = services.ingest.load_merged_sources_frame_window(
-            site_id=site_id,
-            sources=source_list,
-            start_ts=None,
-            end_ts=None,
-            join_how="outer",
-        )
+        jh = str(join_how or "outer").strip().lower()
+        if jh not in {"inner", "left", "outer", "right"}:
+            jh = "outer"
+        try:
+            merged, used_sources = services.ingest.load_merged_sources_frame_window(
+                site_id=site_id,
+                sources=source_list,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                join_how=jh,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if merged.empty:
-            return {"columns": [], "rows": [], "sources": []}
+            out: dict[str, Any] = {"columns": [], "rows": [], "sources": used_sources}
+            if include_readiness:
+                out["readiness"] = analyze_dataframe_for_plot(merged).model_dump()
+            return out
         ts_col = infer_timestamp_column(merged)
-        out = merged.tail(cap).copy()
-        out = out.where(pd.notnull(out), None)
+        work = merged.tail(cap).copy()
+        readiness_dict: dict[str, Any] | None = None
+        if include_readiness:
+            readiness_dict = analyze_dataframe_for_plot(work).model_dump()
+        work = work.where(pd.notnull(work), None)
+        if ts_col in work.columns:
+            work[ts_col] = work[ts_col].astype(str)
+        return {
+            "columns": [str(c) for c in work.columns],
+            "rows": _plot_frame_records_json_safe(work),
+            "sources": used_sources,
+            **({"readiness": readiness_dict} if readiness_dict is not None else {}),
+        }
+
+    def _plots_fdd_payload(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """
+        Merged timeseries for plotting plus FDD fault columns (same row cap as ``/plots/site-frame``).
+
+        Rules execute on the **tail** ``limit`` rows of the merged window (aligned with the plot load path).
+        """
+        cap = max(1, min(int(body.limit), 20_000))
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()]
+        if not cleaned:
+            cleaned = ["csv"]
+        try:
+            merged, used_sources = services.ingest.load_merged_sources_frame_window(
+                site_id=body.site_id,
+                sources=cleaned,
+                start_ts=body.start_ts,
+                end_ts=body.end_ts,
+                join_how=str(body.join_how),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        safe_rules = _safe_rules_path(body.rules_path)
+        rule_files_norm = _normalize_rule_files_basenames(body.rule_files)
+        if merged.empty:
+            return {
+                "columns": [],
+                "rows": [],
+                "sources": [],
+                "fault_totals": {},
+                "rule_files_filter": rule_files_norm,
+            }
+        ts_col = infer_timestamp_column(merged)
+        work = merged.tail(cap).copy()
+        cmap = _column_map_for_rules_run(services, body.site_id)
+        try:
+            evaluated = run_rule_loop_batched(
+                work,
+                RuleLoopConfig(
+                    rules_path=safe_rules,
+                    chunk_rows=int(body.chunk_rows or 0),
+                    rule_files=rule_files_norm,
+                    skip_missing_columns=bool(body.skip_missing_columns),
+                    column_map=cmap or None,
+                ),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        out = evaluated.where(pd.notnull(evaluated), None)
         if ts_col in out.columns:
             out[ts_col] = out[ts_col].astype(str)
+        fault_cols = [c for c in out.columns if c.endswith("_flag") or c.endswith("_fault")]
+        fault_totals = {c: int(pd.to_numeric(out[c], errors="coerce").fillna(0).sum()) for c in fault_cols}
         return {
             "columns": [str(c) for c in out.columns],
             "rows": _plot_frame_records_json_safe(out),
             "sources": used_sources,
+            "fault_totals": fault_totals,
+            "rule_files_filter": rule_files_norm,
+        }
+
+    @app.post("/plots/fdd-frame", tags=["timeseries"])
+    def plots_fdd_frame(body: PlotsFddFrameBody) -> dict[str, Any]:
+        return _plots_fdd_payload(body)
+
+    @app.post("/plots/share", tags=["timeseries"])
+    def plots_share_create(body: PlotsFddFrameBody) -> dict[str, Any]:
+        """Run the same pipeline as ``/plots/fdd-frame`` and persist parameters for a reopenable Claw handoff."""
+        from open_fdd.assistant.readiness import ui_public_base_url
+        from open_fdd.desktop.storage.plot_share_store import save_plot_share
+
+        result = _plots_fdd_payload(body)
+        safe_rules = _safe_rules_path(body.rules_path)
+        cleaned = [str(s).strip() for s in body.sources if str(s).strip()] or ["csv"]
+        share_id = save_plot_share(
+            {
+                "site_id": body.site_id,
+                "rules_path": safe_rules,
+                "sources": cleaned,
+                "limit": int(body.limit),
+                "join_how": str(body.join_how),
+                "start_ts": body.start_ts,
+                "end_ts": body.end_ts,
+                "rule_files": body.rule_files,
+                "skip_missing_columns": bool(body.skip_missing_columns),
+                "chunk_rows": int(body.chunk_rows or 0),
+                "fault_totals": result.get("fault_totals") or {},
+                "columns": result.get("columns") or [],
+                "row_count": len(result.get("rows") or []),
+            },
+        )
+        result["share_id"] = share_id
+        result["plots_open_url"] = f"{ui_public_base_url().rstrip('/')}/plots?share={urllib.parse.quote(share_id, safe='')}"
+        return result
+
+    @app.get("/plots/share/{share_id}", tags=["timeseries"])
+    def plots_share_get(share_id: str) -> dict[str, Any]:
+        """Return a saved plot+FDD session (no rows); use with ``POST /plots/fdd-frame`` or Plots ``?share=``."""
+        from open_fdd.desktop.storage.plot_share_store import load_plot_share
+
+        rec = load_plot_share(share_id)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="share not found")
+        return rec
+
+    @app.get("/assistant/readiness", tags=["assistant"])
+    def assistant_readiness() -> dict[str, Any]:
+        """Copy-paste handoff for humans or chat agents: deep links, site summary, suggested follow-up."""
+        from open_fdd.assistant.readiness import build_readiness_payload
+
+        return build_readiness_payload(services.model.load())
+
+    @app.post("/assistant/apply-site-profiles", tags=["assistant"])
+    def assistant_apply_site_profiles(body: ApplySiteProfilesBody) -> dict[str, Any]:
+        """
+        Run ingest + equipment + BRICK mappings from a YAML pack under ``examples/`` (same schema as the workshop file).
+
+        Intended for agents / OpenClaw-style automation; paths are restricted to the repo ``examples/`` directory.
+        """
+        from open_fdd.assistant.site_profiles_runner import apply_site_profiles_file
+
+        raw = str(body.profiles_yaml or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="profiles_yaml is required")
+        candidate = Path(raw).expanduser()
+        if not candidate.is_absolute():
+            raise HTTPException(status_code=400, detail="profiles_yaml must be an absolute path")
+        resolved = candidate.resolve()
+        ex_root = _examples_pack_root()
+        if ex_root is None:
+            raise HTTPException(status_code=400, detail="examples directory is not available on this install")
+        if ex_root not in resolved.parents and resolved != ex_root:
+            raise HTTPException(
+                status_code=400,
+                detail="profiles_yaml must be located under the repository examples/ directory",
+            )
+        try:
+            out = apply_site_profiles_file(
+                profiles_yaml=resolved,
+                model=services.model,
+                ingest=services.ingest,
+                ttl=services.ttl,
+                reset=bool(body.reset),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        ttl_err = _safe_sync_ttl()
+        if ttl_err:
+            out["ttl_sync_warning"] = ttl_err
+        return out
+
+    @app.post("/assistant/data-model-openclaw", tags=["assistant"])
+    def assistant_data_model_openclaw(body: AssistantDataModelOpenclawBody | None = None) -> dict[str, Any]:
+        """
+        Call the OpenClaw gateway OpenAI-compatible chat API with the current ``/model/export`` JSON plus
+        all managed ``*.yaml`` / ``*.yml`` under the desktop rules directory.
+
+        Requires ``OFDD_OPENCLAW_GATEWAY_TOKEN`` (or ``OFDD_CLAW_GATEWAY_TOKEN``) and a reachable gateway
+        (default ``OFDD_OPENCLAW_GATEWAY_URL`` = ``http://127.0.0.1:18789``). Returns parsed ``import_ready``
+        when the model response is JSON-shaped; otherwise inspect ``raw_content``.
+        """
+        from open_fdd.assistant.data_model_openclaw import (
+            build_data_model_redesign_user_message,
+            collect_managed_rule_yaml_texts,
+            extract_import_shape_from_llm_output,
+        )
+        from open_fdd.assistant.data_model_redesign_prompt import DATA_MODEL_REDESIGN_SYSTEM_PROMPT
+        from open_fdd.gateway.openclaw_chat import OpenClawGatewayChatClient
+
+        opts = body or AssistantDataModelOpenclawBody()
+        model = services.model.load()
+        rules_root = _rules_dir().resolve()
+        pairs = collect_managed_rule_yaml_texts(rules_root, max_bytes=int(opts.max_rule_bytes))
+        if not pairs:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No rule YAML found under managed rules directory: {rules_root}",
+            )
+        user_msg = build_data_model_redesign_user_message(model, pairs)
+        client = OpenClawGatewayChatClient()
+        try:
+            resp = client.complete_for_task(
+                task_summary="Open-FDD data model BRICK redesign from export and rule YAML",
+                messages=[
+                    {"role": "system", "content": DATA_MODEL_REDESIGN_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc)
+                + " Set OFDD_OPENCLAW_GATEWAY_TOKEN (OpenClaw gateway.auth.token) and ensure the gateway is running.",
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        content = resp.content
+        cap = int(opts.raw_content_max_chars)
+        raw_out = content if len(content) <= cap else content[:cap] + "\n…[truncated by raw_content_max_chars]…"
+        import_ready = extract_import_shape_from_llm_output(content)
+        return {
+            "rule_files_used": [p[0] for p in pairs],
+            "import_ready": import_ready,
+            "import_ready_parse_ok": import_ready is not None,
+            "raw_content": raw_out,
+            "openclaw_task_class": getattr(resp.task_class, "value", str(resp.task_class)),
+            "openclaw_route_reason": resp.route_reason,
         }
 
     @app.get("/data-model/testing/predefined", tags=["sparql"])
@@ -1397,13 +1769,51 @@ ORDER BY DESC(?count)""",
         )
         return {"rules_dir": str(rules_dir), "files": files}
 
-    @app.get("/rules/{filename}", tags=["rules"])
-    def get_rule_file(filename: str) -> Response:
+    @app.get("/rules/export-json", tags=["rules"])
+    def export_rules_json() -> dict[str, Any]:
+        """
+        Full managed rule pack as JSON (YAML text + parsed document per file).
+
+        Intended for agents and humans to share the same view as the FDD Rule Setup UI.
+        """
+        rules_dir = _rules_dir()
+        names = sorted(
+            [p.name for p in rules_dir.iterdir() if p.is_file() and p.suffix.lower() in {".yaml", ".yml"}]
+        )
+        rules: list[dict[str, Any]] = []
+        for name in names:
+            text = (rules_dir / name).read_text(encoding="utf-8")
+            parsed, parse_error = _try_parse_rule_yaml(text)
+            rules.append(
+                {
+                    "filename": name,
+                    "yaml": text,
+                    "parsed": parsed,
+                    "parse_error": parse_error,
+                },
+            )
+        return {"rules_dir": str(rules_dir), "count": len(rules), "rules": rules}
+
+    @app.get("/rules/{filename}", tags=["rules"], response_model=None)
+    def get_rule_file(
+        filename: str,
+        parsed: bool = Query(False, description="If true, return JSON with yaml text and parsed document."),
+    ) -> Response | dict[str, Any]:
         safe = _safe_rule_filename(filename)
         path = _rules_dir() / safe
         if not path.exists() or not path.is_file():
             raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
-        return Response(content=path.read_text(encoding="utf-8"), media_type="text/plain; charset=utf-8")
+        text = path.read_text(encoding="utf-8")
+        if parsed:
+            doc, parse_error = _try_parse_rule_yaml(text)
+            return {
+                "filename": safe,
+                "rules_dir": str(_rules_dir()),
+                "yaml": text,
+                "parsed": doc,
+                "parse_error": parse_error,
+            }
+        return Response(content=text, media_type="text/plain; charset=utf-8")
 
     @app.post("/rules", tags=["rules"])
     def upload_rule_file(body: RuleUploadBody) -> dict[str, Any]:
@@ -1411,6 +1821,14 @@ ORDER BY DESC(?count)""",
         path = _rules_dir() / safe
         path.write_text(body.content, encoding="utf-8")
         return {"filename": safe, "size": len(body.content)}
+
+    @app.put("/rules/{filename}", tags=["rules"])
+    def put_rule_file(filename: str, body: RulePutBody) -> dict[str, Any]:
+        """Replace a rule file in the managed pack (same disk location the UI lists)."""
+        safe = _safe_rule_filename(filename)
+        path = _rules_dir() / safe
+        path.write_text(body.content, encoding="utf-8")
+        return {"filename": safe, "size": len(body.content), "updated": True}
 
     @app.delete("/rules/{filename}", tags=["rules"])
     def delete_rule_file(filename: str) -> dict[str, str]:

@@ -10,7 +10,10 @@ type ModelPayload = {
 
 export function DataModelPage() {
   const [activeTab, setActiveTab] = useState<"export" | "import">("export");
-  const [jsonText, setJsonText] = useState("");
+  /** Last export / model snapshot (Export tab only). */
+  const [exportJsonText, setExportJsonText] = useState("");
+  /** Draft for POST /model/import (Import tab only). */
+  const [importJsonText, setImportJsonText] = useState("");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlText, setTtlText] = useState("");
@@ -47,7 +50,7 @@ export function DataModelPage() {
   async function doExport() {
     try {
       const model = await desktopFetch<ModelPayload>("/model/export");
-      setJsonText(JSON.stringify(model, null, 2));
+      setExportJsonText(JSON.stringify(model, null, 2));
       setOut("Exported model JSON.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -55,9 +58,21 @@ export function DataModelPage() {
     }
   }
 
-  function downloadJsonFile() {
+  async function ensureExportJsonInEditor(): Promise<string> {
+    const trimmed = String(exportJsonText || "").trim();
+    if (trimmed) {
+      return exportJsonText;
+    }
+    const model = await desktopFetch<ModelPayload>("/model/export");
+    const text = JSON.stringify(model, null, 2);
+    setExportJsonText(text);
+    return text;
+  }
+
+  async function downloadJsonFile() {
     try {
-      const payload = parseImportPayload(jsonText);
+      const source = await ensureExportJsonInEditor();
+      const payload = parseImportPayload(source);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -76,7 +91,8 @@ export function DataModelPage() {
 
   async function copyImportReadyJson() {
     try {
-      const payload = parseImportPayload(jsonText);
+      const source = await ensureExportJsonInEditor();
+      const payload = parseImportPayload(source);
       const text = JSON.stringify(payload, null, 2);
       await copyText("import-ready", text);
       setOut("Copied import-ready JSON (sites/equipment/points only).");
@@ -88,13 +104,21 @@ export function DataModelPage() {
 
   async function doImport() {
     try {
-      const payload = parseImportPayload(jsonText);
+      const payload = parseImportPayload(importJsonText);
+      const confirmed = window.confirm(
+        "Import with replace=true will overwrite the existing model. Continue?",
+      );
+      if (!confirmed) {
+        setOut("Import canceled.");
+        return;
+      }
       const resp = await desktopFetch<{ sites: number; equipment: number; points: number }>("/model/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ payload, replace: true }),
       });
-      setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}`);
+      setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}.`);
+      setImportJsonText("");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setOut(`Import failed: ${message}`);
@@ -107,7 +131,7 @@ export function DataModelPage() {
     }
     try {
       const text = await file.text();
-      setJsonText(text);
+      setImportJsonText(text);
       setOut(`Loaded JSON file: ${file.name}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -152,7 +176,7 @@ export function DataModelPage() {
       </div>
 
       {activeTab === "export" ? (
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
           <button onClick={() => void doExport()}>Export JSON</button>
           <button className="secondary-btn" onClick={() => void downloadJsonFile()}>
             Export file
@@ -186,9 +210,19 @@ export function DataModelPage() {
       )}
 
       <textarea
-        value={jsonText}
-        onChange={(e) => setJsonText(e.target.value)}
-        placeholder={activeTab === "import" ? "Paste or upload LLM JSON here" : "Exported model JSON appears here"}
+        value={activeTab === "import" ? importJsonText : exportJsonText}
+        onChange={(e) => {
+          if (activeTab === "import") {
+            setImportJsonText(e.target.value);
+          } else {
+            setExportJsonText(e.target.value);
+          }
+        }}
+        placeholder={
+          activeTab === "import"
+            ? "Paste import JSON here (sites / equipment / points). Switch to Export for the live model snapshot."
+            : "Click Export JSON to load the current model. Import uses a separate box on the Import tab."
+        }
         style={{ minHeight: 260 }}
       />
       <textarea readOnly value={out} style={{ marginTop: 10, minHeight: 64 }} />
@@ -220,7 +254,18 @@ function parseImportPayload(input: string): ModelPayload {
   if (!raw) {
     throw new Error("JSON input is empty.");
   }
-  const parsed = parseJsonLenient(raw);
+  let parsed: unknown;
+  try {
+    parsed = parseJsonLenient(raw);
+  } catch {
+    const fromSections = extractImportJsonFromFileSections(raw);
+    if (!fromSections) {
+      throw new Error(
+        "Could not parse JSON. Paste either plain import JSON, a fenced ```json block, or ChatGPT === FILE: open_fdd_data_model_import_ready.json === sections.",
+      );
+    }
+    parsed = fromSections;
+  }
   const extracted = extractImportShape(parsed);
   return validateImportShape(extracted);
 }
@@ -250,6 +295,26 @@ function parseJsonLenient(raw: string): unknown {
 function extractJsonFence(text: string): string | null {
   const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   return m?.[1]?.trim() || null;
+}
+
+/** LLM fallback format: === FILE: open_fdd_data_model_import_ready.json === ... */
+function extractImportJsonFromFileSections(text: string): unknown | null {
+  const re = /^===\s*FILE:\s*([^\n]+?)\s*===\s*\n([\s\S]*?)(?=^===\s*FILE:|$)/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const name = m[1].trim().toLowerCase();
+    const body = m[2].trim();
+    if (!body) continue;
+    const looksImport =
+      name.includes("import_ready") || name.endsWith(".json") || name.includes("data_model_import");
+    if (!looksImport) continue;
+    try {
+      return JSON.parse(body) as unknown;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function escapeBackslashesInLikelyPathFields(text: string): string {

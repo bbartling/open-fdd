@@ -16,6 +16,11 @@ from open_fdd.desktop.services.timeseries_merge import (
     DEFAULT_SITE_DRIVER_SOURCES,
     merge_site_frames_on_timestamp,
 )
+from open_fdd.desktop.services.timeseries_numeric_clean import (
+    coerce_metrics_to_numeric,
+    preview_rows_json,
+    suggest_coercible_columns,
+)
 from open_fdd.desktop.storage.connectors import TimeSeriesConnector
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
@@ -49,13 +54,18 @@ class IngestService:
                     source=source,
                     storage_ref=storage_ref,
                 )
-        return {
+        out: dict[str, Any] = {
             "rows": rows,
             "storage_path": target,
             "feather_path": feather_path,
             "metrics": metric_columns,
             "dropped_rows": dropped_rows,
         }
+        if result.get("parse_error"):
+            out["parse_error"] = result.get("parse_error")
+        if result.get("preview_rows") is not None:
+            out["preview_rows"] = result.get("preview_rows")
+        return out
 
     def ingest_weather(self, *, site_id: str, days_back: int = 1) -> dict[str, Any]:
         result = run_weather_fetch(store=self.connector, site_id=site_id, days_back=days_back)
@@ -224,6 +234,58 @@ class IngestService:
 
     def purge_timeseries(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         return self.connector.purge(source=source, site_id=site_id)
+
+    def clean_timeseries_metrics(
+        self,
+        *,
+        site_id: str,
+        source: str,
+        columns: list[str] | None,
+        commit: bool,
+        preview_limit: int = 12,
+    ) -> dict[str, Any]:
+        """
+        Strip Grafana-style units from metric strings and coerce to float (preview or commit).
+
+        When ``columns`` is omitted, only columns returned by :func:`suggest_coercible_columns` are updated.
+        On ``commit``, existing Feather files for this ``site_id`` + ``source`` are purged and one cleaned frame is written.
+        """
+        frame = self.load_source_frame(source=source, site_id=site_id)
+        if frame.empty:
+            return {
+                "ok": False,
+                "error": "empty_frame",
+                "message": "No Feather timeseries for this site_id and source.",
+            }
+        suggested = suggest_coercible_columns(frame)
+        target_cols = set(columns) if columns else set(suggested)
+        if not target_cols:
+            return {
+                "ok": True,
+                "committed": False,
+                "suggested_columns": suggested,
+                "applied_columns": [],
+                "message": "No coercible string-metric columns detected (already numeric or no unit-like strings).",
+                "preview_before": preview_rows_json(frame, preview_limit),
+                "preview_after": preview_rows_json(frame, preview_limit),
+                "coercion_stats": {},
+            }
+        cleaned, stats = coerce_metrics_to_numeric(frame, columns=target_cols)
+        out: dict[str, Any] = {
+            "ok": True,
+            "committed": bool(commit),
+            "suggested_columns": suggested,
+            "applied_columns": sorted(target_cols),
+            "coercion_stats": stats,
+            "preview_before": preview_rows_json(frame, preview_limit),
+            "preview_after": preview_rows_json(cleaned, preview_limit),
+            "row_count": int(len(cleaned.index)),
+        }
+        if commit:
+            self.connector.purge(source=source, site_id=site_id)
+            storage_path = self.connector.write_frame(source=source, site_id=site_id, frame=cleaned)
+            out["storage_path"] = str(storage_path)
+        return out
 
     def train_ml_baseline(
         self,

@@ -83,6 +83,26 @@ def test_runner_bounds_out_of_range(sample_df):
     assert result["bounds_flag"].sum() > 0
 
 
+def test_runner_bounds_object_string_numerics() -> None:
+    """Bounds rules coerce string/object numerics (Grafana CSV before full clean)."""
+    df = pd.DataFrame(
+        {
+            "timestamp": pd.date_range("2026-01-01", periods=5, freq="h"),
+            "oat": ["40.0", "41.2", "200.0", "42.0", "43.0"],
+        }
+    )
+    rule = {
+        "name": "bounds",
+        "type": "bounds",
+        "flag": "bounds_flag",
+        "inputs": {"Outside_Air_Temperature_Sensor": {"column": "oat", "bounds": {"imperial": [-20, 120]}}},
+        "params": {"units": "imperial"},
+    }
+    runner = RuleRunner(rules=[rule])
+    result = runner.run(df)
+    assert int(result["bounds_flag"].sum()) == 1
+
+
 def test_runner_flatline_rule():
     """RuleRunner evaluates flatline rules."""
     df = pd.DataFrame(

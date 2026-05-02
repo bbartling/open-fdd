@@ -116,7 +116,35 @@ Minimum observability baseline:
 
 ## 1) Run Open-FDD on the host
 
-Requirements: **Python 3.10+**, **Node.js 20+ for Open-FDD desktop build** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI **`http://127.0.0.1:8080`**.
+Requirements: **Python 3.10+**, **Node.js 20+ for the desktop UI** (**Node 22.14+ minimum, Node 24 recommended if also installing OpenClaw CLI**), **git**. Default URLs: bridge **`http://127.0.0.1:8765`**, MCP **`http://127.0.0.1:8090`**, UI (**`start-local`**) uses Vite **`npm run dev`** — typically **`http://127.0.0.1:5173`** (not 8080 unless you change ports).
+
+### 1b) Desired workflow — AI vs manual
+
+**Neither path is deprecated.** Pick what fits the operator.
+
+| Mode | Who starts the stack | Typical flow |
+|------|------------------------|--------------|
+| **AI-assisted (Open-FDD Claw / OpenClaw)** | Human or agent runs **`start-local.ps1`** or **`start-local.sh`** once on the host (or over SSH). | The AI calls **bridge** endpoints (`/health`, `/assistant/readiness`, `/plots/fdd-frame`, `/plots/share`, …) and points humans to **Plots** readiness links (`plots_quicklinks`, `?fdd=1`, `?share=`). |
+| **Fully manual** | Same **`start-local`** scripts; no AI. | Use the **web UI**, **`/docs`**, or **`curl`** / Postman. Optionally export **`GET /model/export`** JSON into ChatGPT or another tool; optional and not tied to OpenClaw. |
+
+**Practical order (both modes):** install deps once → **`start-local`** → wait for **`/health` OK** → ingest or apply site profiles → open **Plots** (or **`GET /assistant/readiness`** for copy-paste links) → run FDD overlay or save a **`POST /plots/share`** handoff for someone else to open **`/plots?share=…`**.
+
+### 1c) Agent-friendly pipeline: ingest → clean → BRICK → plots → FDD
+
+Typical Grafana CSVs keep **units in cells** (`69.5 °F`, `17.8 psi`). Open-FDD stores those as strings until you coerce them.
+
+| Step | Bridge (or MCP tool) | Notes |
+|------|------------------------|--------|
+| 1. Ingest | **`POST /ingest/csv`** or **`POST /ingest/csv/upload`** | UTF-16 tab + `ts` column supported. |
+| 2. Preview clean | **`POST /timeseries/clean-metrics`** with **`commit: false`** | Returns **`suggested_columns`**, **`preview_before`**, **`preview_after`**. |
+| 3. Commit clean | Same body with **`commit: true`** | **Purges** Feather for that `site_id` + `source`, writes one cleaned frame. Destructive. |
+| 4. BRICK / model | **`GET /model/export`**, **`POST /model/import`**, **`POST /model/ttl/sync`**, or **`POST /assistant/apply-site-profiles`** | Map `external_id` to BRICK types for rule column resolution. |
+| 5. Rules (shared with UI) | **`GET /rules`**, **`GET /rules/export-json`**, **`PUT /rules/{file}.yaml`**, **`POST /rules`** | Same managed pack as **FDD Rule Setup** in the desktop UI; export includes raw YAML plus parsed JSON per file. |
+| 6. Plots + FDD | **`POST /plots/fdd-frame`**, **`POST /rules/run`**, **`POST /plots/share`** | Bounds / flatline rules expect **numeric** sensor columns. |
+
+MCP (action tools): **`bridge_timeseries_clean_metrics`**, **`bridge_rules_list`**, **`bridge_rules_export_json`**, **`bridge_rules_put`** (see MCP `/manifest`).
+
+Agents should **not** assume they started the UI until **`/health`** succeeds; **`ERR_CONNECTION_REFUSED`** means the gateway is down or the wrong URL/port.
 
 ### Windows (recommended here)
 

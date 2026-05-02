@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Protocol
+from typing import Any, Protocol
 
 import pandas as pd
 
@@ -37,13 +37,18 @@ class FeatherConnector:
         from open_fdd.platform.drivers.csv_driver import ingest_csv_to_feather
 
         result = ingest_csv_to_feather(csv_path=csv_path, source=source, site_id=site_id, store=self.store)
-        return {
+        out: dict[str, Any] = {
             "rows": result.rows,
             "dropped_rows": result.dropped_rows,
             "storage_path": str(result.file_path),
             "feather_path": str(result.file_path),
             "metrics": result.metric_columns,
         }
+        if result.error:
+            out["parse_error"] = result.error
+        if result.preview_rows is not None:
+            out["preview_rows"] = result.preview_rows
+        return out
 
     def purge(self, *, source: str | None = None, site_id: str | None = None) -> dict[str, int]:
         return self.store.purge(source=source, site_id=site_id)

@@ -176,8 +176,8 @@ export function OpenClawChatPage() {
       <div className="card">
         <h3 className="title">Operations (Cron / Memory / Skills)</h3>
         <p className="muted">
-          Open-FDD Claw Cron runs in the gateway and can wake the agent on schedule.
-          Use these generated commands in your terminal or in Open-FDD Claw operator workflows.
+          Until the remote agent is wired end-to-end, pull a **readiness snippet** from the Open-FDD bridge: sites, deep links to Plots / CSV import / data model,
+          and a short message you can paste into chat for the human reviewer (“blessing”, follow-up yes/no). Use **Plots** links with <code>?fdd=1</code> to open trends and auto-run **Run FDD &amp; refresh chart**, or **POST /plots/share** to mint a reopenable <code>?share=</code> handoff for the team.
         </p>
         <div className="openclaw-actions">
           <span className="inline-label">Runbook shell:</span>
