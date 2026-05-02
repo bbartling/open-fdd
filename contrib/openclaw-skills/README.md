@@ -1,16 +1,16 @@
 # OpenClaw skills for Open-FDD
 
-These folders are **[AgentSkills](https://agentskills.io)-compatible** skills for OpenClaw. Each directory contains a `SKILL.md` with YAML frontmatter plus operator instructions.
+These folders are **[AgentSkills](https://agentskills.io)-compatible** skills for OpenClaw. Each linked skill folder in the table contains a `SKILL.md` with YAML frontmatter plus operator instructions.
 
 ## Skills in this repo
 
 | Folder | Role |
 |--------|------|
-| **`open-fdd-bootstrap`** | Session start: bridge + MCP manifest + doc index smoke; tell the human if MCP or docs context is offline. |
-| **`open-fdd-clean-metrics`** | Preview/commit **`POST /timeseries/clean-metrics`** until plot-readiness is green; Feather rewrite via bridge (no custom Python). |
-| **`open-fdd-modeling`** | Model export / validate / import / SPARQL. |
-| **`open-fdd-drivers`** | Driver / ingest configuration helpers. |
-| **`open-fdd-bacnet`** | BACnet-related bridge usage. |
+| **[open-fdd-bootstrap](open-fdd-bootstrap/SKILL.md)** | Session start: bridge + MCP manifest + doc index smoke; tell the human if MCP or docs context is offline. |
+| **[open-fdd-clean-metrics](open-fdd-clean-metrics/SKILL.md)** | Preview/commit **`POST /timeseries/clean-metrics`** until plot-readiness is green; Feather rewrite via bridge (no custom Python). |
+| **[open-fdd-modeling](open-fdd-modeling/SKILL.md)** | Model export / validate / import / SPARQL. |
+| **[open-fdd-drivers](open-fdd-drivers/SKILL.md)** | Driver / ingest configuration helpers. |
+| **[open-fdd-bacnet](open-fdd-bacnet/SKILL.md)** | BACnet-related bridge usage. |
 
 ## Install
 

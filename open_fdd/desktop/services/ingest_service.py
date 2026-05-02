@@ -38,6 +38,18 @@ class IngestService:
 
     def ingest_csv(self, *, csv_path: str | Path, site_id: str, source: str = "csv") -> dict[str, Any]:
         result = self.connector.ingest_csv(csv_path=str(csv_path), source=source, site_id=site_id)
+        if result.get("parse_error"):
+            out: dict[str, Any] = {
+                "rows": int(result.get("rows", 0)),
+                "storage_path": str(result.get("storage_path", "")),
+                "feather_path": str(result.get("feather_path", "")),
+                "metrics": [str(c) for c in result.get("metrics", [])],
+                "dropped_rows": int(result.get("dropped_rows", 0)),
+                "parse_error": result.get("parse_error"),
+            }
+            if result.get("preview_rows") is not None:
+                out["preview_rows"] = result.get("preview_rows")
+            return out
         metric_columns = [str(c) for c in result.get("metrics", [])]
         rows = int(result.get("rows", 0))
         dropped_rows = int(result.get("dropped_rows", 0))
@@ -53,15 +65,13 @@ class IngestService:
                     source=source,
                     storage_ref=storage_ref,
                 )
-        out: dict[str, Any] = {
+        out = {
             "rows": rows,
             "storage_path": target,
             "feather_path": feather_path,
             "metrics": metric_columns,
             "dropped_rows": dropped_rows,
         }
-        if result.get("parse_error"):
-            out["parse_error"] = result.get("parse_error")
         if result.get("preview_rows") is not None:
             out["preview_rows"] = result.get("preview_rows")
         return out
@@ -282,15 +292,8 @@ class IngestService:
             "row_count": int(len(cleaned.index)),
         }
         if commit:
-            if isinstance(self.connector, FeatherConnector):
-                storage_path = self.feather_store.replace_site_frame(
-                    source=source, site_id=site_id, frame=cleaned
-                )
-                out["storage_path"] = str(storage_path)
-            else:
-                self.connector.purge(source=source, site_id=site_id)
-                storage_path = self.connector.write_frame(source=source, site_id=site_id, frame=cleaned)
-                out["storage_path"] = str(storage_path)
+            storage_path = self.connector.replace_frame(source=source, site_id=site_id, frame=cleaned)
+            out["storage_path"] = str(storage_path)
         return out
 
     def train_ml_baseline(

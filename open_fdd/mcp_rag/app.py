@@ -5,7 +5,7 @@ import os
 import re
 import secrets
 import urllib.parse
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Annotated, Any
 
 import requests
@@ -645,7 +645,13 @@ def bridge_rules_export_json() -> dict[str, Any]:
 @app.post("/tools/bridge_rules_put", dependencies=[Depends(require_action_tools_auth)])
 def bridge_rules_put(req: RulesPutBridgeRequest) -> dict[str, Any]:
     """Write one rule file by basename (``.yaml`` / ``.yml``)."""
-    safe = Path(str(req.filename or "").strip()).name
+    raw = str(req.filename or "").strip()
+    if not raw or "/" in raw or "\\" in raw or ".." in raw or PurePath(raw).name != raw:
+        raise HTTPException(
+            status_code=400,
+            detail="filename must be a single basename (no directories, no '..').",
+        )
+    safe = raw
     return _json_request(
         "PUT",
         f"/rules/{urllib.parse.quote(safe, safe='')}",

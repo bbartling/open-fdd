@@ -16,6 +16,8 @@ class TimeSeriesConnector(Protocol):
 
     def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
 
+    def replace_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str: ...
+
     def read_frame(self, *, source: str, site_id: str) -> pd.DataFrame: ...
 
     def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict: ...
@@ -29,6 +31,9 @@ class FeatherConnector:
 
     def write_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str:
         return str(self.store.write_frame(source=source, site_id=site_id, frame=frame))
+
+    def replace_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str:
+        return str(self.store.replace_site_frame(source=source, site_id=site_id, frame=frame))
 
     def read_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         return self.store.read_site_frames(source=source, site_id=site_id)
@@ -100,6 +105,26 @@ class SqliteConnector:
             rows.to_sql(self.table_name, conn, if_exists="append", index=False)
         return self.db_path
 
+    def replace_frame(self, *, source: str, site_id: str, frame: pd.DataFrame) -> str:
+        import sqlite3
+
+        self._ensure_schema()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                f"DELETE FROM {self.table_name} WHERE source = ? AND site_id = ?",
+                (source, site_id),
+            )
+            if frame.empty:
+                return self.db_path
+            ts_col = "timestamp" if "timestamp" in frame.columns else frame.columns[0]
+            melted = frame.copy().melt(id_vars=[ts_col], var_name="metric", value_name="value")
+            melted = melted.rename(columns={ts_col: "ts"})
+            melted["source"] = source
+            melted["site_id"] = site_id
+            rows = melted[["source", "site_id", "ts", "metric", "value"]]
+            rows.to_sql(self.table_name, conn, if_exists="append", index=False)
+        return self.db_path
+
     def read_frame(self, *, source: str, site_id: str) -> pd.DataFrame:
         import sqlite3
 
@@ -117,37 +142,54 @@ class SqliteConnector:
         return wide
 
     def ingest_csv(self, *, csv_path: str, source: str, site_id: str) -> dict:
-        from open_fdd.desktop.services.time_utils import (
-            infer_timestamp_column,
-            normalize_known_timezone_abbreviations,
-            parse_timestamp_series,
-        )
+        from open_fdd.platform.drivers.csv_driver import load_timestamped_csv
 
-        frame = pd.read_csv(csv_path)
-        original_len = len(frame.index)
+        from open_fdd.desktop.services.timeseries_numeric_clean import preview_rows_json
+
+        try:
+            frame, original_len, kept_len = load_timestamped_csv(csv_path)
+        except FileNotFoundError as exc:
+            return {
+                "rows": 0,
+                "dropped_rows": 0,
+                "storage_path": self.db_path,
+                "feather_path": "",
+                "metrics": [],
+                "parse_error": f"CSV not found: {csv_path} ({exc})",
+                "preview_rows": [],
+            }
+        except pd.errors.ParserError as exc:
+            return {
+                "rows": 0,
+                "dropped_rows": 0,
+                "storage_path": self.db_path,
+                "feather_path": "",
+                "metrics": [],
+                "parse_error": f"CSV parse error for {csv_path}: {exc}",
+                "preview_rows": [],
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "rows": 0,
+                "dropped_rows": 0,
+                "storage_path": self.db_path,
+                "feather_path": "",
+                "metrics": [],
+                "parse_error": f"Failed reading CSV {csv_path}: {exc}",
+                "preview_rows": [],
+            }
+
         if frame.empty:
             metrics: list[str] = []
             dropped_rows = 0
             rows = 0
         else:
-            ts_col = infer_timestamp_column(frame, candidate_names=("timestamp", "time", "date", "datetime"))
-            try:
-                frame[ts_col] = parse_timestamp_series(frame, timestamp_col=ts_col, min_valid_ratio=0.35)
-            except ValueError:
-                frame[ts_col] = pd.to_datetime(
-                    normalize_known_timezone_abbreviations(frame[ts_col]),
-                    errors="coerce",
-                    utc=True,
-                )
-            frame = frame[frame[ts_col].notna()].copy()
-            if ts_col != "timestamp":
-                frame = frame.rename(columns={ts_col: "timestamp"})
-                ts_col = "timestamp"
+            ts_col = "timestamp"
             ordered = [ts_col] + [c for c in frame.columns if c != ts_col]
             frame = frame[ordered]
             metrics = [str(c) for c in frame.columns if str(c) != "timestamp"]
-            rows = len(frame.index)
-            dropped_rows = original_len - rows
+            rows = kept_len
+            dropped_rows = original_len - kept_len
         out = self.write_frame(source=source, site_id=site_id, frame=frame)
         ret: dict[str, Any] = {
             "rows": rows,
@@ -156,8 +198,6 @@ class SqliteConnector:
             "feather_path": "",
             "metrics": metrics,
         }
-        from open_fdd.desktop.services.timeseries_numeric_clean import preview_rows_json
-
         ret["preview_rows"] = preview_rows_json(frame, 8) if not frame.empty else []
         return ret
 

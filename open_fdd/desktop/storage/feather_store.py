@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
+import os
 from pathlib import Path
 from uuid import uuid4
 from typing import Iterable
@@ -12,6 +13,11 @@ import pandas as pd
 
 from open_fdd.desktop.column_utils import dedupe_dataframe_columns
 from open_fdd.desktop.storage.paths import feather_root
+
+
+# Basename of the single authoritative Feather shard for a site (when present).
+_FEATHER_ACTIVE = ".feather_active"
+_FEATHER_ACTIVE_NEXT = ".feather_active.next"
 
 
 def _safe_name(value: str) -> str:
@@ -37,6 +43,9 @@ class FeatherStore:
         nonce = uuid4().hex[:8]
         path = self.root / _safe_name(source) / _safe_name(site_id)
         path.mkdir(parents=True, exist_ok=True)
+        # New append shard: drop single-shard pointer so reads merge all *.feather again.
+        (path / _FEATHER_ACTIVE).unlink(missing_ok=True)
+        (path / _FEATHER_ACTIVE_NEXT).unlink(missing_ok=True)
         out = path / f"{ts}_{nonce}.feather"
         frame.reset_index(drop=True).to_feather(out)
         return out
@@ -46,8 +55,8 @@ class FeatherStore:
         Atomically replace all Feather shards for ``source`` + ``site_id`` with ``frame``.
 
         Writes to a ``*.feather.tmp`` file in the site directory, verifies it can be read back,
-        removes existing ``*.feather`` shards, then renames the temp file to ``*.feather``.
-        Avoids data loss if the write fails before the old files are removed.
+        publishes it as the live shard via a ``.feather_active`` marker (so readers never see zero shards
+        between delete and rename), then removes other ``*.feather`` files for that site.
         """
         try:
             import pyarrow  # noqa: F401
@@ -63,18 +72,28 @@ class FeatherStore:
         final = path / f"{ts}_{nonce}.feather"
         frame.reset_index(drop=True).to_feather(tmp)
         pd.read_feather(tmp)
+        os.replace(tmp, final)
+        next_active = path / _FEATHER_ACTIVE_NEXT
+        next_active.write_text(final.name, encoding="utf-8")
+        os.replace(str(next_active), str(path / _FEATHER_ACTIVE))
         for f in path.glob("*.feather"):
-            f.unlink(missing_ok=True)
-        for f in path.glob("*.feather.tmp"):
-            if f.resolve() != tmp.resolve():
+            if f.name != final.name:
                 f.unlink(missing_ok=True)
-        tmp.rename(final)
+        for f in path.glob("*.feather.tmp"):
+            f.unlink(missing_ok=True)
         return final
 
     def iter_site_files(self, *, source: str, site_id: str) -> Iterable[Path]:
         path = self.root / _safe_name(source) / _safe_name(site_id)
         if not path.exists():
             return []
+        active = path / _FEATHER_ACTIVE
+        if active.exists():
+            name = active.read_text(encoding="utf-8").strip()
+            if name and "/" not in name and "\\" not in name and ".." not in name:
+                fp = path / name
+                if fp.is_file():
+                    return [fp]
         return sorted(path.glob("*.feather"))
 
     def read_site_frames(self, *, source: str, site_id: str) -> pd.DataFrame:
@@ -100,6 +119,8 @@ class FeatherStore:
 
         if source and site_id:
             target = self.root / _safe_name(source) / _safe_name(site_id)
+            (target / _FEATHER_ACTIVE).unlink(missing_ok=True)
+            (target / _FEATHER_ACTIVE_NEXT).unlink(missing_ok=True)
             for f in target.glob("*.feather"):
                 _delete_file(f)
             if target.exists() and not any(target.iterdir()):

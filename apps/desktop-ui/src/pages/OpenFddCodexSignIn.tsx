@@ -44,7 +44,6 @@ export function OpenFddCodexSignIn() {
   const [sessionId, setSessionId] = useState("");
   const [statusLine, setStatusLine] = useState("");
   const [tokensJson, setTokensJson] = useState("");
-  const [popupBlocked, setPopupBlocked] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPollingRef = useRef(false);
 
@@ -109,8 +108,9 @@ export function OpenFddCodexSignIn() {
   useEffect(() => () => stopPoll(), [stopPoll]);
 
   function openVerificationTab(url: string) {
-    const w = window.open(url, "_blank", "noopener,noreferrer");
-    setPopupBlocked(!w || w.closed);
+    // Omit noopener/noreferrer in the features string: some browsers return null from window.open
+    // when those flags are set, which makes popup detection misleading. Manual link is always shown.
+    window.open(url, "_blank");
   }
 
   async function continueWithChatGPT() {
@@ -121,7 +121,6 @@ export function OpenFddCodexSignIn() {
     setVerificationUrl("");
     setSessionId("");
     setStatusLine("");
-    setPopupBlocked(false);
     stopPoll();
     try {
       const res = await fetch(`${bridgeBase}/openfdd-claw/codex/device/start`, { method: "POST" });
@@ -159,7 +158,6 @@ export function OpenFddCodexSignIn() {
     setSessionId("");
     setStatusLine("");
     setTokensJson("");
-    setPopupBlocked(false);
   }
 
   const showChatgptSettingsHint = phase === "err" && err && looksLikeDevicePolicyBlock(err);
@@ -212,11 +210,6 @@ export function OpenFddCodexSignIn() {
 
       {phase === "waiting" ? (
         <div className="openfdd-codex-active" style={{ marginTop: 12 }}>
-          {popupBlocked ? (
-            <p className="cron-hint-box warn" style={{ marginBottom: 10 }}>
-              Your browser blocked the new tab. Use the button below to open ChatGPT.
-            </p>
-          ) : null}
           <div className="openclaw-actions" style={{ flexWrap: "wrap", marginBottom: 8 }}>
             <a className="link-btn" href={verificationUrl || "#"} target="_blank" rel="noreferrer">
               Open ChatGPT sign-in

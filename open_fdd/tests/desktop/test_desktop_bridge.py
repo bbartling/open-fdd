@@ -803,6 +803,9 @@ def test_rules_export_json_put_and_parsed_query(monkeypatch: pytest.MonkeyPatch,
         assert put.status_code == 200
         assert put.json().get("updated") is True
 
+        missing = client.put("/rules/does-not-exist.yaml", json={"content": "x: 1\n"})
+        assert missing.status_code == 404
+
         again = client.get("/rules/export-json").json()
         assert again["rules"][0]["yaml"] == yaml_b
         assert again["rules"][0]["parsed"]["k"] == 2
@@ -1161,7 +1164,7 @@ def test_openfdd_claw_codex_start_poll_smoke() -> None:
             assert poll.json()["status"] == "pending"
 
 
-def test_assistant_data_model_openclaw_parses_import_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_assistant_data_model_openclaw_parses_import_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import json
 
     from open_fdd.gateway import openclaw_chat as oc
@@ -1180,6 +1183,7 @@ def test_assistant_data_model_openclaw_parses_import_ready(monkeypatch: pytest.M
             )
 
     monkeypatch.setenv("OFDD_OPENCLAW_GATEWAY_TOKEN", "test-token-for-openclaw-bridge")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "claw_dm"))
     monkeypatch.setattr(oc, "OpenClawGatewayChatClient", lambda *a, **k: FakeClient())
 
     app = create_app()

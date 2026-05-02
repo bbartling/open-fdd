@@ -45,6 +45,22 @@ def test_dedupe_dataframe_columns_renames_duplicate_labels() -> None:
     assert list(out.columns) == ["timestamp", "value", "value__1"]
 
 
+def test_feather_store_replace_site_frame_sets_active_pointer(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    store = FeatherStore(root=tmp_path / "feather")
+    t = pd.Timestamp("2026-01-01T00:00:00Z", tz="UTC")
+    a = pd.DataFrame({"timestamp": [t], "value": [1.0]})
+    b = pd.DataFrame({"timestamp": [t], "value": [9.0]})
+    store.write_frame(source="csv", site_id="site-1", frame=a)
+    store.write_frame(source="csv", site_id="site-1", frame=a)
+    merged = store.read_site_frames(source="csv", site_id="site-1")
+    assert len(merged.index) == 2
+    store.replace_site_frame(source="csv", site_id="site-1", frame=b)
+    single = store.read_site_frames(source="csv", site_id="site-1")
+    assert len(single.index) == 1
+    assert float(single["value"].iloc[0]) == 9.0
+
+
 def test_feather_store_stats_and_targeted_purge(tmp_path: Path) -> None:
     pytest.importorskip("pyarrow")
     store = FeatherStore(root=tmp_path / "feather")

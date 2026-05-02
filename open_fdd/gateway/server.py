@@ -983,8 +983,9 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail=(
                     f"{exc}. Hint: this usually means a rule references a sensor column not present "
-                    "in the selected source/window; try source='all' (joined), map/upload matching points, "
-                    "narrow rule_files to one YAML, or set skip_missing_columns=true to skip incompatible rules. "
+                    "in the selected source/window; pass a non-empty ``sources`` list on this endpoint to join "
+                    "those drivers on ``timestamp`` (or use a timeseries route that loads all default drivers for you), "
+                    "map/upload matching points, narrow rule_files to one YAML, or set skip_missing_columns=true to skip incompatible rules. "
                     "Joined frames suffix metrics as metric_driver (e.g. _csv); the engine maps BRICK labels to those automatically when possible. "
                     "Bounds/flatline coerce numeric strings; if you still see dtype errors, use POST /timeseries/clean-metrics or fix column dtypes."
                 ),
@@ -2030,9 +2031,11 @@ ORDER BY DESC(?count)""",
 
     @app.put("/rules/{filename}", tags=["rules"])
     def put_rule_file(filename: str, body: RulePutBody) -> dict[str, Any]:
-        """Replace a rule file in the managed pack (same disk location the UI lists)."""
+        """Update an existing rule file in the managed pack (same disk location the UI lists)."""
         safe = _safe_rule_filename(filename)
         path = _rules_dir() / safe
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail=f"Rule file not found: {safe}")
         path.write_text(body.content, encoding="utf-8")
         return {"filename": safe, "size": len(body.content), "updated": True}
 
