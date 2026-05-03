@@ -1147,6 +1147,20 @@ def test_local_codex_diagnostics_route() -> None:
         assert "codex_path" in body
         assert "hints" in body
         assert "where_codex" in body
+        assert "exec_env" in body
+        assert body["exec_env"].get("ask_for_approval") == "never"
+
+
+def test_local_codex_install_cli_route() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    fake = {"ok": True, "returncode": 0, "stdout": "added 1 package", "stderr": ""}
+    with patch.object(gateway_server.local_codex_cli, "run_npm_install_codex_global", return_value=fake):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/install-cli")
+            assert res.status_code == 200
+            assert res.json() == fake
 
 
 def test_local_codex_chat_rejects_missing_workdir(tmp_path: Path) -> None:

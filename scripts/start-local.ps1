@@ -20,6 +20,11 @@ function Escape-PSLiteral([string]$value) {
   return $value.Replace("'", "''")
 }
 
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8)
+}
+
 function Needs-PythonVenv([string]$roleValue) {
   return $roleValue -ne "ui"
 }
@@ -64,7 +69,7 @@ if ($Role -eq "all") {
   $mcpRest = "http://127.0.0.1:8090"
   $uiBase = "http://127.0.0.1:5173"
   $bridgeTrim = $BridgeUrl.TrimEnd("/")
-  @{
+  $bootstrapJson = @{
     bridge_base     = $bridgeTrim
     mcp_rest_base   = $mcpRest
     ui_public_base  = $uiBase
@@ -76,7 +81,8 @@ if ($Role -eq "all") {
       "GET $($bridgeTrim)/openfdd-agent/context for live merged JSON from the bridge.",
       "MCP: GET $($mcpRest)/manifest - REST tools under POST $($mcpRest)/tools/..."
     )
-  } | ConvertTo-Json -Depth 6 | Set-Content -Path $bootstrapPath -Encoding utf8
+  } | ConvertTo-Json -Depth 6
+  Write-Utf8NoBom -Path $bootstrapPath -Content $bootstrapJson
   Write-Host "Wrote agent bootstrap: $bootstrapPath"
 
   Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath
@@ -119,14 +125,13 @@ $singleCommand = switch ($Role) {
 
 $singleCwd = if ($Role -eq "ui") { $desktopUiDir } else { $repoRoot }
 $singleBootstrap = Join-Path $localDataDir "openfdd-agent-bootstrap.json"
-if (-not (Test-Path $singleBootstrap)) {
-  @{
-    bridge_base    = $BridgeUrl.TrimEnd("/")
-    mcp_rest_base  = "http://127.0.0.1:8090"
-    ui_public_base = "http://127.0.0.1:5173"
-    started_with   = "scripts/start-local.ps1"
-    role           = $Role
-  } | ConvertTo-Json -Depth 5 | Set-Content -Path $singleBootstrap -Encoding utf8
-}
+$singleBootstrapJson = @{
+  bridge_base    = $BridgeUrl.TrimEnd("/")
+  mcp_rest_base  = "http://127.0.0.1:8090"
+  ui_public_base = "http://127.0.0.1:5173"
+  started_with   = "scripts/start-local.ps1"
+  role           = $Role
+} | ConvertTo-Json -Depth 5
+Write-Utf8NoBom -Path $singleBootstrap -Content $singleBootstrapJson
 $scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap
 Invoke-Expression $scriptBody

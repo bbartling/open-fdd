@@ -750,6 +750,11 @@ def create_app() -> FastAPI:
     def local_codex_diagnostics() -> dict[str, Any]:
         return local_codex_cli.gather_diagnostics()
 
+    @app.post("/local-codex/install-cli", tags=["local-codex"])
+    def local_codex_install_cli() -> dict[str, Any]:
+        """Install the OpenAI Codex CLI globally via npm on the bridge host (can take several minutes)."""
+        return local_codex_cli.run_npm_install_codex_global()
+
     @app.post("/local-codex/chat", tags=["local-codex"])
     def local_codex_chat(body: LocalCodexChatBody) -> dict[str, Any]:
         codex = local_codex_cli.resolve_codex_executable()

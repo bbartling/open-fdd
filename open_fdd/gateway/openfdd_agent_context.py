@@ -47,6 +47,20 @@ def _load_bootstrap_file() -> dict[str, Any]:
         return {}
 
 
+def _merge_bootstrap_overlay(ctx: dict[str, Any], overlay: dict[str, Any]) -> None:
+    """Apply bootstrap file on top of generated defaults without clobbering nested dicts/lists."""
+    for k, v in overlay.items():
+        if v is None:
+            continue
+        existing = ctx.get(k)
+        if isinstance(existing, dict) and isinstance(v, dict):
+            _merge_bootstrap_overlay(existing, v)
+        elif isinstance(existing, list) and isinstance(v, list):
+            ctx[k] = list(existing) + list(v)
+        else:
+            ctx[k] = v
+
+
 def build_agent_bootstrap_context() -> dict[str, Any]:
     """Return JSON-serializable map for UI + Codex system prompts."""
     file_overlay = _load_bootstrap_file()
@@ -72,6 +86,11 @@ def build_agent_bootstrap_context() -> dict[str, Any]:
             "bridge_openapi": f"{bridge}/openapi.json",
             "bridge_docs": f"{bridge}/docs",
             "readiness": f"{bridge}/assistant/readiness",
+            "sites": f"{bridge}/sites",
+            "timeseries_clean_metrics": f"{bridge}/timeseries/clean-metrics",
+            "plots_frame": f"{bridge}/plots/frame",
+            "plots_site_frame": f"{bridge}/plots/site-frame",
+            "plots_fdd_frame": f"{bridge}/plots/fdd-frame",
             "local_codex_diagnostics": f"{bridge}/local-codex/diagnostics",
             "openfdd_agent_context": f"{bridge}/openfdd-agent/context",
             "openfdd_agent_chat": f"{bridge}/openfdd-agent/chat",
@@ -79,18 +98,17 @@ def build_agent_bootstrap_context() -> dict[str, Any]:
             "mcp_health": f"{mcp}/health",
         },
         "mcp_tools_examples": [
-            f"POST {mcp}/tools/search_docs — JSON body: query, top_k",
+            f"POST {mcp}/tools/search_docs — JSON body: query, top_k (e.g. query mentions clean-metrics, plots frame, FDD, readiness)",
             f"POST {mcp}/tools/search_api_capabilities — list bridge capabilities",
         ],
         "notes": [
             "MCP RAG is REST on mcp_rest_base (not Streamable MCP unless you add an adapter).",
             "Action tools may require OFDD_MCP_ENABLE_ACTION_TOOLS and OFDD_MCP_OFDD_API_KEY — see docs/howto/desktop_app.md.",
             "Codex auth: use `codex login` on the bridge host; GET /local-codex/diagnostics for status.",
+            "String metrics / plots: use POST timeseries/clean-metrics with commit:false first when readiness recommends it; Plots JSON from GET plots/site-frame or POST plots/fdd-frame.",
         ],
     }
-    for k, v in file_overlay.items():
-        if v is not None:
-            ctx[k] = v
+    _merge_bootstrap_overlay(ctx, file_overlay)
     return ctx
 
 
@@ -110,6 +128,19 @@ def format_agent_context_markdown(ctx: dict[str, Any]) -> str:
         lines.append("- **HTTP**")
         for name in sorted(ep.keys()):
             lines.append(f"  - `{name}`: {ep[name]}")
+    mcp_base = ctx.get("mcp_rest_base") or ""
+    if isinstance(mcp_base, str) and mcp_base.strip():
+        lines.append(
+            "- **MCP RAG (optional)** — use when docs, API discovery, or RAG search would help; "
+            f"skip if the human only needs bridge/UI actions. Start with `{mcp_base.strip()}/manifest` "
+            "(or `mcp_health`) to confirm the server, then call tools as needed."
+        )
+    examples = ctx.get("mcp_tools_examples")
+    if isinstance(examples, list) and examples:
+        lines.append("  - Example tool calls (REST JSON):")
+        for ex in examples:
+            if isinstance(ex, str) and ex.strip():
+                lines.append(f"    - {ex.strip()}")
     notes = ctx.get("notes")
     if isinstance(notes, list):
         lines.append("- **Remarks**")

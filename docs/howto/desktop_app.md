@@ -54,8 +54,10 @@ After startup you should have:
 
 The **Local Codex chat** tab is the **built-in** Open-FDD AI surface: the bridge runs the **`codex` CLI** on the host (same auth model as `codex login` / `codex login --device-auth`). Endpoints:
 
-- `GET /local-codex/diagnostics` — `codex login status`, `where` / npm hints (especially Windows)
+- `GET /local-codex/diagnostics` — `codex login status`, `where` / npm hints (especially Windows), plus **`exec_env`** (how `codex exec` is invoked)
 - `POST /local-codex/chat` — `codex exec …` for a simple transcript in the UI
+
+**Codex exec sandbox (bridge host):** the bridge runs `codex --ask-for-approval … exec …` so the agent can call **localhost** (e.g. `http://127.0.0.1:8765`) and edit the workdir. Defaults: **`OFDD_CODEX_EXEC_APPROVAL=never`**, **`OFDD_CODEX_EXEC_SANDBOX=danger-full-access`**. Stricter options: `read-only`, `workspace-write` (with **`OFDD_CODEX_WORKSPACE_WRITE_NETWORK=true`** the bridge adds `-c sandbox_workspace_write.network_access=true`). Full bypass (only on locked-down automation hosts): **`OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX=1`**. See upstream [Codex sandbox](https://developers.openai.com/codex/concepts/sandboxing).
 
 Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. Legacy bridge device endpoints still exist for compatibility:
 

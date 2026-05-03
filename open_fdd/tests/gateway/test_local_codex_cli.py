@@ -10,6 +10,33 @@ import pytest
 from open_fdd.gateway import local_codex_cli as lc
 
 
+def test_run_npm_install_codex_global(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    out = lc.run_npm_install_codex_global(timeout_s=120)
+    assert out["ok"] is True
+    assert calls == [["npm", "install", "-g", "@openai/codex"]]
+
+
+def test_safe_int_from_env_invalid_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OFDD_CODEX_EXEC_TIMEOUT_S", "not-a-number")
+    captured: dict[str, object] = {}
+
+    def fake_run(*_a: object, **k: object) -> MagicMock:
+        captured.clear()
+        captured.update(k)
+        return MagicMock(returncode=0, stdout="out\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    lc.run_codex_exec("codex", tmp_path, stdin_text="prompt", timeout_s=None)
+    assert captured["timeout"] == 600
+
+
 def test_build_chat_stdin_includes_user_message() -> None:
     body = lc.build_chat_stdin(user_message="hello", system_context=None)
     assert "hello" in body
@@ -44,10 +71,14 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
     out = lc.gather_diagnostics()
     assert out["codex_path"] is None
     assert any("npm install" in h.lower() for h in out["hints"])
+    assert out["exec_env"]["ask_for_approval"] == "never"
+    assert out["exec_env"]["sandbox_mode"] == "danger-full-access"
 
 
 def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: "C:\\\\fake\\\\codex.cmd")
+    monkeypatch.setattr(lc, "npm_global_prefix", lambda: "C:\\\\fake\\\\npm-prefix")
+    monkeypatch.setattr(lc, "where_codex_lines", lambda: ["C:\\\\fake\\\\codex.cmd"])
     monkeypatch.setattr(
         lc,
         "run_codex_login_status",
@@ -55,15 +86,59 @@ def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     out = lc.gather_diagnostics()
     assert out["codex_path"] == "C:\\\\fake\\\\codex.cmd"
+    assert out["npm_prefix"] == "C:\\\\fake\\\\npm-prefix"
+    assert out["where_codex"] == ["C:\\\\fake\\\\codex.cmd"]
     assert out["login_status"]["logged_in"] is True
+    assert out["exec_env"]["sandbox_mode"] == "danger-full-access"
 
 
 def test_run_codex_exec_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    fake = MagicMock(returncode=0, stdout="out\n", stderr="")
-    monkeypatch.setattr(lc.subprocess, "run", lambda *a, **k: fake)
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="out\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    monkeypatch.delenv("OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_EXEC_SANDBOX", raising=False)
     r = lc.run_codex_exec("codex", tmp_path, stdin_text="prompt")
     assert r["ok"] is True
     assert r["stdout"] == "out"
+    assert calls[0][:4] == ["codex", "--ask-for-approval", "never", "exec"]
+    assert "--sandbox" in calls[0]
+    assert calls[0][calls[0].index("--sandbox") + 1] == "danger-full-access"
+    assert calls[0][-4:] == ["--skip-git-repo-check", "--color", "never", "-"]
+
+
+def test_run_codex_exec_workspace_write_adds_network_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    monkeypatch.setenv("OFDD_CODEX_EXEC_SANDBOX", "workspace-write")
+    monkeypatch.setenv("OFDD_CODEX_WORKSPACE_WRITE_NETWORK", "true")
+    lc.run_codex_exec("codex", tmp_path, stdin_text="x")
+    assert "-c" in calls[0]
+    idx = calls[0].index("-c")
+    assert calls[0][idx + 1] == "sandbox_workspace_write.network_access=true"
+
+
+def test_run_codex_exec_bypass_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    monkeypatch.setenv("OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX", "1")
+    lc.run_codex_exec("codex", tmp_path, stdin_text="x")
+    assert "--dangerously-bypass-approvals-and-sandbox" in calls[0]
+    assert "--sandbox" not in calls[0]
 
 
 def test_run_codex_exec_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

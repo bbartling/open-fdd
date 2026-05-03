@@ -57,6 +57,16 @@ type ModelExportResponse = {
 type PlotMode = "lines" | "points" | "both";
 type BoundsResponse = { start: string | null; end: string | null };
 
+type CleanMetricsPayload = {
+  ok?: boolean;
+  committed?: boolean;
+  error?: string;
+  message?: string;
+  applied_columns?: string[];
+  storage_path?: string;
+  row_count?: number;
+};
+
 const COLORS = ["#1d4ed8", "#be185d", "#15803d", "#d97706", "#7c3aed", "#0891b2"];
 
 function isFaultColumn(name: string) {
@@ -190,6 +200,10 @@ export function PlotsPage() {
   const [selectedRuleFiles, setSelectedRuleFiles] = useState<string[]>([]);
   const [skipMissingRules, setSkipMissingRules] = useState(() => initialPlots.skipMissingRules !== false);
   const { data: rulesData, isLoading: rulesLoading, error: rulesListError, refresh: refreshRulesList } = useRulesList();
+  const [cleanBusy, setCleanBusy] = useState(false);
+  const [cleanMsg, setCleanMsg] = useState<string | null>(null);
+
+  const effectiveSiteId = useMemo(() => (siteId || siteContext.selectedSiteId || "").trim(), [siteId, siteContext.selectedSiteId]);
 
   const toggleRuleFileForBackfill = useCallback((name: string) => {
     setSelectedRuleFiles((prev) => (prev.includes(name) ? prev.filter((f) => f !== name) : [...prev, name]));
@@ -304,6 +318,56 @@ export function PlotsPage() {
       setStatus(e instanceof Error ? e.message : String(e));
     }
   }, [siteId, siteContext.selectedSiteId, runSource, joinHow, startTs, endTs]);
+
+  const runCleanMetricsForPlots = useCallback(
+    async (commit: boolean) => {
+      if (!effectiveSiteId) {
+        setCleanMsg("Select a site first.");
+        return;
+      }
+      if (runSource === "all") {
+        setCleanMsg("Choose a single source (e.g. CSV) — cleaning updates one Feather store per driver.");
+        return;
+      }
+      if (commit) {
+        const ok = window.confirm(
+          "Save cleaned numeric columns to Feather for this site and source? Replaces stored files for that driver.",
+        );
+        if (!ok) return;
+      }
+      setCleanBusy(true);
+      setCleanMsg(null);
+      try {
+        const out = await desktopFetch<CleanMetricsPayload>("/timeseries/clean-metrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_id: effectiveSiteId,
+            source: runSource,
+            commit,
+            preview_limit: 12,
+          }),
+        });
+        if (out.ok === false || out.error) {
+          setCleanMsg(`${out.error ?? "error"}: ${out.message ?? JSON.stringify(out)}`);
+          return;
+        }
+        const cols = (out.applied_columns ?? []).length ? out.applied_columns!.join(", ") : "(none)";
+        const path = out.storage_path ? `\n${out.storage_path}` : "";
+        setCleanMsg(
+          `${commit ? "Saved." : "Preview OK — no Feather write yet."} Columns: ${cols}. Rows: ${out.row_count ?? "—"}${path}`,
+        );
+        if (commit) {
+          await loadAndPlotNoFdd();
+        }
+      } catch (e) {
+        setCleanMsg(e instanceof Error ? e.message : String(e));
+      } finally {
+        setCleanBusy(false);
+      }
+    },
+    [effectiveSiteId, runSource, loadAndPlotNoFdd],
+  );
 
   const refreshFddChart = useCallback(async (): Promise<PlotFrameResponse | null> => {
     try {
@@ -626,6 +690,52 @@ export function PlotsPage() {
           </details>
         </div>
         <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 70 }} />
+        {effectiveSiteId && runSource !== "all" ? (
+          <details
+            data-testid="plots-clean-metrics-panel"
+            className="plots-clean-metrics-details"
+            style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}
+          >
+            <summary className="muted" style={{ cursor: "pointer", fontSize: 13, lineHeight: 1.5, userSelect: "none" }}>
+              <strong>Optional</strong> — clean string metrics on this page (same <code className="inline-code">POST /timeseries/clean-metrics</code> as
+              readiness / Local Codex). Expand if you want buttons instead of the API or chat.
+            </summary>
+            <p className="muted" style={{ fontSize: 12, margin: "10px 0 8px", lineHeight: 1.5 }}>
+              Targets values like <code className="inline-code">17.8 psi</code> for the <strong>selected site</strong> and source <strong>{runSource}</strong>.
+              Preview does not write; save updates Feather then reloads the chart above.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <button type="button" className="secondary-btn" disabled={cleanBusy} onClick={() => void runCleanMetricsForPlots(false)}>
+                {cleanBusy ? "…" : "Preview string-metric fix"}
+              </button>
+              <button type="button" disabled={cleanBusy} onClick={() => void runCleanMetricsForPlots(true)}>
+                {cleanBusy ? "…" : "Save to Feather & reload chart"}
+              </button>
+            </div>
+            {cleanMsg ? (
+              <pre
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  background: "var(--panel-soft)",
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: 120,
+                  overflow: "auto",
+                }}
+              >
+                {cleanMsg}
+              </pre>
+            ) : null}
+          </details>
+        ) : runSource === "all" ? (
+          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            For <strong>All sources</strong>, switch to one driver here to run string-metric cleaning (one Feather store per source).
+          </p>
+        ) : null}
       </div>
 
       <div className="card">

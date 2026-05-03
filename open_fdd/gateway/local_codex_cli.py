@@ -26,6 +26,108 @@ def _decode_completed(cp: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     }
 
 
+def safe_int_from_env(name: str, default: int) -> int:
+    """Parse integer env vars; missing/blank/invalid values return ``default``."""
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return int(str(raw).strip(), 10)
+    except ValueError:
+        return default
+
+
+_VALID_SANDBOX_MODES = frozenset({"read-only", "workspace-write", "danger-full-access"})
+_VALID_APPROVAL = frozenset({"never", "on-request", "untrusted"})
+
+
+def _env_trim(name: str, default: str) -> str:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    s = str(raw).strip()
+    return s if s else default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.environ.get(name) or "").strip().lower()
+    if raw == "":
+        return default
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def describe_codex_exec_env() -> dict[str, Any]:
+    """Summarize how the bridge will invoke ``codex exec`` (for diagnostics / operators)."""
+    approval = _env_trim("OFDD_CODEX_EXEC_APPROVAL", "never").lower()
+    if approval not in _VALID_APPROVAL:
+        approval = "never"
+    bypass = _env_bool("OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX", False)
+    sandbox = _env_trim("OFDD_CODEX_EXEC_SANDBOX", "danger-full-access").lower()
+    if sandbox not in _VALID_SANDBOX_MODES:
+        sandbox = "danger-full-access"
+    net = _env_bool("OFDD_CODEX_WORKSPACE_WRITE_NETWORK", True)
+    if bypass:
+        return {
+            "ask_for_approval": approval,
+            "sandbox_mode": "dangerously-bypass-approvals-and-sandbox",
+            "workspace_write_network": None,
+        }
+    return {
+        "ask_for_approval": approval,
+        "sandbox_mode": sandbox,
+        "workspace_write_network": net if sandbox == "workspace-write" else None,
+    }
+
+
+def build_codex_exec_argv(codex_path: str) -> list[str]:
+    """Build argv for non-interactive ``codex exec`` (global flags before the ``exec`` subcommand)."""
+    approval = _env_trim("OFDD_CODEX_EXEC_APPROVAL", "never").lower()
+    if approval not in _VALID_APPROVAL:
+        approval = "never"
+    cmd: list[str] = [codex_path, "--ask-for-approval", approval, "exec"]
+    if _env_bool("OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX", False):
+        cmd.append("--dangerously-bypass-approvals-and-sandbox")
+    else:
+        sandbox = _env_trim("OFDD_CODEX_EXEC_SANDBOX", "danger-full-access").lower()
+        if sandbox not in _VALID_SANDBOX_MODES:
+            sandbox = "danger-full-access"
+        cmd.extend(["--sandbox", sandbox])
+        if sandbox == "workspace-write" and _env_bool("OFDD_CODEX_WORKSPACE_WRITE_NETWORK", True):
+            cmd.extend(["-c", "sandbox_workspace_write.network_access=true"])
+    cmd.extend(["--skip-git-repo-check", "--color", "never", "-"])
+    return cmd
+
+
+def run_npm_install_codex_global(*, timeout_s: int | None = None) -> dict[str, Any]:
+    """Run ``npm install -g @openai/codex`` on the bridge host (operator-local desktop bridge)."""
+    t = timeout_s if timeout_s is not None else safe_int_from_env("OFDD_NPM_INSTALL_CODEX_TIMEOUT_S", 600)
+    t = max(60, min(t, 3600))
+    try:
+        cp = subprocess.run(
+            ["npm", "install", "-g", "@openai/codex"],
+            capture_output=True,
+            text=True,
+            timeout=t,
+            encoding="utf-8",
+            errors="replace",
+            shell=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"npm install timed out after {t}s.",
+        }
+    out = _decode_completed(cp)
+    out["ok"] = cp.returncode == 0
+    return out
+
+
 def resolve_codex_executable() -> str | None:
     """Return path to `codex` (Windows: often `codex.cmd` under npm global)."""
     override = (os.environ.get("OFDD_CODEX_CMD") or "").strip()
@@ -123,11 +225,11 @@ def run_codex_exec(
     stdin_text: str,
     timeout_s: int | None = None,
 ) -> dict[str, Any]:
-    t = timeout_s if timeout_s is not None else int(os.environ.get("OFDD_CODEX_EXEC_TIMEOUT_S") or "600")
+    t = timeout_s if timeout_s is not None else safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_S", 600)
     t = max(30, min(t, 3600))
     try:
         cp = subprocess.run(
-            [codex_path, "exec", "--skip-git-repo-check", "--color", "never", "-"],
+            build_codex_exec_argv(codex_path),
             cwd=str(workdir),
             input=stdin_text,
             text=True,
@@ -181,6 +283,7 @@ def gather_diagnostics() -> dict[str, Any]:
         "where_codex": where_lines,
         "login_status": login,
         "hints": hints,
+        "exec_env": describe_codex_exec_env(),
     }
 
 

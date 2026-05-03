@@ -308,6 +308,16 @@ select {
   gap: 12px;
 }
 
+.local-codex-auth-card .title {
+  margin-bottom: 6px;
+}
+
+.local-codex-signin-primary {
+  padding: 10px 22px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .local-codex-diagnostics {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
@@ -326,6 +336,79 @@ select {
   display: flex;
   flex-direction: column;
   min-height: 42vh;
+}
+
+.local-codex-workdir-block {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.local-codex-workdir-heading {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.local-codex-workdir-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.local-codex-workdir-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+}
+
+.local-codex-workdir-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.local-codex-thinking {
+  opacity: 0.95;
+}
+
+.local-codex-thinking-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.local-codex-brain-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--primary);
+  animation: local-codex-brain-pulse 1.25s ease-in-out infinite;
+}
+
+@keyframes local-codex-brain-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.local-codex-thinking-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
 .local-codex-thread {
