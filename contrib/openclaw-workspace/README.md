@@ -28,4 +28,4 @@ cp -R contrib/openclaw-skills/open-fdd-bacnet ~/.openclaw/workspace/skills/
 
 - [`../openclaw-skills/README.md`](../openclaw-skills/README.md) — AgentSkills bundles for bridge/MCP
 - [`../../scripts/OPENCLAW_RUNBOOK.md`](../../scripts/OPENCLAW_RUNBOOK.md) — ports, health, smoke flows
-- [`../../docs/open-fdd-claw-architecture.md`](../../docs/open-fdd-claw-architecture.md) — topology and Codex auth policy
+- [`../../docs/open-fdd-claw-architecture.md`](../../docs/open-fdd-claw-architecture.md) — built-in Codex CLI vs optional OpenClaw gateway, topology, skills/workspace strategy

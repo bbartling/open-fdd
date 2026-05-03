@@ -30,7 +30,7 @@ In active development.
 
 **One-command local launcher:** use `scripts/start-local.ps1` (Windows) or `scripts/start-local.sh` (bash) to start gateway/MCP/UI with repo-local defaults under `stack/local-data`.
 
-**Open-FDD Claw** (OpenClaw + bridge): after `start-local`, open the **Open-FDD Claw** page in the desktop UI for embedded chat and optional **ChatGPT / Codex** device sign-in via the bridge. Operator docs: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md), workspace bootstrap [`contrib/openclaw-workspace/`](contrib/openclaw-workspace/README.md), skills [`contrib/openclaw-skills/`](contrib/openclaw-skills/README.md).
+**Open-FDD Claw** (built-in agent + optional OpenClaw): after `start-local`, open **Local Codex chat** in the desktop UI for the **Open-FDD agent** (`codex` CLI + stack-aware **SIMPLE/COMPLEX** routing, bridge/MCP URLs from `GET /openfdd-agent/context`). Optional embedded OpenClaw UI remains for full gateway workflows. Docs: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md), workspace [`contrib/openclaw-workspace/`](contrib/openclaw-workspace/README.md), skills [`contrib/openclaw-skills/`](contrib/openclaw-skills/README.md).
 
 ---
 

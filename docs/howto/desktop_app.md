@@ -50,14 +50,18 @@ After startup you should have:
 
 **Readiness deep links:** `GET /assistant/readiness` builds UI URLs using **`OFDD_UI_PUBLIC_BASE`** (preferred) or **`OFDD_UI_PORT`** (defaults to **8080** in code if unset). With **`start-local`**, set **`OFDD_UI_PUBLIC_BASE=http://127.0.0.1:5173`** (the Windows script does this) so plot/data-model links match the Vite dev server.
 
-### Open-FDD Claw (embedded OpenClaw + Codex device login)
+### Local Codex + OpenClaw handoff (`/openfdd-claw-chat`)
 
-In the React app, **Open-FDD Claw** embeds the OpenClaw web UI (iframe) and offers **ChatGPT / Codex** device login via the bridge:
+The **Local Codex chat** tab is the **built-in** Open-FDD AI surface: the bridge runs the **`codex` CLI** on the host (same auth model as `codex login` / `codex login --device-auth`). Endpoints:
 
-- `POST /openfdd-claw/codex/device/start`
-- `POST /openfdd-claw/codex/device/poll`
+- `GET /local-codex/diagnostics` — `codex login status`, `where` / npm hints (especially Windows)
+- `POST /local-codex/chat` — `codex exec …` for a simple transcript in the UI
 
-That mirrors the same OAuth device flow as `openclaw models auth login --provider openai-codex` on the OpenClaw host; tokens are shown in the UI only for localhost-trusted setups. See **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** for policy (keep subscription OAuth in OpenClaw / gateway).
+Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. Legacy bridge device endpoints still exist for compatibility:
+
+- `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` (not used by the current UI)
+
+See **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** for the built-in vs optional-gateway split and skills/workspace clones.
 
 ### Manual start (no launcher)
 

@@ -28,7 +28,7 @@ if ((Needs-PythonVenv $Role) -and -not (Test-Path $venvActivate)) {
   throw "Missing venv activation script: $venvActivate"
 }
 
-function New-ServiceCommand([string]$serviceCommand, [string]$cwd, [bool]$activateVenv) {
+function New-ServiceCommand([string]$serviceCommand, [string]$cwd, [bool]$activateVenv, [string]$BootstrapJsonPath) {
   $escapedCwd = Escape-PSLiteral $cwd
   $escapedVenv = Escape-PSLiteral $venvActivate
   $escapedLocalDataDir = Escape-PSLiteral $localDataDir
@@ -36,6 +36,7 @@ function New-ServiceCommand([string]$serviceCommand, [string]$cwd, [bool]$activa
   $escapedTtlMirrorPath = Escape-PSLiteral $ttlMirrorPath
   $escapedSyncIntervalSeconds = Escape-PSLiteral $SyncIntervalSeconds
   $escapedBridgeUrl = Escape-PSLiteral $BridgeUrl
+  $escapedBootstrap = Escape-PSLiteral $BootstrapJsonPath
   $activateLine = if ($activateVenv) { ". '$escapedVenv'" } else { "" }
   return @"
 Set-Location '$escapedCwd'
@@ -47,25 +48,47 @@ $activateLine
 `$env:OFDD_BRIDGE_URL = '$escapedBridgeUrl'
 `$env:OFDD_MCP_OFDD_API_URL = '$escapedBridgeUrl'
 `$env:OFDD_UI_PUBLIC_BASE = 'http://127.0.0.1:5173'
+`$env:OFDD_AGENT_BOOTSTRAP_FILE = '$escapedBootstrap'
 $serviceCommand
 "@
 }
 
-function Start-ServiceWindow([string]$title, [string]$serviceCommand, [string]$cwd, [bool]$activateVenv) {
-  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv
+function Start-ServiceWindow([string]$title, [string]$serviceCommand, [string]$cwd, [bool]$activateVenv, [string]$BootstrapJsonPath) {
+  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv -BootstrapJsonPath $BootstrapJsonPath
   Start-Process powershell -ArgumentList @("-NoExit", "-Command", $cmd) -WorkingDirectory $cwd | Out-Null
   Write-Host "Started $title"
 }
 
 if ($Role -eq "all") {
-  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true
-  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true
-  Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false
+  $bootstrapPath = Join-Path $localDataDir "openfdd-agent-bootstrap.json"
+  $mcpRest = "http://127.0.0.1:8090"
+  $uiBase = "http://127.0.0.1:5173"
+  $bridgeTrim = $BridgeUrl.TrimEnd("/")
+  @{
+    bridge_base     = $bridgeTrim
+    mcp_rest_base   = $mcpRest
+    ui_public_base  = $uiBase
+    started_with    = "scripts/start-local.ps1"
+    role            = "all"
+    desktop_data_dir = $localDataDir
+    notes           = @(
+      "Open-FDD built-in agent reads this file via OFDD_AGENT_BOOTSTRAP_FILE (set on child processes).",
+      "GET $($bridgeTrim)/openfdd-agent/context for live merged JSON from the bridge.",
+      "MCP: GET $($mcpRest)/manifest - REST tools under POST $($mcpRest)/tools/..."
+    )
+  } | ConvertTo-Json -Depth 6 | Set-Content -Path $bootstrapPath -Encoding utf8
+  Write-Host "Wrote agent bootstrap: $bootstrapPath"
+
+  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath
+  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath
+  Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath
   Write-Host "All services launched with repo-local data defaults."
   Write-Host ""
   Write-Host "Open-FDD UI:        http://127.0.0.1:5173"
-  Write-Host "Plots (FDD-ready):  http://127.0.0.1:5173/plots?fdd=1&skipMissing=1&runSource=csv"
-  Write-Host "  Add site_id=<uuid> after you ingest (see GET http://127.0.0.1:8765/assistant/readiness) for one-click overlay."
+  Write-Host "Open-FDD agent API: $BridgeUrl/openfdd-agent/context  (POST .../openfdd-agent/chat)"
+  Write-Host "MCP RAG REST:       $mcpRest/manifest"
+  Write-Host 'Plots (FDD-ready):  http://127.0.0.1:5173/plots?fdd=1&skipMissing=1&runSource=csv'
+  Write-Host '  Add site_id=<uuid> after you ingest (see GET http://127.0.0.1:8765/assistant/readiness) for one-click overlay.'
   Write-Host "Bridge health:      $BridgeUrl/health"
   Write-Host "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."
   $healthOk = $false
@@ -95,5 +118,15 @@ $singleCommand = switch ($Role) {
 }
 
 $singleCwd = if ($Role -eq "ui") { $desktopUiDir } else { $repoRoot }
-$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role)
+$singleBootstrap = Join-Path $localDataDir "openfdd-agent-bootstrap.json"
+if (-not (Test-Path $singleBootstrap)) {
+  @{
+    bridge_base    = $BridgeUrl.TrimEnd("/")
+    mcp_rest_base  = "http://127.0.0.1:8090"
+    ui_public_base = "http://127.0.0.1:5173"
+    started_with   = "scripts/start-local.ps1"
+    role           = $Role
+  } | ConvertTo-Json -Depth 5 | Set-Content -Path $singleBootstrap -Encoding utf8
+}
+$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap
 Invoke-Expression $scriptBody

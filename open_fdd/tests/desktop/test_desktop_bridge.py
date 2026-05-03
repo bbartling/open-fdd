@@ -1138,6 +1138,51 @@ def test_openfdd_claw_codex_poll_rejects_blank_session_id() -> None:
         assert poll.status_code == 422
 
 
+def test_local_codex_diagnostics_route() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/local-codex/diagnostics")
+        assert res.status_code == 200
+        body = res.json()
+        assert "codex_path" in body
+        assert "hints" in body
+        assert "where_codex" in body
+
+
+def test_local_codex_chat_rejects_missing_workdir(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    missing = tmp_path / "not_a_directory"
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value="codex"):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/chat", json={"message": "hello", "workdir": str(missing)})
+            assert res.status_code == 400
+
+
+def test_openfdd_agent_context_route() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/openfdd-agent/context")
+        assert res.status_code == 200
+        body = res.json()
+        assert "bridge_base" in body
+        assert "mcp_rest_base" in body
+        assert "endpoints" in body
+
+
+def test_openfdd_agent_chat_requires_codex_or_returns_503(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    with patch("open_fdd.gateway.openfdd_agent.resolve_codex_executable", return_value=None):
+        with TestClient(app) as client:
+            res = client.post("/openfdd-agent/chat", json={"message": "hello", "workdir": str(proj)})
+            assert res.status_code == 503
+
+
 def test_openfdd_claw_codex_start_poll_smoke() -> None:
     from unittest.mock import MagicMock, patch
 

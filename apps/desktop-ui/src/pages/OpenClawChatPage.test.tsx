@@ -1,8 +1,61 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OpenClawChatPage } from "./OpenClawChatPage";
 
+vi.mock("../lib/api", async () => {
+  const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
+  return {
+    ...actual,
+    desktopFetch: vi.fn(),
+  };
+});
+
+import { desktopFetch } from "../lib/api";
+
+const desktopFetchMock = vi.mocked(desktopFetch);
+
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  desktopFetchMock.mockReset();
+  desktopFetchMock.mockImplementation(async (path: string) => {
+    if (path === "/local-codex/diagnostics") {
+      return {
+        codex_path: null,
+        npm_prefix: null,
+        where_codex: [],
+        login_status: null,
+        hints: ["npm install -g @openai/codex"],
+      };
+    }
+    if (path === "/assistant/readiness") {
+      return {
+        message_markdown: "",
+        plots_quicklinks: [],
+        suggested_actions: [],
+        deep_links: {},
+      };
+    }
+    throw new Error(`unexpected desktopFetch path: ${path}`);
+  });
+});
+
+function expandDev(container: HTMLElement) {
+  const details = container.querySelector("[data-testid='ofdd-dev-details']");
+  if (!details) {
+    throw new Error("missing dev details");
+  }
+  const summary = details.querySelector("summary");
+  if (!summary) {
+    throw new Error("missing dev summary");
+  }
+  fireEvent.click(summary);
+}
+
 function expandAdvanced(container: HTMLElement) {
+  expandDev(container);
   const details = container.querySelector("[data-testid='ofdd-claw-advanced']");
   if (!details) {
     throw new Error("missing advanced details");
@@ -23,19 +76,32 @@ function advancedPanel(container: HTMLElement) {
 }
 
 describe("OpenClawChatPage", () => {
-  it("renders chat-first layout with iframe and advanced section collapsed", () => {
+  it("renders minimal Codex auth + chat and collapsed developer section", async () => {
+    desktopFetchMock.mockImplementation(async (path: string) => {
+      if (path === "/local-codex/diagnostics") {
+        return {
+          codex_path: "C:\\\\fake\\\\codex.cmd",
+          npm_prefix: null,
+          where_codex: [],
+          login_status: { returncode: 0, stdout: "ok", stderr: "", logged_in: true },
+          hints: [],
+        };
+      }
+      throw new Error(`unexpected path ${path}`);
+    });
+
     const { container } = render(<OpenClawChatPage />);
-    expect(screen.getByText("Open-FDD Claw")).toBeInTheDocument();
-    expect(screen.getByTitle("Open-FDD Claw UI")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /ChatGPT sign-in/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Continue with ChatGPT/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ChatGPT sign-in/i })).toBeInTheDocument();
-    const advancedHost = container.querySelector("[data-testid='ofdd-claw-advanced'] > div");
-    expect(advancedHost).toHaveAttribute("aria-hidden", "true");
+    expect(await screen.findByTestId("ofdd-ai-chat-heading")).toHaveTextContent("Codex");
+    expect(screen.getByRole("button", { name: /Check sign-in/i })).toBeInTheDocument();
+    expect(screen.getByTestId("local-codex-thread")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Send$/i })).toBeInTheDocument();
+    const dev = container.querySelector("[data-testid='ofdd-dev-details'] > div");
+    expect(dev).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("reveals advanced cron panel when details is expanded", () => {
+  it("reveals advanced cron panel when developer and advanced sections are expanded", async () => {
     const { container } = render(<OpenClawChatPage />);
+    await screen.findByTestId("ofdd-ai-chat-heading");
     expandAdvanced(container);
     const advancedHost = container.querySelector("[data-testid='ofdd-claw-advanced'] > div");
     expect(advancedHost).toHaveAttribute("aria-hidden", "false");
@@ -45,6 +111,7 @@ describe("OpenClawChatPage", () => {
 
   it("updates cron command preview when draft changes inside advanced", async () => {
     const { container } = render(<OpenClawChatPage />);
+    await screen.findByTestId("ofdd-ai-chat-heading");
     expandAdvanced(container);
     const panel = advancedPanel(container);
     const nameInput = (await panel.findByLabelText("Job name")) as HTMLInputElement;
@@ -55,6 +122,7 @@ describe("OpenClawChatPage", () => {
 
   it("switches to PowerShell mode inside advanced", async () => {
     const { container } = render(<OpenClawChatPage />);
+    await screen.findByTestId("ofdd-ai-chat-heading");
     expandAdvanced(container);
     const panel = advancedPanel(container);
     fireEvent.click(await panel.findByRole("button", { name: "PowerShell" }));
@@ -65,6 +133,7 @@ describe("OpenClawChatPage", () => {
 
   it("shows cron validation warning for malformed expression in advanced", async () => {
     const { container } = render(<OpenClawChatPage />);
+    await screen.findByTestId("ofdd-ai-chat-heading");
     expandAdvanced(container);
     const panel = advancedPanel(container);
     const cronInput = (await panel.findByLabelText("Cron schedule")) as HTMLInputElement;
@@ -74,6 +143,7 @@ describe("OpenClawChatPage", () => {
 
   it("shows API mode controls when selected in advanced", async () => {
     const { container } = render(<OpenClawChatPage />);
+    await screen.findByTestId("ofdd-ai-chat-heading");
     expandAdvanced(container);
     const panel = advancedPanel(container);
     fireEvent.click(await panel.findByRole("button", { name: "Create via API" }));

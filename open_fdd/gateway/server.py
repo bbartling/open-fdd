@@ -35,7 +35,9 @@ from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.services.plot_readiness import TimeseriesPlotReadiness, analyze_dataframe_for_plot
 from open_fdd.desktop.storage.paths import default_rules_root
-from open_fdd.gateway import codex_device_login
+from open_fdd.gateway import codex_device_login, local_codex_cli
+from open_fdd.gateway.openfdd_agent import run_openfdd_agent_turn
+from open_fdd.gateway.openfdd_agent_context import build_agent_bootstrap_context
 
 _log = logging.getLogger(__name__)
 
@@ -333,6 +335,26 @@ class CodexDevicePollBody(BaseModel):
         if not s:
             raise ValueError("session_id must not be empty or whitespace-only")
         return s
+
+
+class LocalCodexChatBody(BaseModel):
+    """Run `codex exec` on the bridge host (same idea as a local subprocess harness)."""
+
+    model_config = ConfigDict(extra="ignore")
+    message: str = Field(..., min_length=1, max_length=200_000)
+    workdir: str | None = None
+    system_context: str | None = Field(None, max_length=100_000)
+
+
+class OpenFddAgentChatBody(BaseModel):
+    """Open-FDD built-in agent: stack-aware Codex turn with SIMPLE/COMPLEX routing."""
+
+    model_config = ConfigDict(extra="ignore")
+    message: str = Field(..., min_length=1, max_length=200_000)
+    workdir: str | None = None
+    task_summary: str | None = Field(None, max_length=8000)
+    force_class: Literal["simple", "complex"] | None = None
+    system_context: str | None = Field(None, max_length=100_000)
 
 
 class TimeseriesPurgeBody(BaseModel):
@@ -723,6 +745,48 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/local-codex/diagnostics", tags=["local-codex"])
+    def local_codex_diagnostics() -> dict[str, Any]:
+        return local_codex_cli.gather_diagnostics()
+
+    @app.post("/local-codex/chat", tags=["local-codex"])
+    def local_codex_chat(body: LocalCodexChatBody) -> dict[str, Any]:
+        codex = local_codex_cli.resolve_codex_executable()
+        if not codex:
+            raise HTTPException(
+                status_code=503,
+                detail="codex CLI not found on this machine. Install with npm install -g @openai/codex "
+                "or set OFDD_CODEX_CMD to the full path to codex.cmd / codex.",
+            )
+        workdir = local_codex_cli.resolve_workdir(body.workdir)
+        if not workdir.is_dir():
+            raise HTTPException(status_code=400, detail=f"workdir is not a directory: {workdir}")
+        stdin_text = local_codex_cli.build_chat_stdin(
+            user_message=body.message,
+            system_context=body.system_context,
+        )
+        return local_codex_cli.run_codex_exec(codex, workdir, stdin_text=stdin_text)
+
+    @app.get("/openfdd-agent/context", tags=["openfdd-agent"])
+    def openfdd_agent_context() -> dict[str, Any]:
+        """Ports and URLs for the built-in agent (merge of env + optional bootstrap JSON)."""
+        return build_agent_bootstrap_context()
+
+    @app.post("/openfdd-agent/chat", tags=["openfdd-agent"])
+    def openfdd_agent_chat(body: OpenFddAgentChatBody) -> dict[str, Any]:
+        result = run_openfdd_agent_turn(
+            message=body.message,
+            workdir_raw=body.workdir,
+            task_summary=body.task_summary,
+            force_class=body.force_class,
+            system_context=body.system_context,
+        )
+        if result.get("error") == "codex_cli_missing":
+            raise HTTPException(status_code=503, detail=str(result.get("detail") or "codex CLI missing"))
+        if result.get("error") == "bad_workdir":
+            raise HTTPException(status_code=400, detail=str(result.get("detail") or "bad workdir"))
+        return result
 
     @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
     def codex_device_start() -> dict[str, Any]:

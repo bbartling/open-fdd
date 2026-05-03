@@ -16,7 +16,7 @@ const navItems: NavItem[] = [
   { to: "/data-maintenance", icon: "🧹", label: "Data & model maintenance" },
   { to: "/ml-lab", icon: "🤖", label: "ML Lab" },
   { to: "/energy-engineering", icon: "⚡", label: "Energy and Analytics" },
-  { to: "/openfdd-claw-chat", icon: "🦞", label: "Open-FDD Claw Chat" },
+  { to: "/openfdd-claw-chat", icon: "💬", label: "Local Codex chat" },
   { to: "/system", icon: "🖥️", label: "System resources" },
 ];
 

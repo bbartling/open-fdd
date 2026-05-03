@@ -301,6 +301,88 @@ select {
   font-size: 12px;
 }
 
+/* Local Codex chat — simple transcript + bubbles */
+.local-codex-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.local-codex-diagnostics {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.local-codex-chat-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 42vh;
+}
+
+.local-codex-thread {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  padding: 12px;
+  overflow: auto;
+  min-height: 200px;
+  max-height: min(55vh, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.local-codex-msg {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.local-codex-msg-user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--primary) 22%, var(--panel));
+  border: 1px solid var(--border);
+}
+
+.local-codex-msg-ai {
+  align-self: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.local-codex-msg-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.local-codex-compose {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: flex-end;
+}
+
+.local-codex-compose textarea {
+  flex: 1;
+  min-height: 52px;
+  resize: vertical;
+}
+
 .openclaw-actions {
   display: flex;
   align-items: center;
