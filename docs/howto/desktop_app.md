@@ -33,12 +33,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway
 
 Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**.
 
-Bash — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**:
+Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**. The script writes **`stack/local-data/openfdd-agent-bootstrap.json`** and exports **`OFDD_AGENT_BOOTSTRAP_FILE`** (same behavior as **`start-local.ps1`**) so **Local Codex** / **`GET /openfdd-agent/context`** see **`bridge_base`**, **`mcp_rest_base`**, and **`ui_public_base`**.
 
 ```bash
 bash ./scripts/start-local.sh
 bash ./scripts/start-local.sh gateway   # foreground gateway only
 ```
+
+Override the bridge URL the same way on all platforms: **`export OFDD_BRIDGE_URL=http://127.0.0.1:9999`** before running the script (optional).
+
+**Codex on macOS:** install with **`npm install -g @openai/codex`**, then **`codex login`**. If the bridge cannot find the binary, set **`OFDD_CODEX_CMD`** to the full path (often under **`$(npm config get prefix)/bin/codex`**).
 
 First-time UI: **`cd apps/desktop-ui && npm install`** once; the launcher runs **`npm run dev`** for the UI role.
 

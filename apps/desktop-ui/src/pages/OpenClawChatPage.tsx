@@ -251,7 +251,7 @@ export function OpenClawChatPage() {
     const { sessionId, pollMs } = deviceSession;
     let cancelled = false;
 
-    const tick = async () => {
+    const tick = async (): Promise<boolean> => {
       try {
         const res = await fetch(`${bridgeBase}/openfdd-claw/codex/device/poll`, {
           method: "POST",
@@ -260,13 +260,13 @@ export function OpenClawChatPage() {
         });
         const body = (await res.json()) as { status?: string; message?: string; detail?: string };
         if (cancelled || !devicePollMounted.current) {
-          return;
+          return false;
         }
         if (!res.ok) {
           setDeviceSession(null);
           setAuthState("error");
           setAuthLine(typeof body.detail === "string" ? body.detail : JSON.stringify(body));
-          return;
+          return false;
         }
         if (body.status === "complete") {
           setDeviceSession(null);
@@ -281,28 +281,44 @@ export function OpenClawChatPage() {
             setAuthState("error");
             setAuthLine(e instanceof Error ? e.message : String(e));
           }
-          return;
+          return false;
         }
         if (body.status === "error") {
           setDeviceSession(null);
           setAuthState("error");
           setAuthLine(body.message || "Device sign-in failed.");
+          return false;
         }
+        return true;
       } catch (e) {
         if (cancelled || !devicePollMounted.current) {
-          return;
+          return false;
         }
         setDeviceSession(null);
         setAuthState("error");
         setAuthLine(e instanceof Error ? e.message : String(e));
+        return false;
       }
     };
 
-    const id = window.setInterval(() => void tick(), pollMs);
-    void tick();
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const runSequentialPoll = async () => {
+      if (cancelled || !devicePollMounted.current) {
+        return;
+      }
+      const continuePolling = await tick();
+      if (cancelled || !devicePollMounted.current || !continuePolling) {
+        return;
+      }
+      timeoutId = window.setTimeout(() => void runSequentialPoll(), pollMs);
+    };
+    void runSequentialPoll();
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     };
   }, [deviceSession, bridgeBase, pullDiagnostics]);
 
@@ -335,7 +351,7 @@ export function OpenClawChatPage() {
       }
       if (st === "no_cli") {
         setSignInActionError(
-          "Codex is still not on PATH after install. Restart the bridge process or set OFDD_CODEX_CMD to the full path to codex.cmd.",
+          "Codex is still not on PATH after install. Restart the bridge process or set OFDD_CODEX_CMD to the full path to the codex executable (e.g. codex or codex.cmd).",
         );
         setAuthState("error");
         setAuthLine("Codex CLI not found after npm install.");

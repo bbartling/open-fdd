@@ -23,6 +23,14 @@ def test_run_npm_install_codex_global(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls == [["npm", "install", "-g", "@openai/codex"]]
 
 
+def test_run_npm_install_codex_global_oserror(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(lc.subprocess, "run", MagicMock(side_effect=FileNotFoundError("npm")))
+    out = lc.run_npm_install_codex_global(timeout_s=120)
+    assert out["ok"] is False
+    assert out["returncode"] == -1
+    assert "npm launch failed" in out["stderr"]
+
+
 def test_safe_int_from_env_invalid_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OFDD_CODEX_EXEC_TIMEOUT_S", "not-a-number")
     captured: dict[str, object] = {}
@@ -65,6 +73,13 @@ def test_resolve_workdir_explicit(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
 
 def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "OFDD_CODEX_EXEC_APPROVAL",
+        "OFDD_CODEX_EXEC_SANDBOX",
+        "OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX",
+        "OFDD_CODEX_WORKSPACE_WRITE_NETWORK",
+    ):
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: None)
     monkeypatch.setattr(lc, "npm_global_prefix", lambda: None)
     monkeypatch.setattr(lc, "where_codex_lines", lambda: [])
@@ -76,6 +91,13 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "OFDD_CODEX_EXEC_APPROVAL",
+        "OFDD_CODEX_EXEC_SANDBOX",
+        "OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX",
+        "OFDD_CODEX_WORKSPACE_WRITE_NETWORK",
+    ):
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: "C:\\\\fake\\\\codex.cmd")
     monkeypatch.setattr(lc, "npm_global_prefix", lambda: "C:\\\\fake\\\\npm-prefix")
     monkeypatch.setattr(lc, "where_codex_lines", lambda: ["C:\\\\fake\\\\codex.cmd"])

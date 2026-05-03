@@ -24,10 +24,12 @@ afterEach(() => {
 });
 
 const CHAT_KEY = "ofdd-local-codex-chat-v1";
+const WORKDIR_KEY = "ofdd-local-codex-workdir";
 
 beforeEach(() => {
   try {
     localStorage.removeItem(CHAT_KEY);
+    localStorage.removeItem(WORKDIR_KEY);
   } catch {
     /* ignore */
   }

@@ -123,6 +123,13 @@ def run_npm_install_codex_global(*, timeout_s: int | None = None) -> dict[str, A
             "stdout": "",
             "stderr": f"npm install timed out after {t}s.",
         }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"npm launch failed: {exc}",
+        }
     out = _decode_completed(cp)
     out["ok"] = cp.returncode == 0
     return out
@@ -265,10 +272,21 @@ def gather_diagnostics() -> dict[str, Any]:
         hints.extend(
             [
                 "Install CLI: npm install -g @openai/codex",
-                "PowerShell: where.exe codex.cmd",
-                "PowerShell: where.exe codex",
-                "PowerShell: npm config get prefix   (then look under node_modules\\.bin)",
+                "Find the binary: command -v codex   or   which codex",
+                "npm global bin: npm config get prefix   (then look under bin/ or node_modules/.bin/)",
+            ]
+        )
+        if os.name == "nt":
+            hints.extend(
+                [
+                    "Windows: where.exe codex.cmd",
+                    "Windows: where.exe codex",
+                ]
+            )
+        hints.extend(
+            [
                 "Then in a terminal: codex login   or   codex login --device-auth",
+                "If PATH is odd, set OFDD_CODEX_CMD to the full path to the codex executable.",
                 "Check: codex login status",
             ]
         )

@@ -94,7 +94,7 @@ if ($Role -eq "all") {
   Write-Host "Open-FDD agent API: $BridgeUrl/openfdd-agent/context  (POST .../openfdd-agent/chat)"
   Write-Host "MCP RAG REST:       $mcpRest/manifest"
   Write-Host 'Plots (FDD-ready):  http://127.0.0.1:5173/plots?fdd=1&skipMissing=1&runSource=csv'
-  Write-Host '  Add site_id=<uuid> after you ingest (see GET http://127.0.0.1:8765/assistant/readiness) for one-click overlay.'
+  Write-Host "  Add site_id=<uuid> after you ingest (see GET $bridgeTrim/assistant/readiness) for one-click overlay."
   Write-Host "Bridge health:      $BridgeUrl/health"
   Write-Host "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."
   $healthOk = $false

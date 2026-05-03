@@ -15,6 +15,43 @@ LOG_DIR="${LOCAL_DATA_DIR}/logs"
 
 mkdir -p "${LOCAL_DATA_DIR}" "${LOG_DIR}"
 
+# Match scripts/start-local.ps1: agent + Codex see merged URLs via OFDD_AGENT_BOOTSTRAP_FILE.
+write_openfdd_agent_bootstrap() {
+  local role_tag="$1"
+  local bootstrap_path="${LOCAL_DATA_DIR}/openfdd-agent-bootstrap.json"
+  local bridge_trim="${BRIDGE_URL%/}"
+  local mcp_rest="${OFDD_MCP_REST_BASE:-http://127.0.0.1:8090}"
+  mcp_rest="${mcp_rest%/}"
+  local ui_pub="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
+  ui_pub="${ui_pub%/}"
+  export OFDD_AGENT_BOOTSTRAP_FILE="${bootstrap_path}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "WARNING: python3 not found; could not write ${bootstrap_path}. Set OFDD_BRIDGE_URL / OFDD_UI_PUBLIC_BASE manually for Codex." >&2
+    return 0
+  fi
+  python3 - "${bootstrap_path}" "${bridge_trim}" "${mcp_rest}" "${ui_pub}" "${LOCAL_DATA_DIR}" "${role_tag}" <<'PY'
+import json, pathlib, sys
+
+path, bridge, mcp, ui, data_dir, role = sys.argv[1:7]
+doc = {
+    "bridge_base": bridge,
+    "mcp_rest_base": mcp,
+    "ui_public_base": ui,
+    "started_with": "scripts/start-local.sh",
+    "role": role,
+    "desktop_data_dir": data_dir,
+    "notes": [
+        "Open-FDD built-in agent reads this file via OFDD_AGENT_BOOTSTRAP_FILE (set on child processes).",
+        f"GET {bridge}/openfdd-agent/context for live merged JSON from the bridge.",
+        f"MCP: GET {mcp}/manifest — REST tools under POST {mcp}/tools/...",
+    ],
+}
+pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+pathlib.Path(path).write_text(json.dumps(doc, indent=2), encoding="utf-8")
+PY
+  echo "Wrote agent bootstrap: ${bootstrap_path}"
+}
+
 needs_venv() {
   [[ "${ROLE}" != "ui" ]]
 }
@@ -46,6 +83,7 @@ start_bg() {
 
 case "${ROLE}" in
   all)
+    write_openfdd_agent_bootstrap "all"
     (
       cd "${REPO_ROOT}"
       start_bg "gateway" open-fdd-gateway
@@ -58,8 +96,10 @@ case "${ROLE}" in
     echo "All services launched with repo-local data defaults."
     echo ""
     echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
+    echo "Open-FDD agent API: ${BRIDGE_URL%/}/openfdd-agent/context  (POST .../openfdd-agent/chat)"
+    echo "MCP RAG REST:       ${OFDD_MCP_REST_BASE:-http://127.0.0.1:8090}/manifest"
     echo "Plots (FDD-ready):  ${OFDD_UI_PUBLIC_BASE}/plots?fdd=1&skipMissing=1&runSource=csv"
-    echo "  Add site_id=<uuid> after you ingest (see GET ${BRIDGE_URL}/assistant/readiness) for one-click overlay."
+    echo "  Add site_id=<uuid> after you ingest (see GET ${BRIDGE_URL%/}/assistant/readiness) for one-click overlay."
     echo "Bridge health:      ${BRIDGE_URL}/health"
     echo "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."
     echo "Background logs:    ${LOG_DIR}/gateway.log  ${LOG_DIR}/mcp-rag.log  ${LOG_DIR}/desktop-ui.log"
@@ -88,18 +128,22 @@ case "${ROLE}" in
     fi
     ;;
   gateway)
+    write_openfdd_agent_bootstrap "gateway"
     cd "${REPO_ROOT}"
     exec open-fdd-gateway
     ;;
   mcp)
+    write_openfdd_agent_bootstrap "mcp"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-rag
     ;;
   adapter)
+    write_openfdd_agent_bootstrap "adapter"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-adapter
     ;;
   ui)
+    write_openfdd_agent_bootstrap "ui"
     cd "${DESKTOP_UI_DIR}"
     exec npm run dev
     ;;

@@ -17,6 +17,7 @@ import { desktopFetch } from "../lib/api";
 const desktopFetchMock = vi.mocked(desktopFetch);
 
 function renderPlots(search = "?site_id=s1&runSource=csv") {
+  window.history.pushState({}, "", `/plots${search}`);
   return render(
     <MemoryRouter initialEntries={[`/plots${search}`]}>
       <SiteProvider>
@@ -74,9 +75,10 @@ describe("PlotsPage", () => {
     });
 
     renderPlots();
-    await waitFor(() => {
-      expect(screen.getByTestId("plots-clean-metrics-panel")).toBeInTheDocument();
-    });
+    const panel = await waitFor(() => screen.getByTestId("plots-clean-metrics-panel"));
+    const summary = panel.querySelector("summary");
+    expect(summary).toBeTruthy();
+    fireEvent.click(summary as HTMLElement);
     fireEvent.click(screen.getByRole("button", { name: /Preview string-metric fix/i }));
     expect(await screen.findByText(/Preview OK/i)).toBeInTheDocument();
     expect(screen.getByText(/ColA/)).toBeInTheDocument();

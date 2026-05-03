@@ -7,9 +7,12 @@ that file (when present) with live environment variables so Codex always sees a 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 def _strip(s: str | None) -> str:
@@ -43,7 +46,8 @@ def _load_bootstrap_file() -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        _logger.warning("Could not read or parse agent bootstrap file %s: %s", path, exc)
         return {}
 
 
