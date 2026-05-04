@@ -50,6 +50,7 @@ def run_openfdd_agent_turn(
     force_class: str | None,
     system_context: str | None,
     conversation_history: list[tuple[str, str]] | None = None,
+    human_requested_complex: bool = False,
 ) -> dict[str, Any]:
     codex = resolve_codex_executable()
     if not codex:
@@ -64,9 +65,21 @@ def run_openfdd_agent_turn(
         return {"ok": False, "error": "bad_workdir", "detail": f"Not a directory: {workdir}"}
 
     summary = (task_summary or message or "").strip()[:8000]
-    if force_class in ("simple", "complex"):
-        tier: TaskTier = cast(TaskTier, force_class)
-        reason = "forced tier from client"
+    human_route = False
+    if force_class == "simple":
+        tier: TaskTier = "simple"
+        reason = "forced SIMPLE from client"
+    elif force_class == "complex":
+        tier = "complex"
+        if human_requested_complex:
+            reason = "human-requested COMPLEX evaluation"
+            human_route = True
+        else:
+            reason = "forced COMPLEX from client"
+    elif human_requested_complex:
+        tier = "complex"
+        reason = "human-requested COMPLEX evaluation"
+        human_route = True
     else:
         default_raw = (os.environ.get("OFDD_AGENT_ROUTE_DEFAULT") or "simple").strip().lower()
         default: TaskTier = "complex" if default_raw == "complex" else "simple"
@@ -86,31 +99,66 @@ def run_openfdd_agent_turn(
     model_simple = _codex_env_trim("OFDD_CODEX_MODEL_SIMPLE", DEFAULT_CODEX_MODEL_SIMPLE)
     model_complex_primary = _codex_env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY)
     model_complex_fallback = _codex_env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK)
-    chosen_model = model_simple if tier == "simple" else model_complex_primary
 
     ctx = build_agent_bootstrap_context()
     ctx_md = format_agent_context_markdown(ctx)
-    tier_md = routing_instructions_for_tier(tier)
-
+    slim = {
+        "bridge_base": ctx.get("bridge_base"),
+        "mcp_rest_base": ctx.get("mcp_rest_base"),
+        "ui_public_base": ctx.get("ui_public_base"),
+    }
     extra = (system_context or "").strip()
-    system = "\n\n".join(
-        part
-        for part in (_openfdd_agent_identity(), ctx_md, tier_md, f"### Operator extra instructions\n{extra}" if extra else "")
-        if part
-    )
-
-    stdin_text = build_chat_stdin(
-        user_message=message,
-        system_context=system,
-        conversation_history=conversation_history,
-    )
 
     simple_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_SIMPLE", 420)
     complex_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_COMPLEX", 900)
-    timeout_s = complex_timeout if tier == "complex" else simple_timeout
+
+    def _tier_bundle(t: TaskTier) -> tuple[str, str, str, int]:
+        tier_md = routing_instructions_for_tier(t)
+        system_inner = "\n\n".join(
+            part
+            for part in (
+                _openfdd_agent_identity(),
+                ctx_md,
+                tier_md,
+                f"### Operator extra instructions\n{extra}" if extra else "",
+            )
+            if part
+        )
+        std_in = build_chat_stdin(
+            user_message=message,
+            system_context=system_inner,
+            conversation_history=conversation_history,
+        )
+        m_complex = model_complex_primary
+        m_simple = model_simple
+        chosen = m_simple if t == "simple" else m_complex
+        tout = simple_timeout if t == "simple" else complex_timeout
+        return system_inner, std_in, chosen, tout
+
+    _, stdin_text, chosen_model, timeout_s = _tier_bundle(cast(TaskTier, tier))
+    escalation_eligible = (
+        tier == "simple"
+        and force_class is None
+        and not human_requested_complex
+        and _codex_env_bool("OFDD_AGENT_ESCALATE_ON_FAILURE", True)
+    )
+    route_reason_before_turn = reason
 
     out = run_codex_exec(codex, workdir, stdin_text=stdin_text, timeout_s=timeout_s, model=chosen_model)
     model_attempts: list[str] = [chosen_model]
+    escalated_simple_failure = False
+
+    if escalation_eligible and not out.get("ok"):
+        escalated_simple_failure = True
+        tier = cast(TaskTier, "complex")
+        reason = (
+            f"{route_reason_before_turn}; escalated after SIMPLE codex failed "
+            f"(returncode={out.get('returncode')})"
+        )
+        _, stdin_text, chosen_model, timeout_s = _tier_bundle("complex")
+        out = run_codex_exec(codex, workdir, stdin_text=stdin_text, timeout_s=timeout_s, model=chosen_model)
+        model_attempts = [model_attempts[0], chosen_model]
+
     if (
         tier == "complex"
         and not out.get("ok")
@@ -129,11 +177,6 @@ def run_openfdd_agent_turn(
         model_attempts.append(model_complex_fallback.strip())
         out["codex_model_fallback_used"] = True
 
-    slim = {
-        "bridge_base": ctx.get("bridge_base"),
-        "mcp_rest_base": ctx.get("mcp_rest_base"),
-        "ui_public_base": ctx.get("ui_public_base"),
-    }
     return {
         **out,
         "ok": bool(out.get("ok")),
@@ -143,4 +186,6 @@ def run_openfdd_agent_turn(
         "codex_model": out.get("codex_model") or chosen_model,
         "codex_model_attempts": model_attempts,
         "bootstrap_summary": slim,
+        **({"human_route": True} if human_route else {}),
+        **({"simple_failure_escalated": True} if escalated_simple_failure else {}),
     }

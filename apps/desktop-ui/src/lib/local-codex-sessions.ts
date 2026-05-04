@@ -7,6 +7,10 @@ export type AgentRouteMeta = {
   route_reason?: string;
   attempts?: string[];
   fallback_used?: boolean;
+  /** Operator asked for COMPLEX — `POST …/human_requested_complex` — not auto-routing. */
+  human_requested?: boolean;
+  /** Bridge retried once as COMPLEX after SIMPLE Codex exited non‑zero / failed. */
+  simple_failure_escalated?: boolean;
 };
 
 export type ChatLine = { role: "user" | "assistant"; text: string; route?: AgentRouteMeta };
@@ -75,6 +79,12 @@ function parseRouteMeta(raw: unknown): AgentRouteMeta | undefined {
   }
   if (typeof o.codex_model_fallback_used === "boolean") {
     meta.fallback_used = o.codex_model_fallback_used;
+  }
+  if (o.human_route === true || o.human_requested === true) {
+    meta.human_requested = true;
+  }
+  if (o.simple_failure_escalated === true) {
+    meta.simple_failure_escalated = true;
   }
   return meta;
 }

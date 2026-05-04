@@ -51,6 +51,7 @@ class IngestService:
         source: str = "csv",
         equipment_id: str | None = None,
     ) -> dict[str, Any]:
+        selected_equipment_id = self._resolve_equipment_id(site_id=site_id, equipment_id=equipment_id)
         result = self.connector.ingest_csv(csv_path=str(csv_path), source=source, site_id=site_id)
         if result.get("parse_error"):
             out: dict[str, Any] = {
@@ -70,7 +71,6 @@ class IngestService:
         target = str(result.get("storage_path", ""))
         feather_path = str(result.get("feather_path", ""))
         storage_ref = str(result.get("storage_ref") or target)
-        selected_equipment_id = self._resolve_equipment_id(site_id=site_id, equipment_id=equipment_id)
         with self.model_service.transaction() as model:
             for metric in metric_columns:
                 self._upsert_point_for_metric(

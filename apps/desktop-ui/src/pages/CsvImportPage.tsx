@@ -35,6 +35,7 @@ export function CsvImportPage() {
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [output, setOutput] = useState("Choose one or more CSV files and import.");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   async function runUpload(file: File): Promise<ImportLog> {
     try {
@@ -87,6 +88,7 @@ export function CsvImportPage() {
       setOutput("No CSV files to import (use .csv files or drag/drop CSVs only).");
       return;
     }
+    setPickedFiles(csvFiles);
     const logs: ImportLog[] = [];
     for (const file of csvFiles) {
       logs.push(await runUpload(file));
@@ -139,10 +141,7 @@ export function CsvImportPage() {
             style={{ display: "none" }}
             aria-label="Choose one or more CSV files to import"
             onChange={(e) => {
-              const files = Array.from(e.target.files ?? []).filter(isLikelyCsvFile);
-              if (files.length === 0) return;
-              setPickedFiles(files);
-              void processFiles(files);
+              void processFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
           />
@@ -154,10 +153,18 @@ export function CsvImportPage() {
         )}
       </div>
       <div
-        className="drop-zone"
+        className={`drop-zone${isDragOver ? " drop-zone--active" : ""}`}
         data-testid="csv-import-drop-zone"
         role="region"
         aria-label="Drop CSV files to import"
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+        }}
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -165,10 +172,8 @@ export function CsvImportPage() {
         onDrop={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          const files = Array.from(e.dataTransfer.files ?? []).filter(isLikelyCsvFile);
-          if (files.length === 0) return;
-          setPickedFiles(files);
-          void processFiles(files);
+          setIsDragOver(false);
+          void processFiles(Array.from(e.dataTransfer.files ?? []));
         }}
       >
         <span className="muted" style={{ textAlign: "center", padding: "0 12px" }}>

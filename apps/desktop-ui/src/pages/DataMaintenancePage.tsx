@@ -52,18 +52,35 @@ export function DataMaintenancePage() {
     try {
       const data = await desktopFetch<{
         sites_deleted?: number;
-        feather_purge?: { files_deleted: number; dirs_deleted: number; bytes_deleted: number };
+        feather_purge?:
+          | { files_deleted: number; dirs_deleted: number; bytes_deleted: number }
+          | { error: string };
         ttl_sync_warning?: string;
       }>(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
       await siteContext.refreshSites();
+      const sitesDeleted = data.sites_deleted ?? 0;
+      const fpErr = data.feather_purge && "error" in data.feather_purge ? String(data.feather_purge.error) : null;
+      if (sitesDeleted <= 0 || fpErr) {
+        if (fpErr) {
+          setStatus(
+            `Delete did not complete: Feather purge failed (${fpErr}). The site record was left unchanged — fix the bridge error and retry.`,
+          );
+        } else {
+          setStatus(
+            `No site was deleted (sites_deleted=${sitesDeleted}). Confirm the ID still exists after refresh, then retry.`,
+          );
+        }
+        return;
+      }
       setSiteId("");
-      const fp = data.feather_purge;
-      let msg = `Deleted site "${siteName}" from the stored model (equipment/points removed; BRICK TTL resynced).`;
-      if (fp) {
-        msg += ` Feather timeseries removed: files=${fp.files_deleted}, dirs=${fp.dirs_deleted}, bytes=${fp.bytes_deleted}.`;
+      let msg = `Deleted site "${siteName}" from the stored model (equipment/points removed; BRICK TTL resync attempted).`;
+      const fpOk = data.feather_purge && "files_deleted" in data.feather_purge ? data.feather_purge : null;
+      if (fpOk) {
+        msg += ` Feather timeseries removed: files=${fpOk.files_deleted}, dirs=${fpOk.dirs_deleted}, bytes=${fpOk.bytes_deleted}.`;
       }
       if (data.ttl_sync_warning) {
-        msg += ` TTL sync warning: ${data.ttl_sync_warning}`;
+        msg +=
+          ` TTL was not fully resynced: ${data.ttl_sync_warning}`;
       }
       setStatus(msg);
     } catch (e) {

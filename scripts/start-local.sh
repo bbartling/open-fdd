@@ -59,6 +59,22 @@ needs_venv() {
   [[ "${ROLE}" != "ui" ]]
 }
 
+# Regenerate MCP RAG chunks from docs/ so open-fdd-mcp-rag loads fresh rag_index.json on each start (opt out with OFDD_SKIP_MCP_INDEX_BUILD=1).
+refresh_mcp_rag_index() {
+  if [[ "${OFDD_SKIP_MCP_INDEX_BUILD:-0}" == "1" ]]; then
+    echo "Skipping MCP RAG index rebuild (OFDD_SKIP_MCP_INDEX_BUILD=1)."
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "WARNING: python3 not found; skipping MCP index rebuild." >&2
+    return 0
+  fi
+  (
+    cd "${REPO_ROOT}"
+    python3 scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
+  ) || echo "WARNING: MCP RAG index build failed; search_docs may be stale or empty until you fix errors and restart MCP." >&2
+}
+
 if needs_venv && [[ ! -f "${REPO_ROOT}/.venv/bin/activate" ]]; then
   echo "Missing venv: ${REPO_ROOT}/.venv/bin/activate (create .venv and pip install open-fdd[desktop] before gateway/mcp/adapter)." >&2
   exit 1
@@ -93,6 +109,7 @@ start_bg() {
 case "${ROLE}" in
   all)
     write_openfdd_agent_bootstrap "all"
+    refresh_mcp_rag_index
     (
       cd "${REPO_ROOT}"
       start_bg "gateway" open-fdd-gateway
@@ -103,7 +120,7 @@ case "${ROLE}" in
       start_bg "desktop-ui" npm run dev
     )
     echo "All services launched with repo-local data defaults."
-    printf '%s\n' 'Tip: Re-running this script without closing the previous gateway / mcp-rag / desktop-ui windows can leave ports 8765, 8090, or 5173 busy. Close old windows (or stop old PIDs) to refresh MCP and pick up a rebuilt rag_index.json — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
+    printf '%s\n' 'Tip: This run rebuilt stack/mcp-rag/index/rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui processes can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
     echo ""
     echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
     echo "Open-FDD agent API: ${BRIDGE_URL}/openfdd-agent/context  (POST .../openfdd-agent/chat)"
@@ -144,6 +161,7 @@ case "${ROLE}" in
     ;;
   mcp)
     write_openfdd_agent_bootstrap "mcp"
+    refresh_mcp_rag_index
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-rag
     ;;

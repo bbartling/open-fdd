@@ -34,6 +34,28 @@ function Get-OfddAllowLocalCodexInstallCli {
   return "0"
 }
 
+function Invoke-McpRagIndexBuild {
+  if ($env:OFDD_SKIP_MCP_INDEX_BUILD -eq "1") {
+    Write-Host "Skipping MCP RAG index rebuild (OFDD_SKIP_MCP_INDEX_BUILD=1)."
+    return
+  }
+  $pyExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
+  if (-not (Test-Path $pyExe)) {
+    $pyExe = "python"
+  }
+  $scriptPath = Join-Path $repoRoot "scripts\build_mcp_rag_index.py"
+  $outPath = Join-Path $repoRoot "stack\mcp-rag\index\rag_index.json"
+  Push-Location $repoRoot
+  try {
+    & $pyExe $scriptPath --output $outPath
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "MCP RAG index build failed; search_docs may be stale until you fix errors and restart MCP."
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 New-Item -ItemType Directory -Path $localDataDir -Force | Out-Null
 
 function Escape-PSLiteral([string]$value) {
@@ -128,11 +150,13 @@ if ($Role -eq "all") {
   Write-Utf8NoBom -Path $bootstrapPath -Content $bootstrapJson
   Write-Host "Wrote agent bootstrap: $bootstrapPath"
 
+  Invoke-McpRagIndexBuild
+
   Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
   Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
   Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
   Write-Host 'All services launched with repo-local data defaults.'
-  Write-Host 'Tip: Re-running this script without closing the previous gateway / mcp-rag / desktop-ui windows can leave ports 8765, 8090, or 5173 busy. Close old windows (or stop old PIDs) to refresh MCP and pick up a rebuilt rag_index.json — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
+  Write-Host 'Tip: This run rebuilt stack\mcp-rag\index\rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui windows can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
   Write-Host ""
   Write-Host ('Open-FDD UI:        {0}' -f $uiBase)
   Write-Host ('Open-FDD agent API: {0}/openfdd-agent/context  (POST .../openfdd-agent/chat)' -f $bridgeTrim)
@@ -180,5 +204,8 @@ $singleBootstrapJson = @{
   role           = $Role
 } | ConvertTo-Json -Depth 5
 Write-Utf8NoBom -Path $singleBootstrap -Content $singleBootstrapJson
+if ($Role -eq "mcp") {
+  Invoke-McpRagIndexBuild
+}
 $scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli
 Invoke-Expression $scriptBody

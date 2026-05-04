@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -15,6 +16,8 @@ DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY = "gpt-5.5"
 DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK = "gpt-5.4"
 
 TaskRoute = Literal["simple", "complex"]
+
+_log = logging.getLogger(__name__)
 
 _DEFAULT_SYSTEM = """You are a local coding assistant.
 
@@ -87,6 +90,7 @@ def describe_codex_exec_env() -> dict[str, Any]:
             "model_complex_primary": _env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY),
             "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
             "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
+            "escalate_simple_failure_to_complex": _env_bool("OFDD_AGENT_ESCALATE_ON_FAILURE", True),
         }
     return {
         "ask_for_approval": approval,
@@ -96,6 +100,7 @@ def describe_codex_exec_env() -> dict[str, Any]:
         "model_complex_primary": _env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY),
         "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
         "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
+        "escalate_simple_failure_to_complex": _env_bool("OFDD_AGENT_ESCALATE_ON_FAILURE", True),
     }
 
 
@@ -175,6 +180,11 @@ def resolve_codex_executable() -> str | None:
         p = Path(override)
         if p.is_file():
             return str(p.resolve())
+        _log.warning(
+            "OFDD_CODEX_CMD is set but not found as a file (%r); falling back to shutil.which(\"codex\") "
+            "and Windows where.exe lookup.",
+            override,
+        )
 
     w = shutil.which("codex")
     if w:

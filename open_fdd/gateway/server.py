@@ -16,6 +16,7 @@ import platform
 import time
 import ctypes
 import ctypes.util
+from ctypes import wintypes
 import subprocess
 import warnings
 
@@ -372,6 +373,7 @@ class OpenFddAgentChatBody(BaseModel):
     workdir: str | None = None
     task_summary: str | None = Field(None, max_length=8000)
     force_class: Literal["simple", "complex"] | None = None
+    human_requested_complex: bool = False
     system_context: str | None = Field(None, max_length=100_000)
     conversation_history: list[OpenFddAgentHistoryLine] | None = None
 
@@ -907,8 +909,8 @@ def create_app() -> FastAPI:
     def _cpu_percent_windows() -> float | None:
         class FILETIME(ctypes.Structure):
             _fields_ = [
-                ("dwLowDateTime", ctypes.wintypes.DWORD),
-                ("dwHighDateTime", ctypes.wintypes.DWORD),
+                ("dwLowDateTime", wintypes.DWORD),
+                ("dwHighDateTime", wintypes.DWORD),
             ]
 
         def ft64(ft: FILETIME) -> int:
@@ -1129,6 +1131,7 @@ def create_app() -> FastAPI:
             force_class=body.force_class,
             system_context=body.system_context,
             conversation_history=hist,
+            human_requested_complex=bool(body.human_requested_complex),
         )
         if result.get("error") == "codex_cli_missing":
             raise HTTPException(status_code=503, detail=str(result.get("detail") or "codex CLI missing"))
@@ -1165,13 +1168,27 @@ def create_app() -> FastAPI:
 
     @app.delete("/sites/{site_id}", tags=["sites"])
     def delete_site(site_id: str) -> dict[str, Any]:
+        feather_purge: dict[str, Any]
+        try:
+            feather_purge = services.ingest.purge_timeseries(site_id=site_id, source=None)
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("purge_timeseries failed before deleting site %s", site_id)
+            result: dict[str, Any] = {
+                "sites_deleted": 0,
+                "equipment_deleted": 0,
+                "points_deleted": 0,
+                "feather_purge": {"error": str(exc)},
+            }
+            ttl_err = _safe_sync_ttl()
+            if ttl_err:
+                result["ttl_sync_warning"] = ttl_err
+            return result
+
         out = services.model.delete_site(site_id)
-        # Feather timeseries live under the ingest store keyed by site_id; remove them so disk stats match the model.
-        feather_purge = services.ingest.purge_timeseries(site_id=site_id, source=None)
-        ttl_error = _safe_sync_ttl()
-        result: dict[str, Any] = {**out, "feather_purge": feather_purge}
-        if ttl_error:
-            result["ttl_sync_warning"] = ttl_error
+        ttl_err = _safe_sync_ttl()
+        result = {**out, "feather_purge": feather_purge}
+        if ttl_err:
+            result["ttl_sync_warning"] = ttl_err
         return result
 
     @app.post("/sites/{site_id}/rule-pack", tags=["sites"])

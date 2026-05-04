@@ -473,6 +473,20 @@ select {
   color: color-mix(in srgb, #d97706 95%, var(--text));
 }
 
+.local-codex-route-human-flag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #2563eb 95%, var(--text));
+}
+
+.local-codex-route-escalated-flag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: color-mix(in srgb, #c026d3 92%, var(--text));
+}
+
 .local-codex-route-reason {
   flex-basis: 100%;
   font-size: 10px;
@@ -900,13 +914,19 @@ select {
 
 .local-codex-compose {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-top: 12px;
-  align-items: flex-end;
   padding: 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel-soft) 80%, var(--panel) 20%);
+}
+
+.local-codex-compose-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
 }
 
 .local-codex-compose-input,
@@ -929,6 +949,104 @@ select {
   outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent);
   outline-offset: 1px;
   border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+.local-codex-send-split {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: 44px;
+}
+
+.local-codex-send-split-main {
+  flex: 1;
+  min-width: 72px;
+  padding: 10px 16px;
+  border-radius: 10px 0 0 10px;
+  border: none;
+  background: var(--primary);
+  color: var(--nav-active-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.local-codex-send-split-main:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+.local-codex-send-split-main:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.local-codex-send-split-trigger {
+  padding: 10px 12px;
+  border-radius: 0 10px 10px 0;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--nav-active-text) 22%, transparent);
+  background: var(--primary);
+  color: var(--nav-active-text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 40px;
+  transition: background 140ms ease;
+}
+
+.local-codex-send-split-trigger:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+
+.local-codex-send-split-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.local-codex-send-split-trigger[aria-expanded="true"] {
+  background: var(--primary-strong);
+}
+
+.local-codex-send-split-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.local-codex-send-split-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.local-codex-send-split-menu-item:hover {
+  background: color-mix(in srgb, var(--primary) 14%, var(--panel-soft));
+}
+
+.local-codex-send-split-menu-desc {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .local-codex-send-btn {
@@ -1048,11 +1166,24 @@ details.openfdd-advanced > summary {
 
 .file-picker-btn {
   display: inline-block;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel-soft);
-  color: var(--text);
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--nav-active-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, transform 80ms ease, box-shadow 140ms ease;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.file-picker-btn:hover {
+  background: var(--primary-strong);
+}
+
+.file-picker-btn:active {
+  transform: translateY(1px);
 }
 
 .drop-zone {
@@ -1065,6 +1196,12 @@ details.openfdd-advanced > summary {
   justify-content: center;
   color: var(--muted);
   margin-bottom: 12px;
+}
+
+.drop-zone.drop-zone--active {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--drop-border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--drop-bg));
+  color: var(--text);
 }
 
 /* Data model testing — health / lineage / SPARQL sections */

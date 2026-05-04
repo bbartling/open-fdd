@@ -19,6 +19,8 @@ pip install "open-fdd[desktop]"
 
 From the repository root, **`scripts/start-local.ps1`** (Windows) and **`scripts/start-local.sh`** (bash) export **`OFDD_DESKTOP_DATA_DIR`**, **`OFDD_MODEL_TTL_PATH`**, **`OFDD_MODEL_TTL_MIRROR_PATH`**, **`OFDD_TTL_SYNC_INTERVAL_SECONDS`**, and **`OFDD_BRIDGE_URL`** so **`model.json`**, Feather chunks, and **`data_model.ttl`** live under **`stack/local-data/`** (gitignored) instead of per-user app data.
 
+Both scripts **rebuild `stack/mcp-rag/index/rag_index.json`** from **`docs/`** before starting **`open-fdd-mcp-rag`** (roles **`all`** and **`mcp`**), so MCP search matches current docs on each launch. Set **`OFDD_SKIP_MCP_INDEX_BUILD=1`** to skip that step when iterating quickly.
+
 Windows — gateway, MCP RAG, and Vite dev UI each in a new PowerShell window:
 
 ```powershell
@@ -44,7 +46,7 @@ Override the bridge URL the same way on all platforms: **`export OFDD_BRIDGE_URL
 
 ### Restarting `start-local` and MCP (important)
 
-**MCP RAG** (`open-fdd-mcp-rag`, default **`127.0.0.1:8090`**) is designed like a normal server process: it reads **`OFDD_AGENT_BOOTSTRAP_FILE`**, **`OFDD_MCP_*`**, and the on-disk **`rag_index.json`** when it **starts**. It does **not** watch those files for live edits—so you **refresh MCP by restarting that process**.
+**MCP RAG** (`open-fdd-mcp-rag`, default **`127.0.0.1:8090`**) is designed like a normal server process: it reads **`OFDD_AGENT_BOOTSTRAP_FILE`**, **`OFDD_MCP_*`**, and the on-disk **`rag_index.json`** when it **starts**. It does **not** watch those files for live edits while running—the **`start-local`** scripts regenerate **`rag_index.json`** from **`docs/`** before launching MCP (unless **`OFDD_SKIP_MCP_INDEX_BUILD=1`**), then **`open-fdd-mcp-rag`** loads that snapshot until you stop and start it again.
 
 | Situation | What to do |
 |-----------|------------|

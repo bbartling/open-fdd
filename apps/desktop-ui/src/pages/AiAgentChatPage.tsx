@@ -42,6 +42,8 @@ type CodexExecEnvPayload = {
   model_complex_primary?: string;
   model_complex_fallback?: string;
   llm_route_classify?: boolean;
+  /** Bridge retries once as COMPLEX when auto SIMPLE Codex fails (`OFDD_AGENT_ESCALATE_ON_FAILURE`). */
+  escalate_simple_failure_to_complex?: boolean;
 };
 
 type DiagnosticsPayload = {
@@ -61,6 +63,8 @@ type ChatResponse = {
   codex_model?: string;
   codex_model_attempts?: string[];
   codex_model_fallback_used?: boolean;
+  human_route?: boolean;
+  simple_failure_escalated?: boolean;
 };
 
 function routeMetaFromAgentResponse(data: ChatResponse): AgentRouteMeta | undefined {
@@ -78,6 +82,12 @@ function routeMetaFromAgentResponse(data: ChatResponse): AgentRouteMeta | undefi
   }
   if (data.codex_model_fallback_used === true) {
     meta.fallback_used = true;
+  }
+  if (data.human_route === true) {
+    meta.human_requested = true;
+  }
+  if (data.simple_failure_escalated === true) {
+    meta.simple_failure_escalated = true;
   }
   return meta;
 }
@@ -144,6 +154,8 @@ function AgentRouteCallout({ route }: { route: AgentRouteMeta }) {
     <div className={`local-codex-route-bar local-codex-route-bar--${tier}`} title={route.route_reason || undefined}>
       <span className="local-codex-route-tier">{label}</span>
       {route.codex_model ? <span className="local-codex-route-model">{route.codex_model}</span> : null}
+      {route.human_requested ? <span className="local-codex-route-human-flag">human-requested</span> : null}
+      {route.simple_failure_escalated ? <span className="local-codex-route-escalated-flag">auto-escalated</span> : null}
       {route.fallback_used ? <span className="local-codex-route-fallback-flag">fallback</span> : null}
       {route.route_reason ? <span className="local-codex-route-reason">{route.route_reason}</span> : null}
     </div>
@@ -223,6 +235,10 @@ export function AiAgentChatPage() {
   const [sending, setSending] = useState(false);
   /** Heuristic preview only; bridge may differ when LLM classify or OFDD_AGENT_ROUTE_DEFAULT is set. */
   const [sendingRoutePreview, setSendingRoutePreview] = useState<"simple" | "complex" | null>(null);
+  /** True when the last send used the split-button COMPLEX (human-requested) path. */
+  const [thinkingHumanRequested, setThinkingHumanRequested] = useState(false);
+  const [sendMenuOpen, setSendMenuOpen] = useState(false);
+  const sendSplitRef = useRef<HTMLDivElement | null>(null);
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const devicePollMounted = useRef(true);
@@ -483,7 +499,7 @@ export function AiAgentChatPage() {
     }
   }, [bridgeBase, pullDiagnostics]);
 
-  const sendMessage = useCallback(async () => {
+  const sendMessage = useCallback(async (humanRequestedComplex = false) => {
     const b = bundleRef.current;
     const sessionId = b.activeId;
     const active = b.sessions.find((s) => s.id === sessionId);
@@ -491,10 +507,13 @@ export function AiAgentChatPage() {
     if (!active || !text || sending || authState !== "signed_in") {
       return;
     }
+    setSendMenuOpen(false);
     const workdirSnapshot = workdir.trim() || null;
     const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
+    const requestedHumanComplex = humanRequestedComplex;
     setSending(true);
-    setSendingRoutePreview(classifyOpenfddTaskPreview(text));
+    setThinkingHumanRequested(requestedHumanComplex);
+    setSendingRoutePreview(requestedHumanComplex ? "complex" : classifyOpenfddTaskPreview(text));
     setSessionBundle((prev) =>
       updateSessionById(prev, sessionId, (s) => {
         const nextLines: ChatLine[] = [...s.lines, { role: "user", text }];
@@ -514,6 +533,7 @@ export function AiAgentChatPage() {
           workdir: workdirSnapshot,
           task_summary: null,
           conversation_history: conversationHistory,
+          human_requested_complex: requestedHumanComplex,
         }),
       });
       const data = (await res.json()) as ChatResponse & { detail?: string };
@@ -550,10 +570,29 @@ export function AiAgentChatPage() {
         })),
       );
     } finally {
+      setThinkingHumanRequested(false);
       setSendingRoutePreview(null);
       setSending(false);
     }
   }, [authState, sending, workdir, bridgeBase]);
+
+  useEffect(() => {
+    if (!sendMenuOpen) return;
+    const onDoc = (ev: MouseEvent) => {
+      if (sendSplitRef.current && !sendSplitRef.current.contains(ev.target as Node)) {
+        setSendMenuOpen(false);
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setSendMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [sendMenuOpen]);
 
   const chatEnabled = authState === "signed_in";
   const devicePending = deviceSession !== null;
@@ -619,6 +658,14 @@ export function AiAgentChatPage() {
                 ) : null}
                 {execEnv.llm_route_classify ? (
                   <span className="local-codex-model-chip local-codex-model-chip--accent">LLM classify</span>
+                ) : null}
+                {execEnv.escalate_simple_failure_to_complex === false ? (
+                  <span
+                    className="local-codex-model-chip"
+                    title="OFDD_AGENT_ESCALATE_ON_FAILURE=0 — no automatic COMPLEX retry after SIMPLE failure"
+                  >
+                    no auto-escalate
+                  </span>
                 ) : null}
               </div>
             ) : null}
@@ -725,7 +772,7 @@ export function AiAgentChatPage() {
             className="local-codex-workdir-input"
             value={workdir}
             onChange={(e) => onWorkdirChange(e.target.value)}
-            placeholder="C:\path\to\open-fdd"
+            placeholder={"C:\\path\\to\\open-fdd"}
             aria-label="Open-FDD repository path on the bridge"
             disabled={sending || !chatEnabled}
             autoComplete="off"
@@ -735,9 +782,11 @@ export function AiAgentChatPage() {
         <div className="local-codex-thread" data-testid="local-codex-thread">
           <p className="local-codex-thread-hint muted">
             Up to five threads saved in this browser (oldest dropped when you start a sixth). Drafts persist across tabs.
-            While Codex runs, the colored strip matches a <strong>local routing preview</strong>; each reply header shows
-            the bridge&apos;s actual <strong>SIMPLE</strong> or <strong>COMPLEX</strong> tier and model (may differ if LLM
-            classify or env defaults are enabled on the bridge).
+            <strong> Auto routing</strong> picks SIMPLE vs COMPLEX from your text (and optional bridge LLM classify); if SIMPLE
+            Codex exits with an error, the bridge retries once as <strong>COMPLEX</strong> (
+            <code className="inline-code">OFDD_AGENT_ESCALATE_ON_FAILURE</code>, default on). The <strong>Send ▾</strong> menu
+            offers a <strong> human-requested COMPLEX</strong> pass. While Codex runs, the colored strip previews the tier; reply
+            headers show the bridge&apos;s actual route and chips for human-requested or auto-escalation.
           </p>
           {!chatEnabled && authState !== "loading" ? (
             <p className="muted" style={{ margin: 0 }}>
@@ -787,7 +836,11 @@ export function AiAgentChatPage() {
                   }`}
                 >
                   {THINKING_PHASES[thinkingPhase]}
-                  {sendingRoutePreview ? (
+                  {thinkingHumanRequested ? (
+                    <span className="muted" style={{ display: "block", marginTop: 4, fontSize: 11, fontWeight: 500 }}>
+                      Sending as human-requested <strong>COMPLEX</strong> (strong model on the bridge)
+                    </span>
+                  ) : sendingRoutePreview ? (
                     <span className="muted" style={{ display: "block", marginTop: 4, fontSize: 11, fontWeight: 500 }}>
                       Preview route: {sendingRoutePreview === "simple" ? "SIMPLE" : "COMPLEX"} (bridge may override)
                     </span>
@@ -798,31 +851,65 @@ export function AiAgentChatPage() {
           ) : null}
         </div>
         <div className="local-codex-compose">
-          <textarea
-            className="local-codex-compose-input"
-            value={draft}
-            onChange={(e) =>
-              setSessionBundle((prev) => updateActiveSession(prev, (s) => ({ ...s, draft: e.target.value })))
-            }
-            placeholder="Message Codex… (Shift+Enter for newline)"
-            aria-label="Chat message"
-            rows={3}
-            disabled={sending || !chatEnabled}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void sendMessage();
+          <div className="local-codex-compose-row">
+            <textarea
+              className="local-codex-compose-input"
+              value={draft}
+              onChange={(e) =>
+                setSessionBundle((prev) => updateActiveSession(prev, (s) => ({ ...s, draft: e.target.value })))
               }
-            }}
-          />
-          <button
-            type="button"
-            className="local-codex-btn-primary local-codex-send-btn"
-            disabled={sending || !chatEnabled || !draft.trim()}
-            onClick={() => void sendMessage()}
-          >
-            {sending ? "…" : "Send"}
-          </button>
+              placeholder="Message Codex… (Shift+Enter for newline)"
+              aria-label="Chat message"
+              rows={3}
+              disabled={sending || !chatEnabled}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendMessage(false);
+                }
+              }}
+            />
+            <div className="local-codex-send-split" ref={sendSplitRef}>
+              <button
+                type="button"
+                className="local-codex-send-split-main"
+                data-testid="ofdd-agent-send"
+                disabled={sending || !chatEnabled || !draft.trim()}
+                onClick={() => void sendMessage(false)}
+              >
+                {sending ? "…" : "Send"}
+              </button>
+              <button
+                type="button"
+                className="local-codex-send-split-trigger"
+                data-testid="ofdd-agent-send-menu-trigger"
+                disabled={sending || !chatEnabled || !draft.trim()}
+                aria-label="Send options"
+                aria-haspopup="menu"
+                aria-expanded={sendMenuOpen}
+                onClick={() => setSendMenuOpen((o) => !o)}
+              >
+                ▾
+              </button>
+              {sendMenuOpen ? (
+                <div className="local-codex-send-split-menu" role="menu" aria-label="Send with routing">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="local-codex-send-split-menu-item"
+                    data-testid="ofdd-send-complex-review"
+                    title="Uses the bridge COMPLEX tier and strong model for this message only."
+                    onClick={() => void sendMessage(true)}
+                  >
+                    COMPLEX review
+                    <span className="local-codex-send-split-menu-desc">
+                      Strong model · audits &amp; second opinions
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
           </div>
         </div>
