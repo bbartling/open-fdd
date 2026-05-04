@@ -233,7 +233,7 @@ From **Docker client to Windows host:** replace host with `host.docker.internal`
 
 Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/logs/gateway.log`**, **`mcp-rag.log`**, **`desktop-ui.log`**. On Windows, **`start-local.ps1`** opens separate windows — watch those terminals (no repo-root `.openfdd-*.log` files).
 
-- Bash roles: `bash scripts/start-local.sh` or `bash scripts/start-local.sh gateway`
+- Bash roles: `bash scripts/start-local.sh` or `bash scripts/start-local.sh gateway` or `bash scripts/start-local.sh --lan-host 192.168.1.10 all` for a private-LAN dashboard (same intent as PowerShell `-LanHost`).
 - PowerShell: `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway` (see `scripts/README.md`)
 
 ---

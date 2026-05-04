@@ -2,10 +2,26 @@ param(
   [ValidateSet("all", "gateway", "mcp", "ui", "adapter")]
   [string]$Role = "all",
   [string]$BridgeUrl = "http://127.0.0.1:8765",
-  [string]$SyncIntervalSeconds = "5"
+  [string]$SyncIntervalSeconds = "5",
+  # Private LAN dashboard: bind gateway + MCP on 0.0.0.0, Vite --host 0.0.0.0, CORS for RFC1918, and set
+  # bridge / MCP / UI public URLs to this host (e.g. 192.168.1.10). Open firewall for 8765, 8090, 5173.
+  [string]$LanHost = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+$LanDashboard = $false
+if ($LanHost -and $LanHost.Trim().Length -gt 0) {
+  $LanDashboard = $true
+  $h = $LanHost.Trim()
+  $BridgeUrl = "http://${h}:8765"
+  $env:OFDD_UI_PUBLIC_BASE = "http://${h}:5173"
+  $env:OFDD_MCP_REST_BASE = "http://${h}:8090"
+  $env:OFDD_BRIDGE_HOST = "0.0.0.0"
+  $env:OFDD_MCP_LISTEN_HOST = "0.0.0.0"
+  $env:OFDD_CORS_ALLOW_PRIVATE_LAN = "1"
+  Write-Host "LAN dashboard: URLs use ${h}; gateway+MCP listen on 0.0.0.0; Vite --host 0.0.0.0. Allow inbound TCP 8765, 8090, 5173 on this machine if other PCs connect."
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $desktopUiDir = Join-Path $repoRoot "apps\desktop-ui"
@@ -82,7 +98,8 @@ function New-ServiceCommand(
   [string]$BootstrapJsonPath,
   [string]$McpRestBase,
   [string]$UiPublicBase,
-  [string]$AllowInstallCli
+  [string]$AllowInstallCli,
+  [bool]$LanDashboard = $false
 ) {
   $escapedCwd = Escape-PSLiteral $cwd
   $escapedVenv = Escape-PSLiteral $venvActivate
@@ -96,6 +113,14 @@ function New-ServiceCommand(
   $escapedUiPublic = Escape-PSLiteral $UiPublicBase
   $escapedAllowInstall = Escape-PSLiteral $AllowInstallCli
   $activateLine = if ($activateVenv) { ". '$escapedVenv'" } else { "" }
+  $lanBlock = ""
+  if ($LanDashboard) {
+    $lanBlock = @"
+`$env:OFDD_BRIDGE_HOST = '0.0.0.0'
+`$env:OFDD_MCP_LISTEN_HOST = '0.0.0.0'
+`$env:OFDD_CORS_ALLOW_PRIVATE_LAN = '1'
+"@
+  }
   return @"
 Set-Location '$escapedCwd'
 $activateLine
@@ -109,6 +134,7 @@ $activateLine
 `$env:OFDD_UI_PUBLIC_BASE = '$escapedUiPublic'
 `$env:OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI = '$escapedAllowInstall'
 `$env:OFDD_AGENT_BOOTSTRAP_FILE = '$escapedBootstrap'
+$lanBlock
 $serviceCommand
 "@
 }
@@ -121,9 +147,10 @@ function Start-ServiceWindow(
   [string]$BootstrapJsonPath,
   [string]$McpRestBase,
   [string]$UiPublicBase,
-  [string]$AllowInstallCli
+  [string]$AllowInstallCli,
+  [bool]$LanDashboard = $false
 ) {
-  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv -BootstrapJsonPath $BootstrapJsonPath -McpRestBase $McpRestBase -UiPublicBase $UiPublicBase -AllowInstallCli $AllowInstallCli
+  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv -BootstrapJsonPath $BootstrapJsonPath -McpRestBase $McpRestBase -UiPublicBase $UiPublicBase -AllowInstallCli $AllowInstallCli -LanDashboard:$LanDashboard
   Start-Process powershell -ArgumentList @("-NoExit", "-Command", $cmd) -WorkingDirectory $cwd | Out-Null
   Write-Host "Started $title"
 }
@@ -152,9 +179,10 @@ if ($Role -eq "all") {
 
   Invoke-McpRagIndexBuild
 
-  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
-  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
-  Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
+  $uiDevCmd = if ($LanDashboard) { "npm run dev -- --host 0.0.0.0" } else { "npm run dev" }
+  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
+  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
+  Start-ServiceWindow -title "desktop-ui" -serviceCommand $uiDevCmd -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Write-Host 'All services launched with repo-local data defaults.'
   Write-Host 'Tip: This run rebuilt stack\mcp-rag\index\rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui windows can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
   Write-Host ""
@@ -186,7 +214,7 @@ if ($Role -eq "all") {
 $singleCommand = switch ($Role) {
   "gateway" { "open-fdd-gateway" }
   "mcp" { "open-fdd-mcp-rag" }
-  "ui" { "npm run dev" }
+  "ui" { if ($LanDashboard) { "npm run dev -- --host 0.0.0.0" } else { "npm run dev" } }
   "adapter" { "open-fdd-mcp-adapter" }
   default { throw "Unknown role: $Role" }
 }
@@ -207,5 +235,5 @@ Write-Utf8NoBom -Path $singleBootstrap -Content $singleBootstrapJson
 if ($Role -eq "mcp") {
   Invoke-McpRagIndexBuild
 }
-$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli
+$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli -LanDashboard:$LanDashboard
 Invoke-Expression $scriptBody

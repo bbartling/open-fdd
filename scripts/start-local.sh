@@ -1,11 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROLE="${1:-all}"
+# Optional: bash scripts/start-local.sh --lan-host 192.168.1.10 all
+# Same as PowerShell -LanHost: bind gateway+MCP on 0.0.0.0, Vite --host 0.0.0.0, CORS for private LAN, set public URLs.
+ROLE="all"
+LAN_HOST=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --lan-host)
+      LAN_HOST="${2:-}"
+      if [[ -z "${LAN_HOST}" ]]; then
+        echo "start-local.sh: --lan-host requires an IPv4 (e.g. 192.168.1.10)" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    all|gateway|mcp|ui|adapter)
+      ROLE="$1"
+      shift
+      ;;
+    *)
+      echo "start-local.sh: unknown argument '$1' (use [--lan-host IP] [all|gateway|mcp|ui|adapter])" >&2
+      exit 1
+      ;;
+  esac
+done
+if [[ -z "${LAN_HOST}" && -n "${OFDD_LAN_HOST:-}" ]]; then
+  LAN_HOST="${OFDD_LAN_HOST}"
+fi
+if [[ -n "${LAN_HOST}" ]]; then
+  export OFDD_BRIDGE_URL="http://${LAN_HOST}:8765"
+  export OFDD_MCP_OFDD_API_URL="${OFDD_BRIDGE_URL}"
+  export OFDD_UI_PUBLIC_BASE="http://${LAN_HOST}:5173"
+  export OFDD_MCP_REST_BASE="http://${LAN_HOST}:8090"
+  export OFDD_BRIDGE_HOST="0.0.0.0"
+  export OFDD_MCP_LISTEN_HOST="0.0.0.0"
+  export OFDD_CORS_ALLOW_PRIVATE_LAN="1"
+  echo "LAN dashboard: URLs use ${LAN_HOST}; gateway+MCP listen on 0.0.0.0; Vite --host 0.0.0.0. Open firewall TCP 8765, 8090, 5173 if other hosts connect."
+fi
+
 BRIDGE_URL="${OFDD_BRIDGE_URL:-http://127.0.0.1:8765}"
 # Match start-local.ps1 / gateway: avoid double slashes when joining paths.
 BRIDGE_URL="${BRIDGE_URL%/}"
 SYNC_INTERVAL="${OFDD_TTL_SYNC_INTERVAL_SECONDS:-5}"
+
+if [[ -n "${LAN_HOST}" ]]; then
+  UI_DEV_CMD=(npm run dev -- --host 0.0.0.0)
+else
+  UI_DEV_CMD=(npm run dev)
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -117,7 +160,7 @@ case "${ROLE}" in
     )
     (
       cd "${DESKTOP_UI_DIR}"
-      start_bg "desktop-ui" npm run dev
+      start_bg "desktop-ui" "${UI_DEV_CMD[@]}"
     )
     echo "All services launched with repo-local data defaults."
     printf '%s\n' 'Tip: This run rebuilt stack/mcp-rag/index/rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui processes can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
@@ -173,7 +216,7 @@ case "${ROLE}" in
   ui)
     write_openfdd_agent_bootstrap "ui"
     cd "${DESKTOP_UI_DIR}"
-    exec npm run dev
+    exec "${UI_DEV_CMD[@]}"
     ;;
   *)
     echo "Unknown role '${ROLE}'. Use: all|gateway|mcp|adapter|ui" >&2

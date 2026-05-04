@@ -2,7 +2,7 @@
 
 ## Goal
 
-Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills + workspace bootstrap**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)**, copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills), and copy bootstrap Markdown from [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-workspace) into your OpenClaw workspace root. Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
+Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills + workspace bootstrap**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture)**, copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills), and copy bootstrap Markdown from [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-workspace) into your OpenClaw workspace root. Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
 
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
 The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
@@ -25,6 +25,7 @@ Windows — gateway, MCP RAG, and Vite dev UI each in a new PowerShell window:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost 192.168.1.10   # LAN dashboard (see Trusted private LAN)
 ```
 
 Single role in the current shell (`gateway` \| `mcp` \| `ui` \| `adapter`):
@@ -33,18 +34,21 @@ Single role in the current shell (`gateway` \| `mcp` \| `ui` \| `adapter`):
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway
 ```
 
-Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**.
+Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**, **`-LanHost <ipv4>`** (private LAN dashboard: binds gateway and MCP on **`0.0.0.0`**, runs Vite with **`--host 0.0.0.0`**, sets **`OFDD_CORS_ALLOW_PRIVATE_LAN=1`**, and points **`OFDD_BRIDGE_URL`**, **`OFDD_MCP_REST_BASE`**, and **`OFDD_UI_PUBLIC_BASE`** at `http://<ip>:8765` / `:8090` / `:5173`; open inbound **8765**, **8090**, **5173** on the host firewall if other PCs connect).
 
 Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**. The script writes **`stack/local-data/openfdd-agent-bootstrap.json`** and exports **`OFDD_AGENT_BOOTSTRAP_FILE`** (same behavior as **`start-local.ps1`**) so the **AI Agent** tab / **`GET /openfdd-agent/context`** see **`bridge_base`**, **`mcp_rest_base`**, and **`ui_public_base`**.
 
 ```bash
 bash ./scripts/start-local.sh
 bash ./scripts/start-local.sh gateway   # foreground gateway only
+bash ./scripts/start-local.sh --lan-host 192.168.1.10 all   # same LAN defaults as -LanHost on Windows
+# or: OFDD_LAN_HOST=192.168.1.10 bash ./scripts/start-local.sh
 ```
 
 Override the bridge URL the same way on all platforms: **`export OFDD_BRIDGE_URL=http://127.0.0.1:9999`** before running the script (optional).
 
 ### Restarting `start-local` and MCP (important)
+{: #restarting-start-local-and-mcp-important}
 
 **MCP RAG** (`open-fdd-mcp-rag`, default **`127.0.0.1:8090`**) is designed like a normal server process: it reads **`OFDD_AGENT_BOOTSTRAP_FILE`**, **`OFDD_MCP_*`**, and the on-disk **`rag_index.json`** when it **starts**. It does **not** watch those files for live edits while running—the **`start-local`** scripts regenerate **`rag_index.json`** from **`docs/`** before launching MCP (unless **`OFDD_SKIP_MCP_INDEX_BUILD=1`**), then **`open-fdd-mcp-rag`** loads that snapshot until you stop and start it again.
 
@@ -76,6 +80,7 @@ The **AI Agent** tab is the **built-in** Open-FDD AI surface: the bridge runs th
 - `POST /local-codex/chat` — `codex exec …` for a simple transcript in the UI
 
 #### Where Codex runs
+{: #where-codex-runs}
 
 | Layer | What it does |
 |-------|----------------|
@@ -95,7 +100,7 @@ Optional **OpenClaw** web UI remains available in the same page (embedded / new 
 
 - `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` (not used by the current UI)
 
-See **[Open FDD Claw architecture](../open-fdd-claw-architecture.md)** for the built-in vs optional-gateway split and skills/workspace clones.
+See **[Open FDD Claw architecture](../open-fdd-claw-architecture)** for the built-in vs optional-gateway split and skills/workspace clones.
 
 ### Manual start (no launcher)
 
@@ -123,6 +128,10 @@ Bridge URL consistency:
 ### Trusted private LAN (other PCs on the same network)
 
 The stack defaults to **loopback** (`127.0.0.1`) so random machines cannot reach your bridge. For a **locked-down office / VLAN** where other workstations should use the UI and API, you intentionally **listen on all interfaces** and point URLs at the **bridge host’s LAN IP** (not for the public internet).
+
+**One-shot launcher (recommended):** **`powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost 192.168.1.10`** or **`bash ./scripts/start-local.sh --lan-host 192.168.1.10 all`** applies the listen addresses, CORS flag, Vite bind, and public URL env vars described below. Ensure **`apps/desktop-ui/.env.local`** (if present) does not force **`VITE_DESKTOP_BRIDGE_BASE`** back to localhost when LAN browsers must call the bridge.
+
+Manual steps (equivalent to **`-LanHost` / `--lan-host`**):
 
 1. **Gateway listen address** — bind `uvicorn` to all interfaces, then clients use your LAN IP:
    - `export OFDD_BRIDGE_HOST=0.0.0.0`

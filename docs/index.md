@@ -44,6 +44,13 @@ See **[Getting started](getting_started)** and **`examples/README.md`** in the r
 
 ---
 
+## Behind the firewall; cloud export is vendor-led
+{: #behind-the-firewall-cloud-export-is-vendor-led}
+
+Open-FDD is meant to run **on the building network**. Vendors and MSI platforms that need cloud analytics **pull** from your deployment over the LAN; Open-FDD does not push to their cloud for you. See **[Cloud export example](concepts/cloud_export)** for a sample integration script.
+
+---
+
 ## Documentation
 
 | Section | Description |

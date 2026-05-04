@@ -90,6 +90,7 @@ runner.run(
 ---
 
 ## Signal scaling (0–1 fraction vs 0–100 percent)
+{: #signal-scaling-0--1-fraction-vs-0--100-percent}
 
 Many cookbook thresholds (e.g. `drv_hi_frac: 0.93`, comparisons to `0.01`) assume **command signals are in 0–1** (fraction of full scale). In the field, BACnet and some historians often expose **0–100** (percent) for the same semantics.
 

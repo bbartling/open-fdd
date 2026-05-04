@@ -218,5 +218,5 @@ Install: `pip install "open-fdd[desktop]"` (bridge already pulls desktop deps).
 2. OpenClaw: `openclaw onboard` (or your install path); enable chat completions if you need the HTTP client.  
 3. Codex OAuth: `openclaw models auth login --provider openai-codex`.  
 4. Register MCP: merge `mcp.servers.openfdd` into `openclaw.json` (this doc + runbook Phase 0).  
-5. Skills: copy [`contrib/openclaw-skills/`](../contrib/openclaw-skills/) skill folders into `~/.openclaw/workspace/skills/`.  
+5. Skills: copy [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills) skill folders into `~/.openclaw/workspace/skills/`.  
 6. Workspace bootstrap: copy Markdown from [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, etc.) into your OpenClaw workspace root so the agent loads Open-FDD API context on boot.

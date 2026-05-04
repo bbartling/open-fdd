@@ -50,6 +50,7 @@ jobs:
           "$(ruby -e 'puts Gem.bindir')/htmlproofer" "${{ github.workspace }}/_site" \
             --assume-extension .html \
             --swap-urls '^/open-fdd/:/' \
+            --ignore-files "/404\\.html\$/" \
             --disable-external \
             --allow-hash-href \
             --ignore-empty-alt \

@@ -26,7 +26,7 @@ The **base PyPI wheel** is the rules engine only. **`pip install "open-fdd[deskt
 
 ## AI-assisted modeling workflows
 
-For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
+For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](../open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
 
 For AI-assisted data modeling (OpenClaw, ChatGPT, or human-in-the-loop review), use a simple loop:
 
