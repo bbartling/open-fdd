@@ -1163,6 +1163,29 @@ def test_local_codex_install_cli_route() -> None:
             assert res.json() == fake
 
 
+def test_local_codex_logout_route_no_codex() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value=None):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/logout")
+            assert res.status_code == 503
+
+
+def test_local_codex_logout_route() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    fake = {"ok": True, "returncode": 0, "stdout": "", "stderr": ""}
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value="codex"):
+        with patch.object(gateway_server.local_codex_cli, "run_codex_logout", return_value=fake):
+            with TestClient(app) as client:
+                res = client.post("/local-codex/logout")
+                assert res.status_code == 200
+                assert res.json() == fake
+
+
 def test_local_codex_chat_rejects_missing_workdir(tmp_path: Path) -> None:
     from unittest.mock import patch
 

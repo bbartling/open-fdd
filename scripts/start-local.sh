@@ -94,6 +94,7 @@ case "${ROLE}" in
       start_bg "desktop-ui" npm run dev
     )
     echo "All services launched with repo-local data defaults."
+    echo "Tip: Re-run only after stopping prior gateway/mcp-rag/desktop-ui jobs, or you may get port conflicts (8765/8090/5173). Restart mcp-rag to reload rag_index.json — docs/howto/desktop_app.md (Restarting start-local and MCP)."
     echo ""
     echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
     echo "Open-FDD agent API: ${BRIDGE_URL%/}/openfdd-agent/context  (POST .../openfdd-agent/chat)"

@@ -24,8 +24,8 @@ import {
 } from "../lib/openfdd-claw-policy";
 
 /**
- * Optional operator tools (cron helpers, env presets, OpenClaw cron API).
- * Hidden by default on the Open-FDD Claw tab so the main surface stays approachable.
+ * Optional operator tools (cron helpers, env presets, optional gateway cron HTTP API).
+ * Hidden by default on the AI Agent tab so the main surface stays approachable.
  */
 export function OpenFddClawAdvancedPanel() {
   const [draft, setDraft] = useState<CronDraft>({
@@ -150,8 +150,8 @@ export function OpenFddClawAdvancedPanel() {
     <div className="card" data-testid="ofdd-claw-advanced-panel">
       <h3 className="title">Operations (Cron / Memory / Skills)</h3>
       <p className="muted">
-        Open-FDD Claw cron runs in the OpenClaw gateway and can wake the agent on schedule. Copy commands into a
-        terminal where the OpenClaw CLI is installed, or use API mode if your gateway exposes cron HTTP.
+        Optional gateway cron (e.g. OpenClaw) can wake an agent on schedule. Copy commands into a terminal where that
+        gateway CLI is installed, or use API mode if your gateway exposes cron HTTP.
       </p>
       <div className="openclaw-actions">
         <span className="inline-label">Runbook shell:</span>
@@ -390,7 +390,7 @@ export function OpenFddClawAdvancedPanel() {
       <h3 className="title" style={{ marginTop: "1.5rem" }}>
         Phase 1 policy presets (routing + security)
       </h3>
-      <p className="muted">Copy into OpenClaw host env or config when you need strict routing and gateway defaults.</p>
+      <p className="muted">Copy into the gateway host env or config when you need strict routing and gateway defaults.</p>
       <div className="grid-two">
         <label>
           Runtime route map env preset

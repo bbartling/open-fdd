@@ -6,7 +6,14 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+# Defaults aligned with https://developers.openai.com/codex/models/ (override per host via env).
+DEFAULT_CODEX_MODEL_SIMPLE = "gpt-5.4-mini"
+DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY = "gpt-5.5"
+DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK = "gpt-5.4"
+
+TaskRoute = Literal["simple", "complex"]
 
 _DEFAULT_SYSTEM = """You are a local coding assistant.
 
@@ -75,15 +82,38 @@ def describe_codex_exec_env() -> dict[str, Any]:
             "ask_for_approval": approval,
             "sandbox_mode": "dangerously-bypass-approvals-and-sandbox",
             "workspace_write_network": None,
+            "model_simple": _env_trim("OFDD_CODEX_MODEL_SIMPLE", DEFAULT_CODEX_MODEL_SIMPLE),
+            "model_complex_primary": _env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY),
+            "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
+            "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
         }
     return {
         "ask_for_approval": approval,
         "sandbox_mode": sandbox,
         "workspace_write_network": net if sandbox == "workspace-write" else None,
+        "model_simple": _env_trim("OFDD_CODEX_MODEL_SIMPLE", DEFAULT_CODEX_MODEL_SIMPLE),
+        "model_complex_primary": _env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY),
+        "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
+        "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
     }
 
 
-def build_codex_exec_argv(codex_path: str) -> list[str]:
+def stderr_suggests_unknown_codex_model(stderr: str, stdout: str) -> bool:
+    blob = f"{stderr}\n{stdout}".lower()
+    needles = (
+        "unknown model",
+        "model not found",
+        "invalid model",
+        "is not available",
+        "not a valid model",
+        "unsupported model",
+        "model_id",
+        "does not have access",
+    )
+    return any(n in blob for n in needles)
+
+
+def build_codex_exec_argv(codex_path: str, *, model: str | None = None) -> list[str]:
     """Build argv for non-interactive ``codex exec`` (global flags before the ``exec`` subcommand)."""
     approval = _env_trim("OFDD_CODEX_EXEC_APPROVAL", "never").lower()
     if approval not in _VALID_APPROVAL:
@@ -98,6 +128,8 @@ def build_codex_exec_argv(codex_path: str) -> list[str]:
         cmd.extend(["--sandbox", sandbox])
         if sandbox == "workspace-write" and _env_bool("OFDD_CODEX_WORKSPACE_WRITE_NETWORK", True):
             cmd.extend(["-c", "sandbox_workspace_write.network_access=true"])
+    if model and str(model).strip():
+        cmd.extend(["--model", str(model).strip()])
     cmd.extend(["--skip-git-repo-check", "--color", "never", "-"])
     return cmd
 
@@ -225,18 +257,49 @@ def run_codex_login_status(codex_path: str) -> dict[str, Any]:
     return out
 
 
+def run_codex_logout(codex_path: str) -> dict[str, Any]:
+    """Run ``codex logout`` on the bridge host (clears stored ChatGPT / API credentials for that CLI)."""
+    try:
+        cp = subprocess.run(
+            [codex_path, "logout"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": "codex logout timed out.",
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"codex launch failed: {exc}",
+        }
+    out = _decode_completed(cp)
+    out["ok"] = cp.returncode == 0
+    return out
+
+
 def run_codex_exec(
     codex_path: str,
     workdir: Path,
     *,
     stdin_text: str,
     timeout_s: int | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     t = timeout_s if timeout_s is not None else safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_S", 600)
     t = max(30, min(t, 3600))
     try:
         cp = subprocess.run(
-            build_codex_exec_argv(codex_path),
+            build_codex_exec_argv(codex_path, model=model),
             cwd=str(workdir),
             input=stdin_text,
             text=True,
@@ -255,7 +318,43 @@ def run_codex_exec(
         }
     out = _decode_completed(cp)
     out["ok"] = cp.returncode == 0
+    if model and str(model).strip():
+        out["codex_model"] = str(model).strip()
     return out
+
+
+_ROUTER_PROMPT = """You are a task router for an Open-FDD operator assistant.
+
+Classify the following task summary as SIMPLE or COMPLEX:
+- SIMPLE: one-shot checks (HTTP 200/404, /health), list endpoints, verify pass/fail, trivial one-liners.
+- COMPLEX: code changes, design validation, multi-step debugging, BRICK/TTL/rules architecture, ambiguous root cause.
+
+Reply with exactly one word on the first line: SIMPLE or COMPLEX. No punctuation, no explanation."""
+
+
+def run_codex_route_classify_llm(
+    codex_path: str,
+    workdir: Path,
+    *,
+    task_summary: str,
+    classify_model: str,
+    timeout_s: int | None = None,
+) -> tuple[TaskRoute | None, str]:
+    """Optional second ``codex exec`` using the **simple** tier model to pick SIMPLE vs COMPLEX."""
+    t = timeout_s if timeout_s is not None else safe_int_from_env("OFDD_CODEX_CLASSIFY_TIMEOUT_S", 120)
+    t = max(20, min(t, 300))
+    stdin_text = f"{_ROUTER_PROMPT}\n\n---\n{str(task_summary or '').strip()[:6000]}\n"
+    out = run_codex_exec(codex_path, workdir, stdin_text=stdin_text, timeout_s=t, model=classify_model.strip())
+    if not out.get("ok"):
+        return None, f"classify_exec_failed: {out.get('stderr') or out.get('stdout') or 'unknown'}"
+    raw = (out.get("stdout") or "").strip()
+    first_line = raw.splitlines()[0].strip() if raw else ""
+    first_word = first_line.split()[0].upper().strip(".,;:!\"'") if first_line else ""
+    if first_word.startswith("COMPLEX"):
+        return "complex", "llm_router"
+    if first_word.startswith("SIMPLE"):
+        return "simple", "llm_router"
+    return None, f"classify_unparseable: {first_line!r}"
 
 
 def build_chat_stdin(*, user_message: str, system_context: str | None) -> str:

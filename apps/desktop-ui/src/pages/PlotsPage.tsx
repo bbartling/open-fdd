@@ -698,7 +698,7 @@ export function PlotsPage() {
           >
             <summary className="muted" style={{ cursor: "pointer", fontSize: 13, lineHeight: 1.5, userSelect: "none" }}>
               <strong>Optional</strong> — clean string metrics on this page (same <code className="inline-code">POST /timeseries/clean-metrics</code> as
-              readiness / Local Codex). Expand if you want buttons instead of the API or chat.
+              readiness / AI Agent). Expand if you want buttons instead of the API or chat.
             </summary>
             <p className="muted" style={{ fontSize: 12, margin: "10px 0 8px", lineHeight: 1.5 }}>
               Targets values like <code className="inline-code">17.8 psi</code> for the <strong>selected site</strong> and source <strong>{runSource}</strong>.

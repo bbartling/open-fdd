@@ -10,7 +10,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { PlotsPage } from "./pages/PlotsPage";
 import { DataMaintenancePage } from "./pages/DataMaintenancePage";
 import { MlLabPage } from "./pages/MlLabPage";
-import { OpenClawChatPage } from "./pages/OpenClawChatPage";
+import { AiAgentChatPage } from "./pages/AiAgentChatPage";
 import { WeatherDriverPage } from "./pages/WeatherDriverPage";
 import { BacnetDriverPage } from "./pages/BacnetDriverPage";
 import { OnboardDriverPage } from "./pages/OnboardDriverPage";
@@ -33,8 +33,9 @@ export default function App() {
         <Route path="/plots" element={<PlotsPage />} />
         <Route path="/data-maintenance" element={<DataMaintenancePage />} />
         <Route path="/ml-lab" element={<MlLabPage />} />
-        <Route path="/openfdd-claw-chat" element={<OpenClawChatPage />} />
-        <Route path="/openclaw-chat" element={<Navigate to="/openfdd-claw-chat" replace />} />
+        <Route path="/ai-agent" element={<AiAgentChatPage />} />
+        <Route path="/openfdd-claw-chat" element={<Navigate to="/ai-agent" replace />} />
+        <Route path="/openclaw-chat" element={<Navigate to="/ai-agent" replace />} />
         <Route path="/analytics" element={<Navigate to="/ml-lab" replace />} />
         <Route path="/system" element={<SystemResourcesPage />} />
       </Route>

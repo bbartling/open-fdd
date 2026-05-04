@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway
 
 Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**.
 
-Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**. The script writes **`stack/local-data/openfdd-agent-bootstrap.json`** and exports **`OFDD_AGENT_BOOTSTRAP_FILE`** (same behavior as **`start-local.ps1`**) so **Local Codex** / **`GET /openfdd-agent/context`** see **`bridge_base`**, **`mcp_rest_base`**, and **`ui_public_base`**.
+Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**. The script writes **`stack/local-data/openfdd-agent-bootstrap.json`** and exports **`OFDD_AGENT_BOOTSTRAP_FILE`** (same behavior as **`start-local.ps1`**) so the **AI Agent** tab / **`GET /openfdd-agent/context`** see **`bridge_base`**, **`mcp_rest_base`**, and **`ui_public_base`**.
 
 ```bash
 bash ./scripts/start-local.sh
@@ -41,6 +41,18 @@ bash ./scripts/start-local.sh gateway   # foreground gateway only
 ```
 
 Override the bridge URL the same way on all platforms: **`export OFDD_BRIDGE_URL=http://127.0.0.1:9999`** before running the script (optional).
+
+### Restarting `start-local` and MCP (important)
+
+**MCP RAG** (`open-fdd-mcp-rag`, default **`127.0.0.1:8090`**) is designed like a normal server process: it reads **`OFDD_AGENT_BOOTSTRAP_FILE`**, **`OFDD_MCP_*`**, and the on-disk **`rag_index.json`** when it **starts**. It does **not** watch those files for live edits—so you **refresh MCP by restarting that process**.
+
+| Situation | What to do |
+|-----------|------------|
+| You ran **`start-local`** again while old windows/PIDs are still up | **Windows:** close the previous **gateway**, **mcp-rag**, and **desktop-ui** PowerShell windows (or you risk **port conflicts** on **8765 / 8090 / 5173** and two different MCP instances). **macOS/Linux:** stop the old **`open-fdd-gateway`**, **`open-fdd-mcp-rag`**, and **`npm run dev`** jobs (see **`stack/local-data/logs/*.log`** for PIDs) before starting new ones. |
+| You rebuilt the doc index (`python scripts/build_mcp_rag_index.py …`) | **Restart `open-fdd-mcp-rag`** so `GET /manifest` and `search_docs` see the new **`rag_index.json`**. |
+| You changed bridge URL, MCP port, or bootstrap JSON | Restart **gateway and MCP** (and usually the UI) so every process agrees on the same env + **`openfdd-agent-bootstrap.json`**. |
+
+So: **each clean `start-local` run should mean one trio of processes** (gateway + MCP + UI). Treat “refresh MCP” as **stop the old `mcp-rag` → start again** (the launcher does the start; you own the stop when re-launching).
 
 **Codex on macOS:** install with **`npm install -g @openai/codex`**, then **`codex login`**. If the bridge cannot find the binary, set **`OFDD_CODEX_CMD`** to the full path (often under **`$(npm config get prefix)/bin/codex`**).
 
@@ -54,14 +66,26 @@ After startup you should have:
 
 **Readiness deep links:** `GET /assistant/readiness` builds UI URLs using **`OFDD_UI_PUBLIC_BASE`** (preferred) or **`OFDD_UI_PORT`** (defaults to **8080** in code if unset). With **`start-local`**, set **`OFDD_UI_PUBLIC_BASE=http://127.0.0.1:5173`** (the Windows script does this) so plot/data-model links match the Vite dev server.
 
-### Local Codex + OpenClaw handoff (`/openfdd-claw-chat`)
+### Built-in AI Agent (`/ai-agent`)
 
-The **Local Codex chat** tab is the **built-in** Open-FDD AI surface: the bridge runs the **`codex` CLI** on the host (same auth model as `codex login` / `codex login --device-auth`). Endpoints:
+The **AI Agent** tab is the **built-in** Open-FDD AI surface: the bridge runs the **`codex` CLI** on the host today (same auth model as `codex login` / `codex login --device-auth`). The UI route **`/ai-agent`** replaces the older **`/openfdd-claw-chat`** path (which redirects for bookmarks). Endpoints:
 
 - `GET /local-codex/diagnostics` — `codex login status`, `where` / npm hints (especially Windows), plus **`exec_env`** (how `codex exec` is invoked)
 - `POST /local-codex/chat` — `codex exec …` for a simple transcript in the UI
 
+#### Where Codex runs
+
+| Layer | What it does |
+|-------|----------------|
+| **Desktop UI** (`apps/desktop-ui`, Vite / npm) | The browser talks to the bridge over HTTP (`/openfdd-agent/chat`, `/local-codex/*`, etc.). The UI **does not** execute Codex or Python rules locally—it only sends messages and shows replies. |
+| **Open-FDD bridge** (**Python**, `open_fdd.gateway`) | The FastAPI gateway **orchestrates** each turn: it resolves the workdir, builds stdin/context, and **`subprocess.run`s** the **`codex` executable** on the **same host** as the bridge. Code lives in **`open_fdd/gateway/local_codex_cli.py`** and **`open_fdd/gateway/openfdd_agent.py`**. |
+| **`codex` CLI** (OpenAI product) | Usually **installed with npm** (`npm install -g @openai/codex`), but at runtime it is a **normal OS child process** (e.g. `codex` / `codex.cmd`), not a long-lived “npm server.” **Subscriptions, OAuth/session, model choice, tool execution, and sandbox/approval behavior** for that process are **owned by Codex**; the bridge supplies **argv and env** (e.g. `OFDD_CODEX_EXEC_APPROVAL`, `OFDD_CODEX_EXEC_SANDBOX`, model overrides) so non-interactive runs can reach **localhost** and edit the configured repo path. |
+
+So: **Python starts Codex; Codex runs the agent turn** under the flags and login you have on that machine. Tightening behavior is done with **Open-FDD env vars** (what we pass into `codex exec`) and/or **Codex’s own config and `codex login`**, not by moving execution into the Vite dev server.
+
 **Codex exec sandbox (bridge host):** the bridge runs `codex --ask-for-approval … exec …` so the agent can call **localhost** (e.g. `http://127.0.0.1:8765`) and edit the workdir. Defaults: **`OFDD_CODEX_EXEC_APPROVAL=never`**, **`OFDD_CODEX_EXEC_SANDBOX=danger-full-access`**. Stricter options: `read-only`, `workspace-write` (with **`OFDD_CODEX_WORKSPACE_WRITE_NETWORK=true`** the bridge adds `-c sandbox_workspace_write.network_access=true`). Full bypass (only on locked-down automation hosts): **`OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX=1`**. See upstream [Codex sandbox](https://developers.openai.com/codex/concepts/sandboxing).
+
+**Built-in agent model routing (`POST /openfdd-agent/chat` only):** SIMPLE tier uses **`--model gpt-5.4-mini`** (override **`OFDD_CODEX_MODEL_SIMPLE`**). COMPLEX uses **`gpt-5.5`** then retries once with **`gpt-5.4`** if stderr looks like an unknown-model error (override **`OFDD_CODEX_MODEL_COMPLEX`** / **`OFDD_CODEX_MODEL_COMPLEX_FALLBACK`**). Optional: **`OFDD_CODEX_LLM_CLASSIFY=1`** runs a **short second `codex exec`** with the simple model to choose SIMPLE vs COMPLEX before the main turn (extra latency/cost); **`OFDD_CODEX_CLASSIFY_TIMEOUT_S`** caps that call (default 120s).
 
 Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. Legacy bridge device endpoints still exist for compatibility:
 
@@ -103,7 +127,9 @@ Use Swagger for endpoint discovery, request body examples, and quick local API t
 
 ## MCP RAG service (OpenClaw/agents)
 
-`open-fdd` includes an MCP-style RAG HTTP service that can index local `docs/` and proxy driver/model tools to the **gateway** HTTP API.
+`open-fdd` includes an **MCP-style RAG HTTP service** (REST on **8090** by default): **`GET /manifest`**, **`POST /tools/search_docs`**, **`POST /tools/search_api_capabilities`**, and optional **action** tools that proxy the bridge. Agents and Codex discover it via **`mcp_rest_base`** in **`GET /openfdd-agent/context`** (from **`OFDD_AGENT_BOOTSTRAP_FILE`** when you use **`start-local`**).
+
+Docs for operators and LLM retrieval are indexed under **`stack/mcp-rag/`**; the **agent operator playbook** (`agent_operator_playbook.md`) is written to match what `search_docs` returns. **Design:** HTTP-first, explicit env, no hot-reload of the JSON index—see **[Restarting `start-local` and MCP](#restarting-start-local-and-mcp-important)** above.
 
 Build the local retrieval index:
 
@@ -117,6 +143,8 @@ Run MCP RAG locally:
 open-fdd-mcp-rag
 # serves on http://127.0.0.1:8090
 ```
+
+After changing **`rag_index.json`**, restart this process (or full **`start-local`**) so clients see updated chunks.
 
 Key env vars:
 - `OFDD_MCP_LISTEN_HOST` / `OFDD_MCP_LISTEN_PORT` (defaults `127.0.0.1` / `8090`; bind address for `open-fdd-mcp-rag` and for `/health`’s `mcp_listen_hint`)

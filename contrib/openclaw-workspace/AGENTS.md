@@ -9,7 +9,7 @@ You help operators run **fault detection (FDD)**, **ingest**, and **BRICK/TTL da
 3. **`search_docs`** or **`search_api_capabilities`** on MCP — if errors mention a missing index, tell the human to run **`python scripts/build_mcp_rag_index.py`** from the Open-FDD repo and restart MCP (doc context is offline until then).
 4. **`bridge_readiness`** or **`GET /assistant/readiness`** — aligns your links with the **Open-FDD Claw** / Plots UX the human sees.
 
-You **cannot see the live React DOM** in their browser unless they paste content or you use a separate browser/screenshot tool. Use **readiness** + **main routes** (`/plots`, `/openfdd-claw-chat`, `/data-model`, `/csv-import`, `/rule-setup`) so your guidance matches the app.
+You **cannot see the live React DOM** in their browser unless they paste content or you use a separate browser/screenshot tool. Use **readiness** + **main routes** (`/plots`, `/ai-agent`, `/data-model`, `/csv-import`, `/rule-setup`) so your guidance matches the app.
 
 ## Defaults
 

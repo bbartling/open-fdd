@@ -25,12 +25,21 @@ pip install open-fdd
 
 ## Dashboard
 
-In active development.
+The web dashboard is a local operator web UI (React) backed by a FastAPI bridge, MCP RAG for retrieval context, and an AI agent that uses OpenAI Codex (subscription / `codex login` auth on the bridge host), all talking to services on localhost. Codex-backed tasks help the HVAC FDD analyst because the bridge spawns the `codex` CLI as a child OS process per turn (not “Python subprocesses” in the sense of running inside the interpreter). Codex is OpenAI’s CLI product; Open-FDD starts that binary on the host and supplies flags and environment variables, while authentication, model selection, tools, and execution policy are handled by Codex itself.
 
+**Start everything** (gateway + MCP + UI, data under `stack/local-data`):
 
-**One-command local launcher:** use `scripts/start-local.ps1` (Windows) or `scripts/start-local.sh` (macOS / Linux / WSL) to start gateway/MCP/UI with repo-local defaults under `stack/local-data`. Both write **`openfdd-agent-bootstrap.json`** and set **`OFDD_AGENT_BOOTSTRAP_FILE`** so the built-in Codex agent sees bridge + MCP + UI URLs.
+```powershell
+# Windows (from repo root)
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
 
-**Open-FDD Claw** (built-in agent + optional OpenClaw): after `start-local`, open **Local Codex chat** in the desktop UI for the **Open-FDD agent** (`codex` CLI + stack-aware **SIMPLE/COMPLEX** routing, bridge/MCP URLs from `GET /openfdd-agent/context`). Optional embedded OpenClaw UI remains for full gateway workflows. Docs: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md), workspace [`contrib/openclaw-workspace/`](contrib/openclaw-workspace/README.md), skills [`contrib/openclaw-skills/`](contrib/openclaw-skills/README.md).
+```bash
+# macOS, Linux, or WSL (from repo root)
+bash ./scripts/start-local.sh
+```
+
+Details: **[Desktop app how-to](docs/howto/desktop_app.md)** (sections *Launch* and *MCP RAG*).
 
 ---
 

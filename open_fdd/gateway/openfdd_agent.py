@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, cast
 
 from open_fdd.gateway.local_codex_cli import (
+    DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK,
+    DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY,
+    DEFAULT_CODEX_MODEL_SIMPLE,
     build_chat_stdin,
     resolve_codex_executable,
     resolve_workdir,
     run_codex_exec,
+    run_codex_route_classify_llm,
     safe_int_from_env,
+    stderr_suggests_unknown_codex_model,
 )
+from open_fdd.gateway.local_codex_cli import _env_bool as _codex_env_bool
+from open_fdd.gateway.local_codex_cli import _env_trim as _codex_env_trim
 from open_fdd.gateway.openfdd_agent_context import build_agent_bootstrap_context, format_agent_context_markdown
-from open_fdd.gateway.openfdd_agent_routing import classify_openfdd_task, routing_instructions_for_tier
+from open_fdd.gateway.openfdd_agent_routing import TaskTier, classify_openfdd_task, routing_instructions_for_tier
 
 
 def _openfdd_agent_identity() -> str:
@@ -30,6 +37,8 @@ Rules:
 - Reference `GET /assistant/readiness` for UI-aligned deep links to paste back to humans.
 - If MCP action tools are disabled, say what env vars to set instead of pretending writes succeeded.
 - Never invent site IDs: use `GET /sites` or readiness output.
+
+Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
 """
 
 
@@ -55,12 +64,28 @@ def run_openfdd_agent_turn(
 
     summary = (task_summary or message or "").strip()[:8000]
     if force_class in ("simple", "complex"):
-        tier: Any = force_class
+        tier: TaskTier = cast(TaskTier, force_class)
         reason = "forced tier from client"
     else:
         default_raw = (os.environ.get("OFDD_AGENT_ROUTE_DEFAULT") or "simple").strip().lower()
-        default = "complex" if default_raw == "complex" else "simple"
+        default: TaskTier = "complex" if default_raw == "complex" else "simple"
         tier, reason = classify_openfdd_task(summary, default=default)
+        if _codex_env_bool("OFDD_CODEX_LLM_CLASSIFY", False):
+            router_model = _codex_env_trim("OFDD_CODEX_MODEL_SIMPLE", DEFAULT_CODEX_MODEL_SIMPLE)
+            llm_tier, llm_note = run_codex_route_classify_llm(
+                codex,
+                workdir,
+                task_summary=summary,
+                classify_model=router_model,
+            )
+            if llm_tier is not None:
+                tier = llm_tier
+                reason = f"{reason}; {llm_note} ({router_model})"
+
+    model_simple = _codex_env_trim("OFDD_CODEX_MODEL_SIMPLE", DEFAULT_CODEX_MODEL_SIMPLE)
+    model_complex_primary = _codex_env_trim("OFDD_CODEX_MODEL_COMPLEX", DEFAULT_CODEX_MODEL_COMPLEX_PRIMARY)
+    model_complex_fallback = _codex_env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK)
+    chosen_model = model_simple if tier == "simple" else model_complex_primary
 
     ctx = build_agent_bootstrap_context()
     ctx_md = format_agent_context_markdown(ctx)
@@ -79,7 +104,26 @@ def run_openfdd_agent_turn(
     complex_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_COMPLEX", 900)
     timeout_s = complex_timeout if tier == "complex" else simple_timeout
 
-    out = run_codex_exec(codex, workdir, stdin_text=stdin_text, timeout_s=timeout_s)
+    out = run_codex_exec(codex, workdir, stdin_text=stdin_text, timeout_s=timeout_s, model=chosen_model)
+    model_attempts: list[str] = [chosen_model]
+    if (
+        tier == "complex"
+        and not out.get("ok")
+        and chosen_model == model_complex_primary
+        and model_complex_fallback.strip()
+        and model_complex_fallback.strip() != model_complex_primary.strip()
+        and stderr_suggests_unknown_codex_model(str(out.get("stderr") or ""), str(out.get("stdout") or ""))
+    ):
+        out = run_codex_exec(
+            codex,
+            workdir,
+            stdin_text=stdin_text,
+            timeout_s=timeout_s,
+            model=model_complex_fallback.strip(),
+        )
+        model_attempts.append(model_complex_fallback.strip())
+        out["codex_model_fallback_used"] = True
+
     slim = {
         "bridge_base": ctx.get("bridge_base"),
         "mcp_rest_base": ctx.get("mcp_rest_base"),
@@ -91,5 +135,7 @@ def run_openfdd_agent_turn(
         "task_class": tier,
         "route_reason": reason,
         "timeout_seconds": timeout_s,
+        "codex_model": out.get("codex_model") or chosen_model,
+        "codex_model_attempts": model_attempts,
         "bootstrap_summary": slim,
     }

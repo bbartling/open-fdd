@@ -6,7 +6,7 @@ nav_order: 12
 
 # Agent & operator playbook (bridge + MCP)
 
-Use this page as **retrieval fodder** for assistants: it ties **human goals** on the Open-FDD **desktop bridge** to **HTTP routes**, **MCP RAG** (`POST /tools/search_docs`, `POST /tools/search_api_capabilities` on the MCP REST server), and **execution** (Codex on the bridge host, UI actions). Rebuild the MCP index after editing: `python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json`.
+Use this page as **retrieval fodder** for assistants: it ties **human goals** on the Open-FDD **desktop bridge** to **HTTP routes**, **MCP RAG** (`POST /tools/search_docs`, `POST /tools/search_api_capabilities` on the MCP REST server), and **execution** (Codex on the bridge host, UI actions). Rebuild the MCP index after editing: `python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json`, then **restart `open-fdd-mcp-rag`** (or re-run **`start-local`** after stopping the old MCP process) so the server reloads the file—see **[Desktop app — Restarting start-local and MCP](desktop_app#restarting-start-local-and-mcp-important)**.
 
 **Defaults:** bridge `http://127.0.0.1:8765`, MCP RAG `http://127.0.0.1:8090`, UI `http://127.0.0.1:5173` (override with env).
 

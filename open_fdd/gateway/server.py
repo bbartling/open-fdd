@@ -755,6 +755,18 @@ def create_app() -> FastAPI:
         """Install the OpenAI Codex CLI globally via npm on the bridge host (can take several minutes)."""
         return local_codex_cli.run_npm_install_codex_global()
 
+    @app.post("/local-codex/logout", tags=["local-codex"])
+    def local_codex_logout() -> dict[str, Any]:
+        """Run ``codex logout`` on the bridge host (same as signing out in a terminal there)."""
+        codex = local_codex_cli.resolve_codex_executable()
+        if not codex:
+            raise HTTPException(
+                status_code=503,
+                detail="codex CLI not found on this machine. Install with npm install -g @openai/codex "
+                "or set OFDD_CODEX_CMD to the full path to codex.cmd / codex.",
+            )
+        return local_codex_cli.run_codex_logout(codex)
+
     @app.post("/local-codex/chat", tags=["local-codex"])
     def local_codex_chat(body: LocalCodexChatBody) -> dict[str, Any]:
         codex = local_codex_cli.resolve_codex_executable()

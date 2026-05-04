@@ -20,14 +20,16 @@ Full **Brick / SPARQL / Compose** platform docs: **[open-fdd-afdd-stack](https:/
 
 | Track | Who it is for | Auth / model | Where it lives in this repo |
 |-------|----------------|----------------|-----------------------------|
-| **Built-in AI (Open-FDD only)** | Default Open-FDD desktop users | Official **`codex` CLI** on the bridge host: `codex login` / `codex login --device-auth`, then `codex login status`; optional `OFDD_CODEX_CMD` | UI: **`/openfdd-claw-chat`** — stack context + **SIMPLE/COMPLEX** agent chat; bridge: **`GET /openfdd-agent/context`**, **`POST /openfdd-agent/chat`** (`open_fdd/gateway/openfdd_agent.py`, `openfdd_agent_routing.py`, `openfdd_agent_context.py`); raw CLI: **`GET /local-codex/diagnostics`**, **`POST /local-codex/chat`** |
+| **Built-in AI (Open-FDD only)** | Default Open-FDD desktop users | Official **`codex` CLI** on the bridge host: `codex login` / `codex login --device-auth`, then `codex login status`; optional `OFDD_CODEX_CMD` | UI: **`/ai-agent`** (legacy **`/openfdd-claw-chat`** redirects) — stack context + **SIMPLE/COMPLEX** agent chat; bridge: **`GET /openfdd-agent/context`**, **`POST /openfdd-agent/chat`** (`open_fdd/gateway/openfdd_agent.py`, `openfdd_agent_routing.py`, `openfdd_agent_context.py`); raw CLI: **`GET /local-codex/diagnostics`**, **`POST /local-codex/chat`** |
 | **Optional OpenClaw gateway** | Teams that already run OpenClaw | OpenClaw-managed **OAuth** (`openclaw models auth login --provider openai-codex`) + gateway token | Bridge: **`OpenClawGatewayChatClient`** (`open_fdd/gateway/openclaw_chat.py`), **`/assistant/data-model-openclaw`**; UI: embedded Claw URL (**`VITE_OPENFDDCLAW_UI_URL`**) |
+
+**Execution model (built-in path):** the **Vite/React desktop UI** only calls the bridge over HTTP. The **Python gateway** spawns a **`codex exec`** child process on the **same machine** as the bridge (`local_codex_cli.py`). **Codex** (the CLI) performs the actual model/tool/sandbox steps; Open-FDD passes workdir, stdin, and **`OFDD_CODEX_*`**-derived flags. See **[Desktop app — Where Codex runs](howto/desktop_app#where-codex-runs)** for the full table.
 
 **Agentic / “OpenClaw-style” building blocks already in Open-FDD (fixed, repo-local):**
 
 - **Model routing (inspired by OpenClaw):** `open_fdd/gateway/openclaw_routing.py` — task classification and simple vs complex lanes used when calling the gateway client (`complete_for_task`).
 - **Workspace + skills (cloned patterns, not a running OpenClaw dependency):** [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) and [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md) (`SKILL.md` bundles: bootstrap, clean-metrics, modeling, drivers, BACnet). These mirror OpenClaw’s **bootstrap Markdown + AgentSkills** layout; operators can still **copy** them into `~/.openclaw/workspace/` if they *also* run OpenClaw.
-- **Operator tools in the UI:** Advanced panel (cron/API/policy presets) on the same route as local Codex chat — see `OpenFddClawAdvancedPanel.tsx`.
+- **Operator tools in the UI:** Advanced panel (cron/API/policy presets) on the same route as **AI Agent** chat — see `OpenFddClawAdvancedPanel.tsx`.
 
 **Gaps / roadmap (honest):** a single long-running “Open-FDD agent” process with OpenClaw-parity **memory files**, **multi-step tool loop**, and **subagents** is **not** fully merged into the bridge yet; today the **built-in** path is **CLI Codex + REST bridge + readiness/MCP/docs**. Gateway routing and workspace clones are the **spine** to grow toward that without forking OpenClaw wholesale.
 
@@ -40,7 +42,7 @@ If you have OpenClaw cloned (e.g. `C:\Users\ben\Documents\openclaw`), useful ref
 | Topic | OpenClaw (upstream) | Open-FDD (this repo) |
 |-------|---------------------|------------------------|
 | Codex device OAuth (HTTP) | `extensions/openai/openai-codex-device-code.ts` | **Built-in:** delegate to **`codex` CLI** (`local_codex_cli.py`) so auth matches `codex login` / OpenAI’s supported installer path |
-| TUI / chat UX | `src/tui/` (e.g. `gateway-chat.ts`, `components/chat-log.ts`) | Desktop **React** chat + handoff cards (`OpenClawChatPage.tsx`) — same *ideas* (transcript, status), not a terminal port |
+| TUI / chat UX | `src/tui/` (e.g. `gateway-chat.ts`, `components/chat-log.ts`) | Desktop **React** chat + handoff cards (`AiAgentChatPage.tsx`) — same *ideas* (transcript, status), not a terminal port |
 | Skills format | `skills/**/SKILL.md`, `.agents/skills/**` | `contrib/openclaw-skills/**/SKILL.md` |
 | Workspace bootstrap | Workspace `AGENTS.md`, `SOUL.md`, `MEMORY.md` | `contrib/openclaw-workspace/*.md` |
 | Gateway HTTP completions | Gateway `POST /v1/chat/completions` | `openclaw_chat.py` + env `OFDD_OPENCLAW_GATEWAY_*` |

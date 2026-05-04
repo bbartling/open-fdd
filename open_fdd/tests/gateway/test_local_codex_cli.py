@@ -31,6 +31,19 @@ def test_run_npm_install_codex_global_oserror(monkeypatch: pytest.MonkeyPatch) -
     assert "npm launch failed" in out["stderr"]
 
 
+def test_run_codex_logout(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="signed out\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    out = lc.run_codex_logout("/fake/codex")
+    assert out["ok"] is True
+    assert calls == [["/fake/codex", "logout"]]
+
+
 def test_safe_int_from_env_invalid_falls_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OFDD_CODEX_EXEC_TIMEOUT_S", "not-a-number")
     captured: dict[str, object] = {}
@@ -78,6 +91,10 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
         "OFDD_CODEX_EXEC_SANDBOX",
         "OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX",
         "OFDD_CODEX_WORKSPACE_WRITE_NETWORK",
+        "OFDD_CODEX_MODEL_SIMPLE",
+        "OFDD_CODEX_MODEL_COMPLEX",
+        "OFDD_CODEX_MODEL_COMPLEX_FALLBACK",
+        "OFDD_CODEX_LLM_CLASSIFY",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: None)
@@ -88,6 +105,8 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
     assert any("npm install" in h.lower() for h in out["hints"])
     assert out["exec_env"]["ask_for_approval"] == "never"
     assert out["exec_env"]["sandbox_mode"] == "danger-full-access"
+    assert out["exec_env"]["model_simple"] == "gpt-5.4-mini"
+    assert out["exec_env"]["model_complex_primary"] == "gpt-5.5"
 
 
 def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,6 +115,10 @@ def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
         "OFDD_CODEX_EXEC_SANDBOX",
         "OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX",
         "OFDD_CODEX_WORKSPACE_WRITE_NETWORK",
+        "OFDD_CODEX_MODEL_SIMPLE",
+        "OFDD_CODEX_MODEL_COMPLEX",
+        "OFDD_CODEX_MODEL_COMPLEX_FALLBACK",
+        "OFDD_CODEX_LLM_CLASSIFY",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: "C:\\\\fake\\\\codex.cmd")
@@ -130,6 +153,22 @@ def test_run_codex_exec_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert calls[0][:4] == ["codex", "--ask-for-approval", "never", "exec"]
     assert "--sandbox" in calls[0]
     assert calls[0][calls[0].index("--sandbox") + 1] == "danger-full-access"
+    assert calls[0][-4:] == ["--skip-git-repo-check", "--color", "never", "-"]
+
+
+def test_run_codex_exec_inserts_model_before_stdin_dash(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> MagicMock:
+        calls.append(list(cmd))
+        return MagicMock(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr(lc.subprocess, "run", fake_run)
+    monkeypatch.delenv("OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX", raising=False)
+    lc.run_codex_exec("codex", tmp_path, stdin_text="x", model="gpt-5.4-mini")
+    assert "--model" in calls[0]
+    mi = calls[0].index("--model")
+    assert calls[0][mi + 1] == "gpt-5.4-mini"
     assert calls[0][-4:] == ["--skip-git-repo-check", "--color", "never", "-"]
 
 
