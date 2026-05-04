@@ -44,8 +44,12 @@ jobs:
 
       - name: Check internal links (HTMLProofer)
         run: |
-          gem install html-proofer -v '~> 5.0'
-          htmlproofer "${{ github.workspace }}/_site" \
+          gem install html-proofer -v '~> 5.0' --no-document
+          # gem wrappers are not always on PATH; Gem.bindir is reliable.
+          # baseurl is /open-fdd — map hrefs to _site paths (see html-proofer README "baseurl").
+          "$(ruby -e 'puts Gem.bindir')/htmlproofer" "${{ github.workspace }}/_site" \
+            --assume-extension .html \
+            --swap-urls '^/open-fdd/:/' \
             --disable-external \
             --allow-hash-href \
             --ignore-empty-alt \
