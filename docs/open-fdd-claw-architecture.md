@@ -1,14 +1,51 @@
 ---
 title: Open FDD Claw architecture
 nav_order: 8
-description: "OpenClaw features mapped to Open-FDD, host startup order, and Codex-aligned LLM auth via the Gateway."
+description: "Built-in Open-FDD AI (Codex CLI + bridge) vs optional OpenClaw gateway; skills/workspace clone; routing inspired by OpenClaw."
 ---
 
 # Open FDD Claw architecture
 
-**Open FDD Claw** is the integration pattern where **OpenClaw** is the AI control plane (gateway, tools, skills, optional channels) and **Open-FDD** stays the data and FDD plane (FastAPI bridge, MCP RAG, rules engine, Feather storage). This page matches the shipped runbook and skills; see also [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md).
+**Goal for Open-FDD operators:** a **fixed, first-party AI surface** inside the desktop app for **FDD**, **AI-assisted data modeling**, and **AI data cleaning**—**inspired by** OpenClaw (skills, memory/SOUL-style workspace docs, model routing ideas, readiness handoff)—**without** requiring everyone to install or run the full OpenClaw stack.
+
+**Open FDD Claw** still names the **optional** pattern where a separate **OpenClaw** process is the AI control plane (gateway, channels, full agent loop) while **Open-FDD** remains the data plane (bridge **8765**, MCP RAG **8090**, rules, Feather). That remains supported for power users.
+
+This page describes **both** tracks, maps shipped code and `contrib/` clones, and points at a **local OpenClaw checkout** when you want to compare upstream behavior (example path: `C:\Users\ben\Documents\openclaw`). See also [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md).
 
 Full **Brick / SPARQL / Compose** platform docs: **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+
+---
+
+## Product split: built-in Open-FDD AI vs optional OpenClaw
+
+| Track | Who it is for | Auth / model | Where it lives in this repo |
+|-------|----------------|----------------|-----------------------------|
+| **Built-in AI (Open-FDD only)** | Default Open-FDD desktop users | Official **`codex` CLI** on the bridge host: `codex login` / `codex login --device-auth`, then `codex login status`; optional `OFDD_CODEX_CMD` | UI: **`/ai-agent`** (legacy **`/openfdd-claw-chat`** redirects) — stack context + **SIMPLE/COMPLEX** agent chat; bridge: **`GET /openfdd-agent/context`**, **`POST /openfdd-agent/chat`** (`open_fdd/gateway/openfdd_agent.py`, `openfdd_agent_routing.py`, `openfdd_agent_context.py`); raw CLI: **`GET /local-codex/diagnostics`**, **`POST /local-codex/chat`** |
+| **Optional OpenClaw gateway** | Teams that already run OpenClaw | OpenClaw-managed **OAuth** (`openclaw models auth login --provider openai-codex`) + gateway token | Bridge: **`OpenClawGatewayChatClient`** (`open_fdd/gateway/openclaw_chat.py`), **`/assistant/data-model-openclaw`**; UI: embedded Claw URL (**`VITE_OPENFDDCLAW_UI_URL`**) |
+
+**Execution model (built-in path):** the **Vite/React desktop UI** only calls the bridge over HTTP. The **Python gateway** spawns a **`codex exec`** child process on the **same machine** as the bridge (`local_codex_cli.py`). **Codex** (the CLI) performs the actual model/tool/sandbox steps; Open-FDD passes workdir, stdin, and **`OFDD_CODEX_*`**-derived flags. See **[Desktop app — Where Codex runs](howto/desktop_app#where-codex-runs)** for the full table.
+
+**Agentic / “OpenClaw-style” building blocks already in Open-FDD (fixed, repo-local):**
+
+- **Model routing (inspired by OpenClaw):** `open_fdd/gateway/openclaw_routing.py` — task classification and simple vs complex lanes used when calling the gateway client (`complete_for_task`).
+- **Workspace + skills (cloned patterns, not a running OpenClaw dependency):** [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) and [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md) (`SKILL.md` bundles: bootstrap, clean-metrics, modeling, drivers, BACnet). These mirror OpenClaw’s **bootstrap Markdown + AgentSkills** layout; operators can still **copy** them into `~/.openclaw/workspace/` if they *also* run OpenClaw.
+- **Operator tools in the UI:** Advanced panel (cron/API/policy presets) on the same route as **AI Agent** chat — see `OpenFddClawAdvancedPanel.tsx`.
+
+**Gaps / roadmap (honest):** a single long-running “Open-FDD agent” process with OpenClaw-parity **memory files**, **multi-step tool loop**, and **subagents** is **not** fully merged into the bridge yet; today the **built-in** path is **CLI Codex + REST bridge + readiness/MCP/docs**. Gateway routing and workspace clones are the **spine** to grow toward that without forking OpenClaw wholesale.
+
+---
+
+## Upstream OpenClaw (local checkout) — what to compare
+
+If you have OpenClaw cloned (e.g. `C:\Users\ben\Documents\openclaw`), useful references when evolving Open-FDD’s built-in AI:
+
+| Topic | OpenClaw (upstream) | Open-FDD (this repo) |
+|-------|---------------------|------------------------|
+| Codex device OAuth (HTTP) | `extensions/openai/openai-codex-device-code.ts` | **Built-in:** delegate to **`codex` CLI** (`local_codex_cli.py`) so auth matches `codex login` / OpenAI’s supported installer path |
+| TUI / chat UX | `src/tui/` (e.g. `gateway-chat.ts`, `components/chat-log.ts`) | Desktop **React** chat + handoff cards (`AiAgentChatPage.tsx`) — same *ideas* (transcript, status), not a terminal port |
+| Skills format | `skills/**/SKILL.md`, `.agents/skills/**` | `contrib/openclaw-skills/**/SKILL.md` |
+| Workspace bootstrap | Workspace `AGENTS.md`, `SOUL.md`, `MEMORY.md` | `contrib/openclaw-workspace/*.md` |
+| Gateway HTTP completions | Gateway `POST /v1/chat/completions` | `openclaw_chat.py` + env `OFDD_OPENCLAW_GATEWAY_*` |
 
 ---
 
@@ -75,17 +112,28 @@ Human-in-the-loop export → review → validate → import is described in [Dat
 
 ---
 
-## Codex-aligned auth (do not duplicate OAuth in Python)
+## Codex / OpenAI auth (two supported paths)
+
+### A) Built-in Open-FDD (Codex CLI — default product story)
+
+| Concern | Where it lives |
+|--------|----------------|
+| **Operator subscription / CLI session** | Same as a normal Codex install: **`codex login`**, **`codex login --device-auth`**, **`codex login status`** on the machine running **`open-fdd-desktop-bridge`**. |
+| **Bridge integration** | **`OFDD_CODEX_CMD`** if `codex` is not on `PATH` for the bridge process (Windows: often `…\npm\codex.cmd`). **`GET /local-codex/diagnostics`**, **`POST /local-codex/chat`**. |
+| **Onboard, BACnet, etc.** | Open-FDD bridge env (e.g. `OFDD_ONBOARD_API_KEY`) — **data plane**, not LLM auth. |
+
+**Device / org policy:** If `codex login` fails, use the same guidance as upstream Codex: ChatGPT **security / device** settings or admin policy; official: [Codex authentication](https://developers.openai.com/codex/auth/).
+
+**Policy:** Do **not** invent a second OAuth store in Open-FDD for this path—the **`codex` binary** owns tokens for built-in chat.
+
+### B) Optional OpenClaw gateway (OAuth in OpenClaw)
 
 | Secret / credential | Where it lives |
 |---------------------|----------------|
 | **ChatGPT / Codex subscription (OAuth)** | OpenClaw: `openclaw models auth login --provider openai-codex`; tokens in `~/.openclaw/agents/.../auth-profiles.json`. |
 | **Gateway operator HTTP auth** | `OPENCLAW_GATEWAY_TOKEN` (or `gateway.auth.token` in `openclaw.json`). |
-| **Onboard, BACnet DIY, etc.** | Open-FDD bridge env (e.g. `OFDD_ONBOARD_API_KEY`) — **data plane**, not LLM auth. |
 
-**Device-code prerequisite (OpenAI):** ChatGPT may refuse device login until **device code authorization for Codex** is enabled in **ChatGPT security settings** (personal) or allowed by a **workspace admin** (Business / Enterprise). The consent screen can mention `codex login --device-auth` — that is the same device flow as Open-FDD’s **Start sign-in** button. Official steps: [Codex authentication](https://developers.openai.com/codex/auth/).
-
-**Policy:** LLM calls from Python should go to the **OpenClaw Gateway** `POST /v1/chat/completions` with `Authorization: Bearer <gateway token>` and `x-openclaw-model: openai-codex/<model>` so **Codex OAuth stays in OpenClaw**. Do not read `auth-profiles.json` from Open-FDD.
+**Policy for bridge → gateway calls:** Use **`OpenClawGatewayChatClient`** (`POST /v1/chat/completions` with `Authorization: Bearer <gateway token>` and `x-openclaw-model: openai-codex/<model>`). Do **not** read `auth-profiles.json` from Open-FDD Python for gateway-backed flows.
 
 Enable the HTTP surface in OpenClaw (see [OpenClaw OpenAI chat completions](https://docs.openclaw.ai/gateway/openai-http-api)):
 

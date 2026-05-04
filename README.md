@@ -25,12 +25,21 @@ pip install open-fdd
 
 ## Dashboard
 
-In active development.
+The web dashboard is a local operator web UI (React) backed by a FastAPI bridge, MCP RAG for retrieval context, and an AI agent that uses OpenAI Codex (subscription / `codex login` auth on the bridge host), all talking to services on localhost. Codex-backed tasks help the HVAC FDD analyst because the bridge spawns the `codex` CLI as a child OS process per turn (not “Python subprocesses” in the sense of running inside the interpreter). Codex is OpenAI’s CLI product; Open-FDD starts that binary on the host and supplies flags and environment variables, while authentication, model selection, tools, and execution policy are handled by Codex itself.
 
+**Start everything** (gateway + MCP + UI, data under `stack/local-data`):
 
-**One-command local launcher:** use `scripts/start-local.ps1` (Windows) or `scripts/start-local.sh` (bash) to start gateway/MCP/UI with repo-local defaults under `stack/local-data`.
+```powershell
+# Windows (from repo root)
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
 
-**Open-FDD Claw** (OpenClaw + bridge): after `start-local`, open the **Open-FDD Claw** page in the desktop UI for embedded chat and optional **ChatGPT / Codex** device sign-in via the bridge. Operator docs: [`docs/open-fdd-claw-architecture.md`](docs/open-fdd-claw-architecture.md), workspace bootstrap [`contrib/openclaw-workspace/`](contrib/openclaw-workspace/README.md), skills [`contrib/openclaw-skills/`](contrib/openclaw-skills/README.md).
+```bash
+# macOS, Linux, or WSL (from repo root)
+bash ./scripts/start-local.sh
+```
+
+Details: **[Desktop app how-to](docs/howto/desktop_app.md)** (sections *Launch* and *MCP RAG*).
 
 ---
 
@@ -73,12 +82,10 @@ pytest
 
 ## Dependencies
 
-* Python 3.10+ (see `requires-python` in `pyproject.toml`)
-* `pandas`
-* `numpy`
-* `pyyaml`
-* `pydantic>=2.4,<3`
-* `pip` + virtual environment tooling (`python3 -m venv`)
+* **Python 3.10+**, `pip`, and a venv (`requires-python` and `[project.dependencies]` in `pyproject.toml`): `pandas`, `numpy`, `pyyaml`, `pydantic>=2.4,<3`, `requests`.
+* **Desktop / Python bridge** (Feather ingest, TTL/RDF, FastAPI gateway, PySide tooling): install the **`desktop`** extra, e.g. `pip install -e ".[desktop]"`—see `[project.optional-dependencies].desktop` in `pyproject.toml` (includes FastAPI, uvicorn, httpx, pyarrow, rdflib, PySide6, scikit-learn, etc.).
+* **Browser desktop UI** (`apps/desktop-ui`): **Node.js** + **npm** for the Vite/React app (`npm install`, `npm run dev`) talking to the bridge.
+* **AI Agent tab** (Codex on the bridge): the **OpenAI Codex CLI** on the host that runs the gateway (PATH or `OFDD_CODEX_CMD`), not an extra Python dependency listed above.
 
 ---
 

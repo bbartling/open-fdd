@@ -12,7 +12,12 @@ import urllib.parse
 from typing import Any, Literal
 import logging
 import os
+import platform
+import time
 import ctypes
+import ctypes.util
+from ctypes import wintypes
+import subprocess
 import warnings
 
 import pandas as pd
@@ -35,9 +40,16 @@ from open_fdd.desktop.services.time_utils import infer_timestamp_column
 from open_fdd.desktop.services.ttl_service import TtlService
 from open_fdd.desktop.services.plot_readiness import TimeseriesPlotReadiness, analyze_dataframe_for_plot
 from open_fdd.desktop.storage.paths import default_rules_root
-from open_fdd.gateway import codex_device_login
+from open_fdd.gateway import codex_device_login, local_codex_cli
+from open_fdd.gateway.openfdd_agent import run_openfdd_agent_turn
+from open_fdd.gateway.openfdd_agent_context import build_agent_bootstrap_context
 
 _log = logging.getLogger(__name__)
+
+
+def _allow_local_codex_install_cli() -> bool:
+    raw = (os.environ.get("OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
 
 
 def _normalize_rule_files_basenames(rule_files: list[str] | None) -> list[str] | None:
@@ -111,6 +123,7 @@ class CsvIngestBody(BaseModel):
     site_id: str
     source: str = "csv"
     csv_path: str
+    equipment_id: str | None = None
 
 
 class ModelImportBody(BaseModel):
@@ -335,6 +348,43 @@ class CodexDevicePollBody(BaseModel):
         return s
 
 
+class LocalCodexChatBody(BaseModel):
+    """Run `codex exec` on the bridge host (same idea as a local subprocess harness)."""
+
+    model_config = ConfigDict(extra="ignore")
+    message: str = Field(..., min_length=1, max_length=200_000)
+    workdir: str | None = None
+    system_context: str | None = Field(None, max_length=100_000)
+
+
+class OpenFddAgentHistoryLine(BaseModel):
+    """One prior turn from the desktop UI thread (sent so Codex sees full context)."""
+
+    model_config = ConfigDict(extra="ignore")
+    role: Literal["user", "assistant"]
+    text: str = Field(..., max_length=120_000)
+
+
+class OpenFddAgentChatBody(BaseModel):
+    """Open-FDD built-in agent: stack-aware Codex turn with SIMPLE/COMPLEX routing."""
+
+    model_config = ConfigDict(extra="ignore")
+    message: str = Field(..., min_length=1, max_length=200_000)
+    workdir: str | None = None
+    task_summary: str | None = Field(None, max_length=8000)
+    force_class: Literal["simple", "complex"] | None = None
+    human_requested_complex: bool = False
+    system_context: str | None = Field(None, max_length=100_000)
+    conversation_history: list[OpenFddAgentHistoryLine] | None = None
+
+    @field_validator("conversation_history", mode="after")
+    @classmethod
+    def _cap_conversation_history(cls, v: list[OpenFddAgentHistoryLine] | None) -> list[OpenFddAgentHistoryLine] | None:
+        if not v:
+            return v
+        return v[-120:] if len(v) > 120 else v
+
+
 class TimeseriesPurgeBody(BaseModel):
     source: str | None = None
     site_id: str | None = None
@@ -436,6 +486,28 @@ def _examples_pack_root() -> Path | None:
     return root.resolve() if root.is_dir() else None
 
 
+def _cors_extra_origins() -> list[str]:
+    """Optional explicit browser origins (comma-separated), e.g. ``http://192.168.1.20:5173``."""
+    raw = (os.environ.get("OFDD_CORS_EXTRA_ORIGINS") or "").strip()
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _cors_origin_regex() -> str:
+    """Restrict browser ``Origin`` headers the bridge accepts (see ``OFDD_CORS_ALLOW_PRIVATE_LAN``)."""
+    if (os.environ.get("OFDD_CORS_ALLOW_PRIVATE_LAN") or "").strip().lower() in ("1", "true", "yes", "on"):
+        return (
+            r"^https?://("
+            r"localhost|127\.0\.0\.1"
+            r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+            r"|192\.168\.\d{1,3}\.\d{1,3}"
+            r"|172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}"
+            r")(?::\d+)?$"
+        )
+    return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -501,10 +573,11 @@ def create_app() -> FastAPI:
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             *_static_ui_origins,
+            *_cors_extra_origins(),
             "tauri://localhost",
             "https://tauri.localhost",
         ],
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_origin_regex=_cors_origin_regex(),
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=True,
@@ -564,40 +637,144 @@ def create_app() -> FastAPI:
             _log.exception("TTL sync failed")
             return str(exc)
 
-    def _memory_info() -> dict[str, int | float]:
-        if os.name == "nt":
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_ulong),
-                    ("dwMemoryLoad", ctypes.c_ulong),
-                    ("ullTotalPhys", ctypes.c_ulonglong),
-                    ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong),
-                    ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong),
-                    ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
+    def _memory_info_proc_linux() -> tuple[int, int] | None:
+        """``/proc/meminfo`` (MemTotal + MemAvailable or MemFree+Cached+Buffers)."""
+        path = Path("/proc/meminfo")
+        if not path.is_file():
+            return None
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        mem_total_kb: int | None = None
+        mem_avail_kb: int | None = None
+        mem_free_kb: int | None = None
+        cached_kb = 0
+        buffers_kb = 0
+        for line in text.splitlines():
+            if line.startswith("MemTotal:"):
+                mem_total_kb = int(line.split()[1])
+            elif line.startswith("MemAvailable:"):
+                mem_avail_kb = int(line.split()[1])
+            elif line.startswith("MemFree:"):
+                mem_free_kb = int(line.split()[1])
+            elif line.startswith("Cached:"):
+                cached_kb = int(line.split()[1])
+            elif line.startswith("Buffers:"):
+                buffers_kb = int(line.split()[1])
+        if mem_total_kb is None:
+            return None
+        if mem_avail_kb is None:
+            if mem_free_kb is None:
+                return None
+            mem_avail_kb = mem_free_kb + cached_kb + buffers_kb
+        total = mem_total_kb * 1024
+        avail = min(mem_avail_kb * 1024, total)
+        return total, avail
 
-            stat = MEMORYSTATUSEX()
-            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
-            total = int(stat.ullTotalPhys)
-            avail = int(stat.ullAvailPhys)
-        else:
+    def _memory_info_darwin() -> tuple[int, int] | None:
+        """macOS: ``sysctl hw.memsize`` + ``vm_stat`` (free + inactive + speculative pages)."""
+        try:
+            r = subprocess.run(
+                ["/usr/sbin/sysctl", "-n", "hw.memsize"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if r.returncode != 0:
+                return None
+            total = int(r.stdout.strip())
+        except (ValueError, OSError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return None
+        try:
+            r2 = subprocess.run(
+                ["/usr/bin/vm_stat"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if r2.returncode != 0 or not (r2.stdout or "").strip():
+                return None
+        except (OSError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return None
+        lines = r2.stdout.splitlines()
+        page_size = 4096
+        if lines and "page size of" in lines[0] and "bytes" in lines[0]:
             try:
-                pages = int(os.sysconf("SC_PHYS_PAGES"))
-                page_size = int(os.sysconf("SC_PAGE_SIZE"))
-                try:
-                    avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
-                except (ValueError, OSError, KeyError):
-                    # Darwin can omit SC_AVPHYS_PAGES; use total pages as conservative fallback.
-                    avail_pages = pages
-                total = pages * page_size
-                avail = avail_pages * page_size
-            except (ValueError, OSError, KeyError):
-                total = 0
-                avail = 0
+                chunk = lines[0].split("page size of", 1)[1]
+                page_size = int(chunk.split("bytes", 1)[0].strip())
+            except (ValueError, IndexError):
+                pass
+        pages: dict[str, int] = {}
+        for line in lines:
+            s = line.strip()
+            for key in ("Pages free:", "Pages inactive:", "Pages speculative:"):
+                if s.startswith(key):
+                    try:
+                        pages[key] = int(s.split(":", 1)[1].strip().rstrip("."))
+                    except (ValueError, IndexError):
+                        pass
+        free_p = pages.get("Pages free:", 0)
+        inact_p = pages.get("Pages inactive:", 0)
+        spec_p = pages.get("Pages speculative:", 0)
+        avail = min((free_p + inact_p + spec_p) * page_size, total)
+        return total, avail
+
+    def _memory_info_posix_sysconf() -> tuple[int, int] | None:
+        try:
+            pages = int(os.sysconf("SC_PHYS_PAGES"))
+            page_size = int(os.sysconf("SC_PAGE_SIZE"))
+        except (ValueError, OSError, KeyError, AttributeError):
+            return None
+        try:
+            avail_pages = int(os.sysconf("SC_AVPHYS_PAGES"))
+        except (ValueError, OSError, KeyError, AttributeError):
+            avail_pages = pages
+        total = pages * page_size
+        avail = avail_pages * page_size
+        return total, avail
+
+    def _memory_info() -> dict[str, int | float]:
+        total = 0
+        avail = 0
+        try:
+            if os.name == "nt":
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    raise OSError("GlobalMemoryStatusEx failed")
+                total = int(stat.ullTotalPhys)
+                avail = int(stat.ullAvailPhys)
+            elif Path("/proc/meminfo").is_file():
+                got = _memory_info_proc_linux()
+                if got:
+                    total, avail = got
+            elif platform.system() == "Darwin":
+                got = _memory_info_darwin()
+                if got:
+                    total, avail = got
+            if total == 0 and os.name != "nt":
+                got = _memory_info_posix_sysconf()
+                if got:
+                    total, avail = got
+        except Exception:  # noqa: BLE001
+            _log.exception("memory snapshot failed")
+            total, avail = 0, 0
         used = max(0, total - avail)
         pct = round((used / total) * 100, 2) if total > 0 else 0.0
         return {
@@ -608,19 +785,185 @@ def create_app() -> FastAPI:
         }
 
     def _disk_info() -> dict[str, int | float | str]:
-        target = Path.home()
-        usage = shutil.disk_usage(target)
-        total = int(usage.total)
-        free = int(usage.free)
-        used = int(usage.used)
-        pct = round((used / total) * 100, 2) if total > 0 else 0.0
+        for target in (Path.home(), Path.cwd()):
+            try:
+                if not target.exists():
+                    continue
+                usage = shutil.disk_usage(target)
+                total = int(usage.total)
+                free = int(usage.free)
+                used = int(usage.used)
+                pct = round((used / total) * 100, 2) if total > 0 else 0.0
+                return {
+                    "path": str(target),
+                    "total_bytes": total,
+                    "free_bytes": free,
+                    "used_bytes": used,
+                    "used_percent": pct,
+                }
+            except OSError:
+                continue
         return {
-            "path": str(target),
-            "total_bytes": total,
-            "free_bytes": free,
-            "used_bytes": used,
-            "used_percent": pct,
+            "path": "",
+            "total_bytes": 0,
+            "free_bytes": 0,
+            "used_bytes": 0,
+            "used_percent": 0.0,
         }
+
+    def _linux_cpu_idle_total() -> tuple[int, int] | None:
+        try:
+            with open("/proc/stat", encoding="utf-8") as fh:
+                line = fh.readline()
+        except OSError:
+            return None
+        parts = line.split()
+        if len(parts) < 5 or parts[0] != "cpu":
+            return None
+        fields = [int(x) for x in parts[1:]]
+        while len(fields) < 8:
+            fields.append(0)
+        user, nice, system, idle, iowait, irq, softirq, steal = fields[:8]
+        idle_all = idle + iowait
+        busy = user + nice + system + irq + softirq + steal
+        total = idle_all + busy
+        return idle_all, total
+
+    def _cpu_percent_linux() -> float | None:
+        a = _linux_cpu_idle_total()
+        if a is None:
+            return None
+        idle1, total1 = a
+        time.sleep(0.12)
+        b = _linux_cpu_idle_total()
+        if b is None:
+            return None
+        idle2, total2 = b
+        did = idle2 - idle1
+        dtot = total2 - total1
+        if dtot <= 0:
+            return None
+        return round(100.0 * (1.0 - did / dtot), 1)
+
+    def _cpu_percent_darwin_host() -> float | None:
+        """Approximate host CPU% using Mach ``HOST_CPU_LOAD_INFO`` (macOS / Darwin)."""
+        if platform.system() != "Darwin" or os.name == "nt":
+            return None
+        try:
+            libname = ctypes.util.find_library("System")
+            libc = ctypes.CDLL(libname) if libname else ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+        except OSError:
+            try:
+                libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            except OSError:
+                return None
+        HOST_CPU_LOAD_INFO = 3
+        KERN_SUCCESS = 0
+
+        class HostCpuLoadInfo(ctypes.Structure):
+            _fields_ = [("cpu_ticks", ctypes.c_uint * 4)]
+
+        mach_host_self = libc.mach_host_self
+        mach_host_self.argtypes = []
+        mach_host_self.restype = ctypes.c_uint
+
+        host_statistics = libc.host_statistics
+        host_statistics.argtypes = [
+            ctypes.c_uint,
+            ctypes.c_int,
+            ctypes.POINTER(HostCpuLoadInfo),
+            ctypes.POINTER(ctypes.c_int),
+        ]
+        host_statistics.restype = ctypes.c_int
+
+        def sample() -> tuple[int, int] | None:
+            port = mach_host_self()
+            data = HostCpuLoadInfo()
+            count = ctypes.c_int(4)
+            kr = host_statistics(port, HOST_CPU_LOAD_INFO, ctypes.byref(data), ctypes.byref(count))
+            if kr != KERN_SUCCESS:
+                return None
+            user, nice, system, idle_ = (int(data.cpu_ticks[i]) for i in range(4))
+            busy = user + nice + system
+            tot = idle_ + busy
+            return idle_, tot
+
+        try:
+            a = sample()
+            if a is None:
+                return None
+            idle1, tot1 = a
+            time.sleep(0.12)
+            b = sample()
+            if b is None:
+                return None
+            idle2, tot2 = b
+            did = idle2 - idle1
+            dtot = tot2 - tot1
+            if dtot <= 0:
+                return None
+            return round(100.0 * (1.0 - did / dtot), 1)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _cpu_percent_windows() -> float | None:
+        class FILETIME(ctypes.Structure):
+            _fields_ = [
+                ("dwLowDateTime", wintypes.DWORD),
+                ("dwHighDateTime", wintypes.DWORD),
+            ]
+
+        def ft64(ft: FILETIME) -> int:
+            return int(ft.dwLowDateTime) + (int(ft.dwHighDateTime) << 32)
+
+        idle1, k1, u1 = FILETIME(), FILETIME(), FILETIME()
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle1), ctypes.byref(k1), ctypes.byref(u1)):
+            return None
+        time.sleep(0.12)
+        idle2, k2, u2 = FILETIME(), FILETIME(), FILETIME()
+        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle2), ctypes.byref(k2), ctypes.byref(u2)):
+            return None
+        idle_delta = ft64(idle2) - ft64(idle1)
+        total_delta = (ft64(k2) - ft64(k1)) + (ft64(u2) - ft64(u1))
+        if total_delta <= 0:
+            return None
+        return round(100.0 - (100.0 * idle_delta / total_delta), 1)
+
+    def _cpu_info() -> dict[str, Any]:
+        cores = int(os.cpu_count() or 1)
+        out: dict[str, Any] = {"logical_cores": cores, "cpu_percent": None}
+        try:
+            if os.name == "nt":
+                out["cpu_percent"] = _cpu_percent_windows()
+            elif Path("/proc/stat").is_file():
+                pct = _cpu_percent_linux()
+                if pct is not None:
+                    out["cpu_percent"] = pct
+                else:
+                    try:
+                        load1, _, _ = os.getloadavg()
+                        out["load_average_1m"] = round(float(load1), 2)
+                    except (OSError, AttributeError):
+                        pass
+            elif platform.system() == "Darwin":
+                pct = _cpu_percent_darwin_host()
+                if pct is not None:
+                    out["cpu_percent"] = pct
+                else:
+                    try:
+                        load1, _, _ = os.getloadavg()
+                        out["load_average_1m"] = round(float(load1), 2)
+                    except (OSError, AttributeError):
+                        pass
+            else:
+                try:
+                    load1, _, _ = os.getloadavg()
+                    out["load_average_1m"] = round(float(load1), 2)
+                except (OSError, AttributeError):
+                    pass
+        except Exception:  # noqa: BLE001
+            _log.exception("cpu snapshot failed")
+        return out
 
     raw_ttl_interval = os.getenv("OFDD_TTL_SYNC_INTERVAL_SECONDS", "30")
     try:
@@ -724,6 +1067,78 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/local-codex/diagnostics", tags=["local-codex"])
+    def local_codex_diagnostics() -> dict[str, Any]:
+        return local_codex_cli.gather_diagnostics()
+
+    @app.post("/local-codex/install-cli", tags=["local-codex"])
+    def local_codex_install_cli() -> dict[str, Any]:
+        """Install the OpenAI Codex CLI globally via npm on the bridge host (can take several minutes)."""
+        if not _allow_local_codex_install_cli():
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Local Codex npm install is disabled unless OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1 is set on "
+                    "the bridge host to allow POST /local-codex/install-cli."
+                ),
+            )
+        return local_codex_cli.run_npm_install_codex_global()
+
+    @app.post("/local-codex/logout", tags=["local-codex"])
+    def local_codex_logout() -> dict[str, Any]:
+        """Run ``codex logout`` on the bridge host (same as signing out in a terminal there)."""
+        codex = local_codex_cli.resolve_codex_executable()
+        if not codex:
+            raise HTTPException(
+                status_code=503,
+                detail="codex CLI not found on this machine. Install with npm install -g @openai/codex "
+                "or set OFDD_CODEX_CMD to the full path to codex.cmd / codex.",
+            )
+        return local_codex_cli.run_codex_logout(codex)
+
+    @app.post("/local-codex/chat", tags=["local-codex"])
+    def local_codex_chat(body: LocalCodexChatBody) -> dict[str, Any]:
+        codex = local_codex_cli.resolve_codex_executable()
+        if not codex:
+            raise HTTPException(
+                status_code=503,
+                detail="codex CLI not found on this machine. Install with npm install -g @openai/codex "
+                "or set OFDD_CODEX_CMD to the full path to codex.cmd / codex.",
+            )
+        workdir = local_codex_cli.resolve_workdir(body.workdir)
+        if not workdir.is_dir():
+            raise HTTPException(status_code=400, detail=f"workdir is not a directory: {workdir}")
+        stdin_text = local_codex_cli.build_chat_stdin(
+            user_message=body.message,
+            system_context=body.system_context,
+        )
+        return local_codex_cli.run_codex_exec(codex, workdir, stdin_text=stdin_text)
+
+    @app.get("/openfdd-agent/context", tags=["openfdd-agent"])
+    def openfdd_agent_context() -> dict[str, Any]:
+        """Ports and URLs for the built-in agent (merge of env + optional bootstrap JSON)."""
+        return build_agent_bootstrap_context()
+
+    @app.post("/openfdd-agent/chat", tags=["openfdd-agent"])
+    def openfdd_agent_chat(body: OpenFddAgentChatBody) -> dict[str, Any]:
+        hist: list[tuple[str, str]] | None = None
+        if body.conversation_history:
+            hist = [(ln.role, ln.text) for ln in body.conversation_history]
+        result = run_openfdd_agent_turn(
+            message=body.message,
+            workdir_raw=body.workdir,
+            task_summary=body.task_summary,
+            force_class=body.force_class,
+            system_context=body.system_context,
+            conversation_history=hist,
+            human_requested_complex=bool(body.human_requested_complex),
+        )
+        if result.get("error") == "codex_cli_missing":
+            raise HTTPException(status_code=503, detail=str(result.get("detail") or "codex CLI missing"))
+        if result.get("error") == "bad_workdir":
+            raise HTTPException(status_code=400, detail=str(result.get("detail") or "bad workdir"))
+        return result
+
     @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
     def codex_device_start() -> dict[str, Any]:
         try:
@@ -753,11 +1168,28 @@ def create_app() -> FastAPI:
 
     @app.delete("/sites/{site_id}", tags=["sites"])
     def delete_site(site_id: str) -> dict[str, Any]:
+        feather_purge: dict[str, Any]
+        try:
+            feather_purge = services.ingest.purge_timeseries(site_id=site_id, source=None)
+        except Exception as exc:  # noqa: BLE001
+            _log.exception("purge_timeseries failed before deleting site %s", site_id)
+            result: dict[str, Any] = {
+                "sites_deleted": 0,
+                "equipment_deleted": 0,
+                "points_deleted": 0,
+                "feather_purge": {"error": str(exc)},
+            }
+            ttl_err = _safe_sync_ttl()
+            if ttl_err:
+                result["ttl_sync_warning"] = ttl_err
+            return result
+
         out = services.model.delete_site(site_id)
-        ttl_error = _safe_sync_ttl()
-        if ttl_error:
-            return {**out, "ttl_sync_warning": ttl_error}
-        return out
+        ttl_err = _safe_sync_ttl()
+        result = {**out, "feather_purge": feather_purge}
+        if ttl_err:
+            result["ttl_sync_warning"] = ttl_err
+        return result
 
     @app.post("/sites/{site_id}/rule-pack", tags=["sites"])
     def set_site_rule_pack(site_id: str, body: SiteRulePackBody) -> dict[str, Any]:
@@ -871,7 +1303,12 @@ def create_app() -> FastAPI:
                 ),
             )
         try:
-            out = services.ingest.ingest_csv(csv_path=csv_path, site_id=body.site_id, source=body.source)
+            out = services.ingest.ingest_csv(
+                csv_path=csv_path,
+                site_id=body.site_id,
+                source=body.source,
+                equipment_id=body.equipment_id,
+            )
             _driver_health_update(
                 app.state.driver_health,
                 driver="csv",
@@ -891,6 +1328,7 @@ def create_app() -> FastAPI:
     async def ingest_csv_upload(
         site_id: str = Form(...),
         source: str = Form("csv"),
+        equipment_id: str | None = Form(None),
         file: UploadFile = File(...),
     ) -> dict[str, Any]:
         chunk_size = 64 * 1024
@@ -906,7 +1344,12 @@ def create_app() -> FastAPI:
                     handle.write(chunk)
                 handle.flush()
                 os.fsync(handle.fileno())
-            out = services.ingest.ingest_csv(csv_path=tmp_path, site_id=site_id, source=source)
+            out = services.ingest.ingest_csv(
+                csv_path=tmp_path,
+                site_id=site_id,
+                source=source,
+                equipment_id=equipment_id,
+            )
             _driver_health_update(
                 app.state.driver_health,
                 driver="csv",
@@ -2063,6 +2506,7 @@ ORDER BY DESC(?count)""",
         return {
             "memory": _memory_info(),
             "disk": _disk_info(),
+            "cpu": _cpu_info(),
         }
 
     @app.post("/storage/timeseries/purge", tags=["timeseries"])

@@ -8,7 +8,6 @@ export function AppLayout() {
       <Sidebar />
       <div className="app-main">
         <TopBar />
-        <div className="status-strip">Desktop bridge mode active: optimized for local large-file ingestion workflows.</div>
         <main className="content">
           <Outlet />
         </main>

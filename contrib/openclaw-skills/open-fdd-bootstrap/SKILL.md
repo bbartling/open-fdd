@@ -21,7 +21,7 @@ description: First-run checks for Open-FDD + MCP RAG — bridge health, doc inde
 
 ## “Seeing” the React UI
 
-You do **not** receive a live DOM or screen pixels from the operator’s browser unless they paste screenshots or you use a **separate** browser tool. Treat **`/assistant/readiness`** + **`plots_quicklinks`** + known routes (`/plots`, `/openfdd-claw-chat`, `/data-model`, `/csv-import`, `/rule-setup`) as the **shared map** so your suggestions align with what the human sees.
+You do **not** receive a live DOM or screen pixels from the operator’s browser unless they paste screenshots or you use a **separate** browser tool. Treat **`/assistant/readiness`** + **`plots_quicklinks`** + known routes (`/plots`, `/ai-agent`, `/data-model`, `/csv-import`, `/rule-setup`) as the **shared map** so your suggestions align with what the human sees.
 
 ## If context is offline
 

@@ -50,13 +50,39 @@ export function DataMaintenancePage() {
     const siteName = siteContext.sites.find((s) => s.id === effectiveSiteId)?.name ?? "selected site";
     if (!window.confirm(`Delete site "${siteName}" and all associated data? This is destructive.`)) return;
     try {
-      await desktopFetch(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
+      const data = await desktopFetch<{
+        sites_deleted?: number;
+        feather_purge?:
+          | { files_deleted: number; dirs_deleted: number; bytes_deleted: number }
+          | { error: string };
+        ttl_sync_warning?: string;
+      }>(`/sites/${encodeURIComponent(effectiveSiteId)}`, { method: "DELETE" });
       await siteContext.refreshSites();
+      const sitesDeleted = data.sites_deleted ?? 0;
+      const fpErr = data.feather_purge && "error" in data.feather_purge ? String(data.feather_purge.error) : null;
+      if (sitesDeleted <= 0 || fpErr) {
+        if (fpErr) {
+          setStatus(
+            `Delete did not complete: Feather purge failed (${fpErr}). The site record was left unchanged — fix the bridge error and retry.`,
+          );
+        } else {
+          setStatus(
+            `No site was deleted (sites_deleted=${sitesDeleted}). Confirm the ID still exists after refresh, then retry.`,
+          );
+        }
+        return;
+      }
       setSiteId("");
-      setStatus(
-        `Deleted site "${siteName}" from the stored model (equipment/points for that site removed; BRICK TTL resynced). `
-          + "Feather timeseries files for that site are not removed by this action alone — use Purge timeseries first if you need disk cleared.",
-      );
+      let msg = `Deleted site "${siteName}" from the stored model (equipment/points removed; BRICK TTL resync attempted).`;
+      const fpOk = data.feather_purge && "files_deleted" in data.feather_purge ? data.feather_purge : null;
+      if (fpOk) {
+        msg += ` Feather timeseries removed: files=${fpOk.files_deleted}, dirs=${fpOk.dirs_deleted}, bytes=${fpOk.bytes_deleted}.`;
+      }
+      if (data.ttl_sync_warning) {
+        msg +=
+          ` TTL was not fully resynced: ${data.ttl_sync_warning}`;
+      }
+      setStatus(msg);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }
@@ -66,9 +92,10 @@ export function DataMaintenancePage() {
     <div className="card">
       <h2 className="title">Data &amp; model maintenance</h2>
       <p className="muted">
-        Feather files (timeseries) and the JSON model (sites, equipment, points) are separate layers. Purge targets Feather
-        storage; optional pruning removes model points that referenced purged series and resyncs TTL. Delete entire site
-        removes the site and related model rows only — purge first if you want timeseries files gone too.
+        Feather files (timeseries) and the JSON model (sites, equipment, points) are stored separately on disk. Purge
+        targets Feather only (optional pruning also edits model points). <strong>Delete entire site</strong> removes the
+        site from the model and also deletes that site&apos;s Feather timeseries under the bridge so System resources
+        counts stay aligned.
       </p>
       <div className="grid-two" style={{ marginTop: 12 }}>
         <div>
@@ -102,8 +129,8 @@ export function DataMaintenancePage() {
       </label>
       {!prunePoints ? (
         <p className="muted" style={{ marginTop: 0 }}>
-          Default purge is site-scoped timeseries only; data model (sites/equipment/points) is retained. Use Delete entire site
-          for a full model wipe for that site (then purge if you also need Feather data removed).
+          Purge alone removes Feather for the selected site without deleting the site record. Use Delete entire site to wipe
+          the model row and its Feather shards together.
         </p>
       ) : (
         <p className="muted" style={{ marginTop: 0 }}>

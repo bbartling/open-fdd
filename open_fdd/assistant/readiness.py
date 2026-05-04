@@ -53,7 +53,7 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         "data_model": f"{ui}/data-model",
         "site_management": f"{ui}/site-management",
         "fdd_rule_setup": f"{ui}/rule-setup",
-        "openfdd_claw_chat": f"{ui}/openfdd-claw-chat",
+        "openfdd_claw_chat": f"{ui}/ai-agent",
     }
 
     plots_quicklinks: list[dict[str, str]] = []

@@ -175,14 +175,18 @@ class FeatherStore:
         for source_dir in self.root.iterdir():
             if not source_dir.is_dir():
                 continue
-            source_dirs.add(source_dir.name)
+            source_has_files = False
             for site_dir in source_dir.iterdir():
                 if not site_dir.is_dir():
                     continue
-                site_dirs.add(f"{source_dir.name}/{site_dir.name}")
+                site_key = f"{source_dir.name}/{site_dir.name}"
                 for f in site_dir.glob("*.feather"):
                     file_count += 1
                     bytes_total += f.stat().st_size
+                    site_dirs.add(site_key)
+                    source_has_files = True
+            if source_has_files:
+                source_dirs.add(source_dir.name)
         return {
             "file_count": file_count,
             "source_count": len(source_dirs),

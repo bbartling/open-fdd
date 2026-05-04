@@ -17,7 +17,8 @@ Recipes for **`pip install open-fdd`**, releases, and embedding **`RuleRunner`**
 - [PyPI releases (open-fdd)](openfdd_engine_pypi) — tags, trusted publishing, `twine check`.
 - [The optional openfdd-engine package](openfdd_engine) — `openfdd_engine` vs `open_fdd.engine`.
 - [Engine-only deployment and external IoT pipelines](engine_only_iot) — `RuleRunner` on DataFrames.
-- [Desktop app (under construction)](desktop_app) — FastAPI gateway, MCP, local ingest, Feather storage, BRICK sync, and batched rule runs.
+- [Desktop app (under construction)](desktop_app) — FastAPI gateway, MCP RAG (REST **8090**), `start-local`, **restart MCP after index/bootstrap changes**, local ingest, Feather storage, BRICK sync, batched rule runs.
+- [Agent & operator playbook (bridge + MCP)](agent_operator_playbook) — drivers, cleaning, BRICK modeling, FDD tuning, execution notes for assistants (`search_docs`).
 - [Verification](verification) — pytest and small smoke checks.
 - [Cloning and porting](cloning_and_porting) — portable rules and envs.
 - [Operations (engine)](operations) — CI and scheduling notes.

@@ -113,7 +113,7 @@ If both model export and rule YAML are attached in one message:
 - Always ensure the import-ready JSON validates against the Open-FDD /model/import shape.`;
 
 /**
- * @param consumerDetected When true, prompt the model for a single parseable JSON object (OpenClaw / bridge).
+ * @param consumerDetected When true, prompt the model for a single parseable JSON object (gateway / bridge).
  * When false, prompt for human-oriented ZIP / === FILE: === sections only (no combined JSON+FILE ambiguity).
  */
 export function getDataModelRedesignPrompt(consumerDetected: boolean): string {

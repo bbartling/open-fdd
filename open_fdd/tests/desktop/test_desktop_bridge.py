@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+from unittest.mock import patch
 
 import pytest
 import pandas as pd
@@ -14,6 +15,14 @@ from fastapi.testclient import TestClient
 from open_fdd.desktop.storage.paths import default_rules_root
 import open_fdd.gateway.server as gateway_server
 from open_fdd.gateway.server import create_app
+
+
+def test_create_app_with_private_lan_cors_env() -> None:
+    from unittest.mock import patch
+
+    with patch.dict(os.environ, {"OFDD_CORS_ALLOW_PRIVATE_LAN": "1"}, clear=False):
+        app = create_app()
+        assert app is not None
 
 
 def test_desktop_bridge_health() -> None:
@@ -78,6 +87,105 @@ def test_desktop_bridge_csv_ingest_missing_file_returns_400() -> None:
         detail = res.json().get("detail", "")
         assert "CSV file not found" in detail
         assert "Use an absolute file path" in detail
+
+
+def test_desktop_bridge_csv_upload_can_bind_to_existing_equipment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "bridge_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        created = client.post("/sites", json={"name": "Append Site"})
+        assert created.status_code == 200
+        site_id = created.json()["id"]
+
+        equipment_id = "ahu-1"
+        imported = client.post(
+            "/model/import",
+            json={
+                "replace": False,
+                "payload": {
+                    "sites": [{"id": site_id, "name": "Append Site"}],
+                    "equipment": [
+                        {"id": equipment_id, "site_id": site_id, "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}
+                    ],
+                    "points": [],
+                },
+            },
+        )
+        assert imported.status_code == 200
+
+        csv_old = tmp_path / "old.csv"
+        csv_new = tmp_path / "new.csv"
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+                "sat": [55.0, 56.0],
+                "mat": [57.0, 57.5],
+            }
+        ).to_csv(csv_old, index=False)
+        pd.DataFrame(
+            {
+                "timestamp": ["2026-01-01T02:00:00Z", "2026-01-01T03:00:00Z"],
+                "sat": [57.0, 58.0],
+                "mat": [58.0, 58.5],
+            }
+        ).to_csv(csv_new, index=False)
+
+        with csv_old.open("rb") as fh:
+            res = client.post(
+                "/ingest/csv/upload",
+                data={"site_id": site_id, "source": "csv", "equipment_id": equipment_id},
+                files={"file": ("old.csv", fh, "text/csv")},
+            )
+            assert res.status_code == 200, res.text
+        with csv_new.open("rb") as fh:
+            res = client.post(
+                "/ingest/csv/upload",
+                data={"site_id": site_id, "source": "csv", "equipment_id": equipment_id},
+                files={"file": ("new.csv", fh, "text/csv")},
+            )
+            assert res.status_code == 200, res.text
+
+        frame = client.get(f"/plots/frame?site_id={site_id}&source=csv&limit=100")
+        assert frame.status_code == 200
+        assert len(frame.json().get("rows", [])) == 4
+
+        exported = client.get("/model/export")
+        assert exported.status_code == 200
+        body = exported.json()
+        points = [p for p in body.get("points", []) if str(p.get("site_id")) == site_id]
+        assert len(points) == 2
+        assert all(str(p.get("equipment_id")) == equipment_id for p in points)
+
+
+def test_delete_site_purges_feather_timeseries(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "bridge_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        created = client.post("/sites", json={"name": "Feather Delete Site"})
+        assert created.status_code == 200
+        site_id = created.json()["id"]
+        csv_path = tmp_path / "one.csv"
+        pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "x": [1.0]}).to_csv(csv_path, index=False)
+        with csv_path.open("rb") as fh:
+            up = client.post(
+                "/ingest/csv/upload",
+                data={"site_id": site_id, "source": "csv"},
+                files={"file": ("one.csv", fh, "text/csv")},
+            )
+            assert up.status_code == 200, up.text
+        stats = client.get("/storage/timeseries/stats")
+        assert stats.status_code == 200
+        assert stats.json()["file_count"] >= 1
+        deleted = client.delete(f"/sites/{site_id}")
+        assert deleted.status_code == 200, deleted.text
+        body = deleted.json()
+        assert "feather_purge" in body
+        assert body["feather_purge"]["files_deleted"] >= 1
+        stats2 = client.get("/storage/timeseries/stats")
+        assert stats2.status_code == 200
+        assert stats2.json()["file_count"] == 0
 
 
 def test_desktop_bridge_purge_can_prune_matching_points() -> None:
@@ -1136,6 +1244,124 @@ def test_openfdd_claw_codex_poll_rejects_blank_session_id() -> None:
     with TestClient(app) as client:
         poll = client.post("/openfdd-claw/codex/device/poll", json={"session_id": "   "})
         assert poll.status_code == 422
+
+
+def test_local_codex_diagnostics_route() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/local-codex/diagnostics")
+        assert res.status_code == 200
+        body = res.json()
+        assert "codex_path" in body
+        assert "hints" in body
+        assert "where_codex" in body
+        assert "exec_env" in body
+        assert body["exec_env"].get("ask_for_approval") == "never"
+
+
+def test_local_codex_install_cli_route_forbidden_when_disabled() -> None:
+    app = create_app()
+    with patch.dict(os.environ, {"OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI": "0"}):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/install-cli")
+            assert res.status_code == 403
+
+
+def test_local_codex_install_cli_route() -> None:
+    app = create_app()
+    fake = {"ok": True, "returncode": 0, "stdout": "added 1 package", "stderr": ""}
+    with patch.dict(os.environ, {"OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI": "1"}):
+        with patch.object(gateway_server.local_codex_cli, "run_npm_install_codex_global", return_value=fake):
+            with TestClient(app) as client:
+                res = client.post("/local-codex/install-cli")
+                assert res.status_code == 200
+                assert res.json() == fake
+
+
+def test_local_codex_logout_route_no_codex() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value=None):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/logout")
+            assert res.status_code == 503
+
+
+def test_local_codex_logout_route() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    fake = {"ok": True, "returncode": 0, "stdout": "", "stderr": ""}
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value="codex"):
+        with patch.object(gateway_server.local_codex_cli, "run_codex_logout", return_value=fake):
+            with TestClient(app) as client:
+                res = client.post("/local-codex/logout")
+                assert res.status_code == 200
+                assert res.json() == fake
+
+
+def test_local_codex_chat_rejects_missing_workdir(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    missing = tmp_path / "not_a_directory"
+    with patch.object(gateway_server.local_codex_cli, "resolve_codex_executable", return_value="codex"):
+        with TestClient(app) as client:
+            res = client.post("/local-codex/chat", json={"message": "hello", "workdir": str(missing)})
+            assert res.status_code == 400
+
+
+def test_openfdd_agent_context_route() -> None:
+    app = create_app()
+    with TestClient(app) as client:
+        res = client.get("/openfdd-agent/context")
+        assert res.status_code == 200
+        body = res.json()
+        assert "bridge_base" in body
+        assert "mcp_rest_base" in body
+        assert "endpoints" in body
+
+
+def test_openfdd_agent_chat_requires_codex_or_returns_503(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    with patch("open_fdd.gateway.openfdd_agent.resolve_codex_executable", return_value=None):
+        with TestClient(app) as client:
+            res = client.post("/openfdd-agent/chat", json={"message": "hello", "workdir": str(proj)})
+            assert res.status_code == 503
+
+
+def test_openfdd_agent_chat_passes_conversation_history(tmp_path: Path) -> None:
+    from unittest.mock import patch
+
+    captured: dict[str, object] = {}
+
+    def fake_turn(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"ok": True, "stdout": "ok", "stderr": "", "returncode": 0}
+
+    app = create_app()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    with patch("open_fdd.gateway.server.run_openfdd_agent_turn", side_effect=fake_turn):
+        with TestClient(app) as client:
+            res = client.post(
+                "/openfdd-agent/chat",
+                json={
+                    "message": "last",
+                    "workdir": str(proj),
+                    "conversation_history": [
+                        {"role": "user", "text": "first"},
+                        {"role": "assistant", "text": "second"},
+                    ],
+                },
+            )
+    assert res.status_code == 200
+    assert captured.get("conversation_history") == [("user", "first"), ("assistant", "second")]
 
 
 def test_openfdd_claw_codex_start_poll_smoke() -> None:

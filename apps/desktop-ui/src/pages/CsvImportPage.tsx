@@ -18,13 +18,24 @@ type ImportLog = {
   parseError?: string;
 };
 
+const CSV_IMPORT_INPUT_ID = "ofdd-csv-import-file";
+
+function isLikelyCsvFile(file: File): boolean {
+  const n = file.name.toLowerCase();
+  if (n.endsWith(".csv")) return true;
+  const t = (file.type || "").toLowerCase();
+  return t === "text/csv" || t === "application/csv" || t === "application/vnd.ms-excel";
+}
+
 export function CsvImportPage() {
   const siteContext = useOptionalSite();
   const [siteId, setSiteId] = useState(() => siteContext?.selectedSiteId ?? "");
   const [source, setSource] = useState("csv");
+  const [equipmentId, setEquipmentId] = useState("");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [output, setOutput] = useState("Choose one or more CSV files and import.");
+  const [isDragOver, setIsDragOver] = useState(false);
 
   async function runUpload(file: File): Promise<ImportLog> {
     try {
@@ -35,6 +46,9 @@ export function CsvImportPage() {
       const formData = new FormData();
       formData.append("site_id", effectiveSiteId);
       formData.append("source", source);
+      if (equipmentId.trim()) {
+        formData.append("equipment_id", equipmentId.trim());
+      }
       formData.append("file", file, file.name);
       const res = await fetch(`${bridgeBase}/ingest/csv/upload`, {
         method: "POST",
@@ -67,9 +81,16 @@ export function CsvImportPage() {
   }
 
   async function processFiles(files: File[]) {
-    if (files.length === 0) return;
+    const csvFiles = files.filter(isLikelyCsvFile);
+    if (csvFiles.length === 0) {
+      setPickedFiles([]);
+      setImportLogs([]);
+      setOutput("No CSV files to import (use .csv files or drag/drop CSVs only).");
+      return;
+    }
+    setPickedFiles(csvFiles);
     const logs: ImportLog[] = [];
-    for (const file of files) {
+    for (const file of csvFiles) {
       logs.push(await runUpload(file));
     }
     setImportLogs(logs);
@@ -98,22 +119,29 @@ export function CsvImportPage() {
           <label>Source</label>
           <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="csv" />
         </div>
+        <div>
+          <label>Equipment ID (optional)</label>
+          <input
+            value={equipmentId}
+            onChange={(e) => setEquipmentId(e.target.value)}
+            placeholder="attach to an existing AHU"
+          />
+        </div>
       </div>
       <div style={{ marginBottom: 10 }}>
-        <label style={{ display: "inline-block", cursor: "pointer" }}>
-          <span className="file-picker-btn">
-            Choose CSV file
+        <label htmlFor={CSV_IMPORT_INPUT_ID} style={{ display: "inline-block", cursor: "pointer" }}>
+          <span className="file-picker-btn" title="Hold Ctrl (Windows/Linux) or Cmd (macOS) to select multiple files.">
+            Choose CSV file(s)
           </span>
           <input
+            id={CSV_IMPORT_INPUT_ID}
             type="file"
             accept=".csv,text/csv"
             multiple
             style={{ display: "none" }}
+            aria-label="Choose one or more CSV files to import"
             onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              if (files.length === 0) return;
-              setPickedFiles(files);
-              void processFiles(files);
+              void processFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
           />
@@ -124,16 +152,46 @@ export function CsvImportPage() {
           </span>
         )}
       </div>
+      <div
+        className={`drop-zone${isDragOver ? " drop-zone--active" : ""}`}
+        data-testid="csv-import-drop-zone"
+        role="region"
+        aria-label="Drop CSV files to import"
+        onDragEnter={(e) => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+          void processFiles(Array.from(e.dataTransfer.files ?? []));
+        }}
+      >
+        <span className="muted" style={{ textAlign: "center", padding: "0 12px" }}>
+          Or drop one or more CSV files here (same site, source, and optional equipment as above).
+        </span>
+      </div>
       <p style={{ color: "var(--muted)", marginTop: 8, marginBottom: 0 }}>
-        Picker-only mode for reliable cross-platform behavior (Windows/macOS/Linux).
+        Picker-only mode for reliable cross-platform behavior (Windows/macOS/Linux). If the site already has one
+        equipment record, uploads will attach there automatically; otherwise, paste an equipment ID to keep
+        repeated CSV batches on the same AHU.
       </p>
       {importLogs.length > 0 && (
         <div style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}>
           <strong>Processed files</strong>
           <ul style={{ margin: "8px 0 0", paddingLeft: 18, listStyle: "none" }}>
-            {importLogs.map((entry) => (
+            {importLogs.map((entry, idx) => (
               <li
-                key={`${entry.name}-${entry.message}`}
+                key={`${entry.name}-${idx}`}
                 style={{
                   marginBottom: 12,
                   color: entry.ok ? "var(--text)" : "var(--danger)",
