@@ -484,6 +484,28 @@ def _examples_pack_root() -> Path | None:
     return root.resolve() if root.is_dir() else None
 
 
+def _cors_extra_origins() -> list[str]:
+    """Optional explicit browser origins (comma-separated), e.g. ``http://192.168.1.20:5173``."""
+    raw = (os.environ.get("OFDD_CORS_EXTRA_ORIGINS") or "").strip()
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def _cors_origin_regex() -> str:
+    """Restrict browser ``Origin`` headers the bridge accepts (see ``OFDD_CORS_ALLOW_PRIVATE_LAN``)."""
+    if (os.environ.get("OFDD_CORS_ALLOW_PRIVATE_LAN") or "").strip().lower() in ("1", "true", "yes", "on"):
+        return (
+            r"^https?://("
+            r"localhost|127\.0\.0\.1"
+            r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+            r"|192\.168\.\d{1,3}\.\d{1,3}"
+            r"|172\.(?:1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}"
+            r")(?::\d+)?$"
+        )
+    return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -549,10 +571,11 @@ def create_app() -> FastAPI:
             "http://localhost:5173",
             "http://127.0.0.1:5173",
             *_static_ui_origins,
+            *_cors_extra_origins(),
             "tauri://localhost",
             "https://tauri.localhost",
         ],
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_origin_regex=_cors_origin_regex(),
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=True,
@@ -1053,8 +1076,8 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    "Local Codex npm install is disabled by default. Set OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1 on "
-                    "the bridge host to allow POST /local-codex/install-cli (start-local scripts set this for local dev)."
+                    "Local Codex npm install is disabled unless OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1 is set on "
+                    "the bridge host to allow POST /local-codex/install-cli."
                 ),
             )
         return local_codex_cli.run_npm_install_codex_global()
@@ -1143,10 +1166,13 @@ def create_app() -> FastAPI:
     @app.delete("/sites/{site_id}", tags=["sites"])
     def delete_site(site_id: str) -> dict[str, Any]:
         out = services.model.delete_site(site_id)
+        # Feather timeseries live under the ingest store keyed by site_id; remove them so disk stats match the model.
+        feather_purge = services.ingest.purge_timeseries(site_id=site_id, source=None)
         ttl_error = _safe_sync_ttl()
+        result: dict[str, Any] = {**out, "feather_purge": feather_purge}
         if ttl_error:
-            return {**out, "ttl_sync_warning": ttl_error}
-        return out
+            result["ttl_sync_warning"] = ttl_error
+        return result
 
     @app.post("/sites/{site_id}/rule-pack", tags=["sites"])
     def set_site_rule_pack(site_id: str, body: SiteRulePackBody) -> dict[str, Any]:

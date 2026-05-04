@@ -17,6 +17,14 @@ import open_fdd.gateway.server as gateway_server
 from open_fdd.gateway.server import create_app
 
 
+def test_create_app_with_private_lan_cors_env() -> None:
+    from unittest.mock import patch
+
+    with patch.dict(os.environ, {"OFDD_CORS_ALLOW_PRIVATE_LAN": "1"}, clear=False):
+        app = create_app()
+        assert app is not None
+
+
 def test_desktop_bridge_health() -> None:
     app = create_app()
     with TestClient(app) as client:
@@ -148,6 +156,36 @@ def test_desktop_bridge_csv_upload_can_bind_to_existing_equipment(monkeypatch: p
         points = [p for p in body.get("points", []) if str(p.get("site_id")) == site_id]
         assert len(points) == 2
         assert all(str(p.get("equipment_id")) == equipment_id for p in points)
+
+
+def test_delete_site_purges_feather_timeseries(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path / "bridge_dd"))
+    app = create_app()
+    with TestClient(app) as client:
+        created = client.post("/sites", json={"name": "Feather Delete Site"})
+        assert created.status_code == 200
+        site_id = created.json()["id"]
+        csv_path = tmp_path / "one.csv"
+        pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "x": [1.0]}).to_csv(csv_path, index=False)
+        with csv_path.open("rb") as fh:
+            up = client.post(
+                "/ingest/csv/upload",
+                data={"site_id": site_id, "source": "csv"},
+                files={"file": ("one.csv", fh, "text/csv")},
+            )
+            assert up.status_code == 200, up.text
+        stats = client.get("/storage/timeseries/stats")
+        assert stats.status_code == 200
+        assert stats.json()["file_count"] >= 1
+        deleted = client.delete(f"/sites/{site_id}")
+        assert deleted.status_code == 200, deleted.text
+        body = deleted.json()
+        assert "feather_purge" in body
+        assert body["feather_purge"]["files_deleted"] >= 1
+        stats2 = client.get("/storage/timeseries/stats")
+        assert stats2.status_code == 200
+        assert stats2.json()["file_count"] == 0
 
 
 def test_desktop_bridge_purge_can_prune_matching_points() -> None:

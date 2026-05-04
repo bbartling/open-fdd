@@ -118,6 +118,29 @@ Bridge URL consistency:
 - **`start-local`** sets **`OFDD_BRIDGE_URL`** for child processes; match the UI’s bridge base URL (e.g. **`VITE_DESKTOP_BRIDGE_BASE`** at build time) to the same host/port.
 - The gateway also honors **`OFDD_BRIDGE_HOST`** / **`OFDD_BRIDGE_PORT`** if you prefer host/port env vars instead of a full URL.
 
+### Trusted private LAN (other PCs on the same network)
+
+The stack defaults to **loopback** (`127.0.0.1`) so random machines cannot reach your bridge. For a **locked-down office / VLAN** where other workstations should use the UI and API, you intentionally **listen on all interfaces** and point URLs at the **bridge host’s LAN IP** (not for the public internet).
+
+1. **Gateway listen address** — bind `uvicorn` to all interfaces, then clients use your LAN IP:
+   - `export OFDD_BRIDGE_HOST=0.0.0.0`
+   - `export OFDD_BRIDGE_PORT=8765` *(optional if default)*
+   - Browsers and tools call **`http://<bridge-lan-ip>:8765`** (example `http://192.168.1.10:8765`).
+2. **MCP RAG** — same idea if other hosts must call MCP directly (Codex on the bridge often still uses `127.0.0.1`):
+   - `export OFDD_MCP_LISTEN_HOST=0.0.0.0`
+   - `export OFDD_MCP_LISTEN_PORT=8090` *(default)*  
+3. **Vite dev server** — so other PCs can load the UI:
+   - `cd apps/desktop-ui && npm run dev -- --host 0.0.0.0`
+4. **Where the UI sends API traffic** — set **`apps/desktop-ui/.env.local`** (or build env) so the browser uses the bridge’s LAN address, not localhost:
+   - `VITE_DESKTOP_BRIDGE_BASE=http://192.168.1.10:8765`
+5. **Bootstrap / readiness links** — for **`GET /openfdd-agent/context`**, **`OFDD_AGENT_BOOTSTRAP_FILE`**, and **`OFDD_UI_PUBLIC_BASE`**, use URLs that are valid **from the bridge host and from browsers on the LAN** (often `http://<bridge-ip>:8765`, `http://<bridge-ip>:8090`, `http://<ui-host-ip>:5173` or a shared hostname if you use DNS).
+6. **CORS** — the bridge only allows localhost origins unless you opt in:
+   - **`OFDD_CORS_ALLOW_PRIVATE_LAN=1`** — allow browser `Origin` matching common **RFC1918** IPv4 patterns (10/8, 192.168/16, 172.16–31) plus localhost, **or**
+   - **`OFDD_CORS_EXTRA_ORIGINS=http://192.168.1.20:5173`** — comma-separated exact UI origins if you prefer an allowlist.
+7. **OS firewall** — open inbound **8765**, **8090**, **5173** (or your ports) on the **private** profile only.
+
+This does **not** add authentication or TLS; treat the bridge like an internal tool on a network you trust.
+
 ### Gateway HTTP API (Swagger / OpenAPI)
 
 Once the gateway is running locally:

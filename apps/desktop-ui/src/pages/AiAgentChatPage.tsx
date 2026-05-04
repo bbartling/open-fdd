@@ -1,4 +1,5 @@
 import { bridgeBase, desktopFetch } from "../lib/api";
+import { classifyOpenfddTaskPreview } from "../lib/openfdd-agent-route-preview";
 import {
   loadCodexSessionBundle,
   persistCodexSessionBundle,
@@ -7,6 +8,7 @@ import {
   titleFromFirstUserMessage,
   updateActiveSession,
   updateSessionById,
+  type AgentRouteMeta,
   type ChatLine,
   type CodexSessionBundle,
 } from "../lib/local-codex-sessions";
@@ -54,7 +56,31 @@ type ChatResponse = {
   stdout: string;
   stderr: string;
   ok?: boolean;
+  task_class?: string;
+  route_reason?: string;
+  codex_model?: string;
+  codex_model_attempts?: string[];
+  codex_model_fallback_used?: boolean;
 };
+
+function routeMetaFromAgentResponse(data: ChatResponse): AgentRouteMeta | undefined {
+  const tc = data.task_class;
+  if (tc !== "simple" && tc !== "complex") return undefined;
+  const meta: AgentRouteMeta = { task_class: tc };
+  if (typeof data.codex_model === "string" && data.codex_model.trim()) {
+    meta.codex_model = data.codex_model.trim();
+  }
+  if (typeof data.route_reason === "string" && data.route_reason.trim()) {
+    meta.route_reason = data.route_reason.trim();
+  }
+  if (Array.isArray(data.codex_model_attempts) && data.codex_model_attempts.length > 0) {
+    meta.attempts = data.codex_model_attempts.map(String);
+  }
+  if (data.codex_model_fallback_used === true) {
+    meta.fallback_used = true;
+  }
+  return meta;
+}
 
 type AuthUiState = "loading" | "signed_in" | "needs_login" | "no_cli" | "error";
 
@@ -108,6 +134,19 @@ function CodexBrandMark() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function AgentRouteCallout({ route }: { route: AgentRouteMeta }) {
+  const tier = route.task_class;
+  const label = tier === "simple" ? "SIMPLE" : "COMPLEX";
+  return (
+    <div className={`local-codex-route-bar local-codex-route-bar--${tier}`} title={route.route_reason || undefined}>
+      <span className="local-codex-route-tier">{label}</span>
+      {route.codex_model ? <span className="local-codex-route-model">{route.codex_model}</span> : null}
+      {route.fallback_used ? <span className="local-codex-route-fallback-flag">fallback</span> : null}
+      {route.route_reason ? <span className="local-codex-route-reason">{route.route_reason}</span> : null}
+    </div>
   );
 }
 
@@ -182,6 +221,8 @@ export function AiAgentChatPage() {
   const draft = activeSession.draft;
 
   const [sending, setSending] = useState(false);
+  /** Heuristic preview only; bridge may differ when LLM classify or OFDD_AGENT_ROUTE_DEFAULT is set. */
+  const [sendingRoutePreview, setSendingRoutePreview] = useState<"simple" | "complex" | null>(null);
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const devicePollMounted = useRef(true);
@@ -447,12 +488,13 @@ export function AiAgentChatPage() {
     const sessionId = b.activeId;
     const active = b.sessions.find((s) => s.id === sessionId);
     const text = (active?.draft ?? "").trim();
-    if (!text || sending || authState !== "signed_in") {
+    if (!active || !text || sending || authState !== "signed_in") {
       return;
     }
     const workdirSnapshot = workdir.trim() || null;
     const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
     setSending(true);
+    setSendingRoutePreview(classifyOpenfddTaskPreview(text));
     setSessionBundle((prev) =>
       updateSessionById(prev, sessionId, (s) => {
         const nextLines: ChatLine[] = [...s.lines, { role: "user", text }];
@@ -491,10 +533,11 @@ export function AiAgentChatPage() {
         (data.stderr?.trim()
           ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
           : "(No output.)");
+      const route = routeMetaFromAgentResponse(data);
       setSessionBundle((prev) =>
         updateSessionById(prev, sessionId, (s) => ({
           ...s,
-          lines: [...s.lines, { role: "assistant", text: out }],
+          lines: [...s.lines, route ? { role: "assistant", text: out, route } : { role: "assistant", text: out }],
           updatedAt: Date.now(),
         })),
       );
@@ -507,6 +550,7 @@ export function AiAgentChatPage() {
         })),
       );
     } finally {
+      setSendingRoutePreview(null);
       setSending(false);
     }
   }, [authState, sending, workdir, bridgeBase]);
@@ -562,14 +606,14 @@ export function AiAgentChatPage() {
             ) : null}
             {execEnv?.model_simple && execEnv.model_complex_primary ? (
               <div className="local-codex-model-chips" data-testid="local-codex-model-chips" aria-label="Model routing">
-                <span className="local-codex-model-chip">
+                <span className="local-codex-model-chip local-codex-model-chip--simple">
                   SIMPLE <span className="local-codex-model-chip-mono">{execEnv.model_simple}</span>
                 </span>
-                <span className="local-codex-model-chip">
+                <span className="local-codex-model-chip local-codex-model-chip--complex">
                   COMPLEX <span className="local-codex-model-chip-mono">{execEnv.model_complex_primary}</span>
                 </span>
                 {execEnv.model_complex_fallback ? (
-                  <span className="local-codex-model-chip">
+                  <span className="local-codex-model-chip local-codex-model-chip--fallback">
                     fallback <span className="local-codex-model-chip-mono">{execEnv.model_complex_fallback}</span>
                   </span>
                 ) : null}
@@ -691,6 +735,9 @@ export function AiAgentChatPage() {
         <div className="local-codex-thread" data-testid="local-codex-thread">
           <p className="local-codex-thread-hint muted">
             Up to five threads saved in this browser (oldest dropped when you start a sixth). Drafts persist across tabs.
+            While Codex runs, the colored strip matches a <strong>local routing preview</strong>; each reply header shows
+            the bridge&apos;s actual <strong>SIMPLE</strong> or <strong>COMPLEX</strong> tier and model (may differ if LLM
+            classify or env defaults are enabled on the bridge).
           </p>
           {!chatEnabled && authState !== "loading" ? (
             <p className="muted" style={{ margin: 0 }}>
@@ -703,17 +750,26 @@ export function AiAgentChatPage() {
           ) : (
             lines.map((ln, i) => (
               <div
-                key={`${i}-${ln.role}`}
+                key={`${activeSession.id}-${i}-${ln.role}`}
                 className={`local-codex-msg ${ln.role === "user" ? "local-codex-msg-user" : "local-codex-msg-ai"}`}
               >
                 <div className="local-codex-msg-label">{ln.role === "user" ? "You" : "Codex"}</div>
-                <div className="local-codex-msg-body">{renderRichMessageContent(ln.text)}</div>
+                <div className="local-codex-msg-body">
+                  {ln.role === "assistant" && ln.route ? <AgentRouteCallout route={ln.route} /> : null}
+                  {renderRichMessageContent(ln.text)}
+                </div>
               </div>
             ))
           )}
           {sending ? (
             <div
-              className="local-codex-msg local-codex-msg-ai local-codex-thinking"
+              className={`local-codex-msg local-codex-msg-ai local-codex-thinking${
+                sendingRoutePreview === "simple"
+                  ? " local-codex-thinking--simple"
+                  : sendingRoutePreview === "complex"
+                    ? " local-codex-thinking--complex"
+                    : " local-codex-thinking--neutral"
+              }`}
               data-testid="ofdd-agent-thinking"
               aria-live="polite"
               aria-busy="true"
@@ -721,7 +777,22 @@ export function AiAgentChatPage() {
               <div className="local-codex-msg-label">Codex</div>
               <div className="local-codex-thinking-row">
                 <AgentBrainIcon />
-                <span className="local-codex-thinking-text">{THINKING_PHASES[thinkingPhase]}</span>
+                <span
+                  className={`local-codex-thinking-text${
+                    sendingRoutePreview === "simple"
+                      ? " local-codex-thinking-text--simple"
+                      : sendingRoutePreview === "complex"
+                        ? " local-codex-thinking-text--complex"
+                        : ""
+                  }`}
+                >
+                  {THINKING_PHASES[thinkingPhase]}
+                  {sendingRoutePreview ? (
+                    <span className="muted" style={{ display: "block", marginTop: 4, fontSize: 11, fontWeight: 500 }}>
+                      Preview route: {sendingRoutePreview === "simple" ? "SIMPLE" : "COMPLEX"} (bridge may override)
+                    </span>
+                  ) : null}
+                </span>
               </div>
             </div>
           ) : null}

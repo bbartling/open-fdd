@@ -18,6 +18,15 @@ type ImportLog = {
   parseError?: string;
 };
 
+const CSV_IMPORT_INPUT_ID = "ofdd-csv-import-file";
+
+function isLikelyCsvFile(file: File): boolean {
+  const n = file.name.toLowerCase();
+  if (n.endsWith(".csv")) return true;
+  const t = (file.type || "").toLowerCase();
+  return t === "text/csv" || t === "application/csv" || t === "application/vnd.ms-excel";
+}
+
 export function CsvImportPage() {
   const siteContext = useOptionalSite();
   const [siteId, setSiteId] = useState(() => siteContext?.selectedSiteId ?? "");
@@ -71,9 +80,15 @@ export function CsvImportPage() {
   }
 
   async function processFiles(files: File[]) {
-    if (files.length === 0) return;
+    const csvFiles = files.filter(isLikelyCsvFile);
+    if (csvFiles.length === 0) {
+      setPickedFiles([]);
+      setImportLogs([]);
+      setOutput("No CSV files to import (use .csv files or drag/drop CSVs only).");
+      return;
+    }
     const logs: ImportLog[] = [];
-    for (const file of files) {
+    for (const file of csvFiles) {
       logs.push(await runUpload(file));
     }
     setImportLogs(logs);
@@ -112,17 +127,19 @@ export function CsvImportPage() {
         </div>
       </div>
       <div style={{ marginBottom: 10 }}>
-        <label style={{ display: "inline-block", cursor: "pointer" }}>
-          <span className="file-picker-btn">
-            Choose CSV file
+        <label htmlFor={CSV_IMPORT_INPUT_ID} style={{ display: "inline-block", cursor: "pointer" }}>
+          <span className="file-picker-btn" title="Hold Ctrl (Windows/Linux) or Cmd (macOS) to select multiple files.">
+            Choose CSV file(s)
           </span>
           <input
+            id={CSV_IMPORT_INPUT_ID}
             type="file"
             accept=".csv,text/csv"
             multiple
             style={{ display: "none" }}
+            aria-label="Choose one or more CSV files to import"
             onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
+              const files = Array.from(e.target.files ?? []).filter(isLikelyCsvFile);
               if (files.length === 0) return;
               setPickedFiles(files);
               void processFiles(files);
@@ -136,6 +153,28 @@ export function CsvImportPage() {
           </span>
         )}
       </div>
+      <div
+        className="drop-zone"
+        data-testid="csv-import-drop-zone"
+        role="region"
+        aria-label="Drop CSV files to import"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const files = Array.from(e.dataTransfer.files ?? []).filter(isLikelyCsvFile);
+          if (files.length === 0) return;
+          setPickedFiles(files);
+          void processFiles(files);
+        }}
+      >
+        <span className="muted" style={{ textAlign: "center", padding: "0 12px" }}>
+          Or drop one or more CSV files here (same site, source, and optional equipment as above).
+        </span>
+      </div>
       <p style={{ color: "var(--muted)", marginTop: 8, marginBottom: 0 }}>
         Picker-only mode for reliable cross-platform behavior (Windows/macOS/Linux). If the site already has one
         equipment record, uploads will attach there automatically; otherwise, paste an equipment ID to keep
@@ -145,9 +184,9 @@ export function CsvImportPage() {
         <div style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}>
           <strong>Processed files</strong>
           <ul style={{ margin: "8px 0 0", paddingLeft: 18, listStyle: "none" }}>
-            {importLogs.map((entry) => (
+            {importLogs.map((entry, idx) => (
               <li
-                key={`${entry.name}-${entry.message}`}
+                key={`${entry.name}-${idx}`}
                 style={{
                   marginBottom: 12,
                   color: entry.ok ? "var(--text)" : "var(--danger)",

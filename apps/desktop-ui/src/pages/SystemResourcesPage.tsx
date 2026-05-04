@@ -70,16 +70,33 @@ export function SystemResourcesPage() {
     setError(null);
     setRefreshing(true);
     try {
-      const [s, t, r] = await Promise.all([
+      const results = await Promise.allSettled([
         desktopFetch<TimeseriesStats>("/storage/timeseries/stats"),
         desktopFetch<TtlStatus>("/model/ttl/status"),
         desktopFetch<SystemResources>("/system/resources"),
       ]);
-      setStats(s);
-      setTtl(t);
-      setResources(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const failures: string[] = [];
+      if (results[0].status === "fulfilled") {
+        setStats(results[0].value);
+      } else {
+        const reason = results[0].reason;
+        failures.push(reason instanceof Error ? reason.message : String(reason));
+      }
+      if (results[1].status === "fulfilled") {
+        setTtl(results[1].value);
+      } else {
+        const reason = results[1].reason;
+        failures.push(reason instanceof Error ? reason.message : String(reason));
+      }
+      if (results[2].status === "fulfilled") {
+        setResources(results[2].value);
+      } else {
+        const reason = results[2].reason;
+        failures.push(reason instanceof Error ? reason.message : String(reason));
+      }
+      if (failures.length) {
+        setError(failures.join(" | "));
+      }
     } finally {
       setRefreshing(false);
     }
@@ -112,7 +129,11 @@ export function SystemResourcesPage() {
       <div className="system-resources-stack">
         <article className="system-resources-panel">
           <h3 className="system-resources-panel-title">Timeseries store</h3>
-          <p className="muted system-resources-panel-desc">Feather files ingested through the bridge.</p>
+          <p className="muted system-resources-panel-desc">
+            Feather files on disk under the bridge data directory (not the BRICK site list). &quot;Sites with data&quot;
+            counts source/site folders that actually contain <code className="inline-code">*.feather</code> shards. After
+            deleting sites, refresh here — counts drop once Feather has been purged or removed with the site.
+          </p>
           <div className="system-resources-panel-inner">
             {stats ? (
               <div className="system-resources-stat-grid">

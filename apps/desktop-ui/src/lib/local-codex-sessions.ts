@@ -1,6 +1,15 @@
 /** Built-in AI Agent chat: up to N saved threads in localStorage (browser-only; bridge uses local agent CLI). */
 
-export type ChatLine = { role: "user" | "assistant"; text: string };
+/** Per-turn routing from `POST /openfdd-agent/chat` (optional; persisted with the line). */
+export type AgentRouteMeta = {
+  task_class: "simple" | "complex";
+  codex_model?: string;
+  route_reason?: string;
+  attempts?: string[];
+  fallback_used?: boolean;
+};
+
+export type ChatLine = { role: "user" | "assistant"; text: string; route?: AgentRouteMeta };
 
 export type CodexAgentSession = {
   id: string;
@@ -44,6 +53,32 @@ export function createEmptySession(title = "New agent"): CodexAgentSession {
   return { id: newId(), title, updatedAt: now, lines: [], draft: "" };
 }
 
+function parseRouteMeta(raw: unknown): AgentRouteMeta | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const tc = o.task_class;
+  if (tc !== "simple" && tc !== "complex") return undefined;
+  const meta: AgentRouteMeta = { task_class: tc };
+  if (typeof o.codex_model === "string" && o.codex_model.trim()) {
+    meta.codex_model = o.codex_model.trim();
+  }
+  if (typeof o.route_reason === "string" && o.route_reason.trim()) {
+    meta.route_reason = o.route_reason.trim();
+  }
+  const rawAttempts = o.attempts ?? o.codex_model_attempts;
+  if (Array.isArray(rawAttempts)) {
+    const attempts = rawAttempts.map((x) => String(x)).filter((s) => s.length > 0);
+    if (attempts.length) meta.attempts = attempts;
+  }
+  if (typeof o.fallback_used === "boolean") {
+    meta.fallback_used = o.fallback_used;
+  }
+  if (typeof o.codex_model_fallback_used === "boolean") {
+    meta.fallback_used = o.codex_model_fallback_used;
+  }
+  return meta;
+}
+
 function parseLines(raw: unknown): ChatLine[] {
   if (!Array.isArray(raw)) return [];
   const lines: ChatLine[] = [];
@@ -53,7 +88,8 @@ function parseLines(raw: unknown): ChatLine[] {
     const text = (item as { text?: unknown }).text;
     if (role !== "user" && role !== "assistant") continue;
     if (typeof text !== "string") continue;
-    lines.push({ role, text });
+    const route = parseRouteMeta((item as { route?: unknown }).route);
+    lines.push(route ? { role, text, route } : { role, text });
   }
   return trimStoredChatLines(lines);
 }
@@ -75,7 +111,7 @@ export function loadCodexSessionBundle(): CodexSessionBundle {
         activeId?: unknown;
         sessions?: unknown;
       };
-      if (parsed.v === 2 && typeof parsed.activeId === "string" && Array.isArray(parsed.sessions)) {
+      if (parsed.v === 2 && Array.isArray(parsed.sessions)) {
         const sessions: CodexAgentSession[] = [];
         for (const s of parsed.sessions) {
           if (!s || typeof s !== "object") continue;

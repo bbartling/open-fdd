@@ -31,6 +31,8 @@ bash ./scripts/start-local.sh
 
 **`start-local.sh`:** first argument is role (`all`, `gateway`, `mcp`, `adapter`, `ui`); optional env `OFDD_BRIDGE_URL`, `OFDD_TTL_SYNC_INTERVAL_SECONDS`.
 
+Both launchers strip a trailing `/` from **`OFDD_BRIDGE_URL`**, **`OFDD_UI_PUBLIC_BASE`**, and **`OFDD_MCP_REST_BASE`** in the environment they export, use the same banner copy (Plots URL uses **`printf`** / single-quoted segments so `&` and long tips are safe), and default **`OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI`** to **`0`** (set **`1`** to allow POST **`/local-codex/install-cli`**).
+
 Onboard metadata check:
 
 ```powershell

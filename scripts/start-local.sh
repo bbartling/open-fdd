@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROLE="${1:-all}"
 BRIDGE_URL="${OFDD_BRIDGE_URL:-http://127.0.0.1:8765}"
+# Match start-local.ps1 / gateway: avoid double slashes when joining paths.
+BRIDGE_URL="${BRIDGE_URL%/}"
 SYNC_INTERVAL="${OFDD_TTL_SYNC_INTERVAL_SECONDS:-5}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,7 +45,7 @@ doc = {
     "notes": [
         "Open-FDD built-in agent reads this file via OFDD_AGENT_BOOTSTRAP_FILE (set on child processes).",
         f"GET {bridge}/openfdd-agent/context for live merged JSON from the bridge.",
-        f"MCP: GET {mcp}/manifest — REST tools under POST {mcp}/tools/...",
+        f"MCP: GET {mcp}/manifest - REST tools under POST {mcp}/tools/...",
     ],
 }
 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -73,8 +75,13 @@ export OFDD_MODEL_TTL_MIRROR_PATH="${TTL_MIRROR_PATH}"
 export OFDD_TTL_SYNC_INTERVAL_SECONDS="${SYNC_INTERVAL}"
 export OFDD_BRIDGE_URL="${BRIDGE_URL}"
 export OFDD_MCP_OFDD_API_URL="${BRIDGE_URL}"
-export OFDD_UI_PUBLIC_BASE="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
-export OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI="${OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI:-1}"
+# Trim trailing slashes on exported bases (same behavior as Get-Ofdd* in start-local.ps1).
+_ui_pub="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
+export OFDD_UI_PUBLIC_BASE="${_ui_pub%/}"
+_mcp_rest="${OFDD_MCP_REST_BASE:-http://127.0.0.1:8090}"
+export OFDD_MCP_REST_BASE="${_mcp_rest%/}"
+# Global npm install from POST /local-codex/install-cli: opt in with OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1.
+export OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI="${OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI:-0}"
 
 start_bg() {
   local name="$1"
@@ -96,15 +103,15 @@ case "${ROLE}" in
       start_bg "desktop-ui" npm run dev
     )
     echo "All services launched with repo-local data defaults."
-    echo "Tip: Re-run only after stopping prior gateway/mcp-rag/desktop-ui jobs, or you may get port conflicts (8765/8090/5173). Restart mcp-rag to reload rag_index.json — docs/howto/desktop_app.md (Restarting start-local and MCP)."
+    printf '%s\n' 'Tip: Re-running this script without closing the previous gateway / mcp-rag / desktop-ui windows can leave ports 8765, 8090, or 5173 busy. Close old windows (or stop old PIDs) to refresh MCP and pick up a rebuilt rag_index.json — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
     echo ""
     echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
-    echo "Open-FDD agent API: ${BRIDGE_URL%/}/openfdd-agent/context  (POST .../openfdd-agent/chat)"
-    echo "MCP RAG REST:       ${OFDD_MCP_REST_BASE:-http://127.0.0.1:8090}/manifest"
-    echo "Plots (FDD-ready):  ${OFDD_UI_PUBLIC_BASE}/plots?fdd=1&skipMissing=1&runSource=csv"
-    echo "  Add site_id=<uuid> after you ingest (see GET ${BRIDGE_URL%/}/assistant/readiness) for one-click overlay."
+    echo "Open-FDD agent API: ${BRIDGE_URL}/openfdd-agent/context  (POST .../openfdd-agent/chat)"
+    echo "MCP RAG REST:       ${OFDD_MCP_REST_BASE}/manifest"
+    printf 'Plots (FDD-ready):  %s/plots?fdd=1&skipMissing=1&runSource=csv\n' "${OFDD_UI_PUBLIC_BASE}"
+    printf '  Add site_id=<uuid> after you ingest (see GET %s/assistant/readiness) for one-click overlay.\n' "${BRIDGE_URL}"
     echo "Bridge health:      ${BRIDGE_URL}/health"
-    echo "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."
+    printf '%s\n' 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
     echo "Background logs:    ${LOG_DIR}/gateway.log  ${LOG_DIR}/mcp-rag.log  ${LOG_DIR}/desktop-ui.log"
     health_ok=0
     for _i in $(seq 1 30); do

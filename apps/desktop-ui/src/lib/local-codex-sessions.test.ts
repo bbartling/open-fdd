@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   createEmptySession,
+  loadCodexSessionBundle,
   MAX_AGENT_SESSIONS,
   pushNewAgentSession,
+  SESSIONS_STORAGE_KEY,
   type CodexSessionBundle,
 } from "./local-codex-sessions";
 
@@ -25,5 +27,28 @@ describe("pushNewAgentSession", () => {
     expect(next.sessions.some((s) => s.id === oldest.id)).toBe(false);
     expect(next.activeId).toBe(next.sessions[next.sessions.length - 1].id);
     expect(next.sessions[next.sessions.length - 1].title).toBe("New agent");
+  });
+});
+
+describe("loadCodexSessionBundle", () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("loads v2 bundle when activeId is not a string and falls back to first session id", () => {
+    const s1 = { id: "a", title: "A", updatedAt: 1, lines: [], draft: "" };
+    const s2 = { id: "b", title: "B", updatedAt: 2, lines: [], draft: "" };
+    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify({ v: 2, activeId: 999, sessions: [s1, s2] }));
+    const b = loadCodexSessionBundle();
+    expect(b.sessions.map((s) => s.id)).toEqual(["a", "b"]);
+    expect(b.activeId).toBe("a");
+  });
+
+  it("uses last session when activeId string is stale", () => {
+    const s1 = { id: "a", title: "A", updatedAt: 1, lines: [], draft: "" };
+    const s2 = { id: "b", title: "B", updatedAt: 2, lines: [], draft: "" };
+    localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify({ v: 2, activeId: "ghost", sessions: [s1, s2] }));
+    const b = loadCodexSessionBundle();
+    expect(b.activeId).toBe("b");
   });
 });

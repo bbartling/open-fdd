@@ -26,6 +26,13 @@ from open_fdd.desktop.storage.connectors import FeatherConnector, TimeSeriesConn
 from open_fdd.desktop.storage.feather_store import FeatherStore
 
 
+def _normalize_point_equipment_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
 @dataclass
 class IngestService:
     model_service: ModelService = field(default_factory=ModelService)
@@ -363,6 +370,8 @@ class IngestService:
                 and p.get("external_id") == metric
                 and isinstance(p.get("metadata"), dict)
                 and p["metadata"].get("source") == source
+                and _normalize_point_equipment_id(p.get("equipment_id"))
+                == _normalize_point_equipment_id(equipment_id)
             ),
             None,
         )
@@ -399,7 +408,16 @@ class IngestService:
     def _resolve_equipment_id(self, *, site_id: str, equipment_id: str | None) -> str | None:
         selected = str(equipment_id or "").strip()
         if selected:
-            return selected
+            model = self.model_service.load()
+            for e in model.get("equipment", []):
+                if not isinstance(e, dict):
+                    continue
+                if str(e.get("id")) == selected and str(e.get("site_id")) == str(site_id):
+                    return selected
+            raise ValueError(
+                f"equipment_id {selected!r} is not valid for site_id {site_id!r}: "
+                "no equipment with that id exists for this site in the model."
+            )
         model = self.model_service.load()
         eq_ids = [str(e.get("id")) for e in model.get("equipment", []) if str(e.get("site_id")) == str(site_id) and e.get("id")]
         if len(eq_ids) == 1:

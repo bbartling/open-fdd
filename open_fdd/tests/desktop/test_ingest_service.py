@@ -342,3 +342,53 @@ def test_ingest_service_bacnet_ingest_success(tmp_path: Path, monkeypatch: pytes
     assert out["source"] == "bacnet"
     assert out["devices_polled"] == 1
 
+
+def test_csv_ingest_rejects_unknown_equipment_id(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_path = tmp_path / "sample.csv"
+    pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "sat": [55.0]}).to_csv(csv_path, index=False)
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("HQ")
+    model_service.create_equipment(site_id=site["id"], name="AHU-1", equipment_type="Air_Handling_Unit")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    with pytest.raises(ValueError, match="not valid"):
+        ingest.ingest_csv(csv_path=csv_path, site_id=site["id"], source="csv", equipment_id="definitely-missing")
+
+
+def test_csv_ingest_rejects_equipment_id_from_other_site(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_path = tmp_path / "sample.csv"
+    pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "sat": [55.0]}).to_csv(csv_path, index=False)
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site_a = model_service.create_site("Site A")
+    site_b = model_service.create_site("Site B")
+    eq_b = model_service.create_equipment(site_id=site_b["id"], name="Only B", equipment_type="Air_Handling_Unit")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    with pytest.raises(ValueError, match="not valid"):
+        ingest.ingest_csv(csv_path=csv_path, site_id=site_a["id"], source="csv", equipment_id=eq_b["id"])
+
+
+def test_csv_ingest_same_metric_columns_create_separate_points_per_equipment(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_a = tmp_path / "a.csv"
+    csv_b = tmp_path / "b.csv"
+    pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "sat": [55.0]}).to_csv(csv_a, index=False)
+    pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z"], "sat": [60.0]}).to_csv(csv_b, index=False)
+
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("Multi")
+    eq1 = model_service.create_equipment(site_id=site["id"], name="AHU-1", equipment_type="Air_Handling_Unit")
+    eq2 = model_service.create_equipment(site_id=site["id"], name="AHU-2", equipment_type="Air_Handling_Unit")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+
+    ingest.ingest_csv(csv_path=csv_a, site_id=site["id"], source="csv", equipment_id=eq1["id"])
+    ingest.ingest_csv(csv_path=csv_b, site_id=site["id"], source="csv", equipment_id=eq2["id"])
+
+    model = model_service.load()
+    sat_points = [p for p in model["points"] if p.get("external_id") == "sat"]
+    assert len(sat_points) == 2
+    assert {p.get("equipment_id") for p in sat_points} == {eq1["id"], eq2["id"]}
+

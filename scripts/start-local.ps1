@@ -30,7 +30,8 @@ function Get-OfddAllowLocalCodexInstallCli {
   if ($env:OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI -and $env:OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI.Trim()) {
     return $env:OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI.Trim()
   }
-  return "1"
+  # Default 0 matches start-local.sh (opt in with OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1 for POST /local-codex/install-cli).
+  return "0"
 }
 
 New-Item -ItemType Directory -Path $localDataDir -Force | Out-Null
@@ -130,20 +131,20 @@ if ($Role -eq "all") {
   Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
   Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
   Start-ServiceWindow -title "desktop-ui" -serviceCommand "npm run dev" -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli
-  Write-Host "All services launched with repo-local data defaults."
-  Write-Host "Tip: Re-running this script without closing the previous gateway / mcp-rag / desktop-ui windows can leave ports 8765, 8090, or 5173 busy. Close old windows (or stop old PIDs) to refresh MCP and pick up a rebuilt rag_index.json — see docs/howto/desktop_app.md (Restarting start-local and MCP)."
+  Write-Host 'All services launched with repo-local data defaults.'
+  Write-Host 'Tip: Re-running this script without closing the previous gateway / mcp-rag / desktop-ui windows can leave ports 8765, 8090, or 5173 busy. Close old windows (or stop old PIDs) to refresh MCP and pick up a rebuilt rag_index.json — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
   Write-Host ""
-  Write-Host "Open-FDD UI:        http://127.0.0.1:5173"
-  Write-Host "Open-FDD agent API: $BridgeUrl/openfdd-agent/context  (POST .../openfdd-agent/chat)"
-  Write-Host "MCP RAG REST:       $mcpRest/manifest"
-  Write-Host 'Plots (FDD-ready):  http://127.0.0.1:5173/plots?fdd=1&skipMissing=1&runSource=csv'
-  Write-Host "  Add site_id=<uuid> after you ingest (see GET $bridgeTrim/assistant/readiness) for one-click overlay."
-  Write-Host "Bridge health:      $BridgeUrl/health"
-  Write-Host "If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script."
+  Write-Host ('Open-FDD UI:        {0}' -f $uiBase)
+  Write-Host ('Open-FDD agent API: {0}/openfdd-agent/context  (POST .../openfdd-agent/chat)' -f $bridgeTrim)
+  Write-Host ('MCP RAG REST:       {0}/manifest' -f $mcpRest)
+  Write-Host ('Plots (FDD-ready):  {0}/plots?fdd=1&skipMissing=1&runSource=csv' -f $uiBase)
+  Write-Host ('  Add site_id=<uuid> after you ingest (see GET {0}/assistant/readiness) for one-click overlay.' -f $bridgeTrim)
+  Write-Host ('Bridge health:      {0}/health' -f $bridgeTrim)
+  Write-Host 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
   $healthOk = $false
   for ($i = 0; $i -lt 30; $i++) {
     try {
-      Invoke-WebRequest -Uri "$BridgeUrl/health" -UseBasicParsing -TimeoutSec 2 | Out-Null
+      Invoke-WebRequest -Uri ('{0}/health' -f $bridgeTrim) -UseBasicParsing -TimeoutSec 2 | Out-Null
       $healthOk = $true
       break
     } catch {
@@ -151,9 +152,9 @@ if ($Role -eq "all") {
     }
   }
   if ($healthOk) {
-    Write-Host "Bridge responded OK at $BridgeUrl/health (UI may need a few more seconds for Vite)."
+    Write-Host ('Bridge responded OK at {0}/health (UI may need a few more seconds for Vite).' -f $bridgeTrim)
   } else {
-    Write-Host "WARNING: Bridge did not respond at $BridgeUrl/health within 30s. Check the gateway PowerShell window for errors."
+    Write-Host ('WARNING: Bridge did not respond at {0}/health within 30s. Check the gateway PowerShell window for errors.' -f $bridgeTrim)
   }
   exit 0
 }
