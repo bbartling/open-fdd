@@ -193,14 +193,6 @@ body {
   width: 240px;
 }
 
-.status-strip {
-  padding: 9px 20px;
-  font-size: 12px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel-soft) 85%, transparent);
-}
-
 .content {
   padding: 18px 20px;
   overflow: auto;
@@ -651,12 +643,6 @@ select {
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
-}
-
-.local-codex-workdir-heading {
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 6px;
 }
 
 .local-codex-workdir-label {
@@ -1167,4 +1153,209 @@ details.openfdd-advanced > summary {
   .topbar {
     flex-direction: column;
   }
+}
+
+/* —— System resources page —— */
+.system-resources-page {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.system-resources-hero {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.system-resources-title {
+  margin-bottom: 8px;
+}
+
+.system-resources-lead {
+  margin: 0 auto;
+  max-width: 52ch;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.system-resources-banner {
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.system-resources-banner--error {
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel));
+  color: var(--text);
+}
+
+.system-resources-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.system-resources-panel {
+  width: 100%;
+  max-width: 640px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 20px 22px 22px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.system-resources-panel-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.system-resources-panel-desc {
+  margin: 0 auto 16px;
+  max-width: 48ch;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.system-resources-panel-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.system-resources-panel-inner--align-start {
+  align-items: stretch;
+}
+
+.system-resources-placeholder {
+  margin: 12px 0;
+  text-align: center;
+}
+
+.system-resources-stat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.system-resources-stat {
+  flex: 1 1 140px;
+  min-width: 132px;
+  max-width: 200px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-soft) 88%, var(--panel));
+  text-align: center;
+}
+
+.system-resources-stat-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.system-resources-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.system-resources-stat-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.system-resources-disk-path {
+  margin: 4px 0 18px;
+  font-size: 12px;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-resources-chart-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 8px 24px;
+  width: 100%;
+}
+
+.system-resources-chart-wrap {
+  flex: 0 1 280px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.system-resources-chart {
+  height: 260px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--panel-soft) 55%, transparent);
+}
+
+.system-resources-dl {
+  margin: 0;
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.system-resources-dl > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 140px) 1fr;
+  gap: 10px 14px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.system-resources-dl > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.system-resources-dl dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.system-resources-dl dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.system-resources-dl-error {
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+
+.system-resources-actions {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
 }

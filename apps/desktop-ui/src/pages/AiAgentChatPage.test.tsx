@@ -93,7 +93,7 @@ describe("AiAgentChatPage", () => {
     expect(screen.getByTestId("local-codex-agents-rail")).toBeInTheDocument();
     expect(screen.getByTestId("local-codex-new-agent")).toBeInTheDocument();
     expect(screen.getByTestId("local-codex-sign-out")).toBeInTheDocument();
-    expect(screen.getByLabelText("Codex working directory on the bridge")).toBeInTheDocument();
+    expect(screen.getByLabelText("Open-FDD repository path on the bridge")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send$/i })).toBeInTheDocument();
     expect(screen.queryByTestId("plots-clean-metrics-panel")).toBeNull();
     expect(container.querySelector("[data-testid='ofdd-dev-details']")).toBeNull();
@@ -227,7 +227,7 @@ describe("AiAgentChatPage", () => {
     renderChat();
     await screen.findByTestId("ofdd-agent-chat-heading");
 
-    fireEvent.change(screen.getByLabelText("Codex working directory on the bridge"), {
+    fireEvent.change(screen.getByLabelText("Open-FDD repository path on the bridge"), {
       target: { value: "C:\\\\repo\\\\open-fdd" },
     });
     fireEvent.change(screen.getByLabelText("Chat message"), { target: { value: "hello" } });

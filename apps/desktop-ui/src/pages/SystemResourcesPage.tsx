@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { desktopFetch } from "../lib/api";
 
 type TimeseriesStats = {
@@ -15,6 +15,12 @@ type TtlStatus = {
   last_sync_error: string;
 };
 
+type CpuInfo = {
+  logical_cores: number;
+  cpu_percent: number | null;
+  load_average_1m?: number;
+};
+
 type SystemResources = {
   memory: {
     total_bytes: number;
@@ -29,6 +35,7 @@ type SystemResources = {
     used_bytes: number;
     used_percent: number;
   };
+  cpu?: CpuInfo;
 };
 
 function fmtBytes(value: number): string {
@@ -42,99 +49,197 @@ function fmtBytes(value: number): string {
   return `${n.toFixed(1)} ${units[idx]}`;
 }
 
+function StatTile({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="system-resources-stat">
+      <div className="system-resources-stat-label">{label}</div>
+      <div className="system-resources-stat-value">{value}</div>
+      {detail ? <div className="system-resources-stat-detail">{detail}</div> : null}
+    </div>
+  );
+}
+
 export function SystemResourcesPage() {
   const [stats, setStats] = useState<TimeseriesStats | null>(null);
   const [ttl, setTtl] = useState<TtlStatus | null>(null);
   const [resources, setResources] = useState<SystemResources | null>(null);
-  const [status, setStatus] = useState("Host resources, Feather stats, and TTL sync health.");
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    setError(null);
+    setRefreshing(true);
     try {
-      const [s, t] = await Promise.all([
+      const [s, t, r] = await Promise.all([
         desktopFetch<TimeseriesStats>("/storage/timeseries/stats"),
         desktopFetch<TtlStatus>("/model/ttl/status"),
+        desktopFetch<SystemResources>("/system/resources"),
       ]);
       setStats(s);
       setTtl(t);
-      const r = await desktopFetch<SystemResources>("/system/resources");
       setResources(r);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [refresh]);
+
+  const cpu = resources?.cpu;
 
   return (
-    <div className="card">
-      <h2 className="title">System resources</h2>
-      <p className="muted">Data deletion and model purge controls live on the Data &amp; model maintenance page.</p>
-      <div className="grid-two">
-        <div>
-          <h3>Timeseries store</h3>
-          <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
+    <section className="stack-page system-resources-page" aria-labelledby="system-resources-title">
+      <header className="system-resources-hero">
+        <h2 id="system-resources-title" className="title system-resources-title">
+          System resources
+        </h2>
+        <p className="muted system-resources-lead">
+          Feather footprint and TTL mirror on this machine, plus live RAM, CPU, and disk for the gateway host. Purge and
+          deletion controls stay on <strong>Data &amp; model maintenance</strong>.
+        </p>
+      </header>
+
+      {error ? (
+        <div className="system-resources-banner system-resources-banner--error" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="system-resources-stack">
+        <article className="system-resources-panel">
+          <h3 className="system-resources-panel-title">Timeseries store</h3>
+          <p className="muted system-resources-panel-desc">Feather files ingested through the bridge.</p>
+          <div className="system-resources-panel-inner">
             {stats ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <div><strong>Feather files:</strong> {stats.file_count}</div>
-                <div><strong>Sources:</strong> {stats.source_count}</div>
-                <div><strong>Sites with data:</strong> {stats.site_count}</div>
-                <div><strong>Total bytes:</strong> {fmtBytes(stats.bytes_total)}</div>
+              <div className="system-resources-stat-grid">
+                <StatTile label="Feather files" value={String(stats.file_count)} />
+                <StatTile label="Sources" value={String(stats.source_count)} />
+                <StatTile label="Sites with data" value={String(stats.site_count)} />
+                <StatTile label="Total size" value={fmtBytes(stats.bytes_total)} />
               </div>
             ) : (
-              <div className="muted">Loading...</div>
+              <p className="muted system-resources-placeholder">Loading…</p>
             )}
           </div>
-        </div>
-        <div>
-          <h3>Host resources</h3>
-          {resources ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <DonutChart
-                title={`Memory used ${resources.memory.used_percent.toFixed(1)}%`}
-                used={resources.memory.used_bytes}
-                free={resources.memory.available_bytes}
-                usedLabel="Used"
-                freeLabel="Available"
-              />
-              <DonutChart
-                title={`Disk used ${resources.disk.used_percent.toFixed(1)}%`}
-                used={resources.disk.used_bytes}
-                free={resources.disk.free_bytes}
-                usedLabel="Used"
-                freeLabel="Free"
-              />
-              <div className="muted">Disk path: {resources.disk.path}</div>
-            </div>
-          ) : (
-            <div className="muted">Loading...</div>
-          )}
-        </div>
-        <div>
-          <h3>TTL sync status</h3>
-          <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
-            {ttl ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <div><strong>TTL path:</strong> {ttl.ttl_path}</div>
-                <div><strong>Sync interval:</strong> {ttl.sync_interval_seconds}s</div>
-                <div><strong>Last sync:</strong> {ttl.last_sync_path || "not yet synced"}</div>
-                <div>
-                  <strong>Last error:</strong>{" "}
-                  {ttl.last_sync_error ? <span style={{ color: "var(--danger)" }}>{ttl.last_sync_error}</span> : "none"}
+        </article>
+
+        <article className="system-resources-panel">
+          <h3 className="system-resources-panel-title">Host bridge</h3>
+          <p className="muted system-resources-panel-desc">
+            Physical memory, processor usage, and free space on the volume that hosts your user profile (same host as the
+            gateway).
+          </p>
+          <div className="system-resources-panel-inner">
+            {resources ? (
+              <>
+                <div className="system-resources-stat-grid">
+                  <StatTile
+                    label="RAM in use"
+                    value={`${resources.memory.used_percent.toFixed(1)}%`}
+                    detail={`${fmtBytes(resources.memory.used_bytes)} / ${fmtBytes(resources.memory.total_bytes)}`}
+                  />
+                  <StatTile
+                    label="RAM available"
+                    value={fmtBytes(resources.memory.available_bytes)}
+                    detail="Ready for new work"
+                  />
+                  <StatTile
+                    label="CPU"
+                    value={
+                      cpu?.cpu_percent != null
+                        ? `${cpu.cpu_percent.toFixed(1)}%`
+                        : cpu?.load_average_1m != null
+                          ? `Load ${cpu.load_average_1m.toFixed(2)}`
+                          : "—"
+                    }
+                    detail={
+                      cpu?.cpu_percent != null
+                        ? `~0.12s sample · ${cpu?.logical_cores ?? "—"} logical cores`
+                        : cpu?.load_average_1m != null
+                          ? `1m load avg (CPU % N/A here) · ${cpu?.logical_cores ?? "—"} cores`
+                          : `${cpu?.logical_cores ?? "—"} logical cores`
+                    }
+                  />
+                  <StatTile
+                    label="Disk used"
+                    value={`${resources.disk.used_percent.toFixed(1)}%`}
+                    detail={`${fmtBytes(resources.disk.free_bytes)} free of ${fmtBytes(resources.disk.total_bytes)}`}
+                  />
                 </div>
-              </div>
+                <p className="muted system-resources-disk-path" title={resources.disk.path}>
+                  Disk measured at <code className="inline-code">{resources.disk.path}</code>
+                </p>
+                <div className="system-resources-chart-row">
+                  <DonutChart
+                    title="Memory"
+                    used={resources.memory.used_bytes}
+                    free={resources.memory.available_bytes}
+                    usedLabel="In use"
+                    freeLabel="Available"
+                  />
+                  <DonutChart
+                    title="Disk"
+                    used={resources.disk.used_bytes}
+                    free={resources.disk.free_bytes}
+                    usedLabel="Used"
+                    freeLabel="Free"
+                  />
+                </div>
+              </>
             ) : (
-              <div className="muted">Loading...</div>
+              <p className="muted system-resources-placeholder">Loading…</p>
             )}
           </div>
-        </div>
+        </article>
+
+        <article className="system-resources-panel">
+          <h3 className="system-resources-panel-title">TTL mirror sync</h3>
+          <p className="muted system-resources-panel-desc">Background sync of the RDF/TTL graph to the configured mirror.</p>
+          <div className="system-resources-panel-inner system-resources-panel-inner--align-start">
+            {ttl ? (
+              <dl className="system-resources-dl">
+                <div>
+                  <dt>TTL path</dt>
+                  <dd>
+                    <code className="inline-code">{ttl.ttl_path}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Sync interval</dt>
+                  <dd>{ttl.sync_interval_seconds}s</dd>
+                </div>
+                <div>
+                  <dt>Last sync file</dt>
+                  <dd>{ttl.last_sync_path || "Not yet synced"}</dd>
+                </div>
+                <div>
+                  <dt>Last error</dt>
+                  <dd>
+                    {ttl.last_sync_error ? (
+                      <span className="system-resources-dl-error">{ttl.last_sync_error}</span>
+                    ) : (
+                      <span className="muted">None</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="muted system-resources-placeholder">Loading…</p>
+            )}
+          </div>
+        </article>
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={() => void refresh()}>Refresh stats</button>
+
+      <div className="system-resources-actions">
+        <button type="button" className="secondary-btn" disabled={refreshing} onClick={() => void refresh()}>
+          {refreshing ? "Refreshing…" : "Refresh stats"}
+        </button>
       </div>
-      <textarea readOnly value={status} style={{ marginTop: 10, minHeight: 88 }} />
-    </div>
+    </section>
   );
 }
 
@@ -160,6 +265,7 @@ function DonutChart({
         react: (el: HTMLDivElement, data: unknown[], layout: unknown, config: unknown) => void;
       };
       if (!mounted) return;
+      const textColor = getComputedStyle(document.body).color || "#111827";
       Plotly.react(
         ref,
         [
@@ -167,15 +273,20 @@ function DonutChart({
             type: "pie",
             labels: [usedLabel, freeLabel],
             values: [Math.max(0, used), Math.max(0, free)],
-            hole: 0.55,
+            hole: 0.58,
             textinfo: "label+percent",
-            marker: { colors: ["#d45555", "#4f78e8"] },
+            textposition: "outside",
+            marker: { colors: ["#c23b3b", "#2f57c7"] },
           },
         ],
         {
-          title,
-          margin: { t: 36, r: 16, b: 16, l: 16 },
+          title: { text: title, font: { size: 14, color: textColor } },
+          margin: { t: 44, r: 12, b: 12, l: 12 },
           paper_bgcolor: "transparent",
+          plot_bgcolor: "transparent",
+          font: { color: textColor },
+          showlegend: true,
+          legend: { orientation: "h", y: -0.08 },
         },
         { responsive: true, displaylogo: false },
       );
@@ -186,5 +297,9 @@ function DonutChart({
     };
   }, [ref, title, used, free, usedLabel, freeLabel]);
 
-  return <div ref={setRef} style={{ height: 230, border: "1px solid var(--border)", borderRadius: 10 }} />;
+  return (
+    <div className="system-resources-chart-wrap">
+      <div ref={setRef} className="system-resources-chart" />
+    </div>
+  );
 }

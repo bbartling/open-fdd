@@ -82,12 +82,10 @@ pytest
 
 ## Dependencies
 
-* Python 3.10+ (see `requires-python` in `pyproject.toml`)
-* `pandas`
-* `numpy`
-* `pyyaml`
-* `pydantic>=2.4,<3`
-* `pip` + virtual environment tooling (`python3 -m venv`)
+* **Python 3.10+**, `pip`, and a venv (`requires-python` and `[project.dependencies]` in `pyproject.toml`): `pandas`, `numpy`, `pyyaml`, `pydantic>=2.4,<3`, `requests`.
+* **Desktop / Python bridge** (Feather ingest, TTL/RDF, FastAPI gateway, PySide tooling): install the **`desktop`** extra, e.g. `pip install -e ".[desktop]"`—see `[project.optional-dependencies].desktop` in `pyproject.toml` (includes FastAPI, uvicorn, httpx, pyarrow, rdflib, PySide6, scikit-learn, etc.).
+* **Browser desktop UI** (`apps/desktop-ui`): **Node.js** + **npm** for the Vite/React app (`npm install`, `npm run dev`) talking to the bridge.
+* **AI Agent tab** (Codex on the bridge): the **OpenAI Codex CLI** on the host that runs the gateway (PATH or `OFDD_CODEX_CMD`), not an extra Python dependency listed above.
 
 ---
 

@@ -49,6 +49,7 @@ def run_openfdd_agent_turn(
     task_summary: str | None,
     force_class: str | None,
     system_context: str | None,
+    conversation_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     codex = resolve_codex_executable()
     if not codex:
@@ -98,7 +99,11 @@ def run_openfdd_agent_turn(
         if part
     )
 
-    stdin_text = build_chat_stdin(user_message=message, system_context=system)
+    stdin_text = build_chat_stdin(
+        user_message=message,
+        system_context=system,
+        conversation_history=conversation_history,
+    )
 
     simple_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_SIMPLE", 420)
     complex_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_COMPLEX", 900)

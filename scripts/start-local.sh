@@ -24,7 +24,7 @@ write_openfdd_agent_bootstrap() {
   mcp_rest="${mcp_rest%/}"
   local ui_pub="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
   ui_pub="${ui_pub%/}"
-  export OFDD_AGENT_BOOTSTRAP_FILE="${bootstrap_path}"
+  unset OFDD_AGENT_BOOTSTRAP_FILE 2>/dev/null || true
   if ! command -v python3 >/dev/null 2>&1; then
     echo "WARNING: python3 not found; could not write ${bootstrap_path}. Set OFDD_BRIDGE_URL / OFDD_UI_PUBLIC_BASE manually for Codex." >&2
     return 0
@@ -49,6 +49,7 @@ doc = {
 pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
 pathlib.Path(path).write_text(json.dumps(doc, indent=2), encoding="utf-8")
 PY
+  export OFDD_AGENT_BOOTSTRAP_FILE="${bootstrap_path}"
   echo "Wrote agent bootstrap: ${bootstrap_path}"
 }
 
@@ -73,6 +74,7 @@ export OFDD_TTL_SYNC_INTERVAL_SECONDS="${SYNC_INTERVAL}"
 export OFDD_BRIDGE_URL="${BRIDGE_URL}"
 export OFDD_MCP_OFDD_API_URL="${BRIDGE_URL}"
 export OFDD_UI_PUBLIC_BASE="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
+export OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI="${OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI:-1}"
 
 start_bg() {
   local name="$1"

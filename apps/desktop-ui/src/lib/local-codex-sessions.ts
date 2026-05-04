@@ -96,11 +96,12 @@ export function loadCodexSessionBundle(): CodexSessionBundle {
           const s = createEmptySession();
           return { activeId: s.id, sessions: [s] };
         }
-        let activeId = typeof parsed.activeId === "string" ? parsed.activeId : sessions[0].id;
-        if (!sessions.some((x) => x.id === activeId)) {
-          activeId = sessions[sessions.length - 1].id;
+        const trimmed = sessions.slice(-MAX_AGENT_SESSIONS);
+        let activeId = typeof parsed.activeId === "string" ? parsed.activeId : trimmed[0].id;
+        if (!trimmed.some((x) => x.id === activeId)) {
+          activeId = trimmed[trimmed.length - 1].id;
         }
-        return { activeId, sessions: sessions.slice(-MAX_AGENT_SESSIONS) };
+        return { activeId, sessions: trimmed };
       }
     }
   } catch {
@@ -176,5 +177,15 @@ export function updateActiveSession(
   fn: (s: CodexAgentSession) => CodexAgentSession,
 ): CodexSessionBundle {
   const sessions = bundle.sessions.map((s) => (s.id === bundle.activeId ? fn(s) : s));
+  return { ...bundle, sessions };
+}
+
+/** Update a session by id (for async completions after the user may have switched threads). */
+export function updateSessionById(
+  bundle: CodexSessionBundle,
+  sessionId: string,
+  fn: (s: CodexAgentSession) => CodexAgentSession,
+): CodexSessionBundle {
+  const sessions = bundle.sessions.map((s) => (s.id === sessionId ? fn(s) : s));
   return { ...bundle, sessions };
 }

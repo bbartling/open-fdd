@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Literal
 
 # Defaults aligned with https://developers.openai.com/codex/models/ (override per host via env).
@@ -252,6 +253,13 @@ def run_codex_login_status(codex_path: str) -> dict[str, Any]:
         )
     except subprocess.TimeoutExpired:
         return {"returncode": -1, "stdout": "", "stderr": "codex login status timed out.", "logged_in": False}
+    except OSError as exc:
+        return {
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"codex spawn failed: {exc}",
+            "logged_in": False,
+        }
     out = _decode_completed(cp)
     out["logged_in"] = cp.returncode == 0
     return out
@@ -316,6 +324,13 @@ def run_codex_exec(
             "stderr": f"codex exec timed out after {t}s.",
             "ok": False,
         }
+    except OSError as exc:
+        return {
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"codex spawn failed: {exc}",
+            "ok": False,
+        }
     out = _decode_completed(cp)
     out["ok"] = cp.returncode == 0
     if model and str(model).strip():
@@ -357,9 +372,64 @@ def run_codex_route_classify_llm(
     return None, f"classify_unparseable: {first_line!r}"
 
 
-def build_chat_stdin(*, user_message: str, system_context: str | None) -> str:
+def _history_budget_chars() -> int:
+    """
+    Max UTF-8 length for the prior-turn markdown block.
+
+    Uses ``OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS`` (default 8000 ≈ 32k chars) capped by
+    ``OFDD_AGENT_CHAT_HISTORY_MAX_CHARS`` so operators can hard-limit payload size.
+    """
+    max_tok = safe_int_from_env("OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS", 8_000)
+    max_tok = min(max(max_tok, 32), 200_000)
+    cap_chars = safe_int_from_env("OFDD_AGENT_CHAT_HISTORY_MAX_CHARS", 120_000)
+    cap_chars = min(max(cap_chars, 64), 500_000)
+    return min(max_tok * 4, cap_chars)
+
+
+def _markdown_history_block(
+    entries: Sequence[tuple[str, str]],
+    *,
+    max_chars: int,
+) -> tuple[str, bool]:
+    """Format prior turns (oldest first) as markdown; keep the tail if over ``max_chars``."""
+    chunks: list[str] = []
+    size = 0
+    truncated = False
+    for role, text in reversed(entries):
+        if role not in ("user", "assistant"):
+            continue
+        label = "Operator" if role == "user" else "Codex"
+        chunk = f"**{label}:**\n{(text or '').strip()}\n\n"
+        if size + len(chunk) > max_chars:
+            truncated = True
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    body = "".join(reversed(chunks))
+    if truncated:
+        return f"_(Earlier messages omitted to stay within history limit.)_\n\n{body}", True
+    return body, False
+
+
+def build_chat_stdin(
+    *,
+    user_message: str,
+    system_context: str | None,
+    conversation_history: Sequence[tuple[str, str]] | None = None,
+) -> str:
     system = (system_context or "").strip() or _DEFAULT_SYSTEM
-    return f"{system}\n\nHuman message:\n{user_message.strip()}\n\nRespond to the human message above.\n"
+    msg = user_message.strip()
+    hist_raw = list(conversation_history or [])
+    if not hist_raw:
+        return f"{system}\n\nHuman message:\n{msg}\n\nRespond to the human message above.\n"
+    # Cap prior-turn transcript by approximate tokens (see docs/howto/desktop_app.md).
+    max_hist = _history_budget_chars()
+    history_md, _trunc = _markdown_history_block(hist_raw, max_chars=max_hist)
+    return (
+        f"{system}\n\n### Conversation so far (same UI thread)\n\n{history_md}\n"
+        f"### Latest human message\n{msg}\n\n"
+        "Respond to the **latest** human message using the full thread above for continuity.\n"
+    )
 
 
 def gather_diagnostics() -> dict[str, Any]:

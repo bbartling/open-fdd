@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -10,6 +11,8 @@ from open_fdd.desktop.services.ingest_service import IngestService
 from open_fdd.desktop.services.model_service import ModelService
 from open_fdd.desktop.storage.feather_store import FeatherStore
 from open_fdd.desktop.storage.model_store import ModelStore
+
+_FIXTURE_CSV_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "csv"
 
 
 def test_csv_ingest_parse_error_does_not_touch_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -58,6 +61,99 @@ def test_csv_ingest_creates_feather_refs(tmp_path: Path) -> None:
     assert any(p.get("external_id") == "sa_temp" for p in model["points"])
     sa_point = next(p for p in model["points"] if p.get("external_id") == "sa_temp")
     assert sa_point.get("metadata", {}).get("external_ref", "") == out["storage_path"]
+
+
+def test_csv_ingest_appends_batches_to_same_equipment(tmp_path: Path) -> None:
+    pytest.importorskip("pyarrow")
+    csv_old = tmp_path / "old.csv"
+    csv_new = tmp_path / "new.csv"
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T01:00:00Z"],
+            "sat": [55.0, 56.0],
+            "mat": [57.0, 57.5],
+        }
+    ).to_csv(csv_old, index=False)
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-01-01T02:00:00Z", "2026-01-01T03:00:00Z"],
+            "sat": [57.0, 58.0],
+            "mat": [58.0, 58.5],
+        }
+    ).to_csv(csv_new, index=False)
+
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("AHU Site")
+    eq = model_service.create_equipment(site_id=site["id"], name="AHU-1", equipment_type="Air_Handling_Unit")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+
+    first = ingest.ingest_csv(csv_path=csv_old, site_id=site["id"], source="csv", equipment_id=eq["id"])
+    second = ingest.ingest_csv(csv_path=csv_new, site_id=site["id"], source="csv", equipment_id=eq["id"])
+
+    assert first["rows"] == 2
+    assert second["rows"] == 2
+
+    frame = ingest.load_source_frame(site_id=site["id"], source="csv")
+    assert len(frame.index) == 4
+
+    model = model_service.load()
+    assert len(model["equipment"]) == 1
+    assert len(model["points"]) == 2
+    assert all(p.get("equipment_id") == eq["id"] for p in model["points"])
+
+
+def test_rtu07_style_split_tsv_files_append_one_site_one_equipment(tmp_path: Path) -> None:
+    """Two sequential CSV ingests for the same site + equipment append Feather shards (not new equipment)."""
+    pytest.importorskip("pyarrow")
+    p1 = _FIXTURE_CSV_DIR / "rtu07_part1.tsv"
+    p2 = _FIXTURE_CSV_DIR / "rtu07_part2.tsv"
+    assert p1.is_file() and p2.is_file()
+
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("RTU07 lab")
+    eq = model_service.create_equipment(
+        site_id=site["id"],
+        name="RTU07",
+        equipment_type="Air_Handling_Unit",
+    )
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+
+    first = ingest.ingest_csv(csv_path=p1, site_id=site["id"], source="csv", equipment_id=eq["id"])
+    second = ingest.ingest_csv(csv_path=p2, site_id=site["id"], source="csv", equipment_id=eq["id"])
+    assert first["rows"] >= 1 and second["rows"] >= 1
+
+    frame = ingest.load_source_frame(site_id=site["id"], source="csv")
+    assert len(frame.index) == first["rows"] + second["rows"]
+    assert str(frame["timestamp"].min()).startswith("2026-02-02")
+    assert str(frame["timestamp"].max()).startswith("2026-03-20")
+
+    model = model_service.load()
+    assert len(model["equipment"]) == 1
+    assert len(model["points"]) == 3
+    assert all(str(p.get("equipment_id")) == str(eq["id"]) for p in model["points"])
+
+
+@pytest.mark.skipif(
+    not (os.environ.get("OFDD_LIVE_AHU7_CSV_PART1") and os.environ.get("OFDD_LIVE_AHU7_CSV_PART2")),
+    reason="Set OFDD_LIVE_AHU7_CSV_PART1 and OFDD_LIVE_AHU7_CSV_PART2 to full AHU7 export paths",
+)
+def test_live_two_part_operator_csv_ingest_from_env(tmp_path: Path) -> None:
+    """Optional: run against your real split exports (same schema, same site)."""
+    pytest.importorskip("pyarrow")
+    p1 = Path(os.environ["OFDD_LIVE_AHU7_CSV_PART1"]).expanduser()
+    p2 = Path(os.environ["OFDD_LIVE_AHU7_CSV_PART2"]).expanduser()
+    model_store = ModelStore(path=tmp_path / "model.json")
+    model_service = ModelService(store=model_store)
+    site = model_service.create_site("AHU7 live")
+    eq = model_service.create_equipment(site_id=site["id"], name="AHU7", equipment_type="Air_Handling_Unit")
+    ingest = IngestService(model_service=model_service, feather_store=FeatherStore(root=tmp_path / "feather"))
+    a = ingest.ingest_csv(csv_path=p1, site_id=site["id"], source="csv", equipment_id=eq["id"])
+    b = ingest.ingest_csv(csv_path=p2, site_id=site["id"], source="csv", equipment_id=eq["id"])
+    assert a.get("parse_error") is None and b.get("parse_error") is None
+    frame = ingest.load_source_frame(site_id=site["id"], source="csv")
+    assert len(frame.index) == int(a["rows"]) + int(b["rows"])
 
 
 def test_ingest_service_ml_baseline_returns_metrics(tmp_path: Path) -> None:

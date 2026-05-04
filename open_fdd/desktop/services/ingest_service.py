@@ -36,7 +36,14 @@ class IngestService:
         if self.connector is None:
             self.connector = FeatherConnector(self.feather_store)
 
-    def ingest_csv(self, *, csv_path: str | Path, site_id: str, source: str = "csv") -> dict[str, Any]:
+    def ingest_csv(
+        self,
+        *,
+        csv_path: str | Path,
+        site_id: str,
+        source: str = "csv",
+        equipment_id: str | None = None,
+    ) -> dict[str, Any]:
         result = self.connector.ingest_csv(csv_path=str(csv_path), source=source, site_id=site_id)
         if result.get("parse_error"):
             out: dict[str, Any] = {
@@ -56,6 +63,7 @@ class IngestService:
         target = str(result.get("storage_path", ""))
         feather_path = str(result.get("feather_path", ""))
         storage_ref = str(result.get("storage_ref") or target)
+        selected_equipment_id = self._resolve_equipment_id(site_id=site_id, equipment_id=equipment_id)
         with self.model_service.transaction() as model:
             for metric in metric_columns:
                 self._upsert_point_for_metric(
@@ -64,6 +72,7 @@ class IngestService:
                     metric=metric,
                     source=source,
                     storage_ref=storage_ref,
+                    equipment_id=selected_equipment_id,
                 )
         out = {
             "rows": rows,
@@ -341,6 +350,7 @@ class IngestService:
         metric: str,
         source: str,
         storage_ref: str,
+        equipment_id: str | None = None,
         brick_type_override: str | None = None,
         fdd_input_override: str | None = None,
         unit_override: str | None = None,
@@ -361,6 +371,8 @@ class IngestService:
             md["external_ref"] = storage_ref
             md["source"] = source
             existing["metadata"] = md
+            if equipment_id is not None:
+                existing["equipment_id"] = equipment_id
             if brick_type_override:
                 existing["brick_type"] = brick_type_override
             if fdd_input_override is not None:
@@ -372,7 +384,7 @@ class IngestService:
             {
                 "id": self.model_service.store.id_str(),
                 "site_id": site_id,
-                "equipment_id": None,
+                "equipment_id": equipment_id,
                 "external_id": metric,
                 "brick_type": brick_type_override or "Point",
                 "fdd_input": fdd_input_override,
@@ -383,4 +395,14 @@ class IngestService:
                 },
             }
         )
+
+    def _resolve_equipment_id(self, *, site_id: str, equipment_id: str | None) -> str | None:
+        selected = str(equipment_id or "").strip()
+        if selected:
+            return selected
+        model = self.model_service.load()
+        eq_ids = [str(e.get("id")) for e in model.get("equipment", []) if str(e.get("site_id")) == str(site_id) and e.get("id")]
+        if len(eq_ids) == 1:
+            return eq_ids[0]
+        return None
 

@@ -22,6 +22,7 @@ export function CsvImportPage() {
   const siteContext = useOptionalSite();
   const [siteId, setSiteId] = useState(() => siteContext?.selectedSiteId ?? "");
   const [source, setSource] = useState("csv");
+  const [equipmentId, setEquipmentId] = useState("");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [output, setOutput] = useState("Choose one or more CSV files and import.");
@@ -35,6 +36,9 @@ export function CsvImportPage() {
       const formData = new FormData();
       formData.append("site_id", effectiveSiteId);
       formData.append("source", source);
+      if (equipmentId.trim()) {
+        formData.append("equipment_id", equipmentId.trim());
+      }
       formData.append("file", file, file.name);
       const res = await fetch(`${bridgeBase}/ingest/csv/upload`, {
         method: "POST",
@@ -98,6 +102,14 @@ export function CsvImportPage() {
           <label>Source</label>
           <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="csv" />
         </div>
+        <div>
+          <label>Equipment ID (optional)</label>
+          <input
+            value={equipmentId}
+            onChange={(e) => setEquipmentId(e.target.value)}
+            placeholder="attach to an existing AHU"
+          />
+        </div>
       </div>
       <div style={{ marginBottom: 10 }}>
         <label style={{ display: "inline-block", cursor: "pointer" }}>
@@ -125,7 +137,9 @@ export function CsvImportPage() {
         )}
       </div>
       <p style={{ color: "var(--muted)", marginTop: 8, marginBottom: 0 }}>
-        Picker-only mode for reliable cross-platform behavior (Windows/macOS/Linux).
+        Picker-only mode for reliable cross-platform behavior (Windows/macOS/Linux). If the site already has one
+        equipment record, uploads will attach there automatically; otherwise, paste an equipment ID to keep
+        repeated CSV batches on the same AHU.
       </p>
       {importLogs.length > 0 && (
         <div style={{ marginTop: 10, border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}>

@@ -6,6 +6,7 @@ import {
   selectSession,
   titleFromFirstUserMessage,
   updateActiveSession,
+  updateSessionById,
   type ChatLine,
   type CodexSessionBundle,
 } from "../lib/local-codex-sessions";
@@ -161,6 +162,8 @@ export function AiAgentChatPage() {
   const [authLine, setAuthLine] = useState("Checking Codex on the bridge…");
   const [postOAuthHint, setPostOAuthHint] = useState<string | null>(null);
   const [npmBusy, setNpmBusy] = useState(false);
+  const [signInBusy, setSignInBusy] = useState(false);
+  const signInInFlightRef = useRef(false);
   const [deviceSession, setDeviceSession] = useState<DeviceSession | null>(null);
   const [signInActionError, setSignInActionError] = useState<string | null>(null);
   const [signOutBusy, setSignOutBusy] = useState(false);
@@ -357,6 +360,11 @@ export function AiAgentChatPage() {
   }, [deviceSession, bridgeBase, pullDiagnostics]);
 
   const runAutomatedSignIn = useCallback(async () => {
+    if (signInInFlightRef.current) {
+      return;
+    }
+    signInInFlightRef.current = true;
+    setSignInBusy(true);
     setSignInActionError(null);
     setPostOAuthHint(null);
     try {
@@ -428,19 +436,25 @@ export function AiAgentChatPage() {
       setSignInActionError(msg);
       setAuthState("error");
       setAuthLine(msg);
+    } finally {
+      signInInFlightRef.current = false;
+      setSignInBusy(false);
     }
   }, [bridgeBase, pullDiagnostics]);
 
   const sendMessage = useCallback(async () => {
     const b = bundleRef.current;
-    const active = b.sessions.find((s) => s.id === b.activeId);
+    const sessionId = b.activeId;
+    const active = b.sessions.find((s) => s.id === sessionId);
     const text = (active?.draft ?? "").trim();
     if (!text || sending || authState !== "signed_in") {
       return;
     }
+    const workdirSnapshot = workdir.trim() || null;
+    const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
     setSending(true);
     setSessionBundle((prev) =>
-      updateActiveSession(prev, (s) => {
+      updateSessionById(prev, sessionId, (s) => {
         const nextLines: ChatLine[] = [...s.lines, { role: "user", text }];
         const title =
           s.title === "New agent" && s.lines.length === 0
@@ -455,15 +469,16 @@ export function AiAgentChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          workdir: workdir.trim() || null,
+          workdir: workdirSnapshot,
           task_summary: null,
+          conversation_history: conversationHistory,
         }),
       });
       const data = (await res.json()) as ChatResponse & { detail?: string };
       if (!res.ok) {
         const detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
         setSessionBundle((prev) =>
-          updateActiveSession(prev, (s) => ({
+          updateSessionById(prev, sessionId, (s) => ({
             ...s,
             lines: [...s.lines, { role: "assistant", text: `Request failed (${res.status}):\n${detail}` }],
             updatedAt: Date.now(),
@@ -477,7 +492,7 @@ export function AiAgentChatPage() {
           ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
           : "(No output.)");
       setSessionBundle((prev) =>
-        updateActiveSession(prev, (s) => ({
+        updateSessionById(prev, sessionId, (s) => ({
           ...s,
           lines: [...s.lines, { role: "assistant", text: out }],
           updatedAt: Date.now(),
@@ -485,7 +500,7 @@ export function AiAgentChatPage() {
       );
     } catch (e) {
       setSessionBundle((prev) =>
-        updateActiveSession(prev, (s) => ({
+        updateSessionById(prev, sessionId, (s) => ({
           ...s,
           lines: [...s.lines, { role: "assistant", text: e instanceof Error ? e.message : String(e) }],
           updatedAt: Date.now(),
@@ -498,7 +513,7 @@ export function AiAgentChatPage() {
 
   const chatEnabled = authState === "signed_in";
   const devicePending = deviceSession !== null;
-  const signInControlsBusy = authState === "loading" || npmBusy || devicePending;
+  const signInControlsBusy = authState === "loading" || npmBusy || signInBusy || devicePending;
 
   const signInButtonLabel =
     authState === "error"
@@ -653,14 +668,12 @@ export function AiAgentChatPage() {
           ) : null}
           <div className="local-codex-chat-main">
         <div className="local-codex-workdir-block">
-          <div className="local-codex-workdir-heading">Codex workdir on the bridge</div>
           <p className="muted" style={{ margin: "0 0 8px", fontSize: 12, lineHeight: 1.5 }}>
-            Repo root for <code className="inline-code">codex exec</code> (default <code className="inline-code">VITE_OPENFDD_AGENT_WORKDIR</code> in{" "}
-            <code className="inline-code">.env.local</code>). Stack URLs are injected every turn. For string metrics / Feather fixes, use the{" "}
-            <strong>Plots</strong> page after you load a chart — not here.
+            Set the Open-FDD path on the bridge to your repo root (optional default:{" "}
+            <code className="inline-code">VITE_OPENFDD_AGENT_WORKDIR</code> in <code className="inline-code">.env.local</code>).
           </p>
           <label className="local-codex-workdir-label" htmlFor="ofdd-codex-workdir-input">
-            Repo path
+            Open-FDD path
           </label>
           <input
             id="ofdd-codex-workdir-input"
@@ -669,7 +682,7 @@ export function AiAgentChatPage() {
             value={workdir}
             onChange={(e) => onWorkdirChange(e.target.value)}
             placeholder="C:\path\to\open-fdd"
-            aria-label="Codex working directory on the bridge"
+            aria-label="Open-FDD repository path on the bridge"
             disabled={sending || !chatEnabled}
             autoComplete="off"
           />

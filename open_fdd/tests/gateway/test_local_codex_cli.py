@@ -70,6 +70,38 @@ def test_build_chat_stdin_custom_system() -> None:
     assert "x" in body
 
 
+def test_build_chat_stdin_includes_conversation_history() -> None:
+    hist = [("user", "first question"), ("assistant", "first answer")]
+    body = lc.build_chat_stdin(
+        user_message="follow up",
+        system_context="SYS",
+        conversation_history=hist,
+    )
+    assert "Conversation so far" in body
+    assert "first question" in body
+    assert "first answer" in body
+    assert "follow up" in body
+    assert "Latest human message" in body
+
+
+def test_build_chat_stdin_history_truncates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS", "40")
+    monkeypatch.setenv("OFDD_AGENT_CHAT_HISTORY_MAX_CHARS", "10_000_000")
+    hist = [("user", "a" * 400), ("user", "tail")]
+    body = lc.build_chat_stdin(user_message="z", system_context="S", conversation_history=hist)
+    assert "tail" in body
+    assert "z" in body
+    assert "Earlier messages omitted" in body
+
+
+def test_history_budget_chars_respects_token_and_char_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS", "10000")
+    monkeypatch.setenv("OFDD_AGENT_CHAT_HISTORY_MAX_CHARS", "1000")
+    assert lc._history_budget_chars() == 1000
+    monkeypatch.setenv("OFDD_AGENT_CHAT_HISTORY_MAX_CHARS", "500000")
+    assert lc._history_budget_chars() == 40_000
+
+
 def test_resolve_workdir_blank_uses_cwd(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("OFDD_CODEX_WORKDIR", raising=False)
     monkeypatch.chdir(tmp_path)

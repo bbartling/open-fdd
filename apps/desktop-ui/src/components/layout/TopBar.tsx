@@ -7,7 +7,10 @@ export function TopBar() {
     <header className="topbar">
       <div>
         <h1 className="topbar-title">Open-FDD Desktop</h1>
-        <p className="topbar-subtitle">AFDD-style workflow shell for local large-file desktop iteration.</p>
+        <p className="topbar-subtitle">
+          AFDD-style workflow shell for local large-file desktop iteration—this bridge-mode dashboard is for trusted machines
+          or private networks only, not hardened for the public internet.
+        </p>
       </div>
       <div className="topbar-actions">
         <label className="inline-label" htmlFor="site-selector">

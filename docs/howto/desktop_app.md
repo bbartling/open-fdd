@@ -87,6 +87,8 @@ So: **Python starts Codex; Codex runs the agent turn** under the flags and login
 
 **Built-in agent model routing (`POST /openfdd-agent/chat` only):** SIMPLE tier uses **`--model gpt-5.4-mini`** (override **`OFDD_CODEX_MODEL_SIMPLE`**). COMPLEX uses **`gpt-5.5`** then retries once with **`gpt-5.4`** if stderr looks like an unknown-model error (override **`OFDD_CODEX_MODEL_COMPLEX`** / **`OFDD_CODEX_MODEL_COMPLEX_FALLBACK`**). Optional: **`OFDD_CODEX_LLM_CLASSIFY=1`** runs a **short second `codex exec`** with the simple model to choose SIMPLE vs COMPLEX before the main turn (extra latency/cost); **`OFDD_CODEX_CLASSIFY_TIMEOUT_S`** caps that call (default 120s).
 
+**Agent chat thread context:** the UI sends the last **120** prior turns plus the new message. The bridge formats them into Codex stdin. History size is **`min(OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS × 4 chars, OFDD_AGENT_CHAT_HISTORY_MAX_CHARS)`** using a rough **~4 characters per token** heuristic (`open_fdd/gateway/local_codex_cli.py`): defaults **`OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS=8000`** (≈32k UTF‑8 bytes for prior turns) and **`OFDD_AGENT_CHAT_HISTORY_MAX_CHARS=120000`** as a hard ceiling. When over budget, **older turns are dropped** and a short “Earlier messages omitted…” line is prepended. **Rolling summarization** (a SIMPLE model compressing old turns + a verbatim tail) is optional product work; Open-FDD does not do it today.
+
 Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. Legacy bridge device endpoints still exist for compatibility:
 
 - `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` (not used by the current UI)
