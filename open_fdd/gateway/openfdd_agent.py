@@ -147,6 +147,8 @@ def run_openfdd_agent_turn(
     out = run_codex_exec(codex, workdir, stdin_text=stdin_text, timeout_s=timeout_s, model=chosen_model)
     model_attempts: list[str] = [chosen_model]
     escalated_simple_failure = False
+    critic_used = False
+    critic_model: str | None = None
 
     if escalation_eligible and not out.get("ok"):
         escalated_simple_failure = True
@@ -177,6 +179,52 @@ def run_openfdd_agent_turn(
         model_attempts.append(model_complex_fallback.strip())
         out["codex_model_fallback_used"] = True
 
+    critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", False)
+    if critic_enabled and tier == "simple" and bool(out.get("ok")) and not human_requested_complex:
+        critic_prompt = (
+            "You are a strict final reviewer. Review the draft answer below for correctness, safety, "
+            "and concrete actionability for Open-FDD operators. If needed, provide a corrected final answer.\n\n"
+            f"User message:\n{message}\n\n"
+            f"Draft answer:\n{str(out.get('stdout') or '').strip()}\n\n"
+            "Return only the final answer to show the human (no rubric, no preamble)."
+        )
+        critic_stdin = build_chat_stdin(
+            user_message=critic_prompt,
+            system_context="\n\n".join(
+                part for part in (_openfdd_agent_identity(), ctx_md, routing_instructions_for_tier("complex")) if part
+            ),
+            conversation_history=None,
+        )
+        critic_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_CRITIC", complex_timeout)
+        critic_out = run_codex_exec(
+            codex,
+            workdir,
+            stdin_text=critic_stdin,
+            timeout_s=critic_timeout,
+            model=model_complex_primary,
+        )
+        critic_model = model_complex_primary
+        if (
+            not critic_out.get("ok")
+            and model_complex_fallback.strip()
+            and model_complex_fallback.strip() != model_complex_primary.strip()
+            and stderr_suggests_unknown_codex_model(
+                str(critic_out.get("stderr") or ""), str(critic_out.get("stdout") or "")
+            )
+        ):
+            critic_out = run_codex_exec(
+                codex,
+                workdir,
+                stdin_text=critic_stdin,
+                timeout_s=critic_timeout,
+                model=model_complex_fallback.strip(),
+            )
+            critic_model = model_complex_fallback.strip()
+        if critic_out.get("ok") and str(critic_out.get("stdout") or "").strip():
+            out["stdout"] = str(critic_out.get("stdout") or "").strip()
+            critic_used = True
+            model_attempts.append(str(critic_model or model_complex_primary))
+
     return {
         **out,
         "ok": bool(out.get("ok")),
@@ -186,6 +234,7 @@ def run_openfdd_agent_turn(
         "codex_model": out.get("codex_model") or chosen_model,
         "codex_model_attempts": model_attempts,
         "bootstrap_summary": slim,
+        **({"critic_used": True, "critic_model": critic_model} if critic_used else {}),
         **({"human_route": True} if human_route else {}),
         **({"simple_failure_escalated": True} if escalated_simple_failure else {}),
     }

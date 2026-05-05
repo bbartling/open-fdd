@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+echo "[checkpoint] start-local.sh starting"
 
 # Optional: bash scripts/start-local.sh --lan-host 192.168.1.10 all
 # Same as PowerShell -LanHost: bind gateway+MCP on 0.0.0.0, Vite --host 0.0.0.0, CORS for private LAN, set public URLs.
 ROLE="all"
 LAN_HOST=""
+RAG_INDEX_MODE="${OFDD_MCP_RAG_INDEX_MODE:-auto}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --lan-host)
@@ -19,8 +21,16 @@ while [[ $# -gt 0 ]]; do
       ROLE="$1"
       shift
       ;;
+    --rag-index-mode)
+      RAG_INDEX_MODE="${2:-}"
+      if [[ -z "${RAG_INDEX_MODE}" ]]; then
+        echo "start-local.sh: --rag-index-mode requires one of: auto|always|skip" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     *)
-      echo "start-local.sh: unknown argument '$1' (use [--lan-host IP] [all|gateway|mcp|ui|adapter])" >&2
+      echo "start-local.sh: unknown argument '$1' (use [--lan-host IP] [--rag-index-mode auto|always|skip] [all|gateway|mcp|ui|adapter])" >&2
       exit 1
       ;;
   esac
@@ -38,6 +48,7 @@ if [[ -n "${LAN_HOST}" ]]; then
   export OFDD_CORS_ALLOW_PRIVATE_LAN="1"
   echo "LAN dashboard: URLs use ${LAN_HOST}; gateway+MCP listen on 0.0.0.0; Vite --host 0.0.0.0. Open firewall TCP 8765, 8090, 5173 if other hosts connect."
 fi
+echo "[checkpoint] role=${ROLE} env parsed"
 
 BRIDGE_URL="${OFDD_BRIDGE_URL:-http://127.0.0.1:8765}"
 # Match start-local.ps1 / gateway: avoid double slashes when joining paths.
@@ -59,6 +70,7 @@ TTL_MIRROR_PATH="${LOCAL_DATA_DIR}/data_model.mirror.ttl"
 LOG_DIR="${LOCAL_DATA_DIR}/logs"
 
 mkdir -p "${LOCAL_DATA_DIR}" "${LOG_DIR}"
+echo "[checkpoint] local data dir ready: ${LOCAL_DATA_DIR}"
 
 # Match scripts/start-local.ps1: agent + Codex see merged URLs via OFDD_AGENT_BOOTSTRAP_FILE.
 write_openfdd_agent_bootstrap() {
@@ -104,18 +116,53 @@ needs_venv() {
 
 # Regenerate MCP RAG chunks from docs/ so open-fdd-mcp-rag loads fresh rag_index.json on each start (opt out with OFDD_SKIP_MCP_INDEX_BUILD=1).
 refresh_mcp_rag_index() {
+  local out_path="${REPO_ROOT}/stack/mcp-rag/index/rag_index.json"
+  local mode="${RAG_INDEX_MODE:-auto}"
+  mode="$(printf '%s' "${mode}" | tr '[:upper:]' '[:lower:]')"
   if [[ "${OFDD_SKIP_MCP_INDEX_BUILD:-0}" == "1" ]]; then
-    echo "Skipping MCP RAG index rebuild (OFDD_SKIP_MCP_INDEX_BUILD=1)."
+    mode="skip"
+  fi
+  if [[ ! "${mode}" =~ ^(auto|always|skip)$ ]]; then
+    echo "WARNING: invalid rag index mode '${mode}', falling back to auto." >&2
+    mode="auto"
+  fi
+  if [[ "${mode}" == "skip" ]]; then
+    echo "Skipping MCP RAG index rebuild (mode=skip; set --rag-index-mode always to force)."
     return 0
   fi
+  if [[ "${mode}" == "auto" && -f "${out_path}" ]]; then
+    echo "MCP RAG index exists; skipping rebuild (mode=auto): ${out_path}"
+    return 0
+  fi
+  echo "Building MCP RAG index (mode=${mode})... this may take a few minutes."
+  echo "Tip: use --rag-index-mode skip for faster startup, or --rag-index-mode always to force rebuild."
   if ! command -v python3 >/dev/null 2>&1; then
     echo "WARNING: python3 not found; skipping MCP index rebuild." >&2
     return 0
   fi
+  local started_at
+  started_at="$(date +%s)"
   (
     cd "${REPO_ROOT}"
     python3 scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
-  ) || echo "WARNING: MCP RAG index build failed; search_docs may be stale or empty until you fix errors and restart MCP." >&2
+  ) &
+  local build_pid="$!"
+  local next_heartbeat=10
+  while kill -0 "${build_pid}" >/dev/null 2>&1; do
+    sleep 2
+    local now elapsed
+    now="$(date +%s)"
+    elapsed="$((now - started_at))"
+    if (( elapsed >= next_heartbeat )); then
+      echo "Still building MCP RAG index... (${elapsed}s elapsed)"
+      next_heartbeat=$((next_heartbeat + 10))
+    fi
+  done
+  wait "${build_pid}" || echo "WARNING: MCP RAG index build failed; search_docs may be stale or empty until you fix errors and restart MCP." >&2
+  local ended_at elapsed_s
+  ended_at="$(date +%s)"
+  elapsed_s="$((ended_at - started_at))"
+  echo "MCP RAG index build complete (${elapsed_s}s): ${REPO_ROOT}/stack/mcp-rag/index/rag_index.json"
 }
 
 if needs_venv && [[ ! -f "${REPO_ROOT}/.venv/bin/activate" ]]; then
@@ -153,8 +200,12 @@ start_bg() {
 
 case "${ROLE}" in
   all)
+    echo "[checkpoint] role=all preparing bootstrap and environment"
     write_openfdd_agent_bootstrap "all"
+    echo "[checkpoint] bootstrap written"
     refresh_mcp_rag_index
+    echo "[checkpoint] MCP RAG index step finished"
+    echo "[checkpoint] launching services (gateway, mcp-rag, desktop-ui)"
     (
       cd "${REPO_ROOT}"
       start_bg "gateway" open-fdd-gateway
@@ -165,7 +216,7 @@ case "${ROLE}" in
       start_bg "desktop-ui" "${UI_DEV_CMD[@]}"
     )
     echo "All services launched with repo-local data defaults."
-    printf '%s\n' 'Tip: This run rebuilt stack/mcp-rag/index/rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui processes can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
+    printf '%s\n' 'Tip: MCP RAG index behavior is controlled by --rag-index-mode (auto|always|skip). Re-running without stopping old gateway/mcp/ui processes can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
     echo ""
     echo "Open-FDD UI:        ${OFDD_UI_PUBLIC_BASE}"
     echo "Open-FDD agent API: ${BRIDGE_URL}/openfdd-agent/context  (POST .../openfdd-agent/chat)"
@@ -181,6 +232,7 @@ case "${ROLE}" in
     fi
     printf '%s\n' 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
     echo "Background logs:    ${LOG_DIR}/gateway.log  ${LOG_DIR}/mcp-rag.log  ${LOG_DIR}/desktop-ui.log"
+    echo "[checkpoint] running startup health checks"
     health_ok=0
     for _i in $(seq 1 30); do
       if command -v curl >/dev/null 2>&1; then
@@ -221,25 +273,35 @@ case "${ROLE}" in
         echo "WARNING: OpenClaw gateway not reachable at ${OFDD_OPENCLAW_GATEWAY_URL}/health (optional unless using /assistant/data-model-openclaw)."
       fi
     fi
+    echo "[checkpoint] role=all startup sequence complete"
     ;;
   gateway)
+    echo "[checkpoint] role=gateway preparing bootstrap"
     write_openfdd_agent_bootstrap "gateway"
+    echo "[checkpoint] launching role=gateway command"
     cd "${REPO_ROOT}"
     exec open-fdd-gateway
     ;;
   mcp)
+    echo "[checkpoint] role=mcp preparing bootstrap"
     write_openfdd_agent_bootstrap "mcp"
     refresh_mcp_rag_index
+    echo "[checkpoint] role=mcp RAG index step finished"
+    echo "[checkpoint] launching role=mcp command"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-rag
     ;;
   adapter)
+    echo "[checkpoint] role=adapter preparing bootstrap"
     write_openfdd_agent_bootstrap "adapter"
+    echo "[checkpoint] launching role=adapter command"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-adapter
     ;;
   ui)
+    echo "[checkpoint] role=ui preparing bootstrap"
     write_openfdd_agent_bootstrap "ui"
+    echo "[checkpoint] launching role=ui command"
     cd "${DESKTOP_UI_DIR}"
     exec "${UI_DEV_CMD[@]}"
     ;;

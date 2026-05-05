@@ -6,7 +6,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from queue import Empty, Queue
 import shutil
+import threading
 import tempfile
 import urllib.parse
 import urllib.error
@@ -16,6 +18,7 @@ import logging
 import os
 import platform
 import time
+import uuid
 import ctypes
 import ctypes.util
 from ctypes import wintypes
@@ -233,6 +236,8 @@ class WeatherIngestBody(BaseModel):
 
 class OnboardIngestBody(BaseModel):
     site_id: str
+    start_ts: str | None = None
+    end_ts: str | None = None
 
 
 class BacnetIngestBody(BaseModel):
@@ -414,6 +419,159 @@ class OpenFddAgentChatBody(BaseModel):
         if not v:
             return v
         return v[-120:] if len(v) > 120 else v
+
+
+class OpenFddAgentEnqueueBody(OpenFddAgentChatBody):
+    mode: Literal["run_now", "queue"] = "run_now"
+
+
+class OpenFddAgentControlBody(BaseModel):
+    paused: bool
+
+
+@dataclass
+class _AgentRunItem:
+    run_id: str
+    message: str
+    workdir: str | None
+    task_summary: str | None
+    force_class: Literal["simple", "complex"] | None
+    system_context: str | None
+    conversation_history: list[tuple[str, str]] | None
+    human_requested_complex: bool
+
+
+class _OpenFddAgentQueueManager:
+    def __init__(self) -> None:
+        self._queue: Queue[_AgentRunItem] = Queue()
+        self._lock = threading.Lock()
+        self._cv = threading.Condition(self._lock)
+        self._paused = False
+        self._running: dict[str, Any] | None = None
+        self._runs: dict[str, dict[str, Any]] = {}
+        self._worker = threading.Thread(target=self._worker_loop, name="ofdd-agent-runner", daemon=True)
+        self._worker.start()
+
+    def enqueue_or_run(self, item: _AgentRunItem, mode: Literal["run_now", "queue"]) -> dict[str, Any]:
+        if mode == "queue":
+            with self._cv:
+                self._runs[item.run_id] = {
+                    "run_id": item.run_id,
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": None,
+                    "result": None,
+                    "error": None,
+                }
+                self._queue.put(item)
+                self._cv.notify_all()
+            return {"run_id": item.run_id, "status": "queued"}
+
+        with self._cv:
+            is_busy = self._paused or (self._running is not None) or (not self._queue.empty())
+        if is_busy:
+            with self._cv:
+                self._runs[item.run_id] = {
+                    "run_id": item.run_id,
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": None,
+                    "result": None,
+                    "error": None,
+                }
+                self._queue.put(item)
+                self._cv.notify_all()
+            return {"run_id": item.run_id, "status": "queued"}
+
+        self._set_running(item.run_id)
+        try:
+            result = run_openfdd_agent_turn(
+                message=item.message,
+                workdir_raw=item.workdir,
+                task_summary=item.task_summary,
+                force_class=item.force_class,
+                system_context=item.system_context,
+                conversation_history=item.conversation_history,
+                human_requested_complex=item.human_requested_complex,
+            )
+        finally:
+            self._set_completed(item.run_id, result if "result" in locals() else None)
+        return {"run_id": item.run_id, "status": "completed", "result": result}
+
+    def set_paused(self, paused: bool) -> dict[str, Any]:
+        with self._cv:
+            self._paused = bool(paused)
+            self._cv.notify_all()
+            return self.snapshot()
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._cv:
+            queued = list(self._queue.queue)
+            return {
+                "paused": self._paused,
+                "running": self._running,
+                "queue_size": len(queued),
+                "queued_run_ids": [it.run_id for it in queued],
+            }
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self._cv:
+            return self._runs.get(run_id)
+
+    def _set_running(self, run_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._cv:
+            row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
+            row.update({"status": "running", "started_at": now, "error": None})
+            self._runs[run_id] = row
+            self._running = {"run_id": run_id, "started_at": now}
+
+    def _set_completed(self, run_id: str, result: dict[str, Any] | None) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._cv:
+            row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
+            row.update(
+                {
+                    "status": "completed",
+                    "completed_at": now,
+                    "result": result,
+                    "error": None if result and result.get("ok", True) else (result or {}).get("error"),
+                }
+            )
+            self._runs[run_id] = row
+            if self._running and self._running.get("run_id") == run_id:
+                self._running = None
+            self._cv.notify_all()
+
+    def _worker_loop(self) -> None:
+        while True:
+            item: _AgentRunItem | None = None
+            with self._cv:
+                while self._paused or self._queue.empty():
+                    self._cv.wait(timeout=0.5)
+                try:
+                    item = self._queue.get_nowait()
+                except Empty:
+                    item = None
+            if item is None:
+                continue
+            self._set_running(item.run_id)
+            result: dict[str, Any]
+            try:
+                result = run_openfdd_agent_turn(
+                    message=item.message,
+                    workdir_raw=item.workdir,
+                    task_summary=item.task_summary,
+                    force_class=item.force_class,
+                    system_context=item.system_context,
+                    conversation_history=item.conversation_history,
+                    human_requested_complex=item.human_requested_complex,
+                )
+            except Exception as exc:
+                result = {"ok": False, "error": "agent_runner_exception", "detail": str(exc)}
+            self._set_completed(item.run_id, result)
 
 
 class TimeseriesPurgeBody(BaseModel):
@@ -1025,6 +1183,7 @@ def create_app() -> FastAPI:
         "bacnet": _driver_health_entry(),
         "onboard": _driver_health_entry(),
     }
+    app.state.agent_queue = _OpenFddAgentQueueManager()
 
     async def _ttl_sync_loop(app_ref: FastAPI) -> None:
         while True:
@@ -1150,25 +1309,48 @@ def create_app() -> FastAPI:
         """Ports and URLs for the built-in agent (merge of env + optional bootstrap JSON)."""
         return build_agent_bootstrap_context()
 
+    @app.get("/openfdd-agent/status", tags=["openfdd-agent"])
+    def openfdd_agent_status() -> dict[str, Any]:
+        return app.state.agent_queue.snapshot()
+
+    @app.post("/openfdd-agent/control", tags=["openfdd-agent"])
+    def openfdd_agent_control(body: OpenFddAgentControlBody) -> dict[str, Any]:
+        return app.state.agent_queue.set_paused(body.paused)
+
+    @app.get("/openfdd-agent/runs/{run_id}", tags=["openfdd-agent"])
+    def openfdd_agent_run_status(run_id: str) -> dict[str, Any]:
+        row = app.state.agent_queue.get_run(str(run_id).strip())
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Unknown run id: {run_id}")
+        return row
+
     @app.post("/openfdd-agent/chat", tags=["openfdd-agent"])
-    def openfdd_agent_chat(body: OpenFddAgentChatBody) -> dict[str, Any]:
+    def openfdd_agent_chat(body: OpenFddAgentEnqueueBody) -> dict[str, Any]:
         hist: list[tuple[str, str]] | None = None
         if body.conversation_history:
             hist = [(ln.role, ln.text) for ln in body.conversation_history]
-        result = run_openfdd_agent_turn(
-            message=body.message,
-            workdir_raw=body.workdir,
-            task_summary=body.task_summary,
-            force_class=body.force_class,
-            system_context=body.system_context,
-            conversation_history=hist,
-            human_requested_complex=bool(body.human_requested_complex),
+        run_id = f"run-{uuid.uuid4()}"
+        queued = app.state.agent_queue.enqueue_or_run(
+            _AgentRunItem(
+                run_id=run_id,
+                message=body.message,
+                workdir=body.workdir,
+                task_summary=body.task_summary,
+                force_class=body.force_class,
+                system_context=body.system_context,
+                conversation_history=hist,
+                human_requested_complex=bool(body.human_requested_complex),
+            ),
+            body.mode,
         )
+        if queued.get("status") == "queued":
+            return queued
+        result = queued.get("result") or {}
         if result.get("error") == "codex_cli_missing":
             raise HTTPException(status_code=503, detail=str(result.get("detail") or "codex CLI missing"))
         if result.get("error") == "bad_workdir":
             raise HTTPException(status_code=400, detail=str(result.get("detail") or "bad workdir"))
-        return result
+        return {"run_id": run_id, "status": "completed", **result}
 
     @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
     def codex_device_start() -> dict[str, Any]:
@@ -1496,7 +1678,11 @@ def create_app() -> FastAPI:
 
     @app.post("/ingest/onboard", tags=["ingest"])
     def ingest_onboard(body: OnboardIngestBody) -> dict[str, Any]:
-        out = services.ingest.ingest_onboard(site_id=body.site_id)
+        out = services.ingest.ingest_onboard(
+            site_id=body.site_id,
+            start_ts=body.start_ts,
+            end_ts=body.end_ts,
+        )
         ok = bool(out.get("success", False))
         _driver_health_update(
             app.state.driver_health,
@@ -1953,6 +2139,101 @@ def create_app() -> FastAPI:
             "building_id": int(building_id),
             "equipment_count": len(out),
             "equipment": [e.model_dump() for e in out],
+        }
+
+    @app.get("/config/onboard/buildings/{building_id}/availability", tags=["config"])
+    def onboard_building_availability_get(
+        building_id: int,
+        search_back_days: int = Query(default=365, ge=1, le=3650),
+        sample_points: int = Query(default=14, ge=1, le=100),
+    ) -> dict[str, Any]:
+        rows = _onboard_request_json(f"/buildings/{int(building_id)}/points")
+        point_type_counts: dict[str, int] = {}
+        for row in rows:
+            ptype = str(row.get("point_type") or "unknown").strip() or "unknown"
+            point_type_counts[ptype] = int(point_type_counts.get(ptype, 0)) + 1
+        preferred_types = [
+            "zone_air_temperature_sensor",
+            "supply_air_temperature_sensor",
+            "return_air_temperature_sensor",
+            "discharge_air_temperature_sensor",
+            "outside_air_temperature_sensor",
+            "zone_air_co2_concentration_sensor",
+            "relative_humidity_sensor",
+            "supply_air_static_pressure_sensor",
+        ]
+        sampled_ids: list[int] = []
+        for ptype in preferred_types:
+            for row in rows:
+                if len(sampled_ids) >= int(sample_points):
+                    break
+                if str(row.get("point_type") or "").strip() != ptype:
+                    continue
+                pid = row.get("id")
+                if pid is None:
+                    continue
+                try:
+                    pid_i = int(pid)
+                except (TypeError, ValueError):
+                    continue
+                if pid_i not in sampled_ids:
+                    sampled_ids.append(pid_i)
+            if len(sampled_ids) >= int(sample_points):
+                break
+        if len(sampled_ids) < int(sample_points):
+            for row in rows:
+                if len(sampled_ids) >= int(sample_points):
+                    break
+                pid = row.get("id")
+                if pid is None:
+                    continue
+                try:
+                    pid_i = int(pid)
+                except (TypeError, ValueError):
+                    continue
+                if pid_i not in sampled_ids:
+                    sampled_ids.append(pid_i)
+        end = datetime.now(timezone.utc)
+        start = end - pd.Timedelta(days=int(search_back_days))
+        series_rows = _onboard_request_json(
+            "/query-v2",
+            method="POST",
+            payload={
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "point_ids": sampled_ids,
+            },
+        )
+        earliest_seen: datetime | None = None
+        latest_seen: datetime | None = None
+        for row in series_rows:
+            vals = row.get("values") if isinstance(row, dict) else []
+            if not isinstance(vals, list):
+                continue
+            for sample in vals:
+                if not isinstance(sample, list) or len(sample) < 1:
+                    continue
+                raw_ts = str(sample[0] or "").strip()
+                if not raw_ts:
+                    continue
+                if raw_ts.endswith("Z"):
+                    raw_ts = raw_ts[:-1] + "+00:00"
+                try:
+                    ts = datetime.fromisoformat(raw_ts).astimezone(timezone.utc)
+                except ValueError:
+                    continue
+                earliest_seen = ts if earliest_seen is None or ts < earliest_seen else earliest_seen
+                latest_seen = ts if latest_seen is None or ts > latest_seen else latest_seen
+        return {
+            "building_id": int(building_id),
+            "search_back_days": int(search_back_days),
+            "sampled_point_ids": sampled_ids,
+            "point_type_counts": [
+                {"point_type": k, "count": int(v)}
+                for k, v in sorted(point_type_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            ],
+            "earliest_seen": earliest_seen.isoformat() if earliest_seen else None,
+            "latest_seen": latest_seen.isoformat() if latest_seen else None,
         }
 
     @app.get("/config/onboard/points/live", tags=["config"])

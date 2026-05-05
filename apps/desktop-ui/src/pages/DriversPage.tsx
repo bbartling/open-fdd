@@ -63,6 +63,13 @@ type DriverHealthMap = Record<string, DriverHealthEntry>;
 
 type DriversPageSection = "all" | "weather" | "bacnet" | "onboard";
 const ONBOARD_API_KEY_STORAGE_KEY = "ofdd-onboard-api-key-draft";
+const ONBOARD_LOG_MAX = 28;
+
+type OnboardOp = "idle" | "auth" | "save" | "buildings" | "availability" | "feather" | "tree" | "bulk";
+
+function onboardLogLine(message: string): string {
+  return `${new Date().toLocaleTimeString()} ${message}`;
+}
 
 function defaultDateRange(): { start: string; end: string } {
   const toLocalDateInput = (value: Date) => {
@@ -140,18 +147,17 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
   const [onboardApiKeySet, setOnboardApiKeySet] = useState(false);
   const [onboardAuthStatus, setOnboardAuthStatus] = useState<"idle" | "ok" | "error" | "testing">("idle");
   const [onboardAuthMessage, setOnboardAuthMessage] = useState("");
-  const [onboardBusy, setOnboardBusy] = useState(false);
+  const [onboardOp, setOnboardOp] = useState<OnboardOp>("idle");
+  const [onboardStartDate, setOnboardStartDate] = useState(initialRange.start);
+  const [onboardEndDate, setOnboardEndDate] = useState(initialRange.end);
+  const [onboardRangeReady, setOnboardRangeReady] = useState(false);
+  const [onboardPrefillFlashOn, setOnboardPrefillFlashOn] = useState(true);
   const [onboardBuildings, setOnboardBuildings] = useState<OnboardBuilding[]>([]);
   const [onboardBuildingInspectId, setOnboardBuildingInspectId] = useState<string>("");
-  const [onboardPointTypeFilter, setOnboardPointTypeFilter] = useState("zone_air_temperature_sensor");
   const [onboardEquipmentTree, setOnboardEquipmentTree] = useState<OnboardEquipment[]>([]);
-  const [onboardEquipFilter, setOnboardEquipFilter] = useState("");
-  const [onboardLivePointIds, setOnboardLivePointIds] = useState("");
-  const [onboardLiveValues, setOnboardLiveValues] = useState("");
   const [onboardDataBounds, setOnboardDataBounds] = useState<SourceBounds | null>(null);
   const [onboardActionLog, setOnboardActionLog] = useState<string[]>([]);
   const [onboardDiscoveryResult, setOnboardDiscoveryResult] = useState("");
-  const [onboardSmokeResult, setOnboardSmokeResult] = useState("");
   const [driverHealth, setDriverHealth] = useState<DriverHealthMap>({});
 
   useEffect(() => {
@@ -167,6 +173,24 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
   useEffect(() => {
     void refreshConfigs();
   }, []);
+
+  useEffect(() => {
+    if (onboardRangeReady) {
+      setOnboardPrefillFlashOn(false);
+      return;
+    }
+    const id = window.setInterval(() => setOnboardPrefillFlashOn((v) => !v), 520);
+    return () => window.clearInterval(id);
+  }, [onboardRangeReady]);
+
+  useEffect(() => {
+    if (onboardRangeReady) {
+      setOnboardPrefillFlashOn(false);
+      return;
+    }
+    const id = window.setInterval(() => setOnboardPrefillFlashOn((v) => !v), 520);
+    return () => window.clearInterval(id);
+  }, [onboardRangeReady]);
 
   useEffect(() => {
     try {
@@ -331,7 +355,7 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       return;
     }
     const selectedBuilding = String(onboardBuildingInspectId || "").trim();
-    setOnboardBusy(true);
+    setOnboardOp("save");
     try {
       const out = await desktopFetch<OnboardConfig>("/config/onboard", {
         method: "POST",
@@ -346,14 +370,18 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       setOnboardApiKeySet(Boolean(out.api_key_set));
       setStatus("Saved Onboard driver config.");
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Saved config (building=${selectedBuilding || "none"}).`,
-        ...prev.slice(0, 11),
+        onboardLogLine(`POST /config/onboard OK (building_ids=${selectedBuilding || "none"}, lookback=${parsedLookback}h).`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
       await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`POST /config/onboard FAILED: ${error instanceof Error ? error.message : String(error)}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
     } finally {
-      setOnboardBusy(false);
+      setOnboardOp("idle");
     }
   }
 
@@ -363,12 +391,27 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       setStatus("Select a site first.");
       return;
     }
-    setOnboardBusy(true);
+    const rangeDays = daysBackFromRange(onboardStartDate, onboardEndDate);
+    if (rangeDays === null) {
+      setStatus("Onboard date range must be valid and end date must be on/after start date.");
+      return;
+    }
+    if (!onboardRangeReady) {
+      setStatus("Step 1 required: click 'Prefill from Onboard availability' before bulk download.");
+      return;
+    }
+    const startTs = `${onboardStartDate}T00:00:00Z`;
+    const endTs = `${onboardEndDate}T23:59:59Z`;
+    setOnboardOp("bulk");
     try {
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`POST /ingest/onboard starting site_id=${effectiveSiteId} start=${startTs} end=${endTs} …`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
       const out = await desktopFetch<{ rows: number; source: string; success: boolean; error?: string }>("/ingest/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site_id: effectiveSiteId }),
+        body: JSON.stringify({ site_id: effectiveSiteId, start_ts: startTs, end_ts: endTs }),
       });
       setStatus(
         out.success
@@ -376,25 +419,44 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
           : `Onboard ingest failed: ${out.error || "Missing credentials or source error."}`,
       );
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Bulk download ${out.success ? "OK" : "failed"} (rows=${out.rows}).`,
-        ...prev.slice(0, 11),
+        onboardLogLine(
+          `POST /ingest/onboard ${out.success ? "OK" : "FAILED"} site_id=${effectiveSiteId} rows=${out.rows} source=${out.source ?? "?"} err=${out.error ?? "-"}`,
+        ),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
-      await refreshOnboardDataPresence();
+      await refreshOnboardDataPresence({ manageOp: false });
       await refreshConfigs();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`POST /ingest/onboard FAILED: ${error instanceof Error ? error.message : String(error)}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
     } finally {
-      setOnboardBusy(false);
+      setOnboardOp("idle");
     }
   }
 
-  async function refreshOnboardDataPresence() {
+  async function refreshOnboardDataPresence(opts?: { manageOp?: boolean }) {
+    const manageOp = opts?.manageOp !== false;
     const effectiveSiteId = embedded ? (selectedSiteId || "") : (siteId || selectedSiteId || "");
     if (!effectiveSiteId) {
       setOnboardDataBounds(null);
+      setStatus("Pick a site in the selector above, then refresh Feather status.");
+      setOnboardActionLog((prev) => [
+        onboardLogLine("POST /timeseries/bounds skipped: no site_id (select a site first)."),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
       return;
     }
+    if (manageOp) {
+      setOnboardOp("feather");
+    }
     try {
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`POST /timeseries/bounds starting site_id=${effectiveSiteId} source=onboard …`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
       const out = await desktopFetch<SourceBounds>("/timeseries/bounds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -402,31 +464,96 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       });
       setOnboardDataBounds(out);
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Refreshed Feather status (rows=${out.rows}).`,
-        ...prev.slice(0, 11),
+        onboardLogLine(
+          `POST /timeseries/bounds OK site_id=${effectiveSiteId} source=onboard rows=${out.rows} start=${out.start ?? "-"} end=${out.end ?? "-"}`,
+        ),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
-    } catch {
+    } catch (error) {
       setOnboardDataBounds(null);
+      const msg = error instanceof Error ? error.message : String(error);
+      setOnboardActionLog((prev) => [onboardLogLine(`POST /timeseries/bounds FAILED: ${msg}`), ...prev.slice(0, ONBOARD_LOG_MAX - 1)]);
+      setStatus(`Feather bounds failed: ${msg}`);
+    } finally {
+      if (manageOp) {
+        setOnboardOp("idle");
+      }
     }
   }
 
   async function discoverOnboardBuildings() {
-    setOnboardBusy(true);
+    setOnboardOp("buildings");
     try {
+      setOnboardActionLog((prev) => [onboardLogLine("GET /config/onboard/buildings …"), ...prev.slice(0, ONBOARD_LOG_MAX - 1)]);
       const out = await desktopFetch<{ count: number; buildings: OnboardBuilding[] }>("/config/onboard/buildings");
       setOnboardBuildings(out.buildings || []);
-      if (!onboardBuildingInspectId && out.buildings?.length) {
-        setOnboardBuildingInspectId(String(out.buildings[0].id || ""));
+      const selectedId = String(onboardBuildingInspectId || out.buildings?.[0]?.id || "").trim();
+      if (selectedId) {
+        setOnboardBuildingInspectId(selectedId);
+        setOnboardRangeReady(false);
       }
       setOnboardDiscoveryResult(`Found ${out.count || 0} buildings from Onboard.`);
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Fetched buildings (${out.count || 0}).`,
-        ...prev.slice(0, 11),
+        onboardLogLine(`GET /config/onboard/buildings OK count=${out.count || 0}.`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
+      if (selectedId) {
+        await loadOnboardEquipmentTree(selectedId);
+        await prefillOnboardDateRange(selectedId);
+      }
     } catch (error) {
       setOnboardDiscoveryResult(error instanceof Error ? error.message : String(error));
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`GET /config/onboard/buildings FAILED: ${error instanceof Error ? error.message : String(error)}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
     } finally {
-      setOnboardBusy(false);
+      setOnboardOp("idle");
+    }
+  }
+
+  async function prefillOnboardDateRange(buildingIdOverride?: string) {
+    const buildingId = String(buildingIdOverride || onboardBuildingInspectId || "").trim();
+    if (!buildingId) {
+      setStatus("Pick a building first.");
+      return;
+    }
+    setOnboardOp("availability");
+    try {
+      const path = `/config/onboard/buildings/${encodeURIComponent(buildingId)}/availability?search_back_days=365&sample_points=14`;
+      setOnboardActionLog((prev) => [onboardLogLine(`GET ${path} …`), ...prev.slice(0, ONBOARD_LOG_MAX - 1)]);
+      const out = await desktopFetch<{
+        earliest_seen?: string | null;
+        latest_seen?: string | null;
+        sampled_point_ids: number[];
+      }>(path);
+      const toDateInput = (raw: string | null | undefined): string => {
+        if (!raw) return "";
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return "";
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      };
+      const start = toDateInput(out.earliest_seen || null);
+      const end = toDateInput(out.latest_seen || null);
+      if (start) setOnboardStartDate(start);
+      if (end) setOnboardEndDate(end);
+      setOnboardRangeReady(Boolean(start && end));
+      setOnboardActionLog((prev) => [
+        onboardLogLine(
+          `GET …/availability OK sampled=${(out.sampled_point_ids || []).length} earliest=${out.earliest_seen ?? "-"} latest=${out.latest_seen ?? "-"}`,
+        ),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
+    } catch (error) {
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`GET …/availability FAILED: ${error instanceof Error ? error.message : String(error)}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
+    } finally {
+      setOnboardOp("idle");
     }
   }
 
@@ -436,8 +563,12 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
     const selectedBuilding = String(onboardBuildingInspectId || "").trim();
     setOnboardAuthStatus("testing");
     setOnboardAuthMessage("Testing API key...");
-    setOnboardBusy(true);
+    setOnboardOp("auth");
     try {
+      setOnboardActionLog((prev) => [
+        onboardLogLine("POST /config/onboard (save draft) then GET /config/onboard/auth-test …"),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
       // Apply the currently pasted key/base URL before auth test so users can test in one click.
       await desktopFetch<OnboardConfig>("/config/onboard", {
         method: "POST",
@@ -457,8 +588,8 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       setStatus(`Onboard auth OK (${out.building_count} buildings visible).`);
       setOnboardApiKeySet(true);
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} API auth OK (${out.building_count} buildings).`,
-        ...prev.slice(0, 11),
+        onboardLogLine(`GET /config/onboard/auth-test OK buildings=${out.building_count} msg=${out.message}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -467,100 +598,59 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       setOnboardAuthMessage(msg);
       setStatus(`Onboard auth failed: ${msg}`);
       setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} API auth failed: ${msg}`,
-        ...prev.slice(0, 11),
+        onboardLogLine(`GET /config/onboard/auth-test FAILED: ${msg}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
     } finally {
-      setOnboardBusy(false);
+      setOnboardOp("idle");
     }
   }
 
-  async function inspectOnboardBuildingPoints() {
-    if (!onboardBuildingInspectId) {
-      setOnboardDiscoveryResult("Pick a building first.");
-      return;
-    }
-    const filter = onboardPointTypeFilter.trim();
-    const qs = filter ? `?point_type=${encodeURIComponent(filter)}` : "";
-    try {
-      const out = await desktopFetch<{
-        building_id: number;
-        point_count: number;
-        point_type_counts: Array<{ point_type: string; count: number }>;
-        sample_points: Array<Record<string, unknown>>;
-      }>(`/config/onboard/buildings/${encodeURIComponent(onboardBuildingInspectId)}/points${qs}`);
-      const topTypes = (out.point_type_counts || []).slice(0, 12)
-        .map((row) => `${row.point_type}: ${row.count}`)
-        .join(", ");
-      const sampleIds = (out.sample_points || [])
-        .slice(0, 10)
-        .map((row) => String(row.id ?? ""))
-        .filter(Boolean)
-        .join(", ");
-      setOnboardDiscoveryResult(
-        [
-          `Building ${out.building_id} point_count=${out.point_count}.`,
-          topTypes ? `Top point types: ${topTypes}` : "Top point types: none",
-          sampleIds ? `Sample point IDs (${filter || "all"}): [${sampleIds}]` : `Sample point IDs (${filter || "all"}): none`,
-        ].join("\n"),
-      );
-    } catch (error) {
-      setOnboardDiscoveryResult(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function loadOnboardEquipmentTree() {
-    if (!onboardBuildingInspectId) {
+  async function loadOnboardEquipmentTree(buildingIdOverride?: string) {
+    const buildingId = String(buildingIdOverride || onboardBuildingInspectId || "").trim();
+    if (!buildingId) {
       setOnboardDiscoveryResult("Pick a building first.");
       return;
     }
     const qs = new URLSearchParams();
     qs.set("include_points", "true");
-    if (onboardPointTypeFilter.trim()) {
-      qs.set("point_type", onboardPointTypeFilter.trim());
-    }
-    if (onboardEquipFilter.trim()) {
-      qs.set("equip_name_contains", onboardEquipFilter.trim());
-    }
+    setOnboardOp("tree");
     try {
-      const out = await desktopFetch<{ equipment_count: number; equipment: OnboardEquipment[] }>(
-        `/config/onboard/buildings/${encodeURIComponent(onboardBuildingInspectId)}/equipment?${qs.toString()}`,
-      );
+      const path = `/config/onboard/buildings/${encodeURIComponent(buildingId)}/equipment?${qs.toString()}`;
+      setOnboardActionLog((prev) => [onboardLogLine(`GET ${path.split("?")[0]} …`), ...prev.slice(0, ONBOARD_LOG_MAX - 1)]);
+      const out = await desktopFetch<{ equipment_count: number; equipment: OnboardEquipment[] }>(path);
       setOnboardEquipmentTree(out.equipment || []);
-      const firstPointIds = (out.equipment || [])
-        .flatMap((eq) => (eq.points || []).map((p) => p.id))
-        .filter((v): v is number | string => v !== null && v !== undefined)
-        .slice(0, 5)
-        .map((v) => String(v));
-      if (firstPointIds.length) {
-        setOnboardLivePointIds(firstPointIds.join(","));
-      }
       setOnboardDiscoveryResult(`Loaded equipment tree rows=${out.equipment_count}.`);
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`GET …/equipment OK building=${buildingId} equipment_count=${out.equipment_count}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
     } catch (error) {
       setOnboardDiscoveryResult(error instanceof Error ? error.message : String(error));
+      setOnboardActionLog((prev) => [
+        onboardLogLine(`GET …/equipment FAILED: ${error instanceof Error ? error.message : String(error)}`),
+        ...prev.slice(0, ONBOARD_LOG_MAX - 1),
+      ]);
+    } finally {
+      setOnboardOp("idle");
     }
   }
 
-  async function refreshOnboardLivePoints() {
-    const ids = onboardLivePointIds.trim();
-    if (!ids) {
-      setOnboardLiveValues("Enter point IDs first (comma-separated).");
-      return;
-    }
-    try {
-      const out = await desktopFetch<{
-        ok: boolean;
-        lookback_minutes: number;
-        series: Array<{ point_id: number | string; sample_count: number; last_timestamp?: string | null; last_value?: unknown }>;
-      }>(`/config/onboard/points/live?point_ids=${encodeURIComponent(ids)}&lookback_minutes=30`);
-      const lines = (out.series || []).map(
-        (s) => `point_id=${s.point_id} samples=${s.sample_count} last=${s.last_value ?? "null"} at ${s.last_timestamp ?? "-"}`,
-      );
-      setOnboardLiveValues(lines.join("\n") || "No series returned.");
-    } catch (error) {
-      setOnboardLiveValues(error instanceof Error ? error.message : String(error));
-    }
-  }
+  const onboardWorking = onboardOp !== "idle";
+  const onboardOpLabel =
+    onboardOp === "idle"
+      ? "Ready"
+      : onboardOp === "auth"
+        ? "Authenticating"
+        : onboardOp === "save"
+          ? "Saving config"
+          : onboardOp === "buildings"
+            ? "Fetching buildings"
+            : onboardOp === "availability"
+              ? "Prefilling date range"
+              : onboardOp === "bulk"
+                ? "Running bulk download"
+                : "Working";
 
   const showWeather = section === "all" || section === "weather";
   const showBacnet = section === "all" || section === "bacnet";
@@ -580,72 +670,12 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       pointCount: rows.reduce((n, row) => n + (row.points?.length || 0), 0),
     }))
     .sort((a, b) => b.equipmentCount - a.equipmentCount);
-  const onboardSampleDevices = onboardEquipmentTree.slice(0, 15).map((eq) => {
-    const equipType = String(eq.equip_type_abbr || eq.equip_type_name || "UNKNOWN");
-    return `${eq.name} | ${equipType} | points=${eq.points?.length || 0}`;
-  });
   const titleBySection: Record<DriversPageSection, string> = {
     all: embedded ? "Driver Control Center" : "Drivers",
     weather: "Open-Meteo Driver",
     bacnet: "BACnet Driver (diy-bacnet-server)",
     onboard: "Onboard Driver",
   };
-
-  async function runOnboardSmokeTest() {
-    if (!onboardBuildingInspectId) {
-      setOnboardSmokeResult("Pick a building first.");
-      return;
-    }
-    setOnboardBusy(true);
-    setOnboardSmokeResult("Running smoke test...");
-    try {
-      const auth = await desktopFetch<{ ok: boolean; building_count: number; message: string }>("/config/onboard/auth-test");
-      const points = await desktopFetch<{
-        building_id: number;
-        point_count: number;
-        point_type_counts: Array<{ point_type: string; count: number }>;
-        sample_points: Array<Record<string, unknown>>;
-      }>(
-        `/config/onboard/buildings/${encodeURIComponent(onboardBuildingInspectId)}/points?point_type=${encodeURIComponent(onboardPointTypeFilter || "zone_air_temperature_sensor")}`,
-      );
-      const sampleIds = (points.sample_points || [])
-        .slice(0, 5)
-        .map((row) => String(row.id ?? ""))
-        .filter(Boolean);
-      let liveSummary = "no sample point IDs available";
-      if (sampleIds.length) {
-        const live = await desktopFetch<{
-          series: Array<{ point_id: number | string; sample_count: number; last_value?: unknown; last_timestamp?: string | null }>;
-        }>(`/config/onboard/points/live?point_ids=${encodeURIComponent(sampleIds.join(","))}&lookback_minutes=30`);
-        liveSummary = `streamed blocks: ${live.series?.length || 0}, value rows: ${(live.series || []).reduce((n, s) => n + (s.sample_count || 0), 0)}`;
-      }
-      const msg = [
-        "1) auth_test",
-        `   ${auth.message} buildings visible: ${auth.building_count}`,
-        "2) select_points",
-        `   point IDs for ${onboardPointTypeFilter || "zone_air_temperature_sensor"}: ${points.sample_points?.length || 0}`,
-        `   sampling IDs: ${sampleIds.length ? `[${sampleIds.join(", ")}]` : "[]"}`,
-        "3) stream_point_timeseries",
-        `   ${liveSummary}`,
-        "",
-        "Smoke test complete.",
-      ].join("\n");
-      setOnboardSmokeResult(msg);
-      setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Smoke test complete.`,
-        ...prev.slice(0, 11),
-      ]);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      setOnboardSmokeResult(`Smoke test failed: ${msg}`);
-      setOnboardActionLog((prev) => [
-        `${new Date().toLocaleTimeString()} Smoke test failed: ${msg}`,
-        ...prev.slice(0, 11),
-      ]);
-    } finally {
-      setOnboardBusy(false);
-    }
-  }
 
   const content = (
     <>
@@ -772,8 +802,12 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       {showOnboard ? <div className="card">
         <h3 className="title">Onboard Driver</h3>
         <p className="muted" style={{ marginTop: 0 }}>
-          Workflow: paste API key, test auth, browse building/equipment/points, live-check point values, then bulk ingest to Feather.
+          Workflow: paste API key, test auth, fetch buildings, prefill date range, then bulk download to Feather.
         </p>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, border: "1px solid var(--border-color)", borderRadius: 999, padding: "4px 10px", marginBottom: 10 }}>
+          <span aria-hidden style={{ width: 8, height: 8, borderRadius: 999, background: onboardWorking ? "var(--warning-600)" : "var(--success-600)" }} />
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{onboardOpLabel}</span>
+        </div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <label>API base URL</label>
@@ -793,9 +827,17 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
                 placeholder={onboardApiKeySet ? "Saved key present" : "Paste token"}
                 style={{ flex: 1 }}
               />
-              <button type="button" onClick={() => void testOnboardAuth()} disabled={onboardBusy}>Test API auth</button>
-              <button type="button" className="secondary-btn" onClick={() => void saveOnboardConfig()} disabled={onboardBusy}>
-                Save config
+              <button type="button" className="secondary-btn" onClick={() => void testOnboardAuth()} disabled={onboardWorking} aria-busy={onboardOp === "auth"}>
+                {onboardOp === "auth" ? "Testing…" : "Test API auth"}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void saveOnboardConfig()}
+                disabled={onboardWorking}
+                aria-busy={onboardOp === "save"}
+              >
+                {onboardOp === "save" ? "Saving…" : "Save config"}
               </button>
             </div>
             <div
@@ -819,7 +861,10 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
             <label>Selected building</label>
             <select
               value={onboardBuildingInspectId}
-              onChange={(e) => setOnboardBuildingInspectId(e.target.value)}
+              onChange={(e) => {
+                setOnboardBuildingInspectId(e.target.value);
+                setOnboardRangeReady(false);
+              }}
             >
               <option value="">Select building</option>
               {onboardBuildings.map((b) => (
@@ -831,206 +876,111 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button type="button" className="secondary-btn" onClick={() => void discoverOnboardBuildings()} disabled={onboardBusy}>
-            Fetch buildings
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => void discoverOnboardBuildings()}
+            disabled={onboardWorking}
+            aria-busy={onboardOp === "buildings"}
+          >
+            {onboardOp === "buildings" ? "Fetching…" : "Fetch buildings"}
           </button>
         </div>
-        <div
-          style={{
-            marginTop: 10,
-            border: "1px solid var(--border-color)",
-            borderRadius: 6,
-            padding: 10,
-            background: "var(--panel-bg, transparent)",
-          }}
-        >
-          <strong>Onboard data in Feather (selected site)</strong>
-          <div style={{ marginTop: 6, fontSize: 13 }}>
-            <div>Rows: {typeof onboardDataBounds?.rows === "number" ? onboardDataBounds.rows : 0}</div>
-            <div>Latest timestamp: {onboardDataBounds?.end ? new Date(onboardDataBounds.end).toLocaleString() : "-"}</div>
-            <div>Earliest timestamp: {onboardDataBounds?.start ? new Date(onboardDataBounds.start).toLocaleString() : "-"}</div>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button type="button" className="secondary-btn" onClick={() => void refreshOnboardDataPresence()} disabled={onboardBusy}>
-              Refresh onboard data status
-            </button>
-          </div>
-        </div>
         <div style={{ marginTop: 14, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
-          <h4 style={{ margin: "0 0 8px" }}>Points tree</h4>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => {
-                setOnboardPointTypeFilter("");
-                setOnboardEquipFilter("");
-                void loadOnboardEquipmentTree();
-              }}
-              disabled={onboardBusy || !onboardBuildingInspectId}
-            >
-              Build points tree for selected building
-            </button>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Loads all equipment and points for the selected building.
-            </span>
+          <h4 style={{ margin: "0 0 8px" }}>Onboard equipment summary</h4>
+          <div style={{ fontSize: 13, marginBottom: 8 }}>
+            Building ID: {onboardBuildingInspectId || "-"}
           </div>
-          <textarea readOnly value={onboardDiscoveryResult} style={{ minHeight: 90, marginTop: 10 }} />
-          <div style={{ marginTop: 10, border: "1px solid var(--border-color)", borderRadius: 6, padding: 10 }}>
-            <h4 style={{ margin: "0 0 8px" }}>Discovery summary</h4>
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
-              Building ID: {onboardBuildingInspectId || "-"}<br />
-              Equipment count: {onboardEquipmentTree.length}<br />
-              Point count: {onboardEquipmentTree.reduce((n, eq) => n + (eq.points?.length || 0), 0)}
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <strong>Equipment type counts</strong>
-              <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {onboardTypeSummary.slice(0, 20).map((row) => (
+          <div style={{ marginBottom: 8 }}>
+            <strong>Equipment type counts</strong>
+            <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {onboardTypeSummary.length === 0 ? (
+                <span className="muted" style={{ fontSize: 12 }}>
+                  No equipment loaded yet. Fetch buildings and build the summary first.
+                </span>
+              ) : (
+                onboardTypeSummary.slice(0, 20).map((row) => (
                   <span
                     key={`summary-${row.type}`}
                     style={{ fontSize: 12, border: "1px solid var(--border-color)", borderRadius: 999, padding: "2px 8px" }}
                   >
                     {row.type}: {row.equipmentCount}
                   </span>
-                ))}
-              </div>
-            </div>
-            <div>
-              <strong>Sample devices</strong>
-              <textarea
-                readOnly
-                value={onboardSampleDevices.length ? onboardSampleDevices.join("\n") : "No sample devices loaded yet."}
-                style={{ minHeight: 90, marginTop: 6 }}
-              />
-            </div>
-          </div>
-          <div style={{ marginTop: 10, maxHeight: 420, overflow: "auto", border: "1px solid var(--border-color)", borderRadius: 6, padding: 8 }}>
-            {onboardTypeSummary.length > 0 ? (
-              <div style={{ marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {onboardTypeSummary.slice(0, 12).map((row) => (
-                  <span
-                    key={row.type}
-                    style={{
-                      fontSize: 12,
-                      border: "1px solid var(--border-color)",
-                      borderRadius: 999,
-                      padding: "2px 8px",
-                    }}
-                  >
-                    {row.type}: {row.equipmentCount} equip / {row.pointCount} pts
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {onboardEquipmentTree.length === 0 ? (
-              <div className="muted">No equipment tree loaded yet.</div>
-            ) : (
-              Object.entries(onboardTreeByType)
-                .sort((a, b) => b[1].length - a[1].length)
-                .map(([type, rows]) => (
-                  <details key={type} open style={{ marginBottom: 8 }}>
-                    <summary>
-                      <strong>{type}</strong>{" "}
-                      <span className="muted">({rows.length} equipment)</span>
-                    </summary>
-                    <div style={{ paddingLeft: 10, marginTop: 6 }}>
-                      {rows.map((eq) => {
-                        const countsByPointType = (eq.points || []).reduce<Record<string, number>>((acc, pt) => {
-                          const key = String(pt.point_type || "unknown").trim() || "unknown";
-                          acc[key] = (acc[key] || 0) + 1;
-                          return acc;
-                        }, {});
-                        return (
-                          <details key={`${eq.id ?? eq.name}`} style={{ marginBottom: 6 }}>
-                            <summary>
-                              <strong>{eq.name}</strong>{" "}
-                              <span className="muted">(points={eq.points?.length || 0})</span>
-                            </summary>
-                            <div style={{ paddingLeft: 12, marginTop: 6 }}>
-                              {Object.keys(countsByPointType).length > 0 ? (
-                                <div style={{ marginBottom: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                  {Object.entries(countsByPointType)
-                                    .sort((a, b) => b[1] - a[1])
-                                    .slice(0, 10)
-                                    .map(([pt, n]) => (
-                                      <span
-                                        key={`${eq.id ?? eq.name}-${pt}`}
-                                        style={{
-                                          fontSize: 11,
-                                          border: "1px solid var(--border-color)",
-                                          borderRadius: 999,
-                                          padding: "1px 7px",
-                                        }}
-                                      >
-                                        {pt}: {n}
-                                      </span>
-                                    ))}
-                                </div>
-                              ) : null}
-                              {(eq.points || []).slice(0, 120).map((pt, idx) => (
-                                <div
-                                  key={`${eq.id ?? "e"}-${pt.id ?? pt.name ?? idx}`}
-                                  style={{
-                                    fontSize: 13,
-                                    display: "grid",
-                                    gridTemplateColumns: "110px 1fr",
-                                    gap: 8,
-                                    padding: "2px 0",
-                                  }}
-                                >
-                                  <span className="muted">#{pt.id ?? "-"}</span>
-                                  <span>
-                                    {pt.name || "unnamed"}{" "}
-                                    <span className="muted">[{pt.point_type || "unknown"}]</span>
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        );
-                      })}
-                    </div>
-                  </details>
                 ))
-            )}
-          </div>
-          <div style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
-            <h4 style={{ margin: "0 0 8px" }}>Live point snapshot</h4>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                value={onboardLivePointIds}
-                onChange={(e) => setOnboardLivePointIds(e.target.value)}
-                placeholder="point IDs (comma-separated)"
-                style={{ minWidth: 340 }}
-              />
-              <button type="button" className="secondary-btn" onClick={() => void refreshOnboardLivePoints()} disabled={onboardBusy}>
-                Refresh live points
-              </button>
+              )}
             </div>
-            <textarea readOnly value={onboardLiveValues} style={{ minHeight: 90, marginTop: 8 }} />
           </div>
+          <div style={{ marginTop: 8 }}>
+            <strong>Notes</strong>
+            <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
+              Bulk download uses the selected site and lookback hours, then writes Feather rows under <code className="inline-code">source=onboard</code>.
+              Once this summary looks right, the AI agent has enough structure to help with BRICK modeling and FDD on this building.
+            </p>
+          </div>
+        </div>
           <div style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
             <h4 style={{ margin: "0 0 8px" }}>Bulk data download</h4>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "flex-end",
+                marginBottom: 8,
+                border: onboardRangeReady ? "1px solid var(--border-color)" : `2px solid ${onboardPrefillFlashOn ? "var(--warning-600)" : "var(--danger-600)"}`,
+                borderRadius: 10,
+                padding: 10,
+                background: onboardRangeReady ? "transparent" : onboardPrefillFlashOn ? "rgba(250, 173, 20, 0.13)" : "rgba(255, 77, 79, 0.08)",
+                transition: "all 120ms linear",
+              }}
+            >
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => void prefillOnboardDateRange()}
+                disabled={onboardWorking || !onboardBuildingInspectId}
+                aria-busy={onboardOp === "availability"}
+              >
+                {onboardOp === "availability" ? "Prefilling…" : onboardRangeReady ? "Prefill from Onboard availability" : "STEP 1: Prefill from Onboard availability"}
+              </button>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {onboardRangeReady
+                  ? "Date window is ready. You can safely run bulk download."
+                  : "Required safety step: prefill index start/end timestamps before bulk download."}
+              </span>
+            </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <label>Start date</label>
+                <input type="date" value={onboardStartDate} onChange={(e) => setOnboardStartDate(e.target.value)} />
+              </div>
+              <div>
+                <label>End date</label>
+                <input type="date" value={onboardEndDate} onChange={(e) => setOnboardEndDate(e.target.value)} />
+              </div>
               <div>
                 <label>Lookback hours</label>
                 <input value={onboardLookbackHours} onChange={(e) => setOnboardLookbackHours(e.target.value)} />
               </div>
-              <button className="secondary-btn" onClick={() => void runOnboardIngest()} disabled={onboardBusy}>
-                Bulk download now
+              <button
+                className="secondary-btn"
+                onClick={() => void runOnboardIngest()}
+                disabled={onboardWorking || !onboardRangeReady}
+                aria-busy={onboardOp === "bulk"}
+                title={onboardRangeReady ? "Run synchronized bulk download." : "Locked until Step 1 prefill finishes."}
+              >
+                {onboardOp === "bulk" ? "Downloading…" : onboardRangeReady ? "Bulk download now" : "Bulk download locked (complete Step 1)"}
               </button>
             </div>
           </div>
           <div style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
-            <h4 style={{ margin: "0 0 8px" }}>Action log</h4>
+            <h4 style={{ margin: "0 0 8px" }}>Action log (console)</h4>
             <textarea
               readOnly
               value={onboardActionLog.length ? onboardActionLog.join("\n") : "No onboard actions yet."}
-              style={{ minHeight: 110 }}
+              style={{ minHeight: 110, fontFamily: "ui-monospace, monospace", fontSize: 12 }}
             />
           </div>
-        </div>
       </div> : null}
 
       <div className="card">

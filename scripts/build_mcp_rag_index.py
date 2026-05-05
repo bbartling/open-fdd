@@ -10,14 +10,17 @@ from math import log
 from pathlib import Path
 from typing import Any
 
-from open_fdd.mcp_rag.text_utils import TOKEN_RE, tokenize
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 DEFAULT_DOCS_DIR = REPO_ROOT / "docs"
 DEFAULT_OUTPUT = REPO_ROOT / "stack" / "mcp-rag" / "index" / "rag_index.json"
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+TOKEN_RE = re.compile(r"[a-zA-Z0-9_./:-]{2,}")
+
+
+def tokenize(text: str) -> list[str]:
+    return [t.lower() for t in TOKEN_RE.findall(text)]
 
 
 @dataclass

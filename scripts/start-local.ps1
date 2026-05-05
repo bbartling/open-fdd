@@ -3,12 +3,15 @@ param(
   [string]$Role = "all",
   [string]$BridgeUrl = "http://127.0.0.1:8765",
   [string]$SyncIntervalSeconds = "5",
+  [ValidateSet("auto", "always", "skip")]
+  [string]$RagIndex = "auto",
   # Private LAN dashboard: bind gateway + MCP on 0.0.0.0, Vite --host 0.0.0.0, CORS for RFC1918, and set
   # bridge / MCP / UI public URLs to this host (e.g. 192.168.1.10). Open firewall for 8765, 8090, 5173.
   [string]$LanHost = ""
 )
 
 $ErrorActionPreference = "Stop"
+Write-Host "[checkpoint] start-local.ps1 starting (role=$Role)"
 
 $LanDashboard = $false
 if ((-not $LanHost -or $LanHost.Trim().Length -eq 0) -and $env:OFDD_LAN_HOST -and $env:OFDD_LAN_HOST.Trim().Length -gt 0) {
@@ -63,21 +66,54 @@ function Get-OfddOpenClawGatewayUrl {
 }
 
 function Invoke-McpRagIndexBuild {
+  $outPath = Join-Path $repoRoot "stack\mcp-rag\index\rag_index.json"
+  $modeRaw = ($RagIndex | ForEach-Object { "$_".Trim().ToLower() })
+  $mode = if ($modeRaw) { $modeRaw } else { "auto" }
   if ($env:OFDD_SKIP_MCP_INDEX_BUILD -eq "1") {
-    Write-Host "Skipping MCP RAG index rebuild (OFDD_SKIP_MCP_INDEX_BUILD=1)."
+    $mode = "skip"
+  }
+  if ($env:OFDD_MCP_RAG_INDEX_MODE) {
+    $envMode = $env:OFDD_MCP_RAG_INDEX_MODE.Trim().ToLower()
+    if ($envMode -in @("auto", "always", "skip")) {
+      $mode = $envMode
+    }
+  }
+  if ($mode -eq "skip") {
+    Write-Host "Skipping MCP RAG index rebuild (mode=skip; set -RagIndex always to force)."
     return
   }
+  if ($mode -eq "auto" -and (Test-Path $outPath)) {
+    Write-Host "MCP RAG index exists; skipping rebuild (mode=auto): $outPath"
+    return
+  }
+  Write-Host "Building MCP RAG index (mode=$mode)... this may take a few minutes."
+  Write-Host "Tip: use -RagIndex skip for faster startup, or -RagIndex always to force rebuild."
   $pyExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
   if (-not (Test-Path $pyExe)) {
     $pyExe = "python"
   }
   $scriptPath = Join-Path $repoRoot "scripts\build_mcp_rag_index.py"
-  $outPath = Join-Path $repoRoot "stack\mcp-rag\index\rag_index.json"
+  $startedAt = Get-Date
   Push-Location $repoRoot
   try {
-    & $pyExe $scriptPath --output $outPath
-    if ($LASTEXITCODE -ne 0) {
+    $proc = Start-Process -FilePath $pyExe -ArgumentList @($scriptPath, "--output", $outPath) -NoNewWindow -PassThru
+    $nextHeartbeatSeconds = 10
+    while (-not $proc.HasExited) {
+      Start-Sleep -Seconds 2
+      $elapsed = [Math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
+      if ($elapsed -ge $nextHeartbeatSeconds) {
+        Write-Host "Still building MCP RAG index... (${elapsed}s elapsed)"
+        $nextHeartbeatSeconds += 10
+      }
+    }
+    # ExitCode is not guaranteed until WaitForExit(); without this, $null/-1 can falsely trigger failure.
+    $null = $proc.WaitForExit()
+    $exitCode = $proc.ExitCode
+    if ($null -ne $exitCode -and $exitCode -ne 0) {
       Write-Warning "MCP RAG index build failed; search_docs may be stale until you fix errors and restart MCP."
+    } else {
+      $elapsed = [Math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
+      Write-Host "MCP RAG index build complete (${elapsed}s): $outPath"
     }
   } finally {
     Pop-Location
@@ -85,6 +121,7 @@ function Invoke-McpRagIndexBuild {
 }
 
 New-Item -ItemType Directory -Path $localDataDir -Force | Out-Null
+Write-Host "[checkpoint] local data dir ready: $localDataDir"
 
 function Escape-PSLiteral([string]$value) {
   return $value.Replace("'", "''")
@@ -168,6 +205,7 @@ function Start-ServiceWindow(
 }
 
 if ($Role -eq "all") {
+  Write-Host "[checkpoint] role=all preparing bootstrap and environment"
   $bootstrapPath = Join-Path $localDataDir "openfdd-agent-bootstrap.json"
   $mcpRest = Get-OfddMcpRestBase
   $uiBase = Get-OfddUiPublicBase
@@ -189,15 +227,18 @@ if ($Role -eq "all") {
   } | ConvertTo-Json -Depth 6
   Write-Utf8NoBom -Path $bootstrapPath -Content $bootstrapJson
   Write-Host "Wrote agent bootstrap: $bootstrapPath"
+  Write-Host "[checkpoint] bootstrap written"
 
   Invoke-McpRagIndexBuild
+  Write-Host "[checkpoint] MCP RAG index step finished"
 
   $uiDevCmd = if ($LanDashboard) { "npm run dev -- --host 0.0.0.0" } else { "npm run dev" }
+  Write-Host "[checkpoint] launching service windows (gateway, mcp-rag, desktop-ui)"
   Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Start-ServiceWindow -title "desktop-ui" -serviceCommand $uiDevCmd -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Write-Host 'All services launched with repo-local data defaults.'
-  Write-Host 'Tip: This run rebuilt stack\mcp-rag\index\rag_index.json (unless OFDD_SKIP_MCP_INDEX_BUILD=1). Re-running without stopping old gateway/mcp/ui windows can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
+  Write-Host 'Tip: MCP RAG index behavior is controlled by -RagIndex (auto|always|skip). Re-running without stopping old gateway/mcp/ui windows can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
   Write-Host ""
   Write-Host ('Open-FDD UI:        {0}' -f $uiBase)
   Write-Host ('Open-FDD agent API: {0}/openfdd-agent/context  (POST .../openfdd-agent/chat)' -f $bridgeTrim)
@@ -208,6 +249,7 @@ if ($Role -eq "all") {
   Write-Host ('OpenClaw gateway:   {0}/health' -f $openclawUrl)
   Write-Host ('OpenClaw token set: {0}' -f ([bool]($env:OFDD_OPENCLAW_GATEWAY_TOKEN -or $env:OFDD_CLAW_GATEWAY_TOKEN)))
   Write-Host 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
+  Write-Host "[checkpoint] running startup health checks"
   $healthOk = $false
   for ($i = 0; $i -lt 30; $i++) {
     try {
@@ -241,6 +283,7 @@ if ($Role -eq "all") {
   } catch {
     Write-Warning ('OpenClaw gateway not reachable at {0}/health (optional unless using /assistant/data-model-openclaw).' -f $openclawUrl)
   }
+  Write-Host "[checkpoint] role=all startup sequence complete"
   exit 0
 }
 
@@ -265,8 +308,11 @@ $singleBootstrapJson = @{
   role           = $Role
 } | ConvertTo-Json -Depth 5
 Write-Utf8NoBom -Path $singleBootstrap -Content $singleBootstrapJson
+Write-Host "[checkpoint] role=$Role bootstrap written: $singleBootstrap"
 if ($Role -eq "mcp") {
   Invoke-McpRagIndexBuild
+  Write-Host "[checkpoint] role=mcp RAG index step finished"
 }
 $scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli -LanDashboard:$LanDashboard
+Write-Host "[checkpoint] launching role=$Role command"
 Invoke-Expression $scriptBody

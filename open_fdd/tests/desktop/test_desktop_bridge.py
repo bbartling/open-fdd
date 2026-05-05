@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+import time
 from unittest.mock import patch
 
 import pytest
@@ -359,24 +360,123 @@ def test_desktop_bridge_onboard_config_roundtrip() -> None:
             "/config/onboard",
             json={
                 "base_url": "https://api.onboarddata.io",
-                "building_ids": "123,456",
                 "lookback_hours": 12,
                 "api_key": "test-token",
-                "allow_synthetic": False,
             },
         )
         assert set_resp.status_code == 200
         body = set_resp.json()
         assert str(body.get("base_url", "")).startswith("https://")
-        assert str(body.get("building_ids")) == "123,456"
         assert int(body.get("lookback_hours", 0)) == 12
         assert body.get("api_key_set") is True
 
         get_resp = client.get("/config/onboard")
         assert get_resp.status_code == 200
         fetched = get_resp.json()
-        assert str(fetched.get("building_ids")) == "123,456"
         assert int(fetched.get("lookback_hours", 0)) == 12
+
+
+def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
+    from unittest.mock import patch
+
+    app = create_app()
+    with patch("open_fdd.gateway.server.run_openfdd_agent_turn", return_value={"ok": True, "stdout": "queued done", "stderr": "", "returncode": 0}):
+        with TestClient(app) as client:
+            paused = client.post("/openfdd-agent/control", json={"paused": True})
+            assert paused.status_code == 200
+            assert paused.json().get("paused") is True
+
+            queued = client.post("/openfdd-agent/chat", json={"message": "hello", "mode": "queue"})
+            assert queued.status_code == 200
+            qj = queued.json()
+            assert qj.get("status") == "queued"
+            run_id = str(qj.get("run_id"))
+            assert run_id.startswith("run-")
+
+            running = client.get("/openfdd-agent/status")
+            assert running.status_code == 200
+            assert running.json().get("queue_size", 0) >= 1
+
+            resumed = client.post("/openfdd-agent/control", json={"paused": False})
+            assert resumed.status_code == 200
+            assert resumed.json().get("paused") is False
+
+            completed = None
+            for _ in range(30):
+                row = client.get(f"/openfdd-agent/runs/{run_id}")
+                assert row.status_code == 200
+                if row.json().get("status") == "completed":
+                    completed = row.json()
+                    break
+                time.sleep(0.05)
+            assert completed is not None
+            assert completed.get("result", {}).get("stdout") == "queued done"
+
+
+def test_onboard_ingest_accepts_start_end_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+
+    captured: dict[str, str | None] = {}
+
+    def _fake_ingest_onboard(self, *, site_id: str, start_ts: str | None = None, end_ts: str | None = None):  # noqa: ARG001
+        captured["site_id"] = site_id
+        captured["start_ts"] = start_ts
+        captured["end_ts"] = end_ts
+        return {"rows": 2, "source": "onboard", "success": True, "start_ts": start_ts, "end_ts": end_ts}
+
+    monkeypatch.setattr(
+        "open_fdd.desktop.services.ingest_service.IngestService.ingest_onboard",
+        _fake_ingest_onboard,
+    )
+
+    with TestClient(app) as client:
+        created = client.post("/sites", json={"name": "Onboard Window Site"})
+        assert created.status_code == 200
+        site_id = created.json()["id"]
+        res = client.post(
+            "/ingest/onboard",
+            json={
+                "site_id": site_id,
+                "start_ts": "2025-05-05T00:00:00Z",
+                "end_ts": "2026-05-04T23:59:59Z",
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body.get("success") is True
+        assert captured.get("site_id") == site_id
+        assert captured.get("start_ts") == "2025-05-05T00:00:00Z"
+        assert captured.get("end_ts") == "2026-05-04T23:59:59Z"
+
+
+def test_onboard_building_availability_endpoint_returns_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = create_app()
+
+    def _fake_onboard_json(path: str, *, method: str = "GET", payload: dict[str, object] | None = None):  # noqa: ARG001
+        if path.endswith("/points"):
+            return [
+                {"id": 101, "point_type": "zone_air_temperature_sensor"},
+                {"id": 102, "point_type": "supply_air_temperature_sensor"},
+            ]
+        if path == "/query-v2":
+            return [
+                {"point_id": 101, "values": [["2025-05-05T16:37:56.022446Z", "ok", 71.2]]},
+                {"point_id": 102, "values": [["2026-05-04T16:37:56.022446Z", "ok", 55.4]]},
+            ]
+        return []
+
+    monkeypatch.setattr("open_fdd.gateway.server._onboard_request_json", _fake_onboard_json)
+
+    with TestClient(app) as client:
+        res = client.get("/config/onboard/buildings/427/availability?search_back_days=365&sample_points=14")
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body.get("building_id") == 427
+        assert body.get("search_back_days") == 365
+        assert body.get("earliest_seen", "").startswith("2025-05-05T16:37:56")
+        assert body.get("latest_seen", "").startswith("2026-05-04T16:37:56")
+        assert isinstance(body.get("sampled_point_ids"), list)
+        assert isinstance(body.get("point_type_counts"), list)
 
 
 def test_desktop_bridge_sparql_endpoints() -> None:

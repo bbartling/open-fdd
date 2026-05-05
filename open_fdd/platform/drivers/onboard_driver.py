@@ -25,7 +25,13 @@ class OnboardScrapeResult:
     error: str | None = None
 
 
-def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResult:
+def run_onboard_scrape(
+    *,
+    store: FrameStore,
+    site_id: str,
+    start_ts: str | None = None,
+    end_ts: str | None = None,
+) -> OnboardScrapeResult:
     logger = logging.getLogger(__name__)
     base_url = os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io").rstrip("/")
     api_key = os.getenv("OFDD_ONBOARD_API_KEY", "").strip()
@@ -93,8 +99,31 @@ def run_onboard_scrape(*, store: FrameStore, site_id: str) -> OnboardScrapeResul
             if str(b.get("id", "")).strip() in building_filters or str(b.get("name", "")).strip() in building_filters
         ]
 
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(hours=max(1, lookback_hours))
+    try:
+        end = datetime.fromisoformat(str(end_ts).replace("Z", "+00:00")).astimezone(timezone.utc) if end_ts else datetime.now(timezone.utc)
+        start = (
+            datetime.fromisoformat(str(start_ts).replace("Z", "+00:00")).astimezone(timezone.utc)
+            if start_ts
+            else end - timedelta(hours=max(1, lookback_hours))
+        )
+    except ValueError:
+        return OnboardScrapeResult(
+            rows=0,
+            source="onboard",
+            metrics=[],
+            storage_ref=None,
+            success=False,
+            error="Invalid start_ts/end_ts format (use ISO-8601).",
+        )
+    if start >= end:
+        return OnboardScrapeResult(
+            rows=0,
+            source="onboard",
+            metrics=[],
+            storage_ref=None,
+            success=False,
+            error="Invalid onboard window: start_ts must be before end_ts.",
+        )
     rows_by_ts: dict[str, dict[str, object]] = {}
     point_meta: dict[str, dict[str, str | None]] = {}
 

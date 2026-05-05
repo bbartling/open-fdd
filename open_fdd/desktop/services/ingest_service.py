@@ -96,8 +96,14 @@ class IngestService:
         result = run_weather_fetch(store=self.connector, site_id=site_id, days_back=days_back)
         return {"rows": result.rows, "source": "weather"}
 
-    def ingest_onboard(self, *, site_id: str) -> dict[str, Any]:
-        result = run_onboard_scrape(store=self.connector, site_id=site_id)
+    def ingest_onboard(
+        self,
+        *,
+        site_id: str,
+        start_ts: str | None = None,
+        end_ts: str | None = None,
+    ) -> dict[str, Any]:
+        result = run_onboard_scrape(store=self.connector, site_id=site_id, start_ts=start_ts, end_ts=end_ts)
         if not result.success:
             return {
                 "rows": result.rows,
@@ -120,7 +126,13 @@ class IngestService:
                     fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
                     unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
                 )
-        return {"rows": result.rows, "source": result.source, "success": True}
+        return {
+            "rows": result.rows,
+            "source": result.source,
+            "success": True,
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+        }
 
     def ingest_bacnet(
         self,
