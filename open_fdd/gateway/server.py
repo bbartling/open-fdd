@@ -442,15 +442,73 @@ class _AgentRunItem:
 
 
 class _OpenFddAgentQueueManager:
+    """Single-flight agent execution: at most one codex turn runs at a time."""
+
+    _STORE_STDIO_MAX = 4096
+
     def __init__(self) -> None:
         self._queue: Queue[_AgentRunItem] = Queue()
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
         self._paused = False
+        self._shutdown = False
         self._running: dict[str, Any] | None = None
         self._runs: dict[str, dict[str, Any]] = {}
         self._worker = threading.Thread(target=self._worker_loop, name="ofdd-agent-runner", daemon=True)
         self._worker.start()
+
+    def shutdown(self, *, join_timeout_s: float = 30.0) -> None:
+        """Stop the worker thread (used on app lifespan shutdown; tests create many apps)."""
+        with self._cv:
+            self._shutdown = True
+            self._cv.notify_all()
+        if self._worker.is_alive():
+            self._worker.join(timeout=float(join_timeout_s))
+
+    @staticmethod
+    def _shrink_result_for_store(result: dict[str, Any] | None) -> dict[str, Any] | None:
+        if result is None:
+            return None
+        out = dict(result)
+        cap = _OpenFddAgentQueueManager._STORE_STDIO_MAX
+        for key in ("stdout", "stderr"):
+            val = out.get(key)
+            if isinstance(val, str) and len(val) > cap:
+                n = len(val)
+                out[key] = val[:cap] + f"\n… truncated ({n} chars total)"
+        return out
+
+    def _retain_cap(self) -> int:
+        raw = (os.environ.get("OFDD_AGENT_RUNS_RETAIN") or "100").strip()
+        try:
+            cap = int(raw)
+        except ValueError:
+            cap = 100
+        return max(16, min(cap, 5000))
+
+    def _evict_completed_unlocked(self) -> None:
+        cap = self._retain_cap()
+        if len(self._runs) <= cap:
+            return
+        completed_rows = [
+            (rid, str(r.get("completed_at") or ""))
+            for rid, r in self._runs.items()
+            if r.get("status") == "completed"
+        ]
+        completed_rows.sort(key=lambda t: t[1])
+        for rid, _ in completed_rows:
+            if len(self._runs) <= cap:
+                break
+            row = self._runs.get(rid)
+            if row and row.get("status") == "completed":
+                self._runs.pop(rid, None)
+
+    def _claim_running_locked(self, run_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
+        row.update({"status": "running", "started_at": now, "error": None})
+        self._runs[run_id] = row
+        self._running = {"run_id": run_id, "started_at": now}
 
     def enqueue_or_run(self, item: _AgentRunItem, mode: Literal["run_now", "queue"]) -> dict[str, Any]:
         if mode == "queue":
@@ -470,8 +528,7 @@ class _OpenFddAgentQueueManager:
 
         with self._cv:
             is_busy = self._paused or (self._running is not None) or (not self._queue.empty())
-        if is_busy:
-            with self._cv:
+            if is_busy:
                 self._runs[item.run_id] = {
                     "run_id": item.run_id,
                     "status": "queued",
@@ -483,9 +540,9 @@ class _OpenFddAgentQueueManager:
                 }
                 self._queue.put(item)
                 self._cv.notify_all()
-            return {"run_id": item.run_id, "status": "queued"}
+                return {"run_id": item.run_id, "status": "queued"}
+            self._claim_running_locked(item.run_id)
 
-        self._set_running(item.run_id)
         try:
             result = run_openfdd_agent_turn(
                 message=item.message,
@@ -520,45 +577,46 @@ class _OpenFddAgentQueueManager:
         with self._cv:
             return self._runs.get(run_id)
 
-    def _set_running(self, run_id: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        with self._cv:
-            row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
-            row.update({"status": "running", "started_at": now, "error": None})
-            self._runs[run_id] = row
-            self._running = {"run_id": run_id, "started_at": now}
-
     def _set_completed(self, run_id: str, result: dict[str, Any] | None) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        stored = self._shrink_result_for_store(result)
         with self._cv:
             row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
             row.update(
                 {
                     "status": "completed",
                     "completed_at": now,
-                    "result": result,
+                    "result": stored,
                     "error": None if result and result.get("ok", True) else (result or {}).get("error"),
                 }
             )
             self._runs[run_id] = row
             if self._running and self._running.get("run_id") == run_id:
                 self._running = None
+            self._evict_completed_unlocked()
             self._cv.notify_all()
 
     def _worker_loop(self) -> None:
-        while True:
+        while not self._shutdown:
             item: _AgentRunItem | None = None
             with self._cv:
-                while self._paused or self._queue.empty():
+                while (
+                    not self._shutdown
+                    and (self._paused or self._queue.empty() or self._running is not None)
+                ):
                     self._cv.wait(timeout=0.5)
+                if self._shutdown:
+                    break
                 try:
                     item = self._queue.get_nowait()
                 except Empty:
                     item = None
+                if item is not None:
+                    self._claim_running_locked(item.run_id)
+            if self._shutdown:
+                break
             if item is None:
                 continue
-            self._set_running(item.run_id)
-            result: dict[str, Any]
             try:
                 result = run_openfdd_agent_turn(
                     message=item.message,
@@ -697,6 +755,53 @@ def _cors_origin_regex() -> str:
     return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 
+def _onboard_optional_int(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _onboard_request_json(path: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    base_url = str(os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io")).strip().rstrip("/")
+    api_key = str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Missing OFDD_ONBOARD_API_KEY. Save onboard config with API key first.")
+    url = f"{base_url}{path}"
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail=f"Invalid onboard base_url scheme: {parsed.scheme!r}")
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        method=method,
+        data=data,
+        headers={
+            "X-OB-Api": api_key,
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Onboard API HTTP {exc.code} for {path}.") from exc
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Onboard API request failed for {path}: {exc}.") from exc
+    if isinstance(body, list):
+        return [item for item in body if isinstance(item, dict)]
+    return []
+
+
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -715,6 +820,9 @@ def create_app() -> FastAPI:
                 await task_ttl
             with contextlib.suppress(asyncio.CancelledError):
                 await task_bacnet
+            q = getattr(app.state, "agent_queue", None)
+            if q is not None:
+                q.shutdown()
 
     app = FastAPI(
         title="open-fdd desktop bridge",
@@ -1976,36 +2084,6 @@ def create_app() -> FastAPI:
             "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
         }
 
-    def _onboard_request_json(path: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        base_url = str(os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io")).strip().rstrip("/")
-        api_key = str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()
-        if not api_key:
-            raise HTTPException(status_code=400, detail="Missing OFDD_ONBOARD_API_KEY. Save onboard config with API key first.")
-        url = f"{base_url}{path}"
-        parsed = urllib.parse.urlparse(url)
-        if parsed.scheme not in {"http", "https"}:
-            raise HTTPException(status_code=400, detail=f"Invalid onboard base_url scheme: {parsed.scheme!r}")
-        data = None if payload is None else json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            method=method,
-            data=data,
-            headers={
-                "X-OB-Api": api_key,
-                "Content-Type": "application/json",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise HTTPException(status_code=502, detail=f"Onboard API HTTP {exc.code} for {path}.") from exc
-        except urllib.error.URLError as exc:
-            raise HTTPException(status_code=502, detail=f"Onboard API request failed for {path}: {exc}.") from exc
-        if isinstance(body, list):
-            return [item for item in body if isinstance(item, dict)]
-        return []
-
     @app.post("/config/onboard", tags=["config"])
     def onboard_config_set(body: OnboardConfigBody) -> dict[str, Any]:
         os.environ["OFDD_ONBOARD_API_BASE_URL"] = str(body.base_url or "https://api.onboarddata.io").strip()
@@ -2034,8 +2112,8 @@ def create_app() -> FastAPI:
                 OnboardBuildingRow(
                     id=str(row.get("id", "")),
                     name=str(row.get("name", "")).strip() or f"building-{row.get('id', '')}",
-                    point_count=int(row.get("point_count")) if str(row.get("point_count", "")).strip() else None,
-                    equip_count=int(row.get("equip_count")) if str(row.get("equip_count", "")).strip() else None,
+                    point_count=_onboard_optional_int(row.get("point_count")),
+                    equip_count=_onboard_optional_int(row.get("equip_count")),
                     timezone=str(row.get("timezone", "")).strip() or None,
                 )
             )

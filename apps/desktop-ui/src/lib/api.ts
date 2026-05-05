@@ -18,6 +18,20 @@ async function desktopFetchRaw(path: string, init?: RequestInit): Promise<Respon
   return res;
 }
 
+/** Same connectivity error handling as desktop fetch, but returns the Response (caller checks res.ok). */
+export async function bridgeFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${bridgeBase}${path}`, init);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Request failed to ${bridgeBase}${path}. (${detail}) `
+        + `Bridge may be offline, blocked by CORS, or the process exited while handling the request. `
+        + `If needed, restart bridge: open-fdd-desktop-bridge`,
+    );
+  }
+}
+
 export async function desktopFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await desktopFetchRaw(path, init);
   return (await res.json()) as T;

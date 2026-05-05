@@ -180,7 +180,13 @@ def run_openfdd_agent_turn(
         out["codex_model_fallback_used"] = True
 
     critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", False)
-    if critic_enabled and tier == "simple" and bool(out.get("ok")) and not human_requested_complex:
+    if (
+        critic_enabled
+        and tier == "simple"
+        and force_class != "simple"
+        and bool(out.get("ok"))
+        and not human_requested_complex
+    ):
         critic_prompt = (
             "You are a strict final reviewer. Review the draft answer below for correctness, safety, "
             "and concrete actionability for Open-FDD operators. If needed, provide a corrected final answer.\n\n"

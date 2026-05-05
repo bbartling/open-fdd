@@ -204,6 +204,49 @@ function Start-ServiceWindow(
   Write-Host "Started $title"
 }
 
+function Stop-ListeningProcessOnPort(
+  [int]$Port,
+  [string]$Name
+) {
+  try {
+    $rows = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $rows) { return }
+    $pids = @($rows | Select-Object -ExpandProperty OwningProcess -Unique)
+    foreach ($pid in $pids) {
+      if (-not $pid) { continue }
+      try {
+        Stop-Process -Id $pid -Force -ErrorAction Stop
+        Write-Host "Stopped existing $Name process on port $Port (pid=$pid)."
+      } catch {
+        Write-Warning "Could not stop existing $Name process pid=$pid on port $Port."
+      }
+    }
+  } catch {
+    Write-Warning "Port check failed for $Name on $Port; continuing."
+  }
+}
+
+function Restart-ExistingServiceIfRunning([string]$serviceName) {
+  switch ($serviceName) {
+    "gateway" { Stop-ListeningProcessOnPort -Port 8765 -Name "gateway" }
+    "mcp-rag" { Stop-ListeningProcessOnPort -Port 8090 -Name "mcp-rag" }
+    "desktop-ui" { Stop-ListeningProcessOnPort -Port 5173 -Name "desktop-ui" }
+    "adapter" {
+      try {
+        $matches = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue | Where-Object {
+          ($_.CommandLine -as [string]) -match "open-fdd-mcp-adapter"
+        })
+        foreach ($m in $matches) {
+          Stop-Process -Id $m.ProcessId -Force -ErrorAction SilentlyContinue
+          Write-Host "Stopped existing adapter process (pid=$($m.ProcessId))."
+        }
+      } catch {
+        Write-Warning "Adapter process check failed; continuing."
+      }
+    }
+  }
+}
+
 if ($Role -eq "all") {
   Write-Host "[checkpoint] role=all preparing bootstrap and environment"
   $bootstrapPath = Join-Path $localDataDir "openfdd-agent-bootstrap.json"
@@ -234,6 +277,9 @@ if ($Role -eq "all") {
 
   $uiDevCmd = if ($LanDashboard) { "npm run dev -- --host 0.0.0.0" } else { "npm run dev" }
   Write-Host "[checkpoint] launching service windows (gateway, mcp-rag, desktop-ui)"
+  Restart-ExistingServiceIfRunning "gateway"
+  Restart-ExistingServiceIfRunning "mcp-rag"
+  Restart-ExistingServiceIfRunning "desktop-ui"
   Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
   Start-ServiceWindow -title "desktop-ui" -serviceCommand $uiDevCmd -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$LanDashboard
@@ -313,6 +359,10 @@ if ($Role -eq "mcp") {
   Invoke-McpRagIndexBuild
   Write-Host "[checkpoint] role=mcp RAG index step finished"
 }
+if ($Role -eq "gateway") { Restart-ExistingServiceIfRunning "gateway" }
+if ($Role -eq "mcp") { Restart-ExistingServiceIfRunning "mcp-rag" }
+if ($Role -eq "ui") { Restart-ExistingServiceIfRunning "desktop-ui" }
+if ($Role -eq "adapter") { Restart-ExistingServiceIfRunning "adapter" }
 $scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli -LanDashboard:$LanDashboard
 Write-Host "[checkpoint] launching role=$Role command"
 Invoke-Expression $scriptBody

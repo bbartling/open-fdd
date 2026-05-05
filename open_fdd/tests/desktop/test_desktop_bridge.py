@@ -23,7 +23,8 @@ def test_create_app_with_private_lan_cors_env() -> None:
 
     with patch.dict(os.environ, {"OFDD_CORS_ALLOW_PRIVATE_LAN": "1"}, clear=False):
         app = create_app()
-        assert app is not None
+        with TestClient(app):
+            assert app is not None
 
 
 def test_desktop_bridge_health() -> None:
@@ -402,13 +403,14 @@ def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
             assert resumed.json().get("paused") is False
 
             completed = None
-            for _ in range(30):
+            # Mocked turn finishes immediately; keep a short tight poll for slow CI, not long sleeps.
+            for _ in range(80):
                 row = client.get(f"/openfdd-agent/runs/{run_id}")
                 assert row.status_code == 200
                 if row.json().get("status") == "completed":
                     completed = row.json()
                     break
-                time.sleep(0.05)
+                time.sleep(0.01)
             assert completed is not None
             assert completed.get("result", {}).get("stdout") == "queued done"
 

@@ -1,4 +1,4 @@
-import { bridgeBase, desktopFetch } from "../lib/api";
+import { bridgeFetch, bridgeBase, desktopFetch } from "../lib/api";
 import { classifyOpenfddTaskPreview } from "../lib/openfdd-agent-route-preview";
 import {
   loadCodexSessionBundle,
@@ -245,6 +245,7 @@ export function AiAgentChatPage() {
   const [aiDeps, setAiDeps] = useState<AiDepsHealthPayload | null>(null);
   const [agentQueue, setAgentQueue] = useState<AgentQueueStatus | null>(null);
   const [agentControlBusy, setAgentControlBusy] = useState(false);
+  const [agentControlError, setAgentControlError] = useState<string | null>(null);
 
   const [sessionBundle, setSessionBundle] = useState<CodexSessionBundle>(() => loadCodexSessionBundle());
   const bundleRef = useRef(sessionBundle);
@@ -344,25 +345,22 @@ export function AiAgentChatPage() {
     }
   }, [pullDiagnostics]);
 
-  const setAgentPaused = useCallback(
-    async (paused: boolean) => {
-      setAgentControlBusy(true);
-      try {
-        const res = await fetch(`${bridgeBase}/openfdd-agent/control`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paused }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as AgentQueueStatus;
-          setAgentQueue(data);
-        }
-      } finally {
-        setAgentControlBusy(false);
-      }
-    },
-    [bridgeBase],
-  );
+  const setAgentPaused = useCallback(async (paused: boolean) => {
+    setAgentControlBusy(true);
+    setAgentControlError(null);
+    try {
+      const data = await desktopFetch<AgentQueueStatus>("/openfdd-agent/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused }),
+      });
+      setAgentQueue(data);
+    } catch (e) {
+      setAgentControlError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAgentControlBusy(false);
+    }
+  }, []);
 
   const signOutAgentCli = useCallback(async () => {
     setSignOutError(null);
@@ -608,6 +606,7 @@ export function AiAgentChatPage() {
         return;
       }
       if (data.status === "queued" && data.run_id) {
+        const pollSessionId = sessionId;
         setSessionBundle((prev) =>
           updateSessionById(prev, sessionId, (s) => ({
             ...s,
@@ -615,24 +614,44 @@ export function AiAgentChatPage() {
             updatedAt: Date.now(),
           })),
         );
+        let delayMs = 900;
+        const maxDelayMs = 12_000;
+        const deadline = Date.now() + 12 * 60 * 1000;
         let done: ChatResponse | null = null;
-        for (let i = 0; i < 180; i += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-          const poll = await fetch(`${bridgeBase}/openfdd-agent/runs/${encodeURIComponent(data.run_id)}`);
-          if (!poll.ok) {
-            continue;
+        while (Date.now() < deadline) {
+          if (!devicePollMounted.current || bundleRef.current.activeId !== pollSessionId) {
+            return;
           }
-          const row = (await poll.json()) as ChatResponse;
-          if (row.status === "completed") {
-            done = (row.result ?? row) as ChatResponse;
-            break;
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+          delayMs = Math.min(Math.floor(delayMs * 1.38), maxDelayMs);
+          if (!devicePollMounted.current || bundleRef.current.activeId !== pollSessionId) {
+            return;
+          }
+          try {
+            const poll = await bridgeFetch(`/openfdd-agent/runs/${encodeURIComponent(data.run_id)}`);
+            if (!poll.ok) {
+              continue;
+            }
+            const row = (await poll.json()) as ChatResponse;
+            if (row.status === "completed") {
+              done = (row.result ?? row) as ChatResponse;
+              break;
+            }
+          } catch {
+            continue;
           }
         }
         if (!done) {
           setSessionBundle((prev) =>
-            updateSessionById(prev, sessionId, (s) => ({
+            updateSessionById(prev, pollSessionId, (s) => ({
               ...s,
-              lines: [...s.lines, { role: "assistant", text: `Run ${data.run_id} still pending. Check again shortly.` }],
+              lines: [
+                ...s.lines,
+                {
+                  role: "assistant",
+                  text: `Run ${data.run_id} still pending after an extended wait (backoff polling, up to ~12 minutes). Check runner queue or retry shortly.`,
+                },
+              ],
               updatedAt: Date.now(),
             })),
           );
@@ -643,7 +662,7 @@ export function AiAgentChatPage() {
           (done.stderr?.trim() ? `Agent CLI exited ${done.returncode}.\n\nstderr:\n${done.stderr.trim()}` : "(No output.)");
         const doneRoute = routeMetaFromAgentResponse(done);
         setSessionBundle((prev) =>
-          updateSessionById(prev, sessionId, (s) => ({
+          updateSessionById(prev, pollSessionId, (s) => ({
             ...s,
             lines: [
               ...s.lines,
@@ -744,11 +763,18 @@ export function AiAgentChatPage() {
               <button
                 type="button"
                 className="local-codex-btn-outline"
-                disabled={agentControlBusy || sending}
-                onClick={() => void setAgentPaused(!(agentQueue?.paused ?? false))}
-                title="Pause/resume agent runner; queued requests wait while paused."
+                disabled={agentControlBusy || sending || agentQueue === null}
+                onClick={() => {
+                  if (agentQueue === null) return;
+                  void setAgentPaused(!agentQueue.paused);
+                }}
+                title={
+                  agentQueue === null
+                    ? "Runner status unavailable (refresh signing block above)."
+                    : "Pause/resume agent runner; queued requests wait while paused."
+                }
               >
-                {agentControlBusy ? "Updating…" : agentQueue?.paused ? "Resume runner" : "Pause runner"}
+                {agentControlBusy ? "Updating…" : agentQueue === null ? "Runner status unavailable" : agentQueue.paused ? "Resume runner" : "Pause runner"}
               </button>
               <button
                 type="button"
@@ -763,6 +789,11 @@ export function AiAgentChatPage() {
             {agentQueue ? (
               <p className="muted" style={{ margin: "8px 0 0", fontSize: 12 }}>
                 Runner: {agentQueue.paused ? "paused" : "active"} · queued: {agentQueue.queue_size}
+              </p>
+            ) : null}
+            {agentControlError ? (
+              <p className="muted local-codex-auth-error" style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
+                {agentControlError}
               </p>
             ) : null}
             {signOutError ? (

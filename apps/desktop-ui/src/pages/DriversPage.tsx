@@ -62,7 +62,6 @@ type DriverHealthEntry = {
 type DriverHealthMap = Record<string, DriverHealthEntry>;
 
 type DriversPageSection = "all" | "weather" | "bacnet" | "onboard";
-const ONBOARD_API_KEY_STORAGE_KEY = "ofdd-onboard-api-key-draft";
 const ONBOARD_LOG_MAX = 28;
 
 type OnboardOp = "idle" | "auth" | "save" | "buildings" | "availability" | "feather" | "tree" | "bulk";
@@ -85,6 +84,26 @@ function defaultDateRange(): { start: string; end: string } {
     start: toLocalDateInput(start),
     end: toLocalDateInput(end),
   };
+}
+
+function localDayBoundsToIso(startYmd: string, endYmd: string): { startTs: string; endTs: string } | null {
+  const parts = (s: string): { y: number; m: number; d: number } | null => {
+    const seg = s.split("-");
+    if (seg.length !== 3) return null;
+    const y = Number(seg[0]);
+    const m = Number(seg[1]);
+    const d = Number(seg[2]);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+    return { y, m, d };
+  };
+  const a = parts(startYmd);
+  const b = parts(endYmd);
+  if (!a || !b) return null;
+  const start = new Date(a.y, a.m - 1, a.d, 0, 0, 0, 0);
+  const end = new Date(b.y, b.m - 1, b.d, 23, 59, 59, 999);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end.getTime() < start.getTime()) return null;
+  return { startTs: start.toISOString(), endTs: end.toISOString() };
 }
 
 function daysBackFromRange(startDate: string, endDate: string): number | null {
@@ -182,38 +201,6 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
     const id = window.setInterval(() => setOnboardPrefillFlashOn((v) => !v), 520);
     return () => window.clearInterval(id);
   }, [onboardRangeReady]);
-
-  useEffect(() => {
-    if (onboardRangeReady) {
-      setOnboardPrefillFlashOn(false);
-      return;
-    }
-    const id = window.setInterval(() => setOnboardPrefillFlashOn((v) => !v), 520);
-    return () => window.clearInterval(id);
-  }, [onboardRangeReady]);
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(ONBOARD_API_KEY_STORAGE_KEY) || "";
-      if (raw) {
-        setOnboardApiKey(raw);
-      }
-    } catch {
-      // Ignore storage errors in restricted browser contexts.
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (onboardApiKey) {
-        window.localStorage.setItem(ONBOARD_API_KEY_STORAGE_KEY, onboardApiKey);
-      } else {
-        window.localStorage.removeItem(ONBOARD_API_KEY_STORAGE_KEY);
-      }
-    } catch {
-      // Ignore storage errors in restricted browser contexts.
-    }
-  }, [onboardApiKey]);
 
   async function refreshConfigs() {
     try {
@@ -368,6 +355,9 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
         }),
       });
       setOnboardApiKeySet(Boolean(out.api_key_set));
+      if (out.api_key_set) {
+        setOnboardApiKey("");
+      }
       setStatus("Saved Onboard driver config.");
       setOnboardActionLog((prev) => [
         onboardLogLine(`POST /config/onboard OK (building_ids=${selectedBuilding || "none"}, lookback=${parsedLookback}h).`),
@@ -391,17 +381,16 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       setStatus("Select a site first.");
       return;
     }
-    const rangeDays = daysBackFromRange(onboardStartDate, onboardEndDate);
-    if (rangeDays === null) {
-      setStatus("Onboard date range must be valid and end date must be on/after start date.");
+    const bounds = localDayBoundsToIso(onboardStartDate, onboardEndDate);
+    if (!bounds) {
+      setStatus("Onboard date range must be valid YYYY-MM-DD and end date must be on/after start date.");
       return;
     }
+    const { startTs, endTs } = bounds;
     if (!onboardRangeReady) {
       setStatus("Step 1 required: click 'Prefill from Onboard availability' before bulk download.");
       return;
     }
-    const startTs = `${onboardStartDate}T00:00:00Z`;
-    const endTs = `${onboardEndDate}T23:59:59Z`;
     setOnboardOp("bulk");
     try {
       setOnboardActionLog((prev) => [

@@ -198,6 +198,55 @@ start_bg() {
   echo "Started ${name} (pid=$!), log=${LOG_DIR}/${name}.log"
 }
 
+stop_port_listener() {
+  local port="$1"
+  local name="$2"
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti TCP:${port} -sTCP:LISTEN 2>/dev/null || true)"
+  elif command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser -n tcp "${port}" 2>/dev/null | tr ' ' '\n' || true)"
+  fi
+  if [[ -z "${pids}" ]]; then
+    return 0
+  fi
+  echo "Stopping existing ${name} process(es) on port ${port}: ${pids}"
+  # shellcheck disable=SC2086
+  kill -TERM ${pids} 2>/dev/null || true
+  sleep 1
+  # shellcheck disable=SC2086
+  kill -KILL ${pids} 2>/dev/null || true
+}
+
+stop_by_pattern() {
+  local pattern="$1"
+  local name="$2"
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 0
+  fi
+  local pids
+  pids="$(pgrep -f "${pattern}" || true)"
+  if [[ -z "${pids}" ]]; then
+    return 0
+  fi
+  echo "Stopping existing ${name} process(es): ${pids}"
+  # shellcheck disable=SC2086
+  kill -TERM ${pids} 2>/dev/null || true
+  sleep 1
+  # shellcheck disable=SC2086
+  kill -KILL ${pids} 2>/dev/null || true
+}
+
+restart_existing_service_if_running() {
+  local svc="$1"
+  case "${svc}" in
+    gateway) stop_port_listener 8765 "gateway" ;;
+    mcp-rag) stop_port_listener 8090 "mcp-rag" ;;
+    desktop-ui) stop_port_listener 5173 "desktop-ui" ;;
+    adapter) stop_by_pattern "open-fdd-mcp-adapter" "adapter" ;;
+  esac
+}
+
 case "${ROLE}" in
   all)
     echo "[checkpoint] role=all preparing bootstrap and environment"
@@ -206,6 +255,9 @@ case "${ROLE}" in
     refresh_mcp_rag_index
     echo "[checkpoint] MCP RAG index step finished"
     echo "[checkpoint] launching services (gateway, mcp-rag, desktop-ui)"
+    restart_existing_service_if_running "gateway"
+    restart_existing_service_if_running "mcp-rag"
+    restart_existing_service_if_running "desktop-ui"
     (
       cd "${REPO_ROOT}"
       start_bg "gateway" open-fdd-gateway
@@ -278,6 +330,7 @@ case "${ROLE}" in
   gateway)
     echo "[checkpoint] role=gateway preparing bootstrap"
     write_openfdd_agent_bootstrap "gateway"
+    restart_existing_service_if_running "gateway"
     echo "[checkpoint] launching role=gateway command"
     cd "${REPO_ROOT}"
     exec open-fdd-gateway
@@ -287,6 +340,7 @@ case "${ROLE}" in
     write_openfdd_agent_bootstrap "mcp"
     refresh_mcp_rag_index
     echo "[checkpoint] role=mcp RAG index step finished"
+    restart_existing_service_if_running "mcp-rag"
     echo "[checkpoint] launching role=mcp command"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-rag
@@ -294,6 +348,7 @@ case "${ROLE}" in
   adapter)
     echo "[checkpoint] role=adapter preparing bootstrap"
     write_openfdd_agent_bootstrap "adapter"
+    restart_existing_service_if_running "adapter"
     echo "[checkpoint] launching role=adapter command"
     cd "${REPO_ROOT}"
     exec open-fdd-mcp-adapter
@@ -301,6 +356,7 @@ case "${ROLE}" in
   ui)
     echo "[checkpoint] role=ui preparing bootstrap"
     write_openfdd_agent_bootstrap "ui"
+    restart_existing_service_if_running "desktop-ui"
     echo "[checkpoint] launching role=ui command"
     cd "${DESKTOP_UI_DIR}"
     exec "${UI_DEV_CMD[@]}"
