@@ -139,6 +139,8 @@ _ui_pub="${OFDD_UI_PUBLIC_BASE:-http://127.0.0.1:5173}"
 export OFDD_UI_PUBLIC_BASE="${_ui_pub%/}"
 _mcp_rest="${OFDD_MCP_REST_BASE:-http://127.0.0.1:8090}"
 export OFDD_MCP_REST_BASE="${_mcp_rest%/}"
+_openclaw_url="${OFDD_OPENCLAW_GATEWAY_URL:-${OFDD_CLAW_GATEWAY_URL:-http://127.0.0.1:18789}}"
+export OFDD_OPENCLAW_GATEWAY_URL="${_openclaw_url%/}"
 # Global npm install from POST /local-codex/install-cli: opt in with OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1.
 export OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI="${OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI:-0}"
 
@@ -171,6 +173,12 @@ case "${ROLE}" in
     printf 'Plots (FDD-ready):  %s/plots?fdd=1&skipMissing=1&runSource=csv\n' "${OFDD_UI_PUBLIC_BASE}"
     printf '  Add site_id=<uuid> after you ingest (see GET %s/assistant/readiness) for one-click overlay.\n' "${BRIDGE_URL}"
     echo "Bridge health:      ${BRIDGE_URL}/health"
+    echo "OpenClaw gateway:   ${OFDD_OPENCLAW_GATEWAY_URL}/health"
+    if [[ -n "${OFDD_OPENCLAW_GATEWAY_TOKEN:-${OFDD_CLAW_GATEWAY_TOKEN:-}}" ]]; then
+      echo "OpenClaw token set: true"
+    else
+      echo "OpenClaw token set: false"
+    fi
     printf '%s\n' 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
     echo "Background logs:    ${LOG_DIR}/gateway.log  ${LOG_DIR}/mcp-rag.log  ${LOG_DIR}/desktop-ui.log"
     health_ok=0
@@ -195,6 +203,23 @@ case "${ROLE}" in
       echo "Bridge responded OK at ${BRIDGE_URL}/health (UI may need a few more seconds for Vite)."
     elif command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
       echo "WARNING: Bridge did not respond at ${BRIDGE_URL}/health within 30s. Check ${LOG_DIR}/gateway.log"
+    fi
+    if command -v curl >/dev/null 2>&1; then
+      if curl -sf "${OFDD_MCP_REST_BASE}/health" >/dev/null 2>&1; then
+        echo "MCP responded OK at ${OFDD_MCP_REST_BASE}/health."
+      else
+        echo "WARNING: MCP did not respond at ${OFDD_MCP_REST_BASE}/health. Check ${LOG_DIR}/mcp-rag.log"
+      fi
+      if curl -sf "${OFDD_UI_PUBLIC_BASE}" >/dev/null 2>&1; then
+        echo "UI responded OK at ${OFDD_UI_PUBLIC_BASE}."
+      else
+        echo "WARNING: UI did not respond at ${OFDD_UI_PUBLIC_BASE}. Check ${LOG_DIR}/desktop-ui.log"
+      fi
+      if curl -sf "${OFDD_OPENCLAW_GATEWAY_URL}/health" >/dev/null 2>&1; then
+        echo "OpenClaw gateway responded OK at ${OFDD_OPENCLAW_GATEWAY_URL}/health."
+      else
+        echo "WARNING: OpenClaw gateway not reachable at ${OFDD_OPENCLAW_GATEWAY_URL}/health (optional unless using /assistant/data-model-openclaw)."
+      fi
     fi
     ;;
   gateway)

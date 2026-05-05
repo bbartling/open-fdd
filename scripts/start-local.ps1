@@ -11,6 +11,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $LanDashboard = $false
+if ((-not $LanHost -or $LanHost.Trim().Length -eq 0) -and $env:OFDD_LAN_HOST -and $env:OFDD_LAN_HOST.Trim().Length -gt 0) {
+  $LanHost = $env:OFDD_LAN_HOST.Trim()
+}
 if ($LanHost -and $LanHost.Trim().Length -gt 0) {
   $LanDashboard = $true
   $h = $LanHost.Trim()
@@ -48,6 +51,15 @@ function Get-OfddAllowLocalCodexInstallCli {
   }
   # Default 0 matches start-local.sh (opt in with OFDD_ALLOW_LOCAL_CODEX_INSTALL_CLI=1 for POST /local-codex/install-cli).
   return "0"
+}
+function Get-OfddOpenClawGatewayUrl {
+  if ($env:OFDD_OPENCLAW_GATEWAY_URL -and $env:OFDD_OPENCLAW_GATEWAY_URL.Trim()) {
+    return $env:OFDD_OPENCLAW_GATEWAY_URL.TrimEnd("/")
+  }
+  if ($env:OFDD_CLAW_GATEWAY_URL -and $env:OFDD_CLAW_GATEWAY_URL.Trim()) {
+    return $env:OFDD_CLAW_GATEWAY_URL.TrimEnd("/")
+  }
+  return "http://127.0.0.1:18789"
 }
 
 function Invoke-McpRagIndexBuild {
@@ -160,6 +172,7 @@ if ($Role -eq "all") {
   $mcpRest = Get-OfddMcpRestBase
   $uiBase = Get-OfddUiPublicBase
   $allowInstallCli = Get-OfddAllowLocalCodexInstallCli
+  $openclawUrl = Get-OfddOpenClawGatewayUrl
   $bridgeTrim = $BridgeUrl.TrimEnd("/")
   $bootstrapJson = @{
     bridge_base     = $bridgeTrim
@@ -192,6 +205,8 @@ if ($Role -eq "all") {
   Write-Host ('Plots (FDD-ready):  {0}/plots?fdd=1&skipMissing=1&runSource=csv' -f $uiBase)
   Write-Host ('  Add site_id=<uuid> after you ingest (see GET {0}/assistant/readiness) for one-click overlay.' -f $bridgeTrim)
   Write-Host ('Bridge health:      {0}/health' -f $bridgeTrim)
+  Write-Host ('OpenClaw gateway:   {0}/health' -f $openclawUrl)
+  Write-Host ('OpenClaw token set: {0}' -f ([bool]($env:OFDD_OPENCLAW_GATEWAY_TOKEN -or $env:OFDD_CLAW_GATEWAY_TOKEN)))
   Write-Host 'If the browser shows ERR_CONNECTION_REFUSED, the gateway window was closed or failed to bind; re-run this script.'
   $healthOk = $false
   for ($i = 0; $i -lt 30; $i++) {
@@ -207,6 +222,24 @@ if ($Role -eq "all") {
     Write-Host ('Bridge responded OK at {0}/health (UI may need a few more seconds for Vite).' -f $bridgeTrim)
   } else {
     Write-Host ('WARNING: Bridge did not respond at {0}/health within 30s. Check the gateway PowerShell window for errors.' -f $bridgeTrim)
+  }
+  try {
+    Invoke-WebRequest -Uri ('{0}/health' -f $mcpRest) -UseBasicParsing -TimeoutSec 2 | Out-Null
+    Write-Host ('MCP responded OK at {0}/health.' -f $mcpRest)
+  } catch {
+    Write-Warning ('MCP did not respond at {0}/health. Check mcp-rag PowerShell window.' -f $mcpRest)
+  }
+  try {
+    Invoke-WebRequest -Uri $uiBase -UseBasicParsing -TimeoutSec 2 | Out-Null
+    Write-Host ('UI responded OK at {0}.' -f $uiBase)
+  } catch {
+    Write-Warning ('UI did not respond at {0}. Check desktop-ui PowerShell window for Vite errors/port conflicts.' -f $uiBase)
+  }
+  try {
+    Invoke-WebRequest -Uri ('{0}/health' -f $openclawUrl) -UseBasicParsing -TimeoutSec 2 | Out-Null
+    Write-Host ('OpenClaw gateway responded OK at {0}/health.' -f $openclawUrl)
+  } catch {
+    Write-Warning ('OpenClaw gateway not reachable at {0}/health (optional unless using /assistant/data-model-openclaw).' -f $openclawUrl)
   }
   exit 0
 }

@@ -165,7 +165,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 `start-local.ps1` opens **separate** PowerShell windows for gateway, MCP RAG, and **`npm run dev`** for the UI. Use the Vite URL printed in the UI window (often **`http://127.0.0.1:5173`**).
 
-- **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -BridgeUrl "http://<this-pc-ip>:8765"` and allow **8765**, **8090**, and your **UI port** in Windows Firewall.
+- **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost <this-pc-ip>` (equivalent Bash: `bash scripts/start-local.sh --lan-host <this-pc-ip> all`). This sets bridge/MCP listen (`0.0.0.0`), private-LAN CORS, and bridge/MCP/UI public-base URLs; allow **8765**, **8090**, and your **UI port** in Windows Firewall.
 - **Docker on same machine will call the host** — see [§2](#2-openclaw--docker-as-http-client-to-the-host); you may need the bridge/MCP to listen on **`0.0.0.0`** (`OFDD_BRIDGE_HOST`, `OFDD_MCP_LISTEN_HOST`) so `host.docker.internal` can connect.
 
 **Git Bash / WSL:** use `bash scripts/start-local.sh`; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`. Background services log to **`stack/local-data/logs/*.log`**. The script prints **UI / Plots / readiness / health** URLs and waits on **`curl`** or **`wget`** for **`/health`** (install **`curl`** for the wait loop).

@@ -53,6 +53,16 @@ type DiagnosticsPayload = {
   exec_env?: CodexExecEnvPayload | null;
 };
 
+type AiDepsHealthPayload = {
+  mcp_rest_base: string;
+  mcp_reachable: boolean;
+  mcp_error?: string | null;
+  openclaw_gateway_url: string;
+  openclaw_reachable: boolean;
+  openclaw_error?: string | null;
+  openclaw_token_set: boolean;
+};
+
 type ChatResponse = {
   returncode: number;
   stdout: string;
@@ -220,6 +230,7 @@ export function AiAgentChatPage() {
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [execEnv, setExecEnv] = useState<CodexExecEnvPayload | null>(null);
+  const [aiDeps, setAiDeps] = useState<AiDepsHealthPayload | null>(null);
 
   const [sessionBundle, setSessionBundle] = useState<CodexSessionBundle>(() => loadCodexSessionBundle());
   const bundleRef = useRef(sessionBundle);
@@ -300,6 +311,12 @@ export function AiAgentChatPage() {
     setSignInActionError(null);
     try {
       await pullDiagnostics({ silent: false });
+      try {
+        const deps = await desktopFetch<AiDepsHealthPayload>("/assistant/ai-health");
+        setAiDeps(deps);
+      } catch {
+        setAiDeps(null);
+      }
     } catch (e) {
       setAuthState("error");
       setAuthLine(e instanceof Error ? e.message : String(e));
@@ -669,6 +686,22 @@ export function AiAgentChatPage() {
                 ) : null}
               </div>
             ) : null}
+            {aiDeps ? (
+              <div className="local-codex-model-chips" style={{ marginTop: 8 }}>
+                <span className={`local-codex-model-chip ${aiDeps.mcp_reachable ? "local-codex-model-chip--simple" : "local-codex-model-chip--fallback"}`}>
+                  MCP {aiDeps.mcp_reachable ? "ok" : "down"}
+                </span>
+                <span
+                  className={`local-codex-model-chip ${aiDeps.openclaw_reachable ? "local-codex-model-chip--complex" : "local-codex-model-chip--fallback"}`}
+                  title={aiDeps.openclaw_gateway_url}
+                >
+                  OpenClaw {aiDeps.openclaw_reachable ? "ok" : "down"}
+                </span>
+                <span className={`local-codex-model-chip ${aiDeps.openclaw_token_set ? "local-codex-model-chip--simple" : "local-codex-model-chip--fallback"}`}>
+                  Token {aiDeps.openclaw_token_set ? "set" : "missing"}
+                </span>
+              </div>
+            ) : null}
           </>
         ) : (
           <>
@@ -759,10 +792,6 @@ export function AiAgentChatPage() {
           ) : null}
           <div className="local-codex-chat-main">
         <div className="local-codex-workdir-block">
-          <p className="muted" style={{ margin: "0 0 8px", fontSize: 12, lineHeight: 1.5 }}>
-            Set the Open-FDD path on the bridge to your repo root (optional default:{" "}
-            <code className="inline-code">VITE_OPENFDD_AGENT_WORKDIR</code> in <code className="inline-code">.env.local</code>).
-          </p>
           <label className="local-codex-workdir-label" htmlFor="ofdd-codex-workdir-input">
             Open-FDD path
           </label>

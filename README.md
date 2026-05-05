@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 bash ./scripts/start-local.sh
 ```
 
-Details: **[Desktop app how-to](docs/howto/desktop_app.md)** (sections *Launch* and *MCP RAG*).
+[Desktop app how-to quicklink](docs/howto/desktop_app.md)
 
 ---
 

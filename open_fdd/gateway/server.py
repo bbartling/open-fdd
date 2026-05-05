@@ -9,6 +9,8 @@ from pathlib import Path
 import shutil
 import tempfile
 import urllib.parse
+import urllib.error
+import urllib.request
 from typing import Any, Literal
 import logging
 import os
@@ -309,6 +311,35 @@ class OnboardConfigBody(BaseModel):
     lookback_hours: int = 24
     api_key: str | None = None
     allow_synthetic: bool = False
+
+
+class OnboardDiscoveryPointTypeRow(BaseModel):
+    point_type: str
+    count: int
+
+
+class OnboardBuildingRow(BaseModel):
+    id: str
+    name: str
+    point_count: int | None = None
+    equip_count: int | None = None
+    timezone: str | None = None
+
+
+class OnboardEquipmentPointRow(BaseModel):
+    id: int | str | None = None
+    name: str | None = None
+    point_type: str | None = None
+    topic: str | None = None
+    tagged_units: str | None = None
+
+
+class OnboardEquipmentRow(BaseModel):
+    id: int | str | None = None
+    name: str
+    equip_type_name: str | None = None
+    equip_type_abbr: str | None = None
+    points: list[OnboardEquipmentPointRow] = Field(default_factory=list)
 
 
 class DriversValidateBundle(BaseModel):
@@ -1759,6 +1790,36 @@ def create_app() -> FastAPI:
             "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
         }
 
+    def _onboard_request_json(path: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        base_url = str(os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io")).strip().rstrip("/")
+        api_key = str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Missing OFDD_ONBOARD_API_KEY. Save onboard config with API key first.")
+        url = f"{base_url}{path}"
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise HTTPException(status_code=400, detail=f"Invalid onboard base_url scheme: {parsed.scheme!r}")
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            method=method,
+            data=data,
+            headers={
+                "X-OB-Api": api_key,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"Onboard API HTTP {exc.code} for {path}.") from exc
+        except urllib.error.URLError as exc:
+            raise HTTPException(status_code=502, detail=f"Onboard API request failed for {path}: {exc}.") from exc
+        if isinstance(body, list):
+            return [item for item in body if isinstance(item, dict)]
+        return []
+
     @app.post("/config/onboard", tags=["config"])
     def onboard_config_set(body: OnboardConfigBody) -> dict[str, Any]:
         os.environ["OFDD_ONBOARD_API_BASE_URL"] = str(body.base_url or "https://api.onboarddata.io").strip()
@@ -1768,6 +1829,179 @@ def create_app() -> FastAPI:
         if body.api_key is not None:
             os.environ["OFDD_ONBOARD_API_KEY"] = str(body.api_key).strip()
         return onboard_config_get()
+
+    @app.get("/config/onboard/auth-test", tags=["config"])
+    def onboard_auth_test_get() -> dict[str, Any]:
+        rows = _onboard_request_json("/buildings")
+        return {
+            "ok": True,
+            "building_count": len(rows),
+            "message": "Onboard API authentication is valid.",
+        }
+
+    @app.get("/config/onboard/buildings", tags=["config"])
+    def onboard_buildings_get() -> dict[str, Any]:
+        rows = _onboard_request_json("/buildings")
+        buildings: list[OnboardBuildingRow] = []
+        for row in rows:
+            buildings.append(
+                OnboardBuildingRow(
+                    id=str(row.get("id", "")),
+                    name=str(row.get("name", "")).strip() or f"building-{row.get('id', '')}",
+                    point_count=int(row.get("point_count")) if str(row.get("point_count", "")).strip() else None,
+                    equip_count=int(row.get("equip_count")) if str(row.get("equip_count", "")).strip() else None,
+                    timezone=str(row.get("timezone", "")).strip() or None,
+                )
+            )
+        buildings.sort(key=lambda b: (b.name.lower(), b.id))
+        return {
+            "count": len(buildings),
+            "buildings": [b.model_dump() for b in buildings],
+        }
+
+    @app.get("/config/onboard/buildings/{building_id}/points", tags=["config"])
+    def onboard_building_points_get(
+        building_id: int,
+        point_type: str | None = None,
+        sample_limit: int = Query(default=20, ge=1, le=200),
+    ) -> dict[str, Any]:
+        rows = _onboard_request_json(f"/buildings/{int(building_id)}/points")
+        wanted = str(point_type or "").strip().lower()
+        counts: dict[str, int] = {}
+        samples: list[dict[str, Any]] = []
+        for row in rows:
+            raw_type = (
+                row.get("point_type")
+                or row.get("type")
+                or row.get("tag")
+                or row.get("kind")
+                or "unknown"
+            )
+            normalized = str(raw_type).strip().lower() or "unknown"
+            counts[normalized] = int(counts.get(normalized, 0)) + 1
+            if wanted and normalized != wanted:
+                continue
+            if len(samples) >= sample_limit:
+                continue
+            samples.append(
+                {
+                    "id": row.get("id"),
+                    "name": row.get("name"),
+                    "point_type": normalized,
+                    "topic": row.get("topic"),
+                    "tagged_units": row.get("tagged_units") or row.get("units"),
+                }
+            )
+        count_rows = [
+            OnboardDiscoveryPointTypeRow(point_type=k, count=v).model_dump()
+            for k, v in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+        return {
+            "building_id": int(building_id),
+            "point_count": len(rows),
+            "point_type_counts": count_rows,
+            "sample_points": samples,
+        }
+
+    @app.get("/config/onboard/buildings/{building_id}/equipment", tags=["config"])
+    def onboard_building_equipment_get(
+        building_id: int,
+        include_points: bool = True,
+        equip_name_contains: str | None = None,
+        point_type: str | None = None,
+        max_equipment: int = Query(default=500, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        qs = "?points=true" if include_points else ""
+        rows = _onboard_request_json(f"/buildings/{int(building_id)}/equipment{qs}")
+        equip_filter = str(equip_name_contains or "").strip().lower()
+        point_filter = str(point_type or "").strip().lower()
+        out: list[OnboardEquipmentRow] = []
+        for row in rows:
+            name = str(row.get("equip_id") or row.get("name") or f"equipment_{row.get('id', '')}").strip()
+            if equip_filter and equip_filter not in name.lower():
+                continue
+            points_raw = row.get("points") if include_points else []
+            points_list: list[OnboardEquipmentPointRow] = []
+            if isinstance(points_raw, list):
+                for p in points_raw:
+                    if not isinstance(p, dict):
+                        continue
+                    ptype = str(p.get("type") or p.get("point_type") or "").strip().lower()
+                    if point_filter and ptype != point_filter:
+                        continue
+                    points_list.append(
+                        OnboardEquipmentPointRow(
+                            id=p.get("id"),
+                            name=str(p.get("name") or "").strip() or None,
+                            point_type=ptype or None,
+                            topic=str(p.get("topic") or "").strip() or None,
+                            tagged_units=str(p.get("tagged_units") or p.get("units") or "").strip() or None,
+                        )
+                    )
+            out.append(
+                OnboardEquipmentRow(
+                    id=row.get("id"),
+                    name=name,
+                    equip_type_name=str(row.get("equip_type_name") or "").strip() or None,
+                    equip_type_abbr=str(row.get("equip_type_abbr") or "").strip() or None,
+                    points=points_list,
+                )
+            )
+            if len(out) >= int(max_equipment):
+                break
+        return {
+            "building_id": int(building_id),
+            "equipment_count": len(out),
+            "equipment": [e.model_dump() for e in out],
+        }
+
+    @app.get("/config/onboard/points/live", tags=["config"])
+    def onboard_points_live_get(
+        point_ids: str = Query(..., description="Comma-separated onboard point IDs"),
+        lookback_minutes: int = Query(default=30, ge=1, le=24 * 60),
+    ) -> dict[str, Any]:
+        ids = [
+            int(item.strip())
+            for item in str(point_ids).split(",")
+            if item.strip().isdigit()
+        ]
+        if not ids:
+            raise HTTPException(status_code=400, detail="point_ids must include at least one integer ID.")
+        end = datetime.now(timezone.utc)
+        start = end - pd.Timedelta(minutes=int(lookback_minutes))
+        rows = _onboard_request_json(
+            "/query-v2",
+            method="POST",
+            payload={
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "point_ids": ids,
+            },
+        )
+        series: list[dict[str, Any]] = []
+        for row in rows:
+            vals = row.get("values") if isinstance(row, dict) else []
+            sample_count = len(vals) if isinstance(vals, list) else 0
+            last_value = None
+            last_ts = None
+            if isinstance(vals, list) and vals:
+                last = vals[-1]
+                if isinstance(last, list) and len(last) >= 2:
+                    last_ts = last[0]
+                    last_value = last[-1] if len(last) >= 3 else last[1]
+            series.append(
+                {
+                    "point_id": row.get("point_id"),
+                    "sample_count": sample_count,
+                    "last_timestamp": last_ts,
+                    "last_value": last_value,
+                }
+            )
+        return {
+            "ok": True,
+            "lookback_minutes": int(lookback_minutes),
+            "series": series,
+        }
 
     @app.get("/plots/frame", tags=["timeseries"])
     def plots_frame(
@@ -1952,6 +2186,43 @@ def create_app() -> FastAPI:
         from open_fdd.assistant.readiness import build_readiness_payload
 
         return build_readiness_payload(services.model.load())
+
+    @app.get("/assistant/ai-health", tags=["assistant"])
+    def assistant_ai_health() -> dict[str, Any]:
+        mcp_base = str(os.getenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")).strip().rstrip("/")
+        openclaw_url = str(
+            os.getenv("OFDD_OPENCLAW_GATEWAY_URL")
+            or os.getenv("OFDD_CLAW_GATEWAY_URL")
+            or "http://127.0.0.1:18789"
+        ).strip().rstrip("/")
+        has_openclaw_token = bool(
+            str(os.getenv("OFDD_OPENCLAW_GATEWAY_TOKEN") or os.getenv("OFDD_CLAW_GATEWAY_TOKEN") or "").strip()
+        )
+        mcp_ok = False
+        openclaw_ok = False
+        mcp_error: str | None = None
+        openclaw_error: str | None = None
+        try:
+            req = urllib.request.Request(f"{mcp_base}/health", method="GET")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                mcp_ok = int(resp.status) == 200
+        except Exception as exc:  # noqa: BLE001
+            mcp_error = str(exc)
+        try:
+            req = urllib.request.Request(f"{openclaw_url}/health", method="GET")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                openclaw_ok = int(resp.status) == 200
+        except Exception as exc:  # noqa: BLE001
+            openclaw_error = str(exc)
+        return {
+            "mcp_rest_base": mcp_base,
+            "mcp_reachable": mcp_ok,
+            "mcp_error": mcp_error,
+            "openclaw_gateway_url": openclaw_url,
+            "openclaw_reachable": openclaw_ok,
+            "openclaw_error": openclaw_error,
+            "openclaw_token_set": has_openclaw_token,
+        }
 
     @app.post("/assistant/apply-site-profiles", tags=["assistant"])
     def assistant_apply_site_profiles(body: ApplySiteProfilesBody) -> dict[str, Any]:

@@ -28,7 +28,7 @@ Full **Brick / SPARQL / Compose** platform docs: **[open-fdd-afdd-stack](https:/
 **Agentic / “OpenClaw-style” building blocks already in Open-FDD (fixed, repo-local):**
 
 - **Model routing (inspired by OpenClaw):** `open_fdd/gateway/openclaw_routing.py` — task classification and simple vs complex lanes used when calling the gateway client (`complete_for_task`).
-- **Workspace + skills (cloned patterns, not a running OpenClaw dependency):** [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) and [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md) (`SKILL.md` bundles: bootstrap, clean-metrics, modeling, drivers, BACnet). These mirror OpenClaw’s **bootstrap Markdown + AgentSkills** layout; operators can still **copy** them into `~/.openclaw/workspace/` if they *also* run OpenClaw.
+- **Workspace + skills (cloned patterns, not a running OpenClaw dependency):** [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/blob/master/contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) and [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/blob/master/contrib/openclaw-skills/README.md) (`SKILL.md` bundles: bootstrap, clean-metrics, modeling, drivers, BACnet). These mirror OpenClaw’s **bootstrap Markdown + AgentSkills** layout; operators can still **copy** them into `~/.openclaw/workspace/` if they *also* run OpenClaw.
 - **Operator tools in the UI:** Advanced panel (cron/API/policy presets) on the same route as **AI Agent** chat — see `OpenFddClawAdvancedPanel.tsx`.
 
 **Gaps / roadmap (honest):** a single long-running “Open-FDD agent” process with OpenClaw-parity **memory files**, **multi-step tool loop**, and **subagents** is **not** fully merged into the bridge yet; today the **built-in** path is **CLI Codex + REST bridge + readiness/MCP/docs**. Gateway routing and workspace clones are the **spine** to grow toward that without forking OpenClaw wholesale.
@@ -79,8 +79,8 @@ flowchart LR
 | **Gateway + agent loop** | Single place for “operator asks → plan → call bridge/MCP → summarize”. |
 | **`mcp.servers` + MCP adapter** | Stock **8090** service is **REST** `/tools/*`; add a thin MCP shim to use `mcp.servers` (`openfdd__*` tool names), or call REST via fetch/prompts. |
 | **`openclaw mcp serve`** | Optional: IDE MCP clients talk to OpenClaw, which still reaches the host bridge. |
-| **Workspace skills** (`SKILL.md`) | Repo ships skills under [`contrib/openclaw-skills/`](../contrib/openclaw-skills/README.md) — include **`open-fdd-bootstrap`**, **`open-fdd-clean-metrics`** (preview/commit clean-metrics until plot-readiness is green), modeling/drivers/BACnet packs; copy into `~/.openclaw/workspace/skills/`. |
-| **Bootstrap Markdown** (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) | Repo ships starter copies under [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md); merge into your OpenClaw workspace root so the agent loads Open-FDD API context automatically. |
+| **Workspace skills** (`SKILL.md`) | Repo ships skills under [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/blob/master/contrib/openclaw-skills/README.md) — include **`open-fdd-bootstrap`**, **`open-fdd-clean-metrics`** (preview/commit clean-metrics until plot-readiness is green), modeling/drivers/BACnet packs; copy into `~/.openclaw/workspace/skills/`. |
+| **Bootstrap Markdown** (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, …) | Repo ships starter copies under [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/blob/master/contrib/openclaw-workspace/README.md); merge into your OpenClaw workspace root so the agent loads Open-FDD API context automatically. |
 | **Live Canvas / A2UI** | Dashboards: fault timelines, equipment trees, structured summaries instead of raw tables in chat. |
 | **Thinking / subagents / `sessions_spawn`** | Heavy jobs: multi-site backfill, large SPARQL, BACnet discovery in isolated sessions. |
 | **Cron + webhooks** | Scheduled ingest, nightly FDD, alerts to Slack/Telegram/WebChat. |
@@ -219,4 +219,4 @@ Install: `pip install "open-fdd[desktop]"` (bridge already pulls desktop deps).
 3. Codex OAuth: `openclaw models auth login --provider openai-codex`.  
 4. Register MCP: merge `mcp.servers.openfdd` into `openclaw.json` (this doc + runbook Phase 0).  
 5. Skills: copy [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills) skill folders into `~/.openclaw/workspace/skills/`.  
-6. Workspace bootstrap: copy Markdown from [`contrib/openclaw-workspace/`](../contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, etc.) into your OpenClaw workspace root so the agent loads Open-FDD API context on boot.
+6. Workspace bootstrap: copy Markdown from [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/blob/master/contrib/openclaw-workspace/README.md) (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, etc.) into your OpenClaw workspace root so the agent loads Open-FDD API context on boot.
