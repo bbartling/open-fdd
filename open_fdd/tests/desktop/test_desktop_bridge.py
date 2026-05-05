@@ -420,10 +420,11 @@ def test_onboard_ingest_accepts_start_end_window(monkeypatch: pytest.MonkeyPatch
 
     captured: dict[str, str | None] = {}
 
-    def _fake_ingest_onboard(self, *, site_id: str, start_ts: str | None = None, end_ts: str | None = None):  # noqa: ARG001
+    def _fake_ingest_onboard(self, *, site_id: str, start_ts: str | None = None, end_ts: str | None = None, building_ids: str | None = None):  # noqa: ARG001
         captured["site_id"] = site_id
         captured["start_ts"] = start_ts
         captured["end_ts"] = end_ts
+        captured["building_ids"] = building_ids
         return {"rows": 2, "source": "onboard", "success": True, "start_ts": start_ts, "end_ts": end_ts}
 
     monkeypatch.setattr(
@@ -449,6 +450,19 @@ def test_onboard_ingest_accepts_start_end_window(monkeypatch: pytest.MonkeyPatch
         assert captured.get("site_id") == site_id
         assert captured.get("start_ts") == "2025-05-05T00:00:00Z"
         assert captured.get("end_ts") == "2026-05-04T23:59:59Z"
+        assert captured.get("building_ids") is None
+
+        res2 = client.post(
+            "/ingest/onboard",
+            json={
+                "site_id": site_id,
+                "start_ts": "2025-05-05T00:00:00Z",
+                "end_ts": "2026-05-04T23:59:59Z",
+                "building_ids": "42",
+            },
+        )
+        assert res2.status_code == 200, res2.text
+        assert captured.get("building_ids") == "42"
 
 
 def test_onboard_building_availability_endpoint_returns_window(monkeypatch: pytest.MonkeyPatch) -> None:

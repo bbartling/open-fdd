@@ -660,13 +660,19 @@ export function AiAgentChatPage() {
         const doneOut =
           done.stdout?.trim() ||
           (done.stderr?.trim() ? `Agent CLI exited ${done.returncode}.\n\nstderr:\n${done.stderr.trim()}` : "(No output.)");
+        const doneOutWithCritic =
+          done.critic_used && done.critic_model
+            ? `${doneOut}\n\n---\nFinal-pass critique applied (${done.critic_model}).`
+            : doneOut;
         const doneRoute = routeMetaFromAgentResponse(done);
         setSessionBundle((prev) =>
           updateSessionById(prev, pollSessionId, (s) => ({
             ...s,
             lines: [
               ...s.lines,
-              doneRoute ? { role: "assistant", text: doneOut, route: doneRoute } : { role: "assistant", text: doneOut },
+              doneRoute
+                ? { role: "assistant", text: doneOutWithCritic, route: doneRoute }
+                : { role: "assistant", text: doneOutWithCritic },
             ],
             updatedAt: Date.now(),
           })),

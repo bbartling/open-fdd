@@ -31,11 +31,12 @@ def run_onboard_scrape(
     site_id: str,
     start_ts: str | None = None,
     end_ts: str | None = None,
+    building_ids: str | None = None,
 ) -> OnboardScrapeResult:
     logger = logging.getLogger(__name__)
     base_url = os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io").rstrip("/")
     api_key = os.getenv("OFDD_ONBOARD_API_KEY", "").strip()
-    building_ids_raw = os.getenv("OFDD_ONBOARD_BUILDING_IDS", "").strip()
+    building_ids_raw = (building_ids or "").strip() or os.getenv("OFDD_ONBOARD_BUILDING_IDS", "").strip()
     _lb_raw = os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24")
     try:
         lookback_hours = int(str(_lb_raw).strip())

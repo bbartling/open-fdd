@@ -238,6 +238,8 @@ class OnboardIngestBody(BaseModel):
     site_id: str
     start_ts: str | None = None
     end_ts: str | None = None
+    #: When set, overrides saved ``OFDD_ONBOARD_BUILDING_IDS`` for this ingest only (comma-separated ids or names allowed).
+    building_ids: str | None = None
 
 
 class BacnetIngestBody(BaseModel):
@@ -444,8 +446,6 @@ class _AgentRunItem:
 class _OpenFddAgentQueueManager:
     """Single-flight agent execution: at most one codex turn runs at a time."""
 
-    _STORE_STDIO_MAX = 4096
-
     def __init__(self) -> None:
         self._queue: Queue[_AgentRunItem] = Queue()
         self._lock = threading.Lock()
@@ -464,19 +464,6 @@ class _OpenFddAgentQueueManager:
             self._cv.notify_all()
         if self._worker.is_alive():
             self._worker.join(timeout=float(join_timeout_s))
-
-    @staticmethod
-    def _shrink_result_for_store(result: dict[str, Any] | None) -> dict[str, Any] | None:
-        if result is None:
-            return None
-        out = dict(result)
-        cap = _OpenFddAgentQueueManager._STORE_STDIO_MAX
-        for key in ("stdout", "stderr"):
-            val = out.get(key)
-            if isinstance(val, str) and len(val) > cap:
-                n = len(val)
-                out[key] = val[:cap] + f"\n… truncated ({n} chars total)"
-        return out
 
     def _retain_cap(self) -> int:
         raw = (os.environ.get("OFDD_AGENT_RUNS_RETAIN") or "100").strip()
@@ -543,6 +530,7 @@ class _OpenFddAgentQueueManager:
                 return {"run_id": item.run_id, "status": "queued"}
             self._claim_running_locked(item.run_id)
 
+        result: dict[str, Any] | None = None
         try:
             result = run_openfdd_agent_turn(
                 message=item.message,
@@ -553,9 +541,11 @@ class _OpenFddAgentQueueManager:
                 conversation_history=item.conversation_history,
                 human_requested_complex=item.human_requested_complex,
             )
+        except Exception as exc:  # noqa: BLE001
+            result = {"ok": False, "error": "agent_runner_exception", "detail": str(exc)}
         finally:
-            self._set_completed(item.run_id, result if "result" in locals() else None)
-        return {"run_id": item.run_id, "status": "completed", "result": result}
+            self._set_completed(item.run_id, result)
+        return {"run_id": item.run_id, "status": "completed", "result": result or {}}
 
     def set_paused(self, paused: bool) -> dict[str, Any]:
         with self._cv:
@@ -579,7 +569,7 @@ class _OpenFddAgentQueueManager:
 
     def _set_completed(self, run_id: str, result: dict[str, Any] | None) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        stored = self._shrink_result_for_store(result)
+        stored = dict(result) if isinstance(result, dict) else result
         with self._cv:
             row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
             row.update(
@@ -1790,6 +1780,7 @@ def create_app() -> FastAPI:
             site_id=body.site_id,
             start_ts=body.start_ts,
             end_ts=body.end_ts,
+            building_ids=body.building_ids,
         )
         ok = bool(out.get("success", False))
         _driver_health_update(

@@ -392,15 +392,23 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       return;
     }
     setOnboardOp("bulk");
+    const buildingForIngest = String(onboardBuildingInspectId || "").trim();
     try {
       setOnboardActionLog((prev) => [
-        onboardLogLine(`POST /ingest/onboard starting site_id=${effectiveSiteId} start=${startTs} end=${endTs} …`),
+        onboardLogLine(
+          `POST /ingest/onboard starting site_id=${effectiveSiteId} building_ids=${buildingForIngest || "(saved config)"} start=${startTs} end=${endTs} …`,
+        ),
         ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
       const out = await desktopFetch<{ rows: number; source: string; success: boolean; error?: string }>("/ingest/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site_id: effectiveSiteId, start_ts: startTs, end_ts: endTs }),
+        body: JSON.stringify({
+          site_id: effectiveSiteId,
+          start_ts: startTs,
+          end_ts: endTs,
+          ...(buildingForIngest ? { building_ids: buildingForIngest } : {}),
+        }),
       });
       setStatus(
         out.success
@@ -409,7 +417,7 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
       );
       setOnboardActionLog((prev) => [
         onboardLogLine(
-          `POST /ingest/onboard ${out.success ? "OK" : "FAILED"} site_id=${effectiveSiteId} rows=${out.rows} source=${out.source ?? "?"} err=${out.error ?? "-"}`,
+          `POST /ingest/onboard ${out.success ? "OK" : "FAILED"} site_id=${effectiveSiteId} building_ids=${buildingForIngest || "(saved config)"} rows=${out.rows} source=${out.source ?? "?"} err=${out.error ?? "-"}`,
         ),
         ...prev.slice(0, ONBOARD_LOG_MAX - 1),
       ]);
@@ -807,6 +815,20 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
             />
           </div>
           <div>
+            <label>Headless default window (hours, UTC)</label>
+            <input
+              value={onboardLookbackHours}
+              onChange={(e) => setOnboardLookbackHours(e.target.value)}
+              inputMode="numeric"
+              style={{ maxWidth: 120 }}
+            />
+            <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+              Used only when ingest is called without start/end timestamps (for example{" "}
+              <code className="inline-code">POST /ingest/onboard</code> with <code className="inline-code">site_id</code> only). Then the
+              window is “now” back N hours. Bulk download always uses the calendar Start / End dates after prefill, not this value.
+            </p>
+          </div>
+          <div>
             <label>API key</label>
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -902,13 +924,20 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
           <div style={{ marginTop: 8 }}>
             <strong>Notes</strong>
             <p className="muted" style={{ margin: "4px 0 0", fontSize: 12 }}>
-              Bulk download uses the selected site and lookback hours, then writes Feather rows under <code className="inline-code">source=onboard</code>.
-              Once this summary looks right, the AI agent has enough structure to help with BRICK modeling and FDD on this building.
+              Bulk download uses the selected site and the Start / End calendar range (from prefill or your edits), then writes Feather rows under{" "}
+              <code className="inline-code">source=onboard</code>. Once this summary looks right, the AI agent has enough structure to help with BRICK
+              modeling and FDD on this building.
             </p>
           </div>
         </div>
           <div style={{ marginTop: 12, borderTop: "1px solid var(--border-color)", paddingTop: 12 }}>
             <h4 style={{ margin: "0 0 8px" }}>Bulk data download</h4>
+            <p className="muted" style={{ margin: "0 0 10px", fontSize: 12 }}>
+              The Onboard <code className="inline-code">query-v2</code> API returns JSON time-series samples. The bridge turns that into a wide
+              timestamped table, appends a Feather shard under <code className="inline-code">source=onboard</code>, and upserts point metadata
+              (BRICK / FDD hints) in the local model. This path does not read or write CSV; use the CSV import flow if your data is already in a CSV
+              file (that path also lands in Feather).
+            </p>
             <div
               style={{
                 display: "flex",
@@ -946,10 +975,6 @@ export function DriversPage({ embedded = false, section = "all" }: { embedded?: 
               <div>
                 <label>End date</label>
                 <input type="date" value={onboardEndDate} onChange={(e) => setOnboardEndDate(e.target.value)} />
-              </div>
-              <div>
-                <label>Lookback hours</label>
-                <input value={onboardLookbackHours} onChange={(e) => setOnboardLookbackHours(e.target.value)} />
               </div>
               <button
                 className="secondary-btn"

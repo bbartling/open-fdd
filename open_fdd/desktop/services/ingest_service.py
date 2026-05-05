@@ -102,8 +102,15 @@ class IngestService:
         site_id: str,
         start_ts: str | None = None,
         end_ts: str | None = None,
+        building_ids: str | None = None,
     ) -> dict[str, Any]:
-        result = run_onboard_scrape(store=self.connector, site_id=site_id, start_ts=start_ts, end_ts=end_ts)
+        result = run_onboard_scrape(
+            store=self.connector,
+            site_id=site_id,
+            start_ts=start_ts,
+            end_ts=end_ts,
+            building_ids=building_ids,
+        )
         if not result.success:
             return {
                 "rows": result.rows,

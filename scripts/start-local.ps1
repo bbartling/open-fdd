@@ -212,13 +212,13 @@ function Stop-ListeningProcessOnPort(
     $rows = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if (-not $rows) { return }
     $pids = @($rows | Select-Object -ExpandProperty OwningProcess -Unique)
-    foreach ($pid in $pids) {
-      if (-not $pid) { continue }
+    foreach ($procId in $pids) {
+      if (-not $procId) { continue }
       try {
-        Stop-Process -Id $pid -Force -ErrorAction Stop
-        Write-Host "Stopped existing $Name process on port $Port (pid=$pid)."
+        Stop-Process -Id $procId -Force -ErrorAction Stop
+        Write-Host "Stopped existing $Name process on port $Port (pid=$procId)."
       } catch {
-        Write-Warning "Could not stop existing $Name process pid=$pid on port $Port."
+        Write-Warning "Could not stop existing $Name process pid=$procId on port $Port."
       }
     }
   } catch {
@@ -233,10 +233,10 @@ function Restart-ExistingServiceIfRunning([string]$serviceName) {
     "desktop-ui" { Stop-ListeningProcessOnPort -Port 5173 -Name "desktop-ui" }
     "adapter" {
       try {
-        $matches = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue | Where-Object {
+        $adapterProcs = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue | Where-Object {
           ($_.CommandLine -as [string]) -match "open-fdd-mcp-adapter"
         })
-        foreach ($m in $matches) {
+        foreach ($m in $adapterProcs) {
           Stop-Process -Id $m.ProcessId -Force -ErrorAction SilentlyContinue
           Write-Host "Stopped existing adapter process (pid=$($m.ProcessId))."
         }

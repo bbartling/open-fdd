@@ -158,11 +158,16 @@ refresh_mcp_rag_index() {
       next_heartbeat=$((next_heartbeat + 10))
     fi
   done
-  wait "${build_pid}" || echo "WARNING: MCP RAG index build failed; search_docs may be stale or empty until you fix errors and restart MCP." >&2
+  wait "${build_pid}"
+  local wait_status=$?
   local ended_at elapsed_s
   ended_at="$(date +%s)"
   elapsed_s="$((ended_at - started_at))"
-  echo "MCP RAG index build complete (${elapsed_s}s): ${REPO_ROOT}/stack/mcp-rag/index/rag_index.json"
+  if [[ "${wait_status}" -eq 0 ]]; then
+    echo "MCP RAG index build complete (${elapsed_s}s): ${REPO_ROOT}/stack/mcp-rag/index/rag_index.json"
+  else
+    echo "WARNING: MCP RAG index build failed; search_docs may be stale or empty until you fix errors and restart MCP." >&2
+  fi
 }
 
 if needs_venv && [[ ! -f "${REPO_ROOT}/.venv/bin/activate" ]]; then
