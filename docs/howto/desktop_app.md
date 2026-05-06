@@ -1,3 +1,10 @@
+---
+title: Desktop app
+parent: How-to Guides
+nav_order: 11
+description: "Open-FDD gateway, MCP RAG, React UI, Feather storage, and local ingest (start-local)."
+---
+
 # Open-FDD Desktop App
 
 ## Goal
