@@ -1,7 +1,8 @@
 """OpenAI ChatGPT / Codex device-code login (same contract as OpenClaw's extensions/openai device flow).
 
 Used by the desktop UI so operators on headless hosts can complete browser OAuth without the
-OpenClaw CLI. Tokens are returned to the local UI only — treat the bridge as localhost-trusted.
+OpenClaw CLI. After a successful exchange the bridge writes ``auth.json`` for the host ``codex``
+CLI and does **not** return access or refresh tokens to the browser.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import requests
+
+from open_fdd.gateway import local_codex_cli
 
 OPENAI_AUTH_BASE_URL = "https://auth.openai.com"
 OPENAI_CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -80,11 +83,43 @@ class _Session:
     error: str | None = None
     access_token: str | None = None
     refresh_token: str | None = None
+    id_token: str | None = None
     expires_at_ms: int | None = None
+    persisted_to_disk: bool = False
 
 
 _lock = threading.Lock()
 _sessions: dict[str, _Session] = {}
+
+
+def _emit_complete_response(session_id: str) -> dict[str, Any]:
+    """Public JSON for a finished session (no secrets); persists tokens to disk once per session."""
+    with _lock:
+        sess = _sessions.get(session_id)
+        if not sess or sess.phase != "complete" or not sess.access_token or not sess.refresh_token:
+            return {"status": "error", "message": "Unknown or expired session. Start sign-in again."}
+        access = sess.access_token
+        refresh = sess.refresh_token
+        id_tok = sess.id_token
+        exp = sess.expires_at_ms
+        already = sess.persisted_to_disk
+
+    persist: dict[str, Any] = {"ok": True}
+    if not already:
+        persist = local_codex_cli.persist_chatgpt_auth_from_device_tokens(access, refresh, id_token=id_tok)
+        if persist.get("ok"):
+            with _lock:
+                s2 = _sessions.get(session_id)
+                if s2:
+                    s2.persisted_to_disk = True
+
+    return {
+        "status": "complete",
+        "message": "Signed in. Credentials were saved for Codex on this bridge host.",
+        "expires_at_ms": exp,
+        "codex_auth_persisted": bool(persist.get("ok")),
+        "codex_auth_persist_error": persist.get("error") if not persist.get("ok") else None,
+    }
 
 
 def _gc_sessions() -> None:
@@ -146,13 +181,7 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
         return {"status": "error", "message": "Unknown or expired session. Start sign-in again."}
 
     if sess.phase == "complete" and sess.access_token and sess.refresh_token:
-        return {
-            "status": "complete",
-            "message": "Authorized.",
-            "access_token": sess.access_token,
-            "refresh_token": sess.refresh_token,
-            "expires_at_ms": sess.expires_at_ms,
-        }
+        return _emit_complete_response(session_id)
     if sess.phase == "error":
         return {"status": "error", "message": sess.error or "Device login failed."}
 
@@ -164,13 +193,7 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
         if sess is None:
             return {"status": "error", "message": "Unknown or expired session. Start sign-in again."}
         if sess.phase == "complete" and sess.access_token and sess.refresh_token:
-            return {
-                "status": "complete",
-                "message": "Authorized.",
-                "access_token": sess.access_token,
-                "refresh_token": sess.refresh_token,
-                "expires_at_ms": sess.expires_at_ms,
-            }
+            return _emit_complete_response(session_id)
         if sess.phase == "error":
             return {"status": "error", "message": sess.error or "Device login failed."}
         if sess.phase == "exchanging":
@@ -249,6 +272,7 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
     oauth_body = _parse_json_object(text2) or {}
     access = _trim_str(oauth_body.get("access_token"))
     refresh = _trim_str(oauth_body.get("refresh_token"))
+    id_tok = _trim_str(oauth_body.get("id_token"))
     if not access or not refresh:
         with _lock:
             s3 = _sessions.get(session_id)
@@ -264,12 +288,7 @@ def poll_device_login(session_id: str) -> dict[str, Any]:
             s3.phase = "complete"
             s3.access_token = access
             s3.refresh_token = refresh
+            s3.id_token = id_tok
             s3.expires_at_ms = expires_at_ms
 
-    return {
-        "status": "complete",
-        "message": "Signed in with ChatGPT / Codex. OpenClaw can use this profile after you configure it (see UI hint).",
-        "access_token": access,
-        "refresh_token": refresh,
-        "expires_at_ms": expires_at_ms,
-    }
+    return _emit_complete_response(session_id)

@@ -1,4 +1,4 @@
-import { bridgeBase, desktopFetch } from "../lib/api";
+import { BRIDGE_BASE_STORAGE_KEY, desktopFetch, getBridgeBase } from "../lib/api";
 import { classifyOpenfddTaskPreview } from "../lib/openfdd-agent-route-preview";
 import {
   loadCodexSessionBundle,
@@ -44,6 +44,8 @@ type CodexExecEnvPayload = {
   llm_route_classify?: boolean;
   /** Bridge retries once as COMPLEX when auto SIMPLE Codex fails (`OFDD_AGENT_ESCALATE_ON_FAILURE`). */
   escalate_simple_failure_to_complex?: boolean;
+  /** After a successful SIMPLE `codex exec`, run a COMPLEX-model critic pass (`OFDD_AGENT_SIMPLE_COMPLEX_CRITIC`, default on). */
+  simple_tier_critic?: boolean;
 };
 
 type DiagnosticsPayload = {
@@ -265,6 +267,34 @@ export function AiAgentChatPage() {
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const devicePollMounted = useRef(true);
 
+  const [bridgeTick, setBridgeTick] = useState(0);
+  const bridgeBase = useMemo(() => getBridgeBase(), [bridgeTick]);
+  const [bridgeUrlDraft, setBridgeUrlDraft] = useState(() => {
+    try {
+      return localStorage.getItem(BRIDGE_BASE_STORAGE_KEY)?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === BRIDGE_BASE_STORAGE_KEY || e.key === null) {
+        setBridgeTick((n) => n + 1);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    try {
+      setBridgeUrlDraft(localStorage.getItem(BRIDGE_BASE_STORAGE_KEY)?.trim() ?? "");
+    } catch {
+      setBridgeUrlDraft("");
+    }
+  }, [bridgeTick]);
+
   useEffect(() => {
     const persistNow = () => persistCodexSessionBundle(bundleRef.current);
     const id = window.setTimeout(persistNow, 320);
@@ -334,6 +364,68 @@ export function AiAgentChatPage() {
     }
   }, [pullDiagnostics]);
 
+  const applyBridgeUrlOverride = useCallback(() => {
+    setSignInActionError(null);
+    const t = bridgeUrlDraft.trim();
+    try {
+      if (t === "") {
+        try {
+          localStorage.removeItem(BRIDGE_BASE_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        const u = new URL(t.includes("://") ? t : `http://${t}`);
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          setSignInActionError("Bridge URL must use http or https.");
+          return;
+        }
+        try {
+          localStorage.setItem(BRIDGE_BASE_STORAGE_KEY, u.origin);
+        } catch {
+          setSignInActionError("Could not save bridge URL (storage blocked).");
+          return;
+        }
+        setBridgeUrlDraft(u.origin);
+      }
+      setBridgeTick((n) => n + 1);
+      void refreshAuth();
+    } catch (e) {
+      setSignInActionError(e instanceof Error ? e.message : String(e));
+    }
+  }, [bridgeUrlDraft, refreshAuth]);
+
+  const clearBridgeUrlOverride = useCallback(() => {
+    setSignInActionError(null);
+    try {
+      localStorage.removeItem(BRIDGE_BASE_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    setBridgeUrlDraft("");
+    setBridgeTick((n) => n + 1);
+    void refreshAuth();
+  }, [refreshAuth]);
+
+  const copyTextToClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, []);
+
   const setAgentPaused = useCallback(async (paused: boolean) => {
     setAgentControlBusy(true);
     setAgentControlError(null);
@@ -397,7 +489,13 @@ export function AiAgentChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: sessionId }),
         });
-        const body = (await res.json()) as { status?: string; message?: string; detail?: string };
+        const body = (await res.json()) as {
+          status?: string;
+          message?: string;
+          detail?: string;
+          codex_auth_persisted?: boolean;
+          codex_auth_persist_error?: string | null;
+        };
         if (cancelled || !devicePollMounted.current) {
           return false;
         }
@@ -409,12 +507,22 @@ export function AiAgentChatPage() {
         }
         if (body.status === "complete") {
           setDeviceSession(null);
+          if (body.codex_auth_persisted === false && typeof body.codex_auth_persist_error === "string") {
+            setPostOAuthHint(
+              `Browser sign-in finished, but saving Codex credentials on the bridge failed (${body.codex_auth_persist_error}). ` +
+                "Fix CODEX_HOME permissions, ensure `cli_auth_credentials_store = \"file\"` in ~/.codex/config.toml if you use the keyring, then use Retry check.",
+            );
+          } else {
+            setPostOAuthHint(null);
+          }
           try {
             const st = await pullDiagnostics({ silent: true });
             if (st === "needs_login") {
-              setPostOAuthHint(
-                "Browser sign-in finished. If the agent still shows as signed out, on the bridge PC run: codex login — then use Retry below.",
-              );
+              setPostOAuthHint((prev) => {
+                const extra =
+                  "Browser sign-in finished, but Codex on the bridge still reports signed out. SSH to the server and run `codex login status`; if credentials use the OS keyring, switch to file-backed storage (see OpenAI Codex auth docs) or sign in again.";
+                return prev ? `${prev}\n\n${extra}` : extra;
+              });
             }
           } catch (e) {
             setAuthState("error");
@@ -702,6 +810,45 @@ export function AiAgentChatPage() {
           </div>
         </div>
 
+        <div
+          className="local-codex-bridge-url-block"
+          style={{
+            marginTop: 4,
+            marginBottom: 12,
+            paddingTop: 10,
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <label htmlFor="ofdd-bridge-base-input" className="muted" style={{ fontSize: 12 }}>
+            Bridge base URL (API calls go here — use your server or tunnel if this UI is not on the bridge host)
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input
+              id="ofdd-bridge-base-input"
+              type="text"
+              className="local-codex-workdir-input"
+              style={{ flex: "1 1 220px", minWidth: 180, maxWidth: "100%" }}
+              value={bridgeUrlDraft}
+              onChange={(e) => setBridgeUrlDraft(e.target.value)}
+              placeholder={bridgeBase}
+              aria-label="Open-FDD desktop bridge base URL"
+              autoComplete="off"
+            />
+            <button type="button" className="local-codex-btn-outline" onClick={() => void applyBridgeUrlOverride()}>
+              Save
+            </button>
+            <button type="button" className="local-codex-btn-outline" onClick={() => void clearBridgeUrlOverride()}>
+              Default
+            </button>
+          </div>
+          <p className="muted" style={{ margin: 0, fontSize: 11, lineHeight: 1.45 }}>
+            Active: <code className="inline-code">{bridgeBase}</code>
+          </p>
+        </div>
+
         {authState === "loading" ? (
           <p className="muted local-codex-auth-loading" style={{ margin: 0 }}>
             Checking Codex on the bridge…
@@ -759,6 +906,18 @@ export function AiAgentChatPage() {
                     no auto-escalate
                   </span>
                 ) : null}
+                {execEnv.simple_tier_critic === false ? (
+                  <span className="local-codex-model-chip" title="OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0 — no COMPLEX-model review after SIMPLE">
+                    no SIMPLE critic
+                  </span>
+                ) : (
+                  <span
+                    className="local-codex-model-chip local-codex-model-chip--accent"
+                    title="Successful SIMPLE replies get a final COMPLEX primary model review (OFDD_AGENT_SIMPLE_COMPLEX_CRITIC, default on)"
+                  >
+                    SIMPLE→critic
+                  </span>
+                )}
               </div>
             ) : null}
           </>
@@ -779,9 +938,26 @@ export function AiAgentChatPage() {
                 style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel-soft)" }}
               >
                 <p className="muted" style={{ margin: "0 0 6px", fontSize: 13 }}>
-                  Finish sign-in in the browser tab that just opened, then keep this page open.
+                  Open the sign-in link on <strong>any</strong> device, enter the code below, then leave this page open
+                  while the bridge completes sign-in.
                 </p>
-                <p style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.06em" }}>{deviceSession.userCode}</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.06em" }}>{deviceSession.userCode}</p>
+                  <button
+                    type="button"
+                    className="local-codex-btn-outline"
+                    onClick={() => void copyTextToClipboard(deviceSession.userCode)}
+                  >
+                    Copy code
+                  </button>
+                  <button
+                    type="button"
+                    className="local-codex-btn-outline"
+                    onClick={() => void copyTextToClipboard(deviceSession.verificationUrl)}
+                  >
+                    Copy link
+                  </button>
+                </div>
                 <a href={deviceSession.verificationUrl} target="_blank" rel="noreferrer" className="muted" style={{ fontSize: 12 }}>
                   Open sign-in link again
                 </a>
@@ -870,11 +1046,14 @@ export function AiAgentChatPage() {
         <div className="local-codex-thread" data-testid="local-codex-thread">
           <p className="local-codex-thread-hint muted">
             Up to five threads saved in this browser (oldest dropped when you start a sixth). Drafts persist across tabs.
-            <strong> Auto routing</strong> picks SIMPLE vs COMPLEX from your text (and optional bridge LLM classify); if SIMPLE
+            <strong> Auto routing</strong> picks SIMPLE vs COMPLEX from your text (and optional bridge LLM classify). By default,
+            every <strong>successful SIMPLE</strong> reply is also reviewed by the <strong>COMPLEX</strong> primary model as a final
+            critic (turn off with <code className="inline-code">OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0</code> on the bridge). If SIMPLE
             Codex exits with an error, the bridge retries once as <strong>COMPLEX</strong> (
             <code className="inline-code">OFDD_AGENT_ESCALATE_ON_FAILURE</code>, default on). The <strong>Send ▾</strong> menu
-            offers a <strong> human-requested COMPLEX</strong> pass plus runner pause/resume. While Codex runs, the colored strip previews the tier; reply
-            headers show the bridge&apos;s actual route and chips for human-requested or auto-escalation.
+            offers <strong>human-requested COMPLEX</strong> for any message (strong model regardless of auto-route) plus runner
+            pause/resume. While Codex runs, the colored strip previews the tier; reply headers show the bridge&apos;s actual route
+            and chips for human-requested or auto-escalation.
           </p>
           {!chatEnabled && authState !== "loading" ? (
             <p className="muted" style={{ margin: 0 }}>

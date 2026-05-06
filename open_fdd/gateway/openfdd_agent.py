@@ -46,7 +46,7 @@ Rules:
 - If MCP action tools are disabled, say what env vars to set instead of pretending writes succeeded.
 - Never invent site IDs: use `GET /sites` or readiness output.
 
-Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
+Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. By default, every **successful SIMPLE** reply is also reviewed by the **COMPLEX** primary model as a final critic (disable with `OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0`). The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
 """
 
 
@@ -187,20 +187,18 @@ def run_openfdd_agent_turn(
         model_attempts.append(model_complex_fallback.strip())
         out["codex_model_fallback_used"] = True
 
-    critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", False)
-    if (
-        critic_enabled
-        and tier == "simple"
-        and force_class != "simple"
-        and bool(out.get("ok"))
-        and not human_requested_complex
-    ):
+    critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", True)
+    if critic_enabled and tier == "simple" and bool(out.get("ok")):
         critic_prompt = (
-            "You are a strict final reviewer. Review the draft answer below for correctness, safety, "
-            "and concrete actionability for Open-FDD operators. If needed, provide a corrected final answer.\n\n"
+            "You are the **final critic** for an Open-FDD operator assistant.\n\n"
+            "Context: the draft below was produced under **SIMPLE routing** (lighter model, faster/cheaper). "
+            "Your job is to run a **COMPLEX-tier** quality pass using the instructions in your system context.\n\n"
+            "Check: factual correctness against the user request, safety, missing steps, and whether the problem "
+            "actually needs deeper analysis (multi-step debugging, architecture, ambiguous root cause). "
+            "If the draft is superficial for a genuinely hard question, replace it with a complete corrected answer.\n\n"
             f"User message:\n{message}\n\n"
-            f"Draft answer:\n{str(out.get('stdout') or '').strip()}\n\n"
-            "Return only the final answer to show the human (no rubric, no preamble)."
+            f"Draft answer (SIMPLE tier):\n{str(out.get('stdout') or '').strip()}\n\n"
+            "Return **only** the final answer to show the human (no rubric, no preamble, no “As a critic” lines)."
         )
         critic_stdin = build_chat_stdin(
             user_message=critic_prompt,

@@ -35,6 +35,7 @@ Windows — gateway, MCP RAG, and Vite dev UI each in a new PowerShell window:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost 192.168.1.10   # LAN dashboard (see Trusted private LAN)
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -ListenAll   # bind 0.0.0.0 without picking a LAN IP (set OFDD_BRIDGE_URL or AI Agent Bridge base URL)
 ```
 
 Single role in the current shell (`gateway` \| `mcp` \| `ui` \| `adapter`):
@@ -43,7 +44,7 @@ Single role in the current shell (`gateway` \| `mcp` \| `ui` \| `adapter`):
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway
 ```
 
-Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**, **`-LanHost <ipv4>`** (private LAN dashboard: binds gateway and MCP on **`0.0.0.0`**, runs Vite with **`--host 0.0.0.0`**, sets **`OFDD_CORS_ALLOW_PRIVATE_LAN=1`**, and points **`OFDD_BRIDGE_URL`**, **`OFDD_MCP_REST_BASE`**, and **`OFDD_UI_PUBLIC_BASE`** at `http://<ip>:8765` / `:8090` / `:5173`; open inbound **8765**, **8090**, **5173** on the host firewall if other PCs connect).
+Optional parameters: **`-BridgeUrl`**, **`-SyncIntervalSeconds`**, **`-LanHost <ipv4>`** (private LAN dashboard: binds gateway and MCP on **`0.0.0.0`**, runs Vite with **`--host 0.0.0.0`**, sets **`OFDD_CORS_ALLOW_PRIVATE_LAN=1`**, and points **`OFDD_BRIDGE_URL`**, **`OFDD_MCP_REST_BASE`**, and **`OFDD_UI_PUBLIC_BASE`** at `http://<ip>:8765` / `:8090` / `:5173`; open inbound **8765**, **8090**, **5173** on the host firewall if other PCs connect), and **`-ListenAll`** (same bind + Vite **`--host 0.0.0.0`** and private-LAN CORS default, but leaves public URL env vars unchanged unless you set them yourself).
 
 Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the background with logs under **`stack/local-data/logs/`**. The script writes **`stack/local-data/openfdd-agent-bootstrap.json`** and exports **`OFDD_AGENT_BOOTSTRAP_FILE`** (same behavior as **`start-local.ps1`**) so the **AI Agent** tab / **`GET /openfdd-agent/context`** see **`bridge_base`**, **`mcp_rest_base`**, and **`ui_public_base`**.
 
@@ -51,6 +52,7 @@ Bash (macOS / Linux / WSL) — **`all`** runs gateway + MCP + UI in the backgrou
 bash ./scripts/start-local.sh
 bash ./scripts/start-local.sh gateway   # foreground gateway only
 bash ./scripts/start-local.sh --lan-host 192.168.1.10 all   # same LAN defaults as -LanHost on Windows
+bash ./scripts/start-local.sh --listen-all all              # bind 0.0.0.0 without --lan-host (set OFDD_BRIDGE_URL or AI Agent Bridge base URL)
 # or: OFDD_LAN_HOST=192.168.1.10 bash ./scripts/start-local.sh
 ```
 
@@ -101,13 +103,13 @@ So: **Python starts Codex; Codex runs the agent turn** under the flags and login
 
 **Codex exec sandbox (bridge host):** the bridge runs `codex --ask-for-approval … exec …` so the agent can call **localhost** (e.g. `http://127.0.0.1:8765`) and edit the workdir. Defaults: **`OFDD_CODEX_EXEC_APPROVAL=never`**, **`OFDD_CODEX_EXEC_SANDBOX=danger-full-access`**. Stricter options: `read-only`, `workspace-write` (with **`OFDD_CODEX_WORKSPACE_WRITE_NETWORK=true`** the bridge adds `-c sandbox_workspace_write.network_access=true`). Full bypass (only on locked-down automation hosts): **`OFDD_CODEX_DANGEROUSLY_BYPASS_APPROVALS_AND_SANDBOX=1`**. See upstream [Codex sandbox](https://developers.openai.com/codex/concepts/sandboxing).
 
-**Built-in agent model routing (`POST /openfdd-agent/chat` only):** SIMPLE tier uses **`--model gpt-5.4-mini`** (override **`OFDD_CODEX_MODEL_SIMPLE`**). COMPLEX uses **`gpt-5.5`** then retries once with **`gpt-5.4`** if stderr looks like an unknown-model error (override **`OFDD_CODEX_MODEL_COMPLEX`** / **`OFDD_CODEX_MODEL_COMPLEX_FALLBACK`**). Optional: **`OFDD_CODEX_LLM_CLASSIFY=1`** runs a **short second `codex exec`** with the simple model to choose SIMPLE vs COMPLEX before the main turn (extra latency/cost); **`OFDD_CODEX_CLASSIFY_TIMEOUT_S`** caps that call (default 120s).
+**Built-in agent model routing (`POST /openfdd-agent/chat` only):** SIMPLE tier uses **`--model gpt-5.4-mini`** (override **`OFDD_CODEX_MODEL_SIMPLE`**). COMPLEX uses **`gpt-5.5`** then retries once with **`gpt-5.4`** if stderr looks like an unknown-model error (override **`OFDD_CODEX_MODEL_COMPLEX`** / **`OFDD_CODEX_MODEL_COMPLEX_FALLBACK`**). By default, every **successful SIMPLE** turn runs a **second `codex exec`** using the **COMPLEX primary model** as a final critic/reviewer (disable with **`OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0`**; timeout **`OFDD_CODEX_EXEC_TIMEOUT_CRITIC`**). Optional: **`OFDD_CODEX_LLM_CLASSIFY=1`** runs another short **`codex exec`** with the simple model to choose SIMPLE vs COMPLEX before the main turn (extra latency/cost); **`OFDD_CODEX_CLASSIFY_TIMEOUT_S`** caps that call (default 120s). The UI **Send ▾** menu can send any message as **human-requested COMPLEX** (strong model regardless of auto-route).
 
 **Agent chat thread context:** the UI sends the last **120** prior turns plus the new message. The bridge formats them into Codex stdin. History size is **`min(OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS × 4 chars, OFDD_AGENT_CHAT_HISTORY_MAX_CHARS)`** using a rough **~4 characters per token** heuristic (`open_fdd/gateway/local_codex_cli.py`): defaults **`OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS=8000`** (≈32k UTF‑8 bytes for prior turns) and **`OFDD_AGENT_CHAT_HISTORY_MAX_CHARS=120000`** as a hard ceiling. When over budget, **older turns are dropped** and a short “Earlier messages omitted…” line is prepended. **Rolling summarization** (a SIMPLE model compressing old turns + a verbatim tail) is optional product work; Open-FDD does not do it today.
 
-Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. Legacy bridge device endpoints still exist for compatibility:
+Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. The **AI Agent** tab uses the bridge device-code flow:
 
-- `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` (not used by the current UI)
+- `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` — OpenAI device login; after success the bridge writes **`$CODEX_HOME/auth.json`** (default **`~/.codex/auth.json`**) for ChatGPT-managed auth so **`codex exec`** on that host is signed in. OAuth tokens are **not** returned to the browser.
 
 See **[Open FDD Claw architecture](../open-fdd-claw-architecture)** for the built-in vs optional-gateway split and skills/workspace clones.
 
@@ -132,13 +134,14 @@ Production-style static UI (build + static server) is optional; see **`apps/desk
 Bridge URL consistency:
 
 - **`start-local`** sets **`OFDD_BRIDGE_URL`** for child processes; match the UI’s bridge base URL (e.g. **`VITE_DESKTOP_BRIDGE_BASE`** at build time) to the same host/port.
+- In the **AI Agent** tab, **Bridge base URL** (stored in the browser as `ofdd-bridge-base-override`) overrides **`VITE_DESKTOP_BRIDGE_BASE`** without rebuilding—useful when the UI is opened from another host or over an SSH tunnel.
 - The gateway also honors **`OFDD_BRIDGE_HOST`** / **`OFDD_BRIDGE_PORT`** if you prefer host/port env vars instead of a full URL.
 
 ### Trusted private LAN (other PCs on the same network)
 
 The stack defaults to **loopback** (`127.0.0.1`) so random machines cannot reach your bridge. For a **locked-down office / VLAN** where other workstations should use the UI and API, you intentionally **listen on all interfaces** and point URLs at the **bridge host’s LAN IP** (not for the public internet).
 
-**One-shot launcher (recommended):** **`powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost 192.168.1.10`** or **`bash ./scripts/start-local.sh --lan-host 192.168.1.10 all`** applies the listen addresses, CORS flag, Vite bind, and public URL env vars described below. Ensure **`apps/desktop-ui/.env.local`** (if present) does not force **`VITE_DESKTOP_BRIDGE_BASE`** back to localhost when LAN browsers must call the bridge.
+**One-shot launcher (recommended):** **`powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost 192.168.1.10`** or **`bash ./scripts/start-local.sh --lan-host 192.168.1.10 all`** applies the listen addresses, CORS flag, Vite bind, and public URL env vars described below. If you only need **listen on all interfaces** without rewriting URLs, use **`-ListenAll`** or **`bash ./scripts/start-local.sh --listen-all all`**, then set **`OFDD_BRIDGE_URL`** (and related bases) yourself or use the **AI Agent → Bridge base URL** field in the browser. Ensure **`apps/desktop-ui/.env.local`** (if present) does not force **`VITE_DESKTOP_BRIDGE_BASE`** back to localhost when LAN browsers must call the bridge.
 
 Manual steps (equivalent to **`-LanHost` / `--lan-host`**):
 
@@ -153,6 +156,7 @@ Manual steps (equivalent to **`-LanHost` / `--lan-host`**):
    - `cd apps/desktop-ui && npm run dev -- --host 0.0.0.0`
 4. **Where the UI sends API traffic** — set **`apps/desktop-ui/.env.local`** (or build env) so the browser uses the bridge’s LAN address, not localhost:
    - `VITE_DESKTOP_BRIDGE_BASE=http://192.168.1.10:8765`
+   - Or use **AI Agent → Bridge base URL** in the running UI (no rebuild).
 5. **Bootstrap / readiness links** — for **`GET /openfdd-agent/context`**, **`OFDD_AGENT_BOOTSTRAP_FILE`**, and **`OFDD_UI_PUBLIC_BASE`**, use URLs that are valid **from the bridge host and from browsers on the LAN** (often `http://<bridge-ip>:8765`, `http://<bridge-ip>:8090`, `http://<ui-host-ip>:5173` or a shared hostname if you use DNS).
 6. **CORS** — the bridge only allows localhost origins unless you opt in:
    - **`OFDD_CORS_ALLOW_PRIVATE_LAN=1`** — allow browser `Origin` matching common **RFC1918** IPv4 patterns (10/8, 192.168/16, 172.16–31) plus localhost, **or**
