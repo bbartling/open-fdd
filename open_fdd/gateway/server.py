@@ -147,7 +147,7 @@ class PlotsFddFrameBody(BaseModel):
 
     site_id: str
     rules_path: str
-    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "onboard", "bacnet"])
+    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "bacnet"])
     limit: int = 5000
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
     start_ts: str | None = None
@@ -182,7 +182,7 @@ class RuleRunBody(BaseModel):
     target_memory_fraction: float = 0.25
     #: When set (non-empty), load and merge these driver sources on ``timestamp`` instead
     #: of using ``source`` alone. Tags match ingest storage (e.g. ``csv``, ``weather``,
-    #: ``onboard``, ``bacnet``, or any future driver ``source`` string).
+    #: ``bacnet`` or any future driver ``source`` string).
     sources: list[str] | None = None
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
     #: YAML basenames under ``rules_path`` (e.g. ``["ahu_sat.yaml"]``). Omit or empty = all rules.
@@ -232,14 +232,6 @@ class ModelValidateBody(BaseModel):
 class WeatherIngestBody(BaseModel):
     site_id: str
     days_back: int = 1
-
-
-class OnboardIngestBody(BaseModel):
-    site_id: str
-    start_ts: str | None = None
-    end_ts: str | None = None
-    #: When set, overrides saved ``OFDD_ONBOARD_BUILDING_IDS`` for this ingest only (comma-separated ids or names allowed).
-    building_ids: str | None = None
 
 
 class BacnetIngestBody(BaseModel):
@@ -312,49 +304,11 @@ class BacnetConfigBody(BaseModel):
     api_key: str | None = None
 
 
-class OnboardConfigBody(BaseModel):
-    base_url: str = "https://api.onboarddata.io"
-    building_ids: str = ""
-    lookback_hours: int = 24
-    api_key: str | None = None
-    allow_synthetic: bool = False
-
-
-class OnboardDiscoveryPointTypeRow(BaseModel):
-    point_type: str
-    count: int
-
-
-class OnboardBuildingRow(BaseModel):
-    id: str
-    name: str
-    point_count: int | None = None
-    equip_count: int | None = None
-    timezone: str | None = None
-
-
-class OnboardEquipmentPointRow(BaseModel):
-    id: int | str | None = None
-    name: str | None = None
-    point_type: str | None = None
-    topic: str | None = None
-    tagged_units: str | None = None
-
-
-class OnboardEquipmentRow(BaseModel):
-    id: int | str | None = None
-    name: str
-    equip_type_name: str | None = None
-    equip_type_abbr: str | None = None
-    points: list[OnboardEquipmentPointRow] = Field(default_factory=list)
-
-
 class DriversValidateBundle(BaseModel):
     """Draft driver configs for AI-assisted setup (validated without applying)."""
 
     model_config = ConfigDict(extra="ignore")
     weather: dict[str, Any] | None = None
-    onboard: dict[str, Any] | None = None
     bacnet: dict[str, Any] | None = None
 
 
@@ -745,53 +699,6 @@ def _cors_origin_regex() -> str:
     return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 
-def _onboard_optional_int(raw: Any) -> int | None:
-    if raw is None:
-        return None
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, int):
-        return raw
-    text = str(raw).strip()
-    if not text:
-        return None
-    try:
-        return int(text)
-    except (TypeError, ValueError):
-        return None
-
-
-def _onboard_request_json(path: str, *, method: str = "GET", payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    base_url = str(os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io")).strip().rstrip("/")
-    api_key = str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()
-    if not api_key:
-        raise HTTPException(status_code=400, detail="Missing OFDD_ONBOARD_API_KEY. Save onboard config with API key first.")
-    url = f"{base_url}{path}"
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise HTTPException(status_code=400, detail=f"Invalid onboard base_url scheme: {parsed.scheme!r}")
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        method=method,
-        data=data,
-        headers={
-            "X-OB-Api": api_key,
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"Onboard API HTTP {exc.code} for {path}.") from exc
-    except urllib.error.URLError as exc:
-        raise HTTPException(status_code=502, detail=f"Onboard API request failed for {path}: {exc}.") from exc
-    if isinstance(body, list):
-        return [item for item in body if isinstance(item, dict)]
-    return []
-
-
 def create_app() -> FastAPI:
     services = _build_services()
 
@@ -817,7 +724,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="open-fdd desktop bridge",
         description=(
-            "Local desktop bridge API for model management, ingestion (CSV/weather/onboard/BACnet), "
+            "Local desktop bridge API for model management, ingestion (CSV/weather/BACnet), "
             "timeseries joins, rules backfill, and Plotly-friendly views."
         ),
         version="0.1.0",
@@ -828,14 +735,14 @@ def create_app() -> FastAPI:
             {"name": "health", "description": "Bridge health and readiness."},
             {"name": "sites", "description": "Site lifecycle and site-level rule pack config."},
             {"name": "model", "description": "Desktop model export/import/validate and TTL controls."},
-            {"name": "ingest", "description": "CSV, weather, onboard, BACnet ingestion endpoints."},
+            {"name": "ingest", "description": "CSV, weather, BACnet ingestion endpoints."},
             {"name": "timeseries", "description": "Feather-backed query, bounds, plots, FDD overlay frame, and purge endpoints."},
             {
                 "name": "data_prep",
                 "description": "Agent-friendly timeseries cleaning (strip Grafana-style units) before BRICK mapping and FDD.",
             },
             {"name": "rules", "description": "Rule execution, rule file management, and defaults."},
-            {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
+            {"name": "config", "description": "Weather and BACnet runtime configuration."},
             {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
             {"name": "system", "description": "Resource and storage stats."},
             {"name": "assistant", "description": "Agent/human handoff: readiness links and declarative site profile apply."},
@@ -1279,7 +1186,6 @@ def create_app() -> FastAPI:
         "csv": _driver_health_entry(),
         "weather": _driver_health_entry(),
         "bacnet": _driver_health_entry(),
-        "onboard": _driver_health_entry(),
     }
     app.state.agent_queue = _OpenFddAgentQueueManager()
 
@@ -1774,24 +1680,6 @@ def create_app() -> FastAPI:
         )
         return out
 
-    @app.post("/ingest/onboard", tags=["ingest"])
-    def ingest_onboard(body: OnboardIngestBody) -> dict[str, Any]:
-        out = services.ingest.ingest_onboard(
-            site_id=body.site_id,
-            start_ts=body.start_ts,
-            end_ts=body.end_ts,
-            building_ids=body.building_ids,
-        )
-        ok = bool(out.get("success", False))
-        _driver_health_update(
-            app.state.driver_health,
-            driver="onboard",
-            rows=int(out.get("rows", 0) or 0),
-            success=ok,
-            error=str(out.get("error") or ""),
-        )
-        return out
-
     @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
         explicit_server_url = str(body.server_url or "").strip()
@@ -2019,7 +1907,6 @@ def create_app() -> FastAPI:
         return {
             "schema_version": 1,
             "weather": weather_config_get(),
-            "onboard": onboard_config_get(),
             "bacnet": bacnet_config_get(),
             "health": drivers_health_get(),
         }
@@ -2034,12 +1921,6 @@ def create_app() -> FastAPI:
                 WeatherConfigBody.model_validate(body.weather)
             except ValidationError as exc:
                 errors["weather"] = exc.errors()
-
-        if body.onboard is not None:
-            try:
-                OnboardConfigBody.model_validate(body.onboard)
-            except ValidationError as exc:
-                errors["onboard"] = exc.errors()
 
         if body.bacnet is not None:
             try:
@@ -2057,300 +1938,6 @@ def create_app() -> FastAPI:
             "ok": not errors,
             "errors": errors,
             "warnings": warnings,
-        }
-
-    @app.get("/config/onboard", tags=["config"])
-    def onboard_config_get() -> dict[str, Any]:
-        raw_lookback = os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24")
-        try:
-            lookback_hours = int(str(raw_lookback).strip() or "24")
-        except (TypeError, ValueError):
-            lookback_hours = 24
-        lookback_hours = max(1, min(lookback_hours, 24 * 30))
-        return {
-            "base_url": os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io"),
-            "building_ids": os.getenv("OFDD_ONBOARD_BUILDING_IDS", ""),
-            "lookback_hours": lookback_hours,
-            "api_key_set": bool(str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()),
-            "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
-        }
-
-    @app.post("/config/onboard", tags=["config"])
-    def onboard_config_set(body: OnboardConfigBody) -> dict[str, Any]:
-        os.environ["OFDD_ONBOARD_API_BASE_URL"] = str(body.base_url or "https://api.onboarddata.io").strip()
-        os.environ["OFDD_ONBOARD_BUILDING_IDS"] = str(body.building_ids or "").strip()
-        os.environ["OFDD_ONBOARD_LOOKBACK_HOURS"] = str(max(1, int(body.lookback_hours or 24)))
-        os.environ["OFDD_ONBOARD_ALLOW_SYNTHETIC"] = "true" if bool(body.allow_synthetic) else "false"
-        if body.api_key is not None:
-            os.environ["OFDD_ONBOARD_API_KEY"] = str(body.api_key).strip()
-        return onboard_config_get()
-
-    @app.get("/config/onboard/auth-test", tags=["config"])
-    def onboard_auth_test_get() -> dict[str, Any]:
-        rows = _onboard_request_json("/buildings")
-        return {
-            "ok": True,
-            "building_count": len(rows),
-            "message": "Onboard API authentication is valid.",
-        }
-
-    @app.get("/config/onboard/buildings", tags=["config"])
-    def onboard_buildings_get() -> dict[str, Any]:
-        rows = _onboard_request_json("/buildings")
-        buildings: list[OnboardBuildingRow] = []
-        for row in rows:
-            buildings.append(
-                OnboardBuildingRow(
-                    id=str(row.get("id", "")),
-                    name=str(row.get("name", "")).strip() or f"building-{row.get('id', '')}",
-                    point_count=_onboard_optional_int(row.get("point_count")),
-                    equip_count=_onboard_optional_int(row.get("equip_count")),
-                    timezone=str(row.get("timezone", "")).strip() or None,
-                )
-            )
-        buildings.sort(key=lambda b: (b.name.lower(), b.id))
-        return {
-            "count": len(buildings),
-            "buildings": [b.model_dump() for b in buildings],
-        }
-
-    @app.get("/config/onboard/buildings/{building_id}/points", tags=["config"])
-    def onboard_building_points_get(
-        building_id: int,
-        point_type: str | None = None,
-        sample_limit: int = Query(default=20, ge=1, le=200),
-    ) -> dict[str, Any]:
-        rows = _onboard_request_json(f"/buildings/{int(building_id)}/points")
-        wanted = str(point_type or "").strip().lower()
-        counts: dict[str, int] = {}
-        samples: list[dict[str, Any]] = []
-        for row in rows:
-            raw_type = (
-                row.get("point_type")
-                or row.get("type")
-                or row.get("tag")
-                or row.get("kind")
-                or "unknown"
-            )
-            normalized = str(raw_type).strip().lower() or "unknown"
-            counts[normalized] = int(counts.get(normalized, 0)) + 1
-            if wanted and normalized != wanted:
-                continue
-            if len(samples) >= sample_limit:
-                continue
-            samples.append(
-                {
-                    "id": row.get("id"),
-                    "name": row.get("name"),
-                    "point_type": normalized,
-                    "topic": row.get("topic"),
-                    "tagged_units": row.get("tagged_units") or row.get("units"),
-                }
-            )
-        count_rows = [
-            OnboardDiscoveryPointTypeRow(point_type=k, count=v).model_dump()
-            for k, v in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
-        ]
-        return {
-            "building_id": int(building_id),
-            "point_count": len(rows),
-            "point_type_counts": count_rows,
-            "sample_points": samples,
-        }
-
-    @app.get("/config/onboard/buildings/{building_id}/equipment", tags=["config"])
-    def onboard_building_equipment_get(
-        building_id: int,
-        include_points: bool = True,
-        equip_name_contains: str | None = None,
-        point_type: str | None = None,
-        max_equipment: int = Query(default=500, ge=1, le=5000),
-    ) -> dict[str, Any]:
-        qs = "?points=true" if include_points else ""
-        rows = _onboard_request_json(f"/buildings/{int(building_id)}/equipment{qs}")
-        equip_filter = str(equip_name_contains or "").strip().lower()
-        point_filter = str(point_type or "").strip().lower()
-        out: list[OnboardEquipmentRow] = []
-        for row in rows:
-            name = str(row.get("equip_id") or row.get("name") or f"equipment_{row.get('id', '')}").strip()
-            if equip_filter and equip_filter not in name.lower():
-                continue
-            points_raw = row.get("points") if include_points else []
-            points_list: list[OnboardEquipmentPointRow] = []
-            if isinstance(points_raw, list):
-                for p in points_raw:
-                    if not isinstance(p, dict):
-                        continue
-                    ptype = str(p.get("type") or p.get("point_type") or "").strip().lower()
-                    if point_filter and ptype != point_filter:
-                        continue
-                    points_list.append(
-                        OnboardEquipmentPointRow(
-                            id=p.get("id"),
-                            name=str(p.get("name") or "").strip() or None,
-                            point_type=ptype or None,
-                            topic=str(p.get("topic") or "").strip() or None,
-                            tagged_units=str(p.get("tagged_units") or p.get("units") or "").strip() or None,
-                        )
-                    )
-            out.append(
-                OnboardEquipmentRow(
-                    id=row.get("id"),
-                    name=name,
-                    equip_type_name=str(row.get("equip_type_name") or "").strip() or None,
-                    equip_type_abbr=str(row.get("equip_type_abbr") or "").strip() or None,
-                    points=points_list,
-                )
-            )
-            if len(out) >= int(max_equipment):
-                break
-        return {
-            "building_id": int(building_id),
-            "equipment_count": len(out),
-            "equipment": [e.model_dump() for e in out],
-        }
-
-    @app.get("/config/onboard/buildings/{building_id}/availability", tags=["config"])
-    def onboard_building_availability_get(
-        building_id: int,
-        search_back_days: int = Query(default=365, ge=1, le=3650),
-        sample_points: int = Query(default=14, ge=1, le=100),
-    ) -> dict[str, Any]:
-        rows = _onboard_request_json(f"/buildings/{int(building_id)}/points")
-        point_type_counts: dict[str, int] = {}
-        for row in rows:
-            ptype = str(row.get("point_type") or "unknown").strip() or "unknown"
-            point_type_counts[ptype] = int(point_type_counts.get(ptype, 0)) + 1
-        preferred_types = [
-            "zone_air_temperature_sensor",
-            "supply_air_temperature_sensor",
-            "return_air_temperature_sensor",
-            "discharge_air_temperature_sensor",
-            "outside_air_temperature_sensor",
-            "zone_air_co2_concentration_sensor",
-            "relative_humidity_sensor",
-            "supply_air_static_pressure_sensor",
-        ]
-        sampled_ids: list[int] = []
-        for ptype in preferred_types:
-            for row in rows:
-                if len(sampled_ids) >= int(sample_points):
-                    break
-                if str(row.get("point_type") or "").strip() != ptype:
-                    continue
-                pid = row.get("id")
-                if pid is None:
-                    continue
-                try:
-                    pid_i = int(pid)
-                except (TypeError, ValueError):
-                    continue
-                if pid_i not in sampled_ids:
-                    sampled_ids.append(pid_i)
-            if len(sampled_ids) >= int(sample_points):
-                break
-        if len(sampled_ids) < int(sample_points):
-            for row in rows:
-                if len(sampled_ids) >= int(sample_points):
-                    break
-                pid = row.get("id")
-                if pid is None:
-                    continue
-                try:
-                    pid_i = int(pid)
-                except (TypeError, ValueError):
-                    continue
-                if pid_i not in sampled_ids:
-                    sampled_ids.append(pid_i)
-        end = datetime.now(timezone.utc)
-        start = end - pd.Timedelta(days=int(search_back_days))
-        series_rows = _onboard_request_json(
-            "/query-v2",
-            method="POST",
-            payload={
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "point_ids": sampled_ids,
-            },
-        )
-        earliest_seen: datetime | None = None
-        latest_seen: datetime | None = None
-        for row in series_rows:
-            vals = row.get("values") if isinstance(row, dict) else []
-            if not isinstance(vals, list):
-                continue
-            for sample in vals:
-                if not isinstance(sample, list) or len(sample) < 1:
-                    continue
-                raw_ts = str(sample[0] or "").strip()
-                if not raw_ts:
-                    continue
-                if raw_ts.endswith("Z"):
-                    raw_ts = raw_ts[:-1] + "+00:00"
-                try:
-                    ts = datetime.fromisoformat(raw_ts).astimezone(timezone.utc)
-                except ValueError:
-                    continue
-                earliest_seen = ts if earliest_seen is None or ts < earliest_seen else earliest_seen
-                latest_seen = ts if latest_seen is None or ts > latest_seen else latest_seen
-        return {
-            "building_id": int(building_id),
-            "search_back_days": int(search_back_days),
-            "sampled_point_ids": sampled_ids,
-            "point_type_counts": [
-                {"point_type": k, "count": int(v)}
-                for k, v in sorted(point_type_counts.items(), key=lambda kv: (-kv[1], kv[0]))
-            ],
-            "earliest_seen": earliest_seen.isoformat() if earliest_seen else None,
-            "latest_seen": latest_seen.isoformat() if latest_seen else None,
-        }
-
-    @app.get("/config/onboard/points/live", tags=["config"])
-    def onboard_points_live_get(
-        point_ids: str = Query(..., description="Comma-separated onboard point IDs"),
-        lookback_minutes: int = Query(default=30, ge=1, le=24 * 60),
-    ) -> dict[str, Any]:
-        ids = [
-            int(item.strip())
-            for item in str(point_ids).split(",")
-            if item.strip().isdigit()
-        ]
-        if not ids:
-            raise HTTPException(status_code=400, detail="point_ids must include at least one integer ID.")
-        end = datetime.now(timezone.utc)
-        start = end - pd.Timedelta(minutes=int(lookback_minutes))
-        rows = _onboard_request_json(
-            "/query-v2",
-            method="POST",
-            payload={
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "point_ids": ids,
-            },
-        )
-        series: list[dict[str, Any]] = []
-        for row in rows:
-            vals = row.get("values") if isinstance(row, dict) else []
-            sample_count = len(vals) if isinstance(vals, list) else 0
-            last_value = None
-            last_ts = None
-            if isinstance(vals, list) and vals:
-                last = vals[-1]
-                if isinstance(last, list) and len(last) >= 2:
-                    last_ts = last[0]
-                    last_value = last[-1] if len(last) >= 3 else last[1]
-            series.append(
-                {
-                    "point_id": row.get("point_id"),
-                    "sample_count": sample_count,
-                    "last_timestamp": last_ts,
-                    "last_value": last_value,
-                }
-            )
-        return {
-            "ok": True,
-            "lookback_minutes": int(lookback_minutes),
-            "series": series,
         }
 
     @app.get("/plots/frame", tags=["timeseries"])
@@ -2383,7 +1970,7 @@ def create_app() -> FastAPI:
     @app.get("/plots/site-frame", tags=["timeseries"])
     def plots_site_frame(
         site_id: str,
-        sources: str = "csv,weather,onboard,bacnet",
+        sources: str = "csv,weather,bacnet",
         limit: int = 5000,
         join_how: str = "outer",
         start_ts: str | None = None,

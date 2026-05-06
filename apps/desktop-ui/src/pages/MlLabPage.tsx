@@ -239,7 +239,6 @@ export function MlLabPage() {
             <select value={source} onChange={(e) => setSource(e.target.value)}>
               <option value="csv">CSV</option>
               <option value="weather">Weather</option>
-              <option value="onboard">Onboard</option>
               <option value="bacnet">BACnet</option>
             </select>
           </div>

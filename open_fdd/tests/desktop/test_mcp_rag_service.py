@@ -25,7 +25,7 @@ def _write_index(tmp_path: Path) -> Path:
       "chunk_id": "chunk-1",
       "source": "docs/howto/desktop_app.md",
       "section": "Desktop app",
-      "content": "drivers bacnet weather onboard and csv ingest",
+      "content": "drivers bacnet weather and csv ingest",
       "tags": ["docs", "markdown"],
       "endpoint_refs": ["/config/bacnet"],
       "length": 7

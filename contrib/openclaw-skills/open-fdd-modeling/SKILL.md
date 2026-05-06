@@ -25,7 +25,7 @@ description: AI-assisted Open-FDD data model export, LLM review, validate, impor
 
 ## Safety
 
-- Never invent **API keys** (Onboard, BACnet DIY, etc.); read from operator env or bridge config endpoints if documented.
+- Never invent **API keys** (BACnet DIY, OpenClaw gateway token, etc.); read from operator env or bridge config endpoints if documented.
 - On failure, return HTTP status, response body snippet (redacted), and the **curl** the operator can replay.
 
 ## References

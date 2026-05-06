@@ -192,7 +192,7 @@ Key env vars:
 Docker image scaffold:
 - `stack/Dockerfile.mcp_rag`
 
-**Platform drivers:** ingest implementations live under `open_fdd/platform/drivers/` (BACnet DIY JSON-RPC, Open-Meteo, Onboard, CSV). `open_fdd/desktop/drivers/` re-exports the same symbols for backward compatibility.
+**Platform drivers:** ingest implementations live under `open_fdd/platform/drivers/` (BACnet DIY JSON-RPC, Open-Meteo, CSV). `open_fdd/desktop/drivers/` re-exports the same symbols for backward compatibility.
 
 **Headless BACnet loop (cron-friendly):** after `pip install -e ".[desktop]"`, run `open-fdd-headless-bacnet once` or `loop` (see `python -m open_fdd.platform.drivers.headless_bacnet -h`). Modes: `local` uses `IngestService` on disk; `bridge` POSTs to the running gateway at `/ingest/bacnet`.
 
@@ -242,23 +242,15 @@ curl -X POST http://127.0.0.1:8765/ingest/weather \
   -d "{\"site_id\":\"<site-id>\",\"days_back\":7}"
 ```
 
-### 4) Onboard ingest
+### 4) Onboard bulk-to-CSV (standalone tool)
 
-Prerequisite: configure Onboard first (fresh desktop defaults are usually not enough):
-
-```bash
-curl -X POST http://127.0.0.1:8765/config/onboard \
-  -H "Content-Type: application/json" \
-  -d "{\"base_url\":\"https://api.onboarddata.io\",\"building_ids\":\"123,456\",\"api_key\":\"<token>\",\"lookback_hours\":24,\"allow_synthetic\":false}"
-```
-
-Required onboarding keys are `base_url`, `building_ids`, and `api_key` (either via `/config/onboard` or env vars) before `/ingest/onboard`.
+Onboard ingest was moved out of the bridge/UI into a standalone Tkinter tool:
 
 ```bash
-curl -X POST http://127.0.0.1:8765/ingest/onboard \
-  -H "Content-Type: application/json" \
-  -d "{\"site_id\":\"<site-id>\"}"
+python tools/onboard_bulk_download_gui.py
 ```
+
+Use that GUI to export CSV from Onboard, then import the CSV in Open-FDD via `/csv-import` (or `POST /ingest/csv` / upload).
 
 ### 5) BACnet ingest (one-shot) and polling
 
@@ -281,7 +273,7 @@ curl -X POST http://127.0.0.1:8765/config/bacnet \
 ```bash
 curl -X POST http://127.0.0.1:8765/timeseries/query \
   -H "Content-Type: application/json" \
-  -d "{\"site_id\":\"<site-id>\",\"sources\":[\"csv\",\"weather\",\"onboard\",\"bacnet\"],\"join_on_timestamp\":true,\"join_how\":\"outer\",\"limit\":10000}"
+  -d "{\"site_id\":\"<site-id>\",\"sources\":[\"csv\",\"weather\",\"bacnet\"],\"join_on_timestamp\":true,\"join_how\":\"outer\",\"limit\":10000}"
 ```
 
 ## CSV timestamp parsing expectations
@@ -310,7 +302,7 @@ If import fails, fix timestamp formatting and retry.
 
 ## Feather-first ingestion
 
-- CSV, weather, onboard, and BACnet drivers write pandas frames into timestamped Feather files under **`<desktop_data_dir>/feather_store`** (same **`desktop_data_dir`** as above — e.g. **`stack/local-data/feather_store`** when using **`start-local`**).
+- CSV, weather, and BACnet drivers write pandas frames into timestamped Feather files under **`<desktop_data_dir>/feather_store`** (same **`desktop_data_dir`** as above — e.g. **`stack/local-data/feather_store`** when using **`start-local`**).
 - Feather path layout is source/site scoped:
   - `<desktop_data_dir>/feather_store/<safe_source>/<safe_site_id>/<timestamp>_<nonce>.feather`
 - Storage remains append/chunk-based (many files per site/source) for reliability and backfill workflows.
@@ -331,7 +323,7 @@ If import fails, fix timestamp formatting and retry.
 ## Typical desktop workflow (current)
 
 1. Create/select a site in the desktop model tab.
-2. Ingest data (CSV import, weather fetch, or onboard scrape) into Feather-backed storage.
+2. Ingest data (CSV import or weather/BACnet fetch) into Feather-backed storage.
 3. Confirm points and external references in model + generated BRICK TTL.
 4. Run rules from a local YAML rules directory.
 5. For large datasets, use batched rule execution (`chunk_rows` > 0, or leave auto-estimation on).

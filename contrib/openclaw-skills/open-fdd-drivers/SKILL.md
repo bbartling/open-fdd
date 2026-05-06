@@ -7,7 +7,7 @@ description: LLM-assisted driver bundles for Open-FDD — validate draft configs
 
 ## When to use
 
-- Configuring **CSV, weather, onboard, or headless BACnet** drivers.
+- Configuring **CSV, weather, or headless BACnet** drivers.
 - Operator pastes **vendor column names** or sample CSV headers and wants a **column_map** or driver JSON aligned with Open-FDD rules.
 
 ## Preconditions

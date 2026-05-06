@@ -16,7 +16,7 @@ def test_drivers_export_shape() -> None:
         assert r.status_code == 200
         body = r.json()
         assert body.get("schema_version") == 1
-        assert "weather" in body and "onboard" in body and "bacnet" in body and "health" in body
+        assert "weather" in body and "bacnet" in body and "health" in body
 
 
 def test_drivers_validate_ok_minimal() -> None:

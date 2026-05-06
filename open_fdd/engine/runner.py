@@ -151,7 +151,7 @@ def adapt_rule_column_map_to_dataframe(df: pd.DataFrame, col_map: Dict[str, str]
         if not candidates:
             out[alias] = logical
             continue
-        prefer_order = ("_csv", "_bacnet", "_onboard", "_weather")
+        prefer_order = ("_csv", "_bacnet", "_weather")
         chosen: str | None = None
         for suf in prefer_order:
             hit = next((c for c in candidates if c.endswith(suf)), None)

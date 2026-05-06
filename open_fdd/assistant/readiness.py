@@ -75,7 +75,7 @@ def build_readiness_payload(model: dict[str, Any]) -> dict[str, Any]:
         "Grafana-style CSVs may keep units in cells (e.g. `69.5 °F`); use **POST /timeseries/clean-metrics** with `commit:false` to preview coercion, then `commit:true` before bounds/flatline rules.",
         "Agents and the UI share the same rule pack on disk: **GET /rules/export-json** for a JSON snapshot (YAML + parsed fields), **PUT /rules/{filename}** to save edits; humans use **FDD Rule Setup** (`/rule-setup`) to edit and save.",
         "Tune YAML thresholds under **FDD Rule Setup**, then re-run overlay or **Run FDD backfill**.",
-        "When weather/onboard/BACnet are configured, ingest those drivers so **All sources (joined)** reflects multi-stream data.",
+        "When weather/BACnet are configured, ingest those drivers so **All sources (joined)** reflects multi-stream data.",
         "Persist a reopenable view for Open-FDD Claw: **POST /plots/share** (same JSON as **/plots/fdd-frame**), then open the returned **plots_open_url** or **GET /plots/share/{id}**.",
         "Prefer **POST /plots/fdd-frame** (or **POST /rules/run** for tabular-only) for automation; tune thresholds via **PUT /rules/{file}** or the Rule Setup UI rather than ad-hoc file edits on disk.",
         "Preview plot health without rules: **GET /plots/frame?...&include_readiness=true** or **POST /timeseries/plot-readiness** (returns a Pydantic-style JSON report: ok, per-column plot_line_ready, recommend_clean_metrics).",

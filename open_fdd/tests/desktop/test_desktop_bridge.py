@@ -354,29 +354,6 @@ def test_desktop_bridge_weather_config_roundtrip() -> None:
         assert str(body.get("longitude")) != ""
 
 
-def test_desktop_bridge_onboard_config_roundtrip() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        set_resp = client.post(
-            "/config/onboard",
-            json={
-                "base_url": "https://api.onboarddata.io",
-                "lookback_hours": 12,
-                "api_key": "test-token",
-            },
-        )
-        assert set_resp.status_code == 200
-        body = set_resp.json()
-        assert str(body.get("base_url", "")).startswith("https://")
-        assert int(body.get("lookback_hours", 0)) == 12
-        assert body.get("api_key_set") is True
-
-        get_resp = client.get("/config/onboard")
-        assert get_resp.status_code == 200
-        fetched = get_resp.json()
-        assert int(fetched.get("lookback_hours", 0)) == 12
-
-
 def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
     from unittest.mock import patch
 
@@ -413,86 +390,6 @@ def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
                 time.sleep(0.01)
             assert completed is not None
             assert completed.get("result", {}).get("stdout") == "queued done"
-
-
-def test_onboard_ingest_accepts_start_end_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    app = create_app()
-
-    captured: dict[str, str | None] = {}
-
-    def _fake_ingest_onboard(self, *, site_id: str, start_ts: str | None = None, end_ts: str | None = None, building_ids: str | None = None):  # noqa: ARG001
-        captured["site_id"] = site_id
-        captured["start_ts"] = start_ts
-        captured["end_ts"] = end_ts
-        captured["building_ids"] = building_ids
-        return {"rows": 2, "source": "onboard", "success": True, "start_ts": start_ts, "end_ts": end_ts}
-
-    monkeypatch.setattr(
-        "open_fdd.desktop.services.ingest_service.IngestService.ingest_onboard",
-        _fake_ingest_onboard,
-    )
-
-    with TestClient(app) as client:
-        created = client.post("/sites", json={"name": "Onboard Window Site"})
-        assert created.status_code == 200
-        site_id = created.json()["id"]
-        res = client.post(
-            "/ingest/onboard",
-            json={
-                "site_id": site_id,
-                "start_ts": "2025-05-05T00:00:00Z",
-                "end_ts": "2026-05-04T23:59:59Z",
-            },
-        )
-        assert res.status_code == 200, res.text
-        body = res.json()
-        assert body.get("success") is True
-        assert captured.get("site_id") == site_id
-        assert captured.get("start_ts") == "2025-05-05T00:00:00Z"
-        assert captured.get("end_ts") == "2026-05-04T23:59:59Z"
-        assert captured.get("building_ids") is None
-
-        res2 = client.post(
-            "/ingest/onboard",
-            json={
-                "site_id": site_id,
-                "start_ts": "2025-05-05T00:00:00Z",
-                "end_ts": "2026-05-04T23:59:59Z",
-                "building_ids": "42",
-            },
-        )
-        assert res2.status_code == 200, res2.text
-        assert captured.get("building_ids") == "42"
-
-
-def test_onboard_building_availability_endpoint_returns_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    app = create_app()
-
-    def _fake_onboard_json(path: str, *, method: str = "GET", payload: dict[str, object] | None = None):  # noqa: ARG001
-        if path.endswith("/points"):
-            return [
-                {"id": 101, "point_type": "zone_air_temperature_sensor"},
-                {"id": 102, "point_type": "supply_air_temperature_sensor"},
-            ]
-        if path == "/query-v2":
-            return [
-                {"point_id": 101, "values": [["2025-05-05T16:37:56.022446Z", "ok", 71.2]]},
-                {"point_id": 102, "values": [["2026-05-04T16:37:56.022446Z", "ok", 55.4]]},
-            ]
-        return []
-
-    monkeypatch.setattr("open_fdd.gateway.server._onboard_request_json", _fake_onboard_json)
-
-    with TestClient(app) as client:
-        res = client.get("/config/onboard/buildings/427/availability?search_back_days=365&sample_points=14")
-        assert res.status_code == 200, res.text
-        body = res.json()
-        assert body.get("building_id") == 427
-        assert body.get("search_back_days") == 365
-        assert body.get("earliest_seen", "").startswith("2025-05-05T16:37:56")
-        assert body.get("latest_seen", "").startswith("2026-05-04T16:37:56")
-        assert isinstance(body.get("sampled_point_ids"), list)
-        assert isinstance(body.get("point_type_counts"), list)
 
 
 def test_desktop_bridge_sparql_endpoints() -> None:
@@ -569,7 +466,7 @@ def test_desktop_bridge_driver_health_default_shape() -> None:
         health = client.get("/config/drivers/health")
         assert health.status_code == 200
         body = health.json()
-        for key in ("csv", "weather", "bacnet", "onboard"):
+        for key in ("csv", "weather", "bacnet"):
             assert key in body
             assert "last_run" in body[key]
             assert "rows" in body[key]

@@ -55,6 +55,6 @@ The FastAPI **gateway** (`open_fdd.gateway`, CLI `open-fdd-gateway` / `open-fdd-
 - model export/import/validate,
 - SPARQL query endpoints (`/data-model/sparql`, `/data-model/sparql/upload`),
 - timeseries bounds/query over Feather data,
-- weather/onboard ingest and ML training routes.
+- weather/BACnet ingest and ML training routes.
 
 This enables OpenClaw-style local assistants to do data modeling, retrieve and join data in pandas/Feather workflows, run faults, and iterate with a human operator. For how to run the gateway locally, storage paths, and **`start-local`**, see **[Desktop app](../howto/desktop_app)**.

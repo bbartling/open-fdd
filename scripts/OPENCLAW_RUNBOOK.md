@@ -338,7 +338,7 @@ Do in order:
    - GET http://127.0.0.1:8765/plots/frame?site_id=<id>&source=csv&limit=20 — expect rows/columns JSON.
 
 4) Merged time-series (multi-driver merge-on-read; no merged Feather file)
-   - GET http://127.0.0.1:8765/plots/site-frame?site_id=<id>&sources=csv,weather,onboard,bacnet&limit=50 — expect JSON with "sources" listing drivers that had data (weather may be empty until ingest).
+   - GET http://127.0.0.1:8765/plots/site-frame?site_id=<id>&sources=csv,weather,bacnet&limit=50 — expect JSON with "sources" listing drivers that had data (weather may be empty until ingest).
    - Optional: POST http://127.0.0.1:8765/ingest/weather with JSON {"site_id":"<id>","days_back":1} if env/lat/long is set; re-hit plots/site-frame and note new columns like *_weather.
    - Optional: POST http://127.0.0.1:8765/timeseries/query with JSON joining multiple sources (see OpenAPI /docs for TimeseriesQueryBody: sources, join_on_timestamp, join_how).
 

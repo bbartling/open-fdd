@@ -120,7 +120,7 @@ Human-in-the-loop export → review → validate → import is described in [Dat
 |--------|----------------|
 | **Operator subscription / CLI session** | Same as a normal Codex install: **`codex login`**, **`codex login --device-auth`**, **`codex login status`** on the machine running **`open-fdd-desktop-bridge`**. |
 | **Bridge integration** | **`OFDD_CODEX_CMD`** if `codex` is not on `PATH` for the bridge process (Windows: often `…\npm\codex.cmd`). **`GET /local-codex/diagnostics`**, **`POST /local-codex/chat`**. |
-| **Onboard, BACnet, etc.** | Open-FDD bridge env (e.g. `OFDD_ONBOARD_API_KEY`) — **data plane**, not LLM auth. |
+| **External data credentials (BACnet / CSV workflow)** | Open-FDD env + local tools config (for example the standalone Onboard CSV tool inputs) — **data plane**, not LLM auth. |
 
 **Device / org policy:** If `codex login` fails, use the same guidance as upstream Codex: ChatGPT **security / device** settings or admin policy; official: [Codex authentication](https://developers.openai.com/codex/auth/).
 

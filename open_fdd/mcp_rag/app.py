@@ -542,9 +542,6 @@ def manifest() -> dict[str, Any]:
             {"name": "weather_config_get", "route": "/tools/weather_config_get", "mode": "write_guarded"},
             {"name": "weather_config_set", "route": "/tools/weather_config_set", "mode": "write_guarded"},
             {"name": "weather_ingest_run", "route": "/tools/weather_ingest_run", "mode": "write_guarded"},
-            {"name": "onboard_config_get", "route": "/tools/onboard_config_get", "mode": "write_guarded"},
-            {"name": "onboard_config_set", "route": "/tools/onboard_config_set", "mode": "write_guarded"},
-            {"name": "onboard_ingest_run", "route": "/tools/onboard_ingest_run", "mode": "write_guarded"},
             {"name": "bacnet_config_get", "route": "/tools/bacnet_config_get", "mode": "write_guarded"},
             {"name": "bacnet_config_set", "route": "/tools/bacnet_config_set", "mode": "write_guarded"},
             {"name": "bacnet_ingest_run", "route": "/tools/bacnet_ingest_run", "mode": "write_guarded"},
@@ -677,21 +674,6 @@ def weather_config_set(req: DriverConfigRequest) -> dict[str, Any]:
 @app.post("/tools/weather_ingest_run", dependencies=[Depends(require_action_tools_auth)])
 def weather_ingest_run(req: IngestRequest) -> dict[str, Any]:
     return _json_request("POST", "/ingest/weather", body={"site_id": req.site_id, "days_back": 7})
-
-
-@app.post("/tools/onboard_config_get", dependencies=[Depends(require_action_tools_auth)])
-def onboard_config_get() -> dict[str, Any]:
-    return _json_request("GET", "/config/onboard")
-
-
-@app.post("/tools/onboard_config_set", dependencies=[Depends(require_action_tools_auth)])
-def onboard_config_set(req: DriverConfigRequest) -> dict[str, Any]:
-    return _json_request("POST", "/config/onboard", body=req.payload)
-
-
-@app.post("/tools/onboard_ingest_run", dependencies=[Depends(require_action_tools_auth)])
-def onboard_ingest_run(req: IngestRequest) -> dict[str, Any]:
-    return _json_request("POST", "/ingest/onboard", body={"site_id": req.site_id})
 
 
 @app.post("/tools/bacnet_config_get", dependencies=[Depends(require_action_tools_auth)])

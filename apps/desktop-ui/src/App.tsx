@@ -13,7 +13,6 @@ import { MlLabPage } from "./pages/MlLabPage";
 import { AiAgentChatPage } from "./pages/AiAgentChatPage";
 import { WeatherDriverPage } from "./pages/WeatherDriverPage";
 import { BacnetDriverPage } from "./pages/BacnetDriverPage";
-import { OnboardDriverPage } from "./pages/OnboardDriverPage";
 
 export default function App() {
   return (
@@ -24,7 +23,6 @@ export default function App() {
         <Route path="/csv-import" element={<CsvImportPage />} />
         <Route path="/weather" element={<WeatherDriverPage />} />
         <Route path="/bacnet-tools" element={<BacnetDriverPage />} />
-        <Route path="/onboard-driver" element={<OnboardDriverPage />} />
         <Route path="/rule-setup" element={<RuleSetupPage />} />
         <Route path="/drivers" element={<Navigate to="/weather" replace />} />
         <Route path="/data-model" element={<DataModelPage />} />
