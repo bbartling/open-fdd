@@ -505,17 +505,20 @@ class _OpenFddAgentQueueManager:
         with self._cv:
             self._paused = bool(paused)
             self._cv.notify_all()
-            return self.snapshot()
+            return self._snapshot_unlocked()
+
+    def _snapshot_unlocked(self) -> dict[str, Any]:
+        queued = list(self._queue.queue)
+        return {
+            "paused": self._paused,
+            "running": self._running,
+            "queue_size": len(queued),
+            "queued_run_ids": [it.run_id for it in queued],
+        }
 
     def snapshot(self) -> dict[str, Any]:
         with self._cv:
-            queued = list(self._queue.queue)
-            return {
-                "paused": self._paused,
-                "running": self._running,
-                "queue_size": len(queued),
-                "queued_run_ids": [it.run_id for it in queued],
-            }
+            return self._snapshot_unlocked()
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         with self._cv:
