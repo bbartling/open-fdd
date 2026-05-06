@@ -166,6 +166,10 @@ cython_debug/
 # Maintainer notes (local only; do not commit)
 NOTES.md
 
+# Built-in agent (Codex) ephemeral code under repo toolshed — keep directory via .gitkeep only
+toolshed/scratch/**
+!toolshed/scratch/.gitkeep
+
 # Generated docs PDF (scripts/build_docs_pdf.py) — commit pdf/open-fdd-docs.pdf to allow download
 /pdf/*
 !/pdf/.gitkeep

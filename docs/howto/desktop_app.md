@@ -14,6 +14,8 @@ Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
 The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
 
+The **built-in AI agent** (Codex) is instructed to write **new** code only under **`toolshed/scratch/`** in the workdir; see **[Toolshed](toolshed)** for layout and promotion to **`toolshed/published/`**.
+
 ## Install
 
 ```bash
