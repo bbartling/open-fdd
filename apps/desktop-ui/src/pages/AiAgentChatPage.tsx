@@ -1,4 +1,4 @@
-import { bridgeFetch, bridgeBase, desktopFetch } from "../lib/api";
+import { bridgeBase, desktopFetch } from "../lib/api";
 import { classifyOpenfddTaskPreview } from "../lib/openfdd-agent-route-preview";
 import {
   loadCodexSessionBundle,
@@ -53,16 +53,6 @@ type DiagnosticsPayload = {
   exec_env?: CodexExecEnvPayload | null;
 };
 
-type AiDepsHealthPayload = {
-  mcp_rest_base: string;
-  mcp_reachable: boolean;
-  mcp_error?: string | null;
-  openclaw_gateway_url: string;
-  openclaw_reachable: boolean;
-  openclaw_error?: string | null;
-  openclaw_token_set: boolean;
-};
-
 type ChatResponse = {
   run_id?: string;
   status?: "queued" | "running" | "completed";
@@ -87,6 +77,12 @@ type AgentQueueStatus = {
   queue_size: number;
   queued_run_ids: string[];
   running?: { run_id: string; started_at?: string } | null;
+};
+
+type PendingMessage = {
+  id: string;
+  sessionId: string;
+  text: string;
 };
 
 function routeMetaFromAgentResponse(data: ChatResponse): AgentRouteMeta | undefined {
@@ -242,7 +238,6 @@ export function AiAgentChatPage() {
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [execEnv, setExecEnv] = useState<CodexExecEnvPayload | null>(null);
-  const [aiDeps, setAiDeps] = useState<AiDepsHealthPayload | null>(null);
   const [agentQueue, setAgentQueue] = useState<AgentQueueStatus | null>(null);
   const [agentControlBusy, setAgentControlBusy] = useState(false);
   const [agentControlError, setAgentControlError] = useState<string | null>(null);
@@ -261,11 +256,11 @@ export function AiAgentChatPage() {
   const [sending, setSending] = useState(false);
   /** Heuristic preview only; bridge may differ when LLM classify or OFDD_AGENT_ROUTE_DEFAULT is set. */
   const [sendingRoutePreview, setSendingRoutePreview] = useState<"simple" | "complex" | null>(null);
-  const [sendMode, setSendMode] = useState<"run_now" | "queue">("run_now");
   /** True when the last send used the split-button COMPLEX (human-requested) path. */
   const [thinkingHumanRequested, setThinkingHumanRequested] = useState(false);
   const [sendMenuOpen, setSendMenuOpen] = useState(false);
   const sendSplitRef = useRef<HTMLDivElement | null>(null);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const devicePollMounted = useRef(true);
@@ -327,12 +322,6 @@ export function AiAgentChatPage() {
     setSignInActionError(null);
     try {
       await pullDiagnostics({ silent: false });
-      try {
-        const deps = await desktopFetch<AiDepsHealthPayload>("/assistant/ai-health");
-        setAiDeps(deps);
-      } catch {
-        setAiDeps(null);
-      }
       try {
         const q = await desktopFetch<AgentQueueStatus>("/openfdd-agent/status");
         setAgentQueue(q);
@@ -555,164 +544,118 @@ export function AiAgentChatPage() {
     }
   }, [bridgeBase, pullDiagnostics]);
 
-  const sendMessage = useCallback(async (humanRequestedComplex = false) => {
-    const b = bundleRef.current;
-    const sessionId = b.activeId;
-    const active = b.sessions.find((s) => s.id === sessionId);
-    const text = (active?.draft ?? "").trim();
-    if (!active || !text || sending || authState !== "signed_in") {
-      return;
-    }
-    setSendMenuOpen(false);
-    const workdirSnapshot = workdir.trim() || null;
-    const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
-    const requestedHumanComplex = humanRequestedComplex;
-    setSending(true);
-    setThinkingHumanRequested(requestedHumanComplex);
-    setSendingRoutePreview(requestedHumanComplex ? "complex" : classifyOpenfddTaskPreview(text));
-    setSessionBundle((prev) =>
-      updateSessionById(prev, sessionId, (s) => {
-        const nextLines: ChatLine[] = [...s.lines, { role: "user", text }];
-        const title =
-          s.title === "New agent" && s.lines.length === 0
-            ? titleFromFirstUserMessage(nextLines, "New agent")
-            : s.title;
-        return { ...s, draft: "", lines: nextLines, title, updatedAt: Date.now() };
-      }),
-    );
-    try {
-      const res = await fetch(`${bridgeBase}/openfdd-agent/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          mode: sendMode,
-          workdir: workdirSnapshot,
-          task_summary: null,
-          conversation_history: conversationHistory,
-          human_requested_complex: requestedHumanComplex,
-        }),
-      });
-      const data = (await res.json()) as ChatResponse & { detail?: string };
-      if (!res.ok) {
-        const detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
-        setSessionBundle((prev) =>
-          updateSessionById(prev, sessionId, (s) => ({
-            ...s,
-            lines: [...s.lines, { role: "assistant", text: `Request failed (${res.status}):\n${detail}` }],
-            updatedAt: Date.now(),
-          })),
-        );
+  const runMessage = useCallback(
+    async (sessionId: string, text: string, humanRequestedComplex = false) => {
+      const b = bundleRef.current;
+      const active = b.sessions.find((s) => s.id === sessionId);
+      const trimmed = text.trim();
+      if (!active || !trimmed || sending || authState !== "signed_in") {
         return;
       }
-      if (data.status === "queued" && data.run_id) {
-        const pollSessionId = sessionId;
-        setSessionBundle((prev) =>
-          updateSessionById(prev, sessionId, (s) => ({
-            ...s,
-            lines: [...s.lines, { role: "assistant", text: `Queued: ${data.run_id}. Waiting for runner…` }],
-            updatedAt: Date.now(),
-          })),
-        );
-        let delayMs = 900;
-        const maxDelayMs = 12_000;
-        const deadline = Date.now() + 12 * 60 * 1000;
-        let done: ChatResponse | null = null;
-        while (Date.now() < deadline) {
-          if (!devicePollMounted.current || bundleRef.current.activeId !== pollSessionId) {
-            return;
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
-          delayMs = Math.min(Math.floor(delayMs * 1.38), maxDelayMs);
-          if (!devicePollMounted.current || bundleRef.current.activeId !== pollSessionId) {
-            return;
-          }
-          try {
-            const poll = await bridgeFetch(`/openfdd-agent/runs/${encodeURIComponent(data.run_id)}`);
-            if (!poll.ok) {
-              continue;
-            }
-            const row = (await poll.json()) as ChatResponse;
-            if (row.status === "completed") {
-              done = (row.result ?? row) as ChatResponse;
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-        if (!done) {
+      setSendMenuOpen(false);
+      const workdirSnapshot = workdir.trim() || null;
+      const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
+      const requestedHumanComplex = humanRequestedComplex;
+      setSending(true);
+      setThinkingHumanRequested(requestedHumanComplex);
+      setSendingRoutePreview(requestedHumanComplex ? "complex" : classifyOpenfddTaskPreview(trimmed));
+      setSessionBundle((prev) =>
+        updateSessionById(prev, sessionId, (s) => {
+          const nextLines: ChatLine[] = [...s.lines, { role: "user", text: trimmed }];
+          const title =
+            s.title === "New agent" && s.lines.length === 0
+              ? titleFromFirstUserMessage(nextLines, "New agent")
+              : s.title;
+          return { ...s, lines: nextLines, title, updatedAt: Date.now() };
+        }),
+      );
+      try {
+        const res = await fetch(`${bridgeBase}/openfdd-agent/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: trimmed,
+            mode: "run_now",
+            workdir: workdirSnapshot,
+            task_summary: null,
+            conversation_history: conversationHistory,
+            human_requested_complex: requestedHumanComplex,
+          }),
+        });
+        const data = (await res.json()) as ChatResponse & { detail?: string };
+        if (!res.ok) {
+          const detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
           setSessionBundle((prev) =>
-            updateSessionById(prev, pollSessionId, (s) => ({
+            updateSessionById(prev, sessionId, (s) => ({
               ...s,
-              lines: [
-                ...s.lines,
-                {
-                  role: "assistant",
-                  text: `Run ${data.run_id} still pending after an extended wait (backoff polling, up to ~12 minutes). Check runner queue or retry shortly.`,
-                },
-              ],
+              lines: [...s.lines, { role: "assistant", text: `Request failed (${res.status}):\n${detail}` }],
               updatedAt: Date.now(),
             })),
           );
           return;
         }
-        const doneOut =
-          done.stdout?.trim() ||
-          (done.stderr?.trim() ? `Agent CLI exited ${done.returncode}.\n\nstderr:\n${done.stderr.trim()}` : "(No output.)");
-        const doneOutWithCritic =
-          done.critic_used && done.critic_model
-            ? `${doneOut}\n\n---\nFinal-pass critique applied (${done.critic_model}).`
-            : doneOut;
-        const doneRoute = routeMetaFromAgentResponse(done);
+        const out =
+          data.stdout?.trim() ||
+          (data.stderr?.trim()
+            ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
+            : "(No output.)");
+        const outWithCritic =
+          data.critic_used && data.critic_model
+            ? `${out}\n\n---\nFinal-pass critique applied (${data.critic_model}).`
+            : out;
+        const route = routeMetaFromAgentResponse(data);
         setSessionBundle((prev) =>
-          updateSessionById(prev, pollSessionId, (s) => ({
+          updateSessionById(prev, sessionId, (s) => ({
             ...s,
             lines: [
               ...s.lines,
-              doneRoute
-                ? { role: "assistant", text: doneOutWithCritic, route: doneRoute }
-                : { role: "assistant", text: doneOutWithCritic },
+              route ? { role: "assistant", text: outWithCritic, route } : { role: "assistant", text: outWithCritic },
             ],
             updatedAt: Date.now(),
           })),
         );
-        return;
+      } catch (e) {
+        setSessionBundle((prev) =>
+          updateSessionById(prev, sessionId, (s) => ({
+            ...s,
+            lines: [...s.lines, { role: "assistant", text: e instanceof Error ? e.message : String(e) }],
+            updatedAt: Date.now(),
+          })),
+        );
+      } finally {
+        setThinkingHumanRequested(false);
+        setSendingRoutePreview(null);
+        setSending(false);
       }
-      const out =
-        data.stdout?.trim() ||
-        (data.stderr?.trim()
-          ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
-          : "(No output.)");
-      const outWithCritic =
-        data.critic_used && data.critic_model
-          ? `${out}\n\n---\nFinal-pass critique applied (${data.critic_model}).`
-          : out;
-      const route = routeMetaFromAgentResponse(data);
-      setSessionBundle((prev) =>
-        updateSessionById(prev, sessionId, (s) => ({
-          ...s,
-          lines: [
-            ...s.lines,
-            route ? { role: "assistant", text: outWithCritic, route } : { role: "assistant", text: outWithCritic },
-          ],
-          updatedAt: Date.now(),
-        })),
-      );
-    } catch (e) {
-      setSessionBundle((prev) =>
-        updateSessionById(prev, sessionId, (s) => ({
-          ...s,
-          lines: [...s.lines, { role: "assistant", text: e instanceof Error ? e.message : String(e) }],
-          updatedAt: Date.now(),
-        })),
-      );
-    } finally {
-      setThinkingHumanRequested(false);
-      setSendingRoutePreview(null);
-      setSending(false);
+    },
+    [authState, sending, workdir, bridgeBase],
+  );
+
+  const enqueueDraft = useCallback(() => {
+    const b = bundleRef.current;
+    const sessionId = b.activeId;
+    const active = b.sessions.find((s) => s.id === sessionId);
+    const text = (active?.draft ?? "").trim();
+    if (!active || !text || authState !== "signed_in") {
+      return;
     }
-  }, [authState, sending, workdir, bridgeBase, sendMode]);
+    setSessionBundle((prev) =>
+      updateSessionById(prev, sessionId, (s) => {
+        return { ...s, draft: "", updatedAt: Date.now() };
+      }),
+    );
+    setPendingMessages((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, sessionId, text },
+    ]);
+  }, [authState]);
+
+  useEffect(() => {
+    if (sending || authState !== "signed_in" || pendingMessages.length === 0) return;
+    const [next] = pendingMessages;
+    setPendingMessages((prev) => prev.slice(1));
+    void runMessage(next.sessionId, next.text, false);
+  }, [sending, authState, pendingMessages, runMessage]);
 
   useEffect(() => {
     if (!sendMenuOpen) return;
@@ -735,6 +678,7 @@ export function AiAgentChatPage() {
   const chatEnabled = authState === "signed_in";
   const devicePending = deviceSession !== null;
   const signInControlsBusy = authState === "loading" || npmBusy || signInBusy || devicePending;
+  const activePending = pendingMessages.filter((p) => p.sessionId === activeSession.id);
 
   const signInButtonLabel =
     authState === "error"
@@ -766,22 +710,6 @@ export function AiAgentChatPage() {
           <>
             <div className="local-codex-auth-status-row">
               <span className="local-codex-status-pill local-codex-status-pill--ok">Signed in</span>
-              <button
-                type="button"
-                className="local-codex-btn-outline"
-                disabled={agentControlBusy || sending || agentQueue === null}
-                onClick={() => {
-                  if (agentQueue === null) return;
-                  void setAgentPaused(!agentQueue.paused);
-                }}
-                title={
-                  agentQueue === null
-                    ? "Runner status unavailable (refresh signing block above)."
-                    : "Pause/resume agent runner; queued requests wait while paused."
-                }
-              >
-                {agentControlBusy ? "Updating…" : agentQueue === null ? "Runner status unavailable" : agentQueue.paused ? "Resume runner" : "Pause runner"}
-              </button>
               <button
                 type="button"
                 className="local-codex-btn-outline"
@@ -831,22 +759,6 @@ export function AiAgentChatPage() {
                     no auto-escalate
                   </span>
                 ) : null}
-              </div>
-            ) : null}
-            {aiDeps ? (
-              <div className="local-codex-model-chips" style={{ marginTop: 8 }}>
-                <span className={`local-codex-model-chip ${aiDeps.mcp_reachable ? "local-codex-model-chip--simple" : "local-codex-model-chip--fallback"}`}>
-                  MCP {aiDeps.mcp_reachable ? "ok" : "down"}
-                </span>
-                <span
-                  className={`local-codex-model-chip ${aiDeps.openclaw_reachable ? "local-codex-model-chip--complex" : "local-codex-model-chip--fallback"}`}
-                  title={aiDeps.openclaw_gateway_url}
-                >
-                  OpenClaw {aiDeps.openclaw_reachable ? "ok" : "down"}
-                </span>
-                <span className={`local-codex-model-chip ${aiDeps.openclaw_token_set ? "local-codex-model-chip--simple" : "local-codex-model-chip--fallback"}`}>
-                  Token {aiDeps.openclaw_token_set ? "set" : "missing"}
-                </span>
               </div>
             ) : null}
           </>
@@ -961,7 +873,7 @@ export function AiAgentChatPage() {
             <strong> Auto routing</strong> picks SIMPLE vs COMPLEX from your text (and optional bridge LLM classify); if SIMPLE
             Codex exits with an error, the bridge retries once as <strong>COMPLEX</strong> (
             <code className="inline-code">OFDD_AGENT_ESCALATE_ON_FAILURE</code>, default on). The <strong>Send ▾</strong> menu
-            offers a <strong> human-requested COMPLEX</strong> pass. While Codex runs, the colored strip previews the tier; reply
+            offers a <strong> human-requested COMPLEX</strong> pass plus runner pause/resume. While Codex runs, the colored strip previews the tier; reply
             headers show the bridge&apos;s actual route and chips for human-requested or auto-escalation.
           </p>
           {!chatEnabled && authState !== "loading" ? (
@@ -1027,24 +939,33 @@ export function AiAgentChatPage() {
           ) : null}
         </div>
         <div className="local-codex-compose">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <label htmlFor="ofdd-agent-send-mode" className="muted" style={{ fontSize: 12 }}>
-              Delivery
-            </label>
-            <select
-              id="ofdd-agent-send-mode"
-              value={sendMode}
-              disabled={sending || !chatEnabled}
-              onChange={(e) => setSendMode(e.target.value === "queue" ? "queue" : "run_now")}
-              style={{ minWidth: 120 }}
-            >
-              <option value="run_now">Run now</option>
-              <option value="queue">Queued mode</option>
-            </select>
-            <span className="muted" style={{ fontSize: 12 }}>
-              {sendMode === "queue" ? "Message enqueued for worker." : "Runs immediately unless runner is busy."}
-            </span>
-          </div>
+          {activePending.length > 0 ? (
+            <div style={{ marginBottom: 8 }}>
+              <p className="muted" style={{ margin: "0 0 6px", fontSize: 12 }}>
+                Queued messages (edit before they are sent): {activePending.length}
+              </p>
+              {activePending.map((item) => (
+                <div key={item.id} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <textarea
+                    className="local-codex-compose-input"
+                    value={item.text}
+                    rows={2}
+                    onChange={(e) =>
+                      setPendingMessages((prev) => prev.map((p) => (p.id === item.id ? { ...p, text: e.target.value } : p)))
+                    }
+                    aria-label="Queued message"
+                  />
+                  <button
+                    type="button"
+                    className="local-codex-btn-outline"
+                    onClick={() => setPendingMessages((prev) => prev.filter((p) => p.id !== item.id))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="local-codex-compose-row">
             <textarea
               className="local-codex-compose-input"
@@ -1055,11 +976,11 @@ export function AiAgentChatPage() {
               placeholder="Message Codex… (Shift+Enter for newline)"
               aria-label="Chat message"
               rows={3}
-              disabled={sending || !chatEnabled}
+              disabled={!chatEnabled}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void sendMessage(false);
+                  enqueueDraft();
                 }
               }}
             />
@@ -1068,16 +989,16 @@ export function AiAgentChatPage() {
                 type="button"
                 className="local-codex-send-split-main"
                 data-testid="ofdd-agent-send"
-                disabled={sending || !chatEnabled || !draft.trim()}
-                onClick={() => void sendMessage(false)}
+                disabled={!chatEnabled || !draft.trim()}
+                onClick={() => enqueueDraft()}
               >
-                {sending ? "…" : "Send"}
+                Send
               </button>
               <button
                 type="button"
                 className="local-codex-send-split-trigger"
                 data-testid="ofdd-agent-send-menu-trigger"
-                disabled={sending || !chatEnabled || !draft.trim()}
+                disabled={!chatEnabled}
                 aria-label="Send options"
                 aria-haspopup="menu"
                 aria-expanded={sendMenuOpen}
@@ -1093,11 +1014,35 @@ export function AiAgentChatPage() {
                     className="local-codex-send-split-menu-item"
                     data-testid="ofdd-send-complex-review"
                     title="Uses the bridge COMPLEX tier and strong model for this message only."
-                    onClick={() => void sendMessage(true)}
+                    onClick={() => {
+                      const b = bundleRef.current;
+                      const active = b.sessions.find((s) => s.id === b.activeId);
+                      const text = (active?.draft ?? "").trim();
+                      if (!text) return;
+                      setSessionBundle((prev) =>
+                        updateActiveSession(prev, (s) => ({ ...s, draft: "", updatedAt: Date.now() })),
+                      );
+                      void runMessage(b.activeId, text, true);
+                    }}
                   >
                     COMPLEX review
                     <span className="local-codex-send-split-menu-desc">
                       Strong model · audits &amp; second opinions
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="local-codex-send-split-menu-item"
+                    disabled={agentControlBusy || agentQueue === null}
+                    onClick={() => {
+                      if (agentQueue === null) return;
+                      void setAgentPaused(!agentQueue.paused);
+                    }}
+                  >
+                    {agentControlBusy ? "Updating…" : agentQueue?.paused ? "Resume runner" : "Pause runner"}
+                    <span className="local-codex-send-split-menu-desc">
+                      Queue keeps accepting messages while runner is paused
                     </span>
                   </button>
                 </div>

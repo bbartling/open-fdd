@@ -189,18 +189,16 @@ def test_openfdd_agent_does_not_escalate_when_env_disabled(monkeypatch: pytest.M
     assert out.get("simple_failure_escalated") is None
 
 
-def test_openfdd_agent_simple_can_use_complex_critic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_openfdd_agent_simple_smoke_response_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: list[str | None] = []
 
     def fake_run(_c: str, _w: Path, *, stdin_text: str, timeout_s: int | None, model: str | None = None) -> dict:
         calls.append(model)
-        if len(calls) == 1:
-            return {"returncode": 0, "stdout": "draft response", "stderr": "", "ok": True, "codex_model": model}
-        return {"returncode": 0, "stdout": "critic final response", "stderr": "", "ok": True, "codex_model": model}
+        return {"returncode": 0, "stdout": "simple response", "stderr": "", "ok": True, "codex_model": model}
 
     monkeypatch.setattr(agent, "run_codex_exec", fake_run)
     monkeypatch.setattr(agent, "resolve_codex_executable", lambda: "codex")
-    monkeypatch.setenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", "1")
+    monkeypatch.delenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", raising=False)
     monkeypatch.delenv("OFDD_CODEX_LLM_CLASSIFY", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
@@ -215,7 +213,8 @@ def test_openfdd_agent_simple_can_use_complex_critic(monkeypatch: pytest.MonkeyP
         system_context=None,
     )
     assert out["ok"] is True
-    assert out.get("critic_used") is True
-    assert out.get("critic_model") == "gpt-5.5"
-    assert out.get("stdout") == "critic final response"
-    assert calls == ["gpt-5.4-mini", "gpt-5.5"]
+    assert out.get("task_class") == "simple"
+    assert out.get("stdout") == "simple response"
+    assert out.get("codex_model") == "gpt-5.4-mini"
+    assert isinstance(out.get("route_reason"), str) and out["route_reason"]
+    assert calls == ["gpt-5.4-mini"]

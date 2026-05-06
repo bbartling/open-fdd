@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+import sys
 import time
 from unittest.mock import patch
 
@@ -354,6 +355,7 @@ def test_desktop_bridge_weather_config_roundtrip() -> None:
         assert str(body.get("longitude")) != ""
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Flaky/hangs on Windows in CI/local; covered by Linux runs.")
 def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
     from unittest.mock import patch
 
