@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import uuid
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -364,7 +365,7 @@ def persist_chatgpt_auth_from_device_tokens(
         "last_refresh": last_refresh,
     }
 
-    tmp_path = Path(home) / f".auth.{os.getpid()}.tmp"
+    tmp_path = home / f".auth.{uuid.uuid4().hex}.tmp"
     try:
         with tmp_path.open("w", encoding="utf-8", newline="\n") as fh:
             json.dump(doc, fh, indent=2)

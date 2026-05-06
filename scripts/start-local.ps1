@@ -160,7 +160,7 @@ function New-ServiceCommand(
   [string]$McpRestBase,
   [string]$UiPublicBase,
   [string]$AllowInstallCli,
-  [bool]$LanDashboard = $false
+  [bool]$BindAllInterfaces = $false
 ) {
   $escapedCwd = Escape-PSLiteral $cwd
   $escapedVenv = Escape-PSLiteral $venvActivate
@@ -209,9 +209,9 @@ function Start-ServiceWindow(
   [string]$McpRestBase,
   [string]$UiPublicBase,
   [string]$AllowInstallCli,
-  [bool]$LanDashboard = $false
+  [bool]$BindAllInterfaces = $false
 ) {
-  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv -BootstrapJsonPath $BootstrapJsonPath -McpRestBase $McpRestBase -UiPublicBase $UiPublicBase -AllowInstallCli $AllowInstallCli -LanDashboard:$LanDashboard
+  $cmd = New-ServiceCommand -serviceCommand $serviceCommand -cwd $cwd -activateVenv:$activateVenv -BootstrapJsonPath $BootstrapJsonPath -McpRestBase $McpRestBase -UiPublicBase $UiPublicBase -AllowInstallCli $AllowInstallCli -BindAllInterfaces:$BindAllInterfaces
   Start-Process powershell -ArgumentList @("-NoExit", "-Command", $cmd) -WorkingDirectory $cwd | Out-Null
   Write-Host "Started $title"
 }
@@ -292,9 +292,9 @@ if ($Role -eq "all") {
   Restart-ExistingServiceIfRunning "gateway"
   Restart-ExistingServiceIfRunning "mcp-rag"
   Restart-ExistingServiceIfRunning "desktop-ui"
-  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$BindAllInterfaces
-  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$BindAllInterfaces
-  Start-ServiceWindow -title "desktop-ui" -serviceCommand $uiDevCmd -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -LanDashboard:$BindAllInterfaces
+  Start-ServiceWindow -title "gateway" -serviceCommand "open-fdd-gateway" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -BindAllInterfaces:$BindAllInterfaces
+  Start-ServiceWindow -title "mcp-rag" -serviceCommand "open-fdd-mcp-rag" -cwd $repoRoot -activateVenv:$true -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -BindAllInterfaces:$BindAllInterfaces
+  Start-ServiceWindow -title "desktop-ui" -serviceCommand $uiDevCmd -cwd $desktopUiDir -activateVenv:$false -BootstrapJsonPath $bootstrapPath -McpRestBase $mcpRest -UiPublicBase $uiBase -AllowInstallCli $allowInstallCli -BindAllInterfaces:$BindAllInterfaces
   Write-Host 'All services launched with repo-local data defaults.'
   Write-Host 'Tip: MCP RAG index behavior is controlled by -RagIndex (auto|always|skip). Re-running without stopping old gateway/mcp/ui windows can leave ports 8765, 8090, or 5173 busy — close old jobs first — see docs/howto/desktop_app.md (Restarting start-local and MCP).'
   Write-Host ""
@@ -375,6 +375,6 @@ if ($Role -eq "gateway") { Restart-ExistingServiceIfRunning "gateway" }
 if ($Role -eq "mcp") { Restart-ExistingServiceIfRunning "mcp-rag" }
 if ($Role -eq "ui") { Restart-ExistingServiceIfRunning "desktop-ui" }
 if ($Role -eq "adapter") { Restart-ExistingServiceIfRunning "adapter" }
-$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli -LanDashboard:$BindAllInterfaces
+$scriptBody = New-ServiceCommand -serviceCommand $singleCommand -cwd $singleCwd -activateVenv:(Needs-PythonVenv $Role) -BootstrapJsonPath $singleBootstrap -McpRestBase $singleMcpRest -UiPublicBase $singleUiBase -AllowInstallCli $singleAllowInstallCli -BindAllInterfaces:$BindAllInterfaces
 Write-Host "[checkpoint] launching role=$Role command"
 Invoke-Expression $scriptBody

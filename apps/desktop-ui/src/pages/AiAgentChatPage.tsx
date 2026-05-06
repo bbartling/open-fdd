@@ -372,7 +372,8 @@ export function AiAgentChatPage() {
         try {
           localStorage.removeItem(BRIDGE_BASE_STORAGE_KEY);
         } catch {
-          /* ignore */
+          setSignInActionError("Could not remove bridge URL (storage blocked).");
+          return;
         }
       } else {
         const u = new URL(t.includes("://") ? t : `http://${t}`);
@@ -400,7 +401,8 @@ export function AiAgentChatPage() {
     try {
       localStorage.removeItem(BRIDGE_BASE_STORAGE_KEY);
     } catch {
-      /* ignore */
+      setSignInActionError("Could not remove bridge URL (storage blocked).");
+      return;
     }
     setBridgeUrlDraft("");
     setBridgeTick((n) => n + 1);
@@ -409,21 +411,35 @@ export function AiAgentChatPage() {
 
   const copyTextToClipboard = useCallback(async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      } catch {
-        /* ignore */
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
       }
+    } catch {
+      /* fall through */
     }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.focus();
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          document.body.removeChild(ta);
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      document.body.removeChild(ta);
+    } catch {
+      /* ignore */
+    }
+    void window.prompt("Copy manually: select all, then Ctrl+C or Cmd+C, then OK.", text);
   }, []);
 
   const setAgentPaused = useCallback(async (paused: boolean) => {

@@ -113,12 +113,18 @@ def _emit_complete_response(session_id: str) -> dict[str, Any]:
                 if s2:
                     s2.persisted_to_disk = True
 
+    persisted_ok = bool(persist.get("ok"))
+    msg = (
+        "Signed in. Credentials were saved for Codex on this bridge host."
+        if persisted_ok
+        else "Signed in. Failed to persist Codex credentials on this bridge host."
+    )
     return {
         "status": "complete",
-        "message": "Signed in. Credentials were saved for Codex on this bridge host.",
+        "message": msg,
         "expires_at_ms": exp,
-        "codex_auth_persisted": bool(persist.get("ok")),
-        "codex_auth_persist_error": persist.get("error") if not persist.get("ok") else None,
+        "codex_auth_persisted": persisted_ok,
+        "codex_auth_persist_error": persist.get("error") if not persisted_ok else None,
     }
 
 

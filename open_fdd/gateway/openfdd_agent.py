@@ -200,12 +200,20 @@ def run_openfdd_agent_turn(
             f"Draft answer (SIMPLE tier):\n{str(out.get('stdout') or '').strip()}\n\n"
             "Return **only** the final answer to show the human (no rubric, no preamble, no “As a critic” lines)."
         )
+        critic_system = "\n\n".join(
+            part
+            for part in (
+                _openfdd_agent_identity(),
+                ctx_md,
+                routing_instructions_for_tier("complex"),
+                f"### Operator extra instructions\n{extra}" if extra else "",
+            )
+            if part
+        )
         critic_stdin = build_chat_stdin(
             user_message=critic_prompt,
-            system_context="\n\n".join(
-                part for part in (_openfdd_agent_identity(), ctx_md, routing_instructions_for_tier("complex")) if part
-            ),
-            conversation_history=None,
+            system_context=critic_system,
+            conversation_history=conversation_history,
         )
         critic_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_CRITIC", complex_timeout)
         critic_out = run_codex_exec(
