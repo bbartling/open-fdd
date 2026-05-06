@@ -165,7 +165,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
 
 `start-local.ps1` opens **separate** PowerShell windows for gateway, MCP RAG, and **`npm run dev`** for the UI. Use the Vite URL printed in the UI window (often **`http://127.0.0.1:5173`**).
 
-- **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -BridgeUrl "http://<this-pc-ip>:8765"` and allow **8765**, **8090**, and your **UI port** in Windows Firewall.
+- **LAN / other PCs:** `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -LanHost <this-pc-ip>` (equivalent Bash: `bash scripts/start-local.sh --lan-host <this-pc-ip> all`). This sets bridge/MCP listen (`0.0.0.0`), private-LAN CORS, and bridge/MCP/UI public-base URLs; allow **8765**, **8090**, and your **UI port** in Windows Firewall.
 - **Docker on same machine will call the host** — see [§2](#2-openclaw--docker-as-http-client-to-the-host); you may need the bridge/MCP to listen on **`0.0.0.0`** (`OFDD_BRIDGE_HOST`, `OFDD_MCP_LISTEN_HOST`) so `host.docker.internal` can connect.
 
 **Git Bash / WSL:** use `bash scripts/start-local.sh`; clone under Linux filesystem in WSL (`~/open-fdd`) for better I/O than `/mnt/c/...`. Background services log to **`stack/local-data/logs/*.log`**. The script prints **UI / Plots / readiness / health** URLs and waits on **`curl`** or **`wget`** for **`/health`** (install **`curl`** for the wait loop).
@@ -233,7 +233,7 @@ From **Docker client to Windows host:** replace host with `host.docker.internal`
 
 Logs: **`bash scripts/start-local.sh`** (role `all`) writes **`stack/local-data/logs/gateway.log`**, **`mcp-rag.log`**, **`desktop-ui.log`**. On Windows, **`start-local.ps1`** opens separate windows — watch those terminals (no repo-root `.openfdd-*.log` files).
 
-- Bash roles: `bash scripts/start-local.sh` or `bash scripts/start-local.sh gateway`
+- Bash roles: `bash scripts/start-local.sh` or `bash scripts/start-local.sh gateway` or `bash scripts/start-local.sh --lan-host 192.168.1.10 all` for a private-LAN dashboard (same intent as PowerShell `-LanHost`).
 - PowerShell: `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1 -Role gateway` (see `scripts/README.md`)
 
 ---
@@ -338,7 +338,7 @@ Do in order:
    - GET http://127.0.0.1:8765/plots/frame?site_id=<id>&source=csv&limit=20 — expect rows/columns JSON.
 
 4) Merged time-series (multi-driver merge-on-read; no merged Feather file)
-   - GET http://127.0.0.1:8765/plots/site-frame?site_id=<id>&sources=csv,weather,onboard,bacnet&limit=50 — expect JSON with "sources" listing drivers that had data (weather may be empty until ingest).
+   - GET http://127.0.0.1:8765/plots/site-frame?site_id=<id>&sources=csv,weather,bacnet&limit=50 — expect JSON with "sources" listing drivers that had data (weather may be empty until ingest).
    - Optional: POST http://127.0.0.1:8765/ingest/weather with JSON {"site_id":"<id>","days_back":1} if env/lat/long is set; re-hit plots/site-frame and note new columns like *_weather.
    - Optional: POST http://127.0.0.1:8765/timeseries/query with JSON joining multiple sources (see OpenAPI /docs for TimeseriesQueryBody: sources, join_on_timestamp, join_how).
 

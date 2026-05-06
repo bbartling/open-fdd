@@ -6,14 +6,19 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from queue import Empty, Queue
 import shutil
+import threading
 import tempfile
 import urllib.parse
+import urllib.error
+import urllib.request
 from typing import Any, Literal
 import logging
 import os
 import platform
 import time
+import uuid
 import ctypes
 import ctypes.util
 from ctypes import wintypes
@@ -142,7 +147,7 @@ class PlotsFddFrameBody(BaseModel):
 
     site_id: str
     rules_path: str
-    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "onboard", "bacnet"])
+    sources: list[str] = Field(default_factory=lambda: ["csv", "weather", "bacnet"])
     limit: int = 5000
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
     start_ts: str | None = None
@@ -177,7 +182,7 @@ class RuleRunBody(BaseModel):
     target_memory_fraction: float = 0.25
     #: When set (non-empty), load and merge these driver sources on ``timestamp`` instead
     #: of using ``source`` alone. Tags match ingest storage (e.g. ``csv``, ``weather``,
-    #: ``onboard``, ``bacnet``, or any future driver ``source`` string).
+    #: ``bacnet`` or any future driver ``source`` string).
     sources: list[str] | None = None
     join_how: Literal["inner", "left", "outer", "right"] = "outer"
     #: YAML basenames under ``rules_path`` (e.g. ``["ahu_sat.yaml"]``). Omit or empty = all rules.
@@ -227,10 +232,6 @@ class ModelValidateBody(BaseModel):
 class WeatherIngestBody(BaseModel):
     site_id: str
     days_back: int = 1
-
-
-class OnboardIngestBody(BaseModel):
-    site_id: str
 
 
 class BacnetIngestBody(BaseModel):
@@ -303,20 +304,11 @@ class BacnetConfigBody(BaseModel):
     api_key: str | None = None
 
 
-class OnboardConfigBody(BaseModel):
-    base_url: str = "https://api.onboarddata.io"
-    building_ids: str = ""
-    lookback_hours: int = 24
-    api_key: str | None = None
-    allow_synthetic: bool = False
-
-
 class DriversValidateBundle(BaseModel):
     """Draft driver configs for AI-assisted setup (validated without applying)."""
 
     model_config = ConfigDict(extra="ignore")
     weather: dict[str, Any] | None = None
-    onboard: dict[str, Any] | None = None
     bacnet: dict[str, Any] | None = None
 
 
@@ -383,6 +375,208 @@ class OpenFddAgentChatBody(BaseModel):
         if not v:
             return v
         return v[-120:] if len(v) > 120 else v
+
+
+class OpenFddAgentEnqueueBody(OpenFddAgentChatBody):
+    mode: Literal["run_now", "queue"] = "run_now"
+
+
+class OpenFddAgentControlBody(BaseModel):
+    paused: bool
+
+
+@dataclass
+class _AgentRunItem:
+    run_id: str
+    message: str
+    workdir: str | None
+    task_summary: str | None
+    force_class: Literal["simple", "complex"] | None
+    system_context: str | None
+    conversation_history: list[tuple[str, str]] | None
+    human_requested_complex: bool
+
+
+class _OpenFddAgentQueueManager:
+    """Single-flight agent execution: at most one codex turn runs at a time."""
+
+    def __init__(self) -> None:
+        self._queue: Queue[_AgentRunItem] = Queue()
+        self._lock = threading.Lock()
+        self._cv = threading.Condition(self._lock)
+        self._paused = False
+        self._shutdown = False
+        self._running: dict[str, Any] | None = None
+        self._runs: dict[str, dict[str, Any]] = {}
+        self._worker = threading.Thread(target=self._worker_loop, name="ofdd-agent-runner", daemon=True)
+        self._worker.start()
+
+    def shutdown(self, *, join_timeout_s: float = 30.0) -> None:
+        """Stop the worker thread (used on app lifespan shutdown; tests create many apps)."""
+        with self._cv:
+            self._shutdown = True
+            self._cv.notify_all()
+        if self._worker.is_alive():
+            self._worker.join(timeout=float(join_timeout_s))
+
+    def _retain_cap(self) -> int:
+        raw = (os.environ.get("OFDD_AGENT_RUNS_RETAIN") or "100").strip()
+        try:
+            cap = int(raw)
+        except ValueError:
+            cap = 100
+        return max(16, min(cap, 5000))
+
+    def _evict_completed_unlocked(self) -> None:
+        cap = self._retain_cap()
+        if len(self._runs) <= cap:
+            return
+        completed_rows = [
+            (rid, str(r.get("completed_at") or ""))
+            for rid, r in self._runs.items()
+            if r.get("status") == "completed"
+        ]
+        completed_rows.sort(key=lambda t: t[1])
+        for rid, _ in completed_rows:
+            if len(self._runs) <= cap:
+                break
+            row = self._runs.get(rid)
+            if row and row.get("status") == "completed":
+                self._runs.pop(rid, None)
+
+    def _claim_running_locked(self, run_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
+        row.update({"status": "running", "started_at": now, "error": None})
+        self._runs[run_id] = row
+        self._running = {"run_id": run_id, "started_at": now}
+
+    def enqueue_or_run(self, item: _AgentRunItem, mode: Literal["run_now", "queue"]) -> dict[str, Any]:
+        if mode == "queue":
+            with self._cv:
+                self._runs[item.run_id] = {
+                    "run_id": item.run_id,
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": None,
+                    "result": None,
+                    "error": None,
+                }
+                self._queue.put(item)
+                self._cv.notify_all()
+            return {"run_id": item.run_id, "status": "queued"}
+
+        with self._cv:
+            is_busy = self._paused or (self._running is not None) or (not self._queue.empty())
+            if is_busy:
+                self._runs[item.run_id] = {
+                    "run_id": item.run_id,
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": None,
+                    "result": None,
+                    "error": None,
+                }
+                self._queue.put(item)
+                self._cv.notify_all()
+                return {"run_id": item.run_id, "status": "queued"}
+            self._claim_running_locked(item.run_id)
+
+        result: dict[str, Any] | None = None
+        try:
+            result = run_openfdd_agent_turn(
+                message=item.message,
+                workdir_raw=item.workdir,
+                task_summary=item.task_summary,
+                force_class=item.force_class,
+                system_context=item.system_context,
+                conversation_history=item.conversation_history,
+                human_requested_complex=item.human_requested_complex,
+            )
+        except Exception as exc:  # noqa: BLE001
+            result = {"ok": False, "error": "agent_runner_exception", "detail": str(exc)}
+        finally:
+            self._set_completed(item.run_id, result)
+        return {"run_id": item.run_id, "status": "completed", "result": result or {}}
+
+    def set_paused(self, paused: bool) -> dict[str, Any]:
+        with self._cv:
+            self._paused = bool(paused)
+            self._cv.notify_all()
+            return self._snapshot_unlocked()
+
+    def _snapshot_unlocked(self) -> dict[str, Any]:
+        queued = list(self._queue.queue)
+        return {
+            "paused": self._paused,
+            "running": self._running,
+            "queue_size": len(queued),
+            "queued_run_ids": [it.run_id for it in queued],
+        }
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._cv:
+            return self._snapshot_unlocked()
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self._cv:
+            return self._runs.get(run_id)
+
+    def _set_completed(self, run_id: str, result: dict[str, Any] | None) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        stored = dict(result) if isinstance(result, dict) else result
+        with self._cv:
+            row = self._runs.get(run_id) or {"run_id": run_id, "created_at": now}
+            row.update(
+                {
+                    "status": "completed",
+                    "completed_at": now,
+                    "result": stored,
+                    "error": None if result and result.get("ok", True) else (result or {}).get("error"),
+                }
+            )
+            self._runs[run_id] = row
+            if self._running and self._running.get("run_id") == run_id:
+                self._running = None
+            self._evict_completed_unlocked()
+            self._cv.notify_all()
+
+    def _worker_loop(self) -> None:
+        while not self._shutdown:
+            item: _AgentRunItem | None = None
+            with self._cv:
+                while (
+                    not self._shutdown
+                    and (self._paused or self._queue.empty() or self._running is not None)
+                ):
+                    self._cv.wait(timeout=0.5)
+                if self._shutdown:
+                    break
+                try:
+                    item = self._queue.get_nowait()
+                except Empty:
+                    item = None
+                if item is not None:
+                    self._claim_running_locked(item.run_id)
+            if self._shutdown:
+                break
+            if item is None:
+                continue
+            try:
+                result = run_openfdd_agent_turn(
+                    message=item.message,
+                    workdir_raw=item.workdir,
+                    task_summary=item.task_summary,
+                    force_class=item.force_class,
+                    system_context=item.system_context,
+                    conversation_history=item.conversation_history,
+                    human_requested_complex=item.human_requested_complex,
+                )
+            except Exception as exc:
+                result = {"ok": False, "error": "agent_runner_exception", "detail": str(exc)}
+            self._set_completed(item.run_id, result)
 
 
 class TimeseriesPurgeBody(BaseModel):
@@ -526,11 +720,14 @@ def create_app() -> FastAPI:
                 await task_ttl
             with contextlib.suppress(asyncio.CancelledError):
                 await task_bacnet
+            q = getattr(app.state, "agent_queue", None)
+            if q is not None:
+                q.shutdown()
 
     app = FastAPI(
         title="open-fdd desktop bridge",
         description=(
-            "Local desktop bridge API for model management, ingestion (CSV/weather/onboard/BACnet), "
+            "Local desktop bridge API for model management, ingestion (CSV/weather/BACnet), "
             "timeseries joins, rules backfill, and Plotly-friendly views."
         ),
         version="0.1.0",
@@ -541,14 +738,14 @@ def create_app() -> FastAPI:
             {"name": "health", "description": "Bridge health and readiness."},
             {"name": "sites", "description": "Site lifecycle and site-level rule pack config."},
             {"name": "model", "description": "Desktop model export/import/validate and TTL controls."},
-            {"name": "ingest", "description": "CSV, weather, onboard, BACnet ingestion endpoints."},
+            {"name": "ingest", "description": "CSV, weather, BACnet ingestion endpoints."},
             {"name": "timeseries", "description": "Feather-backed query, bounds, plots, FDD overlay frame, and purge endpoints."},
             {
                 "name": "data_prep",
                 "description": "Agent-friendly timeseries cleaning (strip Grafana-style units) before BRICK mapping and FDD.",
             },
             {"name": "rules", "description": "Rule execution, rule file management, and defaults."},
-            {"name": "config", "description": "Weather, BACnet, and Onboard runtime configuration."},
+            {"name": "config", "description": "Weather and BACnet runtime configuration."},
             {"name": "sparql", "description": "SPARQL query endpoints for desktop TTL graph."},
             {"name": "system", "description": "Resource and storage stats."},
             {"name": "assistant", "description": "Agent/human handoff: readiness links and declarative site profile apply."},
@@ -992,8 +1189,8 @@ def create_app() -> FastAPI:
         "csv": _driver_health_entry(),
         "weather": _driver_health_entry(),
         "bacnet": _driver_health_entry(),
-        "onboard": _driver_health_entry(),
     }
+    app.state.agent_queue = _OpenFddAgentQueueManager()
 
     async def _ttl_sync_loop(app_ref: FastAPI) -> None:
         while True:
@@ -1119,25 +1316,48 @@ def create_app() -> FastAPI:
         """Ports and URLs for the built-in agent (merge of env + optional bootstrap JSON)."""
         return build_agent_bootstrap_context()
 
+    @app.get("/openfdd-agent/status", tags=["openfdd-agent"])
+    def openfdd_agent_status() -> dict[str, Any]:
+        return app.state.agent_queue.snapshot()
+
+    @app.post("/openfdd-agent/control", tags=["openfdd-agent"])
+    def openfdd_agent_control(body: OpenFddAgentControlBody) -> dict[str, Any]:
+        return app.state.agent_queue.set_paused(body.paused)
+
+    @app.get("/openfdd-agent/runs/{run_id}", tags=["openfdd-agent"])
+    def openfdd_agent_run_status(run_id: str) -> dict[str, Any]:
+        row = app.state.agent_queue.get_run(str(run_id).strip())
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Unknown run id: {run_id}")
+        return row
+
     @app.post("/openfdd-agent/chat", tags=["openfdd-agent"])
-    def openfdd_agent_chat(body: OpenFddAgentChatBody) -> dict[str, Any]:
+    def openfdd_agent_chat(body: OpenFddAgentEnqueueBody) -> dict[str, Any]:
         hist: list[tuple[str, str]] | None = None
         if body.conversation_history:
             hist = [(ln.role, ln.text) for ln in body.conversation_history]
-        result = run_openfdd_agent_turn(
-            message=body.message,
-            workdir_raw=body.workdir,
-            task_summary=body.task_summary,
-            force_class=body.force_class,
-            system_context=body.system_context,
-            conversation_history=hist,
-            human_requested_complex=bool(body.human_requested_complex),
+        run_id = f"run-{uuid.uuid4()}"
+        queued = app.state.agent_queue.enqueue_or_run(
+            _AgentRunItem(
+                run_id=run_id,
+                message=body.message,
+                workdir=body.workdir,
+                task_summary=body.task_summary,
+                force_class=body.force_class,
+                system_context=body.system_context,
+                conversation_history=hist,
+                human_requested_complex=bool(body.human_requested_complex),
+            ),
+            body.mode,
         )
+        if queued.get("status") == "queued":
+            return queued
+        result = queued.get("result") or {}
         if result.get("error") == "codex_cli_missing":
             raise HTTPException(status_code=503, detail=str(result.get("detail") or "codex CLI missing"))
         if result.get("error") == "bad_workdir":
             raise HTTPException(status_code=400, detail=str(result.get("detail") or "bad workdir"))
-        return result
+        return {"run_id": run_id, "status": "completed", **result}
 
     @app.post("/openfdd-claw/codex/device/start", tags=["openfdd-claw"])
     def codex_device_start() -> dict[str, Any]:
@@ -1463,19 +1683,6 @@ def create_app() -> FastAPI:
         )
         return out
 
-    @app.post("/ingest/onboard", tags=["ingest"])
-    def ingest_onboard(body: OnboardIngestBody) -> dict[str, Any]:
-        out = services.ingest.ingest_onboard(site_id=body.site_id)
-        ok = bool(out.get("success", False))
-        _driver_health_update(
-            app.state.driver_health,
-            driver="onboard",
-            rows=int(out.get("rows", 0) or 0),
-            success=ok,
-            error=str(out.get("error") or ""),
-        )
-        return out
-
     @app.post("/ingest/bacnet", tags=["ingest"])
     def ingest_bacnet(body: BacnetIngestBody) -> dict[str, Any]:
         explicit_server_url = str(body.server_url or "").strip()
@@ -1703,7 +1910,6 @@ def create_app() -> FastAPI:
         return {
             "schema_version": 1,
             "weather": weather_config_get(),
-            "onboard": onboard_config_get(),
             "bacnet": bacnet_config_get(),
             "health": drivers_health_get(),
         }
@@ -1718,12 +1924,6 @@ def create_app() -> FastAPI:
                 WeatherConfigBody.model_validate(body.weather)
             except ValidationError as exc:
                 errors["weather"] = exc.errors()
-
-        if body.onboard is not None:
-            try:
-                OnboardConfigBody.model_validate(body.onboard)
-            except ValidationError as exc:
-                errors["onboard"] = exc.errors()
 
         if body.bacnet is not None:
             try:
@@ -1742,32 +1942,6 @@ def create_app() -> FastAPI:
             "errors": errors,
             "warnings": warnings,
         }
-
-    @app.get("/config/onboard", tags=["config"])
-    def onboard_config_get() -> dict[str, Any]:
-        raw_lookback = os.getenv("OFDD_ONBOARD_LOOKBACK_HOURS", "24")
-        try:
-            lookback_hours = int(str(raw_lookback).strip() or "24")
-        except (TypeError, ValueError):
-            lookback_hours = 24
-        lookback_hours = max(1, min(lookback_hours, 24 * 30))
-        return {
-            "base_url": os.getenv("OFDD_ONBOARD_API_BASE_URL", "https://api.onboarddata.io"),
-            "building_ids": os.getenv("OFDD_ONBOARD_BUILDING_IDS", ""),
-            "lookback_hours": lookback_hours,
-            "api_key_set": bool(str(os.getenv("OFDD_ONBOARD_API_KEY", "")).strip()),
-            "allow_synthetic": os.getenv("OFDD_ONBOARD_ALLOW_SYNTHETIC", "").strip().lower() in {"1", "true", "yes", "on"},
-        }
-
-    @app.post("/config/onboard", tags=["config"])
-    def onboard_config_set(body: OnboardConfigBody) -> dict[str, Any]:
-        os.environ["OFDD_ONBOARD_API_BASE_URL"] = str(body.base_url or "https://api.onboarddata.io").strip()
-        os.environ["OFDD_ONBOARD_BUILDING_IDS"] = str(body.building_ids or "").strip()
-        os.environ["OFDD_ONBOARD_LOOKBACK_HOURS"] = str(max(1, int(body.lookback_hours or 24)))
-        os.environ["OFDD_ONBOARD_ALLOW_SYNTHETIC"] = "true" if bool(body.allow_synthetic) else "false"
-        if body.api_key is not None:
-            os.environ["OFDD_ONBOARD_API_KEY"] = str(body.api_key).strip()
-        return onboard_config_get()
 
     @app.get("/plots/frame", tags=["timeseries"])
     def plots_frame(
@@ -1799,7 +1973,7 @@ def create_app() -> FastAPI:
     @app.get("/plots/site-frame", tags=["timeseries"])
     def plots_site_frame(
         site_id: str,
-        sources: str = "csv,weather,onboard,bacnet",
+        sources: str = "csv,weather,bacnet",
         limit: int = 5000,
         join_how: str = "outer",
         start_ts: str | None = None,
@@ -1952,6 +2126,43 @@ def create_app() -> FastAPI:
         from open_fdd.assistant.readiness import build_readiness_payload
 
         return build_readiness_payload(services.model.load())
+
+    @app.get("/assistant/ai-health", tags=["assistant"])
+    def assistant_ai_health() -> dict[str, Any]:
+        mcp_base = str(os.getenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")).strip().rstrip("/")
+        openclaw_url = str(
+            os.getenv("OFDD_OPENCLAW_GATEWAY_URL")
+            or os.getenv("OFDD_CLAW_GATEWAY_URL")
+            or "http://127.0.0.1:18789"
+        ).strip().rstrip("/")
+        has_openclaw_token = bool(
+            str(os.getenv("OFDD_OPENCLAW_GATEWAY_TOKEN") or os.getenv("OFDD_CLAW_GATEWAY_TOKEN") or "").strip()
+        )
+        mcp_ok = False
+        openclaw_ok = False
+        mcp_error: str | None = None
+        openclaw_error: str | None = None
+        try:
+            req = urllib.request.Request(f"{mcp_base}/health", method="GET")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                mcp_ok = int(resp.status) == 200
+        except Exception as exc:  # noqa: BLE001
+            mcp_error = str(exc)
+        try:
+            req = urllib.request.Request(f"{openclaw_url}/health", method="GET")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                openclaw_ok = int(resp.status) == 200
+        except Exception as exc:  # noqa: BLE001
+            openclaw_error = str(exc)
+        return {
+            "mcp_rest_base": mcp_base,
+            "mcp_reachable": mcp_ok,
+            "mcp_error": mcp_error,
+            "openclaw_gateway_url": openclaw_url,
+            "openclaw_reachable": openclaw_ok,
+            "openclaw_error": openclaw_error,
+            "openclaw_token_set": has_openclaw_token,
+        }
 
     @app.post("/assistant/apply-site-profiles", tags=["assistant"])
     def assistant_apply_site_profiles(body: ApplySiteProfilesBody) -> dict[str, Any]:

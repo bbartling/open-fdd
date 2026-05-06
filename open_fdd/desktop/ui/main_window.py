@@ -68,7 +68,6 @@ class DesktopMainWindow:
         self._thread_pool = QThreadPool.globalInstance()
         self._active_jobs = 0
         self._run_weather_button = None
-        self._run_onboard_button = None
         self._run_ml_button = None
         self._run_rules_button = None
         self.window = QMainWindow()
@@ -304,12 +303,9 @@ class DesktopMainWindow:
         pick_btn.clicked.connect(self._on_import_csv)
         weather_btn = QPushButton("Run Weather Fetch")
         weather_btn.clicked.connect(self._on_run_weather)
-        onboard_btn = QPushButton("Run Onboard Scrape")
-        onboard_btn.clicked.connect(self._on_run_onboard)
         ml_btn = QPushButton("Train ML Baseline")
         ml_btn.clicked.connect(self._on_run_ml_baseline)
         self._run_weather_button = weather_btn
-        self._run_onboard_button = onboard_btn
         self._run_ml_button = ml_btn
         refresh_sites_btn = QPushButton("Refresh Sites")
         refresh_sites_btn.clicked.connect(self._refresh_site_selector)
@@ -321,7 +317,6 @@ class DesktopMainWindow:
         row.addWidget(self.source_input_ingest)
         row.addWidget(pick_btn)
         row.addWidget(weather_btn)
-        row.addWidget(onboard_btn)
         row.addWidget(ml_btn)
         row.addWidget(refresh_sites_btn)
         lay.addLayout(row)
@@ -375,7 +370,7 @@ class DesktopMainWindow:
         self.rules_path = QLineEdit()
         self.rules_path.setPlaceholderText("path to YAML rules directory")
         self.source_input = QLineEdit()
-        self.source_input.setPlaceholderText("source name (csv/weather/onboard)")
+        self.source_input.setPlaceholderText("source name (csv/weather/bacnet)")
         self.chunk_size_input = QLineEdit()
         self.chunk_size_input.setPlaceholderText("chunk rows (optional)")
         self.rules_start_dt = QDateTimeEdit()
@@ -628,23 +623,6 @@ class DesktopMainWindow:
             on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
         )
 
-    def _on_run_onboard(self) -> None:
-        site_id = self._site_id_for_ingest()
-        if not site_id:
-            self.ingest_out.setPlainText("Set a site id first.")
-            return
-        self.ingest_out.setPlainText("Running onboard ingest...")
-        self._set_busy(True)
-        self._run_in_background(
-            lambda: self.ingest_service.ingest_onboard(site_id=site_id),
-            on_success=lambda result: (
-                self._on_ingest_worker_success(f"Onboard rows ingested: {result['rows']}")
-                if result.get("success", True)
-                else self.ingest_out.setPlainText(f"Onboard ingest failed: {result.get('error', 'Unknown error')}")
-            ),
-            on_error=lambda exc, tb: self.ingest_out.setPlainText(f"Error: {exc}\n{tb}"),
-        )
-
     def _on_run_ml_baseline(self) -> None:
         site_id = self._site_id_for_ingest()
         if not site_id:
@@ -819,7 +797,7 @@ class DesktopMainWindow:
         )
 
     def _set_busy(self, busy: bool) -> None:
-        for btn in (self._run_weather_button, self._run_onboard_button, self._run_ml_button, self._run_rules_button):
+        for btn in (self._run_weather_button, self._run_ml_button, self._run_rules_button):
             if btn is not None:
                 btn.setEnabled(not busy)
 

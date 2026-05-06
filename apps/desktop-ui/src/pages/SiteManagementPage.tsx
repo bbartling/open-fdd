@@ -164,7 +164,7 @@ export function SiteManagementPage() {
         <p className="muted">Driver configuration and ingest controls are now managed in dedicated driver tabs.</p>
         <h3 className="title" style={{ marginTop: 12 }}>Driver Control Center</h3>
         <p className="muted">
-          Supported now: CSV import, Open-Meteo weather, BACnet via diy-bacnet-server, and Onboard API ingest.
+          Supported now: CSV import, Open-Meteo weather, and BACnet via diy-bacnet-server.
         </p>
         <div style={{ marginTop: 8 }}>
           <label>Site</label>
@@ -180,7 +180,7 @@ export function SiteManagementPage() {
         <div style={{ marginTop: 12 }}>
           <h3 className="title" style={{ marginTop: 0 }}>Driver health</h3>
           <div className="grid-two">
-            {["csv", "weather", "bacnet", "onboard"].map((driver) => {
+            {["csv", "weather", "bacnet"].map((driver) => {
               const h = driverHealth[driver];
               return (
                 <div key={driver} className="card" style={{ padding: 10 }}>

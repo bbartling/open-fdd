@@ -26,7 +26,7 @@ The **base PyPI wheel** is the rules engine only. **`pip install "open-fdd[deskt
 
 ## AI-assisted modeling workflows
 
-For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
+For the full **OpenClaw + Codex OAuth + gateway HTTP** integration picture, see **[Open FDD Claw architecture](../open-fdd-claw-architecture)** and [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) Phase 0.
 
 For AI-assisted data modeling (OpenClaw, ChatGPT, or human-in-the-loop review), use a simple loop:
 
@@ -55,6 +55,6 @@ The FastAPI **gateway** (`open_fdd.gateway`, CLI `open-fdd-gateway` / `open-fdd-
 - model export/import/validate,
 - SPARQL query endpoints (`/data-model/sparql`, `/data-model/sparql/upload`),
 - timeseries bounds/query over Feather data,
-- weather/onboard ingest and ML training routes.
+- weather/BACnet ingest and ML training routes.
 
 This enables OpenClaw-style local assistants to do data modeling, retrieve and join data in pandas/Feather workflows, run faults, and iterate with a human operator. For how to run the gateway locally, storage paths, and **`start-local`**, see **[Desktop app](../howto/desktop_app)**.

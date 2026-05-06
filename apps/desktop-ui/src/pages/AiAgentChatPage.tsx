@@ -54,6 +54,8 @@ type DiagnosticsPayload = {
 };
 
 type ChatResponse = {
+  run_id?: string;
+  status?: "queued" | "running" | "completed";
   returncode: number;
   stdout: string;
   stderr: string;
@@ -65,6 +67,22 @@ type ChatResponse = {
   codex_model_fallback_used?: boolean;
   human_route?: boolean;
   simple_failure_escalated?: boolean;
+  result?: ChatResponse;
+  critic_used?: boolean;
+  critic_model?: string;
+};
+
+type AgentQueueStatus = {
+  paused: boolean;
+  queue_size: number;
+  queued_run_ids: string[];
+  running?: { run_id: string; started_at?: string } | null;
+};
+
+type PendingMessage = {
+  id: string;
+  sessionId: string;
+  text: string;
 };
 
 function routeMetaFromAgentResponse(data: ChatResponse): AgentRouteMeta | undefined {
@@ -220,6 +238,9 @@ export function AiAgentChatPage() {
   const [signOutBusy, setSignOutBusy] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const [execEnv, setExecEnv] = useState<CodexExecEnvPayload | null>(null);
+  const [agentQueue, setAgentQueue] = useState<AgentQueueStatus | null>(null);
+  const [agentControlBusy, setAgentControlBusy] = useState(false);
+  const [agentControlError, setAgentControlError] = useState<string | null>(null);
 
   const [sessionBundle, setSessionBundle] = useState<CodexSessionBundle>(() => loadCodexSessionBundle());
   const bundleRef = useRef(sessionBundle);
@@ -239,6 +260,7 @@ export function AiAgentChatPage() {
   const [thinkingHumanRequested, setThinkingHumanRequested] = useState(false);
   const [sendMenuOpen, setSendMenuOpen] = useState(false);
   const sendSplitRef = useRef<HTMLDivElement | null>(null);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [thinkingPhase, setThinkingPhase] = useState(0);
   const phaseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const devicePollMounted = useRef(true);
@@ -300,11 +322,34 @@ export function AiAgentChatPage() {
     setSignInActionError(null);
     try {
       await pullDiagnostics({ silent: false });
+      try {
+        const q = await desktopFetch<AgentQueueStatus>("/openfdd-agent/status");
+        setAgentQueue(q);
+      } catch {
+        setAgentQueue(null);
+      }
     } catch (e) {
       setAuthState("error");
       setAuthLine(e instanceof Error ? e.message : String(e));
     }
   }, [pullDiagnostics]);
+
+  const setAgentPaused = useCallback(async (paused: boolean) => {
+    setAgentControlBusy(true);
+    setAgentControlError(null);
+    try {
+      const data = await desktopFetch<AgentQueueStatus>("/openfdd-agent/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused }),
+      });
+      setAgentQueue(data);
+    } catch (e) {
+      setAgentControlError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAgentControlBusy(false);
+    }
+  }, []);
 
   const signOutAgentCli = useCallback(async () => {
     setSignOutError(null);
@@ -499,82 +544,118 @@ export function AiAgentChatPage() {
     }
   }, [bridgeBase, pullDiagnostics]);
 
-  const sendMessage = useCallback(async (humanRequestedComplex = false) => {
+  const runMessage = useCallback(
+    async (sessionId: string, text: string, humanRequestedComplex = false) => {
+      const b = bundleRef.current;
+      const active = b.sessions.find((s) => s.id === sessionId);
+      const trimmed = text.trim();
+      if (!active || !trimmed || sending || authState !== "signed_in") {
+        return;
+      }
+      setSendMenuOpen(false);
+      const workdirSnapshot = workdir.trim() || null;
+      const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
+      const requestedHumanComplex = humanRequestedComplex;
+      setSending(true);
+      setThinkingHumanRequested(requestedHumanComplex);
+      setSendingRoutePreview(requestedHumanComplex ? "complex" : classifyOpenfddTaskPreview(trimmed));
+      setSessionBundle((prev) =>
+        updateSessionById(prev, sessionId, (s) => {
+          const nextLines: ChatLine[] = [...s.lines, { role: "user", text: trimmed }];
+          const title =
+            s.title === "New agent" && s.lines.length === 0
+              ? titleFromFirstUserMessage(nextLines, "New agent")
+              : s.title;
+          return { ...s, lines: nextLines, title, updatedAt: Date.now() };
+        }),
+      );
+      try {
+        const res = await fetch(`${bridgeBase}/openfdd-agent/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: trimmed,
+            mode: "run_now",
+            workdir: workdirSnapshot,
+            task_summary: null,
+            conversation_history: conversationHistory,
+            human_requested_complex: requestedHumanComplex,
+          }),
+        });
+        const data = (await res.json()) as ChatResponse & { detail?: string };
+        if (!res.ok) {
+          const detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
+          setSessionBundle((prev) =>
+            updateSessionById(prev, sessionId, (s) => ({
+              ...s,
+              lines: [...s.lines, { role: "assistant", text: `Request failed (${res.status}):\n${detail}` }],
+              updatedAt: Date.now(),
+            })),
+          );
+          return;
+        }
+        const out =
+          data.stdout?.trim() ||
+          (data.stderr?.trim()
+            ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
+            : "(No output.)");
+        const outWithCritic =
+          data.critic_used && data.critic_model
+            ? `${out}\n\n---\nFinal-pass critique applied (${data.critic_model}).`
+            : out;
+        const route = routeMetaFromAgentResponse(data);
+        setSessionBundle((prev) =>
+          updateSessionById(prev, sessionId, (s) => ({
+            ...s,
+            lines: [
+              ...s.lines,
+              route ? { role: "assistant", text: outWithCritic, route } : { role: "assistant", text: outWithCritic },
+            ],
+            updatedAt: Date.now(),
+          })),
+        );
+      } catch (e) {
+        setSessionBundle((prev) =>
+          updateSessionById(prev, sessionId, (s) => ({
+            ...s,
+            lines: [...s.lines, { role: "assistant", text: e instanceof Error ? e.message : String(e) }],
+            updatedAt: Date.now(),
+          })),
+        );
+      } finally {
+        setThinkingHumanRequested(false);
+        setSendingRoutePreview(null);
+        setSending(false);
+      }
+    },
+    [authState, sending, workdir, bridgeBase],
+  );
+
+  const enqueueDraft = useCallback(() => {
     const b = bundleRef.current;
     const sessionId = b.activeId;
     const active = b.sessions.find((s) => s.id === sessionId);
     const text = (active?.draft ?? "").trim();
-    if (!active || !text || sending || authState !== "signed_in") {
+    if (!active || !text || authState !== "signed_in") {
       return;
     }
-    setSendMenuOpen(false);
-    const workdirSnapshot = workdir.trim() || null;
-    const conversationHistory = active.lines.slice(-120).map((ln) => ({ role: ln.role, text: ln.text }));
-    const requestedHumanComplex = humanRequestedComplex;
-    setSending(true);
-    setThinkingHumanRequested(requestedHumanComplex);
-    setSendingRoutePreview(requestedHumanComplex ? "complex" : classifyOpenfddTaskPreview(text));
     setSessionBundle((prev) =>
       updateSessionById(prev, sessionId, (s) => {
-        const nextLines: ChatLine[] = [...s.lines, { role: "user", text }];
-        const title =
-          s.title === "New agent" && s.lines.length === 0
-            ? titleFromFirstUserMessage(nextLines, "New agent")
-            : s.title;
-        return { ...s, draft: "", lines: nextLines, title, updatedAt: Date.now() };
+        return { ...s, draft: "", updatedAt: Date.now() };
       }),
     );
-    try {
-      const res = await fetch(`${bridgeBase}/openfdd-agent/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          workdir: workdirSnapshot,
-          task_summary: null,
-          conversation_history: conversationHistory,
-          human_requested_complex: requestedHumanComplex,
-        }),
-      });
-      const data = (await res.json()) as ChatResponse & { detail?: string };
-      if (!res.ok) {
-        const detail = typeof data?.detail === "string" ? data.detail : JSON.stringify(data);
-        setSessionBundle((prev) =>
-          updateSessionById(prev, sessionId, (s) => ({
-            ...s,
-            lines: [...s.lines, { role: "assistant", text: `Request failed (${res.status}):\n${detail}` }],
-            updatedAt: Date.now(),
-          })),
-        );
-        return;
-      }
-      const out =
-        data.stdout?.trim() ||
-        (data.stderr?.trim()
-          ? `Agent CLI exited ${data.returncode}.\n\nstderr:\n${data.stderr.trim()}`
-          : "(No output.)");
-      const route = routeMetaFromAgentResponse(data);
-      setSessionBundle((prev) =>
-        updateSessionById(prev, sessionId, (s) => ({
-          ...s,
-          lines: [...s.lines, route ? { role: "assistant", text: out, route } : { role: "assistant", text: out }],
-          updatedAt: Date.now(),
-        })),
-      );
-    } catch (e) {
-      setSessionBundle((prev) =>
-        updateSessionById(prev, sessionId, (s) => ({
-          ...s,
-          lines: [...s.lines, { role: "assistant", text: e instanceof Error ? e.message : String(e) }],
-          updatedAt: Date.now(),
-        })),
-      );
-    } finally {
-      setThinkingHumanRequested(false);
-      setSendingRoutePreview(null);
-      setSending(false);
-    }
-  }, [authState, sending, workdir, bridgeBase]);
+    setPendingMessages((prev) => [
+      ...prev,
+      { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, sessionId, text },
+    ]);
+  }, [authState]);
+
+  useEffect(() => {
+    if (sending || authState !== "signed_in" || pendingMessages.length === 0) return;
+    const [next] = pendingMessages;
+    setPendingMessages((prev) => prev.slice(1));
+    void runMessage(next.sessionId, next.text, false);
+  }, [sending, authState, pendingMessages, runMessage]);
 
   useEffect(() => {
     if (!sendMenuOpen) return;
@@ -597,6 +678,7 @@ export function AiAgentChatPage() {
   const chatEnabled = authState === "signed_in";
   const devicePending = deviceSession !== null;
   const signInControlsBusy = authState === "loading" || npmBusy || signInBusy || devicePending;
+  const activePending = pendingMessages.filter((p) => p.sessionId === activeSession.id);
 
   const signInButtonLabel =
     authState === "error"
@@ -638,6 +720,16 @@ export function AiAgentChatPage() {
                 {signOutBusy ? "Signing out…" : "Sign out of Codex"}
               </button>
             </div>
+            {agentQueue ? (
+              <p className="muted" style={{ margin: "8px 0 0", fontSize: 12 }}>
+                Runner: {agentQueue.paused ? "paused" : "active"} · queued: {agentQueue.queue_size}
+              </p>
+            ) : null}
+            {agentControlError ? (
+              <p className="muted local-codex-auth-error" style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
+                {agentControlError}
+              </p>
+            ) : null}
             {signOutError ? (
               <p className="muted local-codex-auth-error" style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>
                 {signOutError}
@@ -759,10 +851,6 @@ export function AiAgentChatPage() {
           ) : null}
           <div className="local-codex-chat-main">
         <div className="local-codex-workdir-block">
-          <p className="muted" style={{ margin: "0 0 8px", fontSize: 12, lineHeight: 1.5 }}>
-            Set the Open-FDD path on the bridge to your repo root (optional default:{" "}
-            <code className="inline-code">VITE_OPENFDD_AGENT_WORKDIR</code> in <code className="inline-code">.env.local</code>).
-          </p>
           <label className="local-codex-workdir-label" htmlFor="ofdd-codex-workdir-input">
             Open-FDD path
           </label>
@@ -785,7 +873,7 @@ export function AiAgentChatPage() {
             <strong> Auto routing</strong> picks SIMPLE vs COMPLEX from your text (and optional bridge LLM classify); if SIMPLE
             Codex exits with an error, the bridge retries once as <strong>COMPLEX</strong> (
             <code className="inline-code">OFDD_AGENT_ESCALATE_ON_FAILURE</code>, default on). The <strong>Send ▾</strong> menu
-            offers a <strong> human-requested COMPLEX</strong> pass. While Codex runs, the colored strip previews the tier; reply
+            offers a <strong> human-requested COMPLEX</strong> pass plus runner pause/resume. While Codex runs, the colored strip previews the tier; reply
             headers show the bridge&apos;s actual route and chips for human-requested or auto-escalation.
           </p>
           {!chatEnabled && authState !== "loading" ? (
@@ -851,6 +939,33 @@ export function AiAgentChatPage() {
           ) : null}
         </div>
         <div className="local-codex-compose">
+          {activePending.length > 0 ? (
+            <div style={{ marginBottom: 8 }}>
+              <p className="muted" style={{ margin: "0 0 6px", fontSize: 12 }}>
+                Queued messages (edit before they are sent): {activePending.length}
+              </p>
+              {activePending.map((item) => (
+                <div key={item.id} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                  <textarea
+                    className="local-codex-compose-input"
+                    value={item.text}
+                    rows={2}
+                    onChange={(e) =>
+                      setPendingMessages((prev) => prev.map((p) => (p.id === item.id ? { ...p, text: e.target.value } : p)))
+                    }
+                    aria-label="Queued message"
+                  />
+                  <button
+                    type="button"
+                    className="local-codex-btn-outline"
+                    onClick={() => setPendingMessages((prev) => prev.filter((p) => p.id !== item.id))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="local-codex-compose-row">
             <textarea
               className="local-codex-compose-input"
@@ -861,11 +976,11 @@ export function AiAgentChatPage() {
               placeholder="Message Codex… (Shift+Enter for newline)"
               aria-label="Chat message"
               rows={3}
-              disabled={sending || !chatEnabled}
+              disabled={!chatEnabled}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void sendMessage(false);
+                  enqueueDraft();
                 }
               }}
             />
@@ -874,16 +989,16 @@ export function AiAgentChatPage() {
                 type="button"
                 className="local-codex-send-split-main"
                 data-testid="ofdd-agent-send"
-                disabled={sending || !chatEnabled || !draft.trim()}
-                onClick={() => void sendMessage(false)}
+                disabled={!chatEnabled || !draft.trim()}
+                onClick={() => enqueueDraft()}
               >
-                {sending ? "…" : "Send"}
+                Send
               </button>
               <button
                 type="button"
                 className="local-codex-send-split-trigger"
                 data-testid="ofdd-agent-send-menu-trigger"
-                disabled={sending || !chatEnabled || !draft.trim()}
+                disabled={!chatEnabled}
                 aria-label="Send options"
                 aria-haspopup="menu"
                 aria-expanded={sendMenuOpen}
@@ -899,11 +1014,35 @@ export function AiAgentChatPage() {
                     className="local-codex-send-split-menu-item"
                     data-testid="ofdd-send-complex-review"
                     title="Uses the bridge COMPLEX tier and strong model for this message only."
-                    onClick={() => void sendMessage(true)}
+                    onClick={() => {
+                      const b = bundleRef.current;
+                      const active = b.sessions.find((s) => s.id === b.activeId);
+                      const text = (active?.draft ?? "").trim();
+                      if (!text) return;
+                      setSessionBundle((prev) =>
+                        updateActiveSession(prev, (s) => ({ ...s, draft: "", updatedAt: Date.now() })),
+                      );
+                      void runMessage(b.activeId, text, true);
+                    }}
                   >
                     COMPLEX review
                     <span className="local-codex-send-split-menu-desc">
                       Strong model · audits &amp; second opinions
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="local-codex-send-split-menu-item"
+                    disabled={agentControlBusy || agentQueue === null}
+                    onClick={() => {
+                      if (agentQueue === null) return;
+                      void setAgentPaused(!agentQueue.paused);
+                    }}
+                  >
+                    {agentControlBusy ? "Updating…" : agentQueue?.paused ? "Resume runner" : "Pause runner"}
+                    <span className="local-codex-send-split-menu-desc">
+                      Queue keeps accepting messages while runner is paused
                     </span>
                   </button>
                 </div>

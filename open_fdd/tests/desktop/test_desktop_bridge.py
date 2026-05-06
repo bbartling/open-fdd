@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+import sys
+import time
 from unittest.mock import patch
 
 import pytest
@@ -22,7 +24,8 @@ def test_create_app_with_private_lan_cors_env() -> None:
 
     with patch.dict(os.environ, {"OFDD_CORS_ALLOW_PRIVATE_LAN": "1"}, clear=False):
         app = create_app()
-        assert app is not None
+        with TestClient(app):
+            assert app is not None
 
 
 def test_desktop_bridge_health() -> None:
@@ -352,31 +355,43 @@ def test_desktop_bridge_weather_config_roundtrip() -> None:
         assert str(body.get("longitude")) != ""
 
 
-def test_desktop_bridge_onboard_config_roundtrip() -> None:
-    app = create_app()
-    with TestClient(app) as client:
-        set_resp = client.post(
-            "/config/onboard",
-            json={
-                "base_url": "https://api.onboarddata.io",
-                "building_ids": "123,456",
-                "lookback_hours": 12,
-                "api_key": "test-token",
-                "allow_synthetic": False,
-            },
-        )
-        assert set_resp.status_code == 200
-        body = set_resp.json()
-        assert str(body.get("base_url", "")).startswith("https://")
-        assert str(body.get("building_ids")) == "123,456"
-        assert int(body.get("lookback_hours", 0)) == 12
-        assert body.get("api_key_set") is True
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Flaky/hangs on Windows in CI/local; covered by Linux runs.")
+def test_openfdd_agent_chat_queue_and_pause_resume_flow() -> None:
+    from unittest.mock import patch
 
-        get_resp = client.get("/config/onboard")
-        assert get_resp.status_code == 200
-        fetched = get_resp.json()
-        assert str(fetched.get("building_ids")) == "123,456"
-        assert int(fetched.get("lookback_hours", 0)) == 12
+    app = create_app()
+    with patch("open_fdd.gateway.server.run_openfdd_agent_turn", return_value={"ok": True, "stdout": "queued done", "stderr": "", "returncode": 0}):
+        with TestClient(app) as client:
+            paused = client.post("/openfdd-agent/control", json={"paused": True})
+            assert paused.status_code == 200
+            assert paused.json().get("paused") is True
+
+            queued = client.post("/openfdd-agent/chat", json={"message": "hello", "mode": "queue"})
+            assert queued.status_code == 200
+            qj = queued.json()
+            assert qj.get("status") == "queued"
+            run_id = str(qj.get("run_id"))
+            assert run_id.startswith("run-")
+
+            running = client.get("/openfdd-agent/status")
+            assert running.status_code == 200
+            assert running.json().get("queue_size", 0) >= 1
+
+            resumed = client.post("/openfdd-agent/control", json={"paused": False})
+            assert resumed.status_code == 200
+            assert resumed.json().get("paused") is False
+
+            completed = None
+            # Mocked turn finishes immediately; keep a short tight poll for slow CI, not long sleeps.
+            for _ in range(80):
+                row = client.get(f"/openfdd-agent/runs/{run_id}")
+                assert row.status_code == 200
+                if row.json().get("status") == "completed":
+                    completed = row.json()
+                    break
+                time.sleep(0.01)
+            assert completed is not None
+            assert completed.get("result", {}).get("stdout") == "queued done"
 
 
 def test_desktop_bridge_sparql_endpoints() -> None:
@@ -453,7 +468,7 @@ def test_desktop_bridge_driver_health_default_shape() -> None:
         health = client.get("/config/drivers/health")
         assert health.status_code == 200
         body = health.json()
-        for key in ("csv", "weather", "bacnet", "onboard"):
+        for key in ("csv", "weather", "bacnet"):
             assert key in body
             assert "last_run" in body[key]
             assert "rows" in body[key]

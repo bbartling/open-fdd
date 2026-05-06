@@ -286,7 +286,7 @@ export function PlotsPage() {
       if (runSource === "all") {
         const p = new URLSearchParams({
           site_id: effectiveSiteId,
-          sources: "csv,weather,onboard,bacnet",
+          sources: "csv,weather,bacnet",
           limit: "5000",
           join_how: joinHow,
           include_readiness: "true",
@@ -381,7 +381,7 @@ export function PlotsPage() {
         setStatus("Rules directory is not ready yet (FDD Rule Setup).");
         return null;
       }
-      const sources = runSource === "all" ? ["csv", "weather", "onboard", "bacnet"] : [runSource];
+      const sources = runSource === "all" ? ["csv", "weather", "bacnet"] : [runSource];
       const out = await desktopFetch<PlotFrameResponse>("/plots/fdd-frame", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -783,7 +783,6 @@ export function PlotsPage() {
               <option value="all">All sources (joined)</option>
               <option value="csv">CSV</option>
               <option value="weather">Weather</option>
-              <option value="onboard">Onboard</option>
               <option value="bacnet">BACnet</option>
             </select>
           </div>

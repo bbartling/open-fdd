@@ -18,7 +18,7 @@ Integrators who already run **data collection** (historians, MQTT, BAS exports) 
 
 The rule runner is **`open_fdd.engine.runner.RuleRunner`**. It loads **`.yaml`** rule files (`type: bounds|flatline|expression|…`, `inputs`, `params`, …). Authoring references:
 
-- [Expression rule cookbook](../expression_rule_cookbook.md)
+- [Expression rule cookbook](../expression_rule_cookbook)
 - Examples under **`examples/`** in the repository
 
 **Minimal integration pattern**
@@ -69,4 +69,4 @@ pip install -e ".[dev]"
 | **`RuleRunner` in Python** | DataFrame + YAML rules | Fault columns and structured outputs |
 | **Batch / notebook** | CSV or query results | Same semantics as any other caller |
 
-For package layout, see [Modular architecture](../modular_architecture.md).
+For package layout, see [Modular architecture](../modular_architecture).

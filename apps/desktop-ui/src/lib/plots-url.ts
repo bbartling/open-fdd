@@ -9,7 +9,7 @@ export type PlotsUrlState = {
 };
 
 const JOIN: PlotsUrlState["joinHow"][] = ["inner", "left", "outer", "right"];
-const SOURCES = ["all", "csv", "weather", "onboard", "bacnet"] as const;
+const SOURCES = ["all", "csv", "weather", "bacnet"] as const;
 
 function truthy(v: string | null): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";

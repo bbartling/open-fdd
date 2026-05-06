@@ -39,6 +39,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
+    "pytest-timeout>=2.3.0",
 ]
 desktop = [
     "PySide6>=6.8",
@@ -52,6 +53,7 @@ desktop = [
 ]
 dev = [
     "pytest>=7.0",
+    "pytest-timeout>=2.3.0",
     "black[jupyter]>=25.11.0",
     "pre-commit",
 ]
@@ -78,3 +80,6 @@ target-version = ["py310", "py311", "py312", "py313", "py314"]
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]
+# Hard cap for runaway hangs (thread leak from background workers was burning CI for 1h+).
+timeout = 300
+timeout_method = "thread"

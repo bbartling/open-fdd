@@ -7,7 +7,6 @@ from typing import Any
 import pandas as pd
 
 from open_fdd.platform.drivers.bacnet_driver import run_bacnet_scrape
-from open_fdd.platform.drivers.onboard_driver import run_onboard_scrape
 from open_fdd.platform.drivers.weather_driver import run_weather_fetch
 from open_fdd.desktop.services.ml_service import MLService
 from open_fdd.desktop.services.model_service import ModelService
@@ -95,32 +94,6 @@ class IngestService:
     def ingest_weather(self, *, site_id: str, days_back: int = 1) -> dict[str, Any]:
         result = run_weather_fetch(store=self.connector, site_id=site_id, days_back=days_back)
         return {"rows": result.rows, "source": "weather"}
-
-    def ingest_onboard(self, *, site_id: str) -> dict[str, Any]:
-        result = run_onboard_scrape(store=self.connector, site_id=site_id)
-        if not result.success:
-            return {
-                "rows": result.rows,
-                "source": result.source,
-                "success": False,
-                "error": result.error or "Onboard ingest failed.",
-            }
-        metrics = [str(m) for m in (result.metrics or [])]
-        storage_ref = str(result.storage_ref or "")
-        with self.model_service.transaction() as model:
-            for metric in metrics:
-                md = (result.point_metadata or {}).get(metric, {})
-                self._upsert_point_for_metric(
-                    model=model,
-                    site_id=site_id,
-                    metric=metric,
-                    source=result.source,
-                    storage_ref=storage_ref,
-                    brick_type_override=str(md.get("brick_type") or "Point"),
-                    fdd_input_override=(str(md.get("fdd_input")) if md.get("fdd_input") is not None else None),
-                    unit_override=(str(md.get("unit")) if md.get("unit") is not None else None),
-                )
-        return {"rows": result.rows, "source": result.source, "success": True}
 
     def ingest_bacnet(
         self,
@@ -218,7 +191,7 @@ class IngestService:
 
         When only one source has rows, column names are unchanged. When two or more
         contribute rows, non-timestamp columns become ``<metric>_<source>`` to avoid
-        collisions across BACnet / CSV / weather / onboard / future drivers.
+        collisions across BACnet / CSV / weather / future drivers.
         """
         cleaned = [str(s).strip() for s in sources if str(s).strip()]
         if not cleaned:

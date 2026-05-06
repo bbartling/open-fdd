@@ -1,5 +1,5 @@
 """
-Merge time-series frames from multiple drivers (CSV, weather, onboard, BACnet, …)
+Merge time-series frames from multiple drivers (CSV, weather, BACnet, …)
 on a shared timestamp. Used on read — no persisted merged Feather artifact.
 """
 
@@ -14,7 +14,7 @@ from open_fdd.desktop.services.time_utils import infer_timestamp_column
 
 # Typical driver `source` tags used with FeatherStore / ingest. Future drivers use
 # their own string tag; merge accepts any non-empty source name the connector knows.
-DEFAULT_SITE_DRIVER_SOURCES: tuple[str, ...] = ("csv", "weather", "onboard", "bacnet")
+DEFAULT_SITE_DRIVER_SOURCES: tuple[str, ...] = ("csv", "weather", "bacnet")
 
 
 def _normalize_timestamp_for_merge(df: pd.DataFrame, timestamp_col: str) -> pd.DataFrame:
