@@ -179,7 +179,9 @@ function New-ServiceCommand(
     $lanBlock = @"
 `$env:OFDD_BRIDGE_HOST = '0.0.0.0'
 `$env:OFDD_MCP_LISTEN_HOST = '0.0.0.0'
-`$env:OFDD_CORS_ALLOW_PRIVATE_LAN = '1'
+if (-not `$env:OFDD_CORS_ALLOW_PRIVATE_LAN -or `$env:OFDD_CORS_ALLOW_PRIVATE_LAN.Trim().Length -eq 0) {
+  `$env:OFDD_CORS_ALLOW_PRIVATE_LAN = '1'
+}
 "@
   }
   return @"

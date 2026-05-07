@@ -7,6 +7,7 @@
 | **`build_mcp_rag_index.py`** | Chunks Jekyll `docs/*.md` for MCP RAG; invoked automatically by **`start-local`** (see above) or run manually for a one-off refresh. |
 | **`build_docs_pdf.py`** | Maintainer helper to combine Markdown docs and build `pdf/open-fdd-docs.pdf` (optional Pandoc / WeasyPrint). Also writes `pdf/open-fdd-docs.txt` with `--no-pdf`. |
 | **`linux-lan/`** | Option A private-LAN deployment bundle: Caddyfile + systemd units + env template for Open-FDD + easy-aso + diy-bacnet-server. |
+| **`../infra/ansible/`** | WSL-friendly Ansible automation to bootstrap the same Linux bench stack remotely over SSH. |
 | **`../tools/onboard_bulk_download_gui.py`** | Standalone Tkinter tool: fetch Onboard API time-series and export CSV for manual Open-FDD CSV import workflow. |
 
 From the repo root:

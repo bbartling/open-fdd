@@ -1,0 +1,68 @@
+---
+- name: Install apt dependencies
+  ansible.builtin.apt:
+    update_cache: true
+    name:
+      - git
+      - curl
+      - ca-certificates
+      - python3
+      - python3-venv
+      - python3-pip
+      - python3-dev
+      - build-essential
+      - npm
+      - caddy
+    state: present
+
+- name: Create service group
+  ansible.builtin.group:
+    name: "{{ openfdd_group }}"
+    state: present
+
+- name: Create service user
+  ansible.builtin.user:
+    name: "{{ openfdd_user }}"
+    group: "{{ openfdd_group }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Ensure /etc/openfdd exists
+  ansible.builtin.file:
+    path: /etc/openfdd
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Ensure /opt exists (root-owned)
+  ansible.builtin.file:
+    path: /opt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure app code dirs exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ openfdd_user }}"
+    group: "{{ openfdd_group }}"
+    mode: "0750"
+  loop:
+    - "{{ openfdd_root }}"
+    - "{{ easyaso_root }}"
+    - "{{ diy_bacnet_root }}"
+
+- name: Ensure state dirs under /var/lib
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ openfdd_user }}"
+    group: "{{ openfdd_group }}"
+    mode: "0750"
+  loop:
+    - "{{ openfdd_state_dir }}"
+    - "{{ easyaso_state_dir }}"

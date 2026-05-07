@@ -62,7 +62,7 @@ Open-FDD is meant to run **on the building network**. Vendors and MSI platforms 
 | [Engine API](api/engine) | `RuleRunner`, loaders, resolvers |
 | [Desktop app (under construction)](howto/desktop_app) | Local gateway (`open_fdd.gateway`), MCP, React UI, Feather storage, batched rule runs |
 | [Data modeling & platform (pointer)](modeling/index) | Full stack docs live in **open-fdd-afdd-stack** |
-| [Open FDD Claw (OpenClaw integration)](open-fdd-claw-architecture) | Gateway, host startup order, Codex-aligned LLM, skills + workspace bootstrap (`contrib/openclaw-*`) |
+| [Open-FDD Codex architecture](open-fdd-codex-architecture) | Built-in Codex CLI path, host startup order, and gateway/agent responsibilities. |
 | [How-to guides](howto/index) | PyPI releases, verification, operations |
 | [Appendix](appendix/index) | Technical reference, developer guide |
 

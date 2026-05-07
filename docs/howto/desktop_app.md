@@ -9,7 +9,7 @@ description: "Open-FDD gateway, MCP RAG, React UI, Feather storage, and local in
 
 ## Goal
 
-Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. **OpenClaw** (or other agents) should call that stack on the **host** over HTTP — see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) (local host setup + client-to-host networking). For **gateway + Codex subscription auth + skills + workspace bootstrap**, read **[Open FDD Claw architecture](../open-fdd-claw-architecture)**, copy skills from [`contrib/openclaw-skills/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-skills), and copy bootstrap Markdown from [`contrib/openclaw-workspace/`](https://github.com/bbartling/open-fdd/tree/master/contrib/openclaw-workspace) into your OpenClaw workspace root. Optional Python helper: `open_fdd.gateway.openclaw_chat.OpenClawGatewayChatClient` (env `OFDD_OPENCLAW_GATEWAY_*`).
+Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. The built-in AI path is **Codex CLI on the bridge host** via `/ai-agent` and `/openfdd-agent/chat`.
 
 This repository includes a React UI workspace at `apps/desktop-ui` that talks to the gateway on port **8765** by default.
 The recommended automation path is web-first (gateway + MCP + React UI) on the machine where Open-FDD runs.
@@ -107,11 +107,7 @@ So: **Python starts Codex; Codex runs the agent turn** under the flags and login
 
 **Agent chat thread context:** the UI sends the last **120** prior turns plus the new message. The bridge formats them into Codex stdin. History size is **`min(OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS × 4 chars, OFDD_AGENT_CHAT_HISTORY_MAX_CHARS)`** using a rough **~4 characters per token** heuristic (`open_fdd/gateway/local_codex_cli.py`): defaults **`OFDD_AGENT_CHAT_HISTORY_MAX_TOKENS=8000`** (≈32k UTF‑8 bytes for prior turns) and **`OFDD_AGENT_CHAT_HISTORY_MAX_CHARS=120000`** as a hard ceiling. When over budget, **older turns are dropped** and a short “Earlier messages omitted…” line is prepended. **Rolling summarization** (a SIMPLE model compressing old turns + a verbatim tail) is optional product work; Open-FDD does not do it today.
 
-Optional **OpenClaw** web UI remains available in the same page (embedded / new tab) for teams that run the full gateway. The **AI Agent** tab uses the bridge device-code flow:
-
-- `POST /openfdd-claw/codex/device/start` / `POST /openfdd-claw/codex/device/poll` — OpenAI device login; after success the bridge writes **`$CODEX_HOME/auth.json`** (default **`~/.codex/auth.json`**) for ChatGPT-managed auth so **`codex exec`** on that host is signed in. OAuth tokens are **not** returned to the browser.
-
-See **[Open FDD Claw architecture](../open-fdd-claw-architecture)** for the built-in vs optional-gateway split and skills/workspace clones.
+The **AI Agent** tab uses a bridge device-code flow for Codex login status recovery. On completion the bridge writes **`$CODEX_HOME/auth.json`** (default **`~/.codex/auth.json`**) for ChatGPT-managed auth so **`codex exec`** on that host is signed in. OAuth tokens are **not** returned to the browser.
 
 ### Manual start (no launcher)
 
@@ -172,9 +168,9 @@ Once the gateway is running locally:
 - Swagger UI: `http://127.0.0.1:8765/docs`
 - OpenAPI JSON: `http://127.0.0.1:8765/openapi.json`
 
-Use Swagger for endpoint discovery, request body examples, and quick local API testing for OpenClaw or other assistants. The Python package lives at `open_fdd/gateway/`; `open_fdd/desktop_bridge/` is a thin compatibility shim for older imports.
+Use Swagger for endpoint discovery, request body examples, and quick local API testing for Codex-assisted or manual workflows. The Python package lives at `open_fdd/gateway/`; `open_fdd/desktop_bridge/` is a thin compatibility shim for older imports.
 
-## MCP RAG service (OpenClaw/agents)
+## MCP RAG service (agents)
 
 `open-fdd` includes an **MCP-style RAG HTTP service** (REST on **8090** by default): **`GET /manifest`**, **`POST /tools/search_docs`**, **`POST /tools/search_api_capabilities`**, and optional **action** tools that proxy the bridge. Agents and Codex discover it via **`mcp_rest_base`** in **`GET /openfdd-agent/context`** (from **`OFDD_AGENT_BOOTSTRAP_FILE`** when you use **`start-local`**).
 
@@ -267,7 +263,7 @@ Use that GUI to export CSV from Onboard, then import the CSV in Open-FDD via `/c
 
 ### 5) BACnet ingest (one-shot) and polling
 
-**OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) section **6) DIY BACnet server contract**.
+**DIY BACnet server contract (JSON-RPC, model point fields):** `POST /ingest/bacnet` expects a server implementing `client_read_multiple` with `device_instance` + `requests[]` (`object_identifier`, `property_identifier`) and returning values in request order.
 
 If co-running **easy-aso** on the same host for optimization experiments, use its supervisor on **`18090`** (for example `easy-aso-supervisor --port 18090`) so Open-FDD MCP RAG can keep default **`8090`**.
 

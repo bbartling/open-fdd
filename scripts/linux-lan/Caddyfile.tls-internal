@@ -9,9 +9,9 @@ https:// {
 	encode zstd gzip
 
 	# LAN gate first.
-	@lan remote_ip 10.0.0.0/8
+	@lan remote_ip 10.0.0.0/8 192.168.0.0/16 172.16.0.0/12
 	handle @lan {
-		basicauth * {
+		basic_auth * {
 			{$OPENFDD_BASIC_AUTH_USER} {$OPENFDD_BASIC_AUTH_HASH}
 		}
 

@@ -238,6 +238,7 @@ def test_openfdd_agent_simple_success_invokes_complex_critic_by_default(monkeypa
     monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", raising=False)
+    monkeypatch.delenv("OFDD_AGENT_ROUTE_DEFAULT", raising=False)
     d = tmp_path / "crit2"
     d.mkdir()
     out = agent.run_openfdd_agent_turn(

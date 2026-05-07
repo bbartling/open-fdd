@@ -15,7 +15,7 @@ Caddy variants:
 
 - `Caddyfile` — simple HTTP + Basic Auth ingress.
 - `Caddyfile.cidr` — same, plus CIDR source-IP gate (defaults to `10.0.0.0/8`).
-- `Caddyfile.tls-internal` — HTTPS (`tls internal`) + CIDR gate + Basic Auth (defaults to `10.0.0.0/8`).
+- `Caddyfile.tls-internal` — HTTPS (`tls internal`) + CIDR gate + Basic Auth (defaults to `10.0.0.0/8`, `192.168.0.0/16`, `172.16.0.0/12`).
 
 ## 1) Install apps/venvs (example paths)
 
@@ -66,7 +66,7 @@ sudo systemctl restart caddy
 sudo systemctl enable caddy
 ```
 
-For CIDR-gated variants, default allowlist is `10.0.0.0/8`. Tighten this in Caddyfile when ready.
+For CIDR-gated variants, make sure `@lan remote_ip` includes the private CIDRs your bench actually uses (for example 10/8, 192.168/16, 172.16/12), then tighten further to specific subnets when ready.
 
 ## 4) systemd units
 

@@ -94,6 +94,7 @@ _sessions: dict[str, _Session] = {}
 
 def _emit_complete_response(session_id: str) -> dict[str, Any]:
     """Public JSON for a finished session (no secrets); persists tokens to disk once per session."""
+    claim_persist = False
     with _lock:
         sess = _sessions.get(session_id)
         if not sess or sess.phase != "complete" or not sess.access_token or not sess.refresh_token:
@@ -102,16 +103,18 @@ def _emit_complete_response(session_id: str) -> dict[str, Any]:
         refresh = sess.refresh_token
         id_tok = sess.id_token
         exp = sess.expires_at_ms
-        already = sess.persisted_to_disk
+        if not sess.persisted_to_disk:
+            sess.persisted_to_disk = True
+            claim_persist = True
 
     persist: dict[str, Any] = {"ok": True}
-    if not already:
+    if claim_persist:
         persist = local_codex_cli.persist_chatgpt_auth_from_device_tokens(access, refresh, id_token=id_tok)
-        if persist.get("ok"):
+        if not persist.get("ok"):
             with _lock:
                 s2 = _sessions.get(session_id)
                 if s2:
-                    s2.persisted_to_disk = True
+                    s2.persisted_to_disk = False
 
     persisted_ok = bool(persist.get("ok"))
     msg = (

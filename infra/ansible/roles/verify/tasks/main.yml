@@ -1,0 +1,38 @@
+---
+- name: Check Open-FDD bridge health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
+    status_code: 200
+  register: bridge_health
+  retries: 20
+  delay: 2
+  until: bridge_health.status == 200
+
+- name: Check MCP health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ openfdd_mcp_port }}/health"
+    status_code: 200
+  register: mcp_health
+  retries: 20
+  delay: 2
+  until: mcp_health.status == 200
+
+- name: Check easy-aso supervisor health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ easyaso_supervisor_port }}/health"
+    status_code: 200
+  register: easyaso_health
+  retries: 20
+  delay: 2
+  until: easyaso_health.status == 200
+
+- name: Check DIY BACnet hello with bearer
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ diy_bacnet_port }}/server_hello"
+    headers:
+      Authorization: "Bearer {{ bacnet_rpc_api_key }}"
+    status_code: 200
+  register: diy_health
+  retries: 20
+  delay: 2
+  until: diy_health.status == 200

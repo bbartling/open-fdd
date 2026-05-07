@@ -1,0 +1,51 @@
+# Linux bench deployment defaults (override per host/group as needed).
+
+openfdd_user: openfdd
+openfdd_group: openfdd
+
+openfdd_root: /opt/open-fdd
+easyaso_root: /opt/easy-aso
+diy_bacnet_root: /opt/diy-bacnet-server
+openfdd_state_dir: /var/lib/openfdd
+easyaso_state_dir: /var/lib/easyaso
+
+openfdd_repo_url: https://github.com/bbartling/open-fdd.git
+easyaso_repo_url: https://github.com/bbartling/easy-aso.git
+diy_bacnet_repo_url: https://github.com/bbartling/diy-bacnet-server.git
+
+# Use branches/tags as desired.
+openfdd_repo_version: master
+easyaso_repo_version: master
+diy_bacnet_repo_version: master
+
+# Option A security
+caddy_basic_auth_user: operator
+# Generate with: caddy hash-password --plaintext 'change-me-now'
+caddy_basic_auth_hash: "$2a$14$replace-with-caddy-hash"
+
+# CIDR defaults broad 10/8 (tighten later)
+lan_cidr_allowlist: "10.0.0.0/8"
+
+# Caddy variant: simple | cidr | tls-internal
+caddy_variant: cidr
+
+# Service ports
+openfdd_bridge_host: 127.0.0.1
+openfdd_bridge_port: 8765
+openfdd_mcp_host: 127.0.0.1
+openfdd_mcp_port: 8090
+openfdd_ui_port: 5173
+
+easyaso_supervisor_host: 127.0.0.1
+easyaso_supervisor_port: 18090
+diy_bacnet_port: 8080
+diy_bacnet_instance: 3456789
+diy_bacnet_name: BenchBACnet
+
+# Set real secrets in vault/host_vars for production.
+ofdd_mcp_ofdd_api_key: "replace-with-random-long-token"
+supervisor_api_key: "replace-with-random-long-token"
+bacnet_rpc_api_key: "replace-with-random-long-token"
+
+# Env file path used by all services.
+bench_env_path: /etc/openfdd/bench.env

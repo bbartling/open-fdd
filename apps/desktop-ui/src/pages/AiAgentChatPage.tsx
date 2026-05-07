@@ -426,16 +426,9 @@ export function AiAgentChatPage() {
       document.body.appendChild(ta);
       ta.select();
       ta.focus();
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-          document.body.removeChild(ta);
-          return;
-        }
-      } catch {
-        /* fall through */
-      }
+      const copied = document.execCommand("copy");
       document.body.removeChild(ta);
+      if (copied) return;
     } catch {
       /* ignore */
     }

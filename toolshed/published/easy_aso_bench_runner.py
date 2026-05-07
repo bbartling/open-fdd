@@ -30,6 +30,9 @@ def run_preflight(openfdd_base: str, mcp_base: str, supervisor_base: str | None)
 
 def scaffold_agent(output_path: Path, device_instance: str, sat_oid: str, fan_ao_oid: str) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    device_lit = repr(device_instance)
+    sat_lit = repr(sat_oid)
+    fan_lit = repr(fan_ao_oid)
     source = f'''"""Bench optimization agent scaffold for easy-aso RPC-docked mode."""
 
 from __future__ import annotations
@@ -44,8 +47,8 @@ class BenchHvacOptimizationAgent(RpcDockedEasyASO):
 
     async def on_step(self) -> None:
         # Device key is diy-bacnet-server device instance, not IP.
-        device = "{device_instance}"
-        sat = await self.bacnet_read(device, "{sat_oid}")
+        device = {device_lit}
+        sat = await self.bacnet_read(device, {sat_lit})
         if sat is None:
             await asyncio.sleep(30)
             return
@@ -53,12 +56,12 @@ class BenchHvacOptimizationAgent(RpcDockedEasyASO):
         # TODO: Replace with your real optimization sequence.
         # Example: nudge fan command based on SAT guardrail.
         cmd = 65.0 if float(sat) > 57.0 else 45.0
-        await self.bacnet_write(device, "{fan_ao_oid}", cmd)
+        await self.bacnet_write(device, {fan_lit}, cmd)
         await asyncio.sleep(60)
 
     async def on_stop(self) -> None:
         # Safe release pattern for bench override tests.
-        await self.bacnet_write("{device_instance}", "{fan_ao_oid}", "null", priority=8)
+        await self.bacnet_write({device_lit}, {fan_lit}, "null", priority=8)
         await self.close_rpc_dock()
         print("BenchHvacOptimizationAgent stop/release complete")
 '''
@@ -69,7 +72,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--openfdd-base", default="http://127.0.0.1:8765")
     parser.add_argument("--mcp-base", default="http://127.0.0.1:8090")
-    parser.add_argument("--easy-aso-supervisor-base", default="http://127.0.0.1:18090")
+    parser.add_argument(
+        "--easy-aso-supervisor-base",
+        default=None,
+        help="Optional easy-aso supervisor base URL; omit to skip supervisor health preflight.",
+    )
     parser.add_argument("--device-instance", default="3456789")
     parser.add_argument("--sat-oid", default="analog-input,1")
     parser.add_argument("--fan-ao-oid", default="analog-output,2")

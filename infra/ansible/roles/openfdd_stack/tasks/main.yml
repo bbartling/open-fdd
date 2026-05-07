@@ -1,0 +1,42 @@
+---
+- name: Checkout open-fdd repo
+  ansible.builtin.git:
+    repo: "{{ openfdd_repo_url }}"
+    dest: "{{ openfdd_root }}"
+    version: "{{ openfdd_repo_version }}"
+    force: true
+  become_user: "{{ openfdd_user }}"
+
+- name: Create open-fdd venv
+  ansible.builtin.command: python3 -m venv .venv
+  args:
+    chdir: "{{ openfdd_root }}"
+    creates: "{{ openfdd_root }}/.venv/bin/python"
+  become_user: "{{ openfdd_user }}"
+
+- name: Upgrade pip/setuptools/wheel in open-fdd venv
+  ansible.builtin.command: >
+    {{ openfdd_root }}/.venv/bin/pip install -U pip setuptools wheel
+  args:
+    chdir: "{{ openfdd_root }}"
+  become_user: "{{ openfdd_user }}"
+
+- name: Install open-fdd editable package with extras
+  ansible.builtin.command: >
+    {{ openfdd_root }}/.venv/bin/pip install -e ".[desktop,optimization]"
+  args:
+    chdir: "{{ openfdd_root }}"
+  become_user: "{{ openfdd_user }}"
+
+- name: Install UI npm dependencies
+  ansible.builtin.command: npm install
+  args:
+    chdir: "{{ openfdd_root }}/apps/desktop-ui"
+  become_user: "{{ openfdd_user }}"
+
+- name: Build MCP RAG index
+  ansible.builtin.command: >
+    {{ openfdd_root }}/.venv/bin/python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
+  args:
+    chdir: "{{ openfdd_root }}"
+  become_user: "{{ openfdd_user }}"

@@ -52,7 +52,7 @@ Use this page as **retrieval fodder** for assistants: it ties **human goals** on
 
 - **Authoritative prompt (API):** `open_fdd/assistant/data_model_redesign_prompt.py` — `DATA_MODEL_REDESIGN_SYSTEM_PROMPT`, `import_ready_json` contract.
 - **UI copy:** `apps/desktop-ui/src/lib/llm-prompts.ts` — keep in sync for human-facing redesign flows.
-- **Bridge assistant route:** search OpenAPI for `data-model`, `openclaw`, `assistant` — e.g. `POST /assistant/data-model-openclaw` (machine JSON output).
+- **Bridge assistant route:** search OpenAPI for `data-model` and `assistant` endpoints that return machine JSON output.
 - **SPARQL / BRICK context:** `docs/bacnet-rdf-and-brick.md`, `docs/column_map_resolvers.md`.
 - **Execution:** exports via `GET /model/export`; imports via documented import routes; never invent `site_id` — use `GET /sites` or readiness.
 

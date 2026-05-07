@@ -1,6 +1,6 @@
 # Open-FDD — HVAC ontology engineer (agent prompt)
 
-**Canonical text** (Data Model “Copy LLM Prompt”, ChatGPT, and `POST /assistant/data-model-openclaw`): keep in sync with  
+**Canonical text** (Data Model “Copy LLM Prompt” and ChatGPT): keep in sync with  
 [`apps/desktop-ui/src/lib/llm-prompts.ts`](../../apps/desktop-ui/src/lib/llm-prompts.ts) (`DATA_MODEL_REDESIGN_PROMPT`) and  
 [`open_fdd/assistant/data_model_redesign_prompt.py`](../../open_fdd/assistant/data_model_redesign_prompt.py) (`DATA_MODEL_REDESIGN_SYSTEM_PROMPT`).
 
@@ -60,7 +60,6 @@ When the client supports files: save the same object as `import_ready_model.json
 - `GET /model/export` — current model JSON.  
 - `POST /model/validate` — validate a payload before import.  
 - `POST /model/import` — apply `{ "payload": { ... }, "replace": true|false }`.  
-- `POST /assistant/data-model-openclaw` — bundles **current export + all managed `*.yaml` under the site’s `ahu_vav` rules folder**, calls the **OpenClaw** `POST /v1/chat/completions` API (requires `OFDD_OPENCLAW_GATEWAY_TOKEN` and a running gateway, default `http://127.0.0.1:18789`). Returns `import_ready` when the model reply parses as JSON. Call this from scripts, agents, or `curl`; the desktop UI focuses on export/import JSON.  
 - `GET /rules/export-json` — all managed rule YAML + parsed JSON for cross-check.  
 - SPARQL / TTL: use Data Model page or bridge SPARQL endpoints after TTL sync.
 

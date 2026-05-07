@@ -1,0 +1,26 @@
+[Unit]
+Description=Open-FDD Gateway (FastAPI bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ openfdd_user }}
+Group={{ openfdd_group }}
+WorkingDirectory={{ openfdd_root }}
+EnvironmentFile={{ bench_env_path }}
+ExecStart={{ openfdd_root }}/.venv/bin/open-fdd-gateway
+Restart=on-failure
+RestartSec=3
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ReadWritePaths={{ openfdd_state_dir }}
+
+[Install]
+WantedBy=multi-user.target

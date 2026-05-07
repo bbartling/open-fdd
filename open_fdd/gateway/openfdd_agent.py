@@ -189,7 +189,13 @@ def run_openfdd_agent_turn(
         out["codex_model_fallback_used"] = True
 
     critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", True)
-    if critic_enabled and tier == "simple" and bool(out.get("ok")):
+    if (
+        critic_enabled
+        and tier == "simple"
+        and bool(out.get("ok"))
+        and force_class != "simple"
+        and not human_requested_complex
+    ):
         critic_prompt = (
             "You are the **final critic** for an Open-FDD operator assistant.\n\n"
             "Context: the draft below was produced under **SIMPLE routing** (lighter model, faster/cheaper). "
@@ -214,7 +220,7 @@ def run_openfdd_agent_turn(
         critic_stdin = build_chat_stdin(
             user_message=critic_prompt,
             system_context=critic_system,
-            conversation_history=conversation_history,
+            conversation_history=None,
         )
         critic_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_CRITIC", complex_timeout)
         critic_out = run_codex_exec(

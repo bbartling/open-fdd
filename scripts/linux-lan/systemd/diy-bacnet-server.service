@@ -9,7 +9,7 @@ User=openfdd
 Group=openfdd
 WorkingDirectory=/opt/diy-bacnet-server
 EnvironmentFile=/etc/openfdd/bench.env
-ExecStart=/opt/diy-bacnet-server/.venv/bin/python -m bacpypes_server.main --public --name BenchBACnet --instance 3456789
+ExecStart=/opt/diy-bacnet-server/.venv/bin/python -m bacpypes_server.main --public --name BenchBACnet --instance ${BACNET_DEVICE_INSTANCE}
 Restart=on-failure
 RestartSec=3
 

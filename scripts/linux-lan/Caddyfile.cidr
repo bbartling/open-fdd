@@ -12,7 +12,8 @@
 	@lan remote_ip 10.0.0.0/8
 	handle @lan {
 		# Tiny security for private LAN: one Basic Auth gate at ingress.
-		basicauth * {
+		# This block is unusable unless OPENFDD_BASIC_AUTH_USER and OPENFDD_BASIC_AUTH_HASH are set.
+		basic_auth * {
 			{$OPENFDD_BASIC_AUTH_USER} {$OPENFDD_BASIC_AUTH_HASH}
 		}
 

@@ -1,7 +1,7 @@
 [Unit]
 Description=Open-FDD MCP RAG REST service
 After=network-online.target openfdd-gateway.service
-Wants=network-online.target
+Wants=network-online.target openfdd-gateway.service
 
 [Service]
 Type=simple

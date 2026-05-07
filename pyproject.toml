@@ -52,7 +52,7 @@ desktop = [
     "uvicorn>=0.30.0",
 ]
 optimization = [
-    "easy-aso[platform]>=0.1.7",
+    "easy-aso[platform]>=0.1.7,<0.2",
 ]
 dev = [
     "pytest>=7.0",

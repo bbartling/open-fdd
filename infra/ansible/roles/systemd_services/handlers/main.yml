@@ -1,0 +1,4 @@
+---
+- name: Daemon reload
+  ansible.builtin.systemd:
+    daemon_reload: true

@@ -66,9 +66,12 @@ def test_poll_complete_exchanges_token():
     mock_oauth.status_code = 200
 
     with patch("open_fdd.gateway.codex_device_login.requests.post", side_effect=[mock_start, mock_poll, mock_oauth]):
-        with patch.object(m.local_codex_cli, "persist_chatgpt_auth_from_device_tokens", return_value={"ok": True}):
+        with patch.object(
+            m.local_codex_cli, "persist_chatgpt_auth_from_device_tokens", return_value={"ok": True}
+        ) as persist_mock:
             start = m.start_device_login()
             poll = m.poll_device_login(start["session_id"])
+    persist_mock.assert_called_once_with("atok", "rtok", id_token=None)
     assert poll["status"] == "complete"
     assert poll.get("codex_auth_persisted") is True
     assert "access_token" not in poll

@@ -138,8 +138,11 @@ def format_agent_context_markdown(ctx: dict[str, Any]) -> str:
         scratch = ts.get("scratch_rel") or "toolshed/scratch"
         published = ts.get("published_rel") or "toolshed/published"
         pol = ts.get("policy") or ""
+        scratch_line = f"- **Scratch (new code only)**: `{scratch}`"
+        if pol:
+            scratch_line = f"{scratch_line} — {pol}"
         lines.append("### Toolshed (file writes)")
-        lines.append(f"- **Scratch (new code only)**: `{scratch}` — {pol}")
+        lines.append(scratch_line)
         lines.append(f"- **Published (reviewed, git)**: `{published}` — only when the operator asks to save for the library.")
     ep = ctx.get("endpoints")
     if isinstance(ep, dict):
