@@ -269,6 +269,8 @@ Use that GUI to export CSV from Onboard, then import the CSV in Open-FDD via `/c
 
 **OpenClaw / DIY server contract (JSON-RPC, model point fields):** see [`scripts/OPENCLAW_RUNBOOK.md`](https://github.com/bbartling/open-fdd/blob/master/scripts/OPENCLAW_RUNBOOK.md) section **6) DIY BACnet server contract**.
 
+If co-running **easy-aso** on the same host for optimization experiments, use its supervisor on **`18090`** (for example `easy-aso-supervisor --port 18090`) so Open-FDD MCP RAG can keep default **`8090`**.
+
 ```bash
 # one-shot pull
 curl -X POST http://127.0.0.1:8765/ingest/bacnet \

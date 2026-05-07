@@ -51,6 +51,9 @@ desktop = [
     "httpx>=0.27.0",
     "uvicorn>=0.30.0",
 ]
+optimization = [
+    "easy-aso[platform]>=0.1.7",
+]
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.3.0",

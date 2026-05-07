@@ -6,6 +6,7 @@
 | **`start-local.sh`** | Same env defaults and printed hints as **`start-local.ps1`**; **`all`** runs gateway/MCP/UI in the background with logs under **`stack/local-data/logs/`**; requires **`.venv`** for `all` / `gateway` / `mcp` / `adapter`; waits on **`curl`** or **`wget`** for **`/health`**. Rebuilds **`stack/mcp-rag/index/rag_index.json`** before MCP unless **`OFDD_SKIP_MCP_INDEX_BUILD=1`**. |
 | **`build_mcp_rag_index.py`** | Chunks Jekyll `docs/*.md` for MCP RAG; invoked automatically by **`start-local`** (see above) or run manually for a one-off refresh. |
 | **`build_docs_pdf.py`** | Maintainer helper to combine Markdown docs and build `pdf/open-fdd-docs.pdf` (optional Pandoc / WeasyPrint). Also writes `pdf/open-fdd-docs.txt` with `--no-pdf`. |
+| **`linux-lan/`** | Option A private-LAN deployment bundle: Caddyfile + systemd units + env template for Open-FDD + easy-aso + diy-bacnet-server. |
 | **`../tools/onboard_bulk_download_gui.py`** | Standalone Tkinter tool: fetch Onboard API time-series and export CSV for manual Open-FDD CSV import workflow. |
 
 From the repo root:

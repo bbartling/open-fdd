@@ -1,0 +1,17 @@
+[Unit]
+Description=DIY BACnet Server (BACnet + JSON-RPC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openfdd
+Group=openfdd
+WorkingDirectory=/opt/diy-bacnet-server
+EnvironmentFile=/etc/openfdd/bench.env
+ExecStart=/opt/diy-bacnet-server/.venv/bin/python -m bacpypes_server.main --public --name BenchBACnet --instance 3456789
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,38 @@
+# Option A + CIDR gate + internal HTTPS.
+#
+# - Uses Caddy internal CA (good for private LAN test benches).
+# - Default allowlist is broad private 10/8 by request. Tighten later.
+# - If clients don't trust Caddy's internal CA, import Caddy root cert.
+
+https:// {
+	tls internal
+	encode zstd gzip
+
+	# LAN gate first.
+	@lan remote_ip 10.0.0.0/8
+	handle @lan {
+		basicauth * {
+			{$OPENFDD_BASIC_AUTH_USER} {$OPENFDD_BASIC_AUTH_HASH}
+		}
+
+		handle_path /api/openfdd/* {
+			reverse_proxy 127.0.0.1:8765
+		}
+
+		handle_path /api/mcp/* {
+			reverse_proxy 127.0.0.1:8090
+		}
+
+		handle_path /api/easyaso/* {
+			reverse_proxy 127.0.0.1:18090
+		}
+
+		handle_path /api/diy/* {
+			reverse_proxy 127.0.0.1:8080
+		}
+
+		reverse_proxy 127.0.0.1:5173
+	}
+
+	respond "forbidden: source IP not allowed" 403
+}

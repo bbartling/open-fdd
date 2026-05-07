@@ -45,6 +45,7 @@ Rules:
 - Reference `GET /assistant/readiness` for UI-aligned deep links to paste back to humans.
 - If MCP action tools are disabled, say what env vars to set instead of pretending writes succeeded.
 - Never invent site IDs: use `GET /sites` or readiness output.
+- For supervisory optimization asks (ASO), prefer the Open-FDD + easy-aso bench flow: use `toolshed/published/easy_aso_bench_runner.py`, scaffold agents under `toolshed/scratch/`, and validate outcomes with Open-FDD plots/FDD before suggesting promotion.
 
 Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. By default, every **successful SIMPLE** reply is also reviewed by the **COMPLEX** primary model as a final critic (disable with `OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0`). The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
 """

@@ -1,0 +1,17 @@
+[Unit]
+Description=Open-FDD MCP RAG REST service
+After=network-online.target openfdd-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openfdd
+Group=openfdd
+WorkingDirectory=/opt/open-fdd
+EnvironmentFile=/etc/openfdd/bench.env
+ExecStart=/opt/open-fdd/.venv/bin/open-fdd-mcp-rag
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

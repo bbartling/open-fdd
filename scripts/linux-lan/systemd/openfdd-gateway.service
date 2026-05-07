@@ -1,0 +1,17 @@
+[Unit]
+Description=Open-FDD Gateway (FastAPI bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openfdd
+Group=openfdd
+WorkingDirectory=/opt/open-fdd
+EnvironmentFile=/etc/openfdd/bench.env
+ExecStart=/opt/open-fdd/.venv/bin/open-fdd-gateway
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

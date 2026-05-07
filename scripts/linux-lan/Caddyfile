@@ -1,0 +1,44 @@
+# Option A (private LAN): single authenticated ingress for Open-FDD + easy-aso + DIY BACnet.
+#
+# 1) Set OPENFDD_BASIC_AUTH_USER / OPENFDD_BASIC_AUTH_HASH in Caddy's environment.
+# 2) Keep backend services on localhost-only ports.
+# 3) Point browsers to http://<bench-lan-ip>/ and use one login.
+#
+# Generate password hash:
+#   caddy hash-password --plaintext 'change-me-now'
+#
+# Example systemd drop-in for caddy:
+#   Environment="OPENFDD_BASIC_AUTH_USER=operator"
+#   Environment="OPENFDD_BASIC_AUTH_HASH=$2a$14$..."
+
+:80 {
+	encode zstd gzip
+
+	# Tiny security for private LAN: one Basic Auth gate at ingress.
+	basicauth * {
+		{$OPENFDD_BASIC_AUTH_USER} {$OPENFDD_BASIC_AUTH_HASH}
+	}
+
+	# Open-FDD bridge API
+	handle_path /api/openfdd/* {
+		reverse_proxy 127.0.0.1:8765
+	}
+
+	# Open-FDD MCP RAG API
+	handle_path /api/mcp/* {
+		reverse_proxy 127.0.0.1:8090
+	}
+
+	# easy-aso supervisor API
+	handle_path /api/easyaso/* {
+		reverse_proxy 127.0.0.1:18090
+	}
+
+	# diy-bacnet-server JSON-RPC (still protected by BACNET_RPC_API_KEY)
+	handle_path /api/diy/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# Open-FDD UI (vite dev in this Option A baseline).
+	reverse_proxy 127.0.0.1:5173
+}
