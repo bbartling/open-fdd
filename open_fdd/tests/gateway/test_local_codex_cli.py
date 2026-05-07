@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -127,6 +129,7 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
         "OFDD_CODEX_MODEL_COMPLEX",
         "OFDD_CODEX_MODEL_COMPLEX_FALLBACK",
         "OFDD_CODEX_LLM_CLASSIFY",
+        "OFDD_AGENT_SIMPLE_COMPLEX_CRITIC",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: None)
@@ -139,6 +142,7 @@ def test_gather_diagnostics_without_codex(monkeypatch: pytest.MonkeyPatch) -> No
     assert out["exec_env"]["sandbox_mode"] == "danger-full-access"
     assert out["exec_env"]["model_simple"] == "gpt-5.4-mini"
     assert out["exec_env"]["model_complex_primary"] == "gpt-5.5"
+    assert out["exec_env"].get("simple_tier_critic") is True
 
 
 def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,6 +155,7 @@ def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
         "OFDD_CODEX_MODEL_COMPLEX",
         "OFDD_CODEX_MODEL_COMPLEX_FALLBACK",
         "OFDD_CODEX_LLM_CLASSIFY",
+        "OFDD_AGENT_SIMPLE_COMPLEX_CRITIC",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(lc, "resolve_codex_executable", lambda: "C:\\\\fake\\\\codex.cmd")
@@ -167,6 +172,7 @@ def test_gather_diagnostics_with_codex(monkeypatch: pytest.MonkeyPatch) -> None:
     assert out["where_codex"] == ["C:\\\\fake\\\\codex.cmd"]
     assert out["login_status"]["logged_in"] is True
     assert out["exec_env"]["sandbox_mode"] == "danger-full-access"
+    assert out["exec_env"].get("simple_tier_critic") is True
 
 
 def test_run_codex_exec_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -239,3 +245,22 @@ def test_run_codex_exec_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     r = lc.run_codex_exec("codex", tmp_path, stdin_text="x", timeout_s=30)
     assert r["ok"] is False
     assert "timed out" in r["stderr"].lower()
+
+
+def test_persist_chatgpt_auth_from_device_tokens_writes_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    cx = tmp_path / "cxhome"
+    monkeypatch.setenv("CODEX_HOME", str(cx))
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "none"}).encode()).decode().rstrip("=")
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"https://api.openai.com/auth": {"chatgpt_account_id": "acc-xyz"}}).encode(),
+    ).decode().rstrip("=")
+    access = f"{header}.{payload}.sig"
+    out = lc.persist_chatgpt_auth_from_device_tokens(access, "rt_refresh_test", id_token=None)
+    assert out.get("ok") is True
+    auth_path = Path(str(out["path"]))
+    assert auth_path.is_file()
+    data = json.loads(auth_path.read_text(encoding="utf-8"))
+    assert data.get("auth_mode") == "chatgpt"
+    assert data.get("tokens", {}).get("access_token") == access
+    assert data.get("tokens", {}).get("refresh_token") == "rt_refresh_test"
+    assert data.get("tokens", {}).get("account_id") == "acc-xyz"

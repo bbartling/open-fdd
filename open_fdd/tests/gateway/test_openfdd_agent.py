@@ -17,6 +17,7 @@ def test_openfdd_agent_simple_tier_uses_mini_model(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(agent, "run_codex_exec", fake_run)
     monkeypatch.setattr(agent, "resolve_codex_executable", lambda: "codex")
+    monkeypatch.setenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", "0")
     monkeypatch.delenv("OFDD_CODEX_LLM_CLASSIFY", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
@@ -198,7 +199,7 @@ def test_openfdd_agent_simple_smoke_response_shape(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(agent, "run_codex_exec", fake_run)
     monkeypatch.setattr(agent, "resolve_codex_executable", lambda: "codex")
-    monkeypatch.delenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", raising=False)
+    monkeypatch.setenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", "0")
     monkeypatch.delenv("OFDD_CODEX_LLM_CLASSIFY", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
     monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
@@ -217,4 +218,67 @@ def test_openfdd_agent_simple_smoke_response_shape(monkeypatch: pytest.MonkeyPat
     assert out.get("stdout") == "simple response"
     assert out.get("codex_model") == "gpt-5.4-mini"
     assert isinstance(out.get("route_reason"), str) and out["route_reason"]
+    assert calls == ["gpt-5.4-mini"]
+
+
+def test_openfdd_agent_simple_success_invokes_complex_critic_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[str | None] = []
+
+    def fake_run(_c: str, _w: Path, *, stdin_text: str, timeout_s: int | None, model: str | None = None) -> dict:
+        calls.append(model)
+        if model == "gpt-5.5":
+            assert "final critic" in stdin_text.lower()
+            return {"returncode": 0, "stdout": "after critic", "stderr": "", "ok": True, "codex_model": model}
+        return {"returncode": 0, "stdout": "draft", "stderr": "", "ok": True, "codex_model": model}
+
+    monkeypatch.setattr(agent, "run_codex_exec", fake_run)
+    monkeypatch.setattr(agent, "resolve_codex_executable", lambda: "codex")
+    monkeypatch.delenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_LLM_CLASSIFY", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", raising=False)
+    d = tmp_path / "crit2"
+    d.mkdir()
+    out = agent.run_openfdd_agent_turn(
+        message="GET /health",
+        workdir_raw=str(d),
+        task_summary="GET /health",
+        force_class=None,
+        system_context=None,
+    )
+    assert out["ok"] is True
+    assert out.get("task_class") == "simple"
+    assert out.get("stdout") == "after critic"
+    assert out.get("critic_used") is True
+    assert out.get("critic_model") == "gpt-5.5"
+    assert calls == ["gpt-5.4-mini", "gpt-5.5"]
+
+
+def test_openfdd_agent_simple_critic_can_be_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[str | None] = []
+
+    def fake_run(_c: str, _w: Path, *, stdin_text: str, timeout_s: int | None, model: str | None = None) -> dict:
+        calls.append(model)
+        return {"returncode": 0, "stdout": "only simple", "stderr": "", "ok": True, "codex_model": model}
+
+    monkeypatch.setattr(agent, "run_codex_exec", fake_run)
+    monkeypatch.setattr(agent, "resolve_codex_executable", lambda: "codex")
+    monkeypatch.setenv("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", "0")
+    monkeypatch.delenv("OFDD_CODEX_LLM_CLASSIFY", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_SIMPLE", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX", raising=False)
+    monkeypatch.delenv("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", raising=False)
+    d = tmp_path / "critoff"
+    d.mkdir()
+    out = agent.run_openfdd_agent_turn(
+        message="GET /health",
+        workdir_raw=str(d),
+        task_summary="GET /health",
+        force_class=None,
+        system_context=None,
+    )
+    assert out["ok"] is True
+    assert out.get("stdout") == "only simple"
+    assert out.get("critic_used") is None
     assert calls == ["gpt-5.4-mini"]

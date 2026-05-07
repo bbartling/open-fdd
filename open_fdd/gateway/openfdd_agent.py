@@ -29,6 +29,14 @@ def _openfdd_agent_identity() -> str:
 Mission: help operators with **FDD**, **AI-assisted data modeling**, **metrics cleaning**, ingest, rules, and Plots —
 using the Open-FDD **bridge HTTP API**, **MCP RAG** (when up; optional `search_docs` / `search_api_capabilities` from the stack block), and the **repo / workdir** on disk.
 
+### Toolshed (mandatory file placement)
+
+All **new** code you author (Python, shell scripts saved as files, JSON dumps for debugging, generated helpers) **must** live under **`toolshed/scratch/`** in the workdir, using paths like `toolshed/scratch/<descriptive_name>.py`. Edit existing files there in place unless the human explicitly names another path.
+
+- **Do not** create new first-party source under `open_fdd/`, `apps/`, `packages/`, or the repo root **unless the human explicitly asks** (e.g. “patch the gateway” or “add a test in open_fdd/tests/…”).
+- **`toolshed/published/`** is for **human-reviewed** utilities to commit to Git; only add or modify files there when the human asks you to promote or save something for the library.
+- **Never** write secrets (API keys, tokens, `.env` contents) into `toolshed/` or anywhere in the workdir in plain text.
+
 Rules:
 - Prefer **real API calls** (`curl` / `Invoke-RestMethod`), small **Python** helpers, or **PowerShell** one-liners against the URLs below.
 - The bridge runs **`codex exec`** with **non-interactive** approval (`OFDD_CODEX_EXEC_APPROVAL`, default **never**) and a **configurable sandbox** (`OFDD_CODEX_EXEC_SANDBOX`, default **danger-full-access**) so you can reach **127.0.0.1** / the Open-FDD bridge and write scripts in the workdir. If an operator tightened sandbox and localhost fails, say which env vars to relax or use **Plots** for **clean-metrics** instead of guessing.
@@ -38,7 +46,7 @@ Rules:
 - If MCP action tools are disabled, say what env vars to set instead of pretending writes succeeded.
 - Never invent site IDs: use `GET /sites` or readiness output.
 
-Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
+Model routing (bridge-injected): SIMPLE work uses a lighter Codex model; COMPLEX uses the strong default with automatic fallback if the primary model is unavailable on this account. By default, every **successful SIMPLE** reply is also reviewed by the **COMPLEX** primary model as a final critic (disable with `OFDD_AGENT_SIMPLE_COMPLEX_CRITIC=0`). The system block includes a **Routing mode** section (SIMPLE vs COMPLEX) for behavior — do not confuse that with the underlying model name shown in Codex diagnostics.
 """
 
 
@@ -179,27 +187,33 @@ def run_openfdd_agent_turn(
         model_attempts.append(model_complex_fallback.strip())
         out["codex_model_fallback_used"] = True
 
-    critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", False)
-    if (
-        critic_enabled
-        and tier == "simple"
-        and force_class != "simple"
-        and bool(out.get("ok"))
-        and not human_requested_complex
-    ):
+    critic_enabled = _codex_env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", True)
+    if critic_enabled and tier == "simple" and bool(out.get("ok")):
         critic_prompt = (
-            "You are a strict final reviewer. Review the draft answer below for correctness, safety, "
-            "and concrete actionability for Open-FDD operators. If needed, provide a corrected final answer.\n\n"
+            "You are the **final critic** for an Open-FDD operator assistant.\n\n"
+            "Context: the draft below was produced under **SIMPLE routing** (lighter model, faster/cheaper). "
+            "Your job is to run a **COMPLEX-tier** quality pass using the instructions in your system context.\n\n"
+            "Check: factual correctness against the user request, safety, missing steps, and whether the problem "
+            "actually needs deeper analysis (multi-step debugging, architecture, ambiguous root cause). "
+            "If the draft is superficial for a genuinely hard question, replace it with a complete corrected answer.\n\n"
             f"User message:\n{message}\n\n"
-            f"Draft answer:\n{str(out.get('stdout') or '').strip()}\n\n"
-            "Return only the final answer to show the human (no rubric, no preamble)."
+            f"Draft answer (SIMPLE tier):\n{str(out.get('stdout') or '').strip()}\n\n"
+            "Return **only** the final answer to show the human (no rubric, no preamble, no “As a critic” lines)."
+        )
+        critic_system = "\n\n".join(
+            part
+            for part in (
+                _openfdd_agent_identity(),
+                ctx_md,
+                routing_instructions_for_tier("complex"),
+                f"### Operator extra instructions\n{extra}" if extra else "",
+            )
+            if part
         )
         critic_stdin = build_chat_stdin(
             user_message=critic_prompt,
-            system_context="\n\n".join(
-                part for part in (_openfdd_agent_identity(), ctx_md, routing_instructions_for_tier("complex")) if part
-            ),
-            conversation_history=None,
+            system_context=critic_system,
+            conversation_history=conversation_history,
         )
         critic_timeout = safe_int_from_env("OFDD_CODEX_EXEC_TIMEOUT_CRITIC", complex_timeout)
         critic_out = run_codex_exec(

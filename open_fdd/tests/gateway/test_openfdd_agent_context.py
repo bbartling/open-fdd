@@ -46,7 +46,10 @@ def test_format_context_includes_optional_mcp_examples(monkeypatch: pytest.Monke
     monkeypatch.setenv("OFDD_BRIDGE_URL", "http://127.0.0.1:8765")
     monkeypatch.setenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")
     ctx = ctxmod.build_agent_bootstrap_context()
+    assert ctx.get("toolshed", {}).get("scratch_rel") == "toolshed/scratch"
     md = ctxmod.format_agent_context_markdown(ctx)
+    assert "Toolshed (file writes)" in md
+    assert "toolshed/scratch" in md
     assert "MCP RAG (optional)" in md
     assert "/manifest" in md
     assert "search_docs" in md

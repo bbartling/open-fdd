@@ -4,8 +4,10 @@ echo "[checkpoint] start-local.sh starting"
 
 # Optional: bash scripts/start-local.sh --lan-host 192.168.1.10 all
 # Same as PowerShell -LanHost: bind gateway+MCP on 0.0.0.0, Vite --host 0.0.0.0, CORS for private LAN, set public URLs.
+# Optional: --listen-all binds 0.0.0.0 without choosing a LAN IP (set OFDD_BRIDGE_URL / UI override for clients).
 ROLE="all"
 LAN_HOST=""
+LISTEN_ALL=0
 RAG_INDEX_MODE="${OFDD_MCP_RAG_INDEX_MODE:-auto}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,6 +18,10 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       shift 2
+      ;;
+    --listen-all)
+      LISTEN_ALL=1
+      shift
       ;;
     all|gateway|mcp|ui|adapter)
       ROLE="$1"
@@ -30,7 +36,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      echo "start-local.sh: unknown argument '$1' (use [--lan-host IP] [--rag-index-mode auto|always|skip] [all|gateway|mcp|ui|adapter])" >&2
+      echo "start-local.sh: unknown argument '$1' (use [--lan-host IP] [--listen-all] [--rag-index-mode auto|always|skip] [all|gateway|mcp|ui|adapter])" >&2
       exit 1
       ;;
   esac
@@ -47,6 +53,13 @@ if [[ -n "${LAN_HOST}" ]]; then
   export OFDD_MCP_LISTEN_HOST="0.0.0.0"
   export OFDD_CORS_ALLOW_PRIVATE_LAN="1"
   echo "LAN dashboard: URLs use ${LAN_HOST}; gateway+MCP listen on 0.0.0.0; Vite --host 0.0.0.0. Open firewall TCP 8765, 8090, 5173 if other hosts connect."
+elif [[ "${LISTEN_ALL}" == "1" ]]; then
+  export OFDD_BRIDGE_HOST="0.0.0.0"
+  export OFDD_MCP_LISTEN_HOST="0.0.0.0"
+  if [[ -z "${OFDD_CORS_ALLOW_PRIVATE_LAN:-}" ]]; then
+    export OFDD_CORS_ALLOW_PRIVATE_LAN="1"
+  fi
+  echo "Listen-all: gateway+MCP bind 0.0.0.0; Vite --host 0.0.0.0. Set OFDD_BRIDGE_URL / OFDD_UI_PUBLIC_BASE for public URLs, or set Bridge base URL in the AI Agent tab."
 fi
 echo "[checkpoint] role=${ROLE} env parsed"
 
@@ -55,7 +68,7 @@ BRIDGE_URL="${OFDD_BRIDGE_URL:-http://127.0.0.1:8765}"
 BRIDGE_URL="${BRIDGE_URL%/}"
 SYNC_INTERVAL="${OFDD_TTL_SYNC_INTERVAL_SECONDS:-5}"
 
-if [[ -n "${LAN_HOST}" ]]; then
+if [[ -n "${LAN_HOST}" ]] || [[ "${LISTEN_ALL}" == "1" ]]; then
   UI_DEV_CMD=(npm run dev -- --host 0.0.0.0)
 else
   UI_DEV_CMD=(npm run dev)

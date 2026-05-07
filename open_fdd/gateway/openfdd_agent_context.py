@@ -85,6 +85,11 @@ def build_agent_bootstrap_context() -> dict[str, Any]:
         "mcp_rest_base": mcp,
         "ui_public_base": ui,
         "desktop_data_dir": desktop_data or None,
+        "toolshed": {
+            "scratch_rel": "toolshed/scratch",
+            "published_rel": "toolshed/published",
+            "policy": "Codex must write new files only under toolshed/scratch/ unless the operator names another path.",
+        },
         "endpoints": {
             "bridge_health": f"{bridge}/health",
             "bridge_openapi": f"{bridge}/openapi.json",
@@ -106,6 +111,7 @@ def build_agent_bootstrap_context() -> dict[str, Any]:
             f"POST {mcp}/tools/search_api_capabilities — list bridge capabilities",
         ],
         "notes": [
+            "Toolshed: put all new agent-written files under toolshed/scratch/ in the workdir; promote reviewed helpers to toolshed/published/ — see docs/howto/toolshed.md.",
             "MCP RAG is REST on mcp_rest_base (not Streamable MCP unless you add an adapter).",
             "Action tools may require OFDD_MCP_ENABLE_ACTION_TOOLS and OFDD_MCP_OFDD_API_KEY — see docs/howto/desktop_app.md.",
             "Codex auth: use `codex login` on the bridge host; GET /local-codex/diagnostics for status.",
@@ -127,6 +133,14 @@ def format_agent_context_markdown(ctx: dict[str, Any]) -> str:
     dd = ctx.get("desktop_data_dir")
     if dd:
         lines.append(f"- **Desktop data dir**: `{dd}`")
+    ts = ctx.get("toolshed")
+    if isinstance(ts, dict):
+        scratch = ts.get("scratch_rel") or "toolshed/scratch"
+        published = ts.get("published_rel") or "toolshed/published"
+        pol = ts.get("policy") or ""
+        lines.append("### Toolshed (file writes)")
+        lines.append(f"- **Scratch (new code only)**: `{scratch}` — {pol}")
+        lines.append(f"- **Published (reviewed, git)**: `{published}` — only when the operator asks to save for the library.")
     ep = ctx.get("endpoints")
     if isinstance(ep, dict):
         lines.append("- **HTTP**")

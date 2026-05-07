@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
+import uuid
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, Literal
@@ -91,6 +95,7 @@ def describe_codex_exec_env() -> dict[str, Any]:
             "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
             "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
             "escalate_simple_failure_to_complex": _env_bool("OFDD_AGENT_ESCALATE_ON_FAILURE", True),
+            "simple_tier_critic": _env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", True),
         }
     return {
         "ask_for_approval": approval,
@@ -101,6 +106,7 @@ def describe_codex_exec_env() -> dict[str, Any]:
         "model_complex_fallback": _env_trim("OFDD_CODEX_MODEL_COMPLEX_FALLBACK", DEFAULT_CODEX_MODEL_COMPLEX_FALLBACK),
         "llm_route_classify": _env_bool("OFDD_CODEX_LLM_CLASSIFY", False),
         "escalate_simple_failure_to_complex": _env_bool("OFDD_AGENT_ESCALATE_ON_FAILURE", True),
+        "simple_tier_critic": _env_bool("OFDD_AGENT_SIMPLE_COMPLEX_CRITIC", True),
     }
 
 
@@ -249,6 +255,134 @@ def where_codex_lines() -> list[str]:
         if r.stdout:
             lines.extend([ln.strip() for ln in r.stdout.splitlines() if ln.strip()])
     return lines
+
+
+def codex_home_dir() -> Path:
+    """Directory where the Codex CLI stores ``auth.json`` (``CODEX_HOME`` or ``~/.codex``)."""
+    raw = (os.environ.get("CODEX_HOME") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".codex"
+
+
+def _jwt_payload_dict(jwt: str) -> dict[str, Any] | None:
+    parts = jwt.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        pad = "=" * ((4 - len(parts[1]) % 4) % 4)
+        blob = base64.urlsafe_b64decode(parts[1] + pad).decode("utf-8")
+        parsed = json.loads(blob)
+        return parsed if isinstance(parsed, dict) else None
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def chatgpt_account_id_from_access_jwt(access_token: str) -> str | None:
+    """Best-effort ``account_id`` for Codex ``auth.json`` from the ChatGPT access JWT."""
+    payload = _jwt_payload_dict(access_token)
+    if not payload:
+        return None
+    auth_ns = payload.get("https://api.openai.com/auth")
+    if isinstance(auth_ns, dict):
+        aid = auth_ns.get("chatgpt_account_id")
+        if isinstance(aid, str) and aid.strip():
+            return aid.strip()
+    return None
+
+
+def persist_chatgpt_auth_from_device_tokens(
+    access_token: str,
+    refresh_token: str,
+    *,
+    id_token: str | None = None,
+) -> dict[str, Any]:
+    """Write ChatGPT OAuth tokens to ``auth.json`` so ``codex`` on this host can run after device login.
+
+    Mirrors the shape described in OpenAI Codex auth docs (``auth_mode: chatgpt``, ``tokens``, ``last_refresh``).
+    Does not return tokens to HTTP clients — callers should treat this as bridge-local persistence only.
+    """
+    access_token = (access_token or "").strip()
+    refresh_token = (refresh_token or "").strip()
+    if not access_token or not refresh_token:
+        return {"ok": False, "error": "missing access_token or refresh_token"}
+
+    home = codex_home_dir()
+    try:
+        home.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(home, 0o700)
+    except OSError as exc:
+        return {"ok": False, "error": f"cannot create CODEX_HOME {home}: {exc}"}
+
+    auth_path = home / "auth.json"
+    existing: dict[str, Any] | None = None
+    if auth_path.is_file():
+        try:
+            raw_txt = auth_path.read_text(encoding="utf-8")
+            parsed = json.loads(raw_txt)
+            existing = parsed if isinstance(parsed, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            return {"ok": False, "error": f"cannot read existing auth.json: {exc}"}
+
+    if isinstance(existing, dict):
+        mode = str(existing.get("auth_mode") or "").strip().lower()
+        if mode == "api_key":
+            return {"ok": False, "error": "refusing to overwrite API-key auth in auth.json; run codex logout first."}
+        raw_key = existing.get("OPENAI_API_KEY")
+        if isinstance(raw_key, str) and raw_key.strip():
+            return {"ok": False, "error": "refusing to overwrite auth.json that contains OPENAI_API_KEY."}
+
+    existing_tokens: dict[str, Any] = {}
+    if isinstance(existing, dict) and isinstance(existing.get("tokens"), dict):
+        existing_tokens = {str(k): v for k, v in existing["tokens"].items() if isinstance(k, str)}
+
+    merged: dict[str, Any] = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
+    id_chosen = (id_token or "").strip() or ""
+    if not id_chosen:
+        old_id = existing_tokens.get("id_token")
+        if isinstance(old_id, str) and old_id.strip():
+            id_chosen = old_id.strip()
+    if id_chosen:
+        merged["id_token"] = id_chosen
+
+    aid = chatgpt_account_id_from_access_jwt(access_token)
+    if not aid:
+        old_aid = existing_tokens.get("account_id")
+        if isinstance(old_aid, str) and old_aid.strip():
+            aid = old_aid.strip()
+    if aid:
+        merged["account_id"] = str(aid).strip()
+
+    last_refresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    doc: dict[str, Any] = {
+        "auth_mode": "chatgpt",
+        "OPENAI_API_KEY": None,
+        "tokens": merged,
+        "last_refresh": last_refresh,
+    }
+
+    tmp_path = home / f".auth.{uuid.uuid4().hex}.tmp"
+    try:
+        with tmp_path.open("w", encoding="utf-8", newline="\n") as fh:
+            json.dump(doc, fh, indent=2)
+            fh.write("\n")
+        if os.name != "nt":
+            os.chmod(tmp_path, 0o600)
+        tmp_path.replace(auth_path)
+    except OSError as exc:
+        _log.warning("Failed to persist Codex auth.json under %s: %s", home, exc)
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {"ok": False, "error": str(exc)}
+
+    _log.info("Wrote ChatGPT OAuth tokens to %s", auth_path)
+    return {"ok": True, "path": str(auth_path)}
 
 
 def run_codex_login_status(codex_path: str) -> dict[str, Any]:

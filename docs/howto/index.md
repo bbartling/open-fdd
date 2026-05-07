@@ -19,6 +19,7 @@ Recipes for **`pip install open-fdd`**, releases, and embedding **`RuleRunner`**
 - [Engine-only deployment and external IoT pipelines](engine_only_iot) — `RuleRunner` on DataFrames.
 - [Desktop app (under construction)](desktop_app) — FastAPI gateway, MCP RAG (REST **8090**), `start-local`, **restart MCP after index/bootstrap changes**, local ingest, Feather storage, BRICK sync, batched rule runs.
 - [Agent & operator playbook (bridge + MCP)](agent_operator_playbook) — drivers, cleaning, BRICK modeling, FDD tuning, execution notes for assistants (`search_docs`).
+- [Toolshed (agent file layout)](toolshed) — `toolshed/scratch/` vs `toolshed/published/`; where Codex writes new code.
 - [Verification](verification) — pytest and small smoke checks.
 - [Cloning and porting](cloning_and_porting) — portable rules and envs.
 - [Operations (engine)](operations) — CI and scheduling notes.

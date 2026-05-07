@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { bridgeBase } from "../lib/api";
+import { getBridgeBase } from "../lib/api";
 import { useOptionalSite } from "../contexts/site-context";
 
 type IngestResponse = {
@@ -50,7 +50,7 @@ export function CsvImportPage() {
         formData.append("equipment_id", equipmentId.trim());
       }
       formData.append("file", file, file.name);
-      const res = await fetch(`${bridgeBase}/ingest/csv/upload`, {
+      const res = await fetch(`${getBridgeBase()}/ingest/csv/upload`, {
         method: "POST",
         body: formData,
       });
