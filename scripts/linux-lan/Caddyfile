@@ -1,5 +1,8 @@
 # Option A (private LAN): single authenticated ingress for Open-FDD + easy-aso + DIY BACnet.
 #
+# Security note: credentials sent with basic_auth traverse the network as cleartext on HTTP :80.
+# For TLS at the ingress, use Caddyfile.tls-internal or terminate TLS upstream.
+#
 # 1) Set OPENFDD_BASIC_AUTH_USER / OPENFDD_BASIC_AUTH_HASH in Caddy's environment.
 # 2) Keep backend services on localhost-only ports.
 # 3) Point browsers to http://<bench-lan-ip>/ and use one login.

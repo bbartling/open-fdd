@@ -73,3 +73,4 @@ ansible-playbook -i inventory.ini site.yml
   - mutable app state in `/var/lib/openfdd` and `/var/lib/easyaso`
   - secrets/env in `/etc/openfdd/bench.env` (`0600`)
 - systemd units include baseline hardening (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=strict`, limited `ReadWritePaths`).
+- `group_vars/bench.yml`: set `ofdd_ui_public_base` and `bench_env_http_host` if the UI/API should not use loopback URLs; set `npm_path` if `npm` is not at `/usr/bin/npm`.

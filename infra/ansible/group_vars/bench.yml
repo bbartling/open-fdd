@@ -36,13 +36,20 @@ openfdd_mcp_host: 127.0.0.1
 openfdd_mcp_port: 8090
 openfdd_ui_port: 5173
 
+# Backend URLs inside bench.env (loopback defaults; override for LAN / custom proxy).
+bench_env_http_host: "127.0.0.1"
+ofdd_ui_public_base: "http://127.0.0.1:5173"
+
+# systemd ExecStart npm path (nvm/Volta installs may differ)
+npm_path: /usr/bin/npm
+
 easyaso_supervisor_host: 127.0.0.1
 easyaso_supervisor_port: 18090
 diy_bacnet_port: 8080
 diy_bacnet_instance: 3456789
 diy_bacnet_name: BenchBACnet
 
-# Set real secrets in vault/host_vars for production.
+# Override these in ansible-vault, host_vars, or secure inventory — do not ship real secrets in Git.
 ofdd_mcp_ofdd_api_key: "replace-with-random-long-token"
 supervisor_api_key: "replace-with-random-long-token"
 bacnet_rpc_api_key: "replace-with-random-long-token"

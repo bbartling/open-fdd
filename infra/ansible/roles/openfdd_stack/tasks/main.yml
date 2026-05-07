@@ -14,18 +14,22 @@
     creates: "{{ openfdd_root }}/.venv/bin/python"
   become_user: "{{ openfdd_user }}"
 
-- name: Upgrade pip/setuptools/wheel in open-fdd venv
-  ansible.builtin.command: >
-    {{ openfdd_root }}/.venv/bin/pip install -U pip setuptools wheel
-  args:
-    chdir: "{{ openfdd_root }}"
+- name: Upgrade pip setuptools wheel in open-fdd venv
+  ansible.builtin.pip:
+    name:
+      - pip
+      - setuptools
+      - wheel
+    state: latest
+    virtualenv: "{{ openfdd_root }}/.venv"
   become_user: "{{ openfdd_user }}"
 
 - name: Install open-fdd editable package with extras
-  ansible.builtin.command: >
-    {{ openfdd_root }}/.venv/bin/pip install -e ".[desktop,optimization]"
-  args:
+  ansible.builtin.pip:
     chdir: "{{ openfdd_root }}"
+    name: ".[desktop,optimization]"
+    editable: true
+    virtualenv: "{{ openfdd_root }}/.venv"
   become_user: "{{ openfdd_user }}"
 
 - name: Install UI npm dependencies
@@ -34,9 +38,11 @@
     chdir: "{{ openfdd_root }}/apps/desktop-ui"
   become_user: "{{ openfdd_user }}"
 
+# Idempotent: delete stack/mcp-rag/index/rag_index.json on the host to force a rebuild after doc changes.
 - name: Build MCP RAG index
   ansible.builtin.command: >
     {{ openfdd_root }}/.venv/bin/python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json
   args:
     chdir: "{{ openfdd_root }}"
+    creates: "{{ openfdd_root }}/stack/mcp-rag/index/rag_index.json"
   become_user: "{{ openfdd_user }}"

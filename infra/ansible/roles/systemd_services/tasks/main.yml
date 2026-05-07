@@ -12,7 +12,12 @@
     - { src: "openfdd-ui-vite.service.j2", dest: "openfdd-ui-vite.service" }
     - { src: "easyaso-supervisor.service.j2", dest: "easyaso-supervisor.service" }
     - { src: "diy-bacnet-server.service.j2", dest: "diy-bacnet-server.service" }
-  notify: Daemon reload
+  notify:
+    - Daemon reload
+    - Restart bench services
+
+- name: Apply systemd unit changes before start
+  ansible.builtin.meta: flush_handlers
 
 - name: Enable/start bench services
   ansible.builtin.systemd:

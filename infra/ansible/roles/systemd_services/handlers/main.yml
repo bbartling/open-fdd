@@ -2,3 +2,14 @@
 - name: Daemon reload
   ansible.builtin.systemd:
     daemon_reload: true
+
+- name: Restart bench services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - diy-bacnet-server
+    - openfdd-gateway
+    - openfdd-mcp-rag
+    - openfdd-ui-vite
+    - easyaso-supervisor
