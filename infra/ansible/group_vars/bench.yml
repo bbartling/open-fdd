@@ -20,11 +20,13 @@ diy_bacnet_repo_version: master
 
 # Option A security
 caddy_basic_auth_user: operator
-# Generate with: caddy hash-password --plaintext 'change-me-now'
-caddy_basic_auth_hash: "$2a$14$replace-with-caddy-hash"
+# Test bench default password: ben1234 (bcrypt hash below)
+caddy_basic_auth_hash: "$2a$14$/jxMLsm./pSkWMiz/4Z5vOi6mYlIzuzDnbotzoyHTfuzvsbr1jYX2"
 
-# CIDR defaults broad 10/8 (tighten later)
-lan_cidr_allowlist: "10.0.0.0/8"
+# CIDR allowlist used by `caddy_variant: cidr` / tls-internal templates. Defaults to broad 10/8 for documented
+# private LAN test benches (`scripts/linux-lan/README`). For production or narrower subnets, override in inventory
+# (e.g. `lan_cidr_allowlist: "192.168.1.0/24"`).
+lan_cidr_allowlist: "10.0.0.0/8 192.168.0.0/16"
 
 # Caddy variant: simple | cidr | tls-internal
 caddy_variant: cidr

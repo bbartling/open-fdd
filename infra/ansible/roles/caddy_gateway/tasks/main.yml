@@ -6,7 +6,7 @@
     owner: root
     group: root
     mode: "0600"
-  notify: Restart bench services
+  notify: Restart bench services after env file change
 
 - name: Select Caddy template source
   ansible.builtin.set_fact:

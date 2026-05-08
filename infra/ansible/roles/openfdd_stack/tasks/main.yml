@@ -32,8 +32,8 @@
     virtualenv: "{{ openfdd_root }}/.venv"
   become_user: "{{ openfdd_user }}"
 
-- name: Install UI npm dependencies
-  ansible.builtin.command: npm install
+- name: Install UI npm dependencies (lockfile-aligned)
+  ansible.builtin.command: npm ci
   args:
     chdir: "{{ openfdd_root }}/apps/desktop-ui"
   become_user: "{{ openfdd_user }}"

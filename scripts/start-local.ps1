@@ -36,7 +36,8 @@ elseif ($ListenAll) {
   if (-not $env:OFDD_CORS_ALLOW_PRIVATE_LAN -or $env:OFDD_CORS_ALLOW_PRIVATE_LAN.Trim().Length -eq 0) {
     $env:OFDD_CORS_ALLOW_PRIVATE_LAN = "1"
   }
-  if ($env:OFDD_BRIDGE_URL -and $env:OFDD_BRIDGE_URL.Trim().Length -gt 0) {
+  # Only substitute from env when -BridgeUrl was not explicitly passed on the command line.
+  if (-not $PSBoundParameters.ContainsKey("BridgeUrl") -and $env:OFDD_BRIDGE_URL -and $env:OFDD_BRIDGE_URL.Trim().Length -gt 0) {
     $BridgeUrl = $env:OFDD_BRIDGE_URL.TrimEnd("/")
   }
   Write-Host "Listen-all: gateway+MCP bind 0.0.0.0; Vite --host 0.0.0.0. Set OFDD_BRIDGE_URL / OFDD_UI_PUBLIC_BASE for public URLs, or use Bridge base URL in the AI Agent tab."
