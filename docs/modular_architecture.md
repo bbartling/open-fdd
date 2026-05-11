@@ -17,7 +17,7 @@ This document describes how the **`open_fdd`** package is structured at a high l
 | **Column map** | Maps logical names to DataFrame columns (`ColumnMapResolver`, manifest YAML, composite resolvers). |
 | **Checks** | Pure functions over Series/DataFrames (bounds, rate of change, expressions with safe eval, …). |
 | **Runner** | Orchestrates checks, schedules, and optional weather or derived columns. |
-| **Schema** | pydantic models for outputs (fault codes, intervals, metadata). |
+| **Schema** | pydantic models for outputs (fault codes, intervals, metadata). Install **`open-fdd[engine]`** for YAML + pydantic rule loading. |
 
 ---
 

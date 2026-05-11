@@ -12,12 +12,15 @@ Practical checks when authoring or shipping **`open-fdd`** rules.
 
 ## 1. Unit tests (CI)
 
-From the repo root with dev dependencies:
+From the repo root with dev dependencies (includes **`[engine]`** libraries):
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest open_fdd/tests/engine
+pytest packages/openfdd-agent-shell
 ```
+
+Expression cookbook regressions live in **`open_fdd/tests/engine/test_expression_cookbook.py`**.
 
 ---
 
@@ -38,11 +41,14 @@ from open_fdd.engine.runner import RuleRunner
 df = pd.read_csv("your_sample.csv", parse_dates=["timestamp"]).set_index("timestamp")
 runner = RuleRunner(rules_path=Path("path/to/rules"))
 out = runner.run(df, timestamp_col="timestamp", column_map={"Supply_Air_Temperature_Sensor": "SAT"})
-assert out.filter(like="_flag").shape[1] >= 1
+assert any(c.endswith("_flag") for c in out.columns)
 ```
 
 ---
 
-## Platform / database checks
+## 4. Agent shell dry run
 
-For HTTP APIs, databases, Brick / 223P graph workflows, and observability around a deployed stack, see **[open-fdd-afdd-stack documentation](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+```bash
+pip install -e packages/openfdd-agent-shell
+openfdd-agent-shell --repo-root . --dry-run --message "verify engine import"
+```

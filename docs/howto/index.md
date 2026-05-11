@@ -6,25 +6,29 @@ has_children: true
 
 # How-to Guides
 
-Recipes for **`pip install open-fdd`**, releases, and embedding **`RuleRunner`** on **pandas**.
+Recipes for **`pip install open-fdd`**, **`[engine]`** extras, releases, skills-based scaffolding, and embedding **`RuleRunner`** on **pandas**.
 
 **Full platform** (data model, APIs, compose, dashboards): **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**
 
 ---
 
-## Engine
+## Engine and agent
 
+- [Skills and agent shell](skills_and_agent) — `openfdd.toml`, `skills/`, Codex CLI shell, `workspace/` layout.
 - [PyPI releases (open-fdd)](openfdd_engine_pypi) — tags, trusted publishing, `twine check`.
 - [The optional openfdd-engine package](openfdd_engine) — `openfdd_engine` vs `open_fdd.engine`.
 - [Engine-only deployment and external IoT pipelines](engine_only_iot) — `RuleRunner` on DataFrames.
-- [Desktop app (under construction)](desktop_app) — FastAPI gateway, MCP RAG (REST **8090**), `start-local`, **restart MCP after index/bootstrap changes**, local ingest, Feather storage, BRICK sync, batched rule runs.
-- [Agent & operator playbook (bridge + MCP)](agent_operator_playbook) — drivers, cleaning, BRICK modeling, FDD tuning, execution notes for assistants (`search_docs`).
-- [Toolshed (agent file layout)](toolshed) — `toolshed/scratch/` vs `toolshed/published/`; where Codex writes new code.
-- [Open-FDD + Easy-ASO test bench](openfdd_easy_aso_bench) — run optimization agents against DIY BACnet while validating with FDD.
-- [Verification](verification) — pytest and small smoke checks.
+- [Verification](verification) — focused pytest for expressions and cookbook regressions.
 - [Cloning and porting](cloning_and_porting) — portable rules and envs.
 - [Operations (engine)](operations) — CI and scheduling notes.
 - [Danger zone](danger_zone) — expression safety and sharp edges.
 - [Quick reference](quick_reference) — imports and common commands.
+
+## Historical desktop stack (reference)
+
+- [Desktop app (retired monolith)](desktop_app)
+- [Agent & operator playbook (bridge + MCP)](agent_operator_playbook)
+- [Toolshed (agent file layout)](toolshed)
+- [Open-FDD + Easy-ASO test bench](openfdd_easy_aso_bench)
 
 Published site: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**

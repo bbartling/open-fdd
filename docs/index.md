@@ -6,28 +6,39 @@ description: "Open-FDD rules engine: fault detection on pandas DataFrames from Y
 
 # Open-FDD
 
-The **`open-fdd`** package (**`open_fdd/`** in this repository) is a **rules engine** for building science and HVAC workflows: you define fault checks in **YAML**, map columns on a **pandas** `DataFrame`, and run them with **`RuleRunner`**. It is published to **[PyPI](https://pypi.org/project/open-fdd/)** as a small, dependency-conscious wheel (pandas, NumPy, PyYAML, pydantic).
+The **`open-fdd`** package is a **pandas-first rules engine** for building science and HVAC workflows: define fault checks in **YAML**, map columns on a **pandas** `DataFrame`, and run them with **`RuleRunner`**.
 
-**Full platform** (data model, APIs, Docker, Brick/223P tooling beyond `column_map`): **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)** — it uses this library under the hood.
+**PyPI install (bare):** `pip install open-fdd` — **pandas** only.
+
+**Run YAML rules:** `pip install "open-fdd[engine]"` — adds **PyYAML** and **pydantic** for rule loading and validation. NumPy is pulled in through pandas.
+
+Beyond the engine, this repository provides **`skills/`** recipes and a local **agent shell** so Codex can scaffold APIs, dashboards, storage, and deployment only when you ask for them. See **[Skills and agent shell](howto/skills_and_agent)**.
+
+**Full platform** (production APIs, Docker, extended Brick/223P services): **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
 
 ---
 
 ## What it does
 
 - **Loads** rule definitions from YAML (bounds, flatline, hunting, expressions, schedules, weather gates, …).
-- **Maps** **Brick**, **Haystack**, **DBO**, **223P**, or vendor names to DataFrame columns via **`column_map`** (dict, manifest, or composite resolvers) — same YAML can target different ontologies by swapping the map.
-- **Runs** checks over time-indexed or ordered data and returns structured **fault results** (see **`open_fdd.schema`**).
+- **Maps** ontology or vendor labels to DataFrame columns via **`column_map`**.
+- **Runs** checks on time-indexed data and returns boolean **`*_flag`** columns plus optional analytics.
 
-Desktop mode is also available and under active construction in this repository. The current desktop path uses local Feather-backed ingestion plus optional batched rule execution for large datasets.
-
-Bring your own data: CSV exports, historian extracts, lab benches, or notebooks. The engine does **not** connect to databases or field buses by itself.
+Bring your own data: CSV exports, historian extracts, or notebooks. The engine does **not** connect to databases or field buses by itself.
 
 ---
 
 ## Quick start
 
 ```bash
-pip install open-fdd
+pip install "open-fdd[engine]"
+```
+
+```python
+from open_fdd.engine import RuleRunner
+
+runner = RuleRunner(rules_path="path/to/rules")
+df_out = runner.run(df, column_map={"SAT": "supply_air_temp"})
 ```
 
 From a git checkout:
@@ -37,17 +48,8 @@ git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest
+pytest open_fdd/tests/engine
 ```
-
-See **[Getting started](getting_started)** and **`examples/README.md`** in the repository for runnable entrypoints.
-
----
-
-## Behind the firewall; cloud export is vendor-led
-{: #behind-the-firewall-cloud-export-is-vendor-led}
-
-Open-FDD is meant to run **on the building network**. Vendors and MSI platforms that need cloud analytics **pull** from your deployment over the LAN; Open-FDD does not push to their cloud for you. See **[Cloud export example](concepts/cloud_export)** for a sample integration script.
 
 ---
 
@@ -55,16 +57,16 @@ Open-FDD is meant to run **on the building network**. Vendors and MSI platforms 
 
 | Section | Description |
 |---------|-------------|
-| [Getting started](getting_started) | Install, tests, examples |
+| [Getting started](getting_started) | Install extras, tests, examples |
+| [Skills and agent shell](howto/skills_and_agent) | `openfdd.toml`, `skills/`, Codex TUI |
 | [Rules overview](rules/overview) | Rule types and YAML structure |
-| [Expression rule cookbook](expression_rule_cookbook) | Expressions, ontology labels, schedule & weather gates |
-| [Column map resolvers](column_map_resolvers) | Brick / Haystack / DBO / 223P → columns |
+| [Expression rule cookbook](expression_rule_cookbook) | Expressions, gates, scaling |
+| [Column map resolvers](column_map_resolvers) | Manifests and composite maps |
 | [Engine API](api/engine) | `RuleRunner`, loaders, resolvers |
-| [Desktop app (under construction)](howto/desktop_app) | Local gateway (`open_fdd.gateway`), MCP, React UI, Feather storage, batched rule runs |
-| [Data modeling & platform (pointer)](modeling/index) | Full stack docs live in **open-fdd-afdd-stack** |
-| [Open-FDD Codex architecture](open-fdd-codex-architecture) | Built-in Codex CLI path, host startup order, and gateway/agent responsibilities. |
 | [How-to guides](howto/index) | PyPI releases, verification, operations |
 | [Appendix](appendix/index) | Technical reference, developer guide |
+
+Historical desktop/MCP pages remain for reference; new builds should use **`skills/`**.
 
 ---
 

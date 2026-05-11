@@ -20,63 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - profile: core
-            python-version: "3.10"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: core
-            python-version: "3.11"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: core
-            python-version: "3.12"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: core
-            python-version: "3.13"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: core
-            python-version: "3.14"
-            install-extras: '.[dev]'
-            numpy-spec: ""
-          - profile: desktop-numpy1
-            python-version: "3.10"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy1
-            python-version: "3.11"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy1
-            python-version: "3.12"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy1
-            python-version: "3.14"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=1,<2"
-          - profile: desktop-numpy2
-            python-version: "3.10"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
-          - profile: desktop-numpy2
-            python-version: "3.11"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
-          - profile: desktop-numpy2
-            python-version: "3.12"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
-          - profile: desktop-numpy2
-            python-version: "3.13"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
-          - profile: desktop-numpy2
-            python-version: "3.14"
-            install-extras: '.[dev,desktop]'
-            numpy-spec: "numpy>=2,<3"
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout code
@@ -91,18 +35,13 @@ jobs:
       - name: Install package (dev deps for tests)
         run: |
           python -m pip install --upgrade pip
-          pip install -e "${{ matrix.install-extras }}"
-          if [ -n "${{ matrix.numpy-spec }}" ]; then pip install "${{ matrix.numpy-spec }}"; fi
+          pip install -e ".[dev]"
 
-      # pdf/open-fdd-docs.txt is gitignored; generate it so /model-context/docs matches release builds.
       - name: Build combined docs text (LLM context)
         run: python scripts/build_docs_pdf.py --no-pdf
 
-      - name: Run tests (pytest)
-        run: python -m pytest
-        env:
-          OFDD_API_KEY: ""
-          OFDD_CADDY_INTERNAL_SECRET: ""
+      - name: Run engine tests (pytest)
+        run: python -m pytest open_fdd/tests/engine
 
       - name: Build open-fdd sdist/wheel (engine only; dry run)
         run: |
@@ -110,9 +49,32 @@ jobs:
           python -m build
           twine check dist/*
 
+      - name: Verify wheel imports engine with extras
+        run: |
+          python -m venv /tmp/ofdd-wheel-smoke
+          /tmp/ofdd-wheel-smoke/bin/pip install "dist/*.whl[engine]"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
+
       - name: Build openfdd-engine package (dry run)
         working-directory: packages/openfdd-engine
         run: |
           python -m pip install build==1.2.2 twine==6.1.0
           python -m build
           twine check dist/*
+
+  agent-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install engine and agent shell
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install -e packages/openfdd-agent-shell[dev]
+      - name: Test agent shell
+        working-directory: packages/openfdd-agent-shell
+        run: python -m pytest -q

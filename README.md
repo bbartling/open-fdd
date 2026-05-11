@@ -13,54 +13,50 @@
 
 </div>
 
-This repository is the **`open-fdd`** **rules engine**: YAML-defined fault detection on **pandas** `DataFrame`s (`open_fdd.engine`). The published **PyPI** wheel contains only the `open_fdd` package.
+This repository ships the **`open-fdd`** **rules engine**: YAML-defined fault detection on **pandas** `DataFrame`s (`open_fdd.engine`). The published **PyPI** wheel contains only engine and schema modules.
+
+Operator dashboards, HTTP bridges, ingest drivers, and deployment stacks are **not** bundled. Describe what you need in `openfdd.toml`, then use **`skills/`** and the local **agent shell** to generate code under `workspace/`.
 
 ---
 
 ## Install from PyPI
 
 ```bash
-pip install open-fdd
+pip install "open-fdd[engine]"
 ```
 
-## Dashboard
+Bare import with **pandas** only: `pip install open-fdd` (add **`[engine]`** for YAML rules and `RuleRunner`).
 
-The web dashboard is a local operator web UI (React) backed by a FastAPI bridge, MCP RAG for retrieval context, and an AI agent that uses OpenAI Codex (subscription / `codex login` auth on the bridge host), all talking to services on localhost. Codex-backed tasks help the HVAC FDD analyst because the bridge spawns the `codex` CLI as a child OS process per turn (not “Python subprocesses” in the sense of running inside the interpreter). Codex is OpenAI’s CLI product; Open-FDD starts that binary on the host and supplies flags and environment variables, while authentication, model selection, tools, and execution policy are handled by Codex itself.
-
-**Start everything** (gateway + MCP + UI, data under `stack/local-data`):
-
-```powershell
-# Windows (from repo root)
-powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
-```
-
-```bash
-# macOS, Linux, or WSL (from repo root)
-bash ./scripts/start-local.sh
-```
-
-[Desktop app how-to quicklink](docs/howto/desktop_app.md)
+Rule authoring: [Expression rule cookbook](docs/expression_rule_cookbook.md).
 
 ---
 
-## Online Documentation
+## Build with skills + agent shell
 
-* 📘 **Open FDD Fault Detection Engine**
-  Core rules engine with `RuleRunner`, YAML-based fault logic, and pandas workflows.
+1. Copy `openfdd.toml.example` to `openfdd.toml` and set `[build]` targets, drivers, auth, and deploy mode.
+2. Install the shell (local only, not on the engine wheel):
+
+```bash
+cd packages/openfdd-agent-shell
+pip install -e ".[dev]"
+```
+
+3. From the repo root:
+
+```bash
+openfdd-agent-shell --repo-root .
+```
+
+The shell loads [AGENTS.md](AGENTS.md), selected skill recipes under [skills/](skills/), and launches **Codex CLI** to scaffold only what the manifest requests. Generated apps live in `workspace/`.
+
+---
+
+## Online documentation
+
+* **Open FDD fault detection engine** — `RuleRunner`, YAML rules, pandas workflows.
   [Documentation](https://bbartling.github.io/open-fdd/) · [GitHub](https://github.com/bbartling/open-fdd) · [PyPI](https://pypi.org/project/open-fdd/)
 
-## Other Useful Applications
-
-Optional companion projects for BACnet integrations and HVAC optimization workflows.
-
-* 🔗 **DIY BACnet Server**
-  Lightweight BACnet server with JSON-RPC and MQTT support for IoT integrations.
-  [Documentation](https://bbartling.github.io/diy-bacnet-server/) · [GitHub](https://github.com/bbartling/diy-bacnet-server)
-
-* ⚙️ **easy-aso Framework**
-  Lightweight framework for Automated Supervisory Optimization (ASO) algorithms at the IoT edge.
-  [Documentation](https://bbartling.github.io/easy-aso/) · [GitHub](https://github.com/bbartling/easy-aso) · [PyPI](https://pypi.org/project/easy-aso/0.1.7/)
-
+Historical desktop/MCP how-tos under `docs/howto/` describe the retired monolith; new integrations should follow `skills/`.
 
 ---
 
@@ -73,19 +69,22 @@ python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -U pip
 pip install -e ".[dev]"
-# if you are working on desktop UI/storage/tests:
-pip install -e ".[dev,desktop]"
-pytest
+pytest open_fdd/tests/engine
+```
+
+Optional shim package:
+
+```bash
+cd packages/openfdd-engine && pip install -e .
 ```
 
 ---
 
 ## Dependencies
 
-* **Python 3.10+**, `pip`, and a venv (`requires-python` and `[project.dependencies]` in `pyproject.toml`): `pandas`, `numpy`, `pyyaml`, `pydantic>=2.4,<3`, `requests`.
-* **Desktop / Python bridge** (Feather ingest, TTL/RDF, FastAPI gateway, PySide tooling): install the **`desktop`** extra, e.g. `pip install -e ".[desktop]"`—see `[project.optional-dependencies].desktop` in `pyproject.toml` (includes FastAPI, uvicorn, httpx, pyarrow, rdflib, PySide6, scikit-learn, etc.).
-* **Browser desktop UI** (`apps/desktop-ui`): **Node.js** + **npm** for the Vite/React app (`npm install`, `npm run dev`) talking to the bridge.
-* **AI Agent tab** (Codex on the bridge): the **OpenAI Codex CLI** on the host that runs the gateway (PATH or `OFDD_CODEX_CMD`), not an extra Python dependency listed above.
+* **Python 3.10+** and `pip` — required: **pandas**; rule execution adds **PyYAML** and **pydantic** via the **`[engine]`** extra (NumPy via pandas).
+* **Codex CLI** on PATH when using the agent shell (`codex` by default).
+* **Node.js** only if a generated dashboard skill scaffolds a Vite/React app under `workspace/`.
 
 ---
 

@@ -7,6 +7,8 @@ description: "Open-FDD gateway, MCP RAG, React UI, Feather storage, and local in
 
 # Open-FDD Desktop App
 
+> **Retired in 2.4:** The monolithic gateway, MCP, and React UI were removed from this repository. New work uses **[Skills and agent shell](skills_and_agent)** and generated code under **`workspace/`**. The content below is historical reference.
+
 ## Goal
 
 Run Open-FDD locally with a Python **HTTP gateway** (FastAPI, package `open_fdd.gateway`; colloquially the “bridge”) + MCP + web UI. The built-in AI path is **Codex CLI on the bridge host** via `/ai-agent` and `/openfdd-agent/chat`.
