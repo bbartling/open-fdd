@@ -28,7 +28,7 @@ Recipes for **`pip install open-fdd`**, **`[engine]`** extras, releases, skills-
 
 - [Desktop app (retired monolith)](desktop_app)
 - [Agent & operator playbook (bridge + MCP)](agent_operator_playbook)
-- [Toolshed (agent file layout)](toolshed)
+- [Toolshed (retired)](toolshed)
 - [Open-FDD + Easy-ASO test bench](openfdd_easy_aso_bench)
 
 Published site: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**

@@ -10,12 +10,14 @@ description: "Authors and maintains workspace MEMORY.md and memory/ daily and do
 - `workspace/MEMORY.md` — curated bootstrap loaded each session (truncate via `bootstrap_max_chars`).
 - `workspace/memory/YYYY-MM-DD.md` — daily append-only notes.
 - `workspace/memory/sites|clients|engineers|tools/<id>.md` — domain detail.
+- `workspace/scratch/` — ephemeral agent drafts (gitignored with the rest of `workspace/`).
 
 ## Agent duties
 
 - Record durable site maps, rule decisions, and generated service inventory in `MEMORY.md`.
 - Put session detail in daily notes; promote only stable facts to `MEMORY.md`.
 - Never store secrets in Markdown.
+- Promote reviewed helpers from `workspace/scratch/` into `skills/<domain>/scripts/` via PR.
 
 ## Shell commands
 

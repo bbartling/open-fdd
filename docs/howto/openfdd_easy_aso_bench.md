@@ -58,12 +58,12 @@ easy-aso-supervisor --host 0.0.0.0 --port 18090
 For AI-assisted experiments:
 
 1. Use Open-FDD readiness + plots to identify control opportunities.
-2. Generate a candidate optimization agent script under `toolshed/scratch/`.
+2. Generate a candidate optimization agent script under `workspace/scratch/`.
 3. Run the script against DIY BACnet JSON-RPC (`BACNET_RPC_API_KEY` as needed).
 4. Re-check Open-FDD plots/FDD outputs for before/after validation.
-5. Promote stable helpers into `toolshed/published/` via PR.
+5. Promote stable helpers into `skills/<domain>/scripts/` via PR.
 
-Use `toolshed/published/easy_aso_bench_runner.py` to scaffold a bench agent and run preflight checks.
+Use `skills/easy-aso-bench-sidecar/scripts/easy_aso_bench_runner.py` to scaffold a bench agent and run preflight checks.
 
 ## Safety defaults
 

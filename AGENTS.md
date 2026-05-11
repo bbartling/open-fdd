@@ -13,7 +13,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 - Durable portfolio context belongs in `workspace/MEMORY.md` and `workspace/memory/` (see [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md)).
 - Recurring automation belongs in `workspace/cron/jobs.json` (see [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md)).
 - Do **not** modify `open_fdd/`, `packages/openfdd-engine/`, or `skills/` unless the operator explicitly asks for engine or skill maintenance.
-- Reviewed one-off helpers may graduate to `toolshed/published/`; experiments stay in `workspace/scratch/` or `toolshed/scratch/`.
+- Experiments stay in `workspace/scratch/`; promote reviewed helpers into the relevant `skills/<domain>/scripts/` folder via PR.
 
 ## FDD execution
 
