@@ -13,6 +13,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 - Durable portfolio context belongs in `workspace/MEMORY.md` and `workspace/memory/` (see [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md)).
 - When working `workspace/` code or automation diverges from skills or this file, append to `workspace/memory/architecture/working-divergence.md` (see `workspace/memory/architecture/README.md`).
 - Recurring automation belongs in `workspace/cron/jobs.json` (see [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md)).
+- Ordered mini work belongs in `workspace/BUILD_CHECKPOINTS.md`; scheduled wakes use `openfdd-wake` or cron service `wake`.
 - Do **not** modify `open_fdd/`, `packages/openfdd-engine/`, or `skills/` unless the operator explicitly asks for engine or skill maintenance.
 - Experiments stay in `workspace/scratch/`; promote reviewed helpers into the relevant `skills/<domain>/scripts/` folder via PR.
 

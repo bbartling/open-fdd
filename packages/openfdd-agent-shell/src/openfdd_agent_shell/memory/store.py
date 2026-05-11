@@ -95,7 +95,7 @@ class MemoryStore:
     def ensure_layout(self) -> None:
         self.paths.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.paths.memory_root.mkdir(parents=True, exist_ok=True)
-        for sub in ("sites", "clients", "engineers", "tools", "architecture"):
+        for sub in ("sites", "clients", "engineers", "tools", "integrations", "architecture"):
             (self.paths.memory_root / sub).mkdir(parents=True, exist_ok=True)
         if not self.paths.bootstrap_file.is_file():
             self.paths.bootstrap_file.write_text(MEMORY_TEMPLATE, encoding="utf-8")
@@ -181,6 +181,21 @@ class MemoryStore:
                         if len(hits) >= limit:
                             return hits
         return hits
+
+    def count_open_divergence_entries(self) -> int:
+        self.ensure_layout()
+        if not self.paths.divergence_file.is_file():
+            return 0
+        count = 0
+        for line in self.paths.divergence_file.read_text(encoding="utf-8").splitlines():
+            if "**Status:**" in line and "open" in line.lower():
+                count += 1
+        return count
+
+    def write_bootstrap_snapshot(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.bootstrap_block(), encoding="utf-8")
+        return path
 
     def read_divergence_log(self) -> str:
         self.ensure_layout()

@@ -151,12 +151,35 @@ class CronScheduler:
                 raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}")
             return (proc.stdout or "shell ok").strip()[:500]
         if job.service == "codex_turn":
-            from ..codex_launcher import build_invocation, dry_run_command
+            from ..codex_launcher import build_invocation, codex_available, dry_run_command, run_invocation
             from ..prompts import build_codex_turn_message
 
             message = build_codex_turn_message(self.manifest, job)
-            inv = build_invocation(self.manifest, message)
-            return dry_run_command(inv)
+            inv = build_invocation(
+                self.manifest,
+                message,
+                model=str(payload.get("model") or "") or None,
+            )
+            if payload.get("dry_run") or not codex_available(self.manifest.codex_bin):
+                return dry_run_command(inv)
+            code = run_invocation(inv)
+            if code != 0:
+                raise RuntimeError(f"codex_turn exit {code}")
+            return f"codex_turn ok exit={code}"
+        if job.service == "wake":
+            from ..wake.runner import WakeRunner
+
+            runner = WakeRunner(self.manifest)
+            mini_count = payload.get("mini_invocations")
+            result = runner.run(
+                dry_run=bool(payload.get("dry_run")),
+                mini_count=int(mini_count) if mini_count is not None else None,
+            )
+            if result.debounced:
+                return "wake debounced"
+            if result.locked:
+                return f"wake locked log={result.log_path.name}"
+            return f"wake ok log={result.log_path.name} minis={result.mini_runs}"
         if job.service in {"fdd_batch", "health_bridge", "health_hvac", "webhook"}:
             target = payload.get("url") or payload.get("endpoint") or payload.get("script")
             return f"queued {job.service} target={target or 'workspace'}"

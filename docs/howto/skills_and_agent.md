@@ -49,6 +49,13 @@ openfdd-workspace-cron --repo-root . list
 openfdd-workspace-cron --repo-root . tick
 ```
 
+Scheduled wake (mini + critique, transcript under `workspace/cron/wakes/`):
+
+```bash
+openfdd-wake --repo-root . --dry-run
+openfdd-agent-shell wake --repo-root . --dry-run
+```
+
 Dry-run a single turn:
 
 ```bash

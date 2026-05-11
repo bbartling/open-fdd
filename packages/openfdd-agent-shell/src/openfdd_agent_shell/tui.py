@@ -5,7 +5,8 @@ from .cron.scheduler import CronScheduler
 from .cron.store import CronStore
 from .manifest import Manifest
 from .memory.store import MemoryStore
-from .prompts import build_system_prompt, skill_paths
+from .prompts import build_critique_wake_message, build_mini_wake_message, build_system_prompt, skill_paths
+from .wake.runner import WakeRunner
 
 
 def print_status(manifest: Manifest) -> None:
@@ -38,6 +39,14 @@ def _handle_memory_command(manifest: Manifest, line: str) -> bool:
         text = line.split("remember", 1)[1].strip()
         path = store.remember(text)
         print(f"remembered in {path}")
+        return True
+    if len(parts) >= 2 and parts[1] == "divergence":
+        print(f"open divergence entries: {store.count_open_divergence_entries()}")
+        print(store.read_divergence_log()[:2000])
+        return True
+    if len(parts) >= 2 and parts[1] == "bootstrap":
+        path = store.write_bootstrap_snapshot(manifest.wake.bootstrap_snapshot)
+        print(f"wrote {path}")
         return True
     return False
 
@@ -76,7 +85,8 @@ def run_repl(manifest: Manifest, *, dry_run: bool = False) -> int:
     print_status(manifest)
     print(
         "Commands: /skills /plan /verify /engine-check /open-workspace "
-        "/memory [/memory search|remember] /cron [list|tick|run <id>] /quit"
+        "/memory [/memory search|remember|divergence|bootstrap] "
+        "/wake [dry] /cron [list|tick|run <id>] /quit"
     )
     while True:
         try:
@@ -116,6 +126,24 @@ def run_repl(manifest: Manifest, *, dry_run: bool = False) -> int:
         if line.startswith("/cron"):
             if _handle_cron_command(manifest, line, dry_run=dry_run):
                 continue
+        if line == "/wake" or line == "/wake dry":
+            result = WakeRunner(manifest).run(dry_run=dry_run or line.endswith("dry"))
+            print(f"wake log: {result.log_path} debounced={result.debounced} locked={result.locked}")
+            continue
+        if line == "/wake mini":
+            inv = build_invocation(
+                manifest,
+                build_mini_wake_message(manifest, invocation=1, total=manifest.wake.mini_invocations),
+            )
+            print(dry_run_command(inv))
+            continue
+        if line == "/wake critique":
+            inv = build_invocation(
+                manifest,
+                build_critique_wake_message(manifest, mini_count=manifest.wake.mini_invocations),
+            )
+            print(dry_run_command(inv))
+            continue
         inv = build_invocation(manifest, line)
         if dry_run:
             print(dry_run_command(inv))

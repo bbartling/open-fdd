@@ -10,6 +10,7 @@ ServiceKind = Literal[
     "shell",
     "memory_append",
     "codex_turn",
+    "wake",
     "fdd_batch",
     "health_bridge",
     "health_hvac",

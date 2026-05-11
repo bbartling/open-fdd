@@ -33,6 +33,18 @@ state_file = "workspace/cron/jobs-state.json"
 runs_dir = "workspace/cron/runs"
 timezone = "UTC"
 
+[wake]
+mini_invocations = 2
+min_minutes_between = 0
+# mini_model = "gpt-5.4-mini"
+# critique_model = "gpt-5.5"
+checkpoints_file = "workspace/BUILD_CHECKPOINTS.md"
+bootstrap_snapshot = "workspace/scratch/memory-bootstrap-latest.md"
+wakes_dir = "workspace/cron/wakes"
+lock_file = "workspace/cron/wake.lock"
+debounce_file = "workspace/cron/last_wake_epoch"
+stop_early_file = "workspace/cron/stop_mini_loop"
+
 [agent]
 skills = [
   "engine-pandas-fdd",

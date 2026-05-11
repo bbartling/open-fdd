@@ -8,6 +8,8 @@ description: "Authors and maintains workspace MEMORY.md and memory/ daily and do
 ## Layout
 
 - `workspace/MEMORY.md` — curated bootstrap loaded each session (truncate via `bootstrap_max_chars`).
+- `workspace/BUILD_CHECKPOINTS.md` — ordered mini queue; critique rewrites **Next for mini**.
+- `workspace/scratch/memory-bootstrap-latest.md` — regenerated each wake for stable Codex context.
 - `workspace/memory/YYYY-MM-DD.md` — daily append-only notes.
 - `workspace/memory/sites|clients|engineers|tools/<id>.md` — domain detail.
 - `workspace/memory/architecture/working-divergence.md` — append-only log when working `workspace/` or automation differs from skills or `AGENTS.md` because the documented path failed or was incomplete.

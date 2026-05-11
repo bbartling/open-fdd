@@ -11,6 +11,8 @@ def test_load_example_manifest(repo_root: Path) -> None:
     assert manifest.build_deploy == "local"
     assert manifest.memory.bootstrap_max_chars == 12000
     assert manifest.cron.timezone == "UTC"
+    assert manifest.wake.mini_invocations == 2
+    assert manifest.wake.checkpoints_file.name == "BUILD_CHECKPOINTS.md"
     assert "workspace-memory" in manifest.agent_skills
 
 

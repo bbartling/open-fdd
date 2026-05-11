@@ -45,6 +45,9 @@ def build_system_prompt(manifest: Manifest) -> str:
         "",
         agents.strip(),
     ]
+    guardrails = manifest.repo_root / "skills" / "GUARDRAILS.md"
+    if guardrails.is_file():
+        blocks.extend(["", "## Skill guardrails", guardrails.read_text(encoding="utf-8").strip()])
     for skill_path in skill_paths(manifest.repo_root, manifest.agent_skills):
         blocks.append(f"\n## Skill: {skill_path.parent.name}\n")
         blocks.append(skill_path.read_text(encoding="utf-8").strip())
@@ -58,50 +61,83 @@ def _repo_rel(manifest: Manifest, path: Path) -> str:
         return str(path)
 
 
+def _wake_read_list(manifest: Manifest) -> list[str]:
+    paths = MemoryPaths.from_manifest(manifest)
+    items = [
+        _repo_rel(manifest, manifest.repo_root / "AGENTS.md"),
+        _repo_rel(manifest, manifest.manifest_path),
+        _repo_rel(manifest, manifest.wake.bootstrap_snapshot),
+        _repo_rel(manifest, manifest.wake.checkpoints_file),
+        _repo_rel(manifest, paths.memory_root),
+        _repo_rel(manifest, paths.architecture_readme),
+        _repo_rel(manifest, paths.divergence_file),
+        "skills/GUARDRAILS.md",
+        "skills/workspace-memory/SKILL.md",
+        "skills/workspace-cron/SKILL.md",
+    ]
+    return items
+
+
+def build_mini_wake_message(
+    manifest: Manifest,
+    *,
+    invocation: int,
+    total: int,
+    job_name: str = "",
+) -> str:
+    paths = MemoryPaths.from_manifest(manifest)
+    arch_log = _repo_rel(manifest, paths.divergence_file)
+    checkpoints = _repo_rel(manifest, manifest.wake.checkpoints_file)
+    read_block = "\n".join(f"- {item}" for item in _wake_read_list(manifest))
+    title = job_name or "open-fdd wake"
+    return (
+        f"Scheduled Open-FDD wake (mini {invocation}/{total}): {title}.\n\n"
+        f"Read:\n{read_block}\n\n"
+        "Rules:\n"
+        f"- Do one small, reviewable slice toward **Next for mini** in {checkpoints} or open loops in MEMORY.md.\n"
+        "- Write generated application code only under workspace/.\n"
+        "- Run the narrowest verification you can (engine pytest, wheel smoke, or skill verification bullets).\n"
+        "- Append a short bullet to today's workspace/memory/YYYY-MM-DD.md for what you verified or what failed.\n"
+        f"- If working code or automation differs from skills or AGENTS.md because the documented path failed or was incomplete, append one dated block to {arch_log} (expectation, reality, evidence, status open). Do not duplicate the daily log.\n"
+        "- Obey skills/GUARDRAILS.md before creating or editing skills/.\n"
+        "- Stop after this slice."
+    )
+
+
+def build_critique_wake_message(manifest: Manifest, *, mini_count: int) -> str:
+    memory = MemoryStore(manifest)
+    open_count = memory.count_open_divergence_entries()
+    paths = MemoryPaths.from_manifest(manifest)
+    arch_log = _repo_rel(manifest, paths.divergence_file)
+    checkpoints = _repo_rel(manifest, manifest.wake.checkpoints_file)
+    read_block = "\n".join(f"- {item}" for item in _wake_read_list(manifest))
+    return (
+        f"Scheduled Open-FDD wake (critique after up to {mini_count} mini runs).\n\n"
+        f"Read:\n{read_block}\n\n"
+        "Tasks:\n"
+        "1) Summarize what likely changed this wake (BUILD_CHECKPOINTS Done recently, daily notes, workspace diffs, cron run logs).\n"
+        f"2) Rewrite {checkpoints}: **Last critique**, **Current sprint**, and replace **Next for mini** with 3–8 concrete tasks for the next wake.\n"
+        "3) Promote stable facts into workspace/MEMORY.md; keep detailed session notes in daily files.\n"
+        f"4) Architecture divergence: read {arch_log} ({open_count} open entries); triage new open entries; promote stable working patterns into skills/*/references/ or MEMORY.md; mark entries promoted or superseded.\n"
+        "5) Skills: obey skills/GUARDRAILS.md; at most one material skill-folder change per wake unless maintenance is explicit.\n"
+        "6) Be concise; optimize the next mini queue for clarity and safety."
+    )
+
+
 def build_codex_turn_message(manifest: Manifest, job: CronJob) -> str:
     payload = job.payload
     wake_mode = str(payload.get("wake_mode") or "").strip().lower()
     custom = str(payload.get("message") or "").strip()
-    if wake_mode not in {"mini", "critique"}:
-        return custom or job.name
-
-    paths = MemoryPaths.from_manifest(manifest)
-    arch_readme = _repo_rel(manifest, paths.architecture_readme)
-    arch_log = _repo_rel(manifest, paths.divergence_file)
-    memory_root = _repo_rel(manifest, paths.memory_root)
-    agents = _repo_rel(manifest, manifest.repo_root / "AGENTS.md")
-    manifest_path = _repo_rel(manifest, manifest.manifest_path)
-
-    read_list = [
-        agents,
-        manifest_path,
-        memory_root,
-        arch_readme,
-        arch_log,
-        "skills/workspace-memory/SKILL.md",
-        "skills/workspace-cron/SKILL.md",
-    ]
-    read_block = "\n".join(f"- {item}" for item in read_list)
-
     if wake_mode == "mini":
-        return (
-            f"Scheduled Open-FDD wake (mini): {job.name}.\n\n"
-            f"Read:\n{read_block}\n\n"
-            "Rules:\n"
-            "- Do one small, reviewable slice toward the operator goal in this job payload or open loops in MEMORY.md.\n"
-            "- Write generated application code only under workspace/.\n"
-            "- Append a short bullet to today's workspace/memory/YYYY-MM-DD.md for what you verified or what failed.\n"
-            f"- If working code or automation differs from skills or AGENTS.md because the documented path failed or was incomplete, append one dated block to {arch_log} (expectation, reality, evidence, status open). Do not duplicate the daily log.\n"
-            "- Stop after this slice."
+        return build_mini_wake_message(
+            manifest,
+            invocation=int(payload.get("invocation") or 1),
+            total=int(payload.get("total") or manifest.wake.mini_invocations),
+            job_name=job.name,
         )
-
-    return (
-        f"Scheduled Open-FDD wake (critique): {job.name}.\n\n"
-        f"Read:\n{read_block}\n\n"
-        "Tasks:\n"
-        "1) Summarize what likely changed since the last wake (daily notes, workspace diffs, cron run logs).\n"
-        "2) Promote stable facts into workspace/MEMORY.md; keep detailed session notes in daily files.\n"
-        f"3) Architecture divergence: read {arch_log}; triage new open entries; promote stable working patterns into skills/*/references/ or MEMORY.md; mark entries promoted or superseded.\n"
-        "4) If skills need updates, change skills/ only when the operator manifest or an explicit maintenance task allows it.\n"
-        "5) Be concise; optimize the next mini slice for clarity and safety."
-    )
+    if wake_mode == "critique":
+        return build_critique_wake_message(
+            manifest,
+            mini_count=int(payload.get("total") or manifest.wake.mini_invocations),
+        )
+    return custom or job.name
