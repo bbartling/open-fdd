@@ -23,6 +23,7 @@ class MemoryConfig:
     memory_root: Path
     bootstrap_max_chars: int
     daily_lookback_days: int
+    divergence_max_chars: int
 
 
 @dataclass
@@ -84,6 +85,7 @@ class Manifest:
         memory_root_rel = str(memory_raw.get("root") or "workspace/memory").strip()
         bootstrap_max_chars = int(memory_raw.get("bootstrap_max_chars") or 12000)
         daily_lookback_days = int(memory_raw.get("daily_lookback_days") or 2)
+        divergence_max_chars = int(memory_raw.get("divergence_max_chars") or 4000)
 
         jobs_rel = str(cron_raw.get("jobs_file") or "workspace/cron/jobs.json").strip()
         state_rel = str(cron_raw.get("state_file") or "workspace/cron/jobs-state.json").strip()
@@ -95,6 +97,7 @@ class Manifest:
             memory_root=(repo_root / memory_root_rel).resolve(),
             bootstrap_max_chars=bootstrap_max_chars,
             daily_lookback_days=daily_lookback_days,
+            divergence_max_chars=divergence_max_chars,
         )
         cron = CronConfig(
             jobs_file=(repo_root / jobs_rel).resolve(),

@@ -15,6 +15,8 @@ description: "Registers and runs scheduled workspace jobs for FDD batches, HVAC 
 
 `noop`, `shell`, `memory_append`, `codex_turn`, `fdd_batch`, `health_bridge`, `health_hvac`, `webhook`.
 
+For `codex_turn`, set `payload.wake_mode` to `mini` or `critique` to inject working-divergence read/triage rules (see [workspace-memory](../workspace-memory/SKILL.md)).
+
 ## CLI
 
 ```bash

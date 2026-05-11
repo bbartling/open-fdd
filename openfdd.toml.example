@@ -24,6 +24,8 @@ root = "workspace/memory"
 bootstrap_file = "workspace/MEMORY.md"
 bootstrap_max_chars = 12000
 daily_lookback_days = 2
+# Truncated tail of workspace/memory/architecture/working-divergence.md in Codex bootstrap
+divergence_max_chars = 4000
 
 [cron]
 jobs_file = "workspace/cron/jobs.json"

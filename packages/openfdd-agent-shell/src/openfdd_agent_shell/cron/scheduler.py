@@ -152,8 +152,9 @@ class CronScheduler:
             return (proc.stdout or "shell ok").strip()[:500]
         if job.service == "codex_turn":
             from ..codex_launcher import build_invocation, dry_run_command
+            from ..prompts import build_codex_turn_message
 
-            message = str(payload.get("message") or job.name)
+            message = build_codex_turn_message(self.manifest, job)
             inv = build_invocation(self.manifest, message)
             return dry_run_command(inv)
         if job.service in {"fdd_batch", "health_bridge", "health_hvac", "webhook"}:

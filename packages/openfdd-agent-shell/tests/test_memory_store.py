@@ -21,6 +21,8 @@ def test_memory_layout_and_search(repo_root, tmp_path):
     assert hits
     block = store.bootstrap_block()
     assert "Workspace memory" in block
+    assert store.paths.divergence_file.is_file()
+    assert "Working architecture divergence" in block
 
 
 def test_read_daily_lookback(repo_root, tmp_path):
