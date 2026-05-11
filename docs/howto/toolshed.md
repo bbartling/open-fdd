@@ -34,6 +34,8 @@ Implementation lives in **`open_fdd.gateway.openfdd_agent`** (`_openfdd_agent_id
 2. Inspect **`toolshed/scratch/`** after a turn — new files appear there.
 3. If something is worth keeping, **copy or move** to **`toolshed/published/`**, add a short module docstring, run **`pytest`** / smoke as appropriate, then **commit in a normal PR**.
 
+For Open-FDD + easy-aso test benches, start with `toolshed/published/easy_aso_bench_runner.py` to preflight services and scaffold a bench optimization agent into scratch.
+
 Scratch is ephemeral: clones may not have your local scratch contents; only **`published/`** is shared via Git.
 
 ## MCP / RAG

@@ -1,0 +1,46 @@
+# Copy to openfdd.toml and edit before running the agent shell.
+# Generated apps and scratch files belong under workspace_dir.
+
+[project]
+name = "my-fdd-workspace"
+workspace_dir = "workspace"
+
+[engine]
+# pypi: install from PyPI; editable: pip install -e . from the repo root
+install = "pypi"
+package = "open-fdd"
+
+[build]
+# Select only what the operator needs; the agent composes skills from this list.
+targets = ["api", "dashboard", "feather_storage"]
+drivers = ["csv", "openmeteo"]
+# none | caddy_lan | caddy_tls_internal
+auth = "none"
+# local | systemd | ansible_bench
+deploy = "local"
+
+[memory]
+root = "workspace/memory"
+bootstrap_file = "workspace/MEMORY.md"
+bootstrap_max_chars = 12000
+daily_lookback_days = 2
+
+[cron]
+jobs_file = "workspace/cron/jobs.json"
+state_file = "workspace/cron/jobs-state.json"
+runs_dir = "workspace/cron/runs"
+timezone = "UTC"
+
+[agent]
+skills = [
+  "engine-pandas-fdd",
+  "workspace-memory",
+  "workspace-cron",
+  "fastapi-bridge-api",
+  "react-operator-dashboard",
+  "feather-local-storage",
+  "driver-csv-ingest",
+  "local-dev-orchestration",
+]
+codex_bin = "codex"
+scratch_dir = "workspace/scratch"

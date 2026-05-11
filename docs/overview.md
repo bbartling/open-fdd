@@ -15,7 +15,7 @@ nav_order: 2
 2. **Column mapping** connects logical point names used in rules to actual column names (dict, manifest YAML, or custom resolver).
 3. **`RuleRunner`** evaluates configured checks and returns **fault results** compatible with **`open_fdd.schema`**.
 
-There is no required database, HTTP service, or message bus in this repository—the engine runs wherever you import it.
+There is no required database, HTTP service, or message bus in the **PyPI wheel**—the engine runs wherever you import it. Optional APIs, dashboards, and deployment stacks are described under **`skills/`** and built with the **[agent shell](howto/skills_and_agent)**.
 
 ---
 

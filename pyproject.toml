@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.3.1"
+version = "2.4.0"
 description = "Open-FDD: YAML-defined fault detection rules on pandas DataFrames (PyPI)."
 readme = "README.md"
 license = { text = "MIT" }
@@ -30,41 +30,25 @@ keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas"]
 
 dependencies = [
     "pandas",
-    "numpy",
-    "pyyaml",
-    "pydantic>=2.4,<3",
-    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
+engine = [
+    "pyyaml",
+    "pydantic>=2.4,<3",
+]
 test = [
     "pytest>=7.0",
     "pytest-timeout>=2.3.0",
 ]
-desktop = [
-    "PySide6>=6.8",
-    "pyarrow>=15.0.0",
-    "scikit-learn>=1.0",
-    "rdflib>=7.0.0",
-    "fastapi>=0.115.0",
-    "python-multipart>=0.0.20",
-    "httpx>=0.27.0",
-    "uvicorn>=0.30.0",
-]
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.3.0",
+    "pyyaml",
+    "pydantic>=2.4,<3",
     "black[jupyter]>=25.11.0",
     "pre-commit",
 ]
-
-[project.scripts]
-open-fdd-desktop = "open_fdd.desktop:main"
-open-fdd-desktop-bridge = "open_fdd.gateway.cli:run_desktop_bridge"
-open-fdd-gateway = "open_fdd.gateway.cli:run_gateway"
-open-fdd-mcp-rag = "open_fdd.mcp_rag:run_mcp_rag"
-open-fdd-mcp-adapter = "open_fdd.mcp_rag:run_mcp_adapter"
-open-fdd-headless-bacnet = "open_fdd.platform.drivers.headless_bacnet:main"
 
 [project.urls]
 Homepage = "https://github.com/bbartling/open-fdd"
@@ -72,7 +56,7 @@ Documentation = "https://bbartling.github.io/open-fdd/"
 Repository = "https://github.com/bbartling/open-fdd"
 
 [tool.setuptools.packages.find]
-include = ["open_fdd*"]
+include = ["open_fdd", "open_fdd.engine*", "open_fdd.schema*", "open_fdd.reports*"]
 
 [tool.black]
 line-length = 88
@@ -80,6 +64,5 @@ target-version = ["py310", "py311", "py312", "py313", "py314"]
 
 [tool.pytest.ini_options]
 testpaths = ["open_fdd/tests"]
-# Hard cap for runaway hangs (thread leak from background workers was burning CI for 1h+).
 timeout = 300
 timeout_method = "thread"

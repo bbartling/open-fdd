@@ -44,6 +44,14 @@ jobs:
           python -m build
           twine check dist/*
 
+      - name: Verify wheel imports engine with extras
+        run: |
+          python -m venv /tmp/ofdd-wheel-smoke
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          test -n "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
+
       # PyPI Trusted Publishing (OIDC) — no TWINE_PASSWORD secret required.
       # Configure each PyPI project: Publishing → add GitHub trusted publisher for this workflow file.
       - name: Publish to PyPI
