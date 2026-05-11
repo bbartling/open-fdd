@@ -4,9 +4,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev, dev/**]
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev, dev/**]
 
 permissions:
   contents: read
@@ -52,7 +52,9 @@ jobs:
       - name: Verify wheel imports engine with extras
         run: |
           python -m venv /tmp/ofdd-wheel-smoke
-          /tmp/ofdd-wheel-smoke/bin/pip install "dist/*.whl[engine]"
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          test -n "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
           /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
 
       - name: Build openfdd-engine package (dry run)
