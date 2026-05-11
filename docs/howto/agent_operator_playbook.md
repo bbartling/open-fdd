@@ -10,7 +10,7 @@ Use this page as **retrieval fodder** for assistants: it ties **human goals** on
 
 **Defaults:** bridge `http://127.0.0.1:8765`, MCP RAG `http://127.0.0.1:8090`, UI `http://127.0.0.1:5173` (override with env).
 
-**Where Codex writes files:** new scripts and helpers go under **`toolshed/scratch/`** in the workdir (gitignored); operators promote keepers to **`toolshed/published/`**. See **[Toolshed](toolshed)**.
+**Where Codex writes files:** new scripts and helpers go under **`workspace/scratch/`** (gitignored with **`workspace/`**); operators promote keepers into **`skills/<domain>/scripts/`**. See **[Skills and agent shell](skills_and_agent)**.
 
 ---
 

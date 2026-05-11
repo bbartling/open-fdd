@@ -82,7 +82,7 @@ def main() -> None:
     parser.add_argument("--fan-ao-oid", default="analog-output,2")
     parser.add_argument(
         "--output",
-        default="toolshed/scratch/easy_aso_bench_agent.py",
+        default="workspace/scratch/easy_aso_bench_agent.py",
         help="Where to write the scaffolded agent.",
     )
     args = parser.parse_args()
@@ -103,7 +103,8 @@ def main() -> None:
     )
     print(f"Wrote easy-aso bench scaffold: {out}")
     print(
-        "Run with: EASY_ASO_AGENT_MODULE=toolshed.scratch.easy_aso_bench_agent "
+        "Run with: PYTHONPATH=workspace/scratch "
+        "EASY_ASO_AGENT_MODULE=easy_aso_bench_agent "
         "EASY_ASO_AGENT_CLASS=BenchHvacOptimizationAgent easy-aso-agent run",
     )
 

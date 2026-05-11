@@ -27,7 +27,7 @@ Copy **`openfdd.toml.example`** to **`openfdd.toml`** and set:
 - **`[build].drivers`** — `csv`, `openmeteo`, `bacnet`, …
 - **`[build].auth`** / **`[build].deploy`** — local, Caddy, systemd, Ansible bench
 - **`[agent].skills`** — skill folder names under **`skills/`**
-- **`[memory]`** — `MEMORY.md` bootstrap path, daily note lookback, truncation budget
+- **`[memory]`** — `MEMORY.md` bootstrap path, daily note lookback, truncation budget, and `working-divergence.md` tail for skill/spec drift
 - **`[cron]`** — `jobs.json`, runtime state, and run log directories
 
 Generated application code belongs in **`workspace/`** (see **`AGENTS.md`**). Portfolio memory and schedules live beside generated services under the same workspace tree.
@@ -38,13 +38,22 @@ Generated application code belongs in **`workspace/`** (see **`AGENTS.md`**). Po
 openfdd-agent-shell --repo-root .
 ```
 
-The shell loads **`AGENTS.md`**, workspace **`MEMORY.md`** (plus recent daily notes), selected **`skills/*/SKILL.md`** files, and launches **Codex CLI** with a composed system prompt. Slash commands include **`/skills`**, **`/plan`**, **`/verify`**, **`/engine-check`**, **`/open-workspace`**, **`/memory`**, and **`/cron`**.
+The shell loads **`AGENTS.md`**, workspace **`MEMORY.md`** (plus recent daily notes and the architecture divergence log), selected **`skills/*/SKILL.md`** files, and launches **Codex CLI** with a composed system prompt. Slash commands include **`/skills`**, **`/plan`**, **`/verify`**, **`/engine-check`**, **`/open-workspace`**, **`/memory`**, and **`/cron`**.
+
+When working code under **`workspace/`** diverges from skills because the documented path failed, append to **`workspace/memory/architecture/working-divergence.md`**. Scheduled **`codex_turn`** jobs can set **`payload.wake_mode`** to **`mini`** or **`critique`** to repeat the BAS-style append/triage loop.
 
 Workspace cron CLI:
 
 ```bash
 openfdd-workspace-cron --repo-root . list
 openfdd-workspace-cron --repo-root . tick
+```
+
+Scheduled wake (mini + critique, transcript under `workspace/cron/wakes/`):
+
+```bash
+openfdd-wake --repo-root . --dry-run
+openfdd-agent-shell wake --repo-root . --dry-run
 ```
 
 Dry-run a single turn:

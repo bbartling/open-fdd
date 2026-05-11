@@ -23,6 +23,7 @@ class MemoryConfig:
     memory_root: Path
     bootstrap_max_chars: int
     daily_lookback_days: int
+    divergence_max_chars: int
 
 
 @dataclass
@@ -31,6 +32,20 @@ class CronConfig:
     state_file: Path
     runs_dir: Path
     timezone: str
+
+
+@dataclass
+class WakeConfig:
+    mini_invocations: int
+    min_minutes_between: int
+    mini_model: str | None
+    critique_model: str | None
+    lock_file: Path
+    debounce_file: Path
+    stop_early_file: Path
+    wakes_dir: Path
+    checkpoints_file: Path
+    bootstrap_snapshot: Path
 
 
 @dataclass
@@ -50,6 +65,7 @@ class Manifest:
     manifest_path: Path
     memory: MemoryConfig
     cron: CronConfig
+    wake: WakeConfig
 
     @classmethod
     def load(cls, manifest_path: Path, repo_root: Path) -> Manifest:
@@ -60,6 +76,7 @@ class Manifest:
         agent = raw.get("agent") or {}
         memory_raw = raw.get("memory") or {}
         cron_raw = raw.get("cron") or {}
+        wake_raw = raw.get("wake") or {}
 
         name = str(project.get("name") or "open-fdd-workspace").strip()
         workspace_rel = str(project.get("workspace_dir") or "workspace").strip()
@@ -84,23 +101,52 @@ class Manifest:
         memory_root_rel = str(memory_raw.get("root") or "workspace/memory").strip()
         bootstrap_max_chars = int(memory_raw.get("bootstrap_max_chars") or 12000)
         daily_lookback_days = int(memory_raw.get("daily_lookback_days") or 2)
+        divergence_max_chars = int(memory_raw.get("divergence_max_chars") or 4000)
 
         jobs_rel = str(cron_raw.get("jobs_file") or "workspace/cron/jobs.json").strip()
         state_rel = str(cron_raw.get("state_file") or "workspace/cron/jobs-state.json").strip()
         runs_rel = str(cron_raw.get("runs_dir") or "workspace/cron/runs").strip()
         timezone = str(cron_raw.get("timezone") or "UTC").strip()
 
+        mini_invocations = int(wake_raw.get("mini_invocations") or 2)
+        min_minutes_between = int(wake_raw.get("min_minutes_between") or 0)
+        mini_model = wake_raw.get("mini_model")
+        critique_model = wake_raw.get("critique_model")
+        lock_rel = str(wake_raw.get("lock_file") or "workspace/cron/wake.lock").strip()
+        debounce_rel = str(wake_raw.get("debounce_file") or "workspace/cron/last_wake_epoch").strip()
+        stop_early_rel = str(wake_raw.get("stop_early_file") or "workspace/cron/stop_mini_loop").strip()
+        wakes_rel = str(wake_raw.get("wakes_dir") or "workspace/cron/wakes").strip()
+        checkpoints_rel = str(
+            wake_raw.get("checkpoints_file") or "workspace/BUILD_CHECKPOINTS.md"
+        ).strip()
+        snapshot_rel = str(
+            wake_raw.get("bootstrap_snapshot") or "workspace/scratch/memory-bootstrap-latest.md"
+        ).strip()
+
         memory = MemoryConfig(
             bootstrap_file=(repo_root / bootstrap_rel).resolve(),
             memory_root=(repo_root / memory_root_rel).resolve(),
             bootstrap_max_chars=bootstrap_max_chars,
             daily_lookback_days=daily_lookback_days,
+            divergence_max_chars=divergence_max_chars,
         )
         cron = CronConfig(
             jobs_file=(repo_root / jobs_rel).resolve(),
             state_file=(repo_root / state_rel).resolve(),
             runs_dir=(repo_root / runs_rel).resolve(),
             timezone=timezone,
+        )
+        wake = WakeConfig(
+            mini_invocations=mini_invocations,
+            min_minutes_between=min_minutes_between,
+            mini_model=str(mini_model).strip() if mini_model else None,
+            critique_model=str(critique_model).strip() if critique_model else None,
+            lock_file=(repo_root / lock_rel).resolve(),
+            debounce_file=(repo_root / debounce_rel).resolve(),
+            stop_early_file=(repo_root / stop_early_rel).resolve(),
+            wakes_dir=(repo_root / wakes_rel).resolve(),
+            checkpoints_file=(repo_root / checkpoints_rel).resolve(),
+            bootstrap_snapshot=(repo_root / snapshot_rel).resolve(),
         )
 
         return cls(
@@ -119,6 +165,7 @@ class Manifest:
             manifest_path=manifest_path.resolve(),
             memory=memory,
             cron=cron,
+            wake=wake,
         )
 
     def ensure_workspace_dirs(self) -> None:
@@ -127,3 +174,6 @@ class Manifest:
         self.memory.memory_root.mkdir(parents=True, exist_ok=True)
         self.cron.jobs_file.parent.mkdir(parents=True, exist_ok=True)
         self.cron.runs_dir.mkdir(parents=True, exist_ok=True)
+        self.wake.wakes_dir.mkdir(parents=True, exist_ok=True)
+        self.wake.checkpoints_file.parent.mkdir(parents=True, exist_ok=True)
+        self.wake.bootstrap_snapshot.parent.mkdir(parents=True, exist_ok=True)

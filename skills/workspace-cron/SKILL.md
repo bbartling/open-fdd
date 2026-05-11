@@ -13,7 +13,9 @@ description: "Registers and runs scheduled workspace jobs for FDD batches, HVAC 
 
 ## Services
 
-`noop`, `shell`, `memory_append`, `codex_turn`, `fdd_batch`, `health_bridge`, `health_hvac`, `webhook`.
+`noop`, `shell`, `memory_append`, `codex_turn`, `wake`, `fdd_batch`, `health_bridge`, `health_hvac`, `webhook`.
+
+`wake` runs the full mini + critique loop (`openfdd-wake`). For single turns, set `codex_turn` `payload.wake_mode` to `mini` or `critique` (see [workspace-memory](../workspace-memory/SKILL.md)).
 
 ## CLI
 

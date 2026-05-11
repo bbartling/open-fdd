@@ -26,6 +26,10 @@ def main(argv: list[str] | None = None) -> int:
         from .cron_cli import main as cron_main
 
         return cron_main(argv[1:])
+    if argv and argv[0] == "wake":
+        from .wake_cli import main as wake_main
+
+        return wake_main(argv[1:])
 
     parser = argparse.ArgumentParser(description="Open-FDD skills agent shell")
     parser.add_argument("--repo-root", type=Path, default=None)

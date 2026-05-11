@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openfdd-agent-shell"
-version = "0.2.0"
+version = "0.3.0"
 description = "TOML manifest loader, workspace memory, cron scheduler, and Codex chat shell for Open-FDD skills."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dev = ["pytest>=7.0"]
 [project.scripts]
 openfdd-agent-shell = "openfdd_agent_shell.cli:main"
 openfdd-workspace-cron = "openfdd_agent_shell.cron_cli:main"
+openfdd-wake = "openfdd_agent_shell.wake_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

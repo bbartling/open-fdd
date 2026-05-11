@@ -7,6 +7,38 @@ import re
 
 from ..manifest import Manifest
 
+ARCHITECTURE_README = """# Working architecture vs skills/spec
+
+Append-only log when **implemented** behavior under `workspace/` or automation **differs** from `skills/*/SKILL.md`, `AGENTS.md`, or operator manifest expectations because the documented path failed or was incomplete.
+
+**File:** `working-divergence.md` (same folder).
+
+**Mini:** append one dated block when you discover a durable mismatch during a slice.
+
+**Critique:** triage open entries; promote stable patterns into `skills/*/references/` or `MEMORY.md`; mark entries `promoted` or `superseded` in the log.
+
+Do not log secrets, credentials, or full skill pastes.
+"""
+
+DIVERGENCE_TEMPLATE = """# Working architecture divergence log
+
+Append when live code or ops **work** but **skills/spec** are wrong, incomplete, or untested. Feeds skill improvements; not a second task queue.
+
+## Entry template
+
+```markdown
+## YYYY-MM-DDTHH:MMZ — short title
+
+- **Status:** open | promoted | superseded
+- **Expectation (spec/skill):** path + one-line claim
+- **Working reality:** what actually runs
+- **Evidence:** paths, commands, smoke, logs
+- **Skill/spec follow-up:** optional target file
+```
+
+*(No entries yet.)*
+"""
+
 MEMORY_TEMPLATE = """# Open-FDD workspace memory
 
 Curated facts for this portfolio. Keep this file compact; put detailed daily notes under `memory/`.
@@ -30,14 +62,21 @@ class MemoryPaths:
     workspace_dir: Path
     bootstrap_file: Path
     memory_root: Path
+    architecture_dir: Path
+    architecture_readme: Path
+    divergence_file: Path
 
     @classmethod
     def from_manifest(cls, manifest: Manifest) -> MemoryPaths:
         cfg = manifest.memory
+        architecture_dir = cfg.memory_root / "architecture"
         return cls(
             workspace_dir=manifest.workspace_dir,
             bootstrap_file=cfg.bootstrap_file,
             memory_root=cfg.memory_root,
+            architecture_dir=architecture_dir,
+            architecture_readme=architecture_dir / "README.md",
+            divergence_file=architecture_dir / "working-divergence.md",
         )
 
 
@@ -56,10 +95,14 @@ class MemoryStore:
     def ensure_layout(self) -> None:
         self.paths.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.paths.memory_root.mkdir(parents=True, exist_ok=True)
-        for sub in ("sites", "clients", "engineers", "tools"):
+        for sub in ("sites", "clients", "engineers", "tools", "integrations", "architecture"):
             (self.paths.memory_root / sub).mkdir(parents=True, exist_ok=True)
         if not self.paths.bootstrap_file.is_file():
             self.paths.bootstrap_file.write_text(MEMORY_TEMPLATE, encoding="utf-8")
+        if not self.paths.architecture_readme.is_file():
+            self.paths.architecture_readme.write_text(ARCHITECTURE_README, encoding="utf-8")
+        if not self.paths.divergence_file.is_file():
+            self.paths.divergence_file.write_text(DIVERGENCE_TEMPLATE, encoding="utf-8")
 
     def read_bootstrap(self) -> str:
         self.ensure_layout()
@@ -139,9 +182,37 @@ class MemoryStore:
                             return hits
         return hits
 
+    def count_open_divergence_entries(self) -> int:
+        self.ensure_layout()
+        if not self.paths.divergence_file.is_file():
+            return 0
+        count = 0
+        for line in self.paths.divergence_file.read_text(encoding="utf-8").splitlines():
+            if "**Status:**" in line and "open" in line.lower():
+                count += 1
+        return count
+
+    def write_bootstrap_snapshot(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.bootstrap_block(), encoding="utf-8")
+        return path
+
+    def read_divergence_log(self) -> str:
+        self.ensure_layout()
+        if not self.paths.divergence_file.is_file():
+            return ""
+        text = self.paths.divergence_file.read_text(encoding="utf-8").strip()
+        body, truncated = truncate_bootstrap(text, self.cfg.divergence_max_chars)
+        if truncated:
+            body += "\n\n_(working-divergence.md truncated for bootstrap; full file on disk.)_\n"
+        return body
+
     def bootstrap_block(self) -> str:
         parts = ["## Workspace memory (bootstrap)", self.read_bootstrap()]
         daily = self.read_daily_notes()
         if daily:
             parts.extend(["", "## Recent daily notes", daily])
+        divergence = self.read_divergence_log()
+        if divergence:
+            parts.extend(["", "## Working architecture divergence", divergence])
         return "\n".join(parts).strip()
