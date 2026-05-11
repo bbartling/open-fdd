@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--mini-invocations", type=int, default=None)
     args = parser.parse_args(argv)
+    if args.mini_invocations is not None and args.mini_invocations < 1:
+        raise SystemExit("Invalid --mini-invocations: must be a positive integer")
 
     repo_root = (args.repo_root or _default_repo_root()).resolve()
     manifest_path = (args.manifest or _default_manifest(repo_root)).resolve()

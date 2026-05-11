@@ -43,3 +43,27 @@ def test_memory_append_job(repo_root, tmp_path):
     result = scheduler.run_job(job)
     assert result.status == "ok"
     assert scheduler.store.get_job(job.id) is None
+
+
+def test_codex_turn_dry_run_and_missing_binary(repo_root, tmp_path, monkeypatch):
+    manifest = Manifest.load(repo_root / "openfdd.toml.example", tmp_path)
+    scheduler = CronScheduler(manifest)
+    job = CronJob(
+        id="job3",
+        name="codex-mini",
+        schedule=Schedule(kind="every", every_seconds=60),
+        service="codex_turn",
+        payload={"wake_mode": "mini", "dry_run": True},
+    )
+    result = scheduler.run_job(job)
+    assert result.status == "ok"
+    assert "codex" in result.message
+
+    job.payload = {"wake_mode": "mini"}
+    monkeypatch.setattr(
+        "openfdd_agent_shell.codex_launcher.codex_available",
+        lambda _bin: False,
+    )
+    result = scheduler.run_job(job)
+    assert result.status == "error"
+    assert "not found on PATH" in result.message

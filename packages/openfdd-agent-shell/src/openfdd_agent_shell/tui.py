@@ -86,7 +86,7 @@ def run_repl(manifest: Manifest, *, dry_run: bool = False) -> int:
     print(
         "Commands: /skills /plan /verify /engine-check /open-workspace "
         "/memory [/memory search|remember|divergence|bootstrap] "
-        "/wake [dry] /cron [list|tick|run <id>] /quit"
+        "/wake [dry|mini|critique] /cron [list|tick|run <id>] /quit"
     )
     while True:
         try:

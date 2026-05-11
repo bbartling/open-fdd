@@ -116,7 +116,7 @@ def build_critique_wake_message(manifest: Manifest, *, mini_count: int) -> str:
         f"Read:\n{read_block}\n\n"
         "Tasks:\n"
         "1) Summarize what likely changed this wake (BUILD_CHECKPOINTS Done recently, daily notes, workspace diffs, cron run logs).\n"
-        f"2) Rewrite {checkpoints}: **Last critique**, **Current sprint**, and replace **Next for mini** with 3–8 concrete tasks for the next wake.\n"
+        f"2) Rewrite {checkpoints}: **Last critique**, **Current sprint**, and replace **Next for mini** with 3-8 concrete tasks for the next wake.\n"
         "3) Promote stable facts into workspace/MEMORY.md; keep detailed session notes in daily files.\n"
         f"4) Architecture divergence: read {arch_log} ({open_count} open entries); triage new open entries; promote stable working patterns into skills/*/references/ or MEMORY.md; mark entries promoted or superseded.\n"
         "5) Skills: obey skills/GUARDRAILS.md; at most one material skill-folder change per wake unless maintenance is explicit.\n"

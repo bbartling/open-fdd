@@ -35,7 +35,8 @@ timezone = "UTC"
 
 [wake]
 mini_invocations = 2
-min_minutes_between = 0
+# Safer default if debounce/lock state is cleared between wakes
+min_minutes_between = 30
 # mini_model = "gpt-5.4-mini"
 # critique_model = "gpt-5.5"
 checkpoints_file = "workspace/BUILD_CHECKPOINTS.md"

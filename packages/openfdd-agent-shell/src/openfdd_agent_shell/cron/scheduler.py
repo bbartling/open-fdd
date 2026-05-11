@@ -160,8 +160,12 @@ class CronScheduler:
                 message,
                 model=str(payload.get("model") or "") or None,
             )
-            if payload.get("dry_run") or not codex_available(self.manifest.codex_bin):
+            if payload.get("dry_run"):
                 return dry_run_command(inv)
+            if not codex_available(self.manifest.codex_bin):
+                raise RuntimeError(
+                    f"Codex binary '{self.manifest.codex_bin}' not found on PATH"
+                )
             code = run_invocation(inv)
             if code != 0:
                 raise RuntimeError(f"codex_turn exit {code}")
