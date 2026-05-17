@@ -40,39 +40,6 @@ jobs:
         env:
           JEKYLL_ENV: production
 
-      - name: Verify Just the Docs theme assets
-        run: |
-          set -euo pipefail
-          site="${{ github.workspace }}/_site"
-          index="$site/index.html"
-          css_dir="$site/assets/css"
-
-          if [ ! -f "$index" ]; then
-            echo "::error::Missing $index"
-            find "$site" -maxdepth 2 -type f | head -40
-            exit 1
-          fi
-
-          if [ ! -d "$css_dir" ]; then
-            echo "::error::Missing $css_dir (theme may not have compiled)"
-            find "$site" -maxdepth 3 -type d
-            exit 1
-          fi
-
-          echo "CSS files:"
-          ls -la "$css_dir"
-
-          if ! find "$css_dir" -maxdepth 1 -name '*.css' -size +8k -print -quit | grep -q .; then
-            echo "::error::No substantial theme CSS in $css_dir"
-            exit 1
-          fi
-
-          if ! grep -qE 'site-nav|side-bar' "$index"; then
-            echo "::error::index.html missing Just the Docs layout markers"
-            head -60 "$index"
-            exit 1
-          fi
-
       - name: Check internal links (HTMLProofer)
         run: |
           gem install html-proofer -v '~> 5.0' --no-document

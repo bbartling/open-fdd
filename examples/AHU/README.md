@@ -14,14 +14,16 @@ from open_fdd.engine import RuleRunner
 csv_path = Path("examples/AHU/RTU11.csv")
 rules_path = Path("examples/AHU/rules_rtu11_temp_only")
 
-df = pd.read_csv(csv_path, parse_dates=["timestamp"])
+df = pd.read_csv(csv_path, parse_dates=["Timestamp"])
 runner = RuleRunner(rules_path=rules_path)
 out = runner.run(
     df,
-    timestamp_col="timestamp",
+    timestamp_col="Timestamp",
     column_map={
-        "Supply_Air_Temperature_Sensor": "supply_air_temp",
-        # ... match keys to your rule inputs
+        "Supply_Air_Temperature_Sensor": "RTU_11_DA_T(°F)",
+        "Mixed_Air_Temperature_Sensor": "RTU_11_MA_T(°F)",
+        "Outside_Air_Temperature_Sensor": "RTU_11_OA_T(°F)",
+        "Return_Air_Temperature_Sensor": "RTU_11_RA_T(°F)",
     },
 )
 print([c for c in out.columns if c.endswith("_flag")])

@@ -51,7 +51,7 @@ Public imports are re-exported from **`open_fdd`** and **`open_fdd.engine`** whe
 
 The public site at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) is built from **`docs/`** with **Jekyll** and the **[Just the Docs](https://just-the-docs.github.io/just-the-docs/)** theme (sidebar nav, search, syntax highlighting). Custom typography and tables live in **`docs/_includes/head_custom.html`**.
 
-CI job **`docs`** (and workflow **`Docs (GitHub Pages)`** on push to `master` / `main`) run `bundle exec jekyll build` and fail if theme CSS is missing. After substantive edits, preview locally from `docs/`:
+CI job **`docs`** (and workflow **`Docs (GitHub Pages)`** on push to `master` / `main`) run `bundle exec jekyll build` plus HTMLProofer on the built site. After substantive edits, preview locally from `docs/`:
 
 ```bash
 cd docs

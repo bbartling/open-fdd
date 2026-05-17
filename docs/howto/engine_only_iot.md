@@ -49,8 +49,8 @@ The rule runner is **`open_fdd.engine.runner.RuleRunner`**. It loads **`.yaml`**
 **Install**
 
 ```bash
-pip install open-fdd
-# or from a checkout:
+pip install "open-fdd[engine]"
+# or from a checkout (dev extras include PyYAML and pydantic for rules):
 pip install -e ".[dev]"
 ```
 

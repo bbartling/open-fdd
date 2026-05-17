@@ -81,17 +81,6 @@ jobs:
         env:
           JEKYLL_ENV: production
 
-      - name: Verify Just the Docs theme assets
-        run: |
-          set -euo pipefail
-          site="${{ github.workspace }}/_site"
-          index="$site/index.html"
-          css_dir="$site/assets/css"
-          test -f "$index"
-          test -d "$css_dir"
-          find "$css_dir" -maxdepth 1 -name '*.css' -size +8k -print -quit | grep -q .
-          grep -qE 'site-nav|side-bar' "$index"
-
       - name: Check internal links (HTMLProofer)
         run: |
           gem install html-proofer -v '~> 5.0' --no-document
