@@ -72,6 +72,7 @@ Plots need the `[reports]` extra. See the [Reports API](https://bbartling.github
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -U pip
 pip install -e ".[dev]"
 pytest open_fdd/tests/engine
 ```
