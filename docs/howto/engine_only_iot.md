@@ -1,12 +1,12 @@
 ---
 title: Engine-only deployment and external IoT pipelines
-parent: How-to guides
+parent: How-to Guides
 nav_order: 21
 ---
 
 # Engine-only deployment and external IoT pipelines
 
-> **Library-only (`pip install "open-fdd[engine]"`):** See the **[engine documentation](https://bbartling.github.io/open-fdd/)** — [Getting started](https://bbartling.github.io/open-fdd/getting_started), [Skills and agent shell](skills_and_agent), [Column map & resolvers](https://bbartling.github.io/open-fdd/column_map_resolvers), and this page for pandas integrators.
+> **Library-only (`pip install "open-fdd[engine]"`):** See the **[engine documentation](https://bbartling.github.io/open-fdd/)** — [Getting started](https://bbartling.github.io/open-fdd/getting_started), [Expression rule cookbook](https://bbartling.github.io/open-fdd/expression_rule_cookbook), [Column map & resolvers](https://bbartling.github.io/open-fdd/column_map_resolvers), and this page for pandas integrators.
 
 Integrators who already run **data collection** (historians, MQTT, BAS exports) and their own **modeling** can add **FDD** with **`open_fdd.engine.RuleRunner`** and the same **YAML** rules you would use in any other context.
 

@@ -1,6 +1,6 @@
 ---
 title: Operations
-parent: How-to guides
+parent: How-to Guides
 nav_order: 40
 nav_exclude: true
 ---

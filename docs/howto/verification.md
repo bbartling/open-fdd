@@ -1,6 +1,6 @@
 ---
 title: Verification
-parent: How-to guides
+parent: How-to Guides
 nav_order: 18
 ---
 
@@ -17,7 +17,6 @@ From the repo root with dev dependencies (includes **`[engine]`** libraries):
 ```bash
 pip install -e ".[dev]"
 pytest open_fdd/tests/engine
-pytest packages/openfdd-agent-shell
 ```
 
 Expression cookbook regressions live in **`open_fdd/tests/engine/test_expression_cookbook.py`**.
@@ -42,13 +41,4 @@ df = pd.read_csv("your_sample.csv", parse_dates=["timestamp"]).set_index("timest
 runner = RuleRunner(rules_path=Path("path/to/rules"))
 out = runner.run(df, timestamp_col="timestamp", column_map={"Supply_Air_Temperature_Sensor": "SAT"})
 assert any(c.endswith("_flag") for c in out.columns)
-```
-
----
-
-## 4. Agent shell dry run
-
-```bash
-pip install -e packages/openfdd-agent-shell
-openfdd-agent-shell --repo-root . --dry-run --message "verify engine import"
 ```

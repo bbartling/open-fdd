@@ -36,23 +36,7 @@ Use **`fdd_strict_rules`**-style tightening in **your** caller if you want stric
 
 ## Environment variables
 
-### Rules engine (library)
-
 The **`open-fdd`** wheel does **not** require a fixed `OFDD_*` namespace for **`RuleRunner`**. Your **application** may use env vars to locate rule directories or data files; that is entirely under your control.
-
-### Desktop gateway (`pip install "open-fdd[desktop]"`)
-
-When you run **`open-fdd-gateway`** / **`open-fdd-desktop-bridge`**, optional **`OFDD_*`** variables control storage and TTL sync. Defaults use a per-user writable directory (`%APPDATA%\open-fdd-desktop` on Windows, platform-specific elsewhere) unless overridden. The repo **`scripts/start-local.ps1`** and **`scripts/start-local.sh`** set repo-local paths under **`stack/local-data`**.
-
-| Variable | Role |
-|----------|------|
-| **`OFDD_DESKTOP_DATA_DIR`** | Root for `model.json`, `feather_store/`, default rules copy, etc. |
-| **`OFDD_MODEL_TTL_PATH`** | Destination file for generated BRICK TTL (default: `<desktop_data_dir>/data_model.ttl`). |
-| **`OFDD_MODEL_TTL_MIRROR_PATH`** | Optional second TTL write (atomic mirror) for tools that watch another path. |
-| **`OFDD_TTL_SYNC_INTERVAL_SECONDS`** | Background TTL sync interval from `model.json`. |
-| **`OFDD_BRIDGE_URL`** | Base URL the UI and MCP use to reach the gateway (launchers set this). |
-
-See **[Desktop app](howto/desktop_app)** for launchers, ports, and ingest APIs.
 
 ---
 

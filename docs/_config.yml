@@ -3,8 +3,14 @@ description: "Open-FDD: YAML-defined fault detection rules on pandas (PyPI packa
 # Required together for GitHub Pages project sites (CSS/theme assets resolve under /open-fdd/).
 url: "https://bbartling.github.io"
 baseurl: "/open-fdd"
-remote_theme: just-the-docs/just-the-docs
+# Pin theme so Pages builds stay styled (unpinned remote_theme can break on upstream changes).
+remote_theme: just-the-docs/just-the-docs@v0.10.2
 color_scheme: "light"
+permalink: pretty
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
 
 # Match engine docs branding (shared project visual)
 logo: "https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png"

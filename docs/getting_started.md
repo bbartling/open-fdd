@@ -40,13 +40,6 @@ python -c "from open_fdd.engine import RuleRunner; print('engine OK')"
 pytest open_fdd/tests/engine
 ```
 
-Optional agent shell (local package, not on the engine wheel):
-
-```bash
-pip install -e packages/openfdd-agent-shell
-openfdd-agent-shell --repo-root . --dry-run --message "list selected skills"
-```
-
 ---
 
 ## Examples
@@ -57,10 +50,10 @@ See **`examples/README.md`** for CSV-driven demos and notebooks. Plotting or doc
 
 ## Where to read next
 
-- [Skills and agent shell](howto/skills_and_agent)
-- [Rules overview](rules/overview)
 - [Expression rule cookbook](expression_rule_cookbook)
+- [Rules overview](rules/overview)
 - [Column map resolvers](column_map_resolvers)
 - [Engine API](api/engine)
 - [How-to: engine-only IoT](howto/engine_only_iot)
+- [Verification](howto/verification)
 - [Contributing](contributing)

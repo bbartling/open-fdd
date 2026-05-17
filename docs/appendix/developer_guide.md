@@ -49,4 +49,15 @@ Public imports are re-exported from **`open_fdd`** and **`open_fdd.engine`** whe
 
 ## Documentation site
 
-The GitHub Pages site is built from **`docs/`** with Jekyll (Just the Docs). After substantive edits, run a local `bundle exec jekyll build` from `docs/` if you maintain the theme locally.
+The public site at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) is built from **`docs/`** with **Jekyll** and the **[Just the Docs](https://just-the-docs.github.io/just-the-docs/)** theme (sidebar nav, search, syntax highlighting). Custom typography and tables live in **`docs/_includes/head_custom.html`**.
+
+CI job **`docs`** (and workflow **`Docs (GitHub Pages)`** on push to `master` / `main`) run `bundle exec jekyll build` and fail if theme CSS is missing. After substantive edits, preview locally from `docs/`:
+
+```bash
+cd docs
+bundle install
+export JEKYLL_GITHUB_TOKEN="$(gh auth token)"   # Windows: $env:JEKYLL_GITHUB_TOKEN = gh auth token
+bundle exec jekyll serve
+```
+
+`jekyll-remote-theme` needs `JEKYLL_GITHUB_TOKEN` to fetch Just the Docs; without it, the build may produce unstyled HTML.

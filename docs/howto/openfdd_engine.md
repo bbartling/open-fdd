@@ -1,6 +1,6 @@
 ---
 title: The optional openfdd-engine package
-parent: How-to guides
+parent: How-to Guides
 nav_order: 22
 ---
 

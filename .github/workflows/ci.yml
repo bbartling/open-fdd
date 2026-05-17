@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Build combined docs text (LLM context)
+      - name: Build combined docs text bundle
         run: python scripts/build_docs_pdf.py --no-pdf
 
       - name: Run engine tests (pytest)
@@ -64,19 +64,39 @@ jobs:
           python -m build
           twine check dist/*
 
-  agent-shell:
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+
+      - uses: ruby/setup-ruby@v1
         with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install engine and agent shell
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: docs
+
+      - name: Build Jekyll site (Just the Docs)
+        working-directory: docs
+        run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
+        env:
+          JEKYLL_ENV: production
+          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Just the Docs theme assets
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install -e packages/openfdd-agent-shell[dev]
-      - name: Test agent shell
-        working-directory: packages/openfdd-agent-shell
-        run: python -m pytest -q
+          css_dir="${{ github.workspace }}/_site/assets/css"
+          test -d "$css_dir"
+          test -n "$(find "$css_dir" -maxdepth 1 -name 'just-the-docs*.css' -print -quit)"
+          grep -q "just-the-docs" "${{ github.workspace }}/_site/index.html"
+
+      - name: Check internal links (HTMLProofer)
+        run: |
+          gem install html-proofer -v '~> 5.0' --no-document
+          "$(ruby -e 'puts Gem.bindir')/htmlproofer" "${{ github.workspace }}/_site" \
+            --assume-extension .html \
+            --swap-urls '^/open-fdd/:/' \
+            --ignore-files "/404\\.html\$/" \
+            --disable-external \
+            --allow-hash-href \
+            --ignore-empty-alt \
+            --ignore-missing-alt

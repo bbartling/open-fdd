@@ -1,6 +1,6 @@
 ---
 title: Danger zone
-parent: How-to guides
+parent: How-to Guides
 nav_order: 41
 nav_exclude: true
 ---

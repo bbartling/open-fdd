@@ -4,7 +4,7 @@ name: Docs (GitHub Pages)
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
     paths:
       - "docs/**"
       - ".github/workflows/docs-pages.yml"
@@ -42,6 +42,23 @@ jobs:
           # jekyll-remote-theme uses the GitHub API; without a token, anonymous rate limits can yield an unstyled build.
           JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify Just the Docs theme assets
+        run: |
+          css_dir="${{ github.workspace }}/_site/assets/css"
+          if [ ! -d "$css_dir" ]; then
+            echo "::error::Missing _site/assets/css — theme likely failed to download (check JEKYLL_GITHUB_TOKEN / remote_theme)."
+            exit 1
+          fi
+          ls -la "$css_dir"
+          test -n "$(find "$css_dir" -maxdepth 1 -name 'just-the-docs*.css' -print -quit)" || {
+            echo "::error::No just-the-docs*.css in _site/assets/css — site would render unstyled."
+            exit 1
+          }
+          grep -q "just-the-docs" "${{ github.workspace }}/_site/index.html" || {
+            echo "::error::Built index.html does not reference just-the-docs assets."
+            exit 1
+          }
+
       - name: Check internal links (HTMLProofer)
         run: |
           gem install html-proofer -v '~> 5.0' --no-document
@@ -61,7 +78,7 @@ jobs:
           path: _site
 
   deploy:
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
