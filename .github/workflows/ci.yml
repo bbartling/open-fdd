@@ -85,7 +85,6 @@ jobs:
         run: |
           gem install html-proofer -v '~> 5.0' --no-document
           "$(ruby -e 'puts Gem.bindir')/htmlproofer" "${{ github.workspace }}/_site" \
-            --assume-extension .html \
             --swap-urls '^/open-fdd/:/' \
             --ignore-files "/404\\.html\$/" \
             --disable-external \
