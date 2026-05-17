@@ -24,6 +24,11 @@ For a full deployed platform (APIs, Docker, Brick/223P services), see **[open-fd
 
 Bring your own data: CSV exports, historian extracts, or notebooks. The engine does **not** connect to databases or field buses by itself.
 
+## Behind the firewall; cloud export is vendor-led
+{: #behind-the-firewall-cloud-export-is-vendor-led }
+
+Open-FDD does not push data to the cloud. Cloud FDD, MSI, and commissioning vendors run their own export jobs on the building or OT network, pull from your Open-FDD API over the LAN, and forward results to their platform. See [Cloud export example](concepts/cloud_export).
+
 ---
 
 ## Quick start
