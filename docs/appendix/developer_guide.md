@@ -56,8 +56,7 @@ CI job **`docs`** (and workflow **`Docs (GitHub Pages)`** on push to `master` / 
 ```bash
 cd docs
 bundle install
-export JEKYLL_GITHUB_TOKEN="$(gh auth token)"   # Windows: $env:JEKYLL_GITHUB_TOKEN = gh auth token
 bundle exec jekyll serve
 ```
 
-`jekyll-remote-theme` needs `JEKYLL_GITHUB_TOKEN` to fetch Just the Docs; without it, the build may produce unstyled HTML.
+The theme is installed via the **`just-the-docs`** gem in `docs/Gemfile` (no `jekyll-remote-theme` / GitHub API fetch required). Open http://127.0.0.1:4000/open-fdd/ to preview with the correct `baseurl`.

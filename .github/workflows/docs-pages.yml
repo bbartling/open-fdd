@@ -39,25 +39,39 @@ jobs:
         run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
         env:
           JEKYLL_ENV: production
-          # jekyll-remote-theme uses the GitHub API; without a token, anonymous rate limits can yield an unstyled build.
-          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Just the Docs theme assets
         run: |
-          css_dir="${{ github.workspace }}/_site/assets/css"
-          if [ ! -d "$css_dir" ]; then
-            echo "::error::Missing _site/assets/css — theme likely failed to download (check JEKYLL_GITHUB_TOKEN / remote_theme)."
+          set -euo pipefail
+          site="${{ github.workspace }}/_site"
+          index="$site/index.html"
+          css_dir="$site/assets/css"
+
+          if [ ! -f "$index" ]; then
+            echo "::error::Missing $index"
+            find "$site" -maxdepth 2 -type f | head -40
             exit 1
           fi
+
+          if [ ! -d "$css_dir" ]; then
+            echo "::error::Missing $css_dir (theme may not have compiled)"
+            find "$site" -maxdepth 3 -type d
+            exit 1
+          fi
+
+          echo "CSS files:"
           ls -la "$css_dir"
-          test -n "$(find "$css_dir" -maxdepth 1 -name 'just-the-docs*.css' -print -quit)" || {
-            echo "::error::No just-the-docs*.css in _site/assets/css — site would render unstyled."
+
+          if ! find "$css_dir" -maxdepth 1 -name '*.css' -size +8k -print -quit | grep -q .; then
+            echo "::error::No substantial theme CSS in $css_dir"
             exit 1
-          }
-          grep -q "just-the-docs" "${{ github.workspace }}/_site/index.html" || {
-            echo "::error::Built index.html does not reference just-the-docs assets."
+          fi
+
+          if ! grep -qE 'site-nav|side-bar' "$index"; then
+            echo "::error::index.html missing Just the Docs layout markers"
+            head -60 "$index"
             exit 1
-          }
+          fi
 
       - name: Check internal links (HTMLProofer)
         run: |

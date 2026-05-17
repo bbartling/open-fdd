@@ -80,14 +80,17 @@ jobs:
         run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
         env:
           JEKYLL_ENV: production
-          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Just the Docs theme assets
         run: |
-          css_dir="${{ github.workspace }}/_site/assets/css"
+          set -euo pipefail
+          site="${{ github.workspace }}/_site"
+          index="$site/index.html"
+          css_dir="$site/assets/css"
+          test -f "$index"
           test -d "$css_dir"
-          test -n "$(find "$css_dir" -maxdepth 1 -name 'just-the-docs*.css' -print -quit)"
-          grep -q "just-the-docs" "${{ github.workspace }}/_site/index.html"
+          find "$css_dir" -maxdepth 1 -name '*.css' -size +8k -print -quit | grep -q .
+          grep -qE 'site-nav|side-bar' "$index"
 
       - name: Check internal links (HTMLProofer)
         run: |
