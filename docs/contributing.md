@@ -43,7 +43,7 @@ This project expects everyone to be respectful and constructive. By participatin
 
 ## I Have a Question
 
-Before asking, read **[this site’s documentation](https://bbartling.github.io/open-fdd/)** (`pip install open-fdd`), and search [issues](https://github.com/bbartling/open-fdd/issues). Questions about the **deployed AFDD stack** (API, graph, compose) belong with **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)** and its issue tracker when appropriate.
+Before asking, read **[this site’s documentation](https://bbartling.github.io/open-fdd/)** (`pip install open-fdd`), and search [issues](https://github.com/bbartling/open-fdd/issues).
 
 If you still need help:
 
@@ -101,7 +101,7 @@ Enhancements are tracked as [GitHub issues](https://github.com/bbartling/open-fd
 
 - Use the latest version and read the [documentation](https://bbartling.github.io/open-fdd/) to see if the behavior already exists or can be configured.
 - Search [issues](https://github.com/bbartling/open-fdd/issues) to see if the enhancement was already suggested; if so, add to that discussion.
-- Consider whether the idea fits **this repository’s scope**: the **`open_fdd`** rules engine (YAML rules, **`RuleRunner`**, **`column_map`**, expression cookbook patterns). Platform-wide features (HTTP services, databases, full Brick graph pipelines) may belong in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/issues)** instead. Make a clear case for why the change would help most library users.
+- Consider whether the idea fits **this repository’s scope**: the **`open_fdd`** rules engine (YAML rules, **`RuleRunner`**, **`column_map`**, expression cookbook patterns). Make a clear case for why the change would help most library users who run FDD on pandas.
 
 ### How to submit a good enhancement suggestion
 

@@ -1,8 +1,7 @@
 ---
 title: Reports API
 parent: API Reference
-nav_order: 3
-nav_exclude: true
+nav_order: 2
 ---
 
 # Reports API

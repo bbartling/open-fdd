@@ -5,31 +5,44 @@ nav_order: 4
 
 # Modular architecture
 
-This document describes how the **`open_fdd`** package is structured at a high level. The goal is a **small core** (rules + checks + column mapping) that you can embed in notebooks, batch jobs, or larger applications.
+The **`open_fdd`** package is a small library: **rules on pandas**, optional **reporting**.
 
 ---
 
-## Layers
+## Modules
+
+| Module | Role |
+|--------|------|
+| **`open_fdd.engine`** | YAML rules, checks, **`RuleRunner`**, **`column_map`** resolvers |
+| **`open_fdd.reports`** | Episode summaries, matplotlib plots, optional Word export |
+| **`open_fdd.schema`** | pydantic fault result/event models (engine dependency) |
+
+---
+
+## Engine layers
 
 | Layer | Role |
 |-------|------|
-| **Rule YAML** | Human-authored definitions (bounds, flatline, expression, …) loaded by **`load_rule`** / **`RuleRunner`**. |
-| **Column map** | Maps logical names to DataFrame columns (`ColumnMapResolver`, manifest YAML, composite resolvers). |
-| **Checks** | Pure functions over Series/DataFrames (bounds, rate of change, expressions with safe eval, …). |
-| **Runner** | Orchestrates checks, schedules, and optional weather or derived columns. |
-| **Schema** | pydantic models for outputs (fault codes, intervals, metadata). Install **`open-fdd[engine]`** for YAML + pydantic rule loading. |
+| **Rule YAML** | Human-authored definitions loaded by **`load_rule`** / **`RuleRunner`**. |
+| **Column map** | Logical names → DataFrame columns (dict, manifest, composite resolver). |
+| **Checks** | Bounds, flatline, expression eval, schedule/weather masks, … |
+| **Runner** | Orchestrates checks and writes **`*_flag`** columns. |
 
 ---
 
-## Extension points
+## Reports (optional)
 
-- **Custom resolvers** — implement the column-map resolver protocol for site-specific naming.
-- **Expression rules** — use the documented expression language and built-in helpers (see [Expression rule cookbook](expression_rule_cookbook)).
-- **Reports** — optional modules under **`open_fdd.reports`** for visualization or document export (may need extra dependencies).
+After **`RuleRunner.run`**, use **`open_fdd.reports`** for:
+
+- **`summarize_fault`** / **`summarize_all_faults`** — duration and sensor stats during faults
+- **`get_fault_events`** / **`plot_fault_analytics`** — events and charts (`[reports]` extra → matplotlib)
+- **`build_report`** — `.docx` when **`python-docx`** is installed
 
 ---
 
 ## See also
 
-- [Technical reference](appendix/technical_reference)
+- [Engine API](api/engine)
+- [Reports API](api/reports)
+- [Expression rule cookbook](expression_rule_cookbook)
 - [Column map resolvers](column_map_resolvers)

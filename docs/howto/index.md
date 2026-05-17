@@ -8,8 +8,6 @@ has_children: true
 
 Recipes for **`pip install open-fdd`**, **`[engine]`** extras, releases, and embedding **`RuleRunner`** on **pandas**.
 
-**Full platform** (data model, APIs, compose, dashboards): **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**
-
 ---
 
 ## Engine

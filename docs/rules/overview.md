@@ -8,7 +8,7 @@ nav_order: 1
 
 Fault rules are **YAML-defined** checks run against **pandas** `DataFrame`s. Each rule produces boolean fault flag columns (and related outputs) via **`RuleRunner`**.
 
-Rules often use **Brick class names** as logical input keys; you supply a **`column_map`** from those keys to your actual DataFrame columns (dict, manifest, or custom resolver). See [Column map resolvers](../column_map_resolvers) and the [Expression rule cookbook](../expression_rule_cookbook).
+Each rule declares **logical input names** in YAML. You supply a **`column_map`** from those names (or optional ontology keys like **Brick** class labels) to your DataFrame columns. See [Column map resolvers](../column_map_resolvers) and the [Expression rule cookbook](../expression_rule_cookbook).
 
 ---
 
@@ -78,7 +78,7 @@ out = runner.run(df, timestamp_col="timestamp", column_map={...})
 
 ## Engineering metadata and analytics
 
-Downstream analytics often combine **fault flags** from **`RuleRunner`** with **equipment metadata** and **time series** you already store. For Brick / 223P graph and API workflows, see **[open-fdd-afdd-stack docs](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)** and [Data modeling & platform docs](../modeling/index).
+Downstream analytics often combine **fault flags** from **`RuleRunner`** with **equipment metadata** and **time series** you already store. Use **`column_map`** to align ontology or vendor labels with DataFrame columns — see [Column maps & ontologies](../modeling/index) and [Column map resolvers](../column_map_resolvers).
 
 ---
 

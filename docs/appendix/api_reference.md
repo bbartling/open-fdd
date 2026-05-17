@@ -7,22 +7,32 @@ nav_exclude: true
 
 # API reference
 
-This repository ships the **`open_fdd`** **Python API** only. There is **no** bundled HTTP service.
+This repository ships **`open_fdd.engine`** and **`open_fdd.reports`** on PyPI. There is **no** bundled HTTP service.
 
 ---
 
-## Engine (canonical)
+## Engine
 
-See **[Engine API](../api/engine)** for:
+See **[Engine API](../api/engine)** for **`RuleRunner`**, **`load_rule`**, and column-map resolvers.
 
-- **`RuleRunner`**
-- **`load_rule`**, **`bounds_map_from_rule`**
-- **Column map resolvers** and manifest loading
+Install: `pip install "open-fdd[engine]"`.
 
-The OpenAPI/Swagger style **REST** surface described in older revisions is **not** part of this tree.
+---
+
+## Reports
+
+See **[Reports API](../api/reports)** for fault summaries, plots, and optional Word export.
+
+Install: `pip install "open-fdd[reports]"` for plots; `pip install python-docx` for `.docx`.
+
+---
+
+## Schema
+
+**`open_fdd.schema`** — **`FDDResult`**, **`FDDEvent`**, helpers to convert runner output to rows. Used by the engine; optional for your own storage layer.
 
 ---
 
 ## Optional distribution
 
-The **`openfdd-engine`** package (under **`packages/openfdd-engine/`**) re-exports a subset of the engine API and depends on **`open-fdd`** from PyPI. Most users should **`pip install open-fdd`** only.
+**`openfdd-engine`** (`packages/openfdd-engine/`) re-exports a subset of **`open_fdd.engine`**. Most users should **`pip install open-fdd`** only.

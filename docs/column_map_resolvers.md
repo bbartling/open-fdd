@@ -56,7 +56,7 @@ For a raw dict without the resolver class, use **`load_column_map_manifest(path)
 
 ## 4. Composite priority (`FirstWinsCompositeResolver`)
 
-Run multiple resolvers **in order**; for each logical key, the **first resolver that defines it wins** (for example: a base manifest, then an override file that only adds missing keys). On the stack you can compose the stack’s **`BrickTtlColumnMapResolver`** with a **`ManifestColumnMapResolver`** in your own startup code.
+Run multiple resolvers **in order**; for each logical key, the **first resolver that defines it wins** (for example: a base manifest, then an override file that only adds missing keys). Chain **`ManifestColumnMapResolver`** instances or add your own **`ColumnMapResolver`** implementation in application code.
 
 ```python
 from pathlib import Path

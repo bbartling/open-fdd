@@ -112,7 +112,7 @@ git push origin open-fdd-v2.0.11
 
 ## Scope policy
 
-- **PyPI** ships the **Python packages** ( **`open-fdd`** is the supported public name for 2.x).
-- **Full AFDD stack** (Docker, APIs, graph tooling) lives in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+- **PyPI** ships the **Python packages** (**`open-fdd`** is the supported public name for 2.x).
+- This repository is the **rules engine** only — YAML rules, **`RuleRunner`**, and **`column_map`** on pandas.
 
 See also: [Engine-only deployment and external IoT pipelines](engine_only_iot).

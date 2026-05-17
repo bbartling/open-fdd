@@ -1,9 +1,4 @@
 source "https://rubygems.org"
 
-gem "jekyll", "~> 4.3"
-gem "just-the-docs", "0.10.2"
-
-group :jekyll_plugins do
-  gem "jekyll-include-cache"
-  gem "jekyll-seo-tag"
-end
+# Match github-pages (used by GitHub's "pages build and deployment" workflow) and our Docs workflow.
+gem "github-pages", group: :jekyll_plugins

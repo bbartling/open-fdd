@@ -13,9 +13,7 @@ nav_exclude: true
 Typical uses:
 
 - **One-off and scripted FDD** — Exported CSVs, heat pump dumps, ad‑hoc rule tuning.
-- **Vendor / cloud pipelines** — `pip install open-fdd` in a job that already produces DataFrames.
-
-A **full AFDD stack** (API, storage, graph tooling) is documented separately in **[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**; it uses this package for rule evaluation.
+- **Batch and notebook workflows** — `pip install open-fdd` in a job that already produces DataFrames.
 
 ---
 
