@@ -29,5 +29,3 @@ Brick TTL / **rdflib** column-map resolvers are **not** part of **`open-fdd`**; 
 - `ColumnMapResolver`, `ManifestColumnMapResolver`, `FirstWinsCompositeResolver`, `load_column_map_manifest`
 
 Rule authoring: [Expression rule cookbook](https://github.com/bbartling/open-fdd/blob/master/docs/expression_rule_cookbook.md)
-
-Operator dashboards and bridges are built from repo `skills/` via `openfdd.toml` and `packages/openfdd-agent-shell` (not shipped in the engine wheel).

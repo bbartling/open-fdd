@@ -12,9 +12,7 @@ The **`open-fdd`** package is a **pandas-first rules engine** for building scien
 
 **Run YAML rules:** `pip install "open-fdd[engine]"` — adds **PyYAML** and **pydantic** for rule loading and validation. NumPy is pulled in through pandas.
 
-Beyond the engine, this repository provides **`skills/`** recipes and a local **agent shell** so Codex can scaffold APIs, dashboards, storage, and deployment only when you ask for them. See **[Skills and agent shell](howto/skills_and_agent)**.
-
-**Full platform** (production APIs, Docker, extended Brick/223P services): **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+For a full deployed platform (APIs, Docker, Brick/223P services), see **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
 
 ---
 
@@ -62,16 +60,13 @@ pytest open_fdd/tests/engine
 
 | Section | Description |
 |---------|-------------|
+| [Expression rule cookbook](expression_rule_cookbook) | **Primary reference** — expressions, gates, scaling |
 | [Getting started](getting_started) | Install extras, tests, examples |
-| [Skills and agent shell](howto/skills_and_agent) | `openfdd.toml`, `skills/`, Codex TUI |
 | [Rules overview](rules/overview) | Rule types and YAML structure |
-| [Expression rule cookbook](expression_rule_cookbook) | Expressions, gates, scaling |
 | [Column map resolvers](column_map_resolvers) | Manifests and composite maps |
 | [Engine API](api/engine) | `RuleRunner`, loaders, resolvers |
 | [How-to guides](howto/index) | PyPI releases, verification, operations |
 | [Appendix](appendix/index) | Technical reference, developer guide |
-
-Historical desktop/MCP pages remain for reference; new builds should use **`skills/`**.
 
 ---
 

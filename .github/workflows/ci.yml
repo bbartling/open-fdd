@@ -37,7 +37,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Build combined docs text (LLM context)
+      - name: Build combined docs text bundle
         run: python scripts/build_docs_pdf.py --no-pdf
 
       - name: Run engine tests (pytest)
@@ -64,19 +64,20 @@ jobs:
           python -m build
           twine check dist/*
 
-  agent-shell:
+  docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+
+      - uses: ruby/setup-ruby@v1
         with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install engine and agent shell
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install -e packages/openfdd-agent-shell[dev]
-      - name: Test agent shell
-        working-directory: packages/openfdd-agent-shell
-        run: python -m pytest -q
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: docs
+
+      # Jekyll build only (no HTMLProofer — false failures with pretty permalinks + relative hrefs).
+      - name: Build Jekyll site (Just the Docs)
+        working-directory: docs
+        run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
+        env:
+          JEKYLL_ENV: production

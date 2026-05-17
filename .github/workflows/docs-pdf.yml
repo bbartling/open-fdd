@@ -41,7 +41,7 @@ jobs:
       - name: Install Python deps
         run: pip install pyyaml weasyprint
 
-      - name: Build PDF and LLM text bundle
+      - name: Build PDF and plain-text bundle
         run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
 
       - name: Open PR with updated bundle (if changed)

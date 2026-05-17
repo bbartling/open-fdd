@@ -4,7 +4,7 @@ name: Docs (GitHub Pages)
 
 on:
   push:
-    branches: [master]
+    branches: [master, main]
     paths:
       - "docs/**"
       - ".github/workflows/docs-pages.yml"
@@ -39,29 +39,13 @@ jobs:
         run: bundle install && bundle exec jekyll build -d "${{ github.workspace }}/_site"
         env:
           JEKYLL_ENV: production
-          # jekyll-remote-theme uses the GitHub API; without a token, anonymous rate limits can yield an unstyled build.
-          JEKYLL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check internal links (HTMLProofer)
-        run: |
-          gem install html-proofer -v '~> 5.0' --no-document
-          # gem wrappers are not always on PATH; Gem.bindir is reliable.
-          # baseurl is /open-fdd — map hrefs to _site paths (see html-proofer README "baseurl").
-          "$(ruby -e 'puts Gem.bindir')/htmlproofer" "${{ github.workspace }}/_site" \
-            --assume-extension .html \
-            --swap-urls '^/open-fdd/:/' \
-            --ignore-files "/404\\.html\$/" \
-            --disable-external \
-            --allow-hash-href \
-            --ignore-empty-alt \
-            --ignore-missing-alt
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

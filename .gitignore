@@ -1,10 +1,6 @@
 # If a stray top-level frontend/ exists, ignore it
 /frontend/
 
-# Agent-generated application code (keep workspace/.gitignore only)
-/workspace/**
-!/workspace/.gitignore
-
 .DS_Store
 /data
 /tmp

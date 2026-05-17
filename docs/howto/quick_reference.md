@@ -13,7 +13,7 @@ One-page cheat sheet for the **`open-fdd`** rules engine. Deeper detail: [Verifi
 
 ## What it is
 
-**`open-fdd`** evaluates **YAML** fault rules on **pandas** `DataFrame`s. Install with **`pip install open-fdd`**. The base wheel has no bundled database or Docker stack; optional **`pip install "open-fdd[desktop]"`** adds the local FastAPI gateway and desktop storage (see [Desktop app](desktop_app)).
+**`open-fdd`** evaluates **YAML** fault rules on **pandas** `DataFrame`s. Install with **`pip install "open-fdd[engine]"`** for `RuleRunner` and rule loading.
 
 ---
 
@@ -22,8 +22,8 @@ One-page cheat sheet for the **`open-fdd`** rules engine. Deeper detail: [Verifi
 | Goal | Command |
 |------|---------|
 | Install (dev checkout) | `pip install -e ".[dev]"` |
-| Run tests | `pytest` |
-| Import check | `python -c "import open_fdd; print('ok')"` |
+| Run tests | `pytest open_fdd/tests/engine` |
+| Import check | `python -c "from open_fdd.engine import RuleRunner; print('ok')"` |
 
 ---
 
@@ -42,5 +42,6 @@ out = runner.run(df, timestamp_col="timestamp", column_map={"Supply_Air_Temperat
 ## Docs links
 
 - [Getting started](../getting_started)
+- [Expression rule cookbook](../expression_rule_cookbook)
 - [Engine-only / IoT](engine_only_iot)
 - [Column map resolvers](../column_map_resolvers)

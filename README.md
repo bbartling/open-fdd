@@ -13,9 +13,7 @@
 
 </div>
 
-This repository ships the **`open-fdd`** **rules engine**: YAML-defined fault detection on **pandas** `DataFrame`s (`open_fdd.engine`). The published **PyPI** wheel contains only engine and schema modules.
-
-Operator dashboards, HTTP bridges, ingest drivers, and deployment stacks are **not** bundled. Describe what you need in `openfdd.toml`, then use **`skills/`** and the local **agent shell** to generate code under `workspace/`.
+**`open-fdd`** is a **pandas-first rules engine** for building science and HVAC fault detection: define checks in **YAML**, map columns on a **pandas** `DataFrame`, and run them with **`RuleRunner`** (`open_fdd.engine`). The published **PyPI** wheel contains the engine, schema, and reports modules only.
 
 ---
 
@@ -27,36 +25,18 @@ pip install "open-fdd[engine]"
 
 Bare import with **pandas** only: `pip install open-fdd` (add **`[engine]`** for YAML rules and `RuleRunner`).
 
-Rule authoring: [Expression rule cookbook](docs/expression_rule_cookbook.md).
+**Rule authoring:** [Expression rule cookbook](docs/expression_rule_cookbook.md) · [Online docs](https://bbartling.github.io/open-fdd/)
 
 ---
 
-## Build with skills + agent shell
+## Quick start
 
-1. Copy `openfdd.toml.example` to `openfdd.toml` and set `[build]` targets, drivers, auth, and deploy mode.
-2. Install the shell (local only, not on the engine wheel):
+```python
+from open_fdd.engine import RuleRunner
 
-```bash
-cd packages/openfdd-agent-shell
-pip install -e ".[dev]"
+runner = RuleRunner(rules_path="path/to/rules")
+df_out = runner.run(df, column_map={"SAT": "supply_air_temp"})
 ```
-
-3. From the repo root:
-
-```bash
-openfdd-agent-shell --repo-root .
-```
-
-The shell loads [AGENTS.md](AGENTS.md), selected skill recipes under [skills/](skills/), and launches **Codex CLI** to scaffold only what the manifest requests. Generated apps live in `workspace/`.
-
----
-
-## Online documentation
-
-* **Open FDD fault detection engine** — `RuleRunner`, YAML rules, pandas workflows.
-  [Documentation](https://bbartling.github.io/open-fdd/) · [GitHub](https://github.com/bbartling/open-fdd) · [PyPI](https://pypi.org/project/open-fdd/)
-
-Historical desktop/MCP how-tos under `docs/howto/` describe the retired monolith; new integrations should follow `skills/`.
 
 ---
 
@@ -72,19 +52,19 @@ pip install -e ".[dev]"
 pytest open_fdd/tests/engine
 ```
 
-Optional shim package:
+See **`examples/`** for CSV-driven demos and notebooks.
 
-```bash
-cd packages/openfdd-engine && pip install -e .
-```
+---
+
+## Optional PyPI shim
+
+The repository also builds **`openfdd-engine`** (`packages/openfdd-engine/`), a thin re-export of `open_fdd.engine` that depends on `open-fdd`. Most users should install **`open-fdd`** directly.
 
 ---
 
 ## Dependencies
 
 * **Python 3.10+** and `pip` — required: **pandas**; rule execution adds **PyYAML** and **pydantic** via the **`[engine]`** extra (NumPy via pandas).
-* **Codex CLI** on PATH when using the agent shell (`codex` by default).
-* **Node.js** only if a generated dashboard skill scaffolds a Vite/React app under `workspace/`.
 
 ---
 

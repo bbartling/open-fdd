@@ -49,4 +49,14 @@ Public imports are re-exported from **`open_fdd`** and **`open_fdd.engine`** whe
 
 ## Documentation site
 
-The GitHub Pages site is built from **`docs/`** with Jekyll (Just the Docs). After substantive edits, run a local `bundle exec jekyll build` from `docs/` if you maintain the theme locally.
+The public site at [bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/) is built from **`docs/`** with **Jekyll** and the **[Just the Docs](https://just-the-docs.github.io/just-the-docs/)** theme (sidebar nav, search, syntax highlighting). Custom typography and tables live in **`docs/_includes/head_custom.html`**.
+
+CI job **`docs`** (and workflow **`Docs (GitHub Pages)`** on push to `master` / `main`) run `bundle exec jekyll build` (Jekyll fails the job on real template/Markdown errors). After substantive edits, preview locally from `docs/`:
+
+```bash
+cd docs
+bundle install
+bundle exec jekyll serve
+```
+
+The theme is installed via the **`just-the-docs`** gem in `docs/Gemfile` (no `jekyll-remote-theme` / GitHub API fetch required). Open http://127.0.0.1:4000/open-fdd/ to preview with the correct `baseurl`.

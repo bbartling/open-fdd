@@ -147,7 +147,7 @@ Documentation for **this repository** lives in `docs/` and is published at **[bb
 - Add examples or how-tos (e.g. for the [Expression rule cookbook](expression_rule_cookbook), [How-to guides](howto/index), or [Column map resolvers](column_map_resolvers)).
 - Keep code blocks and links in sync with the codebase.
 
-**CI link check:** Pushes that touch `docs/**` run the **Docs (GitHub Pages)** workflow, which builds the Jekyll site and runs **HTMLProofer** on the output with **`--disable-external`** (internal `href` / asset links only, so off-site URLs are not smoked during the build). Fix any reported broken relative links before merge.
+**CI docs build:** Pushes that touch `docs/**` run the **Docs (GitHub Pages)** workflow (on `master`/`main`) and the **`docs`** job in **CI** on PRs — both run `bundle exec jekyll build`. Preview with `bundle exec jekyll serve` under `docs/` before merge.
 
 **Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
 

@@ -1,6 +1,6 @@
 ---
 title: Cloning and porting
-parent: How-to guides
+parent: How-to Guides
 nav_order: 15
 ---
 

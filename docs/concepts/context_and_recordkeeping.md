@@ -6,7 +6,7 @@ nav_order: 2
 
 # Context and recordkeeping
 
-Open-FDD context should be durable, visible, and reusable by both humans and agents.
+Open-FDD context should be durable, visible, and reusable across operators and automation.
 
 ## Rule
 
