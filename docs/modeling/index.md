@@ -1,23 +1,27 @@
 ---
-title: Data modeling & platform docs
+title: Column maps (optional ontology keys)
 nav_order: 7
 has_children: false
 ---
 
-# Data modeling and full-stack docs
+# Column maps and optional ontology keys
 
-**Brick, 223P, SPARQL, CRUD APIs, Docker Compose, and lab automation** for Open-FDD as a **deployed platform** live in a separate repository:
-
-**[open-fdd-afdd-stack — `docs/`](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**
-
-That site documents how the stack uses this **`open-fdd`** PyPI package **under the hood** (`RuleRunner`, YAML rules, pandas).
+**`open_fdd.engine`** does not load Brick TTL or BACnet metadata. You pass **`column_map`** at **`RuleRunner.run`** time.
 
 ---
 
-## In *this* repository (rules engine only)
+## Typical patterns
 
-- **[Column map resolvers](../column_map_resolvers)** — map **Brick**, **Haystack**, **DBO**, **223P**, or vendor labels to DataFrame columns (dict, manifest, composite resolvers).
-- **[Expression rule cookbook](../expression_rule_cookbook)** — fault logic on pandas, including schedule and weather gates via **`params.schedule`** / **`params.weather_band`**.
-- **`examples/column_map_resolver_workshop/`** — runnable **ontology-agnostic** demo (`simple_ontology_demo.py`).
+1. **Simple dict** — `{"SAT": "RTU_11_DA_T(°F)"}` matches logical names in your YAML `inputs`.
+2. **Manifest YAML** — **`ManifestColumnMapResolver`** / **`load_column_map_manifest`**.
+3. **Optional ontology fields** — per-input **`brick:`**, **`haystack:`**, **`dbo:`**, **`223p:`** in rule YAML; keys in **`column_map`** must match those strings if you use them.
 
-The **PyPI wheel** is the rules engine only. Deployed platform concerns (Compose, production topology, extra RDF/SQL services) are documented in **open-fdd-afdd-stack**.
+Example rules under **`examples/AHU/rules/`** often include **`brick:`** for readability. That is a **convention**, not a package requirement.
+
+---
+
+## See also
+
+- [Column map resolvers](../column_map_resolvers)
+- [Expression rule cookbook](../expression_rule_cookbook)
+- **`examples/column_map_resolver_workshop/`**

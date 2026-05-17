@@ -31,4 +31,4 @@ Expressions use raw column values. **0–1 vs 0–100** command scaling is your 
 
 ## 4. Operational data deletion
 
-Deleting rows in **your** warehouse or database is outside this package. If you deploy a full platform, data-retention and CRUD delete semantics are documented in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+Deleting rows in **your** warehouse or database is outside this package. Define retention and deletion in your own storage layer.

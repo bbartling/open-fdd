@@ -8,13 +8,15 @@ nav_order: 2
 
 A reference for building fault detection rules in open-fdd. Rules use **YAML** with **expression** type: when the expression evaluates to **True**, a fault is flagged. open-fdd injects **NumPy** as `np` into expression evaluation, so you can use `np.maximum`, `np.abs`, `np.sqrt`, etc. for vectorized math. **Tuning:** Change `params` in YAML and re-run **`RuleRunner`** on your DataFrame. See [Fault rules overview](rules/overview) and [Configuration](configuration).
 
-> **`column_map`:** The engine is **ontology-agnostic**: YAML **`inputs`** expose logical names you use in the **`expression`**. **`column_map`** (dict or manifest) maps **Brick**, **Haystack**, **DBO**, **223P** (`s223` / `223p` fields), or arbitrary keys → **actual DataFrame columns**. Optional per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** are tried **in that order** against `column_map` (**first match wins**). See [Column map resolvers](column_map_resolvers) and **`examples/column_map_resolver_workshop/simple_ontology_demo.py`**. Full **graph, TTL, SPARQL, and CRUD** workflows live in **[open-fdd-afdd-stack docs](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+> **Scope:** This cookbook documents **`open_fdd.engine`** (rules) and points to **`open_fdd.reports`** for summaries and plots after you run rules.
+>
+> **`column_map`:** YAML **`inputs`** expose logical names used in the **`expression`**. Pass a dict (or manifest) from those names to DataFrame columns. Recipes below often show optional **`brick:`** labels for interoperability; you can instead use a plain **`column:`** fallback or keys that match your CSV headers directly. Optional per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** are tried **in that order** against `column_map` (**first match wins**). See [Column map resolvers](column_map_resolvers).
 
 ---
 
-## Ontology labels (Brick, Haystack, DBO, 223P) {#ontology-labels}
+## Ontology labels (optional: Brick, Haystack, DBO, 223P) {#ontology-labels}
 
-Most cookbook recipes use **Brick class names** because that is a common **interoperable** vocabulary—but the **same rule file** can run against a Haystack- or 223P-keyed `column_map` if your inputs declare the matching field:
+Many cookbook recipes show **Brick class names** as a familiar vocabulary. That is **optional**. The **same rule file** can use Haystack- or 223P-keyed `column_map` entries, or skip ontology fields and map logical aliases only:
 
 ```yaml
 inputs:
@@ -1054,7 +1056,7 @@ Use the [bounds](rules/overview#rule-types) and [flatline](rules/overview#rule-t
 
 ## Follow-up (RFCs): multi-ontology selectors & cookbook matrix
 
-**Multi-ontology inputs** today use the per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** (see [Ontology labels](#ontology-labels)) plus **`column_map`**. Deeper graph and API workflows live in **[open-fdd-afdd-stack](https://github.com/bbartling/open-fdd-afdd-stack/tree/main/docs)**.
+**Multi-ontology inputs** use the per-input fields **`brick`**, **`haystack`**, **`dbo`**, **`s223`**, **`223p`** (see [Ontology labels](#ontology-labels)) plus **`column_map`**. Build the dict in your own pipeline, then pass it to **`RuleRunner.run`**.
 
 **Cookbook matrix / generator:** When a selector schema is stable, we can add a **generated appendix** (logical input × Brick × Haystack × DBO × 223P notes) from a single CSV/YAML source so the long cookbook does not drift. Until then, see the **open-fdd** repo’s **`examples/column_map_resolver_workshop/simple_ontology_demo.py`** (with **`simple_ontology_rule.yaml`**).
 

@@ -3,8 +3,8 @@ description: "Open-FDD: YAML-defined fault detection rules on pandas (PyPI packa
 # Required together for GitHub Pages project sites (CSS/theme assets resolve under /open-fdd/).
 url: "https://bbartling.github.io"
 baseurl: "/open-fdd"
-# Gem-based theme (reliable in CI; no GitHub API fetch for jekyll-remote-theme).
-theme: just-the-docs
+# remote_theme works with the github-pages gem (GitHub's Pages builder + our workflow).
+remote_theme: just-the-docs/just-the-docs@v0.10.2
 color_scheme: light
 permalink: pretty
 markdown: kramdown
@@ -16,6 +16,7 @@ kramdown:
 logo: "https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png"
 
 plugins:
+  - jekyll-remote-theme
   - jekyll-include-cache
   - jekyll-seo-tag
 

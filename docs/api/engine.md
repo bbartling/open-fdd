@@ -1,8 +1,7 @@
 ---
 title: Engine API
 parent: API Reference
-nav_order: 2
-nav_exclude: true
+nav_order: 1
 ---
 
 # Engine API

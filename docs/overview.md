@@ -5,23 +5,36 @@ nav_order: 2
 
 # System overview
 
-**Open-FDD** (package name **`open-fdd`**, import **`open_fdd`**) is a **library** for running **fault detection and diagnostics (FDD)** rules on **pandas** `DataFrame`s. Rules are authored in **YAML**; the core type is **`RuleRunner`** in **`open_fdd.engine`**.
+**Open-FDD** (PyPI **`open-fdd`**, import **`open_fdd`**) runs **YAML fault rules** on **pandas** `DataFrame`s.
+
+---
+
+## Package layout
+
+| Module | Purpose |
+|--------|---------|
+| **`open_fdd.engine`** | **`RuleRunner`**, rule loading, checks, **`column_map`** resolvers |
+| **`open_fdd.reports`** | Fault summaries, episode analysis, plots, optional Word export |
+| **`open_fdd.schema`** | Canonical fault result/event models (used by the engine) |
+
+Install **`open-fdd[engine]`** for rule execution; add **`open-fdd[reports]`** for matplotlib-based plots.
 
 ---
 
 ## Data flow
 
-1. **Your pipeline** loads or builds a time-indexed (or otherwise keyed) `DataFrame` of sensor or calculated points.
-2. **Column mapping** connects logical point names used in rules to actual column names (dict, manifest YAML, or custom resolver).
-3. **`RuleRunner`** evaluates configured checks and returns **fault results** compatible with **`open_fdd.schema`**.
+1. **Your pipeline** builds a time-indexed `DataFrame`.
+2. **`column_map`** maps rule input names to column names (optional Brick/Haystack keys in YAML are conventions, not required).
+3. **`RuleRunner.run`** returns the DataFrame with **`*_flag`** columns.
+4. **`open_fdd.reports`** (optional) summarizes episodes and produces charts or `.docx` reports.
 
-There is no required database, HTTP service, or message bus in the **PyPI wheel**—the engine runs wherever you import it.
+There is no bundled database, HTTP service, or message bus.
 
 ---
 
 ## Related topics
 
-- [Modular architecture](modular_architecture) — how rule types and resolvers fit together
-- [Rules overview](rules/overview)
+- [Modular architecture](modular_architecture)
 - [Expression rule cookbook](expression_rule_cookbook)
 - [Engine API](api/engine)
+- [Reports API](api/reports)

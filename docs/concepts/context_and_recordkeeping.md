@@ -6,7 +6,7 @@ nav_order: 2
 
 # Context and recordkeeping
 
-Open-FDD context should be durable, visible, and reusable across operators and automation.
+Open-FDD documentation should be durable, visible, and reusable across contributors.
 
 ## Rule
 
@@ -15,13 +15,11 @@ If context affects repeatable operations, store it in versioned docs instead of 
 ## Good context to commit
 
 - Verification strategy and sweep logic.
-- BACnet/model assumptions that affect diagnostics.
-- Operator playbook updates and recurring workflow improvements.
-- Cross-check guidance for frontend/API parity and model-based telemetry.
+- BACnet or naming assumptions that affect **`column_map`** and diagnostics.
+- Cookbook additions and regression examples for expression rules.
 
 ## Context anti-patterns
 
 - One-machine-only tribal notes with no repo trace.
 - Secrets in Markdown.
 - Raw transcript dumps without distillation.
-

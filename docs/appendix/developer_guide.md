@@ -32,11 +32,11 @@ For contributors working on the **`open_fdd`** package.
 
 ## Code layout
 
-- **`open_fdd/engine/`** — `RuleRunner`, rule loading, checks (bounds, flatline, expression, …), `ColumnMapResolver` and manifest helpers.
-- **`open_fdd/schema/`** — pydantic models for fault results and related structures.
-- **`open_fdd/reports/`** — optional reporting helpers; may require extra packages in your environment.
+- **`open_fdd/engine/`** — `RuleRunner`, rule loading, checks, `ColumnMapResolver` and manifest helpers.
+- **`open_fdd/reports/`** — fault summaries, visualization, optional `.docx` (`python-docx`, matplotlib).
+- **`open_fdd/schema/`** — pydantic models for fault results and events.
 
-Public imports are re-exported from **`open_fdd`** and **`open_fdd.engine`** where documented on [Engine API](../api/engine).
+Document public API changes on [Engine API](../api/engine) and [Reports API](../api/reports). Top-level **`from open_fdd import RuleRunner`** re-exports the runner only.
 
 ---
 
@@ -59,4 +59,4 @@ bundle install
 bundle exec jekyll serve
 ```
 
-The theme is installed via the **`just-the-docs`** gem in `docs/Gemfile` (no `jekyll-remote-theme` / GitHub API fetch required). Open http://127.0.0.1:4000/open-fdd/ to preview with the correct `baseurl`.
+The theme is fetched via **`remote_theme`** in `docs/_config.yml` (Just the Docs). Set `JEKYLL_GITHUB_TOKEN` when building locally if the theme does not download. Open http://127.0.0.1:4000/open-fdd/ to preview with the correct `baseurl`.

@@ -6,7 +6,7 @@
 pip install open-fdd
 ```
 
-Use **`open_fdd.engine`** (`RuleRunner`, `load_rule`, …). See [open-fdd on PyPI](https://pypi.org/project/open-fdd/) and the [engine-only how-to](https://github.com/bbartling/open-fdd/blob/master/docs/howto/engine_only_iot.md).
+Use **`open_fdd.engine`** (`RuleRunner`, `load_rule`, …) and optionally **`open_fdd.reports`**. See [open-fdd on PyPI](https://pypi.org/project/open-fdd/) and [online docs](https://bbartling.github.io/open-fdd/).
 
 ---
 
@@ -21,7 +21,7 @@ cd packages/openfdd-engine
 pip install -e .
 ```
 
-Brick TTL / **rdflib** column-map resolvers are **not** part of **`open-fdd`**; if you maintain RDF tooling elsewhere, bridge it by building a **column_map** dict or manifest your resolver understands (see [Column map resolvers](https://github.com/bbartling/open-fdd/blob/master/docs/column_map_resolvers.md)).
+**`column_map`** is a plain dict or manifest — optional **`brick:`** fields in example YAML are not required (see [Column map resolvers](https://github.com/bbartling/open-fdd/blob/master/docs/column_map_resolvers.md)).
 
 ## API (subset of `open_fdd.engine`)
 

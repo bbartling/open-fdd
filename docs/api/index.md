@@ -1,11 +1,18 @@
 ---
 title: API Reference
-nav_order: 13
-nav_exclude: true
+nav_order: 6
+has_children: true
 ---
 
 # API reference
 
-Open-FDD exposes a **Python API** documented under **[Engine API](engine)**.
+The **`open-fdd`** wheel exposes a **Python API** only (no bundled HTTP server).
 
-There is no bundled REST or OpenAPI server in this repository. If you expose rules over HTTP in your own service, apply your organization’s auth, TLS, and rate-limiting policies there.
+| Module | Documentation |
+|--------|----------------|
+| **`open_fdd.engine`** | [Engine API](engine) — `RuleRunner`, YAML rules, `column_map` |
+| **`open_fdd.reports`** | [Reports API](reports) — summaries, plots, optional `.docx` |
+
+**`open_fdd.schema`** defines fault result/event models used internally by the engine; import from there only if you need typed rows for storage or export.
+
+**Extras:** `pip install "open-fdd[engine]"` · `pip install "open-fdd[reports]"` · `pip install python-docx` for Word output.
