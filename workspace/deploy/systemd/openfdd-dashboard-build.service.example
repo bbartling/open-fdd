@@ -1,0 +1,17 @@
+# Optional oneshot: rebuild SPA into workspace/api/static/app after git pull.
+# Requires Node 20+ on the host.
+
+[Unit]
+Description=Build Open-FDD operator dashboard (Vite)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=openfdd
+WorkingDirectory=/opt/open-fdd/workspace/dashboard
+ExecStart=/usr/bin/npm ci
+ExecStart=/usr/bin/npm run build
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

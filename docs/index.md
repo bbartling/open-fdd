@@ -23,7 +23,7 @@ The **`open-fdd`** PyPI package provides two main modules:
 
 - **Loads** rule definitions from YAML (bounds, flatline, hunting, expressions, schedules, weather gates, …).
 - **Maps** logical input names to DataFrame columns via **`column_map`** (dict, manifest, or resolver).
-- **Runs** checks and returns boolean **`*_flag`** columns.
+- **Runs** checks and returns integer **`*_flag`** columns (`0` / `1`).
 - **Reports** (optional) — duration, episodes, charts, `.docx` with **`python-docx`**.
 
 Bring your own CSV or historian export. No database or field bus is required.
@@ -68,7 +68,9 @@ summary = summarize_fault(df_out, flag_col="flatline_flag", timestamp_col="times
 | [Getting started](getting_started) | Install extras, tests, examples |
 | [Rules overview](rules/overview) | Rule types and YAML structure |
 | [Column map resolvers](column_map_resolvers) | Manifests and composite maps |
-| [How-to guides](howto/index) | PyPI releases, verification |
+| [How-to guides](howto/index) | PyPI releases, verification, agent shell |
+| [Skills and agent shell](howto/skills_and_agent) | `openfdd.toml`, workspace, cron/wake (checkout) |
+| [BACnet toolshed](bacnet/index) | `bacnet_toolshed/` CLI on edge hosts |
 | [Appendix](appendix/index) | Technical reference, developer guide |
 
 ---

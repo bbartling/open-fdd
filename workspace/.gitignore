@@ -1,0 +1,13 @@
+# Runtime artifacts under workspace (starter trees tracked via negation)
+*
+!.gitignore
+!api/
+!api/**
+**/api/**/__pycache__/
+**/api/**/*.py[cod]
+!dashboard/
+!dashboard/**
+!data/
+!data/**
+!deploy/
+!deploy/**

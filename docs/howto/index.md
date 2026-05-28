@@ -10,6 +10,15 @@ Recipes for **`pip install open-fdd`**, **`[engine]`** extras, releases, and emb
 
 ---
 
+## Agent-maintained stack (git checkout)
+
+- [Operator dashboard (Rule Lab)](operator_dashboard) — React UI + FastAPI playground, auth, systemd.
+- [Skills and agent shell](skills_and_agent) — `openfdd.toml`, Codex REPL, workspace cron/wake, memory, tests.
+- [Agent & operator playbook](agent_operator_playbook) — bridge + MCP routes when `workspace/api` is generated.
+- [Desktop app (retired)](desktop_app) — historical gateway/MCP/UI reference only.
+
+---
+
 ## Engine
 
 - [PyPI releases (open-fdd)](openfdd_engine_pypi) — tags, trusted publishing, `twine check`.

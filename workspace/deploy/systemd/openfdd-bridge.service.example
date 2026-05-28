@@ -1,0 +1,32 @@
+# /etc/systemd/system/openfdd-bridge.service
+# Copy to /etc/systemd/system/ and edit paths + secrets.
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now openfdd-bridge
+#
+# Bind stays on loopback; put Caddy/nginx in front for TLS on the LAN.
+
+[Unit]
+Description=Open-FDD operator bridge (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openfdd
+Group=openfdd
+WorkingDirectory=/opt/open-fdd/workspace/api
+Environment=OPENFDD_REPO_ROOT=/opt/open-fdd
+Environment=OPENFDD_WORKSPACE_DIR=/opt/open-fdd/workspace
+Environment=OFDD_DESKTOP_DATA_DIR=/opt/open-fdd/workspace/data
+Environment=OFDD_AUTH_SECRET=CHANGE_ME_LONG_RANDOM_SECRET
+Environment=OFDD_WEB_USER=operator
+Environment=OFDD_WEB_PASSWORD=CHANGE_ME
+# Listen on LAN only when operator accepts OT exposure:
+# Environment=OFDD_BRIDGE_HOST=0.0.0.0
+ExecStart=/opt/open-fdd/.venv/bin/uvicorn openfdd_bridge.main:app --host 127.0.0.1 --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

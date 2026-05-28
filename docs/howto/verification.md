@@ -21,6 +21,17 @@ pytest open_fdd/tests/engine
 
 Expression cookbook regressions live in **`open_fdd/tests/engine/test_expression_cookbook.py`**.
 
+### Agent shell (optional checkout)
+
+When using **`packages/openfdd-agent-shell`**:
+
+```bash
+pip install -e "packages/openfdd-agent-shell[dev]"
+pytest packages/openfdd-agent-shell -q
+```
+
+Covers manifest loading, memory truncation, cron schedules, wake lock behavior, and REPL slash commands (hermetic `tmp_path` workspaces in tests).
+
 ---
 
 ## 2. Rule YAML sanity

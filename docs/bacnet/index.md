@@ -1,13 +1,24 @@
 ---
-title: Field data and BACnet-shaped metadata
+title: BACnet toolshed
 nav_order: 6
 has_children: false
 ---
 
-# Field data and BACnet-shaped metadata
+# BACnet toolshed
 
-The **`open-fdd`** engine consumes **pandas** `DataFrame`s. It does **not** speak BACnet, Modbus, or other field protocols.
+The **`open_fdd`** engine runs on **pandas** only. BACnet **discovery**, **commissioning CSVs**, and **polling** live in **`bacnet_toolshed/`** at the repo root (BACpypes3).
 
-If your integration maps BACnet object names (or similar) into column names or Brick-style identifiers, use **column_map** manifests or a custom resolver—see [Column map resolvers](../column_map_resolvers) and [RDF, Brick, and optional BACnet-shaped metadata](../bacnet-rdf-and-brick).
+## Edge workflow
 
-For BACnet **discovery or control**, use your building’s **gateway, BMS, or integration stack**, then pass normalized data into the engine.
+1. **Discover** points → `workspace/bacnet/commissioning/points_discovered.csv`
+2. **Enable** rows + optional **`brick_class`** for `column_map` → `points.csv`
+3. **Poll** present-values → `workspace/bacnet/polls/samples.csv`
+4. **Bridge + dashboard** (generated under `workspace/`) ingest CSV/Feather and expose BACnet NIC settings in the UI
+
+See **[bacnet_toolshed/README.md](https://github.com/bbartling/open-fdd/blob/dev/bacnet_toolshed/README.md)** for CLI examples, OT NIC args (`--name`, `--instance`, `--address`), and systemd unit templates.
+
+## Engine integration
+
+Map BACnet commissioning columns to DataFrame columns via **[Column map resolvers](../column_map_resolvers)**. **`brick_class`** in the commissioning CSV can align with optional **`brick:`** fields in rule YAML.
+
+Skill: **`driver-bacnet-ingest`** (agent builds bridge routes and `/bacnet` dashboard page).

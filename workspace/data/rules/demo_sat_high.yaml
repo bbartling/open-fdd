@@ -1,0 +1,8 @@
+name: demo_sat_high
+description: Supply air temp above 75 F (demo)
+type: expression
+flag: demo_sat_high_flag
+inputs:
+  SAT:
+    column: SAT
+expression: "SAT > 75"
