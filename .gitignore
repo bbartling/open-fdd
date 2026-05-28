@@ -172,6 +172,9 @@ NOTES.md
 !/pdf/open-fdd-docs.pdf
 !/pdf/open-fdd-docs.txt
 
+# Local operator manifest (copy from openfdd.toml.example)
+openfdd.toml
+
 # Agent-generated application code (keep workspace/.gitignore only)
 /workspace/**
 !/workspace/.gitignore
