@@ -51,6 +51,7 @@ Allowed imports in sandbox: `datetime`, `math`, `numpy`, `pandas`, `open_fdd`.
 
 ## Core concepts
 
+- **`POST /api/rules/run`** loads feather-backed pandas DataFrames, runs `open_fdd.engine.RuleRunner` with YAML rule definitions, and returns integer `0`/`1` flag columns (or preview frames).
 - **Bridge** = single FastAPI app; UI and MCP call it over HTTP.
 - **CORS:** dev origins `5173`; set `OFDD_CORS_ALLOW_PRIVATE_LAN=1` only with operator consent.
 - **Auth:** when `OFDD_AUTH_*` set, all `/api/*` and `/openfdd-agent/*` require `Authorization: Bearer`.

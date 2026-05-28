@@ -52,8 +52,13 @@ async def read_multiple_chunked(
                         merged.setdefault(key, None)
                 continue
             for res_oid, res_pid, res_idx, property_value in response:
-                key = f"{res_oid[0]},{res_oid[1]}:{res_pid}:{res_idx}"
-                merged[key] = unwrap_value(property_value)
+                oid_str = f"{res_oid[0]},{res_oid[1]}"
+                pid_str = str(getattr(res_pid, "value", res_pid))
+                val = unwrap_value(property_value)
+                merged[f"{oid_str}:{pid_str}:{res_idx}"] = val
+                # poll_driver looks up by object id (present-value only)
+                if pid_str in {"present-value", "85"}:
+                    merged[oid_str] = val
         except Exception as err:
             import sys
 

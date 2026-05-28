@@ -1,3 +1,5 @@
+# Example for Rule Lab per-row mode. YAML FDD equivalent: workspace/data/rules/demo_sat_high.yaml
+
 def evaluate(row, cfg, prev_row=None, rows=None):
     """Per-row rule: flag when SAT exceeds cfg high."""
     high = float(cfg.get("high", 75.0))

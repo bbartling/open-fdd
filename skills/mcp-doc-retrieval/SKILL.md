@@ -12,7 +12,7 @@ Optional alongside bridge for `search_docs`, `search_api_capabilities`, `get_doc
 ## Quick start
 
 1. Chunk `docs/*.md` into JSON index (see `scripts/build_doc_index.py` in this skill).
-2. FastAPI on port 8090; `OFDD_MCP_RAG_INDEX_PATH`.
+2. FastAPI on `127.0.0.1:8090` by default; set `OFDD_MCP_RAG_INDEX_PATH`. Only bind `0.0.0.0` when the operator explicitly opts in for LAN/Caddy ingress.
 3. Action tools proxy bridge only when `OFDD_MCP_ENABLE_ACTION_TOOLS=true` and API key set.
 
 ## Verification

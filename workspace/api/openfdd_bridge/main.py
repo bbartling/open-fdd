@@ -68,6 +68,8 @@ def create_app() -> FastAPI:
         def spa_fallback(full_path: str) -> FileResponse:
             if full_path.startswith("api/") or full_path.startswith("openfdd-agent"):
                 raise HTTPException(status_code=404)
+            if ".." in Path(full_path).parts:
+                raise HTTPException(status_code=404)
             static_resolved = static_dir.resolve(strict=False)
             candidate_resolved = (static_dir / full_path).resolve(strict=False)
             try:
