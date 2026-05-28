@@ -121,6 +121,8 @@ def load_points_csv(
                 continue
             if not raw.get("device_instance") or not raw.get("object_type"):
                 continue
+            if not str(raw.get("object_instance", "")).strip():
+                continue
             points.append(row_to_point(raw, defaults))
     return points
 

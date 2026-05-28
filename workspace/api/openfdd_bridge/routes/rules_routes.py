@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from open_fdd.engine import RuleRunner
+from open_fdd.engine import RuleRunner, load_rule
 
 from ..data_loader import load_demo_dataframe
 from ..deps import require_user
@@ -37,10 +37,17 @@ def run_rules(body: RunRulesBody) -> dict:
     rules_dir = data_dir() / "rules"
     if body.rules_path:
         path = Path(body.rules_path)
-        if not path.is_file():
+        if not path.exists():
             raise HTTPException(status_code=400, detail=f"rules path not found: {path}")
-        runner = RuleRunner(rules_path=str(path.parent if path.suffix else path))
-    elif rules_dir.is_dir() and any(rules_dir.glob("*.yaml")):
+        if path.is_dir():
+            runner = RuleRunner(rules_path=str(path))
+        elif path.is_file() and path.suffix in {".yaml", ".yml"}:
+            runner = RuleRunner(rules=[load_rule(path)])
+        else:
+            raise HTTPException(status_code=400, detail=f"unsupported rules path: {path}")
+    elif rules_dir.is_dir() and (
+        any(rules_dir.glob("*.yaml")) or any(rules_dir.glob("*.yml"))
+    ):
         runner = RuleRunner(rules_path=str(rules_dir))
     else:
         raise HTTPException(

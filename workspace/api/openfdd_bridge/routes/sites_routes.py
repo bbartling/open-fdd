@@ -7,6 +7,9 @@ from ..deps import require_user
 
 router = APIRouter(prefix="/api/sites", tags=["sites"], dependencies=[Depends(require_user)])
 
+MAX_FRAME_LIMIT = 500
+DEFAULT_FRAME_LIMIT = 200
+
 
 @router.get("")
 def list_sites() -> dict:
@@ -18,6 +21,7 @@ def list_sites() -> dict:
 
 
 @router.get("/{site_id}/frame")
-def site_frame(site_id: str, limit: int = 200) -> dict:
+def site_frame(site_id: str, limit: int = DEFAULT_FRAME_LIMIT) -> dict:
+    safe_limit = max(1, min(int(limit), MAX_FRAME_LIMIT))
     df = load_demo_dataframe(site_id)
-    return {"site_id": site_id, "records": records_from_dataframe(df, limit=limit)}
+    return {"site_id": site_id, "records": records_from_dataframe(df, limit=safe_limit)}

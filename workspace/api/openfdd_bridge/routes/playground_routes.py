@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from .. import playground
@@ -21,14 +21,14 @@ class RuleBody(BaseModel):
     code: str
     config: dict[str, Any] = Field(default_factory=dict)
     site_id: str | None = None
-    limit: int = 200
+    limit: int = Field(default=200, ge=1, le=1000)
 
 
 class ScriptBody(BaseModel):
     code: str
     site_id: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
-    limit: int = 500
+    limit: int = Field(default=500, ge=1, le=1000)
 
 
 @router.post("/lint")
@@ -61,6 +61,9 @@ def run_script(body: ScriptBody) -> dict:
 
 
 @router.get("/sample-frame")
-def sample_frame(site_id: str | None = None, limit: int = 100) -> dict:
+def sample_frame(
+    site_id: str | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> dict:
     df = load_demo_dataframe(site_id)
     return {"columns": list(df.columns), "records": records_from_dataframe(df, limit=limit)}

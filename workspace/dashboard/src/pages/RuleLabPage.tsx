@@ -50,10 +50,23 @@ export default function RuleLabPage() {
     }
   }
 
+  function parseCfgHigh(): number | null {
+    const high = Number(cfgHigh);
+    if (!Number.isFinite(high)) {
+      return null;
+    }
+    return high;
+  }
+
   async function testRun() {
     setBusy(true);
     try {
       if (mode === "rule") {
+        const high = parseCfgHigh();
+        if (high === null) {
+          setConsole("cfg high must be a finite number");
+          return;
+        }
         const res = await apiFetch<{
           ok: boolean;
           rows: number;
@@ -63,7 +76,7 @@ export default function RuleLabPage() {
           method: "POST",
           body: JSON.stringify({
             code,
-            config: { high: Number(cfgHigh) },
+            config: { high },
             limit: 200,
           }),
         });

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from ..deps import require_user
-from ..paths import repo_root
+from ..paths import repo_root, resolve_workdir_under_repo
 
 router = APIRouter(prefix="/openfdd-agent", tags=["agent"], dependencies=[Depends(require_user)])
 
@@ -45,7 +45,7 @@ def agent_context() -> dict:
 @router.post("/chat")
 def agent_chat(body: ChatBody) -> dict:
     """Thin Codex exec when CLI is on PATH; otherwise return operator guidance."""
-    root = Path(body.workdir).resolve() if body.workdir else repo_root()
+    root = resolve_workdir_under_repo(body.workdir)
     codex = shutil.which("codex") or shutil.which("codex.cmd")
     if not codex:
         return {

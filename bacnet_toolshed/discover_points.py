@@ -45,7 +45,11 @@ async def discover_points_for_device(
         _warn_skip(dev, "missing device_address")
         return []
 
-    device_address = Address(dev_addr)
+    try:
+        device_address = Address(dev_addr)
+    except (TypeError, ValueError):
+        _warn_skip(dev, "invalid device_address")
+        return []
     device_identifier = ObjectIdentifier(("device", dev_inst))
     vendor_id = dev.get("vendor_id", "")
     try:

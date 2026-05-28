@@ -8,6 +8,7 @@ BACnet Who-Is discovery → full object inventory CSV (read-only commissioning).
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from typing import Any
@@ -49,11 +50,11 @@ async def run_discover(
     parser.add_argument("-o", "--output", help="CSV output path")
     parser.add_argument("--site-id", default=site_id)
     parser.add_argument("--building-id", default=building_id)
-    parser.add_argument("--router-ip", default=None)
-    parser.add_argument("--mstp-net", type=int, default=None)
-    parser.add_argument("--timeout", type=float, default=discover_timeout)
-    parser.add_argument("--local-too", action="store_true")
-    parser.add_argument("--append", action="store_true")
+    parser.add_argument("--router-ip", default=argparse.SUPPRESS)
+    parser.add_argument("--mstp-net", type=int, default=argparse.SUPPRESS)
+    parser.add_argument("--timeout", type=float, default=argparse.SUPPRESS)
+    parser.add_argument("--local-too", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument("--append", action="store_true", default=argparse.SUPPRESS)
     warnings_parser = parser.add_mutually_exclusive_group(required=False)
     warnings_parser.add_argument("--warnings", dest="warnings", action="store_true")
     warnings_parser.add_argument("--no-warnings", dest="warnings", action="store_false")
@@ -72,10 +73,10 @@ async def run_discover(
             app,
             low_limit,
             high_limit,
-            router_ip=app_args.router_ip,
-            mstp_net=app_args.mstp_net,
-            timeout=app_args.timeout,
-            local_too=app_args.local_too,
+            router_ip=getattr(app_args, "router_ip", router_ip),
+            mstp_net=getattr(app_args, "mstp_net", mstp_net),
+            timeout=getattr(app_args, "timeout", discover_timeout),
+            local_too=getattr(app_args, "local_too", local_too),
         )
         if not i_ams:
             sys.stderr.write("No devices found.\n")

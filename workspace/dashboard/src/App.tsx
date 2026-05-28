@@ -18,7 +18,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
         setAuthRequired(s.auth_required);
         if (!s.auth_required) setToken("open");
       })
-      .catch(() => setAuthRequired(false));
+      .catch(() => setAuthRequired(true));
   }, []);
 
   if (authRequired === null) return <p className="muted">Loading…</p>;

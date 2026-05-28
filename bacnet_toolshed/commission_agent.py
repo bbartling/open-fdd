@@ -157,21 +157,28 @@ def _run_job(job_id: str, kind: str, cmd: list[str]) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root())
     env.setdefault("OPENFDD_REPO_ROOT", str(repo_root()))
-    with log_file.open("w", encoding="utf-8") as log:
-        log.write(f"# started {_utc_now()}\n# cmd: {' '.join(cmd)}\n\n")
-        log.flush()
-        proc = subprocess.run(
-            cmd,
-            cwd=str(repo_root()),
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-    meta["status"] = "ok" if proc.returncode == 0 else "failed"
-    meta["finished_at"] = _utc_now()
-    meta["exit_code"] = proc.returncode
-    _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    try:
+        with log_file.open("w", encoding="utf-8") as log:
+            log.write(f"# started {_utc_now()}\n# cmd: {' '.join(cmd)}\n\n")
+            log.flush()
+            proc = subprocess.run(
+                cmd,
+                cwd=str(repo_root()),
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+        meta["status"] = "ok" if proc.returncode == 0 else "failed"
+        meta["finished_at"] = _utc_now()
+        meta["exit_code"] = proc.returncode
+    except Exception as exc:
+        meta["status"] = "failed"
+        meta["finished_at"] = _utc_now()
+        meta["exit_code"] = -1
+        meta["error"] = str(exc)
+    finally:
+        _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def _start_discover(range_low: str | None, range_high: str | None) -> dict[str, Any]:

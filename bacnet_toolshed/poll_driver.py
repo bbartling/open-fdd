@@ -181,6 +181,10 @@ def main() -> None:
         bacnet_extra.append("--route-aware")
     if args.network is not None:
         bacnet_extra.extend(["--network", str(args.network)])
+    if args.router_ip is not None:
+        bacnet_extra.extend(["--router-ip", args.router_ip])
+    if args.mstp_net is not None:
+        bacnet_extra.extend(["--mstp-net", str(args.mstp_net)])
 
     bacnet_parser = SimpleArgumentParser()
     bacnet_args = bacnet_parser.parse_args(bacnet_extra + bacnet_argv)

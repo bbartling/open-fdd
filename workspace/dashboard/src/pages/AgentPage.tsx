@@ -49,7 +49,9 @@ export default function AgentPage() {
         </div>
       ) : null}
       <form className="panel" onSubmit={send}>
+        <label htmlFor="agent-message">Chat message</label>
         <textarea
+          id="agent-message"
           rows={5}
           style={{ width: "100%" }}
           value={message}

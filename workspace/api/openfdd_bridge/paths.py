@@ -35,3 +35,16 @@ def bacnet_poll_csv() -> Path:
 
 def static_dashboard_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "static" / "app"
+
+
+def resolve_workdir_under_repo(workdir: str | None) -> Path:
+    """Codex/exec cwd must stay inside the repository."""
+    repo = repo_root().resolve()
+    if not workdir or not str(workdir).strip():
+        return repo
+    candidate = Path(workdir).resolve()
+    try:
+        candidate.relative_to(repo)
+    except ValueError:
+        return repo
+    return candidate

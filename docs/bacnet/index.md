@@ -21,4 +21,4 @@ See **[bacnet_toolshed/README.md](https://github.com/bbartling/open-fdd/blob/dev
 
 Map BACnet commissioning columns to DataFrame columns via **[Column map resolvers](../column_map_resolvers)**. **`brick_class`** in the commissioning CSV can align with optional **`brick:`** fields in rule YAML.
 
-Skill: **`driver-bacnet-ingest`** (agent builds bridge routes and `/bacnet-tools` dashboard page).
+Skill: **`driver-bacnet-ingest`** (agent builds bridge routes and `/bacnet` dashboard page).

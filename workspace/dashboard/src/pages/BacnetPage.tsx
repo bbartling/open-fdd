@@ -10,10 +10,16 @@ type BacnetConfig = {
 
 export default function BacnetPage() {
   const [cfg, setCfg] = useState<BacnetConfig | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [log, setLog] = useState("");
 
   useEffect(() => {
-    apiFetch<BacnetConfig>("/config/bacnet").then(setCfg).catch((e) => setLog(String(e)));
+    apiFetch<BacnetConfig>("/config/bacnet")
+      .then(setCfg)
+      .catch((e) => {
+        setLoadError(String(e));
+        setLog(String(e));
+      });
   }, []);
 
   async function ingest() {
@@ -35,7 +41,9 @@ export default function BacnetPage() {
         Edge CLIs live in <code>bacnet_toolshed/</code>. Poll CSV → bridge ingest → feather store.
       </p>
       <div className="panel">
-        {cfg ? (
+        {loadError ? (
+          <p className="error">{loadError}</p>
+        ) : cfg ? (
           <ul>
             <li>points.csv: {String(cfg.points_exists)}</li>
             <li>poll CSV: {cfg.poll_csv} ({String(cfg.poll_exists)})</li>

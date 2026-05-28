@@ -13,7 +13,19 @@ from typing import Any
 _SECRET = os.environ.get("OFDD_AUTH_SECRET", "").strip()
 _USER = os.environ.get("OFDD_WEB_USER", "").strip()
 _PASSWORD = os.environ.get("OFDD_WEB_PASSWORD", "").strip()
-_TOKEN_TTL_SEC = int(os.environ.get("OFDD_AUTH_TTL_SEC", str(7 * 86400)))
+def _parse_token_ttl() -> int:
+    raw = os.environ.get("OFDD_AUTH_TTL_SEC", "").strip()
+    default = 7 * 86400
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(1, min(value, 365 * 86400))
+
+
+_TOKEN_TTL_SEC = _parse_token_ttl()
 
 
 def auth_enabled() -> bool:

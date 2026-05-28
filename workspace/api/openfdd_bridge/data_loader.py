@@ -56,6 +56,11 @@ def rows_for_evaluate(df: pd.DataFrame, limit: int = 500) -> list[dict[str, Any]
         item = row.to_dict()
         if "timestamp" in item and hasattr(item["timestamp"], "isoformat"):
             item["timestamp"] = item["timestamp"].isoformat()
-        item["temp"] = item.get("SAT") or item.get("supply_air_temp") or item.get("degF")
+        temp = None
+        for key in ("SAT", "supply_air_temp", "degF"):
+            if key in item and item[key] is not None:
+                temp = item[key]
+                break
+        item["temp"] = temp
         rows.append(item)
     return rows

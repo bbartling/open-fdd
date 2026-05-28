@@ -30,7 +30,9 @@ def create_app() -> FastAPI:
     allow_lan = os.environ.get("OFDD_CORS_ALLOW_PRIVATE_LAN", "").strip() in {"1", "true", "yes"}
     origins = ["http://127.0.0.1:5173", "http://localhost:5173"]
     if allow_lan:
-        origins.append("*")
+        extra = os.environ.get("OFDD_CORS_LAN_ORIGINS", "").strip()
+        if extra:
+            origins.extend(o.strip() for o in extra.split(",") if o.strip())
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -66,10 +68,15 @@ def create_app() -> FastAPI:
         def spa_fallback(full_path: str) -> FileResponse:
             if full_path.startswith("api/") or full_path.startswith("openfdd-agent"):
                 raise HTTPException(status_code=404)
-            candidate = static_dir / full_path
-            if candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(static_dir / "index.html")
+            static_resolved = static_dir.resolve(strict=False)
+            candidate_resolved = (static_dir / full_path).resolve(strict=False)
+            try:
+                candidate_resolved.relative_to(static_resolved)
+            except ValueError:
+                raise HTTPException(status_code=404) from None
+            if candidate_resolved.is_file():
+                return FileResponse(candidate_resolved)
+            return FileResponse(static_resolved / "index.html")
 
     return app
 

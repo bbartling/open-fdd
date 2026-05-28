@@ -39,6 +39,8 @@ def parse_limits(limits: list[int]) -> tuple[int, int]:
     if len(limits) == 1:
         return limits[0], limits[0]
     if len(limits) == 2:
+        if limits[0] > limits[1]:
+            raise ValueError("low limit must be <= high limit")
         return limits[0], limits[1]
     raise ValueError("Provide one or two device instance limits.")
 
