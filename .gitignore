@@ -172,6 +172,10 @@ NOTES.md
 !/pdf/open-fdd-docs.pdf
 !/pdf/open-fdd-docs.txt
 
+# Agent-generated application code (keep workspace/.gitignore only)
+/workspace/**
+!/workspace/.gitignore
+
 # OpenClaw lab generated / local artifacts
 openclaw/dashboard/progress.json
 openclaw/reports/*.md
