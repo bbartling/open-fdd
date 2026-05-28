@@ -44,11 +44,22 @@ class Schedule:
         if kind not in {"at", "every", "cron"}:
             raise ValueError(f"unsupported schedule kind: {kind}")
         every_seconds = raw.get("every_seconds")
+        at_iso = raw.get("at_iso")
+        cron_expr = raw.get("cron_expr")
+        if kind == "every":
+            if every_seconds is None or int(every_seconds) <= 0:
+                raise ValueError("every schedule requires every_seconds > 0")
+        elif kind == "cron":
+            if not str(cron_expr or "").strip():
+                raise ValueError("cron schedule requires cron_expr")
+        elif kind == "at":
+            if not str(at_iso or "").strip():
+                raise ValueError("at schedule requires at_iso")
         return cls(
             kind=kind,  # type: ignore[arg-type]
-            at_iso=raw.get("at_iso"),
+            at_iso=at_iso,
             every_seconds=int(every_seconds) if every_seconds is not None else None,
-            cron_expr=raw.get("cron_expr"),
+            cron_expr=cron_expr,
             timezone=raw.get("timezone"),
         )
 

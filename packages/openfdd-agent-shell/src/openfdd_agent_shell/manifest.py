@@ -6,6 +6,22 @@ from pathlib import Path
 from typing import Any
 
 
+def _resolve_under_workspace(
+    repo_root: Path,
+    workspace_dir: Path,
+    rel: str,
+    *,
+    label: str,
+) -> Path:
+    resolved = (repo_root / rel).resolve()
+    workspace = workspace_dir.resolve()
+    if workspace not in resolved.parents and resolved != workspace:
+        raise ValueError(
+            f"{label} must resolve under workspace_dir ({workspace}), got {resolved}"
+        )
+    return resolved
+
+
 def _load_toml(path: Path) -> dict[str, Any]:
     data = path.read_bytes()
     if sys.version_info >= (3, 11):
@@ -95,7 +111,9 @@ class Manifest:
         skills = [str(x) for x in (agent.get("skills") or [])]
         codex_bin = str(agent.get("codex_bin") or "codex").strip()
         scratch_rel = str(agent.get("scratch_dir") or "workspace/scratch").strip()
-        scratch_dir = (repo_root / scratch_rel).resolve()
+        scratch_dir = _resolve_under_workspace(
+            repo_root, workspace_dir, scratch_rel, label="agent.scratch_dir"
+        )
 
         bootstrap_rel = str(memory_raw.get("bootstrap_file") or "workspace/MEMORY.md").strip()
         memory_root_rel = str(memory_raw.get("root") or "workspace/memory").strip()
@@ -124,16 +142,26 @@ class Manifest:
         ).strip()
 
         memory = MemoryConfig(
-            bootstrap_file=(repo_root / bootstrap_rel).resolve(),
-            memory_root=(repo_root / memory_root_rel).resolve(),
+            bootstrap_file=_resolve_under_workspace(
+                repo_root, workspace_dir, bootstrap_rel, label="memory.bootstrap_file"
+            ),
+            memory_root=_resolve_under_workspace(
+                repo_root, workspace_dir, memory_root_rel, label="memory.root"
+            ),
             bootstrap_max_chars=bootstrap_max_chars,
             daily_lookback_days=daily_lookback_days,
             divergence_max_chars=divergence_max_chars,
         )
         cron = CronConfig(
-            jobs_file=(repo_root / jobs_rel).resolve(),
-            state_file=(repo_root / state_rel).resolve(),
-            runs_dir=(repo_root / runs_rel).resolve(),
+            jobs_file=_resolve_under_workspace(
+                repo_root, workspace_dir, jobs_rel, label="cron.jobs_file"
+            ),
+            state_file=_resolve_under_workspace(
+                repo_root, workspace_dir, state_rel, label="cron.state_file"
+            ),
+            runs_dir=_resolve_under_workspace(
+                repo_root, workspace_dir, runs_rel, label="cron.runs_dir"
+            ),
             timezone=timezone,
         )
         wake = WakeConfig(
@@ -141,12 +169,24 @@ class Manifest:
             min_minutes_between=min_minutes_between,
             mini_model=str(mini_model).strip() if mini_model else None,
             critique_model=str(critique_model).strip() if critique_model else None,
-            lock_file=(repo_root / lock_rel).resolve(),
-            debounce_file=(repo_root / debounce_rel).resolve(),
-            stop_early_file=(repo_root / stop_early_rel).resolve(),
-            wakes_dir=(repo_root / wakes_rel).resolve(),
-            checkpoints_file=(repo_root / checkpoints_rel).resolve(),
-            bootstrap_snapshot=(repo_root / snapshot_rel).resolve(),
+            lock_file=_resolve_under_workspace(
+                repo_root, workspace_dir, lock_rel, label="wake.lock_file"
+            ),
+            debounce_file=_resolve_under_workspace(
+                repo_root, workspace_dir, debounce_rel, label="wake.debounce_file"
+            ),
+            stop_early_file=_resolve_under_workspace(
+                repo_root, workspace_dir, stop_early_rel, label="wake.stop_early_file"
+            ),
+            wakes_dir=_resolve_under_workspace(
+                repo_root, workspace_dir, wakes_rel, label="wake.wakes_dir"
+            ),
+            checkpoints_file=_resolve_under_workspace(
+                repo_root, workspace_dir, checkpoints_rel, label="wake.checkpoints_file"
+            ),
+            bootstrap_snapshot=_resolve_under_workspace(
+                repo_root, workspace_dir, snapshot_rel, label="wake.bootstrap_snapshot"
+            ),
         )
 
         return cls(

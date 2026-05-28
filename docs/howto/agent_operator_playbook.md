@@ -78,8 +78,9 @@ Read-only RAG is always safe. **Proxy writes** (ingest, config) require MCP serv
 
 ## Built-in Codex agent (local AI chat)
 
-- **Chat:** `POST /openfdd-agent/chat` — message + `workdir` (repo root on bridge). Agent prompt includes bootstrap URLs.
-- **Raw Codex:** `POST /local-codex/chat` — thinner harness; same Codex binary.
+- **Chat (browser → bridge):** `POST /openfdd-agent/chat` — message + `workdir` (repo root on bridge). Agent prompt includes bootstrap URLs. The dashboard must not call Codex directly.
+- **Diagnostics:** `GET /local-codex/diagnostics` — Codex CLI availability on the bridge host.
+- **Repo-local shell (no bridge):** `openfdd-agent-shell` and `openfdd-wake` run Codex from the checkout with `openfdd.toml`; see **[Skills and agent shell](skills_and_agent)**.
 - **Sign-in:** CLI must be logged in on the bridge host (`codex login`); device OAuth via bridge complements but may not replace CLI credential store — see product docs.
 
 ---

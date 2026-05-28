@@ -5,6 +5,28 @@ description: "Builds a FastAPI HTTP bridge for Open-FDD sites, ingest, rules, pl
 
 # FastAPI bridge API
 
+## Starter codebase (maintain here)
+
+The repo ships a working bridge under **`workspace/api/openfdd_bridge/`**. Extend it — do not restart from scratch unless asked.
+
+| Module | Purpose |
+|--------|---------|
+| `main.py` | App factory, CORS, static SPA mount |
+| `auth.py` | `OFDD_AUTH_SECRET` / `OFDD_WEB_USER` / `OFDD_WEB_PASSWORD` Bearer tokens |
+| `playground.py` | Server-side Python sandbox (lint, `evaluate()`, DataFrame scripts) |
+| `routes/playground_routes.py` | `/api/playground/*` |
+| `routes/rules_routes.py` | `/api/rules/run` → `open_fdd.engine.RuleRunner` |
+| `routes/bacnet_routes.py` | `/config/bacnet`, `POST /ingest/bacnet` |
+| `routes/agent_routes.py` | `/openfdd-agent/context`, `/openfdd-agent/chat` |
+
+Run:
+
+```bash
+export OPENFDD_REPO_ROOT="$(pwd)"
+export OFDD_DESKTOP_DATA_DIR="$PWD/workspace/data"
+cd workspace/api && uvicorn openfdd_bridge.main:app --reload --port 8765
+```
+
 ## When to use / When not to use
 
 Use when the operator needs HTTP access to sites, ingest, rules, timeseries, or plots.
@@ -13,43 +35,43 @@ Skip for pure in-process pandas rule runs ([engine-pandas-fdd](../engine-pandas-
 
 ## Prerequisites
 
-- Python 3.10+, FastAPI, uvicorn, pyarrow (if feather storage).
-- Generate under `workspace/` per [AGENTS.md](../../AGENTS.md).
-- Default bind: `127.0.0.1:8765`.
+- Python 3.10+, `pip install -r workspace/api/requirements.txt`, `pip install -e ".[dev]"`.
+- Default bind: `127.0.0.1:8765` (OT LAN — use reverse proxy + auth, not public internet).
 
-## Quick start
+## Playground API (Bake-a-Py style)
 
-1. Scaffold `workspace/api/main.py` with FastAPI app and `/health`.
-2. Add route groups incrementally: `sites`, `ingest`, `rules`, `timeseries`, `plots` (see reference route table).
-3. Wire services to [feather-local-storage](../feather-local-storage/SKILL.md) and `open_fdd.engine` for `/rules/run`.
-4. Run: `uvicorn main:app --host 127.0.0.1 --port 8765`.
+| Endpoint | Body | Result |
+|----------|------|--------|
+| `POST /api/playground/lint` | `{ "code" }` | AST issues |
+| `POST /api/playground/test-rule` | `{ "code", "config", "site_id?", "limit?" }` | Per-row sweep events |
+| `POST /api/playground/run-script` | `{ "code", "config?", "limit?" }` | DataFrame `out` preview |
+| `GET /api/playground/sample-frame` | query `site_id`, `limit` | Demo CSV rows |
+
+Allowed imports in sandbox: `datetime`, `math`, `numpy`, `pandas`, `open_fdd`.
 
 ## Core concepts
 
 - **Bridge** = single FastAPI app; UI and MCP call it over HTTP.
-- **CORS:** enable private-LAN only when operator sets `OFDD_CORS_ALLOW_PRIVATE_LAN`.
-- **OpenAPI:** expose `/docs` and `/openapi.json` for agent discovery.
-
-## Common patterns
-
-- Mirror legacy tag groups: `health`, `sites`, `ingest`, `rules`, `timeseries`, `plots`, `config`, `assistant`, `sparql`.
-- Delegate ingest to driver modules ([driver-csv-ingest](../driver-csv-ingest/SKILL.md), etc.).
-- `POST /rules/run` loads feather frames, runs `RuleRunner`, returns flags or frames.
+- **CORS:** dev origins `5173`; set `OFDD_CORS_ALLOW_PRIVATE_LAN=1` only with operator consent.
+- **Auth:** when `OFDD_AUTH_*` set, all `/api/*` and `/openfdd-agent/*` require `Authorization: Bearer`.
+- **OpenAPI:** `/docs` for agent discovery.
 
 ## Compose with other skills
 
-- [feather-local-storage](../feather-local-storage/SKILL.md), [rules-crud-and-batch-run](../rules-crud-and-batch-run/SKILL.md), [codex-agent-on-bridge](../codex-agent-on-bridge/SKILL.md)
+- [feather-local-storage](../feather-local-storage/SKILL.md), [react-operator-dashboard](../react-operator-dashboard/SKILL.md), [driver-bacnet-ingest](../driver-bacnet-ingest/SKILL.md), [codex-agent-on-bridge](../codex-agent-on-bridge/SKILL.md)
 
 ## Verification
 
 ```bash
 curl -s http://127.0.0.1:8765/health
-curl -s http://127.0.0.1:8765/openapi.json | head
+curl -s -X POST http://127.0.0.1:8765/api/playground/lint -H 'Content-Type: application/json' -d '{"code":"def evaluate(row, cfg, prev_row=None, rows=None):\n return False\n"}'
+pytest tests/workspace_bridge -q
 ```
 
 ## Gotchas
 
-- Do not copy the monolithic `open_fdd/gateway/server.py` wholesale; implement only manifest-selected routes.
-- Long-running ingest belongs in background tasks or explicit job endpoints.
+- Do not copy the retired monolithic `open_fdd/gateway/server.py` wholesale; extend `workspace/api`.
+- Python never runs in the browser — only on the bridge host.
+- Production: build dashboard into `workspace/api/static/app` before serving SPA from uvicorn.
 
-See [references/REFERENCE.md](references/REFERENCE.md) for legacy route inventory.
+See [references/REFERENCE.md](references/REFERENCE.md) and [docs/howto/operator_dashboard.md](../../docs/howto/operator_dashboard.md).

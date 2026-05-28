@@ -19,12 +19,19 @@ def _get_json(url: str, timeout: float = 3.0) -> dict[str, Any]:
     return body
 
 
+def _probe(url: str) -> dict[str, Any]:
+    try:
+        return {"ok": True, "value": _get_json(url)}
+    except Exception as exc:  # noqa: BLE001 — report all probe failures to caller
+        return {"ok": False, "error": str(exc)}
+
+
 def run_preflight(openfdd_base: str, mcp_base: str, supervisor_base: str | None) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    out["openfdd_health"] = _get_json(f"{openfdd_base.rstrip('/')}/health")
-    out["mcp_health"] = _get_json(f"{mcp_base.rstrip('/')}/health")
+    out["openfdd_health"] = _probe(f"{openfdd_base.rstrip('/')}/health")
+    out["mcp_health"] = _probe(f"{mcp_base.rstrip('/')}/health")
     if supervisor_base and supervisor_base.strip():
-        out["easy_aso_supervisor_health"] = _get_json(f"{supervisor_base.rstrip('/')}/health")
+        out["easy_aso_supervisor_health"] = _probe(f"{supervisor_base.rstrip('/')}/health")
     return out
 
 
@@ -94,7 +101,13 @@ def main() -> None:
     )
     print(json.dumps({"preflight": preflight}, indent=2))
 
+    repo_root = Path.cwd().resolve()
+    workspace_root = (repo_root / "workspace").resolve()
     out = Path(args.output).resolve()
+    if workspace_root not in out.parents and out != workspace_root:
+        raise SystemExit(
+            f"--output must resolve under {workspace_root}, got {out}"
+        )
     scaffold_agent(
         output_path=out,
         device_instance=str(args.device_instance).strip(),

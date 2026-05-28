@@ -40,6 +40,8 @@ python -c "from open_fdd.engine import RuleRunner; from open_fdd import reports;
 pytest open_fdd/tests/engine
 ```
 
+Optional **agent shell** (not on PyPI): `pip install -e packages/openfdd-agent-shell`, copy `openfdd.toml.example` → `openfdd.toml`, then see **[Skills and agent shell](howto/skills_and_agent)**.
+
 ---
 
 ## Minimal engine + reports
@@ -74,5 +76,7 @@ See **`examples/README.md`** for CSV demos and notebooks.
 - [Rules overview](rules/overview)
 - [Column map resolvers](column_map_resolvers)
 - [How-to: engine-only IoT](howto/engine_only_iot)
+- [Skills and agent shell](howto/skills_and_agent) — `openfdd.toml`, workspace, Codex (checkout only)
+- [BACnet toolshed](bacnet/index) — discovery and polling CLI (`bacnet_toolshed/`)
 - [Verification](howto/verification)
 - [Contributing](contributing)

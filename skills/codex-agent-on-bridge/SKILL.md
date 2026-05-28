@@ -8,7 +8,7 @@ description: "Runs OpenAI Codex CLI on the bridge host with bootstrap context fo
 ## Policy
 
 - Codex runs on the **bridge host** as a child process; credentials stay in `CODEX_HOME`.
-- Browser UI calls bridge `/openfdd-agent/chat` or `/local-codex/chat`, not Codex directly.
+- Browser UI calls bridge `/openfdd-agent/chat`, not Codex directly.
 - Agent file writes default to `workspace/scratch`.
 
 ## Bootstrap JSON

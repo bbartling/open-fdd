@@ -26,7 +26,7 @@ The rule runner is **`open_fdd.engine.runner.RuleRunner`**. It loads **`.yaml`**
 1. Build a **pandas** `DataFrame` whose columns are your sensor traces (and optional timestamp column).
 2. Point **`RuleRunner`** at a directory of `.yaml` files **or** pass **`rules=[...]`** dicts.
 3. Call **`run(df, timestamp_col=..., skip_missing_columns=True, column_map={...})`**.
-4. Read boolean **`*_flag`** columns and related outputs per the rule definitions.
+4. Read integer **`*_flag`** columns (`0` / `1`) and related outputs per the rule definitions.
 
 **`column_map`** — when your naming layer uses Brick-style or vendor tags but DataFrame columns differ (for example `temp_sa` vs a Brick class label), pass **`column_map`** from logical key to column name. See **`RuleRunner.run`** in **`open_fdd/engine/runner.py`**.
 

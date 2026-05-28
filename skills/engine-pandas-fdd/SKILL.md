@@ -37,7 +37,7 @@ Rule authoring: [docs/expression_rule_cookbook.md](../../docs/expression_rule_co
 
 - Rules are YAML files; `load_rule()` returns a dict; `RuleRunner` batches evaluation.
 - `column_map` maps ontology/rule input keys to DataFrame column names.
-- Results add boolean flag columns and optional detail columns per check type.
+- Results add integer flag columns (0/1) and optional detail columns per check type; treat flags as ints, not booleans.
 - Public API: `RuleRunner`, `load_rule`, `bounds_map_from_rule`, column-map resolvers (see [column-map-and-manifests](../column-map-and-manifests/SKILL.md)).
 
 ## Common patterns
@@ -63,7 +63,7 @@ python -c "from open_fdd.engine import RuleRunner; print(RuleRunner)"
 ## Gotchas
 
 - Expression rules trust YAML authors; validate inputs and units (see cookbook danger zone).
-- Column-map misses skip checks silently unless strict validation is enabled in rule params.
+- Missing input columns fail rule execution by default; checks are skipped only when `skip_missing_columns=True` in rule params. Strict validation is an additional guardrail.
 - Use `open_fdd.engine`, not a custom runner, in generated code.
 
 See [references/REFERENCE.md](references/REFERENCE.md) for module map and exports.

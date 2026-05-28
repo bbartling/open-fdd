@@ -79,6 +79,8 @@ pytest open_fdd/tests/engine
 
 Examples live under `examples/`. Optional shim package: `openfdd-engine` (re-exports the engine); most users install **`open-fdd`** only.
 
+**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` + `workspace/api`), BACnet edge tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Quick start: [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
+
 ---
 
 ## License

@@ -26,7 +26,10 @@ def wake_lock(path: Path, *, stale_seconds: int = 6 * 3600):
     while True:
         if _create_lock_file(path):
             break
-        age = time.time() - path.stat().st_mtime
+        try:
+            age = time.time() - path.stat().st_mtime
+        except FileNotFoundError:
+            continue
         if age < stale_seconds:
             raise WakeLockError(f"wake lock busy: {path}")
         path.unlink(missing_ok=True)

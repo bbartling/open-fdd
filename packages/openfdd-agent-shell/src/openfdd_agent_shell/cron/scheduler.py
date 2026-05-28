@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import shlex
 import subprocess
 from typing import Any
 
@@ -70,15 +71,26 @@ class CronScheduler:
         started = CronStore.timestamp()
         run_id = self.store.new_run_id()
         if dry_run:
+            finished = CronStore.timestamp()
             result = CronRunResult(
                 job_id=job.id,
                 run_id=run_id,
                 status="skipped",
                 message=f"dry-run {job.service}",
                 started_at=started,
-                finished_at=CronStore.timestamp(),
+                finished_at=finished,
             )
             self.store.write_run(result)
+            now = datetime.now(timezone.utc)
+            nxt = _next_run(job.schedule, now)
+            update: dict[str, Any] = {
+                "running": False,
+                "last_run_at": finished,
+                "last_status": "skipped",
+            }
+            if nxt is not None:
+                update["next_run_at"] = format_timestamp(nxt)
+            self.store.update_job_state(job.id, **update)
             return result
         try:
             message = self._execute(job)
@@ -137,7 +149,7 @@ class CronScheduler:
             if not command:
                 raise ValueError("shell jobs require payload.command")
             if isinstance(command, str):
-                command_list = command
+                command_list = shlex.split(command)
             else:
                 command_list = [str(part) for part in command]
             proc = subprocess.run(

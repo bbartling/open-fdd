@@ -1,3 +1,13 @@
-# Generated application artifacts — never commit workspace contents.
+# Runtime artifacts under workspace (starter trees tracked via negation)
 *
 !.gitignore
+__pycache__/
+*.py[cod]
+!api/
+!api/**
+!dashboard/
+!dashboard/**
+!data/
+!data/**
+!deploy/
+!deploy/**

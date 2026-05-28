@@ -152,4 +152,5 @@ def run_repl(manifest: Manifest, *, dry_run: bool = False) -> int:
             print(f"Codex binary '{manifest.codex_bin}' not found on PATH.")
             print(dry_run_command(inv))
             continue
-        return run_invocation(inv)
+        run_invocation(inv)
+        continue

@@ -64,15 +64,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "add":
+        schedule_flags = sum(
+            1
+            for flag in (args.every_seconds, args.at_iso, args.cron_expr)
+            if flag is not None and str(flag).strip() != ""
+        )
+        if schedule_flags != 1:
+            raise SystemExit("exactly one of --every-seconds, --at, or --cron is required")
         if args.every_seconds is not None:
             schedule = Schedule(kind="every", every_seconds=args.every_seconds)
         elif args.at_iso:
             schedule = Schedule(kind="at", at_iso=args.at_iso)
-        elif args.cron_expr:
-            schedule = Schedule(kind="cron", cron_expr=args.cron_expr, timezone=manifest.cron.timezone)
         else:
-            raise SystemExit("one of --every-seconds, --at, or --cron is required")
-        payload = json.loads(args.payload_json)
+            schedule = Schedule(
+                kind="cron",
+                cron_expr=args.cron_expr,
+                timezone=manifest.cron.timezone,
+            )
+        try:
+            payload = json.loads(args.payload_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"invalid --payload-json: {exc}") from exc
         job = CronJob(
             id=uuid.uuid4().hex[:12],
             name=args.name,

@@ -32,6 +32,8 @@ Copy **`openfdd.toml.example`** to **`openfdd.toml`** and set:
 
 Generated application code belongs in **`workspace/`** (see **`AGENTS.md`**). Portfolio memory and schedules live beside generated services under the same workspace tree.
 
+**Path safety:** at load time, `Manifest.load` resolves `agent.scratch_dir`, all `[memory]` paths, `[cron]` job/state/run paths, and `[wake]` lock/debounce/wake-log paths to absolute paths and **rejects** any entry that would resolve **outside** `workspace_dir`. Keep custom paths under `workspace/` (for example `workspace/scratch/`, `workspace/cron/`, `workspace/memory/`).
+
 ## Agent shell
 
 ```bash
@@ -62,8 +64,84 @@ Dry-run a single turn:
 openfdd-agent-shell --repo-root . --dry-run --message "scaffold csv ingest only"
 ```
 
+The interactive REPL stays open after a Codex turn (a successful `run_invocation` does not exit the shell).
+
+### Workspace cron
+
+`openfdd-workspace-cron add` requires **exactly one** schedule flag: `--every-seconds`, `--at` (ISO timestamp), or `--cron` (expression). `--payload-json` must be valid JSON (invalid JSON exits with a clear message, not a traceback).
+
+`Schedule` objects loaded from `jobs.json` are validated: `every` needs `every_seconds > 0`; `cron` needs a non-empty `cron_expr`; `at` needs `at_iso`.
+
+`tick` and `run --dry-run` advance job state like real runs. A **dry-run** execution clears the `running` flag, updates `next_run_at`, and writes a run record so jobs are not stuck re-queued.
+
+Shell commands in cron job payloads are tokenized with `shlex.split` before `subprocess.run` (`shell=False`).
+
+Example `codex_turn` job payload for wake-style turns:
+
+```json
+{
+  "wake_mode": "mini",
+  "invocation": 1,
+  "total": 2
+}
+```
+
+Use `"wake_mode": "critique"` for the critique-only message. Non-numeric `invocation` / `total` values fall back to manifest defaults instead of raising.
+
+### Scheduled wake (mini + critique)
+
+`openfdd-wake` (alias `openfdd-agent-shell wake`) runs up to `wake.mini_invocations` mini Codex turns, then one critique turn. Transcripts live under `workspace/cron/wakes/`.
+
+| Outcome | Behavior |
+|---------|----------|
+| Codex exit `0` | Debounce timestamp updated; daily note records **wake complete** |
+| Codex exit non-zero | Wake marked **failed** in the log; debounce **not** updated; critique skipped if a mini run failed |
+| `--dry-run` | Prints `codex exec` lines only; no subprocess |
+| Lock busy | `WakeLockError`; another wake may be running |
+| Debounce window | Skips run when `min_minutes_between` not elapsed |
+
+Wake lock files use a stale timeout (default six hours) so crashed runs can recover.
+
+### Memory layout
+
+| Path | Role |
+|------|------|
+| `workspace/MEMORY.md` | Bootstrap facts (truncated to `bootstrap_max_chars`) |
+| `workspace/memory/daily/YYYY-MM-DD.md` | Session notes |
+| `workspace/memory/<category>/<entity>.md` | Domain notes (`category` is a single safe segment; no `..` or path separators) |
+| `workspace/memory/architecture/working-divergence.md` | Skill vs workspace drift log |
+
+`truncate_bootstrap` never returns more characters than the configured maximum (including very small limits).
+
+## BACnet toolshed (repo checkout)
+
+Field BACnet discovery, commissioning CSVs, and polling are in **`bacnet_toolshed/`** (not on PyPI). See **[BACnet toolshed](../bacnet/index)** and `openfdd.toml.example` `[build].drivers` / `driver-bacnet-ingest` skill.
+
 ## Rule authoring
 
-Expression and YAML semantics are unchanged. Start with the **[Expression rule cookbook](../expression_rule_cookbook)** and **[Rules overview](../rules/overview)**.
+Expression and YAML semantics are unchanged. **`RuleRunner.run`** adds **integer** fault flag columns (`0` / `1`), not booleans—treat them as ints in pandas and downstream code. Missing input columns **fail** the run by default; per-rule `skip_missing_columns: true` skips checks for absent columns. Strict validation in rule params is an additional guardrail.
 
-Historical desktop/MCP how-tos under **`howto/desktop_app.md`** describe the retired monolith; new integrations should follow **`skills/`**.
+Start with the **[Expression rule cookbook](../expression_rule_cookbook)** and **[Rules overview](../rules/overview)**.
+
+## Tests (CI)
+
+From the repo root:
+
+```bash
+pip install -e ".[dev]"
+pip install -e "packages/openfdd-agent-shell[dev]"
+pytest open_fdd/tests/engine -q
+pytest packages/openfdd-agent-shell -q
+```
+
+The **`agent-shell`** job in `.github/workflows/ci.yml` runs the agent-shell suite on Python 3.12.
+
+## Operator dashboard (committed starter)
+
+A full **Rule Lab** stack ships under `workspace/api` and `workspace/dashboard` — see **[Operator dashboard (Rule Lab)](operator_dashboard)**. Agents should extend that code rather than scaffold from zero.
+
+## Bridge and MCP (generated under `workspace/`)
+
+When the agent scaffolds a FastAPI bridge and React dashboard (skills `fastapi-bridge-api`, `react-operator-dashboard`, `codex-agent-on-bridge`), the browser calls **`POST /openfdd-agent/chat`** on the bridge host—not Codex directly. Operator retrieval and route hints: **[Agent & operator playbook](agent_operator_playbook)**.
+
+Historical desktop/MCP how-tos under **`howto/desktop_app.md`** describe the retired monolith; new integrations should follow **`skills/`** and **`workspace/`**.

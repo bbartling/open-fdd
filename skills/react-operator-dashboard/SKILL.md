@@ -5,56 +5,65 @@ description: "Scaffolds a Vite/React operator dashboard that calls the FastAPI b
 
 # React operator dashboard
 
+## Starter codebase (maintain here)
+
+Working UI: **`workspace/dashboard/`** (React 19 + Vite 6 + CodeMirror 6).
+
+| Route | Page | Bridge calls |
+|-------|------|----------------|
+| `/` | Overview | `GET /health` |
+| `/rule-lab` | Bake-a-Py editor | `POST /api/playground/lint`, `test-rule`, `run-script` |
+| `/fdd` | YAML RuleRunner | `POST /api/rules/run` |
+| `/bacnet` | BACnet status / ingest | `GET /config/bacnet`, `POST /ingest/bacnet` |
+| `/agent` | AI chat | `GET /openfdd-agent/context`, `POST /openfdd-agent/chat` |
+| `/login` | Operator login | `POST /api/auth/login` |
+
+Key files:
+
+- `src/lib/api.ts` — `getBridgeBase()`, Bearer token in `sessionStorage`
+- `src/components/PythonCodeEditor.tsx` — CodeMirror Python
+- `src/pages/RuleLabPage.tsx` — per-row vs DataFrame script modes
+
 ## When to use / When not to use
 
-Use for browser-based operators (site list, CSV import, plots, rule setup, AI agent tab).
+Use for browser-based operators (Rule Lab, FDD, BACnet, agent tab).
 
 Skip when CLI/notebook-only workflows suffice.
 
 ## Prerequisites
 
-- Node 20+, Vite, React 19 (or match operator toolchain).
-- Running bridge at `http://127.0.0.1:8765` unless overridden.
-- Generate UI under `workspace/dashboard/`.
-
-## Quick start
-
-```bash
-cd workspace/dashboard
-npm create vite@latest . -- --template react-ts
-npm install react-router-dom @tanstack/react-query
-```
-
-1. Add `src/lib/api.ts` with `getBridgeBase()` (localStorage override → `VITE_DESKTOP_BRIDGE_BASE` → `http://127.0.0.1:8765`).
-2. Add routes from the legacy page map (subset per manifest).
-3. `npm run dev` on port 5173; bind `0.0.0.0` only for LAN with operator consent.
+- Node 20+, bridge at `http://127.0.0.1:8765`.
+- Dev: `cd workspace/dashboard && npm ci && npm run dev` (port 5173, Vite proxy).
+- Prod: `scripts/build_operator_dashboard.sh` → static files in `workspace/api/static/app`.
 
 ## Core concepts
 
-- **Bridge base** is the only backend origin in the browser.
-- **Site context** loads `GET /sites` once and shares site id across pages.
-- **AI agent** page talks to bridge `/openfdd-agent/*` or `/local-codex/*`, not directly to Codex.
+- **Bridge base** is the only backend origin in the browser (`src/lib/api.ts`).
+- **Python execution** is always server-side; buttons call `/api/playground/*`.
+- **AI agent** page uses `/openfdd-agent/chat` when Codex is on PATH; otherwise operators use `openfdd-agent-shell` from Cursor/Codex/Claude/OpenClaw.
 
-## Common patterns
+## Agent maintenance
 
-- CRUD helpers for rules: mirror `crud-api.ts` patterns (list, get, put, delete YAML).
-- Plots: fetch frame JSON from bridge plot endpoints; render with Plotly or similar.
-- Redirect legacy paths `/openfdd-claw-chat` → `/ai-agent`.
+When adding features:
 
-## Compose with other skills
-
-- [fastapi-bridge-api](../fastapi-bridge-api/SKILL.md), [local-dev-orchestration](../local-dev-orchestration/SKILL.md), [codex-agent-on-bridge](../codex-agent-on-bridge/SKILL.md)
+1. Add route in `src/App.tsx` + page under `src/pages/`.
+2. Add bridge endpoint in `workspace/api/openfdd_bridge/routes/`.
+3. Document in `docs/howto/operator_dashboard.md`.
+4. Run `npm run build` and `pytest tests/workspace_bridge`.
 
 ## Verification
 
 ```bash
-npm run build
-curl -s http://127.0.0.1:5173/
+npm run dev
+curl -sf http://127.0.0.1:5173/
+# After build:
+curl -sf http://127.0.0.1:8765/
 ```
 
 ## Gotchas
 
-- CORS errors usually mean bridge offline or wrong bridge base URL.
+- CORS / 401 → check bridge running and auth token after login.
 - Do not embed Codex credentials in the browser.
+- `VITE_DESKTOP_BRIDGE_BASE` or localStorage `ofdd-bridge-base-override` for non-default bridge URL.
 
 See [references/REFERENCE.md](references/REFERENCE.md).

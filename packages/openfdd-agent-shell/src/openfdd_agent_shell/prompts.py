@@ -7,6 +7,13 @@ from .manifest import Manifest
 from .memory.store import MemoryPaths, MemoryStore
 
 
+def _payload_int(value: object, default: int) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 def read_text_if_exists(path: Path) -> str:
     if path.is_file():
         return path.read_text(encoding="utf-8")
@@ -131,13 +138,13 @@ def build_codex_turn_message(manifest: Manifest, job: CronJob) -> str:
     if wake_mode == "mini":
         return build_mini_wake_message(
             manifest,
-            invocation=int(payload.get("invocation") or 1),
-            total=int(payload.get("total") or manifest.wake.mini_invocations),
+            invocation=_payload_int(payload.get("invocation"), 1),
+            total=_payload_int(payload.get("total"), manifest.wake.mini_invocations),
             job_name=job.name,
         )
     if wake_mode == "critique":
         return build_critique_wake_message(
             manifest,
-            mini_count=int(payload.get("total") or manifest.wake.mini_invocations),
+            mini_count=_payload_int(payload.get("total"), manifest.wake.mini_invocations),
         )
     return custom or job.name

@@ -83,6 +83,8 @@ class MemoryPaths:
 def truncate_bootstrap(text: str, max_chars: int) -> tuple[str, bool]:
     if max_chars <= 0 or len(text) <= max_chars:
         return text, False
+    if max_chars <= 3:
+        return ("." * max_chars, True)
     return text[: max_chars - 3].rstrip() + "...", True
 
 
@@ -140,8 +142,15 @@ class MemoryStore:
         return path
 
     def domain_path(self, category: str, entity_id: str) -> Path:
+        cat = re.sub(r"[^a-zA-Z0-9._-]+", "-", category.strip()) or "default"
+        if cat in {".", ".."} or "/" in category or "\\" in category:
+            raise ValueError(f"invalid memory category: {category!r}")
         safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", entity_id.strip()) or "default"
-        return self.paths.memory_root / category / f"{safe}.md"
+        path = (self.paths.memory_root / cat / f"{safe}.md").resolve()
+        root = self.paths.memory_root.resolve()
+        if root not in path.parents and path != root:
+            raise ValueError(f"memory path escapes memory_root: {path}")
+        return path
 
     def append_domain(self, category: str, entity_id: str, line: str) -> Path:
         self.ensure_layout()

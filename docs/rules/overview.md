@@ -6,7 +6,7 @@ nav_order: 1
 
 # Fault rules
 
-Fault rules are **YAML-defined** checks run against **pandas** `DataFrame`s. Each rule produces boolean fault flag columns (and related outputs) via **`RuleRunner`**.
+Fault rules are **YAML-defined** checks run against **pandas** `DataFrame`s. Each rule produces integer fault flag columns (`0` / `1`, and related outputs) via **`RuleRunner`**.
 
 Each rule declares **logical input names** in YAML. You supply a **`column_map`** from those names (or optional ontology keys like **Brick** class labels) to your DataFrame columns. See [Column map resolvers](../column_map_resolvers) and the [Expression rule cookbook](../expression_rule_cookbook).
 

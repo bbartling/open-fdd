@@ -175,9 +175,17 @@ NOTES.md
 # Local operator manifest (copy from openfdd.toml.example)
 openfdd.toml
 
-# Agent-generated application code (keep workspace/.gitignore only)
+# Agent-generated application code (committed operator starter under workspace/)
 /workspace/**
 !/workspace/.gitignore
+!/workspace/api/
+!/workspace/api/**
+!/workspace/dashboard/
+!/workspace/dashboard/**
+!/workspace/data/
+!/workspace/data/**
+!/workspace/deploy/
+!/workspace/deploy/**
 
 # OpenClaw lab generated / local artifacts
 openclaw/dashboard/progress.json

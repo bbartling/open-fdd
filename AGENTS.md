@@ -5,7 +5,8 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 ## Default path
 
 - Rules-only work: `pip install open-fdd` (or editable install from the repo root) and use `open_fdd.engine` on pandas DataFrames.
-- Do **not** scaffold APIs, dashboards, storage, or deployment unless the manifest `[build]` section requests them.
+- A committed **operator starter** lives in `workspace/api/` and `workspace/dashboard/` (Rule Lab + FastAPI bridge). **Extend** that code when `[build]` includes `api` or `dashboard`; do not replace it unless asked.
+- Do **not** add new top-level services beyond the manifest `[build]` section.
 
 ## Workspace writes
 

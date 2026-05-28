@@ -74,6 +74,8 @@ class WakeRunner:
         ]
 
         critique_ran = False
+        failure: str | None = None
+        mini_completed = 0
         try:
             with wake_lock(self.manifest.wake.lock_file):
                 for index in range(1, total + 1):
@@ -97,20 +99,29 @@ class WakeRunner:
                     else:
                         code = run_invocation(inv, transcript=log_path)
                         lines.append(f"mini {index} exit={code}")
+                        if code != 0:
+                            failure = f"mini {index} failed exit={code}"
+                            break
+                    mini_completed = index
 
-                critique_message = build_critique_wake_message(self.manifest, mini_count=total)
-                critique_inv = build_invocation(
-                    self.manifest,
-                    critique_message,
-                    model=self.manifest.wake.critique_model,
-                )
-                lines.append("--- critique ---")
-                critique_ran = True
-                if dry_run or not codex_available(self.manifest.codex_bin):
-                    lines.append(dry_run_command(critique_inv))
+                if failure is not None:
+                    lines.append(failure)
                 else:
-                    code = run_invocation(critique_inv, transcript=log_path)
-                    lines.append(f"critique exit={code}")
+                    critique_message = build_critique_wake_message(self.manifest, mini_count=total)
+                    critique_inv = build_invocation(
+                        self.manifest,
+                        critique_message,
+                        model=self.manifest.wake.critique_model,
+                    )
+                    lines.append("--- critique ---")
+                    critique_ran = True
+                    if dry_run or not codex_available(self.manifest.codex_bin):
+                        lines.append(dry_run_command(critique_inv))
+                    else:
+                        code = run_invocation(critique_inv, transcript=log_path)
+                        lines.append(f"critique exit={code}")
+                        if code != 0:
+                            failure = f"critique failed exit={code}"
         except WakeLockError as exc:
             lines.append(str(exc))
             log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -123,13 +134,27 @@ class WakeRunner:
                 locked=True,
             )
 
-        lines.append(f"=== openfdd wake end {ts} ===")
+        if failure is not None:
+            lines.append(f"=== openfdd wake failed {ts} ===")
+        else:
+            lines.append(f"=== openfdd wake end {ts} ===")
         header = "\n".join(lines) + "\n"
         if log_path.is_file():
             existing = log_path.read_text(encoding="utf-8")
             log_path.write_text(header + existing, encoding="utf-8")
         else:
             log_path.write_text(header, encoding="utf-8")
+
+        if failure is not None:
+            self.memory.append_daily(f"wake failed log={log_path.name}: {failure}")
+            return WakeRunResult(
+                log_path=log_path,
+                mini_runs=mini_completed,
+                critique_ran=critique_ran,
+                dry_run=dry_run,
+                debounced=False,
+                locked=False,
+            )
 
         self._stamp_debounce()
         self.memory.append_daily(f"wake complete log={log_path.name} minis={total}")
