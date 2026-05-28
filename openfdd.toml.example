@@ -13,7 +13,7 @@ package = "open-fdd"
 [build]
 # Select only what the operator needs; the agent composes skills from this list.
 targets = ["api", "dashboard", "feather_storage"]
-drivers = ["csv", "openmeteo"]
+drivers = ["csv", "openmeteo", "bacnet"]
 # none | caddy_lan | caddy_tls_internal
 auth = "none"
 # local | systemd | ansible_bench
@@ -55,6 +55,8 @@ skills = [
   "react-operator-dashboard",
   "feather-local-storage",
   "driver-csv-ingest",
+  "driver-bacnet-ingest",
+  "diy-bacnet-bench-sidecar",
   "local-dev-orchestration",
 ]
 codex_bin = "codex"
