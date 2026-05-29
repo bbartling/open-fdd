@@ -1,3 +1,2 @@
-# Install on the OT edge host (same venv as open-fdd dev or a dedicated venv):
-#   pip install -r bacnet_toolshed/requirements.txt
 bacpypes3>=0.0.102
+pydantic>=2.0

@@ -1,0 +1,20 @@
+---
+# Copy to inventory.yml (gitignored) and set real IPs.
+#
+#   cp inventory.example.yml inventory.yml
+#
+# Deploy:
+#   ./deploy.sh --limit bacnet_pi -v
+#   ./deploy.sh --limit acme_vm_bbartling -v
+
+all:
+  children:
+    pi_bcn:
+      hosts:
+        bacnet_pi:
+          ansible_host: 198.51.100.12
+          ansible_user: ben
+
+        acme_vm_bbartling:
+          ansible_host: 198.51.100.55
+          ansible_user: bbartling

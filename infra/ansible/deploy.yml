@@ -1,0 +1,238 @@
+---
+# Deploy Open-FDD edge stack (bridge + BACnet toolshed) to Linux gateways.
+#
+#   ./deploy.sh --limit bacnet_pi -v
+#   ./deploy.sh --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+
+- name: Deploy Open-FDD edge stack
+  hosts: pi_bcn
+  gather_facts: true
+
+  handlers:
+    - name: Restart BACnet poll driver
+      ansible.builtin.systemd:
+        name: openfdd-bacnet-poll
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_bacnet_poll_driver | default(false) | bool
+
+    - name: Restart Open-FDD bridge
+      ansible.builtin.systemd:
+        name: openfdd-bridge
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_openfdd_bridge | default(true) | bool
+
+    - name: Restart BACnet commission agent
+      ansible.builtin.systemd:
+        name: openfdd-bacnet-commission
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_bacnet_commission_agent | default(true) | bool
+
+  tasks:
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ openfdd_remote_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync open_fdd package
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../open_fdd/"
+        dest: "{{ openfdd_remote_dir }}/open_fdd/"
+        mode: "0644"
+      notify: Restart Open-FDD bridge
+
+    - name: Sync bacnet_toolshed package
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../bacnet_toolshed/"
+        dest: "{{ openfdd_remote_dir }}/bacnet_toolshed/"
+        mode: "0644"
+      notify:
+        - Restart BACnet poll driver
+        - Restart BACnet commission agent
+
+    - name: Sync workspace bridge API
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/api/"
+        dest: "{{ openfdd_remote_dir }}/workspace/api/"
+        mode: "0644"
+      notify: Restart Open-FDD bridge
+
+    - name: Sync workspace data tree
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/data/"
+        dest: "{{ openfdd_remote_dir }}/workspace/data/"
+        mode: "0644"
+
+    - name: Sync built dashboard static files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/api/static/app/"
+        dest: "{{ openfdd_remote_dir }}/workspace/api/static/app/"
+        mode: "0644"
+      notify: Restart Open-FDD bridge
+
+    - name: Copy pyproject.toml and README
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../{{ item }}"
+        dest: "{{ openfdd_remote_dir }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - pyproject.toml
+        - README.md
+
+    - name: Stat commissioned points.csv on control machine
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+      delegate_to: localhost
+      become: false
+      register: local_commission_csv
+
+    - name: Push commissioned points.csv to edge
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+        dest: "{{ points_csv_path }}"
+        mode: "0644"
+      when: local_commission_csv.stat.exists | default(false)
+      notify: Restart BACnet poll driver
+
+    - name: Ensure BACnet workspace layout
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
+
+    - name: Install BACnet commission.env
+      ansible.builtin.template:
+        src: templates/commission.env.j2
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/commission.env"
+        mode: "0644"
+      notify: Restart BACnet commission agent
+
+    - name: Install base Python packages (Debian / Raspberry Pi OS)
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-venv
+          - python3-pip
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Create virtual environment
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -m
+          - venv
+          - "{{ openfdd_remote_dir }}/.venv"
+        creates: "{{ openfdd_remote_dir }}/.venv/bin/python"
+
+    - name: Install Open-FDD editable package
+      ansible.builtin.command:
+        argv:
+          - "{{ openfdd_remote_dir }}/.venv/bin/pip"
+          - install
+          - "-e"
+          - "{{ openfdd_remote_dir }}[dev,engine]"
+      changed_when: true
+
+    - name: Install bridge and BACnet requirements
+      ansible.builtin.command:
+        argv:
+          - "{{ openfdd_remote_dir }}/.venv/bin/pip"
+          - install
+          - "-r"
+          - "{{ openfdd_remote_dir }}/workspace/api/requirements.txt"
+          - "-r"
+          - "{{ openfdd_remote_dir }}/bacnet_toolshed/requirements.txt"
+      changed_when: true
+
+    - name: Install bridge secret env file
+      ansible.builtin.template:
+        src: templates/bridge.secret.env.j2
+        dest: /etc/openfdd/bridge.secret.env
+        mode: "0600"
+        owner: root
+        group: root
+      become: true
+      when:
+        - install_openfdd_bridge | default(true) | bool
+        - (commission_agent_token | default('') | length > 0) or (ofdd_auth_secret | default('') | length > 0)
+      notify: Restart Open-FDD bridge
+
+    - name: Install openfdd-bridge systemd unit
+      ansible.builtin.template:
+        src: templates/openfdd-bridge.service.j2
+        dest: /etc/systemd/system/openfdd-bridge.service
+        mode: "0644"
+      become: true
+      when: install_openfdd_bridge | default(true) | bool
+      notify: Restart Open-FDD bridge
+
+    - name: Install openfdd-bacnet-poll systemd unit
+      ansible.builtin.template:
+        src: templates/openfdd-bacnet-poll.service.j2
+        dest: /etc/systemd/system/openfdd-bacnet-poll.service
+        mode: "0644"
+      become: true
+      when: install_bacnet_poll_unit | default(true) | bool
+      notify: Restart BACnet poll driver
+
+    - name: Install openfdd-bacnet-commission systemd unit
+      ansible.builtin.template:
+        src: templates/openfdd-bacnet-commission.service.j2
+        dest: /etc/systemd/system/openfdd-bacnet-commission.service
+        mode: "0644"
+      become: true
+      when: install_bacnet_commission_unit | default(true) | bool
+
+    - name: Enable and start openfdd-bridge
+      ansible.builtin.systemd:
+        name: openfdd-bridge
+        enabled: "{{ enable_openfdd_bridge | default(true) | bool }}"
+        state: "{{ 'started' if (enable_openfdd_bridge | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_openfdd_bridge | default(true) | bool
+
+    - name: Enable and start openfdd-bacnet-commission
+      ansible.builtin.systemd:
+        name: openfdd-bacnet-commission
+        enabled: "{{ enable_bacnet_commission_agent | default(true) | bool }}"
+        state: "{{ 'started' if (enable_bacnet_commission_agent | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_bacnet_commission_unit | default(true) | bool
+
+    - name: Enable and start openfdd-bacnet-poll
+      ansible.builtin.systemd:
+        name: openfdd-bacnet-poll
+        enabled: "{{ enable_bacnet_poll_driver | default(false) | bool }}"
+        state: "{{ 'started' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_bacnet_poll_unit | default(true) | bool
+
+    - name: Verify bridge health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
+        return_content: true
+      register: bridge_health
+      failed_when: false
+      when:
+        - run_deploy_verify | default(true) | bool
+        - enable_openfdd_bridge | default(true) | bool
+
+    - name: Bridge health summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} bridge={{ bridge_health.status | default('skipped') }} poll_driver={{ 'enabled' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}"
+      when: run_deploy_verify | default(true) | bool

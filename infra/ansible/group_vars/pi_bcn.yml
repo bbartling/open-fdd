@@ -1,0 +1,71 @@
+---
+# Defaults for all Open-FDD BACnet edge hosts (Pi or x86 VM).
+# Per-building overrides: host_vars/<inventory_name>.yml
+
+openfdd_remote_dir: "/home/{{ ansible_user }}/open-fdd"
+
+site_id: demo
+building_id: edge
+
+# BACnet/IP bind — override in host_vars (OT NIC vs SSH IP)
+bacnet_bind_address: "{{ ansible_host }}/24:47808"
+bacnet_instance_id: 599999
+bacnet_device_name: OpenFddEdge
+
+# Poll driver (local CSV → bridge ingest → FDD)
+install_bacnet_poll_unit: true
+enable_bacnet_poll_driver: false
+bacnet_poll_interval: 60
+bacnet_route_aware: false
+bacnet_network: 1
+bacnet_router_ip: ""
+bacnet_discover_timeout: 20
+
+# Discover Who-Is range defaults (override per host)
+bacnet_discover_low: 1
+bacnet_discover_high: 4194303
+
+points_csv_path: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/points.csv"
+polls_csv_path: "{{ openfdd_remote_dir }}/workspace/bacnet/polls/samples.csv"
+
+# Commission HTTP agent (discover jobs from bridge / operator)
+install_bacnet_commission_unit: true
+enable_bacnet_commission_agent: true
+bacnet_commission_bind: "127.0.0.1"
+bacnet_commission_port: 8767
+commission_agent_token: ""
+
+# Set in private host_vars for OT LAN; unset = auth off (dev only)
+# ofdd_auth_secret: ""
+# ofdd_web_user: operator
+# ofdd_web_password: ""
+
+# Auto-ingest poll CSV into feather after each poll cycle (optional timer)
+enable_poll_ingest_timer: false
+
+# Bridge bind: 0.0.0.0 for OT LAN dashboard on edge Pis. Require ofdd_auth_secret + credentials in host_vars.
+# For loopback-only, override openfdd_bridge_host: "127.0.0.1" and use Caddy (see workspace/deploy/Caddyfile.example).
+openfdd_bridge_host: "0.0.0.0"
+openfdd_bridge_port: 8765
+
+# Repo backup on control machine (gitignored local/)
+edge_backup_dir: "{{ playbook_dir }}/../../edge_backup/local"
+
+run_deploy_verify: true
+
+# Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
+enable_ollama: false
+ollama_ram_tier: "8gb"       # 8gb | 16gb | 32gb | 64gb
+ollama_gpu_mode: "cpu"        # cpu | auto | gpu
+ollama_ai_backend: "auto"     # auto | ollama | codex
+ollama_install_if_missing: true
+ollama_base_url: "http://127.0.0.1:11434"
+ollama_version: "0.24.0"
+ollama_checksum_sha256:
+  amd64: "15c5f8d66ba06e0d3b4719df8868612dbd66e14e82760929bb3552e1657cdcdb"
+  arm64: "6e9a3ce5f64e93312902e39c420ec336255f078a368ca25e99b339d08a6dfa4b"
+ollama_model_for_tier:
+  8gb: "tinyllama"
+  16gb: "llama3.2:1b"
+  32gb: "llama3.2:3b"
+  64gb: "llama3.1:8b"

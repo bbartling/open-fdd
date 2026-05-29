@@ -56,6 +56,7 @@ async def read_multiple_chunked(
                 pid_str = str(getattr(res_pid, "value", res_pid))
                 val = unwrap_value(property_value)
                 merged[f"{oid_str}:{pid_str}:{res_idx}"] = val
+                merged[f"{oid_str}:{pid_str}"] = val
                 # poll_driver looks up by object id (present-value only)
                 if pid_str in {"present-value", "85"}:
                     merged[oid_str] = val

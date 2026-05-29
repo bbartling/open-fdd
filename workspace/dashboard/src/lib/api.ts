@@ -1,10 +1,48 @@
 const TOKEN_KEY = "ofdd_token";
+const BRIDGE_OVERRIDE_KEY = "ofdd-bridge-base-override";
+
+function isLocalhostHost(hostname: string): boolean {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+}
+
+function resolveBase(candidate: string, pageHost: string): string {
+  const trimmed = candidate.replace(/\/$/, "");
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed.startsWith("http") ? trimmed : `http://${trimmed}`);
+    if (isLocalhostHost(url.hostname) && pageHost && !isLocalhostHost(pageHost)) {
+      return "";
+    }
+    return trimmed.startsWith("http") ? trimmed : `http://${trimmed}`;
+  } catch {
+    return "";
+  }
+}
+
+/** Clear stale dev override that points at 127.0.0.1 when browsing from another LAN host. */
+export function sanitizeBridgeBaseOverride(): boolean {
+  const pageHost = window.location.hostname;
+  if (!pageHost || isLocalhostHost(pageHost)) return false;
+  const override = localStorage.getItem(BRIDGE_OVERRIDE_KEY);
+  if (!override?.trim()) return false;
+  const resolved = resolveBase(override, pageHost);
+  if (!resolved) {
+    localStorage.removeItem(BRIDGE_OVERRIDE_KEY);
+    return true;
+  }
+  return false;
+}
 
 export function getBridgeBase(): string {
-  const override = localStorage.getItem("ofdd-bridge-base-override");
-  if (override?.trim()) return override.replace(/\/$/, "");
+  const pageHost = typeof window !== "undefined" ? window.location.hostname : "";
+  const override = localStorage.getItem(BRIDGE_OVERRIDE_KEY);
+  if (override?.trim()) {
+    return resolveBase(override, pageHost);
+  }
   const env = import.meta.env.VITE_DESKTOP_BRIDGE_BASE as string | undefined;
-  if (env?.trim()) return env.replace(/\/$/, "");
+  if (env?.trim()) {
+    return resolveBase(env, pageHost);
+  }
   return "";
 }
 
@@ -27,16 +65,58 @@ export async function apiFetch<T>(
       ...(init?.headers || {}),
     },
   });
-  if (res.status === 401) {
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
     sessionStorage.removeItem(TOKEN_KEY);
-    window.location.href = "/login";
+    if (window.top === window.self) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    try {
+      const body = JSON.parse(text) as { detail?: string | { error?: string } };
+      if (typeof body.detail === "string") {
+        throw new Error(body.detail);
+      }
+      if (body.detail && typeof body.detail === "object" && "error" in body.detail) {
+        throw new Error(String(body.detail.error));
+      }
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        // not JSON — fall through to plain-text error
+      } else if (e instanceof Error) {
+        throw e;
+      }
+    }
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Fetch non-JSON responses (e.g. TTL) with shared auth/base-url behavior. */
+export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init?.headers || {}),
+    },
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (window.top === window.self) {
+      window.location.assign("/login");
+    }
     throw new Error("unauthorized");
   }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  return res.text();
 }
 
 export function setToken(token: string) {

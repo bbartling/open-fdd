@@ -173,7 +173,22 @@ NOTES.md
 !/pdf/open-fdd-docs.txt
 
 # Local operator manifest (copy from openfdd.toml.example)
-openfdd.toml
+workspace/auth.env.local
+
+# Local Ollama operator AI config
+workspace/ollama.env.local
+workspace/.local-run/
+
+# Ansible private inventory + host secrets
+infra/ansible/inventory.yml
+infra/ansible/host_vars/bacnet_pi.yml
+infra/ansible/host_vars/acme_vm_bbartling.yml
+
+# Edge commissioning backups (real sites)
+edge_backup/local/
+
+# Runtime audit / error logs (forensics — do not commit)
+workspace/logs/
 
 # Agent-generated application code (committed operator starter under workspace/)
 /workspace/**

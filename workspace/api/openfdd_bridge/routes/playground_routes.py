@@ -8,9 +8,13 @@ from pydantic import BaseModel, Field
 
 from .. import playground
 from ..data_loader import load_demo_dataframe, records_from_dataframe, rows_for_evaluate
-from ..deps import require_user
+from ..deps import require_roles
 
-router = APIRouter(prefix="/api/playground", tags=["playground"], dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/api/playground",
+    tags=["playground"],
+    dependencies=[Depends(require_roles("integrator", "agent"))],
+)
 
 
 class LintBody(BaseModel):

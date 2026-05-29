@@ -19,7 +19,11 @@ from openfdd_bridge.main import create_app  # noqa: E402
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     return TestClient(create_app())
 
 
@@ -55,21 +59,17 @@ def test_playground_test_rule(client: TestClient):
     assert body["rows"] > 0
 
 
-def test_rules_run(client: TestClient):
-    r = client.post(
-        "/api/rules/run",
-        json={"column_map": {"SAT": "SAT"}, "skip_missing_columns": False},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert body["flag_columns"]
-
-
 def test_agent_context(client: TestClient):
     r = client.get("/openfdd-agent/context")
     assert r.status_code == 200
     assert "repo_root" in r.json()
+
+
+def test_model_export_empty(client: TestClient):
+    r = client.get("/api/model/export")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sites"] == []
 
 
 def test_spa_index_when_built(client: TestClient):

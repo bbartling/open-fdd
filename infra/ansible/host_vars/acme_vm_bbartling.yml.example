@@ -1,0 +1,12 @@
+---
+# vm-bbartling — Acme BACnet test bench
+
+site_id: acme
+building_id: vm-bbartling
+
+bacnet_instance_id: 3456791
+bacnet_device_name: OpenFddVmBbartling
+bacnet_bind_address: "10.200.200.185/24:47808"
+
+enable_bacnet_poll_driver: false
+bacnet_poll_interval: 60
