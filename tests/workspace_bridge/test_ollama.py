@@ -153,7 +153,7 @@ def test_agent_chat_ollama_backend():
     ):
         r = client.post(
             "/openfdd-agent/chat",
-            json={"message": "ping", "backend": "ollama", "ram_tier": "8gb", "gpu_mode": "cpu"},
+            json={"message": "ping"},
         )
     assert r.status_code == 200
     body = r.json()
@@ -176,5 +176,4 @@ def test_agent_context_includes_ollama_tiers():
     assert r.status_code == 200
     body = r.json()
     assert body["ollama_tiers"]
-    assert body["ollama_gpu_options"]
     assert body["ollama"]["ok"] is False

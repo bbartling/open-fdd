@@ -1,62 +1,93 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
+import BacnetPointsTree from "../components/BacnetPointsTree";
+import Spinner from "../components/Spinner";
+import {
+  extractPointDiscoveryObjects,
+  extractWhoisDevices,
+  parseDeviceInstanceFromWhoisRow,
+  type InventoryDevice,
+  type PointDiscoveryObjectRow,
+  type WhoisDeviceRow,
+} from "../lib/bacnet-discovery-parse";
 
 type BacnetConfig = {
   points_exists: boolean;
   discovered_exists: boolean;
   poll_exists: boolean;
-  poll_csv: string;
-  discovered_csv: string;
-  points_csv: string;
   commission_agent_ok: boolean;
 };
 
 type CommissionStatus = {
+  bacnet_bind?: string;
   site_id?: string;
   building_id?: string;
-  bacnet_bind?: string;
   discover_range?: [string, string];
-  last_jobs?: Array<{ id: string; kind: string; status: string }>;
 };
 
 type DiscoverJob = {
-  job_id: string;
-  kind: string;
+  job_id?: string;
+  id?: string;
+  kind?: string;
   status?: string;
   exit_code?: number | null;
   log_tail?: string;
   result?: unknown;
-  output?: string;
+  error?: string;
+  device_instance?: number;
 };
 
-type WhoIsDevice = {
-  "i-am-device-identifier"?: string;
-  "device-address"?: string;
-  "device-description"?: string;
-  "vendor-id"?: number;
+type BatchRow = {
+  instance: number;
+  ok: boolean;
+  objectCount?: number;
+  error?: string;
 };
+
+type LiveDevice = {
+  device_instance: number;
+  device_address?: string;
+  objects: PointDiscoveryObjectRow[];
+};
+
+async function waitForJob(jobId: string): Promise<DiscoverJob> {
+  for (let i = 0; i < 120; i++) {
+    const job = await apiFetch<DiscoverJob>(`/api/bacnet/jobs/${jobId}`);
+    if (job.status && job.status !== "running") return job;
+    await new Promise((r) => window.setTimeout(r, 1500));
+  }
+  throw new Error(`Job ${jobId} timed out`);
+}
 
 export default function BacnetPage() {
   const [cfg, setCfg] = useState<BacnetConfig | null>(null);
   const [status, setStatus] = useState<CommissionStatus | null>(null);
+  const [inventory, setInventory] = useState<InventoryDevice[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [log, setLog] = useState("");
-  const [whoisLow, setWhoisLow] = useState(5007);
-  const [whoisHigh, setWhoisHigh] = useState(5007);
+  const [whoisLow, setWhoisLow] = useState(1);
+  const [whoisHigh, setWhoisHigh] = useState(4194303);
   const [deviceInst, setDeviceInst] = useState(5007);
-  const [busy, setBusy] = useState(false);
-  const [activeJob, setActiveJob] = useState<string | null>(null);
-  const [whoisDevices, setWhoisDevices] = useState<WhoIsDevice[]>([]);
-  const [writeOid, setWriteOid] = useState("analog-value,1");
-  const [writeValue, setWriteValue] = useState("72");
-  const [writePriority, setWritePriority] = useState(8);
+  const [whoisPending, setWhoisPending] = useState(false);
+  const [discoverCsvPending, setDiscoverCsvPending] = useState(false);
+  const [pointDiscoveryPending, setPointDiscoveryPending] = useState(false);
+  const [batchPending, setBatchPending] = useState(false);
+  const [whoisDevices, setWhoisDevices] = useState<WhoisDeviceRow[]>([]);
+  const [selectedInstances, setSelectedInstances] = useState<Set<number>>(new Set());
+  const [liveDevices, setLiveDevices] = useState<LiveDevice[]>([]);
+  const [discoveryPreview, setDiscoveryPreview] = useState<PointDiscoveryObjectRow[]>([]);
+  const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
+  const [activeJobLabel, setActiveJobLabel] = useState("");
 
   const refresh = useCallback(async () => {
-    const [c, s] = await Promise.all([
+    const [c, s, inv] = await Promise.all([
       apiFetch<BacnetConfig>("/config/bacnet"),
       apiFetch<CommissionStatus>("/api/bacnet/commission/status").catch(() => null),
+      apiFetch<{ devices: InventoryDevice[] }>("/api/bacnet/inventory").catch(() => ({ devices: [] })),
     ]);
     setCfg(c);
+    setInventory(inv.devices ?? []);
     if (s) {
       setStatus(s);
       if (s.discover_range?.length === 2) {
@@ -67,256 +98,338 @@ export default function BacnetPage() {
   }, []);
 
   useEffect(() => {
-    refresh().catch((e) => {
-      setLoadError(String(e));
-      setLog(String(e));
-    });
+    refresh().catch((e) => setLoadError(String(e)));
   }, [refresh]);
 
-  useEffect(() => {
-    if (!activeJob) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const job = await apiFetch<DiscoverJob>(`/api/bacnet/jobs/${activeJob}`);
-        if (cancelled) return;
-        const tail = job.log_tail?.trim();
-        const resultText = job.result ? `\n--- result ---\n${JSON.stringify(job.result, null, 2)}` : "";
-        setLog(
-          [
-            `Job ${job.job_id} (${job.kind ?? "?"}) — ${job.status ?? "unknown"}`,
-            job.output ? `output: ${job.output}` : "",
-            tail ? `\n--- log ---\n${tail}` : "",
-            resultText,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        );
-        if (job.status && job.status !== "running") {
-          setActiveJob(null);
-          setBusy(false);
-          await refresh();
-        }
-      } catch (e) {
-        if (!cancelled) setLog(String(e));
-      }
-    };
-    poll();
-    const id = window.setInterval(poll, 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [activeJob, refresh]);
+  function toggleInstance(instance: number, checked: boolean) {
+    setSelectedInstances((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(instance);
+      else next.delete(instance);
+      return next;
+    });
+  }
+
+  function selectAllParsable() {
+    const next = new Set<number>();
+    for (const row of whoisDevices) {
+      const inst = parseDeviceInstanceFromWhoisRow(row);
+      if (inst != null) next.add(inst);
+    }
+    setSelectedInstances(next);
+  }
 
   async function runWhoIs() {
-    setBusy(true);
+    setWhoisPending(true);
+    setActionError("");
     setLog(`Who-Is ${whoisLow}–${whoisHigh}…`);
     try {
-      const res = await apiFetch<{ devices: WhoIsDevice[]; count: number }>("/api/bacnet/whois", {
+      const res = await apiFetch<unknown>("/api/bacnet/whois", {
         method: "POST",
         body: JSON.stringify({ range_low: whoisLow, range_high: whoisHigh }),
       });
-      setWhoisDevices(res.devices ?? []);
-      setLog(`Who-Is found ${res.count ?? 0} device(s)`);
+      const devices = extractWhoisDevices(res);
+      setWhoisDevices(devices);
+      setSelectedInstances(new Set());
+      setBatchSummary(null);
+      setLog(
+        devices.length
+          ? `Who-Is found ${devices.length} device(s). Select rows for point discovery.`
+          : "No I-Am responses — widen range or check BACnet bind / OT network.",
+      );
     } catch (e) {
-      setLog(String(e));
+      const msg = String(e);
+      setActionError(msg);
+      setLog(msg);
     } finally {
-      setBusy(false);
+      setWhoisPending(false);
     }
   }
 
   async function runDiscoverCsv() {
-    setBusy(true);
+    setDiscoverCsvPending(true);
+    setActionError("");
+    setActiveJobLabel("CSV discover");
+    setLog("Starting full discover → points_discovered.csv…");
     try {
       const res = await apiFetch<DiscoverJob>("/api/bacnet/discover", {
         method: "POST",
         body: JSON.stringify({ range_low: whoisLow, range_high: whoisHigh }),
       });
-      setActiveJob(res.job_id);
-      setLog(`CSV discover job ${res.job_id} started`);
+      const jobId = res.job_id ?? res.id;
+      if (!jobId) throw new Error("No job_id returned");
+      const job = await waitForJob(jobId);
+      setLog(
+        [
+          `Discover job ${jobId} — ${job.status}`,
+          job.log_tail ? `\n--- log ---\n${job.log_tail}` : "",
+          job.error ? `\nERROR: ${job.error}` : "",
+        ].join(""),
+      );
+      if (job.status !== "ok") setActionError(job.error || "Discover job failed");
+      await refresh();
     } catch (e) {
+      setActionError(String(e));
       setLog(String(e));
-      setBusy(false);
+    } finally {
+      setDiscoverCsvPending(false);
+      setActiveJobLabel("");
     }
   }
 
-  async function runPointDiscovery() {
-    setBusy(true);
+  async function discoverDevice(instance: number): Promise<BatchRow> {
+    setActionError("");
     try {
       const res = await apiFetch<DiscoverJob>("/api/bacnet/point-discovery", {
         method: "POST",
-        body: JSON.stringify({ device_instance: deviceInst }),
+        body: JSON.stringify({ device_instance: instance }),
       });
-      setActiveJob(res.job_id);
-      setLog(`Point discovery job ${res.job_id} for device ${deviceInst}`);
+      const jobId = res.job_id ?? res.id;
+      if (!jobId) throw new Error("No job_id returned");
+      const job = await waitForJob(jobId);
+      const objects = extractPointDiscoveryObjects(job.result);
+      setDiscoveryPreview(objects);
+      setLiveDevices((prev) => {
+        const rest = prev.filter((d) => d.device_instance !== instance);
+        const addr = (job.result as { device_address?: string } | undefined)?.device_address;
+        return [...rest, { device_instance: instance, device_address: addr, objects }];
+      });
+      if (job.status !== "ok") {
+        setActionError(job.error || `Point discovery failed for ${instance}`);
+      }
+      return {
+        instance,
+        ok: job.status === "ok",
+        objectCount: objects.length,
+        error: job.error,
+      };
     } catch (e) {
-      setLog(String(e));
-      setBusy(false);
+      const msg = String(e);
+      setActionError(msg);
+      return { instance, ok: false, error: msg };
     }
   }
 
-  async function runSupervisory() {
-    setBusy(true);
+  async function runPointDiscoveryFor(instance: number) {
+    setPointDiscoveryPending(true);
+    setActiveJobLabel(`Point discovery ${instance}`);
+    setLog(`Point discovery for device ${instance}…`);
     try {
-      const res = await apiFetch<DiscoverJob>("/api/bacnet/supervisory-check", {
-        method: "POST",
-        body: JSON.stringify({ device_instance: deviceInst }),
-      });
-      setActiveJob(res.job_id);
-      setLog(`Supervisory check job ${res.job_id} for device ${deviceInst}`);
-    } catch (e) {
-      setLog(String(e));
-      setBusy(false);
-    }
-  }
-
-  async function runWrite(release: boolean) {
-    setBusy(true);
-    try {
-      const res = await apiFetch<Record<string, unknown>>("/api/bacnet/write", {
-        method: "POST",
-        body: JSON.stringify({
-          device_instance: deviceInst,
-          object_identifier: writeOid,
-          property_identifier: "present-value",
-          value: release ? null : Number.isNaN(Number(writeValue)) ? writeValue : Number(writeValue),
-          priority: writePriority,
-        }),
-      });
-      setLog(JSON.stringify(res, null, 2));
-    } catch (e) {
-      setLog(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function ingest() {
-    try {
-      const res = await apiFetch<{ ok: boolean; rows: number; feather_path: string }>(
-        "/ingest/bacnet?site_id=demo",
-        { method: "POST" },
+      const row = await discoverDevice(instance);
+      setLog(
+        row.ok
+          ? `Device ${instance}: ${row.objectCount ?? 0} object(s)`
+          : `Device ${instance} failed: ${row.error ?? "unknown"}`,
       );
-      setLog(`Ingested ${res.rows} rows → ${res.feather_path}`);
-    } catch (e) {
-      setLog(String(e));
+    } finally {
+      setPointDiscoveryPending(false);
+      setActiveJobLabel("");
     }
   }
 
-  const badge = (ok: boolean) => (
-    <span className={ok ? "badge ok" : "badge"}>{ok ? "yes" : "no"}</span>
-  );
+  async function runBatchPointDiscovery() {
+    const list = Array.from(selectedInstances).sort((a, b) => a - b);
+    if (!list.length) return;
+    setBatchPending(true);
+    setBatchSummary(null);
+    setActionError("");
+    setLog(`Batch point discovery for ${list.length} device(s)…`);
+    const summary: BatchRow[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setActiveJobLabel(`Point discovery ${i + 1}/${list.length} (device ${list[i]})`);
+      const row = await discoverDevice(list[i]);
+      summary.push(row);
+      setBatchSummary([...summary]);
+    }
+    setBatchPending(false);
+    setActiveJobLabel("");
+    setLog(`Batch point discovery finished for ${list.length} device(s).`);
+  }
+
+  const agentOk = cfg?.commission_agent_ok === true;
+  const anyPending = whoisPending || discoverCsvPending || pointDiscoveryPending || batchPending;
+  const selectedList = Array.from(selectedInstances).sort((a, b) => a - b);
 
   return (
     <div>
-      <h2>BACnet commissioning</h2>
-      <p className="muted">
-        Discover, point inventory, supervisory override scan, write/release, poll → ingest.
-      </p>
+      <h2 className="title">BACnet commissioning</h2>
+      <p className="muted">Who-Is → select devices → point discovery → device tree. Bind must reach your OT BACnet segment.</p>
 
       <div className="panel">
-        <h3>Files & agent</h3>
-        {loadError ? (
-          <p className="error">{loadError}</p>
-        ) : cfg ? (
-          <ul className="file-list">
-            <li>Commission agent {badge(cfg.commission_agent_ok)}</li>
-            <li>points.csv {badge(cfg.points_exists)}</li>
-            <li>points_discovered.csv {badge(cfg.discovered_exists)}</li>
-            <li>poll CSV {badge(cfg.poll_exists)}</li>
-          </ul>
+        <h3>Agent status</h3>
+        {loadError ? <p className="error">{loadError}</p> : null}
+        {cfg ? (
+          <div className="host-info-grid">
+            <div>
+              <span className="muted">Commission agent</span>
+              <div className={agentOk ? "ok" : "error"}>{agentOk ? "running" : "down"}</div>
+            </div>
+            <div>
+              <span className="muted">BACnet bind</span>
+              <div>
+                <code>{status?.bacnet_bind ?? "—"}</code>
+              </div>
+            </div>
+            <div>
+              <span className="muted">CSV inventory</span>
+              <div>{cfg.discovered_exists ? "points_discovered.csv ready" : "not yet"}</div>
+            </div>
+            <div>
+              <span className="muted">Poll CSV</span>
+              <div>{cfg.poll_exists ? "yes" : "no"}</div>
+            </div>
+          </div>
         ) : (
-          <p className="muted">Loading…</p>
+          <Spinner label="Loading agent…" />
         )}
-        {status?.bacnet_bind ? (
-          <p className="muted">
-            Bind <code>{status.bacnet_bind}</code> · {status.site_id}/{status.building_id}
-          </p>
-        ) : null}
         <div className="row">
-          <button type="button" className="secondary" onClick={() => refresh().catch((e) => setLog(String(e)))}>
+          <button type="button" className="secondary-btn" onClick={() => refresh().catch((e) => setLoadError(String(e)))}>
             Refresh
           </button>
         </div>
       </div>
 
       <div className="panel">
-        <h3>Discover devices</h3>
+        <h3>Step 1 — Discover devices</h3>
         <div className="form-row">
           <label>
-            Start
+            Who-Is start
             <input type="number" value={whoisLow} onChange={(e) => setWhoisLow(Number(e.target.value))} />
           </label>
           <label>
-            End
+            end
             <input type="number" value={whoisHigh} onChange={(e) => setWhoisHigh(Number(e.target.value))} />
           </label>
-          <button type="button" onClick={runWhoIs} disabled={busy || !cfg?.commission_agent_ok}>
-            Who-Is (live)
+          <button type="button" onClick={runWhoIs} disabled={!agentOk || anyPending}>
+            {whoisPending ? <Spinner label="Who-Is…" /> : "Who-Is"}
           </button>
-          <button type="button" className="secondary" onClick={runDiscoverCsv} disabled={busy || !cfg?.commission_agent_ok}>
-            Discover → CSV
+          <button type="button" className="secondary-btn" onClick={runDiscoverCsv} disabled={!agentOk || anyPending}>
+            {discoverCsvPending ? <Spinner label="Discover CSV…" /> : "Discover → CSV"}
           </button>
         </div>
+
         {whoisDevices.length > 0 ? (
-          <ul className="job-list">
-            {whoisDevices.map((d, i) => (
-              <li key={i}>
-                <code>{d["i-am-device-identifier"]}</code> @ {d["device-address"]} — {d["device-description"]}
+          <div className="bacnet-device-table-wrap">
+            <div className="row">
+              <span className="muted">{whoisDevices.length} device(s)</span>
+              <button type="button" className="secondary-btn" onClick={selectAllParsable}>
+                Select all parsable
+              </button>
+              <button type="button" className="secondary-btn" onClick={() => setSelectedInstances(new Set())}>
+                Clear
+              </button>
+            </div>
+            <table className="bacnet-table">
+              <thead>
+                <tr>
+                  <th>Use</th>
+                  <th>Instance</th>
+                  <th>I-Am id</th>
+                  <th>Address</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {whoisDevices.map((row, i) => {
+                  const inst = parseDeviceInstanceFromWhoisRow(row);
+                  return (
+                    <tr key={`${row["i-am-device-identifier"] ?? i}`}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          disabled={inst == null}
+                          checked={inst != null && selectedInstances.has(inst)}
+                          onChange={(e) => inst != null && toggleInstance(inst, e.target.checked)}
+                        />
+                      </td>
+                      <td className="mono">{inst ?? "—"}</td>
+                      <td className="mono">{row["i-am-device-identifier"] ?? "—"}</td>
+                      <td className="mono">{String(row["device-address"] ?? "—")}</td>
+                      <td>{String(row["device-description"] ?? "—")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !whoisPending && <p className="muted">Run Who-Is to populate the device table.</p>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Step 2 — Point discovery</h3>
+        <div className="form-row">
+          <label>
+            Manual device instance
+            <input type="number" value={deviceInst} onChange={(e) => setDeviceInst(Number(e.target.value))} />
+          </label>
+          <button
+            type="button"
+            onClick={() => runPointDiscoveryFor(deviceInst)}
+            disabled={!agentOk || anyPending}
+          >
+            {pointDiscoveryPending ? <Spinner label="Discovering…" /> : "Point discovery (manual)"}
+          </button>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={runBatchPointDiscovery}
+            disabled={!agentOk || anyPending || selectedList.length === 0}
+          >
+            {batchPending ? <Spinner label={`Batch ${selectedList.length}…`} /> : `Point discovery (${selectedList.length} selected)`}
+          </button>
+        </div>
+
+        {batchSummary?.length ? (
+          <ul className="batch-summary">
+            {batchSummary.map((r) => (
+              <li key={r.instance}>
+                Device {r.instance}:{" "}
+                {r.ok ? (
+                  <span className="ok">{r.objectCount ?? 0} objects</span>
+                ) : (
+                  <span className="error">{r.error ?? "failed"}</span>
+                )}
               </li>
             ))}
           </ul>
         ) : null}
+
+        {discoveryPreview.length > 0 ? (
+          <div className="bacnet-device-table-wrap">
+            <p className="muted">Latest discovery preview ({discoveryPreview.length} objects, first 30 shown)</p>
+            <table className="bacnet-table">
+              <thead>
+                <tr>
+                  <th>object_identifier</th>
+                  <th>name</th>
+                  <th>commandable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {discoveryPreview.slice(0, 30).map((row) => (
+                  <tr key={row.object_identifier}>
+                    <td className="mono">{row.object_identifier}</td>
+                    <td>{row.name}</td>
+                    <td>{row.commandable ? "yes" : "no"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </div>
 
       <div className="panel">
-        <h3>Point discovery & supervisory</h3>
-        <div className="form-row">
-          <label>
-            Device instance
-            <input type="number" value={deviceInst} onChange={(e) => setDeviceInst(Number(e.target.value))} />
-          </label>
-          <button type="button" onClick={runPointDiscovery} disabled={busy || !cfg?.commission_agent_ok}>
-            Point discovery
-          </button>
-          <button type="button" className="secondary" onClick={runSupervisory} disabled={busy || !cfg?.commission_agent_ok}>
-            Supervisory overrides
-          </button>
-        </div>
+        <h3>Device tree</h3>
+        <BacnetPointsTree inventory={inventory} liveDevices={liveDevices} />
       </div>
 
       <div className="panel">
-        <h3>Write / release (present-value)</h3>
-        <div className="form-row">
-          <label>
-            Object id
-            <input value={writeOid} onChange={(e) => setWriteOid(e.target.value)} placeholder="analog-value,1" />
-          </label>
-          <label>
-            Value
-            <input value={writeValue} onChange={(e) => setWriteValue(e.target.value)} />
-          </label>
-          <label>
-            Priority
-            <input type="number" min={1} max={16} value={writePriority} onChange={(e) => setWritePriority(Number(e.target.value))} />
-          </label>
-          <button type="button" onClick={() => runWrite(false)} disabled={busy || !cfg?.commission_agent_ok}>
-            Write
-          </button>
-          <button type="button" className="secondary" onClick={() => runWrite(true)} disabled={busy || !cfg?.commission_agent_ok}>
-            Release (null)
-          </button>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h3>Poll → ingest</h3>
-        <div className="row">
-          <button type="button" onClick={ingest} disabled={!cfg?.poll_exists}>
-            Ingest poll CSV
-          </button>
-        </div>
+        <h3>Activity</h3>
+        {activeJobLabel ? <p className="muted"><Spinner label={activeJobLabel} /></p> : null}
+        {actionError ? <p className="error">{actionError}</p> : null}
         <pre className="console">{log || "Ready."}</pre>
       </div>
     </div>

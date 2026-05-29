@@ -404,9 +404,12 @@ async def bacnet_write(
         write_value = value
         write_priority = int(priority) if priority is not None else None
 
-    result = await app.write_property(
-        address, obj_id, prop_id, write_value, prop_idx, write_priority
-    )
+    if write_priority is not None:
+        result = await app.write_property(
+            address, obj_id, prop_id, write_value, prop_idx, write_priority
+        )
+    else:
+        result = await app.write_property(address, obj_id, prop_id, write_value, prop_idx)
     action = "released" if is_release else "written"
     return {
         "status": "success",

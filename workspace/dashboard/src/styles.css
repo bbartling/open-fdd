@@ -450,3 +450,129 @@ select {
   font-weight: 500;
   margin-top: 2px;
 }
+
+.spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner-inline {
+  vertical-align: middle;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid color-mix(in srgb, var(--muted) 40%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.spinner-label {
+  font-size: 0.9rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bacnet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.bacnet-table th,
+.bacnet-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bacnet-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.bacnet-device-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.bacnet-device-table-wrap .row {
+  padding: 8px 10px;
+  margin: 0;
+}
+
+.batch-summary {
+  margin: 12px 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+
+.bacnet-tree {
+  display: grid;
+  gap: 8px;
+}
+
+.bacnet-tree-device {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.bacnet-tree-device-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.bacnet-tree-device-head:hover {
+  background: var(--nav-hover-bg);
+}
+
+.bacnet-tree-chevron {
+  width: 1rem;
+  color: var(--muted);
+}
+
+.bacnet-tree-device-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.bacnet-tree-points {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px 12px 2rem;
+  display: grid;
+  gap: 6px;
+}
+
+.bacnet-tree-points li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.badge.ok {
+  background: color-mix(in srgb, var(--ok) 20%, var(--panel-soft));
+  color: var(--ok);
+}

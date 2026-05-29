@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,7 @@ API_ROOT = Path(__file__).resolve().parents[2] / "workspace" / "api"
 REPO = Path(__file__).resolve().parents[2]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
+
 
 @pytest.fixture
 def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -27,6 +29,25 @@ def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from openfdd_bridge.main import create_app  # noqa: E402
 
     return TestClient(create_app())
+
+
+def test_operator_can_use_agent_chat(authed_client: TestClient):
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "operator", "password": "changeme"},
+    )
+    token = login.json()["token"]
+    with patch(
+        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+        return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
+    ):
+        r = authed_client.post(
+            "/openfdd-agent/chat",
+            json={"message": "hello"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
 
 
 def test_login_and_call(authed_client: TestClient):

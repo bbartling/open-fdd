@@ -200,6 +200,8 @@ def _sanitize_value(key: str, val: Any, blocked: frozenset[str]) -> Any | None:
                 nested = _sanitize_value(key, item, blocked)
                 if nested is not None:
                     out_list.append(nested)
+            elif isinstance(item, str) and any(b in key.lower() for b in blocked):
+                continue
             else:
                 out_list.append(item)
         return out_list

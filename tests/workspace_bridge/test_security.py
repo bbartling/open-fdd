@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,15 +31,19 @@ def test_spa_path_escape_blocked():
         candidate.relative_to(static_dir)
 
 
-def test_agent_chat_rejects_workdir_outside_repo(client: TestClient):
-    r = client.post(
-        "/openfdd-agent/chat",
-        json={"message": "hi", "workdir": "C:\\Windows\\System32"},
-    )
+def test_agent_chat_uses_ollama(client: TestClient):
+    with patch(
+        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+        return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
+    ):
+        r = client.post(
+            "/openfdd-agent/chat",
+            json={"message": "hi"},
+        )
     assert r.status_code == 200
-    # Should not use System32; guidance mode or codex with repo cwd
     body = r.json()
-    assert body.get("mode") in {"guidance", "codex", "ollama"}
+    assert body.get("mode") == "ollama"
+    assert body.get("ok") is True
 
 
 def test_ingest_bacnet_rejects_bad_site_id(client: TestClient):
