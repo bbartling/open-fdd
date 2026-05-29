@@ -142,24 +142,26 @@ def test_should_use_ollama(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_agent_chat_ollama_backend():
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
     from fastapi.testclient import TestClient
-
-    from openfdd_bridge.main import create_app  # noqa: E402
+    from openfdd_bridge.main import create_app
 
     client = TestClient(create_app())
     with patch(
-        "openfdd_bridge.ollama_client.chat",
+        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
         return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "ok"},
     ):
         r = client.post(
             "/openfdd-agent/chat",
             json={"message": "ping"},
         )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert body["mode"] == "ollama"
-    assert body["reply"] == "ok"
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True
+        assert body["mode"] == "ollama"
+        assert body["reply"] == "ok"
 
 
 def test_agent_context_includes_ollama_tiers():

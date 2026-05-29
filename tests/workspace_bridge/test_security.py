@@ -16,12 +16,20 @@ if str(API_ROOT) not in sys.path:
 os.environ.setdefault("OPENFDD_REPO_ROOT", str(REPO))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
-from openfdd_bridge.main import create_app  # noqa: E402
+
+def _fresh_client() -> TestClient:
+    """Reload bridge modules so patches apply after other tests clear sys.modules."""
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    return TestClient(create_app())
 
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    return _fresh_client()
 
 
 def test_spa_path_escape_blocked():
@@ -33,7 +41,7 @@ def test_spa_path_escape_blocked():
 
 def test_agent_chat_uses_ollama(client: TestClient):
     with patch(
-        "openfdd_bridge.ollama_client.chat",
+        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
         return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
     ):
         r = client.post(
