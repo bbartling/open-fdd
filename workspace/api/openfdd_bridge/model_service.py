@@ -78,6 +78,9 @@ class ModelService:
             }
 
         with self.transaction() as model:
+            for key in ("sites", "equipment", "points"):
+                if not isinstance(model.get(key), list):
+                    model[key] = []
             model["sites"].extend(normalized["sites"])
             model["equipment"].extend(normalized["equipment"])
             model["points"].extend(normalized["points"])

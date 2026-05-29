@@ -4,6 +4,24 @@ import { apiFetch } from "../lib/api";
 
 type AuditEvent = Record<string, unknown>;
 
+function mapAuditError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lower = msg.toLowerCase();
+  if (msg.includes("403") || lower.includes("forbidden")) {
+    return "Sign in as integrator to view audit log.";
+  }
+  if (msg.includes("401") || lower.includes("unauthorized")) {
+    return "Unauthorized";
+  }
+  if (lower.includes("failed to fetch") || lower.includes("network")) {
+    return "Network error";
+  }
+  if (msg.includes("503") || lower.includes("unavailable")) {
+    return "Service unavailable";
+  }
+  return "Unexpected error";
+}
+
 export default function HomePage() {
   const [auditPreview, setAuditPreview] = useState<AuditEvent[]>([]);
   const [auditError, setAuditError] = useState("");
@@ -11,7 +29,7 @@ export default function HomePage() {
   useEffect(() => {
     apiFetch<{ events: AuditEvent[] }>("/api/audit/events?limit=10")
       .then((r) => setAuditPreview(Array.isArray(r.events) ? r.events : []))
-      .catch((e) => setAuditError(String(e)));
+      .catch((e) => setAuditError(mapAuditError(e)));
   }, []);
 
   return (
@@ -35,11 +53,7 @@ export default function HomePage() {
         <p className="muted">
           Append-only JSON Lines at <code>workspace/logs/audit.jsonl</code>. Integrator role required.
         </p>
-        {auditError ? (
-          <p className="muted">
-            {auditError.includes("403") ? "Sign in as integrator to view audit log." : auditError}
-          </p>
-        ) : auditPreview.length ? (
+        {auditError ? <p className="muted">{auditError}</p> : auditPreview.length ? (
           <pre className="console audit-preview">
             {auditPreview
               .slice()
