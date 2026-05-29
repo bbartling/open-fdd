@@ -5,19 +5,31 @@ import re
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+
+from bacnet_toolshed.models import (
+    DeviceInstanceRequest,
+    DiscoverRequest,
+    ReadMultiplePropertiesRequestWrapper,
+    ReadPriorityArrayRequest,
+    SingleReadRequest,
+    WritePropertyRequest,
+)
 
 from ..commission_client import (
+    bacnet_priority_array as commission_priority_array,
+    bacnet_read as commission_read,
+    bacnet_read_multiple as commission_read_multiple,
     bacnet_write as commission_write,
     commission_health,
     commission_status,
     get_job,
+    server_points as commission_server_points,
     start_discover,
     start_point_discovery,
     start_supervisory_check,
     whois as commission_whois,
 )
-from ..deps import require_roles, require_user
+from ..deps import require_roles
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
@@ -27,23 +39,6 @@ _COMMISSION = Depends(require_roles("operator", "integrator", "agent"))
 _WRITE = Depends(require_roles("integrator"))
 
 _SAFE_SITE_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
-
-
-class DiscoverRequest(BaseModel):
-    range_low: int = Field(default=1, ge=0, le=4194303)
-    range_high: int = Field(default=4194303, ge=0, le=4194303)
-
-
-class DeviceInstanceRequest(BaseModel):
-    device_instance: int = Field(ge=0, le=4194303)
-
-
-class BacnetWriteRequest(BaseModel):
-    device_instance: int = Field(ge=0, le=4194303)
-    object_identifier: str
-    property_identifier: str = "present-value"
-    value: float | int | str | None = None
-    priority: int | None = Field(default=None, ge=1, le=16)
 
 
 def _validate_site_id(site_id: str) -> str:
@@ -68,6 +63,10 @@ def bacnet_config() -> dict:
     if status_code == 200 and isinstance(payload, dict):
         commission_ok = bool(payload.get("ok"))
         commission_detail = payload
+    server_pts: list[dict] = []
+    sp_status, sp_payload = commission_server_points()
+    if sp_status == 200 and isinstance(sp_payload, dict):
+        server_pts = sp_payload.get("points") or []
     return {
         "points_csv": str(points),
         "points_exists": points.is_file(),
@@ -78,12 +77,21 @@ def bacnet_config() -> dict:
         "toolshed_readme": "bacnet_toolshed/README.md",
         "commission_agent_ok": commission_ok,
         "commission_agent": commission_detail,
+        "openfdd_server_points": server_pts,
     }
 
 
 @router.get("/api/bacnet/commission/status", dependencies=[_READ])
 def bacnet_commission_status() -> dict:
     status_code, payload = commission_status()
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.get("/api/bacnet/server/points", dependencies=[_READ])
+def bacnet_server_points() -> dict:
+    status_code, payload = commission_server_points()
     if status_code != 200:
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
@@ -153,6 +161,40 @@ def bacnet_whois(body: DiscoverRequest) -> dict:
     return payload  # type: ignore[return-value]
 
 
+@router.post("/api/bacnet/read", dependencies=[_COMMISSION])
+def bacnet_read_property(body: SingleReadRequest) -> dict:
+    status_code, payload = commission_read(
+        body.device_instance,
+        body.object_identifier,
+        body.property_identifier,
+    )
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/read-multiple", dependencies=[_COMMISSION])
+def bacnet_read_multiple_properties(body: ReadMultiplePropertiesRequestWrapper) -> dict:
+    requests = [
+        {"object_identifier": r.object_identifier, "property_identifier": r.property_identifier}
+        for r in body.requests
+    ]
+    status_code, payload = commission_read_multiple(body.device_instance, requests)
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/priority-array", dependencies=[_COMMISSION])
+def bacnet_read_priority_array(body: ReadPriorityArrayRequest) -> dict:
+    status_code, payload = commission_priority_array(
+        body.device_instance, body.object_identifier
+    )
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    return payload  # type: ignore[return-value]
+
+
 @router.post("/api/bacnet/point-discovery", dependencies=[_COMMISSION])
 def bacnet_point_discovery(body: DeviceInstanceRequest) -> dict:
     status_code, payload = start_point_discovery(body.device_instance)
@@ -170,7 +212,7 @@ def bacnet_supervisory_check(body: DeviceInstanceRequest) -> dict:
 
 
 @router.post("/api/bacnet/write", dependencies=[_WRITE])
-def bacnet_write_property(body: BacnetWriteRequest) -> dict:
+def bacnet_write_property(body: WritePropertyRequest) -> dict:
     status_code, payload = commission_write(
         body.device_instance,
         body.object_identifier,

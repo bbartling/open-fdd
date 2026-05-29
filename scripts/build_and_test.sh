@@ -25,8 +25,8 @@ echo "==> Bridge API tests"
 export OPENFDD_REPO_ROOT="$ROOT"
 export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
-export PYTHONPATH="$ROOT"
-"${VENV}/bin/pytest" tests/workspace_bridge/ -q
+export PYTHONPATH="$ROOT:${ROOT}/workspace/api"
+"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
 
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html

@@ -109,5 +109,47 @@ def bacnet_write(
     return _request("POST", "/api/bacnet/write", body)
 
 
+def bacnet_read(
+    device_instance: int,
+    object_identifier: str,
+    property_identifier: str = "present-value",
+) -> tuple[int, Any]:
+    return _request(
+        "POST",
+        "/api/bacnet/read",
+        {
+            "device_instance": device_instance,
+            "object_identifier": object_identifier,
+            "property_identifier": property_identifier,
+        },
+    )
+
+
+def bacnet_read_multiple(
+    device_instance: int,
+    requests: list[dict[str, str]],
+) -> tuple[int, Any]:
+    return _request(
+        "POST",
+        "/api/bacnet/read-multiple",
+        {"device_instance": device_instance, "requests": requests},
+    )
+
+
+def bacnet_priority_array(
+    device_instance: int,
+    object_identifier: str,
+) -> tuple[int, Any]:
+    return _request(
+        "POST",
+        "/api/bacnet/priority-array",
+        {"device_instance": device_instance, "object_identifier": object_identifier},
+    )
+
+
+def server_points() -> tuple[int, Any]:
+    return _request("GET", "/api/bacnet/server/points")
+
+
 def get_job(job_id: str) -> tuple[int, Any]:
     return _request("GET", f"/api/jobs/{job_id}")

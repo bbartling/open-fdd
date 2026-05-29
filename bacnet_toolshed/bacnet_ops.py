@@ -377,7 +377,55 @@ async def bacnet_read(
         encoded = extendedlist_to_json_list(value)
     else:
         encoded = encode_rpm_value(value)
-    return {property_identifier: encoded}
+    return {
+        "device_instance": device_instance,
+        "object_identifier": object_identifier,
+        "property_identifier": property_identifier,
+        "value": encoded,
+    }
+
+
+async def bacnet_read_multiple(
+    app: Application,
+    device_instance: int,
+    requests: List[Tuple[str, str]],
+) -> dict[str, Any]:
+    if not requests:
+        return {"device_instance": device_instance, "results": []}
+    address = await get_device_address(app, device_instance)
+    results = await rpm_chunked(app, address, requests)
+    return {"device_instance": device_instance, "results": results}
+
+
+async def read_point_priority_array(
+    app: Application,
+    device_instance: int,
+    object_identifier: str,
+) -> dict[str, Any]:
+    address = await get_device_address(app, device_instance)
+    obj_id = ObjectIdentifier(object_identifier)
+    try:
+        response = await app.read_property(address, obj_id, "priority-array")
+    except ErrorRejectAbortNack as err:
+        raise BacnetOpsError(f"Error reading priority-array: {err}") from err
+
+    slots: list[dict[str, Any]] = []
+    if response:
+        for index, priority_value in enumerate(response):
+            value_type = priority_value._choice
+            raw = getattr(priority_value, value_type, None)
+            slots.append(
+                {
+                    "priority_level": index + 1,
+                    "type": value_type,
+                    "value": encode_rpm_value(raw) if raw is not None else None,
+                }
+            )
+    return {
+        "device_instance": device_instance,
+        "object_identifier": object_identifier,
+        "priority_array": slots,
+    }
 
 
 async def bacnet_write(
