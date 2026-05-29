@@ -121,6 +121,12 @@ def test_model_installed():
     with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=client):
         assert ollama_client.model_installed("tinyllama") is True
         assert ollama_client.model_installed("llama3.2:3b") is False
+        assert ollama_client.model_installed("llama3.2") is False
+
+    loose = _mock_httpx_client(get_json={"models": [{"name": "llama3.21:latest"}]})
+    with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=loose):
+        assert ollama_client.model_installed("llama3.2") is False
+        assert ollama_client.model_installed("llama3.2:3b") is False
 
 
 def test_should_use_ollama(monkeypatch: pytest.MonkeyPatch):

@@ -60,6 +60,10 @@ ollama_gpu_mode: "cpu"        # cpu | auto | gpu
 ollama_ai_backend: "auto"     # auto | ollama | codex
 ollama_install_if_missing: true
 ollama_base_url: "http://127.0.0.1:11434"
+ollama_version: "0.24.0"
+ollama_checksum_sha256:
+  amd64: "15c5f8d66ba06e0d3b4719df8868612dbd66e14e82760929bb3552e1657cdcdb"
+  arm64: "6e9a3ce5f64e93312902e39c420ec336255f078a368ca25e99b339d08a6dfa4b"
 ollama_model_for_tier:
   8gb: "tinyllama"
   16gb: "llama3.2:1b"

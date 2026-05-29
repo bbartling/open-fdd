@@ -104,12 +104,12 @@ def model_installed(model: str, *, timeout: float = 3.0) -> bool:
     h = health(timeout=timeout)
     if not h.get("ok"):
         return False
-    want = model.split(":")[0]
-    for name in h.get("models_installed") or []:
-        n = str(name)
-        if n == model or n.startswith(f"{want}:") or n.startswith(want):
-            return True
-    return model in (h.get("models_installed") or [])
+    names = [str(x) for x in (h.get("models_installed") or [])]
+    if model in names:
+        return True
+    if ":" not in model:
+        return any(n.split(":")[0] == model for n in names)
+    return False
 
 
 def chat(

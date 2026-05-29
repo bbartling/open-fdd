@@ -1,6 +1,6 @@
 ---
 # Optional Ollama bootstrap on edge hosts (local AI for operator chat).
-# Run: ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit bacnet_pi -e ollama_ram_tier=8gb
+# Run: ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit bacnet_pi -e enable_ollama=true -e ollama_ram_tier=8gb
 
 - name: Bootstrap Ollama for Open-FDD
   hosts: pi_bcn
@@ -11,27 +11,88 @@
       ansible.builtin.meta: end_host
       when: not (enable_ollama | default(false) | bool)
 
-    - name: Ensure curl present
+    - name: Map Ollama release architecture
+      ansible.builtin.set_fact:
+        ollama_arch: "{{ 'arm64' if ansible_facts['architecture'] in ['aarch64', 'arm64'] else 'amd64' }}"
+
+    - name: Ensure Ollama install tools present
       ansible.builtin.apt:
-        name: curl
+        name:
+          - zstd
+          - tar
         state: present
         update_cache: true
       become: true
 
-    - name: Install Ollama when missing
-      ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh
-      args:
-        creates: /usr/local/bin/ollama
-      become: true
-      when: ollama_install_if_missing | default(true) | bool
+    - name: Check for existing Ollama binary
+      ansible.builtin.stat:
+        path: /usr/local/bin/ollama
+      register: ollama_bin
 
-    - name: Ensure ollama service enabled
+    - name: Download pinned Ollama release
+      ansible.builtin.get_url:
+        url: "https://github.com/ollama/ollama/releases/download/v{{ ollama_version }}/ollama-linux-{{ ollama_arch }}.tar.zst"
+        dest: "/tmp/ollama-{{ ollama_version }}-{{ ollama_arch }}.tar.zst"
+        mode: "0644"
+        checksum: "sha256:{{ ollama_checksum_sha256[ollama_arch] }}"
+      become: true
+      when:
+        - ollama_install_if_missing | default(true) | bool
+        - not ollama_bin.stat.exists
+
+    - name: Decompress Ollama archive
+      ansible.builtin.command:
+        argv:
+          - zstd
+          - -d
+          - "/tmp/ollama-{{ ollama_version }}-{{ ollama_arch }}.tar.zst"
+          - -o
+          - "/tmp/ollama-{{ ollama_version }}-{{ ollama_arch }}.tar"
+      args:
+        creates: "/tmp/ollama-{{ ollama_version }}-{{ ollama_arch }}.tar"
+      become: true
+      when:
+        - ollama_install_if_missing | default(true) | bool
+        - not ollama_bin.stat.exists
+
+    - name: Install Ollama binary under /usr/local
+      ansible.builtin.unarchive:
+        src: "/tmp/ollama-{{ ollama_version }}-{{ ollama_arch }}.tar"
+        dest: /usr/local
+        remote_src: true
+      become: true
+      when:
+        - ollama_install_if_missing | default(true) | bool
+        - not ollama_bin.stat.exists
+
+    - name: Install Ollama systemd unit
+      ansible.builtin.template:
+        src: templates/ollama.service.j2
+        dest: /etc/systemd/system/ollama.service
+        mode: "0644"
+      become: true
+      notify: Reload systemd
+
+    - name: Ensure ollama service enabled and running
       ansible.builtin.systemd:
         name: ollama
         enabled: true
         state: started
+        daemon_reload: true
       become: true
-      failed_when: false
+      register: ollama_service
+
+    - name: Assert Ollama service is active
+      ansible.builtin.assert:
+        that:
+          - ollama_service.status.ActiveState == "active"
+        fail_msg: "Ollama systemd unit failed to start — check journalctl -u ollama"
+
+    - name: Wait for Ollama HTTP API
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 11434
+        timeout: 60
 
     - name: Pull tier model
       ansible.builtin.command:
@@ -53,6 +114,11 @@
       notify: Restart Open-FDD bridge
 
   handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+
     - name: Restart Open-FDD bridge
       ansible.builtin.systemd:
         name: openfdd-bridge

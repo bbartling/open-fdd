@@ -1,0 +1,13 @@
+[Unit]
+Description=Ollama Local LLM
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+Restart=on-failure
+RestartSec=3
+Environment=HOME=/usr/share/ollama
+
+[Install]
+WantedBy=multi-user.target

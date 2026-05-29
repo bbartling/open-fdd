@@ -149,6 +149,10 @@ a {
   color: var(--danger);
 }
 
+.ok {
+  color: var(--ok);
+}
+
 button {
   background: linear-gradient(180deg, var(--primary-strong), var(--primary));
   color: white;

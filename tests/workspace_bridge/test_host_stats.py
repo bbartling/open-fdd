@@ -55,6 +55,8 @@ def test_collect_host_stats_shape():
     assert "memory" in stats
     assert "swap" in stats
     assert isinstance(stats["disks"], list)
+    labels = {d["label"] for d in stats["disks"]}
+    assert "repo" in labels or "root (/)" in labels
 
 
 def test_read_linux_meminfo_on_linux():

@@ -229,7 +229,9 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
     ):
         try:
             path.mkdir(parents=True, exist_ok=True)
-            disks.append(_disk_for_path(path))
+            disk = _disk_for_path(path)
+            disk["label"] = label
+            disks.append(disk)
         except OSError:
             continue
 

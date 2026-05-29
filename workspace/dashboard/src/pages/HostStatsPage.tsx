@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 
 type MemBlock = {
@@ -92,8 +92,12 @@ export default function HostStatsPage() {
   const [stats, setStats] = useState<HostStats | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const inFlightRef = useRef(false);
+  const pollRef = useRef<number | null>(null);
 
   async function load() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setBusy(true);
     try {
       const data = await apiFetch<HostStats>("/api/host/stats");
@@ -102,14 +106,19 @@ export default function HostStatsPage() {
     } catch (e) {
       setError(String(e));
     } finally {
+      inFlightRef.current = false;
       setBusy(false);
+      pollRef.current = window.setTimeout(load, 5000);
     }
   }
 
   useEffect(() => {
     load();
-    const id = window.setInterval(load, 5000);
-    return () => window.clearInterval(id);
+    return () => {
+      if (pollRef.current != null) {
+        window.clearTimeout(pollRef.current);
+      }
+    };
   }, []);
 
   const mem = stats?.memory;

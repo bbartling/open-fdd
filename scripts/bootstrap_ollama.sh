@@ -61,12 +61,29 @@ echo "Wrote ${ENV_FILE}"
 OLLAMA_DIR="${ROOT}/workspace/.local-run/ollama"
 OLLAMA_BIN="ollama"
 
+resolve_ollama_arch() {
+  case "$(uname -m)" in
+    x86_64) echo "amd64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *)
+      echo "Unsupported CPU architecture for Ollama bootstrap: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
 install_user_local() {
   mkdir -p "$OLLAMA_DIR"
   if [[ ! -x "${OLLAMA_DIR}/bin/ollama" ]]; then
-    echo "==> Installing Ollama to ${OLLAMA_DIR} (no sudo)…"
+    if ! command -v zstd >/dev/null; then
+      echo "zstd is required to install Ollama — install it (e.g. sudo apt install zstd) and retry." >&2
+      exit 1
+    fi
+    local arch tmp
+    arch="$(resolve_ollama_arch)"
+    echo "==> Installing Ollama to ${OLLAMA_DIR} (no sudo, ${arch})…"
     tmp="${OLLAMA_DIR}/ollama.tar.zst"
-    curl -fsSL -L "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst" -o "$tmp"
+    curl -fsSL -L "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-${arch}.tar.zst" -o "$tmp"
     zstd -d "$tmp" -o "${OLLAMA_DIR}/ollama.tar"
     tar -xf "${OLLAMA_DIR}/ollama.tar" -C "$OLLAMA_DIR"
     rm -f "$tmp" "${OLLAMA_DIR}/ollama.tar"
