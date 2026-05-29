@@ -58,6 +58,8 @@ skills = [
   "driver-bacnet-ingest",
   "diy-bacnet-bench-sidecar",
   "local-dev-orchestration",
+  "ansible-linux-bench-deploy",
+  "caddy-lan-ingress-auth",
 ]
 codex_bin = "codex"
 scratch_dir = "workspace/scratch"

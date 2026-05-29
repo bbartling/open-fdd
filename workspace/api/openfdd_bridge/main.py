@@ -8,31 +8,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .middleware import AuditMiddleware, global_exception_handler
 from .paths import data_dir, static_dashboard_dir
 from .routes import (
     agent_routes,
+    audit_routes,
     auth_routes,
     bacnet_routes,
+    building_routes,
     health,
+    model_routes,
     playground_routes,
-    rules_routes,
     sites_routes,
 )
+from .settings import cors_allow_private_lan, cors_origins
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Open-FDD Operator Bridge",
-        description="Local REST bridge: pandas playground, RuleRunner, BACnet ingest, agent context.",
+        description="Local REST bridge: Python Rule Lab, BRICK data model, BACnet ingest, agent context.",
         version="0.1.0",
     )
 
-    allow_lan = os.environ.get("OFDD_CORS_ALLOW_PRIVATE_LAN", "").strip() in {"1", "true", "yes"}
-    origins = ["http://127.0.0.1:5173", "http://localhost:5173"]
-    if allow_lan:
-        extra = os.environ.get("OFDD_CORS_LAN_ORIGINS", "").strip()
-        if extra:
-            origins.extend(o.strip() for o in extra.split(",") if o.strip())
+    allow_lan = cors_allow_private_lan()
+    origins = cors_origins()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -41,16 +41,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(AuditMiddleware)
+
     app.include_router(health.router)
     app.include_router(auth_routes.router)
+    app.include_router(audit_routes.router)
     app.include_router(playground_routes.router)
-    app.include_router(rules_routes.router)
+    app.include_router(model_routes.router)
+    app.include_router(building_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
     app.include_router(agent_routes.router)
 
     data_dir().mkdir(parents=True, exist_ok=True)
-    (data_dir() / "rules").mkdir(parents=True, exist_ok=True)
     (data_dir() / "playground").mkdir(parents=True, exist_ok=True)
 
     static_dir = static_dashboard_dir()
@@ -79,6 +82,8 @@ def create_app() -> FastAPI:
             if candidate_resolved.is_file():
                 return FileResponse(candidate_resolved)
             return FileResponse(static_resolved / "index.html")
+
+    app.add_exception_handler(Exception, global_exception_handler)
 
     return app
 

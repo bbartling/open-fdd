@@ -1,0 +1,24 @@
+---
+- name: Stop BACnet polling on Open-FDD edge gateways
+  hosts: pi_bcn
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Stop openfdd-bacnet-poll
+      ansible.builtin.systemd:
+        name: openfdd-bacnet-poll
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Confirm poll driver state
+      ansible.builtin.command:
+        argv: [systemctl, is-active, openfdd-bacnet-poll]
+      register: poll_state
+      changed_when: false
+      failed_when: false
+
+    - name: Status
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: openfdd-bacnet-poll is {{ poll_state.stdout | default('inactive') }}"

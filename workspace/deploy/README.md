@@ -12,6 +12,12 @@
 ## Quick dev
 
 ```bash
+./scripts/run_local.sh
+# UI  http://127.0.0.1:5173
+# API http://127.0.0.1:8765/health
+```
+
+Or manually:
 pip install -e ".[dev]"
 pip install -r workspace/api/requirements.txt
 export OPENFDD_REPO_ROOT="$(pwd)"

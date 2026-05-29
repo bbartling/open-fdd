@@ -1,0 +1,21 @@
+[Unit]
+Description=Open-FDD BACnet commission agent
+After=network-online.target
+
+[Service]
+Type=simple
+User={{ ansible_user }}
+WorkingDirectory={{ openfdd_remote_dir }}
+Environment=OPENFDD_REPO_ROOT={{ openfdd_remote_dir }}
+Environment=PYTHONPATH={{ openfdd_remote_dir }}
+Environment=OPENFDD_BACNET_COMMISSION_BIND={{ bacnet_commission_bind }}
+Environment=OPENFDD_BACNET_COMMISSION_PORT={{ bacnet_commission_port }}
+{% if commission_agent_token | default('') | length > 0 %}
+Environment=OPENFDD_BACNET_COMMISSION_TOKEN={{ commission_agent_token }}
+{% endif %}
+ExecStart={{ openfdd_remote_dir }}/.venv/bin/python -m bacnet_toolshed.commission_agent
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

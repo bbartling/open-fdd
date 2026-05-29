@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchAuthStatus, login, setToken } from "../lib/api";
+import { fetchAuthStatus, login, sanitizeBridgeBaseOverride, setToken } from "../lib/api";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -9,7 +9,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(true);
 
+  const [hint, setHint] = useState("");
+
   useEffect(() => {
+    if (sanitizeBridgeBaseOverride()) {
+      setHint("Cleared stale localhost API override — retry login.");
+    }
     fetchAuthStatus()
       .then((s) => {
         setAuthRequired(s.auth_required);
@@ -18,7 +23,10 @@ export default function LoginPage() {
           navigate("/");
         }
       })
-      .catch(() => setAuthRequired(false));
+      .catch((e) => {
+        setAuthRequired(true);
+        setError(String(e));
+      });
   }, [navigate]);
 
   async function onSubmit(e: FormEvent) {
@@ -39,9 +47,17 @@ export default function LoginPage() {
         <h2>Operator sign-in</h2>
         <p className="muted">
           {authRequired
-            ? "LAN-only dashboard. Set OFDD_AUTH_SECRET, OFDD_WEB_USER, OFDD_WEB_PASSWORD on the bridge host."
+            ? "LAN-only dashboard. Roles: operator (local), integrator (MSI), agent (AI)."
             : "Auth disabled on bridge (dev only)."}
         </p>
+        {authRequired ? (
+          <p className="muted">
+            Local dev: <code>integrator</code> / <code>msi-local</code> or{" "}
+            <code>operator</code> / <code>operator-local</code>. Use this machine&apos;s IP in
+            the address bar (not 127.0.0.1 from another PC).
+          </p>
+        ) : null}
+        {hint ? <p className="muted">{hint}</p> : null}
         <div className="row">
           <label>
             Username

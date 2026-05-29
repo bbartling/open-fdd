@@ -17,6 +17,8 @@ def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("OFDD_AUTH_SECRET", "test-secret-key-32chars-minimum!!")
     monkeypatch.setenv("OFDD_WEB_USER", "operator")
     monkeypatch.setenv("OFDD_WEB_PASSWORD", "changeme")
+    monkeypatch.setenv("OFDD_INTEGRATOR_USER", "integrator")
+    monkeypatch.setenv("OFDD_INTEGRATOR_PASSWORD", "msi")
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
     for name in list(sys.modules):
@@ -33,12 +35,24 @@ def test_login_and_call(authed_client: TestClient):
         json={"username": "operator", "password": "changeme"},
     )
     assert login.status_code == 200
+    assert login.json()["role"] == "operator"
     token = login.json()["token"]
     denied = authed_client.post("/api/playground/lint", json={"code": "x=1"})
     assert denied.status_code == 401
-    ok = authed_client.post(
+    forbidden = authed_client.post(
         "/api/playground/lint",
         json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
         headers={"Authorization": f"Bearer {token}"},
+    )
+    assert forbidden.status_code == 403
+    msi = authed_client.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    msi_token = msi.json()["token"]
+    ok = authed_client.post(
+        "/api/playground/lint",
+        json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        headers={"Authorization": f"Bearer {msi_token}"},
     )
     assert ok.status_code == 200

@@ -1,0 +1,16 @@
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ofdd: <http://openfdd.local/ontology#> .
+@prefix : <http://openfdd.local/site#> .
+
+:site_s1 a brick:Site ;
+  rdfs:label "Demo Site" .
+
+:eq_e1 a brick:Air_Handling_Unit ;
+  rdfs:label "AHU-1" ;
+  brick:isPartOf :site_s1 .
+
+:pt_p1 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "SAT" ;
+  brick:isPointOf :eq_e1 ;
+  ofdd:mapsToRuleInput "SAT" .

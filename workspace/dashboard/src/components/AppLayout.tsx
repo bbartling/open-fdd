@@ -1,27 +1,43 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearToken } from "../lib/api";
+import StackStatusStrip from "./StackStatusStrip";
+
+const NAV = [
+  { to: "/", end: true, icon: "🏠", label: "Building status" },
+  { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
+  { to: "/rule-lab", icon: "🐍", label: "Rule Lab" },
+  { to: "/bacnet", icon: "📡", label: "BACnet" },
+  { to: "/agent", icon: "🤖", label: "AI Agent" },
+];
 
 export default function AppLayout() {
   const navigate = useNavigate();
 
   return (
-    <div className="layout">
+    <div className="app-shell">
       <aside className="sidebar">
-        <h1>Open-FDD Operator</h1>
-        <p className="muted">OT LAN · behind firewall</p>
-        <nav>
-          <NavLink to="/" end>
-            Overview
-          </NavLink>
-          <NavLink to="/rule-lab">Rule Lab</NavLink>
-          <NavLink to="/fdd">YAML FDD</NavLink>
-          <NavLink to="/bacnet">BACnet</NavLink>
-          <NavLink to="/agent">AI Agent</NavLink>
+        <div className="brand-row">
+          <span className="brand">Open-FDD</span>
+          <span className="brand-chip">Operator</span>
+        </div>
+        <p className="muted sidebar-hint">OT LAN · behind firewall</p>
+        <StackStatusStrip />
+        <nav className="sidebar-nav">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
         <button
           type="button"
-          className="secondary"
-          style={{ marginTop: "1.5rem" }}
+          className="secondary-btn sign-out-btn"
           onClick={() => {
             clearToken();
             navigate("/login");
@@ -30,8 +46,10 @@ export default function AppLayout() {
           Sign out
         </button>
       </aside>
-      <main className="content">
-        <Outlet />
+      <main className="app-main">
+        <div className="content">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

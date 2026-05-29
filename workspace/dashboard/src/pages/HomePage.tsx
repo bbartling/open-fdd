@@ -1,49 +1,55 @@
 import { useEffect, useState } from "react";
+import BuildingCheckEngine from "../components/BuildingCheckEngine";
 import { apiFetch } from "../lib/api";
 
-type Health = {
-  ok: boolean;
-  service: string;
-  auth_required: boolean;
-  bacnet_poll_csv_exists: boolean;
-};
+type AuditEvent = Record<string, unknown>;
 
 export default function HomePage() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState("");
+  const [auditPreview, setAuditPreview] = useState<AuditEvent[]>([]);
+  const [auditError, setAuditError] = useState("");
 
   useEffect(() => {
-    apiFetch<Health>("/health")
-      .then(setHealth)
-      .catch((e) => setError(String(e)));
+    apiFetch<{ events: AuditEvent[] }>("/api/audit/events?limit=10")
+      .then((r) => setAuditPreview(r.events))
+      .catch((e) => setAuditError(String(e)));
   }, []);
 
   return (
     <div>
-      <h2>Overview</h2>
+      <h2 className="title">Building overview</h2>
       <p className="muted">
-        Python runs on the bridge host (pandas + open_fdd.engine). The browser edits code and
-        calls Test — never executes Python locally.
+        Default landing view — check-engine light for model gaps, stack health, and agent-reported issues.
       </p>
+
+      <BuildingCheckEngine />
+
       <div className="panel">
-        {error ? <p className="error">{error}</p> : null}
-        {health ? (
-          <ul>
-            <li className="ok">Bridge: {health.service}</li>
-            <li>Auth required: {String(health.auth_required)}</li>
-            <li>BACnet poll CSV present: {String(health.bacnet_poll_csv_exists)}</li>
-          </ul>
-        ) : (
-          <p className="muted">Checking bridge…</p>
-        )}
-      </div>
-      <div className="panel">
-        <h3>Agent maintainers</h3>
+        <h3>Stack services</h3>
         <p className="muted">
-          Codex CLI, Cursor, Claude Code, or OpenClaw can edit{" "}
-          <code>workspace/api</code> and <code>workspace/dashboard</code> using skills{" "}
-          <code>fastapi-bridge-api</code> and <code>react-operator-dashboard</code>.
+          Green = healthy · Yellow = degraded · Red = down · Gray = not configured (MCP is optional).
         </p>
+      </div>
+
+      <div className="panel">
+        <h3>Security audit trail</h3>
+        <p className="muted">
+          Append-only JSON Lines at <code>workspace/logs/audit.jsonl</code>. Integrator role required.
+        </p>
+        {auditError ? (
+          <p className="muted">
+            {auditError.includes("403") ? "Sign in as integrator to view audit log." : auditError}
+          </p>
+        ) : auditPreview.length ? (
+          <pre className="console audit-preview">
+            {auditPreview
+              .slice()
+              .reverse()
+              .map((ev) => JSON.stringify(ev))
+              .join("\n")}
+          </pre>
+        ) : (
+          <p className="muted">No audit events yet.</p>
+        )}
       </div>
     </div>
   );

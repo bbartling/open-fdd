@@ -8,10 +8,14 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..deps import require_user
+from ..deps import require_roles
 from ..paths import repo_root, resolve_workdir_under_repo
 
-router = APIRouter(prefix="/openfdd-agent", tags=["agent"], dependencies=[Depends(require_user)])
+router = APIRouter(
+    prefix="/openfdd-agent",
+    tags=["agent"],
+    dependencies=[Depends(require_roles("integrator", "agent"))],
+)
 
 
 class ChatBody(BaseModel):
@@ -38,7 +42,7 @@ def agent_context() -> dict:
         "ui_public_base": os.environ.get("OFDD_UI_PUBLIC_BASE", "http://127.0.0.1:5173"),
         "codex_available": bool(codex),
         "agent_shell": f"openfdd-agent-shell --repo-root {root}",
-        "note": "Use Cursor, Codex CLI, Claude, or OpenClaw against this repo; HTTP chat is optional.",
+        "note": "Use Cursor, Codex CLI, or OpenClaw on this repo. Python Rule Lab + BRICK model at /api/model/export. Update building alerts via PUT /api/building/alerts.",
     }
 
 

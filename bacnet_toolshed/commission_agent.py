@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -13,6 +14,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+from bacpypes3.app import Application
+from bacpypes3.argparse import SimpleArgumentParser
+
+from bacnet_toolshed.bacnet_ops import (
+    BacnetOpsError,
+    bacnet_write,
+    perform_who_is,
+    point_discovery,
+    supervisory_logic_check,
+)
+from bacnet_toolshed.stack_args import bacnet_argv_from_cfg
 
 from bacnet_toolshed.paths import (
     commissioning_dir,
@@ -196,6 +209,123 @@ def _start_discover(range_low: str | None, range_high: str | None) -> dict[str, 
     return {"job_id": job_id, "kind": "discover", "output": str(output)}
 
 
+def _bacnet_app_from_cfg(cfg: dict[str, str]) -> Application:
+    parser = SimpleArgumentParser()
+    return Application.from_args(parser.parse_args(bacnet_argv_from_cfg(cfg)))
+
+
+def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
+    log_file = _log_path(job_id)
+    meta = {
+        "id": job_id,
+        "kind": kind,
+        "status": "running",
+        "started_at": _utc_now(),
+        "finished_at": "",
+        "exit_code": None,
+    }
+    _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    jobs_dir().mkdir(parents=True, exist_ok=True)
+
+    async def _inner() -> dict[str, Any]:
+        cfg = _cfg()
+        app = _bacnet_app_from_cfg(cfg)
+        try:
+            return await coro_factory(app)
+        finally:
+            app.close()
+
+    try:
+        with log_file.open("w", encoding="utf-8") as log:
+            log.write(f"# started {_utc_now()}\n# kind: {kind}\n\n")
+            log.flush()
+            result = asyncio.run(_inner())
+            log.write(json.dumps(result, indent=2))
+        meta["status"] = "ok"
+        meta["finished_at"] = _utc_now()
+        meta["exit_code"] = 0
+        meta["result"] = result
+    except Exception as exc:
+        meta["status"] = "failed"
+        meta["finished_at"] = _utc_now()
+        meta["exit_code"] = 1
+        meta["error"] = str(exc)
+        with log_file.open("a", encoding="utf-8") as log:
+            log.write(f"\nERROR: {exc}\n")
+    finally:
+        _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
+def _start_point_discovery(device_instance: int) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex[:12]
+
+    async def _run(app: Application) -> dict[str, Any]:
+        return await point_discovery(app, device_instance)
+
+    thread = threading.Thread(
+        target=_run_async_bacnet_job, args=(job_id, "point_discovery", _run), daemon=True
+    )
+    thread.start()
+    return {"job_id": job_id, "kind": "point_discovery", "device_instance": device_instance}
+
+
+def _start_supervisory_check(device_instance: int) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex[:12]
+
+    async def _run(app: Application) -> dict[str, Any]:
+        return await supervisory_logic_check(app, device_instance)
+
+    thread = threading.Thread(
+        target=_run_async_bacnet_job, args=(job_id, "supervisory_check", _run), daemon=True
+    )
+    thread.start()
+    return {"job_id": job_id, "kind": "supervisory_check", "device_instance": device_instance}
+
+
+def _sync_who_is(range_low: int, range_high: int) -> dict[str, Any]:
+    cfg = _cfg()
+
+    async def _run(app: Application) -> dict[str, Any]:
+        devices = await perform_who_is(app, range_low, range_high)
+        return {"devices": devices, "count": len(devices)}
+
+    async def _inner() -> dict[str, Any]:
+        app = _bacnet_app_from_cfg(cfg)
+        try:
+            return await _run(app)
+        finally:
+            app.close()
+
+    return asyncio.run(_inner())
+
+
+def _sync_bacnet_write(body: dict[str, Any]) -> dict[str, Any]:
+    cfg = _cfg()
+    required = ("device_instance", "object_identifier", "property_identifier")
+    for key in required:
+        if key not in body:
+            raise ValueError(f"missing {key}")
+
+    async def _run(app: Application) -> dict[str, Any]:
+        return await bacnet_write(
+            app,
+            int(body["device_instance"]),
+            str(body["object_identifier"]),
+            str(body["property_identifier"]),
+            body.get("value"),
+            body.get("priority"),
+        )
+
+    async def _inner() -> dict[str, Any]:
+        app = _bacnet_app_from_cfg(cfg)
+        try:
+            return await _run(app)
+        finally:
+            app.close()
+
+    return asyncio.run(_inner())
+
+
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: Any) -> None:
     body = json.dumps(payload, indent=2).encode("utf-8")
     handler.send_response(status)
@@ -297,6 +427,38 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
         if path == "/api/jobs/discover":
             started = _start_discover(body.get("range_low"), body.get("range_high"))
             return _json_response(self, 202, started)
+
+        if path == "/api/jobs/point-discovery":
+            inst = body.get("device_instance")
+            if inst is None:
+                return _json_response(self, 400, {"error": "device_instance required"})
+            started = _start_point_discovery(int(inst))
+            return _json_response(self, 202, started)
+
+        if path == "/api/jobs/supervisory-check":
+            inst = body.get("device_instance")
+            if inst is None:
+                return _json_response(self, 400, {"error": "device_instance required"})
+            started = _start_supervisory_check(int(inst))
+            return _json_response(self, 202, started)
+
+        if path == "/api/bacnet/whois":
+            low = int(body.get("range_low", _cfg().get("DISCOVER_LOW", 1)))
+            high = int(body.get("range_high", _cfg().get("DISCOVER_HIGH", 4194303)))
+            try:
+                result = _sync_who_is(low, high)
+                return _json_response(self, 200, result)
+            except Exception as exc:
+                return _json_response(self, 500, {"error": str(exc)})
+
+        if path == "/api/bacnet/write":
+            try:
+                result = _sync_bacnet_write(body)
+                return _json_response(self, 200, result)
+            except BacnetOpsError as exc:
+                return _json_response(self, 400, {"error": str(exc), "data": exc.data})
+            except Exception as exc:
+                return _json_response(self, 500, {"error": str(exc)})
 
         return _json_response(self, 404, {"error": "not found"})
 

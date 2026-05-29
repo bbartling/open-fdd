@@ -37,6 +37,18 @@ def static_dashboard_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "static" / "app"
 
 
+def model_json_path() -> Path:
+    return data_dir() / "model.json"
+
+
+def model_ttl_path() -> Path:
+    return data_dir() / "data_model.ttl"
+
+
+def building_alerts_path() -> Path:
+    return data_dir() / "building_alerts.json"
+
+
 def resolve_workdir_under_repo(workdir: str | None) -> Path:
     """Codex/exec cwd must stay inside the repository."""
     repo = repo_root().resolve()

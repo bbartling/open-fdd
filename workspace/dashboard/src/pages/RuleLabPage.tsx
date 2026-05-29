@@ -125,8 +125,9 @@ export default function RuleLabPage() {
     <div>
       <h2>Rule Lab (Bake-a-Py)</h2>
       <p className="muted">
-        Per-row <code>evaluate()</code> or full <code>df</code> scripts with open_fdd.engine on the
-        server.
+        Per-row <code>evaluate()</code> or full <code>df</code> Python scripts. Rules bind to BRICK{" "}
+        <code>fdd_input</code> / <code>external_id</code> from{" "}
+        <a href="/data-model">Data Model</a> — no YAML.
       </p>
       <div className="row panel">
         <label>
