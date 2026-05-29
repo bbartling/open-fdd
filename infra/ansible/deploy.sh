@@ -36,19 +36,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PASS_EXTRA=()
+# Prefer SSH keys. For password auth use sshpass -e (reads SSHPASS env) — never -e ansible_ssh_pass on CLI.
 if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
-  export ANSIBLE_SSH_PASS="$SSHPASS"
-  export ANSIBLE_BECOME_PASS="${ANSIBLE_BECOME_PASS:-$SSHPASS}"
-  PASS_EXTRA=(
-    -e "ansible_ssh_pass=${SSHPASS}"
-    -e "ansible_become_pass=${SSHPASS}"
-    -e "ansible_ssh_common_args=-o StrictHostKeyChecking=no"
-  )
+  export SSHPASS
+  exec sshpass -e "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
 elif [[ "$NO_ASK_PASS" == true ]]; then
-  :
+  exec "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
 else
-  PASS_EXTRA=(--ask-pass --ask-become-pass)
+  exec "$APB" -i "$INV" deploy.yml --ask-pass --ask-become-pass "${EXTRA[@]}"
 fi
-
-exec "$APB" -i "$INV" deploy.yml "${PASS_EXTRA[@]}" "${EXTRA[@]}"

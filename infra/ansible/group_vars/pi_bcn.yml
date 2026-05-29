@@ -43,6 +43,8 @@ commission_agent_token: ""
 # Auto-ingest poll CSV into feather after each poll cycle (optional timer)
 enable_poll_ingest_timer: false
 
+# Bridge bind: 0.0.0.0 for OT LAN dashboard on edge Pis. Require ofdd_auth_secret + credentials in host_vars.
+# For loopback-only, override openfdd_bridge_host: "127.0.0.1" and use Caddy (see workspace/deploy/Caddyfile.example).
 openfdd_bridge_host: "0.0.0.0"
 openfdd_bridge_port: 8765
 

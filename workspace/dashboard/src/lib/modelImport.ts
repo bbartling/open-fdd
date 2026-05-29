@@ -46,9 +46,10 @@ function extractJsonFence(text: string): string | null {
 }
 
 function extractImportJsonFromFileSections(text: string): unknown | null {
-  const re = /^===\s*FILE:\s*([^\n]+?)\s*===\s*\n([\s\S]*?)(?=^===\s*FILE:|$)/gm;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
+  const chunks = text.split(/\n(?===\s*FILE:)/);
+  for (const chunk of chunks) {
+    const m = chunk.match(/^===\s*FILE:\s*([^\n]+?)\s*===\s*\n([\s\S]*)$/);
+    if (!m) continue;
     const name = m[1].trim().toLowerCase();
     const body = m[2].trim();
     if (!body) continue;

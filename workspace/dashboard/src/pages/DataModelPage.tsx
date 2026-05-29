@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiFetch } from "../lib/api";
+import { apiFetch, apiFetchText } from "../lib/api";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
 import { ModelPayload, parseImportPayload } from "../lib/modelImport";
 
@@ -111,15 +111,7 @@ export default function DataModelPage() {
     setTtlLoading(true);
     setTtlText("");
     try {
-      const token = sessionStorage.getItem("ofdd_token");
-      const resp = await fetch("/api/model/ttl?save=false", {
-        headers: {
-          Accept: "text/turtle",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      setTtlText(await resp.text());
+      setTtlText(await apiFetchText("/api/model/ttl?save=false", { headers: { Accept: "text/turtle" } }));
       setOut("Loaded TTL graph below.");
     } catch (error) {
       setTtlText("");

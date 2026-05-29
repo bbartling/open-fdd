@@ -143,7 +143,14 @@ async def rpm_chunked(
         try:
             raw = await read_multiple_chunked(app, addr, objects, chunk_size=len(chunk))
             for obj_id, prop_id in chunk:
-                val = raw.get(f"{obj_id}:{prop_id}") or raw.get(f"{obj_id}:present-value")
+                key1 = f"{obj_id}:{prop_id}"
+                key2 = f"{obj_id}:present-value"
+                if key1 in raw:
+                    val = raw[key1]
+                elif key2 in raw:
+                    val = raw[key2]
+                else:
+                    val = None
                 combined.append(
                     {
                         "object_identifier": obj_id,
@@ -395,7 +402,7 @@ async def bacnet_write(
         write_priority = int(priority)
     else:
         write_value = value
-        write_priority = int(priority) if priority is not None else -1
+        write_priority = int(priority) if priority is not None else None
 
     result = await app.write_property(
         address, obj_id, prop_id, write_value, prop_idx, write_priority
@@ -407,6 +414,6 @@ async def bacnet_write(
         "device_instance": device_instance,
         "object_identifier": object_identifier,
         "property_identifier": property_identifier,
-        "priority": write_priority if write_priority > 0 else None,
+        "priority": write_priority,
         "response": str(result),
     }

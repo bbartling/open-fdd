@@ -1,15 +1,15 @@
 # Open-FDD LAN connectivity check — run on your Windows PC.
 # Usage:  powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1
-#         powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1 -Host 192.168.204.18 -Port 8765
+#         powershell -ExecutionPolicy Bypass -File .\lan_diag.ps1 -TargetHost 192.168.204.18 -Port 8765
 
 param(
-    [string]$Host = "192.168.204.18",
+    [string]$TargetHost = "192.168.204.18",
     [int]$Port = 8765
 )
 
 $ErrorActionPreference = "Continue"
 Write-Host "=== Open-FDD LAN diagnostic ===" -ForegroundColor Cyan
-Write-Host "Target: http://${Host}:${Port}/login"
+Write-Host "Target: http://${TargetHost}:${Port}/login"
 Write-Host ""
 
 Write-Host "--- This PC ---" -ForegroundColor Yellow
@@ -18,15 +18,15 @@ Get-NetIPAddress -AddressFamily IPv4 |
     Select-Object InterfaceAlias, IPAddress, PrefixLength |
     Format-Table -AutoSize
 
-Write-Host "--- Ping ${Host} ---" -ForegroundColor Yellow
-Test-Connection -ComputerName $Host -Count 2 -Quiet | ForEach-Object {
+Write-Host "--- Ping ${TargetHost} ---" -ForegroundColor Yellow
+Test-Connection -ComputerName $TargetHost -Count 2 -Quiet | ForEach-Object {
     if ($_) { Write-Host "Ping: OK" -ForegroundColor Green }
     else { Write-Host "Ping: " -NoNewline; Write-Host "FAILED" -ForegroundColor Red }
 }
 
 Write-Host ""
 Write-Host "--- TCP port ${Port} ---" -ForegroundColor Yellow
-$tcp = Test-NetConnection -ComputerName $Host -Port $Port -WarningAction SilentlyContinue
+$tcp = Test-NetConnection -ComputerName $TargetHost -Port $Port -WarningAction SilentlyContinue
 Write-Host "TcpTestSucceeded: $($tcp.TcpTestSucceeded)"
 if (-not $tcp.TcpTestSucceeded) {
     Write-Host ""
@@ -44,7 +44,7 @@ if (-not $tcp.TcpTestSucceeded) {
 Write-Host ""
 Write-Host "--- HTTP GET /health ---" -ForegroundColor Yellow
 try {
-    $resp = Invoke-WebRequest -Uri "http://${Host}:${Port}/health" -UseBasicParsing -TimeoutSec 10
+    $resp = Invoke-WebRequest -Uri "http://${TargetHost}:${Port}/health" -UseBasicParsing -TimeoutSec 10
     Write-Host "Status: $($resp.StatusCode)"
     Write-Host $resp.Content
 } catch {
@@ -55,7 +55,7 @@ try {
 Write-Host ""
 Write-Host "--- HTTP GET /login (first 200 chars) ---" -ForegroundColor Yellow
 try {
-    $login = Invoke-WebRequest -Uri "http://${Host}:${Port}/login" -UseBasicParsing -TimeoutSec 10
+    $login = Invoke-WebRequest -Uri "http://${TargetHost}:${Port}/login" -UseBasicParsing -TimeoutSec 10
     Write-Host "Status: $($login.StatusCode)  Content-Type: $($login.Headers['Content-Type'])"
     $preview = $login.Content
     if ($preview.Length -gt 200) { $preview = $preview.Substring(0, 200) + "..." }
@@ -67,5 +67,5 @@ try {
 
 Write-Host ""
 Write-Host "LAN path looks OK — open in Chrome/Firefox (not an IDE preview):" -ForegroundColor Green
-Write-Host "  http://${Host}:${Port}/login"
+Write-Host "  http://${TargetHost}:${Port}/login"
 Write-Host "  integrator / msi-local"

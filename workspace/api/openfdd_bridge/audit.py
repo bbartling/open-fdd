@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .paths import workspace_dir
 
+_log = logging.getLogger(__name__)
+
 _SEVERITIES = frozenset({"debug", "info", "notice", "warning", "error", "critical"})
+
+
+def _trusted_proxy() -> bool:
+    return os.environ.get("OFDD_TRUST_X_FORWARDED_FOR", "").strip().lower() in {"1", "true", "yes"}
 
 
 def _logs_dir() -> Path:
@@ -79,9 +87,10 @@ def client_from_request(request: Any | None) -> dict[str, str]:
     ip = ""
     if getattr(request, "client", None):
         ip = request.client.host or ""
-    forwarded = request.headers.get("x-forwarded-for", "").strip()
-    if forwarded:
-        ip = forwarded.split(",")[0].strip() or ip
+    if _trusted_proxy():
+        forwarded = request.headers.get("x-forwarded-for", "").strip()
+        if forwarded:
+            ip = forwarded.split(",")[0].strip() or ip
     return {
         "ip": ip,
         "user_agent": (request.headers.get("user-agent") or "")[:512],
@@ -176,37 +185,58 @@ def write_error(
     return record
 
 
+def _sanitize_value(key: str, val: Any, blocked: frozenset[str]) -> Any | None:
+    lower = key.lower()
+    if any(b in lower for b in blocked):
+        return None
+    if isinstance(val, dict):
+        return _sanitize_detail(val)
+    if isinstance(val, list):
+        out_list: list[Any] = []
+        for item in val:
+            if isinstance(item, dict):
+                out_list.append(_sanitize_detail(item))
+            elif isinstance(item, list):
+                nested = _sanitize_value(key, item, blocked)
+                if nested is not None:
+                    out_list.append(nested)
+            else:
+                out_list.append(item)
+        return out_list
+    return val
+
+
 def _sanitize_detail(detail: dict[str, Any]) -> dict[str, Any]:
     """Drop secrets from forensic detail payloads."""
-    blocked = {
-        "password",
-        "token",
-        "secret",
-        "authorization",
-        "OFDD_AUTH_SECRET",
-        "private_key",
-    }
+    blocked = frozenset(
+        {
+            "password",
+            "token",
+            "secret",
+            "authorization",
+            "OFDD_AUTH_SECRET",
+            "private_key",
+        }
+    )
     out: dict[str, Any] = {}
     for key, val in detail.items():
-        lower = key.lower()
-        if any(b in lower for b in blocked):
-            continue
-        if isinstance(val, dict):
-            out[key] = _sanitize_detail(val)
-        else:
-            out[key] = val
+        sanitized = _sanitize_value(key, val, blocked)
+        if sanitized is not None:
+            out[key] = sanitized
     return out
 
 
 def tail_jsonl(path: Path, *, limit: int = 100) -> list[dict[str, Any]]:
     if not path.is_file() or limit <= 0:
         return []
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    tail: deque[str] = deque(maxlen=limit)
+    with path.open(encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                tail.append(line)
     rows: list[dict[str, Any]] = []
-    for line in lines[-limit:]:
-        line = line.strip()
-        if not line:
-            continue
+    for line in tail:
         try:
             rows.append(json.loads(line))
         except json.JSONDecodeError:

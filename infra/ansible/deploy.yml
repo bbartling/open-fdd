@@ -52,7 +52,9 @@
         src: "{{ playbook_dir }}/../../bacnet_toolshed/"
         dest: "{{ openfdd_remote_dir }}/bacnet_toolshed/"
         mode: "0644"
-      notify: Restart BACnet poll driver
+      notify:
+        - Restart BACnet poll driver
+        - Restart BACnet commission agent
 
     - name: Sync workspace bridge API
       ansible.builtin.copy:
@@ -153,6 +155,19 @@
           - "-r"
           - "{{ openfdd_remote_dir }}/bacnet_toolshed/requirements.txt"
       changed_when: true
+
+    - name: Install bridge secret env file
+      ansible.builtin.template:
+        src: templates/bridge.secret.env.j2
+        dest: /etc/openfdd/bridge.secret.env
+        mode: "0600"
+        owner: root
+        group: root
+      become: true
+      when:
+        - install_openfdd_bridge | default(true) | bool
+        - (commission_agent_token | default('') | length > 0) or (ofdd_auth_secret | default('') | length > 0)
+      notify: Restart Open-FDD bridge
 
     - name: Install openfdd-bridge systemd unit
       ansible.builtin.template:

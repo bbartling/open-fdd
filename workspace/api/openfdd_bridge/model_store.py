@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import uuid
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from .paths import data_dir, model_json_path
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -21,7 +24,11 @@ class ModelStore:
         default_model = {"sites": [], "equipment": [], "points": []}
         if not self.path.is_file():
             return default_model
-        loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            _log.warning("Invalid model JSON at %s: %s", self.path, exc)
+            return default_model
         if not isinstance(loaded, dict):
             return default_model
         out: dict[str, Any] = dict(loaded)

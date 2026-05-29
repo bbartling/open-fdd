@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Literal
@@ -31,9 +32,10 @@ def _status(ok: bool, configured: bool, detail: str = "") -> Status:
         return "gray"
     if ok:
         return "green"
-    if detail in {"timeout", "timed out", "Connection refused"}:
+    lower = detail.lower()
+    if any(x in lower for x in ("timeout", "timed out", "connection refused", "actively refused")):
         return "red"
-    return "red"
+    return "yellow"
 
 
 def stack_health() -> dict[str, Any]:
@@ -74,7 +76,7 @@ def stack_health() -> dict[str, Any]:
     poll_detail = "points.csv not commissioned"
     if poll_configured:
         if poll_csv.is_file():
-            age_s = __import__("time").time() - poll_csv.stat().st_mtime
+            age_s = time.time() - poll_csv.stat().st_mtime
             if age_s < 300:
                 poll_status = "green"
                 poll_detail = f"poll CSV updated {int(age_s)}s ago"

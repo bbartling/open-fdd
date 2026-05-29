@@ -22,6 +22,8 @@ def authed_integrator(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestCl
     monkeypatch.setenv("OFDD_AUTH_SECRET", "test-secret-key-32chars-minimum!!")
     monkeypatch.setenv("OFDD_INTEGRATOR_USER", "integrator")
     monkeypatch.setenv("OFDD_INTEGRATOR_PASSWORD", "msi")
+    monkeypatch.setenv("OFDD_OPERATOR_USER", "operator")
+    monkeypatch.setenv("OFDD_OPERATOR_PASSWORD", "op")
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
     for name in list(sys.modules):
@@ -63,6 +65,18 @@ def test_stack_health_requires_auth(authed_integrator: TestClient):
 
 
 def test_audit_api_integrator_only(authed_integrator: TestClient):
+    denied_no_token = authed_integrator.get("/api/audit/events?limit=5")
+    assert denied_no_token.status_code == 401
+
+    op_login = authed_integrator.post("/api/auth/login", json={"username": "operator", "password": "op"})
+    assert op_login.status_code == 200
+    op_token = op_login.json()["token"]
+    denied_operator = authed_integrator.get(
+        "/api/audit/events?limit=5",
+        headers={"Authorization": f"Bearer {op_token}"},
+    )
+    assert denied_operator.status_code == 403
+
     login = authed_integrator.post(
         "/api/auth/login",
         json={"username": "integrator", "password": "msi"},

@@ -30,9 +30,11 @@ When `OFDD_AUTH_SECRET` and at least one user are set, all `/api/*`, `/config/*`
 
 ## Network
 
-- Bridge defaults to **`0.0.0.0:8765`** (LAN dashboard from any workstation on the VLAN).
+- Bridge defaults to **`0.0.0.0:8765`** on edge deploy (Ansible `openfdd_bridge_host`) so OT LAN workstations can reach the dashboard. **Always set auth** when binding non-loopback.
+- For solo dev on one machine, use **`OFDD_BRIDGE_HOST=127.0.0.1`** or keep `0.0.0.0` with UFW limited to the VLAN.
 - Commission agent stays **`127.0.0.1:8767`**; bridge proxies BACnet ops (no direct browser access to OT stack).
-- Optional Caddy TLS/basic auth on port 80 — see `Caddyfile.example`.
+- Optional Caddy TLS/basic auth on port 80 — see `Caddyfile.example` (explicit opt-in for ingress).
+- Set **`OFDD_TRUST_X_FORWARDED_FOR=1`** only behind a trusted reverse proxy (Caddy); otherwise client IP is the socket peer.
 - **Do not** port-forward to the internet without VPN + stronger auth.
 
 ## BACnet writes

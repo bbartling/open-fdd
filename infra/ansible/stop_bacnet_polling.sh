@@ -22,20 +22,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PASS_EXTRA=()
-if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
-  export ANSIBLE_SSH_PASS="$SSHPASS"
-  export ANSIBLE_BECOME_PASS="${ANSIBLE_BECOME_PASS:-$SSHPASS}"
-  PASS_EXTRA=(
-    -e "ansible_ssh_pass=${SSHPASS}"
-    -e "ansible_become_pass=${SSHPASS}"
-    -e "ansible_ssh_common_args=-o StrictHostKeyChecking=no"
-  )
-else
-  PASS_EXTRA=(--ask-pass --ask-become-pass)
-fi
-
 LIMIT_ARG=()
 [[ -n "$LIMIT" ]] && LIMIT_ARG=(--limit "$LIMIT")
 
-exec "$APB" -i "$INV" stop_bacnet_polling.yml "${LIMIT_ARG[@]}" "${PASS_EXTRA[@]}" "${EXTRA[@]}"
+if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
+  export SSHPASS
+  exec sshpass -e "$APB" -i "$INV" stop_bacnet_polling.yml "${LIMIT_ARG[@]}" "${EXTRA[@]}"
+else
+  exec "$APB" -i "$INV" stop_bacnet_polling.yml --ask-pass --ask-become-pass "${LIMIT_ARG[@]}" "${EXTRA[@]}"
+fi

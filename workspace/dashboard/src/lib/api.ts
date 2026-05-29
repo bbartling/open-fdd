@@ -83,13 +83,40 @@ export async function apiFetch<T>(
         throw new Error(String(body.detail.error));
       }
     } catch (e) {
-      if (e instanceof Error && e.message !== text) {
+      if (e instanceof SyntaxError) {
+        // not JSON — fall through to plain-text error
+      } else if (e instanceof Error) {
         throw e;
       }
     }
     throw new Error(text || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+/** Fetch non-JSON responses (e.g. TTL) with shared auth/base-url behavior. */
+export async function apiFetchText(path: string, init?: RequestInit): Promise<string> {
+  const base = getBridgeBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...authHeaders(),
+      ...(init?.headers || {}),
+    },
+  });
+  if (res.status === 401 && !path.startsWith("/api/auth/login")) {
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (window.top === window.self) {
+      window.location.assign("/login");
+    }
+    throw new Error("unauthorized");
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.text();
 }
 
 export function setToken(token: string) {

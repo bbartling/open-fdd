@@ -10,7 +10,7 @@ export default function HomePage() {
 
   useEffect(() => {
     apiFetch<{ events: AuditEvent[] }>("/api/audit/events?limit=10")
-      .then((r) => setAuditPreview(r.events))
+      .then((r) => setAuditPreview(Array.isArray(r.events) ? r.events : []))
       .catch((e) => setAuditError(String(e)));
   }, []);
 

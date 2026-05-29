@@ -16,7 +16,24 @@ _log = logging.getLogger(__name__)
 
 
 def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    out: list[str] = []
+    for ch in value:
+        o = ord(ch)
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ch == "\t":
+            out.append("\\t")
+        elif o < 32:
+            out.append(f"\\u{o:04x}")
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def _safe_brick_type(value: str, fallback: str) -> str:

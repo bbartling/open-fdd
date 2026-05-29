@@ -39,10 +39,13 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
             missing_brick_type += 1
         if not str(pt.get("fdd_input") or "").strip():
             missing_fdd_input += 1
+        external_id = str(pt.get("external_id") or "").strip()
+        if not external_id:
+            continue
         key = (
             str(pt.get("site_id") or ""),
             str(pt.get("equipment_id") or ""),
-            str(pt.get("external_id") or ""),
+            external_id,
         )
         duplicate_map[key] = duplicate_map.get(key, 0) + 1
     duplicate_external_ids = sum(1 for count in duplicate_map.values() if count > 1)

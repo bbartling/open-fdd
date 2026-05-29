@@ -40,6 +40,10 @@ BIND_HOST = os.environ.get("OPENFDD_BACNET_COMMISSION_BIND", "127.0.0.1")
 BIND_PORT = int(os.environ.get("OPENFDD_BACNET_COMMISSION_PORT", "8767"))
 ENV_FILE = commissioning_dir() / "commission.env"
 
+_bacnet_app: Application | None = None
+_bacnet_app_cfg_key: tuple[tuple[str, str], ...] | None = None
+_bacnet_app_lock = threading.Lock()
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -209,9 +213,19 @@ def _start_discover(range_low: str | None, range_high: str | None) -> dict[str, 
     return {"job_id": job_id, "kind": "discover", "output": str(output)}
 
 
+def _get_bacnet_app(cfg: dict[str, str]) -> Application:
+    global _bacnet_app, _bacnet_app_cfg_key
+    cfg_key = tuple(sorted((k, str(v)) for k, v in cfg.items()))
+    with _bacnet_app_lock:
+        if _bacnet_app is None or _bacnet_app_cfg_key != cfg_key:
+            parser = SimpleArgumentParser()
+            _bacnet_app = Application.from_args(parser.parse_args(bacnet_argv_from_cfg(cfg)))
+            _bacnet_app_cfg_key = cfg_key
+        return _bacnet_app
+
+
 def _bacnet_app_from_cfg(cfg: dict[str, str]) -> Application:
-    parser = SimpleArgumentParser()
-    return Application.from_args(parser.parse_args(bacnet_argv_from_cfg(cfg)))
+    return _get_bacnet_app(cfg)
 
 
 def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:

@@ -13,6 +13,8 @@ from typing import Any, Iterator
 
 from .model_store import ModelStore
 
+_MODEL_LOCK = threading.RLock()
+
 
 def _match_id(items: list[dict[str, Any]], item_id: str) -> dict[str, Any] | None:
     for row in items:
@@ -24,14 +26,13 @@ def _match_id(items: list[dict[str, Any]], item_id: str) -> dict[str, Any] | Non
 @dataclass
 class ModelService:
     store: ModelStore = field(default_factory=ModelStore)
-    _mutation_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def load(self) -> dict[str, Any]:
         return self.store.load()
 
     @contextmanager
     def transaction(self) -> Iterator[dict[str, Any]]:
-        with self._mutation_lock:
+        with _MODEL_LOCK:
             model = self.load()
             try:
                 yield model
@@ -66,18 +67,20 @@ class ModelService:
             "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
         }
         if replace:
-            self.store.save(normalized)
+            with self.transaction() as model:
+                model["sites"] = list(normalized["sites"])
+                model["equipment"] = list(normalized["equipment"])
+                model["points"] = list(normalized["points"])
             return {
                 "sites": len(normalized["sites"]),
                 "equipment": len(normalized["equipment"]),
                 "points": len(normalized["points"]),
             }
 
-        model = self.load()
-        model["sites"].extend(normalized["sites"])
-        model["equipment"].extend(normalized["equipment"])
-        model["points"].extend(normalized["points"])
-        self.store.save(model)
+        with self.transaction() as model:
+            model["sites"].extend(normalized["sites"])
+            model["equipment"].extend(normalized["equipment"])
+            model["points"].extend(normalized["points"])
         return {
             "sites": len(normalized["sites"]),
             "equipment": len(normalized["equipment"]),

@@ -64,13 +64,18 @@ def user_roles() -> list[str]:
     return sorted({role for _, role in _load_users().values()})
 
 
+_DUMMY_PASSWORD = "invalid-credential-placeholder"
+
+
 def check_credentials(username: str, password: str) -> Role | None:
     if not auth_enabled():
         return "operator"
     entry = _load_users().get(username.strip())
-    if not entry:
-        return None
-    expected_password, role = entry
+    if entry:
+        expected_password, role = entry
+    else:
+        expected_password = _DUMMY_PASSWORD
+        role = None
     if not hmac.compare_digest(password, expected_password):
         return None
     return role
