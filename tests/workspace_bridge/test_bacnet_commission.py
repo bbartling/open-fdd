@@ -36,7 +36,7 @@ def test_operator_can_bacnet_whois(authed_client: TestClient):
     )
     token = login.json()["token"]
     with patch(
-        "openfdd_bridge.commission_client.whois",
+        "openfdd_bridge.routes.bacnet_routes.commission_whois",
         return_value=(200, {"devices": [], "count": 0}),
     ):
         r = authed_client.post(

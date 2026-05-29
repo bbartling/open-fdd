@@ -148,7 +148,7 @@ def test_agent_chat_ollama_backend():
 
     client = TestClient(create_app())
     with patch(
-        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+        "openfdd_bridge.ollama_client.chat",
         return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "ok"},
     ):
         r = client.post(

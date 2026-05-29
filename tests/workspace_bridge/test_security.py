@@ -33,17 +33,17 @@ def test_spa_path_escape_blocked():
 
 def test_agent_chat_uses_ollama(client: TestClient):
     with patch(
-        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+        "openfdd_bridge.ollama_client.chat",
         return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
     ):
         r = client.post(
             "/openfdd-agent/chat",
             json={"message": "hi"},
         )
-    assert r.status_code == 200
-    body = r.json()
-    assert body.get("mode") == "ollama"
-    assert body.get("ok") is True
+        assert r.status_code == 200
+        body = r.json()
+        assert body.get("mode") == "ollama"
+        assert body.get("ok") is True
 
 
 def test_ingest_bacnet_rejects_bad_site_id(client: TestClient):
