@@ -17,6 +17,7 @@ from .routes import (
     bacnet_routes,
     building_routes,
     health,
+    host_routes,
     model_routes,
     playground_routes,
     sites_routes,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
     app.include_router(agent_routes.router)
+    app.include_router(host_routes.router)
 
     data_dir().mkdir(parents=True, exist_ok=True)
     (data_dir() / "playground").mkdir(parents=True, exist_ok=True)

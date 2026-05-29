@@ -6,6 +6,7 @@ import AgentPage from "./pages/AgentPage";
 import BacnetPage from "./pages/BacnetPage";
 import DataModelPage from "./pages/DataModelPage";
 import HomePage from "./pages/HomePage";
+import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
 import RuleLabPage from "./pages/RuleLabPage";
 
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="rule-lab" element={<RuleLabPage />} />
         <Route path="bacnet" element={<BacnetPage />} />
         <Route path="agent" element={<AgentPage />} />
+        <Route path="host" element={<HostStatsPage />} />
         <Route path="fdd" element={<Navigate to="/rule-lab" replace />} />
       </Route>
     </Routes>

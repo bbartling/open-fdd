@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from ..deps import require_roles
+from .. import ollama_client
+from ..ollama_profiles import gpu_options_payload, tiers_payload
 from ..paths import repo_root, resolve_workdir_under_repo
 
 router = APIRouter(
@@ -21,20 +23,18 @@ router = APIRouter(
 class ChatBody(BaseModel):
     message: str
     workdir: str | None = None
-
-
-class ContextResponse(BaseModel):
-    bridge_base: str = "http://127.0.0.1:8765"
-    repo_root: str
-    codex_available: bool
-    agent_shell: str = "openfdd-agent-shell --repo-root ."
-    note: str
+    backend: Literal["auto", "ollama", "codex"] = "auto"
+    ram_tier: str | None = None
+    model: str | None = None
+    gpu_mode: Literal["cpu", "auto", "gpu"] | None = None
 
 
 @router.get("/context")
 def agent_context() -> dict:
     root = repo_root()
     codex = shutil.which("codex") or shutil.which("codex.cmd")
+    ollama = ollama_client.health()
+    tier = ollama_client.configured_ram_tier()
     return {
         "bridge_base": os.environ.get("OFDD_PUBLIC_BRIDGE_BASE", "http://127.0.0.1:8765"),
         "repo_root": str(root),
@@ -42,23 +42,55 @@ def agent_context() -> dict:
         "ui_public_base": os.environ.get("OFDD_UI_PUBLIC_BASE", "http://127.0.0.1:5173"),
         "codex_available": bool(codex),
         "agent_shell": f"openfdd-agent-shell --repo-root {root}",
-        "note": "Use Cursor, Codex CLI, or OpenClaw on this repo. Python Rule Lab + BRICK model at /api/model/export. Update building alerts via PUT /api/building/alerts.",
+        "ai_backend_default": ollama_client.ai_backend_preference(),
+        "ollama": ollama,
+        "ollama_ram_tier": tier,
+        "ollama_model": ollama_client.configured_model(),
+        "ollama_gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
+        "ollama_tiers": tiers_payload(),
+        "ollama_gpu_options": gpu_options_payload(),
+        "note": (
+            "Local chat uses Ollama on this host. For heavy work use Cursor / Claude Code / Codex remotely "
+            "against this repo. BRICK export: GET /api/model/export. Building alerts: PUT /api/building/alerts."
+        ),
     }
+
+
+@router.get("/ollama/health")
+def ollama_health() -> dict:
+    return {"ok": True, **ollama_client.health()}
 
 
 @router.post("/chat")
 def agent_chat(body: ChatBody) -> dict:
-    """Thin Codex exec when CLI is on PATH; otherwise return operator guidance."""
+    use_ollama = body.backend == "ollama" or (
+        body.backend == "auto" and ollama_client.should_use_ollama()
+    )
+    if use_ollama:
+        result = ollama_client.chat(
+            body.message,
+            model=body.model,
+            ram_tier=body.ram_tier,
+            gpu_mode=body.gpu_mode,
+        )
+        if result.get("ok") or body.backend == "ollama":
+            return result
+        if body.backend == "auto" and not shutil.which("codex") and not shutil.which("codex.cmd"):
+            result["hint"] = "Install Ollama: ./scripts/bootstrap_ollama.sh --ram-tier 8gb"
+            return result
+
     root = resolve_workdir_under_repo(body.workdir)
     codex = shutil.which("codex") or shutil.which("codex.cmd")
     if not codex:
+        ollama_hint = ollama_client.health()
         return {
-            "ok": True,
+            "ok": False,
             "mode": "guidance",
             "reply": (
-                "Codex CLI not found on bridge host PATH. "
-                "Run openfdd-agent-shell locally, or install Codex and codex login. "
-                f"Your message was recorded ({len(body.message)} chars)."
+                "No local Ollama and no Codex CLI on PATH. "
+                "Run ./scripts/bootstrap_ollama.sh --ram-tier 8gb for local AI, "
+                "or use Cursor / Claude Code remotely. "
+                f"Ollama: {ollama_hint.get('error', 'down')}"
             ),
         }
     cmd = [
@@ -78,7 +110,7 @@ def agent_chat(body: ChatBody) -> dict:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return {"ok": False, "mode": "codex", "error": "codex exec timed out"}
+        return {"ok": False, "mode": "codex", "error": "codex exec timed out", "reply": ""}
     out = (proc.stdout or "") + (proc.stderr or "")
     return {
         "ok": proc.returncode == 0,

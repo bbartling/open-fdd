@@ -30,6 +30,14 @@ if [[ -f "${ROOT}/workspace/auth.env.local" ]]; then
   echo "Loaded workspace/auth.env.local (auth enabled if OFDD_AUTH_SECRET set)"
 fi
 
+if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT}/workspace/ollama.env.local"
+  set +a
+  echo "Loaded workspace/ollama.env.local (Ollama tier ${OFDD_OLLAMA_RAM_TIER:-unset})"
+fi
+
 VENV="${ROOT}/.venv"
 DEV_UI=false
 CMD="${1:-start}"

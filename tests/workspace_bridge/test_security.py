@@ -38,7 +38,7 @@ def test_agent_chat_rejects_workdir_outside_repo(client: TestClient):
     assert r.status_code == 200
     # Should not use System32; guidance mode or codex with repo cwd
     body = r.json()
-    assert body.get("mode") in {"guidance", "codex"}
+    assert body.get("mode") in {"guidance", "codex", "ollama"}
 
 
 def test_ingest_bacnet_rejects_bad_site_id(client: TestClient):

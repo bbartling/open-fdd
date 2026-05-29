@@ -1,0 +1,62 @@
+---
+# Optional Ollama bootstrap on edge hosts (local AI for operator chat).
+# Run: ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit bacnet_pi -e ollama_ram_tier=8gb
+
+- name: Bootstrap Ollama for Open-FDD
+  hosts: pi_bcn
+  gather_facts: true
+
+  tasks:
+    - name: Skip when Ollama disabled
+      ansible.builtin.meta: end_host
+      when: not (enable_ollama | default(false) | bool)
+
+    - name: Ensure curl present
+      ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Install Ollama when missing
+      ansible.builtin.shell: curl -fsSL https://ollama.com/install.sh | sh
+      args:
+        creates: /usr/local/bin/ollama
+      become: true
+      when: ollama_install_if_missing | default(true) | bool
+
+    - name: Ensure ollama service enabled
+      ansible.builtin.systemd:
+        name: ollama
+        enabled: true
+        state: started
+      become: true
+      failed_when: false
+
+    - name: Pull tier model
+      ansible.builtin.command:
+        argv:
+          - ollama
+          - pull
+          - "{{ ollama_model_for_tier[ollama_ram_tier | default('8gb')] }}"
+      become: true
+      become_user: "{{ ansible_user }}"
+      environment:
+        HOME: "/home/{{ ansible_user }}"
+      changed_when: true
+
+    - name: Write ollama.env.local for bridge
+      ansible.builtin.template:
+        src: templates/ollama.env.local.j2
+        dest: "{{ openfdd_remote_dir }}/workspace/ollama.env.local"
+        mode: "0644"
+      notify: Restart Open-FDD bridge
+
+  handlers:
+    - name: Restart Open-FDD bridge
+      ansible.builtin.systemd:
+        name: openfdd-bridge
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_openfdd_bridge | default(true) | bool

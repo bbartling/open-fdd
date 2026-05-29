@@ -52,3 +52,16 @@ openfdd_bridge_port: 8765
 edge_backup_dir: "{{ playbook_dir }}/../../edge_backup/local"
 
 run_deploy_verify: true
+
+# Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
+enable_ollama: false
+ollama_ram_tier: "8gb"       # 8gb | 16gb | 32gb | 64gb
+ollama_gpu_mode: "cpu"        # cpu | auto | gpu
+ollama_ai_backend: "auto"     # auto | ollama | codex
+ollama_install_if_missing: true
+ollama_base_url: "http://127.0.0.1:11434"
+ollama_model_for_tier:
+  8gb: "tinyllama"
+  16gb: "llama3.2:1b"
+  32gb: "llama3.2:3b"
+  64gb: "llama3.1:8b"

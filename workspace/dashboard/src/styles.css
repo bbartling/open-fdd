@@ -382,3 +382,67 @@ select {
   font-family: ui-monospace, monospace;
   font-size: 0.82rem;
 }
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.metric-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+.metric-meter {
+  height: 8px;
+  background: var(--input-bg);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.metric-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.metric-fill-ok {
+  background: linear-gradient(90deg, #3d8b5a, var(--ok));
+}
+
+.metric-fill-warn {
+  background: linear-gradient(90deg, #b45309, var(--warning));
+}
+
+.metric-fill-critical {
+  background: linear-gradient(90deg, #b91c1c, var(--danger));
+}
+
+.metric-detail {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+}
+
+.host-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+}
+
+.host-info-grid > div > div {
+  font-weight: 500;
+  margin-top: 2px;
+}

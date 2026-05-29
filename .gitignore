@@ -175,6 +175,10 @@ NOTES.md
 # Local operator manifest (copy from openfdd.toml.example)
 workspace/auth.env.local
 
+# Local Ollama operator AI config
+workspace/ollama.env.local
+workspace/.local-run/
+
 # Ansible private inventory + host secrets
 infra/ansible/inventory.yml
 infra/ansible/host_vars/bacnet_pi.yml

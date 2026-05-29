@@ -8,6 +8,7 @@ const NAV = [
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab" },
   { to: "/bacnet", icon: "📡", label: "BACnet" },
   { to: "/agent", icon: "🤖", label: "AI Agent" },
+  { to: "/host", icon: "📊", label: "Host stats" },
 ];
 
 export default function AppLayout() {
