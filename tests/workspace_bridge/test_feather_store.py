@@ -51,9 +51,14 @@ def test_compact_collapses_shards(store: FeatherStore):
     assert [f.name for f in files] == ["latest.feather"]
 
 
-def test_prune_drops_old_rows(store: FeatherStore):
+def test_prune_drops_old_rows(store: FeatherStore, monkeypatch: pytest.MonkeyPatch):
+    anchor = pd.Timestamp("2026-05-30 12:00:00", tz="UTC")
+    monkeypatch.setattr(
+        "openfdd_bridge.feather_store.pd.Timestamp.now",
+        lambda tz=None: anchor if tz is not None else anchor.tz_localize(None),
+    )
     old = _frame("2000-01-01", 5)
-    recent = _frame(pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M"), 5)
+    recent = _frame("2026-05-30 08:00", 5)
     store.write_shard(old, source="bacnet", site_id="s1")
     store.write_shard(recent, source="bacnet", site_id="s1")
     result = store.prune(retention_days=30, source="bacnet")
@@ -61,3 +66,12 @@ def test_prune_drops_old_rows(store: FeatherStore):
     df = store.read_site("s1", source="bacnet")
     assert df is not None
     assert len(df) == 5
+
+
+def test_write_shard_unique_when_same_millisecond(store: FeatherStore, monkeypatch: pytest.MonkeyPatch):
+    fixed = 1_700_000_000.0
+    monkeypatch.setattr("openfdd_bridge.feather_store.time.time", lambda: fixed)
+    p1 = store.write_shard(_frame("2025-01-01", 2), source="bacnet", site_id="s1")
+    p2 = store.write_shard(_frame("2025-01-02", 2), source="bacnet", site_id="s1")
+    assert p1 != p2
+    assert len(store.shard_files("bacnet", "s1")) == 2

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,7 +74,8 @@ class FeatherStore:
     def write_shard(self, df: pd.DataFrame, *, source: str, site_id: str) -> Path:
         site = self.site_dir(source, site_id)
         site.mkdir(parents=True, exist_ok=True)
-        name = f"shard-{int(time.time() * 1000)}.feather"
+        # ms + uuid — two writes in the same millisecond must not overwrite each other.
+        name = f"shard-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}.feather"
         path = site / name
         df.reset_index(drop=True).to_feather(path)
         return path
