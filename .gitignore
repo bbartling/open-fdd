@@ -202,6 +202,13 @@ workspace/logs/
 !/workspace/deploy/
 !/workspace/deploy/**
 
+# Runtime state written by the bridge / FDD loop (not committed)
+/workspace/data/fdd_results.json
+/workspace/data/rules_store.json
+/workspace/data/building_alerts.json
+/workspace/data/feather_store/
+/workspace/data/playground/draft_rules.json
+
 # OpenClaw lab generated / local artifacts
 openclaw/dashboard/progress.json
 openclaw/reports/*.md

@@ -9,9 +9,12 @@ from pydantic import BaseModel, Field
 
 from open_fdd.engine import RuleRunner, load_rule
 
-from ..data_loader import load_demo_dataframe
-from ..deps import require_user
+from ..data_loader import load_frame_for_run
+from ..deps import require_roles, require_user
+from ..fault_catalog import is_valid_code
+from ..fdd_runner import run_batch
 from ..paths import data_dir
+from ..rule_store import RuleStore
 
 router = APIRouter(prefix="/api/rules", tags=["rules"], dependencies=[Depends(require_user)])
 
@@ -21,6 +24,30 @@ class RunRulesBody(BaseModel):
     column_map: dict[str, str] = Field(default_factory=dict)
     skip_missing_columns: bool = False
     rules_path: str | None = None
+
+
+class AppliesTo(BaseModel):
+    equipment_type: str = ""
+    brick_type: str = ""
+    site_ids: list[str] = Field(default_factory=list)
+
+
+class SaveRuleBody(BaseModel):
+    id: str | None = None
+    name: str = "Untitled rule"
+    description: str = ""
+    mode: str = "rule"
+    code: str
+    fault_code: str = ""
+    config: dict[str, Any] = Field(default_factory=dict)
+    column_map: dict[str, str] = Field(default_factory=dict)
+    applies_to: AppliesTo = Field(default_factory=AppliesTo)
+    severity: str = "warning"
+    enabled: bool = True
+
+
+class BatchBody(BaseModel):
+    limit: int = Field(default=1000, ge=1, le=5000)
 
 
 @router.get("/list")
@@ -54,7 +81,7 @@ def run_rules(body: RunRulesBody) -> dict:
             status_code=400,
             detail="no rules in workspace/data/rules — add YAML or pass rules_path",
         )
-    df = load_demo_dataframe(body.site_id)
+    df, source = load_frame_for_run(body.site_id)
     out = runner.run(
         df,
         column_map=body.column_map or None,
@@ -67,10 +94,47 @@ def run_rules(body: RunRulesBody) -> dict:
     return {
         "ok": True,
         "rows": len(out),
+        "data_source": source,
         "flag_columns": flag_cols,
         "flag_totals": {c: int(out[c].sum()) for c in flag_cols},
         "preview": preview.to_dict(orient="records"),
     }
+
+
+@router.get("/saved")
+def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
+    return {"rules": RuleStore().list_rules()}
+
+
+@router.post("/save")
+def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
+    saved_by = str(user.get("sub") or user.get("role") or "operator")
+    if body.fault_code and not is_valid_code(body.fault_code):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"unknown fault code '{body.fault_code}'. Use a fixed code from "
+                "/api/faults/catalog — codes must not be invented."
+            ),
+        )
+    try:
+        entry = RuleStore().upsert(body.model_dump(), saved_by=saved_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "rule": entry}
+
+
+@router.delete("/saved/{rule_id}")
+def delete_saved_rule(rule_id: str, _user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
+    removed = RuleStore().delete(rule_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"rule not found: {rule_id}")
+    return {"ok": True, "deleted": rule_id}
+
+
+@router.post("/batch")
+def run_saved_batch(body: BatchBody, _user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
+    return run_batch(limit=body.limit)
 
 
 @router.get("/drafts")

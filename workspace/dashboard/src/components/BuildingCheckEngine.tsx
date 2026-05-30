@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../lib/api";
+import TrafficLight, { Traffic } from "./TrafficLight";
 
 type Alert = {
   id?: string;
@@ -8,32 +9,47 @@ type Alert = {
   title: string;
   detail?: string;
   source?: string;
+  code?: string;
+};
+
+type FamilyNode = {
+  family: string;
+  label: string;
+  worst: string;
+  traffic: Traffic;
+  count: number;
+  faults: Alert[];
+};
+
+type FaultsStatus = {
+  status: "ok" | "warning" | "critical";
+  traffic: Traffic;
+  check_engine: boolean;
+  alert_count: number;
+  families: FamilyNode[];
 };
 
 type BuildingStatus = {
-  status: "ok" | "warning" | "critical";
-  check_engine: boolean;
+  traffic: Traffic;
   model_score?: number;
   model_summary?: string;
-  alert_count: number;
-  alerts: Alert[];
 };
 
 export default function BuildingCheckEngine() {
-  const [data, setData] = useState<BuildingStatus | null>(null);
+  const [faults, setFaults] = useState<FaultsStatus | null>(null);
+  const [building, setBuilding] = useState<BuildingStatus | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiFetch<BuildingStatus>("/api/building/status")
-      .then(setData)
-      .catch((e) => setError(String(e)));
+    apiFetch<FaultsStatus>("/api/faults/status").then(setFaults).catch((e) => setError(String(e)));
+    apiFetch<BuildingStatus>("/api/building/status").then(setBuilding).catch(() => undefined);
   }, []);
 
   if (error) {
     return (
-      <div className="panel check-engine check-engine-gray">
+      <div className="panel check-engine">
         <div className="check-engine-header">
-          <span className="check-engine-icon">⬤</span>
+          <TrafficLight traffic="green" />
           <div>
             <h3>Building status</h3>
             <p className="muted">Could not load status: {error}</p>
@@ -43,54 +59,67 @@ export default function BuildingCheckEngine() {
     );
   }
 
-  if (!data) {
+  if (!faults) {
     return (
-      <div className="panel check-engine check-engine-gray">
-        <p className="muted">Loading building status…</p>
+      <div className="panel check-engine">
+        <p className="muted">Loading building check-engine status…</p>
       </div>
     );
   }
 
-  const statusClass =
-    data.status === "critical"
-      ? "check-engine-critical"
-      : data.status === "warning"
-        ? "check-engine-warning"
-        : "check-engine-ok";
-
-  const icon = data.check_engine ? "⚠" : "✓";
+  const traffic = faults.traffic;
   const headline =
-    data.status === "ok"
-      ? "All clear — no open building issues"
-      : `${data.alert_count} issue${data.alert_count === 1 ? "" : "s"} need attention`;
+    faults.status === "ok"
+      ? "All clear — no open building faults"
+      : `${faults.alert_count} issue${faults.alert_count === 1 ? "" : "s"} need attention`;
+  const statusClass =
+    traffic === "red" ? "check-engine-critical" : traffic === "yellow" ? "check-engine-warning" : "check-engine-ok";
 
   return (
     <div className={`panel check-engine ${statusClass}`}>
       <div className="check-engine-header">
-        <span className="check-engine-icon">{icon}</span>
+        <TrafficLight traffic={traffic} />
         <div>
           <h3>{headline}</h3>
-          {data.model_summary ? <p className="muted">{data.model_summary}</p> : null}
-          {typeof data.model_score === "number" ? (
-            <p className="muted">Data model score: {data.model_score}/100</p>
+          {building?.model_summary ? <p className="muted">{building.model_summary}</p> : null}
+          {typeof building?.model_score === "number" ? (
+            <p className="muted">Data model score: {building.model_score}/100</p>
           ) : null}
+          <p className="muted">
+            Fixed fault codes only — browse the{" "}
+            <Link to="/faults">equipment fault catalog</Link>. The AI agent maps faults to these codes
+            and cannot invent new ones.
+          </p>
         </div>
       </div>
-      {data.alerts.length ? (
-        <ul className="check-engine-list">
-          {data.alerts.map((alert) => (
-            <li key={alert.id || alert.title} className={`alert-${alert.severity}`}>
-              <strong>{alert.title}</strong>
-              {alert.detail ? <span className="muted"> — {alert.detail}</span> : null}
-              {alert.source ? <span className="badge">{alert.source}</span> : null}
-            </li>
+
+      {faults.families.length ? (
+        <div className="fault-tree">
+          {faults.families.map((fam) => (
+            <details key={fam.family} className="fault-family" open={fam.worst === "critical"}>
+              <summary>
+                <span className={`status-dot dot-${fam.traffic}`} />
+                <strong>{fam.label}</strong>
+                <span className="badge">{fam.count}</span>
+              </summary>
+              <ul className="check-engine-list">
+                {fam.faults.map((f) => (
+                  <li key={f.id || f.title} className={`alert-${f.severity}`}>
+                    {f.code ? <span className="badge code-badge">{f.code}</span> : null}
+                    <strong>{f.title}</strong>
+                    {f.detail ? <span className="muted"> — {f.detail}</span> : null}
+                    {f.source ? <span className="badge">{f.source}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
           ))}
-        </ul>
+        </div>
       ) : (
         <p className="muted">
-          Import a BRICK model under <Link to="/data-model">Data Model</Link>, then run Python rules in{" "}
-          <Link to="/rule-lab">Rule Lab</Link>. The AI agent can update alerts via{" "}
-          <code>PUT /api/building/alerts</code>.
+          No open faults. Import a BRICK model under <Link to="/data-model">Data Model</Link>, save
+          Python rules tagged with a fault code in <Link to="/rule-lab">Rule Lab</Link>, and the
+          scheduled FDD run will light this board.
         </p>
       )}
     </div>

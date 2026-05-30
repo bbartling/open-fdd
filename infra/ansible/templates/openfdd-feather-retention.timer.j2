@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Open-FDD feather store retention + compaction
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+Unit=openfdd-feather-retention.service
+
+[Install]
+WantedBy=timers.target

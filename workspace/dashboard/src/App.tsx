@@ -5,6 +5,7 @@ import { fetchAuthStatus, hasToken, setToken } from "./lib/api";
 import AgentPage from "./pages/AgentPage";
 import BacnetPage from "./pages/BacnetPage";
 import DataModelPage from "./pages/DataModelPage";
+import FaultsPage from "./pages/FaultsPage";
 import HomePage from "./pages/HomePage";
 import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
@@ -39,6 +40,7 @@ export default function App() {
         }
       >
         <Route index element={<HomePage />} />
+        <Route path="faults" element={<FaultsPage />} />
         <Route path="data-model" element={<DataModelPage />} />
         <Route path="rule-lab" element={<RuleLabPage />} />
         <Route path="bacnet" element={<BacnetPage />} />

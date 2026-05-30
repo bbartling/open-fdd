@@ -195,6 +195,28 @@
       become: true
       when: install_bacnet_commission_unit | default(true) | bool
 
+    - name: Install openfdd-fdd-loop systemd unit and timer
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-fdd-loop.service
+        - openfdd-fdd-loop.timer
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
+
+    - name: Install openfdd-feather-retention systemd unit and timer
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-feather-retention.service
+        - openfdd-feather-retention.timer
+      become: true
+      when: install_feather_retention_timer | default(true) | bool
+
     - name: Enable and start openfdd-bridge
       ansible.builtin.systemd:
         name: openfdd-bridge
@@ -221,6 +243,24 @@
         daemon_reload: true
       become: true
       when: install_bacnet_poll_unit | default(true) | bool
+
+    - name: Enable and start openfdd-fdd-loop timer
+      ansible.builtin.systemd:
+        name: openfdd-fdd-loop.timer
+        enabled: "{{ enable_fdd_loop_timer | default(true) | bool }}"
+        state: "{{ 'started' if (enable_fdd_loop_timer | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
+
+    - name: Enable and start openfdd-feather-retention timer
+      ansible.builtin.systemd:
+        name: openfdd-feather-retention.timer
+        enabled: "{{ enable_feather_retention_timer | default(true) | bool }}"
+        state: "{{ 'started' if (enable_feather_retention_timer | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_feather_retention_timer | default(true) | bool
 
     - name: Verify bridge health
       ansible.builtin.uri:

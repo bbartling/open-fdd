@@ -1,0 +1,169 @@
+"""Scheduled FDD batch runner.
+
+Resolves which saved Rule Lab rules apply to which BRICK-modeled sites, runs
+each rule across the best available timeseries (feather store, falling back to
+the demo sample), and persists a summary that drives the building check-engine
+light. Invoked on a timer by the ``openfdd-fdd-loop`` systemd unit::
+
+    python -m openfdd_bridge.fdd_runner --once
+    python -m openfdd_bridge.fdd_runner --loop --interval-hours 3
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+from typing import Any
+
+from . import playground
+from .data_loader import load_frame_for_run, rows_for_evaluate
+from .fault_catalog import family_for_code
+from .feather_store import FeatherStore
+from .fdd_results import save_results
+from .model_service import ModelService
+from .rule_store import RuleStore
+
+_log = logging.getLogger(__name__)
+
+DEFAULT_LIMIT = 1000
+
+
+def resolve_site_ids(model: dict[str, Any], applies_to: dict[str, Any]) -> list[str]:
+    """Resolve the data site ids a rule should run against from the BRICK model."""
+    explicit = [str(s) for s in applies_to.get("site_ids", []) if str(s).strip()]
+    if explicit:
+        return explicit
+
+    sites = [s for s in model.get("sites", []) if isinstance(s, dict)]
+    equipment = [e for e in model.get("equipment", []) if isinstance(e, dict)]
+    points = [p for p in model.get("points", []) if isinstance(p, dict)]
+
+    eq_type = str(applies_to.get("equipment_type") or "").strip()
+    brick_type = str(applies_to.get("brick_type") or "").strip()
+
+    matched_site_ids: set[str] = set()
+    if eq_type:
+        for eq in equipment:
+            if str(eq.get("equipment_type") or "") == eq_type and eq.get("site_id"):
+                matched_site_ids.add(str(eq.get("site_id")))
+    if brick_type:
+        for pt in points:
+            if str(pt.get("brick_type") or "") == brick_type and pt.get("site_id"):
+                matched_site_ids.add(str(pt.get("site_id")))
+
+    if eq_type or brick_type:
+        ids = sorted(matched_site_ids)
+    else:
+        ids = sorted({str(s.get("id")) for s in sites if s.get("id")})
+
+    if not ids:
+        # No BRICK sites yet: fall back to whatever the feather store holds, else demo.
+        ids = sorted({entry["site_id"] for entry in FeatherStore().list_sites()})
+    return ids or ["demo"]
+
+
+def _run_one(rule: dict[str, Any], site_id: str, *, limit: int) -> dict[str, Any]:
+    frame, origin = load_frame_for_run(site_id)
+    fault_code = str(rule.get("fault_code") or "")
+    base = {
+        "rule_id": rule.get("id"),
+        "rule_name": rule.get("name"),
+        "site_id": site_id,
+        "severity": rule.get("severity", "warning"),
+        "source": origin,
+        "fault_code": fault_code,
+        "equipment_family": family_for_code(fault_code) or "",
+    }
+    try:
+        if rule.get("mode") == "script":
+            df = frame.head(limit) if limit and len(frame) > limit else frame
+            result = playground.run_dataframe_script(rule["code"], df, cfg=rule.get("config") or {})
+            if not result.get("ok"):
+                return {**base, "status": "error", "rows": int(len(df)), "flagged": 0, "error": result.get("error", "")}
+            flag_cols = result.get("flag_columns") or []
+            flagged = 0
+            for row in result.get("preview", []):
+                if any(int(row.get(col) or 0) for col in flag_cols):
+                    flagged += 1
+            return {
+                **base,
+                "status": "ok",
+                "rows": int(result.get("rows") or 0),
+                "flagged": flagged,
+                "flag_columns": flag_cols,
+            }
+        rows = rows_for_evaluate(frame, limit=limit)
+        flags, _events = playground.sweep_rule(rule["code"], rule.get("config") or {}, rows, capture_print=False)
+        return {
+            **base,
+            "status": "ok",
+            "rows": len(rows),
+            "flagged": int(sum(1 for f in flags if f)),
+        }
+    except Exception as exc:  # noqa: BLE001 - surface as a run error, keep the batch going
+        return {**base, "status": "error", "rows": 0, "flagged": 0, "error": str(exc)[:1000]}
+
+
+def run_batch(*, limit: int = DEFAULT_LIMIT, persist: bool = True) -> dict[str, Any]:
+    started = time.time()
+    model = ModelService().load()
+    rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
+    runs: list[dict[str, Any]] = []
+    for rule in rules:
+        applies_to = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
+        for site_id in resolve_site_ids(model, applies_to):
+            runs.append(_run_one(rule, site_id, limit=limit))
+    summary = {
+        "ok": True,
+        "rules_run": len(rules),
+        "site_runs": len(runs),
+        "flagged_runs": sum(1 for r in runs if r.get("flagged")),
+        "error_runs": sum(1 for r in runs if r.get("status") == "error"),
+        "ms": int((time.time() - started) * 1000),
+        "runs": runs,
+    }
+    if persist:
+        doc = save_results(runs)
+        summary["generated_at"] = doc["generated_at"]
+    return summary
+
+
+def _main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Open-FDD scheduled batch runner")
+    parser.add_argument("--once", action="store_true", help="run a single batch and exit (default)")
+    parser.add_argument("--loop", action="store_true", help="run forever on --interval-hours")
+    parser.add_argument(
+        "--interval-hours",
+        type=float,
+        default=float(os.environ.get("OFDD_RULE_INTERVAL_HOURS", "3") or 3),
+    )
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    def _cycle() -> None:
+        result = run_batch(limit=args.limit)
+        _log.info(
+            "fdd batch: rules=%d site_runs=%d flagged=%d errors=%d ms=%d",
+            result["rules_run"],
+            result["site_runs"],
+            result["flagged_runs"],
+            result["error_runs"],
+            result["ms"],
+        )
+
+    if args.loop:
+        interval = max(60.0, args.interval_hours * 3600.0)
+        while True:
+            _cycle()
+            time.sleep(interval)
+    _cycle()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

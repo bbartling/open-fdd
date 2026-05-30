@@ -43,6 +43,16 @@ commission_agent_token: ""
 # Auto-ingest poll CSV into feather after each poll cycle (optional timer)
 enable_poll_ingest_timer: false
 
+# Scheduled FDD batch run (saved Rule Lab rules across the BRICK model -> check-engine light)
+install_fdd_loop_timer: true
+enable_fdd_loop_timer: true
+fdd_loop_interval_hours: 3
+
+# Feather store retention/compaction (drop rows older than N days, daily)
+install_feather_retention_timer: true
+enable_feather_retention_timer: true
+feather_retention_days: 90
+
 # Bridge bind: 0.0.0.0 for OT LAN dashboard on edge Pis. Require ofdd_auth_secret + credentials in host_vars.
 # For loopback-only, override openfdd_bridge_host: "127.0.0.1" and use Caddy (see workspace/deploy/Caddyfile.example).
 openfdd_bridge_host: "0.0.0.0"
@@ -64,8 +74,9 @@ ollama_version: "0.24.0"
 ollama_checksum_sha256:
   amd64: "15c5f8d66ba06e0d3b4719df8868612dbd66e14e82760929bb3552e1657cdcdb"
   arm64: "6e9a3ce5f64e93312902e39c420ec336255f078a368ca25e99b339d08a6dfa4b"
+# qwen3 thinking line. On a 4GB Pi, set ollama_model_for_tier.8gb to qwen3:0.6b.
 ollama_model_for_tier:
-  8gb: "tinyllama"
-  16gb: "llama3.2:1b"
-  32gb: "llama3.2:3b"
-  64gb: "llama3.1:8b"
+  8gb: "qwen3:1.7b"
+  16gb: "qwen3:4b"
+  32gb: "qwen3:8b"
+  64gb: "qwen3:14b"

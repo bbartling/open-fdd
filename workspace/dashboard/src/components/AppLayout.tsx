@@ -4,6 +4,7 @@ import StackStatusStrip from "./StackStatusStrip";
 
 const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
+  { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/data-model", icon: "🧱", label: "Data Model BRICK" },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab" },
   { to: "/bacnet", icon: "📡", label: "BACnet" },

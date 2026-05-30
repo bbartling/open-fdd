@@ -22,6 +22,8 @@ export SSHPASS='...'   # Acme VM if password auth
 | `openfdd-bridge` | FastAPI Rule Lab + FDD + ingest (8765) |
 | `openfdd-bacnet-commission` | Discover jobs HTTP agent (8767) |
 | `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` |
+| `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
+| `openfdd-feather-retention.timer` | Daily feather store prune/compact (`feather_retention_days`) |
 
 Poll driver is **off** until `points.csv` is commissioned:
 

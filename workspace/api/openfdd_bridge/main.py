@@ -16,11 +16,13 @@ from .routes import (
     auth_routes,
     bacnet_routes,
     building_routes,
+    faults_routes,
     health,
     host_routes,
     modbus_routes,
     model_routes,
     playground_routes,
+    rules_routes,
     sites_routes,
 )
 from .settings import cors_allow_private_lan, cors_origins
@@ -49,8 +51,10 @@ def create_app() -> FastAPI:
     app.include_router(auth_routes.router)
     app.include_router(audit_routes.router)
     app.include_router(playground_routes.router)
+    app.include_router(rules_routes.router)
     app.include_router(model_routes.router)
     app.include_router(building_routes.router)
+    app.include_router(faults_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
     app.include_router(modbus_routes.router)

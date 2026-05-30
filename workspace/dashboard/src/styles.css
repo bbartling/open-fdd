@@ -353,6 +353,137 @@ select {
   margin-bottom: 8px;
 }
 
+/* Traffic light */
+.traffic-housing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 8px;
+  background: #11151c;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.traffic-lamp {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2a313f;
+  opacity: 0.28;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.traffic-sm .traffic-lamp {
+  width: 16px;
+  height: 16px;
+}
+
+.lamp-red {
+  background: var(--danger);
+}
+.lamp-yellow {
+  background: var(--warning);
+}
+.lamp-green {
+  background: var(--ok);
+}
+
+.traffic-lamp.lit {
+  opacity: 1;
+}
+.lamp-red.lit {
+  box-shadow: 0 0 14px 2px rgba(212, 85, 85, 0.7);
+}
+.lamp-yellow.lit {
+  box-shadow: 0 0 14px 2px rgba(251, 191, 36, 0.7);
+}
+.lamp-green.lit {
+  box-shadow: 0 0 14px 2px rgba(127, 217, 146, 0.7);
+}
+
+/* Fault tree */
+.fault-tree {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fault-family {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--panel-soft);
+}
+
+.fault-family > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  list-style: none;
+}
+
+.fault-family > summary::-webkit-details-marker {
+  display: none;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-green {
+  background: var(--ok);
+}
+.dot-yellow {
+  background: var(--warning);
+}
+.dot-red {
+  background: var(--danger);
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+  margin: 0 4px;
+}
+
+.code-badge {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--primary);
+  color: #fff;
+}
+
+.alert-critical strong {
+  color: var(--danger);
+}
+.alert-warning strong {
+  color: var(--warning);
+}
+
+.fault-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.fault-table th,
+.fault-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 .alert-critical strong {
   color: var(--danger);
 }

@@ -54,6 +54,35 @@ def ai_backend_preference() -> str:
     return os.environ.get("OFDD_AI_BACKEND", "auto").strip().lower() or "auto"
 
 
+_THINK_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def normalize_think(value: Any) -> bool | str | None:
+    """Coerce a think request to what Ollama accepts.
+
+    Returns a bool (qwen3 / deepseek-r1 style), a level string for gpt-oss
+    (``low`` / ``medium`` / ``high``), or ``None`` to omit the field entirely.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in _THINK_LEVELS:
+        return text
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def configured_think() -> bool | str | None:
+    return normalize_think(os.environ.get("OFDD_OLLAMA_THINK", ""))
+
+
 def resolve_model(*, ram_tier: str | None = None, model: str | None = None) -> str:
     if model and model.strip():
         return model.strip()
@@ -120,9 +149,11 @@ def chat(
     gpu_mode: str | None = None,
     system: str | None = None,
     timeout: float | None = None,
+    think: bool | str | None = None,
 ) -> dict[str, Any]:
     use_model = resolve_model(ram_tier=ram_tier, model=model)
     num_gpu = resolve_num_gpu(gpu_mode=gpu_mode)
+    think_value = normalize_think(think) if think is not None else configured_think()
     payload: dict[str, Any] = {
         "model": use_model,
         "messages": [
@@ -132,6 +163,8 @@ def chat(
         "stream": False,
         "options": {"num_gpu": num_gpu},
     }
+    if think_value is not None:
+        payload["think"] = think_value
     url = f"{ollama_base_url()}/api/chat"
     to = timeout or float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(DEFAULT_TIMEOUT_S)))
     try:
@@ -140,14 +173,18 @@ def chat(
             resp.raise_for_status()
             data = resp.json()
             content = ""
+            thinking = ""
             msg = data.get("message")
             if isinstance(msg, dict):
                 content = str(msg.get("content") or "")
+                thinking = str(msg.get("thinking") or "")
             return {
                 "ok": True,
                 "mode": "ollama",
                 "model": use_model,
                 "num_gpu": num_gpu,
+                "think": think_value,
+                "thinking": thinking.strip(),
                 "reply": content.strip() or "(empty response)",
                 "eval_count": data.get("eval_count"),
             }

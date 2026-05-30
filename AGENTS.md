@@ -41,6 +41,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
 | CSV / weather / BACnet ingest | `skills/driver-*-ingest/` |
 | Rules CRUD + batch run | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
+| Building check-engine light + fault codes | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
 | Plots / cleaning | [skills/timeseries-plots-and-cleaning/SKILL.md](skills/timeseries-plots-and-cleaning/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
 | MCP doc retrieval | [skills/mcp-doc-retrieval/SKILL.md](skills/mcp-doc-retrieval/SKILL.md) |
