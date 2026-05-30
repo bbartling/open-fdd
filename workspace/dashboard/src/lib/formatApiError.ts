@@ -17,5 +17,8 @@ export function formatApiError(error: unknown): string {
   if (raw.includes("commission agent unreachable")) {
     return "BACnet commission agent is down — run ./scripts/run_local.sh restart";
   }
+  if (raw === "forbidden") {
+    return "Not permitted for your login role — sign in with an account that has access.";
+  }
   return raw;
 }

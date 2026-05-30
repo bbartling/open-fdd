@@ -75,11 +75,14 @@ def whois(range_low: int, range_high: int) -> tuple[int, Any]:
     )
 
 
-def start_point_discovery(device_instance: int) -> tuple[int, Any]:
+def start_point_discovery(device_instance: int, device_address: str = "") -> tuple[int, Any]:
+    body: dict[str, Any] = {"device_instance": device_instance}
+    if device_address.strip():
+        body["device_address"] = device_address.strip()
     return _request(
         "POST",
         "/api/jobs/point-discovery",
-        {"device_instance": device_instance},
+        body,
     )
 
 

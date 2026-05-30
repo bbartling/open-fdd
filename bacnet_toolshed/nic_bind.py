@@ -1,0 +1,133 @@
+"""Resolve BACnet/IP bind address for BACpypes3 (--address IP/prefix:47808).
+
+BACpypes3 must bind the host NIC IP (e.g. 192.168.204.12/24), not 127.0.0.1, for
+LAN Who-Is/I-Am to work — see bacpypes3 shell discussions (Who-Is only works when
+the stack is on the same broadcast domain as field devices).
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import os
+import re
+import socket
+import subprocess
+from typing import Iterable
+
+_DEFAULT_PORT = 47808
+_LOOPBACK = frozenset({"127.0.0.1", "0.0.0.0", "::1", "0:0:0:0:0:0:0:1"})
+
+
+def _parse_ip_addr_show() -> list[tuple[str, int]]:
+    """Parse `ip -4 -o addr show scope global` → [(ip, prefix_len), ...]."""
+    try:
+        out = subprocess.check_output(
+            ["ip", "-4", "-o", "addr", "show", "scope", "global"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rows: list[tuple[str, int]] = []
+    for line in out.splitlines():
+        parts = line.split()
+        # inet 192.168.204.12/24 brd ...
+        for token in parts:
+            if "/" in token and token.count(".") == 3:
+                ip_part, _, prefix = token.partition("/")
+                try:
+                    ipaddress.IPv4Address(ip_part)
+                    rows.append((ip_part, int(prefix)))
+                except ValueError:
+                    continue
+                break
+    return rows
+
+
+def _outbound_guess() -> tuple[str, int] | None:
+    """Best-effort LAN IP via UDP connect (no packets sent)."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        if ip and ip not in _LOOPBACK:
+            return ip, 24
+    except OSError:
+        pass
+    return None
+
+
+def detect_lan_ipv4(*, prefer_prefix: Iterable[str] = ("192.168.", "10.", "172.")) -> tuple[str, int] | None:
+    """Pick the first plausible OT/LAN IPv4 address on this host."""
+    candidates = _parse_ip_addr_show()
+    if not candidates:
+        candidates = [x for x in [_outbound_guess()] if x]
+    if not candidates:
+        return None
+    for prefix in prefer_prefix:
+        for ip, plen in candidates:
+            if ip.startswith(prefix):
+                return ip, plen
+    return candidates[0]
+
+
+def normalize_bacnet_bind(raw: str, *, default_port: int = _DEFAULT_PORT) -> str:
+    """Normalize commission.env BACNET_BIND to BACpypes3 --address form."""
+    text = (raw or "").strip()
+    if not text:
+        return text
+    # already host/prefix:port
+    if re.match(r"^[\d.]+/\d+:\d+$", text):
+        return text
+    # host/prefix without port
+    if re.match(r"^[\d.]+/\d+$", text):
+        return f"{text}:{default_port}"
+    # host:port only (legacy)
+    if re.match(r"^[\d.]+:\d+$", text) and "/" not in text:
+        host, _, port = text.partition(":")
+        return f"{host}/24:{port}"
+    # bare IP
+    if re.match(r"^[\d.]+$", text):
+        return f"{text}/24:{default_port}"
+    return text
+
+
+def _bind_host(raw: str) -> str:
+    text = normalize_bacnet_bind(raw)
+    if not text:
+        return ""
+    host = text.split("/")[0].split(":")[0]
+    return host
+
+
+def should_auto_resolve_bind(raw: str) -> bool:
+    if os.environ.get("OFDD_BACNET_BIND_STRICT", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    host = _bind_host(raw)
+    return not host or host in _LOOPBACK
+
+
+def resolve_bacnet_bind(raw: str | None = None, *, default_port: int = _DEFAULT_PORT) -> str:
+    """Return BACpypes3 --address value; auto-detect NIC when bind is loopback/empty."""
+    env_override = os.environ.get("OFDD_BACNET_BIND", "").strip()
+    candidate = (raw or env_override or "").strip()
+    if candidate and not should_auto_resolve_bind(candidate):
+        return normalize_bacnet_bind(candidate, default_port=default_port)
+    detected = detect_lan_ipv4()
+    if detected:
+        ip, prefix = detected
+        return f"{ip}/{prefix}:{default_port}"
+    if candidate:
+        return normalize_bacnet_bind(candidate, default_port=default_port)
+    return f"0.0.0.0/24:{default_port}"
+
+
+def resolve_commission_cfg(cfg: dict[str, str]) -> dict[str, str]:
+    """Apply bind + name defaults in-place on a commission config dict."""
+    out = dict(cfg)
+    out["BACNET_BIND"] = resolve_bacnet_bind(out.get("BACNET_BIND"))
+    out.setdefault("BACNET_NAME", "OpenFddEdge")
+    out.setdefault("BACNET_INSTANCE", "599999")
+    return out

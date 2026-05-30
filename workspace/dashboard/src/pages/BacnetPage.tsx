@@ -1,44 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
-import BacnetPointsTree from "../components/BacnetPointsTree";
+import BacnetPointsTree, { type DriverDevice } from "../components/BacnetPointsTree";
 import Spinner from "../components/Spinner";
 import {
   extractPointDiscoveryObjects,
   extractWhoisDevices,
   parseDeviceInstanceFromWhoisRow,
-  type InventoryDevice,
-  type PointDiscoveryObjectRow,
   type PointDiscoveryObjectRow,
   type WhoisDeviceRow,
 } from "../lib/bacnet-discovery-parse";
 
 type BacnetConfig = {
-  points_exists: boolean;
-  discovered_exists: boolean;
-  poll_exists: boolean;
   commission_agent_ok: boolean;
 };
 
 type CommissionStatus = {
   bacnet_bind?: string;
-  site_id?: string;
-  building_id?: string;
   discover_range?: [string, string];
 };
 
 type DiscoverJob = {
   job_id?: string;
   id?: string;
-  kind?: string;
   status?: string;
-  exit_code?: number | null;
   log_tail?: string;
   result?: unknown;
   error?: string;
-  device_instance?: number;
 };
 
 type BatchRow = {
@@ -46,12 +35,6 @@ type BatchRow = {
   ok: boolean;
   objectCount?: number;
   error?: string;
-};
-
-type LiveDevice = {
-  device_instance: number;
-  device_address?: string;
-  objects: PointDiscoveryObjectRow[];
 };
 
 async function waitForJob(jobId: string): Promise<DiscoverJob> {
@@ -66,34 +49,36 @@ async function waitForJob(jobId: string): Promise<DiscoverJob> {
 export default function BacnetPage() {
   const [cfg, setCfg] = useState<BacnetConfig | null>(null);
   const [status, setStatus] = useState<CommissionStatus | null>(null);
-  const [inventory, setInventory] = useState<InventoryDevice[]>([]);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [log, setLog] = useState("");
   const [whoisLow, setWhoisLow] = useState(1);
   const [whoisHigh, setWhoisHigh] = useState(4194303);
-  const [deviceInst, setDeviceInst] = useState(5007);
   const [whoisPending, setWhoisPending] = useState(false);
-  const [discoverCsvPending, setDiscoverCsvPending] = useState(false);
-  const [pointDiscoveryPending, setPointDiscoveryPending] = useState(false);
+  const [addPending, setAddPending] = useState(false);
   const [batchPending, setBatchPending] = useState(false);
   const [whoisDevices, setWhoisDevices] = useState<WhoisDeviceRow[]>([]);
   const [selectedInstances, setSelectedInstances] = useState<Set<number>>(new Set());
-  const [liveDevices, setLiveDevices] = useState<LiveDevice[]>([]);
   const [discoveryPreview, setDiscoveryPreview] = useState<PointDiscoveryObjectRow[]>([]);
   const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
-  const [batchGraphPending, setBatchGraphPending] = useState(false);
-  const [modelMsg, setModelMsg] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
+  const [driverDevices, setDriverDevices] = useState<DriverDevice[]>([]);
   const [activeJobLabel, setActiveJobLabel] = useState("");
 
+  const loadDriverTree = useCallback(async () => {
+    const res = await apiFetch<{ devices: DriverDevice[] }>("/api/bacnet/driver/tree").catch(() => ({
+      devices: [],
+    }));
+    setDriverDevices(res.devices ?? []);
+  }, []);
+
   const refresh = useCallback(async () => {
-    const [c, s, inv] = await Promise.all([
+    const [c, s] = await Promise.all([
       apiFetch<BacnetConfig>("/config/bacnet"),
       apiFetch<CommissionStatus>("/api/bacnet/commission/status").catch(() => null),
-      apiFetch<{ devices: InventoryDevice[] }>("/api/bacnet/inventory").catch(() => ({ devices: [] })),
     ]);
     setCfg(c);
-    setInventory(inv.devices ?? []);
+    await loadDriverTree();
     if (s) {
       setStatus(s);
       if (s.discover_range?.length === 2) {
@@ -101,7 +86,7 @@ export default function BacnetPage() {
         setWhoisHigh(Number(s.discover_range[1]) || 4194303);
       }
     }
-  }, []);
+  }, [loadDriverTree]);
 
   useEffect(() => {
     refresh().catch((e) => setLoadError(String(e)));
@@ -125,6 +110,132 @@ export default function BacnetPage() {
     setSelectedInstances(next);
   }
 
+  function whoisAddress(instance: number): string {
+    const row = whoisDevices.find((r) => parseDeviceInstanceFromWhoisRow(r) === instance);
+    return row ? String(row["device-address"] ?? "") : "";
+  }
+
+  function whoisDescription(instance: number): string {
+    const row = whoisDevices.find((r) => parseDeviceInstanceFromWhoisRow(r) === instance);
+    const raw = row ? String(row["device-description"] ?? "") : "";
+    if (raw.startsWith("Error:")) return raw.replace(/^Error:\s*/, "");
+    return raw;
+  }
+
+  async function syncDiscoveryToDriver(
+    instance: number,
+    address: string,
+    objects: PointDiscoveryObjectRow[],
+  ) {
+    if (!objects.length) return { rows_added: 0 };
+    return apiFetch<{ rows_added: number; total: number }>("/api/bacnet/driver/sync-discovery", {
+      method: "POST",
+      body: JSON.stringify({
+        device_instance: instance,
+        device_address: address,
+        objects,
+        replace: true,
+      }),
+    });
+  }
+
+  async function addDevice(
+    instance: number,
+    addressOverride = "",
+    forceRefresh = false,
+  ): Promise<BatchRow> {
+    if (!forceRefresh && driverDevices.some((d) => d.device_instance === String(instance))) {
+      return {
+        instance,
+        ok: false,
+        error: `Device ${instance} is already in the tree — right-click → Refresh points to update.`,
+      };
+    }
+    setActionError("");
+    try {
+      const addr = addressOverride || whoisAddress(instance);
+      const res = await apiFetch<DiscoverJob>("/api/bacnet/point-discovery", {
+        method: "POST",
+        body: JSON.stringify({
+          device_instance: instance,
+          device_address: addr,
+        }),
+      });
+      const jobId = res.job_id ?? res.id;
+      if (!jobId) throw new Error("No job_id returned");
+      const job = await waitForJob(jobId);
+      const objects = extractPointDiscoveryObjects(job.result);
+      const syncAddr =
+        addr ||
+        String((job.result as { device_address?: string } | undefined)?.device_address ?? "");
+      let synced = 0;
+      if (job.status === "ok" && objects.length) {
+        const sync = await syncDiscoveryToDriver(instance, syncAddr, objects);
+        synced = sync.rows_added ?? objects.length;
+        await loadDriverTree();
+      }
+      setDiscoveryPreview(objects);
+      if (job.status !== "ok") {
+        const err = job.error || `Add device failed for ${instance}`;
+        setActionError(err);
+        return { instance, ok: false, objectCount: objects.length, error: err };
+      }
+      if (!objects.length) {
+        const err = `Device ${instance} responded but returned 0 points — check segmentation / object-list support.`;
+        setActionError(err);
+        return { instance, ok: false, objectCount: 0, error: err };
+      }
+      setStatusMsg(`Device ${instance} added — ${objects.length} point(s)${synced ? ` (${synced} new)` : ""}.`);
+      return { instance, ok: true, objectCount: objects.length };
+    } catch (e) {
+      const msg = formatApiError(e);
+      setActionError(msg);
+      return { instance, ok: false, error: msg };
+    }
+  }
+
+  async function runAddDevice(instance: number, address = "", forceRefresh = false) {
+    setAddPending(true);
+    setActiveJobLabel(forceRefresh ? `Refreshing device ${instance}` : `Adding device ${instance}`);
+    setLog(`Reading points from device ${instance}…`);
+    setStatusMsg("");
+    try {
+      const row = await addDevice(instance, address, forceRefresh);
+      setLog(
+        row.ok
+          ? `Device ${instance}: ${row.objectCount ?? 0} point(s) loaded.`
+          : `Device ${instance}: ${row.error ?? "failed"}`,
+      );
+    } finally {
+      setAddPending(false);
+      setActiveJobLabel("");
+    }
+  }
+
+  async function runBatchAddDevices(instances?: number[]) {
+    const list = (instances ?? Array.from(selectedInstances)).sort((a, b) => a - b);
+    if (!list.length) return;
+    if (instances) setSelectedInstances(new Set(list));
+    setBatchPending(true);
+    setBatchSummary(null);
+    setActionError("");
+    setStatusMsg("");
+    setLog(`Adding ${list.length} device(s)…`);
+    const summary: BatchRow[] = [];
+    for (let i = 0; i < list.length; i++) {
+      setActiveJobLabel(`Adding device ${i + 1}/${list.length} (${list[i]})`);
+      const row = await addDevice(list[i], whoisAddress(list[i]), false);
+      summary.push(row);
+      setBatchSummary([...summary]);
+    }
+    setBatchPending(false);
+    setActiveJobLabel("");
+    const ok = summary.filter((r) => r.ok).length;
+    const pts = summary.reduce((n, r) => n + (r.objectCount ?? 0), 0);
+    setLog(`Finished: ${ok}/${list.length} device(s), ${pts} total point(s).`);
+    if (ok > 0) setStatusMsg(`Added ${ok} device(s) with ${pts} point(s). Right-click in tree to start polling.`);
+  }
+
   async function runWhoIs() {
     setWhoisPending(true);
     setActionError("");
@@ -140,7 +251,7 @@ export default function BacnetPage() {
       setBatchSummary(null);
       setLog(
         devices.length
-          ? `Who-Is found ${devices.length} device(s). Select rows for point discovery.`
+          ? `Found ${devices.length} device(s). Check rows and click Add device.`
           : "No I-Am responses — widen range or check BACnet bind / OT network.",
       );
     } catch (e) {
@@ -152,183 +263,117 @@ export default function BacnetPage() {
     }
   }
 
-  async function runDiscoverCsv() {
-    setDiscoverCsvPending(true);
+  async function setPointPoll(pointId: string, enabled: boolean, intervalS: number) {
     setActionError("");
-    setActiveJobLabel("CSV discover");
-    setLog("Starting full discover → points_discovered.csv…");
     try {
-      const res = await apiFetch<DiscoverJob>("/api/bacnet/discover", {
-        method: "POST",
-        body: JSON.stringify({ range_low: whoisLow, range_high: whoisHigh }),
+      const res = await apiFetch<{ model_sync?: { ok?: boolean; error?: string } }>("/api/bacnet/driver/point", {
+        method: "PATCH",
+        body: JSON.stringify({ point_id: pointId, enabled, poll_interval_s: intervalS }),
       });
-      const jobId = res.job_id ?? res.id;
-      if (!jobId) throw new Error("No job_id returned");
-      const job = await waitForJob(jobId);
-      setLog(
-        [
-          `Discover job ${jobId} — ${job.status}`,
-          job.log_tail ? `\n--- log ---\n${job.log_tail}` : "",
-          job.error ? `\nERROR: ${job.error}` : "",
-        ].join(""),
-      );
-      if (job.status !== "ok") setActionError(job.error || "Discover job failed");
-      await refresh();
+      if (res.model_sync?.ok === false && res.model_sync.error) {
+        setActionError(res.model_sync.error);
+      }
+      await loadDriverTree();
     } catch (e) {
       setActionError(formatApiError(e));
-      setLog(formatApiError(e));
-    } finally {
-      setDiscoverCsvPending(false);
-      setActiveJobLabel("");
     }
   }
 
-  async function discoverDevice(instance: number): Promise<BatchRow> {
+  async function setDevicePoll(instance: number, enabled: boolean, intervalS: number) {
     setActionError("");
     try {
-      const res = await apiFetch<DiscoverJob>("/api/bacnet/point-discovery", {
-        method: "POST",
-        body: JSON.stringify({ device_instance: instance }),
+      await apiFetch("/api/bacnet/driver/device", {
+        method: "PATCH",
+        body: JSON.stringify({ device_instance: instance, enabled, poll_interval_s: intervalS }),
       });
-      const jobId = res.job_id ?? res.id;
-      if (!jobId) throw new Error("No job_id returned");
-      const job = await waitForJob(jobId);
-      const objects = extractPointDiscoveryObjects(job.result);
-      setDiscoveryPreview(objects);
-      setLiveDevices((prev) => {
-        const rest = prev.filter((d) => d.device_instance !== instance);
-        const addr = (job.result as { device_address?: string } | undefined)?.device_address;
-        return [...rest, { device_instance: instance, device_address: addr, objects }];
-      });
-      if (job.status !== "ok") {
-        setActionError(job.error || `Point discovery failed for ${instance}`);
-      }
-      return {
-        instance,
-        ok: job.status === "ok",
-        objectCount: objects.length,
-        error: job.error,
-      };
-    } catch (e) {
-      const msg = formatApiError(e);
-      setActionError(msg);
-      return { instance, ok: false, error: msg };
-    }
-  }
-
-  async function runPointDiscoveryFor(instance: number) {
-    setPointDiscoveryPending(true);
-    setActiveJobLabel(`Point discovery ${instance}`);
-    setLog(`Point discovery for device ${instance}…`);
-    try {
-      const row = await discoverDevice(instance);
-      setLog(
-        row.ok
-          ? `Device ${instance}: ${row.objectCount ?? 0} object(s)`
-          : `Device ${instance} failed: ${row.error ?? "unknown"}`,
-      );
-    } finally {
-      setPointDiscoveryPending(false);
-      setActiveJobLabel("");
-    }
-  }
-
-  async function runBatchPointDiscovery() {
-    const list = Array.from(selectedInstances).sort((a, b) => a - b);
-    if (!list.length) return;
-    setBatchPending(true);
-    setBatchSummary(null);
-    setActionError("");
-    setLog(`Batch point discovery for ${list.length} device(s)…`);
-    const summary: BatchRow[] = [];
-    for (let i = 0; i < list.length; i++) {
-      setActiveJobLabel(`Point discovery ${i + 1}/${list.length} (device ${list[i]})`);
-      const row = await discoverDevice(list[i]);
-      summary.push(row);
-      setBatchSummary([...summary]);
-    }
-    setBatchPending(false);
-    setActiveJobLabel("");
-    setLog(`Batch point discovery finished for ${list.length} device(s).`);
-  }
-
-  async function importDeviceToModel(
-    instance: number,
-    address: string,
-    objects: PointDiscoveryObjectRow[],
-  ) {
-    setActionError("");
-    setModelMsg(`Importing device ${instance} to data model…`);
-    try {
-      const body: Record<string, unknown> = {
-        device_instance: instance,
-        device_address: address,
-      };
-      if (objects.length) body.objects = objects;
-      const res = await apiFetch<{ points_added: number; equipment_id: string }>(
-        "/api/bacnet/import-to-model",
-        { method: "POST", body: JSON.stringify(body) },
-      );
-      setModelMsg(
-        `Added ${res.points_added} point(s) for device ${instance} → equipment ${res.equipment_id}. Open Data Model to tag BRICK types.`,
-      );
+      await loadDriverTree();
     } catch (e) {
       setActionError(formatApiError(e));
-      setModelMsg("");
     }
   }
 
-  async function importPointToModel(instance: number, address: string, point: { id: string; name: string }) {
-    await importDeviceToModel(instance, address, [
-      { object_identifier: point.id, name: point.name, commandable: false },
-    ]);
-  }
-
-  async function runBatchImportToModel() {
-    const list = Array.from(selectedInstances).sort((a, b) => a - b);
-    if (!list.length) return;
-    setBatchGraphPending(true);
+  async function deletePoint(pointId: string) {
+    if (!window.confirm("Remove this point from the driver?")) return;
     setActionError("");
-    setModelMsg(`Adding ${list.length} device(s) to data model…`);
-    let total = 0;
-    for (const inst of list) {
-      const live = liveDevices.find((d) => d.device_instance === inst);
-      const addr =
-        live?.device_address ??
-        whoisDevices.map(parseDeviceInstanceFromWhoisRow).includes(inst)
-          ? String(whoisDevices.find((r) => parseDeviceInstanceFromWhoisRow(r) === inst)?.["device-address"] ?? "")
-          : "";
-      try {
-        const body: Record<string, unknown> = {
-          device_instance: inst,
-          device_address: addr,
-        };
-        if (live?.objects?.length) body.objects = live.objects;
-        const res = await apiFetch<{ points_added: number }>("/api/bacnet/import-to-model", {
-          method: "POST",
-          body: JSON.stringify(body),
-        });
-        total += res.points_added;
-      } catch (e) {
-        setActionError(formatApiError(e));
-        break;
-      }
+    try {
+      await apiFetch(`/api/bacnet/driver/point/${encodeURIComponent(pointId)}`, { method: "DELETE" });
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
     }
-    setBatchGraphPending(false);
-    if (total > 0) setModelMsg(`Added ${total} point(s) across ${list.length} device(s).`);
+  }
+
+  async function deleteDevice(instance: number) {
+    if (!window.confirm(`Remove device ${instance} and all its points?`)) return;
+    setActionError("");
+    try {
+      await apiFetch(`/api/bacnet/driver/device/${instance}`, { method: "DELETE" });
+      await loadDriverTree();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  }
+
+  async function remapDevice(device: DriverDevice) {
+    const newInstRaw = window.prompt(
+      "Device instance (BACnet device ID)",
+      device.device_instance,
+    );
+    if (newInstRaw == null) return;
+    const newInst = Number(newInstRaw.trim());
+    if (!Number.isFinite(newInst) || newInst < 0) {
+      setActionError("Invalid device instance");
+      return;
+    }
+    const newAddr = window.prompt("Device address (from Who-Is)", device.device_address || "");
+    if (newAddr == null) return;
+    setActionError("");
+    try {
+      await apiFetch("/api/bacnet/driver/device/remap", {
+        method: "PATCH",
+        body: JSON.stringify({
+          device_instance: Number(device.device_instance),
+          new_device_instance: newInst,
+          new_device_address: newAddr.trim(),
+        }),
+      });
+      await loadDriverTree();
+      setStatusMsg(`Device remapped to instance ${newInst} @ ${newAddr.trim()}.`);
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  }
+
+  async function refreshDevicePoints(instance: number) {
+    const dev = driverDevices.find((d) => d.device_instance === String(instance));
+    await runAddDevice(instance, dev?.device_address ?? whoisAddress(instance), true);
+  }
+
+  async function selectAllAndAddDevices() {
+    const list: number[] = [];
+    const inTreeSet = new Set(driverDevices.map((d) => d.device_instance));
+    for (const row of whoisDevices) {
+      const inst = parseDeviceInstanceFromWhoisRow(row);
+      if (inst != null && !inTreeSet.has(String(inst))) list.push(inst);
+    }
+    if (!list.length) {
+      setActionError("All discovered devices are already in the tree.");
+      return;
+    }
+    setSelectedInstances(new Set(list));
+    await runBatchAddDevices(list);
   }
 
   const agentOk = cfg?.commission_agent_ok === true;
-  const anyPending =
-    whoisPending || discoverCsvPending || pointDiscoveryPending || batchPending || batchGraphPending;
+  const anyPending = whoisPending || addPending || batchPending;
   const selectedList = Array.from(selectedInstances).sort((a, b) => a - b);
+  const inTree = new Set(driverDevices.map((d) => d.device_instance));
 
   return (
     <div className="bacnet-page">
       <h2 className="title">BACnet commissioning</h2>
       <p className="muted">
-        Who-Is → select devices → point discovery → add to <Link to="/data-model">Data Model</Link>.
-        Right-click devices or points in the tree for actions.
+        Scan the network, add devices, then right-click in the tree to set poll rates (1 / 5 / 10 / 15 min).
       </p>
 
       {anyPending ? (
@@ -337,10 +382,10 @@ export default function BacnetPage() {
         </div>
       ) : null}
 
-      {modelMsg ? <p className="ok bacnet-model-msg">{modelMsg}</p> : null}
+      {statusMsg ? <p className="ok bacnet-model-msg">{statusMsg}</p> : null}
 
       <div className="panel">
-        <h3>Agent status</h3>
+        <h3>Agent</h3>
         {loadError ? <p className="error">{loadError}</p> : null}
         {cfg ? (
           <div className="host-info-grid">
@@ -355,12 +400,8 @@ export default function BacnetPage() {
               </div>
             </div>
             <div>
-              <span className="muted">CSV inventory</span>
-              <div>{cfg.discovered_exists ? "points_discovered.csv ready" : "not yet"}</div>
-            </div>
-            <div>
-              <span className="muted">Poll CSV</span>
-              <div>{cfg.poll_exists ? "yes" : "no"}</div>
+              <span className="muted">Devices in driver</span>
+              <div>{driverDevices.length}</div>
             </div>
           </div>
         ) : (
@@ -374,7 +415,7 @@ export default function BacnetPage() {
       </div>
 
       <div className="panel">
-        <h3>Step 1 — Discover devices</h3>
+        <h3>Network scan</h3>
         <div className="form-row">
           <label>
             Who-Is start
@@ -384,26 +425,34 @@ export default function BacnetPage() {
             end
             <input type="number" value={whoisHigh} onChange={(e) => setWhoisHigh(Number(e.target.value))} />
           </label>
-          <ActionButton pending={whoisPending} pendingLabel="Who-Is…" disabled={!agentOk || anyPending} onClick={runWhoIs}>
+          <ActionButton pending={whoisPending} pendingLabel="Scanning…" disabled={!agentOk || anyPending} onClick={runWhoIs}>
             Who-Is
           </ActionButton>
           <ActionButton
-            secondary
-            pending={discoverCsvPending}
-            pendingLabel="Discover CSV…"
-            disabled={!agentOk || anyPending}
-            onClick={runDiscoverCsv}
+            pending={batchPending}
+            pendingLabel={`Adding ${selectedList.length}…`}
+            disabled={!agentOk || anyPending || selectedList.length === 0}
+            onClick={() => runBatchAddDevices()}
           >
-            Discover → CSV
+            Add devices ({selectedList.length} selected)
+          </ActionButton>
+          <ActionButton
+            secondary
+            pending={batchPending}
+            pendingLabel="Adding all…"
+            disabled={!agentOk || anyPending || whoisDevices.length === 0}
+            onClick={selectAllAndAddDevices}
+          >
+            Select all & add all
           </ActionButton>
         </div>
 
         {whoisDevices.length > 0 ? (
           <div className="bacnet-device-table-wrap">
             <div className="row">
-              <span className="muted">{whoisDevices.length} device(s)</span>
+              <span className="muted">{whoisDevices.length} device(s) on network</span>
               <button type="button" className="secondary-btn" onClick={selectAllParsable}>
-                Select all parsable
+                Select all
               </button>
               <button type="button" className="secondary-btn" onClick={() => setSelectedInstances(new Set())}>
                 Clear
@@ -414,14 +463,15 @@ export default function BacnetPage() {
                 <tr>
                   <th>Use</th>
                   <th>Instance</th>
-                  <th>I-Am id</th>
                   <th>Address</th>
-                  <th>Description</th>
+                  <th>Name</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {whoisDevices.map((row, i) => {
                   const inst = parseDeviceInstanceFromWhoisRow(row);
+                  const added = inst != null && inTree.has(String(inst));
                   return (
                     <tr key={`${row["i-am-device-identifier"] ?? i}`}>
                       <td>
@@ -433,9 +483,24 @@ export default function BacnetPage() {
                         />
                       </td>
                       <td className="mono">{inst ?? "—"}</td>
-                      <td className="mono">{row["i-am-device-identifier"] ?? "—"}</td>
                       <td className="mono">{String(row["device-address"] ?? "—")}</td>
-                      <td>{String(row["device-description"] ?? "—")}</td>
+                      <td>
+                        {inst != null ? whoisDescription(inst) || "—" : "—"}
+                      </td>
+                      <td>
+                        {inst != null ? (
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            disabled={!agentOk || anyPending}
+                            onClick={() =>
+                              runAddDevice(inst, whoisAddress(inst), added)
+                            }
+                          >
+                            {added ? "Re-add" : "Add device"}
+                          </button>
+                        ) : null}
+                      </td>
                     </tr>
                   );
                 })}
@@ -443,43 +508,8 @@ export default function BacnetPage() {
             </table>
           </div>
         ) : (
-          !whoisPending && <p className="muted">Run Who-Is to populate the device table.</p>
+          !whoisPending && <p className="muted">Run Who-Is to find BACnet devices on the network.</p>
         )}
-      </div>
-
-      <div className="panel">
-        <h3>Step 2 — Point discovery</h3>
-        <div className="form-row">
-          <label>
-            Manual device instance
-            <input type="number" value={deviceInst} onChange={(e) => setDeviceInst(Number(e.target.value))} />
-          </label>
-          <ActionButton
-            pending={pointDiscoveryPending}
-            pendingLabel="Discovering…"
-            disabled={!agentOk || anyPending}
-            onClick={() => runPointDiscoveryFor(deviceInst)}
-          >
-            Point discovery (manual)
-          </ActionButton>
-          <ActionButton
-            secondary
-            pending={batchPending}
-            pendingLabel={`Batch ${selectedList.length}…`}
-            disabled={!agentOk || anyPending || selectedList.length === 0}
-            onClick={runBatchPointDiscovery}
-          >
-            Point discovery ({selectedList.length} selected)
-          </ActionButton>
-          <ActionButton
-            pending={batchGraphPending}
-            pendingLabel={`Import ${selectedList.length}…`}
-            disabled={!agentOk || anyPending || selectedList.length === 0}
-            onClick={runBatchImportToModel}
-          >
-            Add selected to data model ({selectedList.length})
-          </ActionButton>
-        </div>
 
         {batchSummary?.length ? (
           <ul className="batch-summary">
@@ -487,7 +517,7 @@ export default function BacnetPage() {
               <li key={r.instance}>
                 Device {r.instance}:{" "}
                 {r.ok ? (
-                  <span className="ok">{r.objectCount ?? 0} objects</span>
+                  <span className="ok">{r.objectCount ?? 0} points</span>
                 ) : (
                   <span className="error">{r.error ?? "failed"}</span>
                 )}
@@ -495,41 +525,21 @@ export default function BacnetPage() {
             ))}
           </ul>
         ) : null}
-
-        {discoveryPreview.length > 0 ? (
-          <div className="bacnet-device-table-wrap">
-            <p className="muted">Latest discovery preview ({discoveryPreview.length} objects, first 30 shown)</p>
-            <table className="bacnet-table">
-              <thead>
-                <tr>
-                  <th>object_identifier</th>
-                  <th>name</th>
-                  <th>commandable</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discoveryPreview.slice(0, 30).map((row) => (
-                  <tr key={row.object_identifier}>
-                    <td className="mono">{row.object_identifier}</td>
-                    <td>{row.name}</td>
-                    <td>{row.commandable ? "yes" : "no"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
       </div>
 
       <div className="panel">
-        <h3>Device tree</h3>
-        <p className="muted">Grouped by BACnet object type. Right-click for discovery, data model import, or copy.</p>
+        <h3>Devices &amp; points</h3>
+        <p className="muted">
+          Right-click to poll, remap, refresh, or remove. Last present value shows when polling is enabled.
+        </p>
         <BacnetPointsTree
-          inventory={inventory}
-          liveDevices={liveDevices}
-          onAddDeviceToModel={importDeviceToModel}
-          onAddPointToModel={importPointToModel}
-          onDiscoverDevice={runPointDiscoveryFor}
+          devices={driverDevices}
+          onRefreshDevice={refreshDevicePoints}
+          onSetPointPoll={setPointPoll}
+          onSetDevicePoll={setDevicePoll}
+          onDeletePoint={deletePoint}
+          onDeleteDevice={deleteDevice}
+          onRemapDevice={remapDevice}
           onCopy={(text) => navigator.clipboard.writeText(text).catch(() => undefined)}
         />
       </div>

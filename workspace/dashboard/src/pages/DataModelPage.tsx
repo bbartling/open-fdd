@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiFetchText } from "../lib/api";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
 import { ModelPayload, parseImportPayload } from "../lib/modelImport";
+
+type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
   const [activeTab, setActiveTab] = useState<"export" | "import">("export");
@@ -11,6 +13,41 @@ export default function DataModelPage() {
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlText, setTtlText] = useState("");
   const [copiedKey, setCopiedKey] = useState("");
+  const [siteId, setSiteId] = useState("demo");
+  const [siteName, setSiteName] = useState("Demo Site");
+  const [siteConfigured, setSiteConfigured] = useState(false);
+
+  const loadSites = useCallback(async () => {
+    const res = await apiFetch<{ sites: SiteRow[]; configured: boolean }>("/api/model/sites");
+    setSiteConfigured(res.configured);
+    if (res.sites?.length) {
+      setSiteId(res.sites[0].id);
+      setSiteName(res.sites[0].name);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSites().catch((e) => setOut(String(e)));
+  }, [loadSites]);
+
+  async function saveSite() {
+    try {
+      const sid = siteId.trim();
+      const name = siteName.trim();
+      if (!sid || !name) {
+        setOut("Site id and name are required.");
+        return;
+      }
+      await apiFetch("/api/model/sites", {
+        method: "POST",
+        body: JSON.stringify({ id: sid, name }),
+      });
+      setSiteConfigured(true);
+      setOut(`Site "${name}" (${sid}) saved. BRICK TTL synced.`);
+    } catch (error) {
+      setOut(`Save site failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   async function copyText(key: string, value: string) {
     try {
@@ -23,6 +60,10 @@ export default function DataModelPage() {
   }
 
   async function doExport() {
+    if (!siteConfigured) {
+      setOut("Save a BRICK site first.");
+      return;
+    }
     try {
       const model = await apiFetch<ModelPayload>("/api/model/export");
       setExportJsonText(JSON.stringify(model, null, 2));
@@ -34,9 +75,7 @@ export default function DataModelPage() {
 
   async function ensureExportJsonInEditor(): Promise<string> {
     const trimmed = String(exportJsonText || "").trim();
-    if (trimmed) {
-      return exportJsonText;
-    }
+    if (trimmed) return exportJsonText;
     const model = await apiFetch<ModelPayload>("/api/model/export");
     const text = JSON.stringify(model, null, 2);
     setExportJsonText(text);
@@ -44,6 +83,10 @@ export default function DataModelPage() {
   }
 
   async function downloadJsonFile() {
+    if (!siteConfigured) {
+      setOut("Save a BRICK site first.");
+      return;
+    }
     try {
       const source = await ensureExportJsonInEditor();
       const payload = parseImportPayload(source);
@@ -63,6 +106,10 @@ export default function DataModelPage() {
   }
 
   async function copyImportReadyJson() {
+    if (!siteConfigured) {
+      setOut("Save a BRICK site first.");
+      return;
+    }
     try {
       const source = await ensureExportJsonInEditor();
       const payload = parseImportPayload(source);
@@ -74,6 +121,10 @@ export default function DataModelPage() {
   }
 
   async function doImport() {
+    if (!siteConfigured) {
+      setOut("Save a BRICK site first.");
+      return;
+    }
     try {
       const payload = parseImportPayload(importJsonText);
       const confirmed = window.confirm(
@@ -108,6 +159,10 @@ export default function DataModelPage() {
   }
 
   async function doViewTtl() {
+    if (!siteConfigured) {
+      setOut("Save a BRICK site first.");
+      return;
+    }
     setTtlLoading(true);
     setTtlText("");
     try {
@@ -125,9 +180,31 @@ export default function DataModelPage() {
     <div className="card">
       <h2 className="title">Data Model BRICK</h2>
       <p className="muted">
-        Export/import sites, equipment, and points. Python Rule Lab rules bind to fdd_input and brick_type
-        from this model — no YAML rule files.
+        Set your building site first — required for BACnet polling sync, TTL, and AI-assisted BRICK modeling.
       </p>
+
+      <div className="panel">
+        <h3>Site setup</h3>
+        <div className="form-row">
+          <label>
+            Site id
+            <input value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder="demo" />
+          </label>
+          <label>
+            Site name
+            <input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="Demo Site" />
+          </label>
+          <button type="button" onClick={() => void saveSite()}>
+            Save site
+          </button>
+        </div>
+        {siteConfigured ? (
+          <p className="ok">Site configured — modeling and TTL are enabled.</p>
+        ) : (
+          <p className="error">No site yet. Save a site before import, export, or View TTL.</p>
+        )}
+      </div>
+
       <div className="tab-row">
         <button
           type="button"
@@ -147,20 +224,20 @@ export default function DataModelPage() {
 
       {activeTab === "export" ? (
         <div className="row">
-          <button type="button" onClick={() => void doExport()}>
+          <button type="button" onClick={() => void doExport()} disabled={!siteConfigured}>
             Export JSON
           </button>
-          <button type="button" className="secondary-btn" onClick={() => void downloadJsonFile()}>
+          <button type="button" className="secondary-btn" onClick={() => void downloadJsonFile()} disabled={!siteConfigured}>
             Download file
           </button>
-          <button type="button" className="secondary-btn" onClick={() => void copyImportReadyJson()}>
+          <button type="button" className="secondary-btn" onClick={() => void copyImportReadyJson()} disabled={!siteConfigured}>
             {copiedKey === "import-ready" ? "Copied JSON" : "Copy JSON"}
           </button>
         </div>
       ) : (
         <div className="stack-page">
           <div className="row">
-            <button type="button" onClick={() => void doImport()}>
+            <button type="button" onClick={() => void doImport()} disabled={!siteConfigured}>
               Import JSON
             </button>
             <label className="secondary-btn file-upload-btn">
@@ -198,7 +275,7 @@ export default function DataModelPage() {
         <button type="button" className="secondary-btn" onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}>
           {copiedKey === "prompt" ? "Copied Prompt" : "Copy LLM Prompt"}
         </button>
-        <button type="button" onClick={() => void doViewTtl()}>
+        <button type="button" onClick={() => void doViewTtl()} disabled={!siteConfigured}>
           {ttlLoading ? "Loading TTL…" : "View BRICK TTL"}
         </button>
       </div>

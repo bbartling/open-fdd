@@ -13,7 +13,18 @@ from ..stack_health import stack_health
 
 router = APIRouter(tags=["health"])
 
-_WS_INTERVAL_SEC = float(os.environ.get("OFDD_DASHBOARD_WS_INTERVAL_SEC", "5"))
+_DEFAULT_WS_INTERVAL = 5.0
+
+
+def _ws_interval_sec() -> float:
+    raw = os.environ.get("OFDD_DASHBOARD_WS_INTERVAL_SEC", "").strip()
+    if not raw:
+        return _DEFAULT_WS_INTERVAL
+    try:
+        val = float(raw)
+        return val if val > 0 else _DEFAULT_WS_INTERVAL
+    except ValueError:
+        return _DEFAULT_WS_INTERVAL
 
 
 @router.get("/health")
@@ -43,7 +54,7 @@ async def ws_dashboard(websocket: WebSocket) -> None:
     try:
         while True:
             await websocket.send_json(dashboard_snapshot())
-            await asyncio.sleep(_WS_INTERVAL_SEC)
+            await asyncio.sleep(_ws_interval_sec())
     except WebSocketDisconnect:
         return
     except Exception:

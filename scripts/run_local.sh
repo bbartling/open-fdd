@@ -294,15 +294,18 @@ start_bridge() {
 start_commission_agent() {
   restart_if_running "$COMMISSION_PID" "bacnet_toolshed.commission_agent" "commission agent"
   if [[ ! -f workspace/bacnet/commissioning/commission.env ]]; then
+    local bacnet_bind
+    bacnet_bind="$("${VENV}/bin/python" -c "from bacnet_toolshed.nic_bind import resolve_bacnet_bind; print(resolve_bacnet_bind(''))")"
     cat >workspace/bacnet/commissioning/commission.env <<EOF
 SITE_ID=demo
 BUILDING_ID=local
-BACNET_BIND=127.0.0.1/24:47808
-BACNET_NAME=OpenFddLocal
+BACNET_BIND=${bacnet_bind}
+BACNET_NAME=OpenFddEdge
 BACNET_INSTANCE=599999
 DISCOVER_LOW=1
 DISCOVER_HIGH=4194303
 EOF
+    echo "Created commission.env with BACnet bind ${bacnet_bind} (NIC IP — not 127.0.0.1)"
   fi
   nohup "${VENV}/bin/python" -m bacnet_toolshed.commission_agent \
     >>"$COMMISSION_LOG" 2>&1 &

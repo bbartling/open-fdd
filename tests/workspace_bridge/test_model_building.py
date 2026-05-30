@@ -23,7 +23,18 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
+def test_model_site_and_ttl(client: TestClient):
+    r = client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    assert r.status_code == 200
+    assert r.json()["site_id"] == "s1"
+
+    r_ttl = client.get("/api/model/ttl?save=false")
+    assert r_ttl.status_code == 200
+    assert "brick:Site" in r_ttl.text
+
+
 def test_model_export_import(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
     payload = {
         "sites": [{"id": "s1", "name": "Demo Site"}],
         "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
@@ -46,6 +57,12 @@ def test_model_export_import(client: TestClient):
     assert r2.status_code == 200
     body = r2.json()
     assert len(body["points"]) == 1
+
+
+def test_model_import_requires_site(client: TestClient):
+    payload = {"sites": [], "equipment": [], "points": []}
+    r = client.post("/api/model/import", json={"payload": payload, "replace": True})
+    assert r.status_code == 400
 
 
 def test_model_health_and_building_status(client: TestClient):

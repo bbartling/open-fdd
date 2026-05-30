@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+from bacnet_toolshed.nic_bind import resolve_bacnet_bind
+
 
 def bacnet_argv_from_cfg(cfg: dict[str, str]) -> list[str]:
+    bind = resolve_bacnet_bind(cfg.get("BACNET_BIND"))
+    name = cfg.get("BACNET_NAME", "OpenFddEdge").strip() or "OpenFddEdge"
+    instance = str(cfg.get("BACNET_INSTANCE", "599999")).strip() or "599999"
     argv = [
         "--name",
-        cfg.get("BACNET_NAME", "OpenFddEdge"),
+        name,
         "--instance",
-        str(cfg.get("BACNET_INSTANCE", "599999")),
+        instance,
         "--address",
-        cfg.get("BACNET_BIND", "0.0.0.0/24:47808"),
+        bind,
     ]
+    vendor = cfg.get("BACNET_VENDOR_ID", "").strip()
+    if vendor:
+        argv.extend(["--vendoridentifier", vendor])
     if cfg.get("ROUTER_IP", "").strip():
         argv.extend(
             [

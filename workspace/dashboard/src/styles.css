@@ -790,6 +790,27 @@ select {
   font-weight: 500;
 }
 
+.poll-badge {
+  background: color-mix(in srgb, #3fb950 18%, var(--panel-soft));
+  color: #3fb950;
+  border: 1px solid color-mix(in srgb, #3fb950 35%, transparent);
+}
+
+.muted-badge {
+  opacity: 0.55;
+}
+
+.pv-badge {
+  background: color-mix(in srgb, var(--primary) 14%, var(--panel-soft));
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .commandable-badge {
   background: color-mix(in srgb, var(--primary) 15%, var(--panel-soft));
   color: var(--primary-strong);

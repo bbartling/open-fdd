@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import re
 import uuid
-from pathlib import Path
 from typing import Any
 
 from .model_service import ModelService
@@ -93,82 +92,85 @@ def merge_device_into_model(
 ) -> dict[str, Any]:
     """Append BACnet points for one device; create site/equipment rows when missing."""
     svc = ModelService()
-    model = svc.load()
-    sites = model.setdefault("sites", [])
-    equipment = model.setdefault("equipment", [])
-    points = model.setdefault("points", [])
-
-    sid = (site_id or "").strip()
-    if not sid:
-        sid = str(sites[0].get("id")) if sites and isinstance(sites[0], dict) else "site-default"
-    if not any(isinstance(s, dict) and str(s.get("id")) == sid for s in sites):
-        sites.append({"id": sid, "name": sid.replace("-", " ").title()})
-
-    eq_id = f"bacnet-{device_instance}"
-    eq_row = next((e for e in equipment if isinstance(e, dict) and str(e.get("id")) == eq_id), None)
-    if eq_row is None:
-        equipment.append(
-            {
-                "id": eq_id,
-                "site_id": sid,
-                "name": equipment_name or f"BACnet device {device_instance}",
-                "equipment_type": "BACnet_Device",
-                "bacnet_device_id": device_instance,
-            }
-        )
-
-    known = _existing_keys(points)
     added: list[dict[str, Any]] = []
+    sid = ""
+    eq_id = f"bacnet-{device_instance}"
+    total_points = 0
 
-    if objects:
-        for obj in objects:
-            oid = str(obj.get("object_identifier") or "").strip()
-            if not oid:
-                continue
-            key = _point_key(device_instance, oid)
-            if key in known:
-                continue
-            pt = _row_to_model_point(
-                device_instance=device_instance,
-                device_address=device_address,
-                object_identifier=oid,
-                object_name=str(obj.get("name") or oid),
-                site_id=sid,
-                equipment_id=eq_id,
-            )
-            points.append(pt)
-            known.add(key)
-            added.append(pt)
-    else:
-        for row in _load_csv_rows_for_device(device_instance):
-            obj_type = str(row.get("object_type") or "").strip()
-            obj_inst = str(row.get("object_instance") or "").strip()
-            if not obj_type or not obj_inst:
-                continue
-            oid = f"{obj_type},{obj_inst}"
-            key = _point_key(device_instance, oid)
-            if key in known:
-                continue
-            addr = str(row.get("device_address") or device_address)
-            pt = _row_to_model_point(
-                device_instance=device_instance,
-                device_address=addr,
-                object_identifier=oid,
-                object_name=str(row.get("object_name") or row.get("description") or oid),
-                site_id=sid,
-                equipment_id=eq_id,
-                description=str(row.get("description") or ""),
-            )
-            points.append(pt)
-            known.add(key)
-            added.append(pt)
+    with svc.transaction() as model:
+        sites = model.setdefault("sites", [])
+        equipment = model.setdefault("equipment", [])
+        points = model.setdefault("points", [])
 
-    svc.store.save(model)
+        sid = (site_id or "").strip()
+        if not sid:
+            sid = str(sites[0].get("id")) if sites and isinstance(sites[0], dict) else "site-default"
+        if not any(isinstance(s, dict) and str(s.get("id")) == sid for s in sites):
+            sites.append({"id": sid, "name": sid.replace("-", " ").title()})
+
+        if not any(isinstance(e, dict) and str(e.get("id")) == eq_id for e in equipment):
+            equipment.append(
+                {
+                    "id": eq_id,
+                    "site_id": sid,
+                    "name": equipment_name or f"BACnet device {device_instance}",
+                    "equipment_type": "BACnet_Device",
+                    "bacnet_device_id": device_instance,
+                }
+            )
+
+        known = _existing_keys(points)
+
+        if objects:
+            for obj in objects:
+                oid = str(obj.get("object_identifier") or "").strip()
+                if not oid:
+                    continue
+                key = _point_key(device_instance, oid)
+                if key in known:
+                    continue
+                pt = _row_to_model_point(
+                    device_instance=device_instance,
+                    device_address=device_address,
+                    object_identifier=oid,
+                    object_name=str(obj.get("name") or oid),
+                    site_id=sid,
+                    equipment_id=eq_id,
+                )
+                points.append(pt)
+                known.add(key)
+                added.append(pt)
+        else:
+            for row in _load_csv_rows_for_device(device_instance):
+                obj_type = str(row.get("object_type") or "").strip()
+                obj_inst = str(row.get("object_instance") or "").strip()
+                if not obj_type or not obj_inst:
+                    continue
+                oid = f"{obj_type},{obj_inst}"
+                key = _point_key(device_instance, oid)
+                if key in known:
+                    continue
+                addr = str(row.get("device_address") or device_address)
+                pt = _row_to_model_point(
+                    device_instance=device_instance,
+                    device_address=addr,
+                    object_identifier=oid,
+                    object_name=str(row.get("object_name") or row.get("description") or oid),
+                    site_id=sid,
+                    equipment_id=eq_id,
+                    description=str(row.get("description") or ""),
+                )
+                points.append(pt)
+                known.add(key)
+                added.append(pt)
+
+        total_points = len(points)
+
     return {
         "ok": True,
         "device_instance": device_instance,
         "site_id": sid,
         "equipment_id": eq_id,
         "points_added": len(added),
-        "total_points": len(points),
+        "total_points": total_points,
     }

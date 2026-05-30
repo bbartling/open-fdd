@@ -40,6 +40,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 | React dashboard | [skills/react-operator-dashboard/SKILL.md](skills/react-operator-dashboard/SKILL.md) |
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
 | CSV / weather / BACnet ingest | `skills/driver-*-ingest/` |
+| BACnet single-stack / 47808 exclusivity | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
 | Rules CRUD + batch run | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
 | Building check-engine light + fault codes | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
 | Plots / cleaning | [skills/timeseries-plots-and-cleaning/SKILL.md](skills/timeseries-plots-and-cleaning/SKILL.md) |
