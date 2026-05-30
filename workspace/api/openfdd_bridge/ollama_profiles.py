@@ -18,8 +18,9 @@ class OllamaProfile:
     description: str
 
 
-# Default model per tier — qwen3 thinking line (CPU-friendly ladder).
-# On a 4GB Raspberry Pi, override to qwen3:0.6b; keep the thinking toggle off on Pi.
+# Default model per tier — qwen3 family (CPU-friendly ladder).
+# Size-tagged qwen3 models (qwen3:0.6b, qwen3:1.7b, …) support thinking in Ollama;
+# the UI matches any installed model whose name starts with "qwen3".
 OLLAMA_PROFILES: dict[RamTier, OllamaProfile] = {
     "8gb": OllamaProfile(
         ram_tier="8gb",
@@ -52,9 +53,8 @@ OLLAMA_PROFILES: dict[RamTier, OllamaProfile] = {
 }
 
 
-# Thinking-capable models (emit a `message.thinking` trace). The default tier
-# models above are NOT thinking models, so the operator must pick one of these
-# (installed via `ollama pull <model>`) to see a reasoning trace.
+# Prefixes for thinking-capable model families (UI uses startswith match).
+# Installed tags like qwen3:0.6b match the "qwen3" entry below.
 THINKING_MODELS: list[dict[str, object]] = [
     {"model": "qwen3", "label": "Qwen 3", "think": "boolean", "approx_vram_gb": 5.0},
     {"model": "deepseek-r1", "label": "DeepSeek R1", "think": "boolean", "approx_vram_gb": 5.0},

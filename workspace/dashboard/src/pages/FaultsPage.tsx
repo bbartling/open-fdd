@@ -40,9 +40,9 @@ export default function FaultsPage() {
       </p>
 
       {error ? <p className="muted">Could not load catalog: {error}</p> : null}
-      {!tree ? (
+      {!tree && !error ? (
         <p className="muted">Loading catalog…</p>
-      ) : (
+      ) : tree ? (
         tree.families.map((fam) => (
           <div key={fam.family} className="panel">
             <h3>
@@ -84,7 +84,7 @@ export default function FaultsPage() {
             ))}
           </div>
         ))
-      )}
+      ) : null}
     </div>
   );
 }

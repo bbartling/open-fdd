@@ -33,6 +33,14 @@
       become: true
       when: enable_bacnet_commission_agent | default(true) | bool
 
+    - name: Reload Caddy
+      ansible.builtin.systemd:
+        name: caddy
+        state: reloaded
+        daemon_reload: true
+      become: true
+      when: caddy_enabled | default(true) | bool
+
   tasks:
     - name: Ensure application directory exists
       ansible.builtin.file:
@@ -262,6 +270,69 @@
       become: true
       when: install_feather_retention_timer | default(true) | bool
 
+    - name: Install Caddy (LAN entry :80 / :443)
+      ansible.builtin.apt:
+        name: caddy
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      when: caddy_enabled | default(true) | bool
+
+    - name: Ensure Open-FDD Caddy cert directory
+      ansible.builtin.file:
+        path: /etc/openfdd/caddy
+        state: directory
+        mode: "0750"
+        owner: root
+        group: caddy
+      become: true
+      when:
+        - caddy_enabled | default(true) | bool
+        - caddy_mode | default('http') == 'tls'
+
+    - name: Generate self-signed TLS cert for Caddy
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:4096
+          - -keyout
+          - /etc/openfdd/caddy/key.pem
+          - -out
+          - /etc/openfdd/caddy/cert.pem
+          - -days
+          - "365"
+          - -nodes
+          - -subj
+          - "/CN={{ caddy_tls_cn | default('openfdd.local') }}"
+      args:
+        creates: /etc/openfdd/caddy/cert.pem
+      become: true
+      when:
+        - caddy_enabled | default(true) | bool
+        - caddy_mode | default('http') == 'tls'
+
+    - name: Install Caddyfile for Open-FDD
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+      become: true
+      notify: Reload Caddy
+      when: caddy_enabled | default(true) | bool
+
+    - name: Enable and start Caddy
+      ansible.builtin.systemd:
+        name: caddy
+        enabled: true
+        state: started
+        daemon_reload: true
+      become: true
+      when: caddy_enabled | default(true) | bool
+
     - name: Verify bridge health
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
@@ -272,7 +343,22 @@
         - run_deploy_verify | default(true) | bool
         - enable_openfdd_bridge | default(true) | bool
 
+    - name: Verify Caddy entry health
+      ansible.builtin.uri:
+        url: "{{ 'https://127.0.0.1/health' if (caddy_mode | default('http') == 'tls') else 'http://127.0.0.1/health' }}"
+        validate_certs: false
+        return_content: true
+      register: caddy_health
+      failed_when: false
+      when:
+        - run_deploy_verify | default(true) | bool
+        - caddy_enabled | default(true) | bool
+
     - name: Bridge health summary
       ansible.builtin.debug:
-        msg: "{{ inventory_hostname }} bridge={{ bridge_health.status | default('skipped') }} poll_driver={{ 'enabled' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}"
+        msg: >-
+          {{ inventory_hostname }}
+          bridge={{ bridge_health.status | default('skipped') }}
+          caddy={{ caddy_health.status | default('skipped') }}
+          poll_driver={{ 'enabled' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}
       when: run_deploy_verify | default(true) | bool

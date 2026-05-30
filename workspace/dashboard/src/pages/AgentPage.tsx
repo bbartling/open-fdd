@@ -44,9 +44,12 @@ export default function AgentPage() {
       .catch((e) => setReply(String(e)));
   }, []);
 
-  // gpt-oss only accepts low/medium/high; everything else uses a boolean toggle.
   const isGptOss = model.toLowerCase().includes("gpt-oss");
   const levelOptions = isGptOss ? GPT_OSS_LEVELS : BOOL_LEVELS;
+
+  useEffect(() => {
+    setThinkLevel((current) => (levelOptions.includes(current) ? current : THINK_OFF));
+  }, [model, isGptOss]);
 
   function thinkPayload(): boolean | string | undefined {
     if (thinkLevel === THINK_OFF) return undefined;
@@ -87,7 +90,9 @@ export default function AgentPage() {
   const ollamaOk = ctx?.ollama?.ok === true;
   const thinkingModels = ctx?.ollama_thinking_models || [];
   const installed = ctx?.ollama?.models_installed || [];
-  const modelIsThinking = thinkingModels.some((m) => model.toLowerCase().startsWith(m.model));
+  const modelIsThinking = thinkingModels.some((m) =>
+    model.toLowerCase().startsWith(m.model.toLowerCase()),
+  );
   const thinkEnabled = thinkLevel !== THINK_OFF;
 
   return (

@@ -69,6 +69,12 @@ def test_tool_save_rule_and_batch(client: TestClient):
     assert batch.json()["result"]["rules_run"] == 1
 
 
+def test_tool_run_batch_rejects_invalid_limit(client: TestClient):
+    r = client.post("/openfdd-agent/tool", json={"tool": "rules.run_batch", "args": {"limit": "nope"}})
+    assert r.status_code == 400
+    assert "invalid limit" in r.json()["detail"].lower()
+
+
 def test_app_edit_gated(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     blocked = client.post(
         "/openfdd-agent/tool",

@@ -124,10 +124,14 @@ class FeatherStore:
                 continue
             kept = df[keep_mask].reset_index(drop=True)
             site = self.site_dir(src, site_id)
-            for path in self.shard_files(src, site_id):
-                path.unlink()
+            latest = site / LATEST_NAME
+            tmp = site / f".{LATEST_NAME}.tmp"
             site.mkdir(parents=True, exist_ok=True)
-            kept.to_feather(site / LATEST_NAME)
+            kept.reset_index(drop=True).to_feather(tmp)
+            tmp.replace(latest)
+            for path in self.shard_files(src, site_id):
+                if path.name != LATEST_NAME and path.exists():
+                    path.unlink()
             total_dropped += dropped
             touched += 1
         return {"sites": touched, "rows_dropped": total_dropped, "retention_days": retention_days}

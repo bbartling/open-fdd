@@ -29,15 +29,17 @@ class AlertsBody(BaseModel):
 
 
 @router.get("/status")
-def building_status(_user: dict = Depends(require_user)) -> dict:
+def building_status() -> dict:
     status = collect_status()
     health = status["model_health"]
+    configured = bool(status.get("model_configured"))
     return {
         "ok": True,
         "status": status["status"],
         "traffic": status["traffic"],
-        "model_score": health.get("score"),
-        "model_summary": health.get("summary"),
+        "model_configured": configured,
+        "model_score": health.get("score") if configured else None,
+        "model_summary": health.get("summary") if configured else None,
         "alert_count": len(status["alerts"]),
         "alerts": status["alerts"],
         "stack": status["stack"],

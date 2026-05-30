@@ -1,23 +1,4 @@
-import { useEffect, useState } from "react";
-import { apiFetch } from "../lib/api";
-
-type ServiceStatus = "green" | "yellow" | "red" | "gray";
-
-type StackService = {
-  id: string;
-  label: string;
-  status: ServiceStatus;
-  configured: boolean;
-  detail: string | Record<string, unknown>;
-  url?: string;
-};
-
-type StackHealth = {
-  ok: boolean;
-  overall: ServiceStatus;
-  services: StackService[];
-  bacnet_bind?: string | null;
-};
+import { useDashboardStream, type ServiceStatus } from "../lib/dashboardStream";
 
 function StatusDot({
   status,
@@ -37,30 +18,9 @@ function StatusDot({
 }
 
 export default function StackStatusStrip() {
-  const [stack, setStack] = useState<StackHealth | null>(null);
-  const [error, setError] = useState("");
+  const { snapshot, error } = useDashboardStream();
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      apiFetch<StackHealth>("/health/stack")
-        .then((data) => {
-          if (!cancelled) {
-            setStack(data);
-            setError("");
-          }
-        })
-        .catch((e) => {
-          if (!cancelled) setError(String(e));
-        });
-    };
-    load();
-    const id = window.setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  const stack = snapshot?.stack;
 
   if (error && !stack) {
     return (

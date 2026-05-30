@@ -120,7 +120,11 @@ def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_rules_run_batch(args: dict[str, Any]) -> dict[str, Any]:
-    limit = int(args.get("limit") or 1000)
+    raw = args.get("limit")
+    try:
+        limit = int(raw if raw is not None else 1000)
+    except (TypeError, ValueError) as exc:
+        raise ToolError("invalid limit — must be an integer") from exc
     return run_batch(limit=max(1, min(limit, 5000)))
 
 
@@ -144,8 +148,9 @@ def _tool_app_edit_file(args: dict[str, Any]) -> dict[str, Any]:
     target = _safe_workspace_path(str(args["path"]))
     target.parent.mkdir(parents=True, exist_ok=True)
     existed = target.is_file()
-    target.write_text(str(args["contents"]), encoding="utf-8")
-    return {"path": str(target), "existed": existed, "bytes": len(str(args["contents"]))}
+    content = str(args["contents"])
+    target.write_text(content, encoding="utf-8")
+    return {"path": str(target), "existed": existed, "bytes": len(content.encode("utf-8"))}
 
 
 def _tool_app_rebuild_dashboard(_args: dict[str, Any]) -> dict[str, Any]:

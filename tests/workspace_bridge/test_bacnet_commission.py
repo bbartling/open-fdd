@@ -169,3 +169,29 @@ def test_bacnet_write_rejects_invalid_object_identifier(authed_client: TestClien
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 422
+
+
+def test_bacnet_import_to_model(authed_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    token = login.json()["token"]
+    r = authed_client.post(
+        "/api/bacnet/import-to-model",
+        json={
+            "device_instance": 5007,
+            "device_address": "192.168.1.10:47808",
+            "objects": [
+                {"object_identifier": "analog-input,1", "name": "SAT", "commandable": False},
+            ],
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["points_added"] == 1
+    assert body["equipment_id"] == "bacnet-5007"

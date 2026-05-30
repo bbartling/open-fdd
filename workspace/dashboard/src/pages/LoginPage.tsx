@@ -46,17 +46,8 @@ export default function LoginPage() {
       <form className="panel login-card" onSubmit={onSubmit}>
         <h2>Operator sign-in</h2>
         <p className="muted">
-          {authRequired
-            ? "LAN-only dashboard. Roles: operator (local), integrator (MSI), agent (AI)."
-            : "Auth disabled on bridge (dev only)."}
+          {authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}
         </p>
-        {authRequired ? (
-          <p className="muted">
-            Local dev: <code>integrator</code> / <code>msi-local</code> or{" "}
-            <code>operator</code> / <code>operator-local</code>. Use this machine&apos;s IP in
-            the address bar (not 127.0.0.1 from another PC).
-          </p>
-        ) : null}
         {hint ? <p className="muted">{hint}</p> : null}
         <div className="row">
           <label>

@@ -10,6 +10,27 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
     equipment = model.get("equipment", []) if isinstance(model.get("equipment"), list) else []
     points = model.get("points", []) if isinstance(model.get("points"), list) else []
 
+    configured = bool(sites or equipment or points)
+    if not configured:
+        return {
+            "status": "ok",
+            "configured": False,
+            "score": None,
+            "counts": {
+                "sites": 0,
+                "equipment": 0,
+                "points": 0,
+                "orphan_equipment": 0,
+                "orphan_points_site": 0,
+                "orphan_points_equipment": 0,
+                "missing_brick_type": 0,
+                "missing_fdd_input": 0,
+                "duplicate_external_ids": 0,
+            },
+            "issues": [],
+            "summary": "",
+        }
+
     site_ids = {str(s.get("id")) for s in sites if isinstance(s, dict) and s.get("id")}
     equipment_ids = {str(e.get("id")) for e in equipment if isinstance(e, dict) and e.get("id")}
 
@@ -55,14 +76,6 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
     score = max(0, 100 - (critical * 10) - (warning * 2))
 
     issues: list[dict[str, str]] = []
-    if not sites:
-        issues.append(
-            {
-                "severity": "critical",
-                "title": "No sites in data model",
-                "detail": "Import or create a BRICK model before running Python fault rules.",
-            }
-        )
     if orphan_equipment:
         issues.append(
             {
@@ -113,13 +126,14 @@ def model_health_summary(model: dict[str, Any]) -> dict[str, Any]:
         )
 
     status = "ok"
-    if critical or not sites:
+    if critical:
         status = "critical"
     elif warning:
         status = "warning"
 
     return {
         "status": status,
+        "configured": True,
         "score": score,
         "counts": {
             "sites": len(sites),

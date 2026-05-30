@@ -22,42 +22,19 @@ from .stack_health import stack_health
 TRAFFIC = {"ok": "green", "warning": "yellow", "critical": "red"}
 
 
-def _stack_issues(stack: dict[str, Any]) -> list[dict[str, str]]:
-    issues: list[dict[str, str]] = []
-    for svc in stack.get("services", []):
-        if not isinstance(svc, dict):
-            continue
-        st = str(svc.get("status") or "")
-        if st in {"red", "yellow"}:
-            issues.append(
-                {
-                    "id": f"stack-{svc.get('id')}",
-                    "severity": "critical" if st == "red" else "warning",
-                    "title": f"{svc.get('label', 'Service')} {st}",
-                    "detail": str(svc.get("detail") or ""),
-                    "source": "system",
-                    "code": "BLD-04" if st == "red" else "",
-                    "equipment_family": "BUILDING",
-                }
-            )
-    return issues
-
-
 def collect_status() -> dict[str, Any]:
     model = ModelService().load()
     health = model_health_summary(model)
+    model_issues = health.get("issues", []) if health.get("configured") else []
     stored = load_alerts()
-    merged = merge_auto_issues(model_issues=health.get("issues", []), stored=stored)
-    stack = stack_health()
-    stack_issues = _stack_issues(stack)
+    merged = merge_auto_issues(model_issues=model_issues, stored=stored)
     fdd_alerts = fdd_issues()
 
-    all_alerts = merged["alerts"] + fdd_alerts + stack_issues
+    all_alerts = merged["alerts"] + fdd_alerts
     status = merged["status"]
-    extra = fdd_alerts + stack_issues
-    if extra and status == "ok":
+    if fdd_alerts and status == "ok":
         status = "warning"
-    if any(a.get("severity") == "critical" for a in extra):
+    if any(a.get("severity") == "critical" for a in fdd_alerts):
         status = "critical"
 
     return {
@@ -65,7 +42,8 @@ def collect_status() -> dict[str, Any]:
         "traffic": TRAFFIC.get(status, "green"),
         "alerts": all_alerts,
         "model_health": health,
-        "stack": stack,
+        "model_configured": bool(health.get("configured")),
+        "stack": stack_health(),
         "fdd_alert_count": len(fdd_alerts),
     }
 
@@ -88,9 +66,10 @@ def _worst(severities: list[str]) -> str:
     return "info"
 
 
-def faults_by_family() -> dict[str, Any]:
+def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
     """Group active alerts into an equipment tree for the dashboard."""
-    status = collect_status()
+    if status is None:
+        status = collect_status()
     buckets: dict[str, list[dict[str, Any]]] = {}
     for alert in status["alerts"]:
         if not isinstance(alert, dict):
@@ -100,17 +79,14 @@ def faults_by_family() -> dict[str, Any]:
     families: list[dict[str, Any]] = []
     for family, alerts in sorted(buckets.items()):
         severities = [str(a.get("severity") or "info") for a in alerts]
+        worst = _worst(severities)
+        traffic_key = "critical" if worst == "critical" else "warning" if worst == "warning" else "ok"
         families.append(
             {
                 "family": family,
                 "label": "General / system" if family == "GENERAL" else family_label(family),
-                "worst": _worst(severities),
-                "traffic": TRAFFIC.get(
-                    "critical" if _worst(severities) == "critical"
-                    else "warning" if _worst(severities) == "warning"
-                    else "ok",
-                    "green",
-                ),
+                "worst": worst,
+                "traffic": TRAFFIC.get(traffic_key, "green"),
                 "count": len(alerts),
                 "faults": alerts,
             }
@@ -120,5 +96,15 @@ def faults_by_family() -> dict[str, Any]:
         "traffic": status["traffic"],
         "check_engine": status["status"] != "ok",
         "alert_count": len(status["alerts"]),
+        "model_configured": status.get("model_configured", False),
         "families": families,
+    }
+
+
+def dashboard_snapshot() -> dict[str, Any]:
+    """Single payload for dashboard polling / WebSocket push."""
+    status = collect_status()
+    return {
+        "stack": status["stack"],
+        "faults": faults_by_family(status),
     }

@@ -1,57 +1,17 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../lib/api";
-import TrafficLight, { Traffic } from "./TrafficLight";
-
-type Alert = {
-  id?: string;
-  severity: string;
-  title: string;
-  detail?: string;
-  source?: string;
-  code?: string;
-};
-
-type FamilyNode = {
-  family: string;
-  label: string;
-  worst: string;
-  traffic: Traffic;
-  count: number;
-  faults: Alert[];
-};
-
-type FaultsStatus = {
-  status: "ok" | "warning" | "critical";
-  traffic: Traffic;
-  check_engine: boolean;
-  alert_count: number;
-  families: FamilyNode[];
-};
-
-type BuildingStatus = {
-  traffic: Traffic;
-  model_score?: number;
-  model_summary?: string;
-};
+import TrafficLight from "./TrafficLight";
+import { useDashboardStream } from "../lib/dashboardStream";
 
 export default function BuildingCheckEngine() {
-  const [faults, setFaults] = useState<FaultsStatus | null>(null);
-  const [building, setBuilding] = useState<BuildingStatus | null>(null);
-  const [error, setError] = useState("");
+  const { snapshot, error, live } = useDashboardStream();
 
-  useEffect(() => {
-    apiFetch<FaultsStatus>("/api/faults/status").then(setFaults).catch((e) => setError(String(e)));
-    apiFetch<BuildingStatus>("/api/building/status").then(setBuilding).catch(() => undefined);
-  }, []);
-
-  if (error) {
+  if (error && !snapshot) {
     return (
-      <div className="panel check-engine">
+      <div className="panel check-engine check-engine-gray">
         <div className="check-engine-header">
           <TrafficLight traffic="green" />
           <div>
-            <h3>Building status</h3>
+            <h3>Building check-engine</h3>
             <p className="muted">Could not load status: {error}</p>
           </div>
         </div>
@@ -59,21 +19,41 @@ export default function BuildingCheckEngine() {
     );
   }
 
-  if (!faults) {
+  if (!snapshot) {
     return (
-      <div className="panel check-engine">
-        <p className="muted">Loading building check-engine status…</p>
+      <div className="panel check-engine check-engine-gray">
+        <p className="muted">Loading check-engine status…</p>
       </div>
     );
   }
 
+  const faults = snapshot.faults;
   const traffic = faults.traffic;
-  const headline =
-    faults.status === "ok"
-      ? "All clear — no open building faults"
-      : `${faults.alert_count} issue${faults.alert_count === 1 ? "" : "s"} need attention`;
   const statusClass =
     traffic === "red" ? "check-engine-critical" : traffic === "yellow" ? "check-engine-warning" : "check-engine-ok";
+
+  if (!faults.model_configured && faults.alert_count === 0) {
+    return (
+      <div className={`panel check-engine ${statusClass}`}>
+        <div className="check-engine-header">
+          <TrafficLight traffic="green" />
+          <div>
+            <h3>Building check-engine</h3>
+            <p className="muted">No building model configured yet.</p>
+            <p className="muted">
+              Import a BRICK model under <Link to="/data-model">Data Model</Link> to enable fault detection.
+            </p>
+          </div>
+        </div>
+        {live ? <p className="live-badge">Live</p> : null}
+      </div>
+    );
+  }
+
+  const headline =
+    faults.status === "ok"
+      ? "All clear — no open faults"
+      : `${faults.alert_count} issue${faults.alert_count === 1 ? "" : "s"} need attention`;
 
   return (
     <div className={`panel check-engine ${statusClass}`}>
@@ -81,24 +61,16 @@ export default function BuildingCheckEngine() {
         <TrafficLight traffic={traffic} />
         <div>
           <h3>{headline}</h3>
-          {building?.model_summary ? <p className="muted">{building.model_summary}</p> : null}
-          {typeof building?.model_score === "number" ? (
-            <p className="muted">Data model score: {building.model_score}/100</p>
-          ) : null}
-          <p className="muted">
-            Fixed fault codes only — browse the{" "}
-            <Link to="/faults">equipment fault catalog</Link>. The AI agent maps faults to these codes
-            and cannot invent new ones.
-          </p>
         </div>
       </div>
+      {live ? <p className="live-badge">Live</p> : null}
 
       {faults.families.length ? (
         <div className="fault-tree">
           {faults.families.map((fam) => (
             <details key={fam.family} className="fault-family" open={fam.worst === "critical"}>
               <summary>
-                <span className={`status-dot dot-${fam.traffic}`} />
+                <span className={`fault-tree-dot dot-${fam.traffic}`} />
                 <strong>{fam.label}</strong>
                 <span className="badge">{fam.count}</span>
               </summary>
@@ -115,13 +87,7 @@ export default function BuildingCheckEngine() {
             </details>
           ))}
         </div>
-      ) : (
-        <p className="muted">
-          No open faults. Import a BRICK model under <Link to="/data-model">Data Model</Link>, save
-          Python rules tagged with a fault code in <Link to="/rule-lab">Rule Lab</Link>, and the
-          scheduled FDD run will light this board.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }

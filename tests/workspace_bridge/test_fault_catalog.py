@@ -74,11 +74,19 @@ def test_tree_api(client: TestClient):
     assert "simultaneous_heat_cool" in ahu_cats
 
 
+def test_public_check_engine_endpoints_no_auth_header(client: TestClient):
+    for path in ("/api/building/status", "/api/faults/status", "/health/stack"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+
+
 def test_status_api_starts_green(client: TestClient):
     r = client.get("/api/faults/status")
     assert r.status_code == 200
     body = r.json()
-    assert body["traffic"] in {"green", "yellow", "red"}
+    assert body["traffic"] == "green"
+    assert body["model_configured"] is False
+    assert body["alert_count"] == 0
     assert "families" in body
 
 

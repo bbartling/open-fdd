@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Local edge-like stack: compiled React + bridge on 0.0.0.0:8765 (default).
+# Local edge-like stack: Caddy :80 (or :443 TLS) → bridge 127.0.0.1:8765.
 #
-#   ./scripts/run_local.sh start          # build if needed, serve SPA+API
-#   ./scripts/run_local.sh start --dev    # also run Vite dev on :5173
+#   ./scripts/run_local.sh              # same as start (restarts if already running)
+#   ./scripts/run_local.sh start        # Caddy + bridge + commission + ollama + MCP RAG
+#   ./scripts/run_local.sh start --dev  # also run Vite dev on :5173
 #   ./scripts/run_local.sh stop
 #   ./scripts/run_local.sh status
+#
+# Caddy config: workspace/caddy.env.local (copy from caddy.env.example)
+#   OFDD_CADDY_MODE=http | tls | off
+# Self-signed TLS: ./scripts/setup_caddy_certs.sh then OFDD_CADDY_MODE=tls
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -13,10 +18,14 @@ PID_DIR="${ROOT}/workspace/.local-run"
 BRIDGE_PID="${PID_DIR}/bridge.pid"
 COMMISSION_PID="${PID_DIR}/commission.pid"
 OLLAMA_PID="${PID_DIR}/ollama.pid"
+CADDY_PID="${PID_DIR}/caddy.pid"
+MCP_PID="${PID_DIR}/mcp_rag.pid"
 UI_PID="${PID_DIR}/ui.pid"
 BRIDGE_LOG="${PID_DIR}/bridge.log"
 COMMISSION_LOG="${PID_DIR}/commission.log"
 OLLAMA_LOG="${PID_DIR}/ollama.log"
+CADDY_LOG="${PID_DIR}/caddy.log"
+MCP_LOG="${PID_DIR}/mcp_rag.log"
 UI_LOG="${PID_DIR}/ui.log"
 
 export OPENFDD_REPO_ROOT="$ROOT"
@@ -34,14 +43,42 @@ load_env_files() {
     # shellcheck disable=SC1091
     source "${ROOT}/workspace/auth.env.local"
     set +a
-    [[ "$quiet" == false ]] && echo "Loaded workspace/auth.env.local (auth enabled if OFDD_AUTH_SECRET set)"
+    [[ "$quiet" == false ]] && echo "Loaded workspace/auth.env.local (auth enabled if OFDD_AUTH_SECRET set)" || true
   fi
   if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "${ROOT}/workspace/ollama.env.local"
     set +a
-    [[ "$quiet" == false ]] && echo "Loaded workspace/ollama.env.local (Ollama tier ${OFDD_OLLAMA_RAM_TIER:-unset})"
+    [[ "$quiet" == false ]] && echo "Loaded workspace/ollama.env.local (Ollama tier ${OFDD_OLLAMA_RAM_TIER:-unset})" || true
+  fi
+  if [[ -f "${ROOT}/workspace/caddy.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/caddy.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/caddy.env.local (Caddy mode ${OFDD_CADDY_MODE:-http})" || true
+  elif [[ -f "${ROOT}/workspace/caddy.env.example" ]] && [[ "$CMD" == "start" || "$CMD" == "up" || "$CMD" == "restart" ]]; then
+    cp "${ROOT}/workspace/caddy.env.example" "${ROOT}/workspace/caddy.env.local"
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/caddy.env.local"
+    set +a
+    echo "Created workspace/caddy.env.local from example (Caddy on :80 by default)"
+  fi
+  if [[ -f "${ROOT}/workspace/mcp.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/mcp.env.local"
+    set +a
+    [[ "$quiet" == false ]] && echo "Loaded workspace/mcp.env.local (MCP RAG ${OFDD_MCP_ENABLED:-off})" || true
+  elif [[ -f "${ROOT}/workspace/mcp.env.example" ]] && [[ "$CMD" == "start" || "$CMD" == "up" || "$CMD" == "restart" ]]; then
+    cp "${ROOT}/workspace/mcp.env.example" "${ROOT}/workspace/mcp.env.local"
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/mcp.env.local"
+    set +a
+    echo "Created workspace/mcp.env.local from example (MCP RAG on :8090)"
   fi
 }
 
@@ -58,6 +95,19 @@ done
 
 load_env_files "$([[ "$CMD" == "status" ]] && echo true || echo false)"
 
+caddy_enabled() {
+  [[ "${OFDD_CADDY_ENABLED:-0}" == "1" ]] && [[ "${OFDD_CADDY_MODE:-http}" != "off" ]]
+}
+
+apply_caddy_bridge_bind() {
+  if caddy_enabled; then
+    export OFDD_BRIDGE_HOST=127.0.0.1
+    export OFDD_CORS_ALLOW_PRIVATE_LAN=1
+  fi
+}
+
+apply_caddy_bridge_bind
+
 ensure_build() {
   if [[ ! -f workspace/api/static/app/index.html ]]; then
     ./scripts/build_and_test.sh
@@ -66,7 +116,8 @@ ensure_build() {
 
 pid_running() {
   local pidfile="$1"
-  [[ -f "$pidfile" ]] && kill -0 "$(cat "$pidfile")" 2>/dev/null
+  [[ -f "$pidfile" ]] || return 1
+  kill -0 "$(cat "$pidfile")" 2>/dev/null
 }
 
 stop_one() {
@@ -123,6 +174,110 @@ ollama_responding() {
   curl -sf "$(ollama_base_url)/api/tags" >/dev/null 2>&1
 }
 
+write_caddyfile() {
+  local mode="${OFDD_CADDY_MODE:-http}"
+  local cfg="${PID_DIR}/Caddyfile"
+  local cert_dir="${ROOT}/workspace/deploy/caddy/certs"
+  local http_port="${OFDD_CADDY_HTTP_PORT:-80}"
+  mkdir -p "$PID_DIR"
+  if [[ "$mode" == "tls" ]]; then
+    if [[ ! -f "${cert_dir}/cert.pem" ]]; then
+      OFDD_CADDY_TLS_CN="${OFDD_CADDY_TLS_CN:-openfdd.local}" "${ROOT}/scripts/setup_caddy_certs.sh"
+    fi
+    cat >"$cfg" <<EOF
+:80 {
+	redir https://{host}{uri} permanent
+}
+:443 {
+	tls ${cert_dir}/cert.pem ${cert_dir}/key.pem
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT}
+}
+EOF
+  else
+    cat >"$cfg" <<EOF
+:${http_port} {
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:${OFDD_BRIDGE_PORT}
+}
+EOF
+  fi
+  echo "$cfg"
+}
+
+caddy_entry_url() {
+  if [[ "${OFDD_CADDY_MODE:-http}" == "tls" ]]; then
+    echo "https://127.0.0.1/"
+  elif [[ "${OFDD_CADDY_HTTP_PORT:-80}" != "80" ]]; then
+    echo "http://127.0.0.1:${OFDD_CADDY_HTTP_PORT}/"
+  else
+    echo "http://127.0.0.1/"
+  fi
+}
+
+_caddy_wait_ready() {
+  local entry="$1"
+  curl -sfk "${entry%/}/health" >/dev/null 2>&1
+}
+
+start_caddy() {
+  caddy_enabled || return 0
+  if ! command -v caddy >/dev/null 2>&1; then
+    echo "Caddy enabled but 'caddy' not in PATH — install: sudo apt install caddy" >&2
+    return 0
+  fi
+  local bin
+  bin="$(command -v caddy)"
+  if ! getcap "$bin" 2>/dev/null | grep -q cap_net_bind_service; then
+    if sudo -n setcap 'cap_net_bind_service=+ep' "$bin" 2>/dev/null; then
+      echo "Granted Caddy CAP_NET_BIND_SERVICE for :80"
+    elif [[ "${OFDD_CADDY_HTTP_PORT:-80}" == "80" ]]; then
+      echo "Tip: for :80 without sudo — sudo setcap 'cap_net_bind_service=+ep' $bin" >&2
+    fi
+  fi
+  restart_if_running "$CADDY_PID" "caddy run --config ${PID_DIR}/Caddyfile" "caddy"
+  : >"$CADDY_LOG"
+  local cfg entry
+  cfg="$(write_caddyfile)"
+  nohup caddy run --config "$cfg" --adapter caddyfile >>"$CADDY_LOG" 2>&1 &
+  echo $! >"$CADDY_PID"
+  entry="$(caddy_entry_url)"
+  for _ in $(seq 1 30); do
+    if _caddy_wait_ready "$entry"; then
+      echo "Caddy pid=$(cat "$CADDY_PID") → ${entry} (check-engine dashboard)"
+      return 0
+    fi
+    sleep 0.5
+  done
+  if [[ "${OFDD_CADDY_MODE:-http}" == "http" ]] && [[ "${OFDD_CADDY_HTTP_PORT:-80}" == "80" ]] \
+      && grep -q "permission denied" "$CADDY_LOG" 2>/dev/null; then
+    echo "Caddy :80 permission denied — retrying on :8080 for local dev (Ansible edge uses :80 with setcap)" >&2
+    stop_one "$CADDY_PID" "caddy"
+    export OFDD_CADDY_HTTP_PORT=8080
+    cfg="$(write_caddyfile)"
+    nohup caddy run --config "$cfg" --adapter caddyfile >>"$CADDY_LOG" 2>&1 &
+    echo $! >"$CADDY_PID"
+    entry="$(caddy_entry_url)"
+    for _ in $(seq 1 20); do
+      if _caddy_wait_ready "$entry"; then
+        echo "Caddy pid=$(cat "$CADDY_PID") → ${entry} (local dev fallback; edge deploy uses :80)"
+        return 0
+      fi
+      sleep 0.5
+    done
+  fi
+  echo "Caddy started pid=$(cat "$CADDY_PID") but entry URL not ready — see ${CADDY_LOG}" >&2
+}
+
 start_bridge() {
   mkdir -p "$PID_DIR" workspace/data workspace/bacnet/commissioning workspace/bacnet/polls
   restart_if_running "$BRIDGE_PID" "uvicorn openfdd_bridge.main:app" "bridge"
@@ -153,6 +308,48 @@ EOF
     >>"$COMMISSION_LOG" 2>&1 &
   echo $! >"$COMMISSION_PID"
   echo "Commission agent pid=$(cat "$COMMISSION_PID") (discover/write on 127.0.0.1:8767)"
+}
+
+mcp_enabled() {
+  case "${OFDD_MCP_ENABLED:-0}" in 1|true|yes|TRUE|YES) return 0 ;; *) return 1 ;; esac
+}
+
+ensure_mcp_index() {
+  local idx="${OFDD_MCP_RAG_INDEX_PATH:-${ROOT}/workspace/data/mcp/rag_index.json}"
+  if [[ ! -f "$idx" ]]; then
+    echo "Building MCP RAG index (first run)…"
+    "${ROOT}/scripts/build_mcp_rag_index.sh"
+  fi
+}
+
+mcp_base_url() {
+  echo "${OFDD_MCP_REST_BASE:-http://127.0.0.1:${OFDD_MCP_LISTEN_PORT:-8090}}"
+}
+
+start_mcp_rag() {
+  mcp_enabled || return 0
+  export OFDD_MCP_RAG_INDEX_PATH="${OFDD_MCP_RAG_INDEX_PATH:-${ROOT}/workspace/data/mcp/rag_index.json}"
+  ensure_mcp_index
+  local host="${OFDD_MCP_LISTEN_HOST:-127.0.0.1}"
+  local port="${OFDD_MCP_LISTEN_PORT:-8090}"
+  restart_if_running "$MCP_PID" "uvicorn mcp_rag.app:app" "MCP RAG"
+  mkdir -p "$PID_DIR"
+  "${VENV}/bin/pip" install -q -r workspace/api/requirements.txt
+  nohup "${VENV}/bin/uvicorn" mcp_rag.app:app \
+    --app-dir workspace \
+    --host "$host" --port "$port" \
+    >"$MCP_LOG" 2>&1 &
+  echo $! >"$MCP_PID"
+  local base
+  base="$(mcp_base_url)"
+  for _ in $(seq 1 20); do
+    if curl -sf "${base%/}/health" >/dev/null 2>&1; then
+      echo "MCP RAG pid=$(cat "$MCP_PID") → ${base}"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "MCP RAG started pid=$(cat "$MCP_PID") but /health not ready — see ${MCP_LOG}" >&2
 }
 
 start_ollama() {
@@ -221,7 +418,8 @@ print_lan_note() {
 }
 
 case "$CMD" in
-  start)
+  start|up)
+    start_mcp_rag
     start_bridge
     start_commission_agent
     start_ollama
@@ -229,10 +427,25 @@ case "$CMD" in
       start_ui_dev
     fi
     wait_health
+    start_caddy
     echo ""
     LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    echo "Dashboard (compiled): http://${LAN_IP}:${OFDD_BRIDGE_PORT}/"
-    echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+    if caddy_enabled; then
+      if [[ "${OFDD_CADDY_MODE:-http}" == "tls" ]]; then
+        echo "Check-engine dashboard: https://${LAN_IP}/"
+        echo "                     https://127.0.0.1/  (self-signed — browser warning OK on OT LAN)"
+      elif [[ "${OFDD_CADDY_HTTP_PORT:-80}" != "80" ]]; then
+        echo "Check-engine dashboard: http://${LAN_IP}:${OFDD_CADDY_HTTP_PORT}/"
+        echo "                     http://127.0.0.1:${OFDD_CADDY_HTTP_PORT}/  (local dev fallback port)"
+      else
+        echo "Check-engine dashboard: http://${LAN_IP}/"
+        echo "                     http://127.0.0.1/  (no port — public traffic-light view)"
+      fi
+      echo "Bridge (internal):     http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+    else
+      echo "Dashboard (compiled): http://${LAN_IP}:${OFDD_BRIDGE_PORT}/"
+      echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+    fi
     print_lan_note
     if [[ "$DEV_UI" == true ]]; then
       echo "Vite dev UI:         http://127.0.0.1:5173/"
@@ -240,6 +453,10 @@ case "$CMD" in
     ;;
   stop)
     stop_one "$UI_PID" "vite dev"
+    stop_one "$CADDY_PID" "caddy"
+    stop_by_pattern "caddy run --config ${PID_DIR}/Caddyfile" "caddy"
+    stop_one "$MCP_PID" "MCP RAG"
+    stop_by_pattern "uvicorn mcp_rag.app:app" "MCP RAG"
     stop_one "$OLLAMA_PID" "ollama"
     stop_one "$COMMISSION_PID" "commission agent"
     stop_one "$BRIDGE_PID" "bridge"
@@ -264,6 +481,17 @@ case "$CMD" in
     else
       echo "commission: stopped"
     fi
+    if mcp_enabled; then
+      if pid_running "$MCP_PID"; then
+        echo "mcp_rag: running pid=$(cat "$MCP_PID")"
+      elif curl -sf "$(mcp_base_url)/health" >/dev/null 2>&1; then
+        echo "mcp_rag: responding at $(mcp_base_url) (pid file missing)"
+      else
+        echo "mcp_rag: stopped"
+      fi
+    elif [[ -f "${ROOT}/workspace/mcp.env.local" ]]; then
+      echo "mcp_rag: disabled (OFDD_MCP_ENABLED not set)"
+    fi
     if [[ -f "${ROOT}/workspace/ollama.env.local" ]]; then
       if pid_running "$OLLAMA_PID"; then
         echo "ollama: running pid=$(cat "$OLLAMA_PID")"
@@ -276,7 +504,20 @@ case "$CMD" in
     if pid_running "$UI_PID"; then
       echo "vite dev: running pid=$(cat "$UI_PID")"
     fi
-    if curl -sf "http://127.0.0.1:${OFDD_BRIDGE_PORT}/health" >/dev/null 2>&1; then
+    if caddy_enabled; then
+      if pid_running "$CADDY_PID"; then
+        echo "caddy: running pid=$(cat "$CADDY_PID") mode=${OFDD_CADDY_MODE:-http}"
+      else
+        echo "caddy: stopped (enabled in caddy.env.local)"
+      fi
+    fi
+    if caddy_enabled; then
+      if curl -sfk "$(caddy_entry_url)health" >/dev/null 2>&1; then
+        echo "health (via Caddy): ok"
+      else
+        echo "health (via Caddy): down"
+      fi
+    elif curl -sf "http://127.0.0.1:${OFDD_BRIDGE_PORT}/health" >/dev/null 2>&1; then
       echo "health: ok"
     else
       echo "health: down"
@@ -286,7 +527,7 @@ case "$CMD" in
     ./scripts/build_and_test.sh
     ;;
   *)
-    echo "Usage: $0 [start|stop|restart|status|build-test] [--dev]" >&2
+    echo "Usage: $0 [start|up|stop|restart|status|build-test] [--dev]" >&2
     exit 1
     ;;
 esac

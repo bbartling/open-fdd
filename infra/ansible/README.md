@@ -24,6 +24,7 @@ export SSHPASS='...'   # Acme VM if password auth
 | `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` |
 | `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
 | `openfdd-feather-retention.timer` | Daily feather store prune/compact (`feather_retention_days`) |
+| `caddy` | LAN entry **:80** (or **:443** TLS) → bridge on loopback — default URL with no port |
 
 Poll driver is **off** until `points.csv` is commissioned:
 
@@ -51,12 +52,14 @@ ofdd_web_user: operator
 ofdd_web_password: "..."
 ```
 
-Or use `workspace/deploy/Caddyfile.example` for path routing only.
+Or set `caddy_mode: tls` in group_vars for self-signed HTTPS on OT LAN.
+
+Check-engine dashboard (`/` and `/faults`) is **public read-only** — no login required.
+Optional bridge auth (`ofdd_auth_secret`) gates Rule Lab, BACnet writes, etc.
 
 ## Local dev (bensserver)
 
 ```bash
 ./scripts/run_local.sh
-# http://127.0.0.1:5173  UI
-# http://127.0.0.1:8765  API
+# http://127.0.0.1/  check-engine dashboard (Caddy default, no port)
 ```

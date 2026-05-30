@@ -49,15 +49,9 @@ def test_login_writes_audit(authed_integrator: TestClient, tmp_path: Path):
     assert ev["client"]["ip"]
 
 
-def test_stack_health_requires_auth(authed_integrator: TestClient):
-    denied = authed_integrator.get("/health/stack")
-    assert denied.status_code == 401
-    login = authed_integrator.post(
-        "/api/auth/login",
-        json={"username": "integrator", "password": "msi"},
-    )
-    token = login.json()["token"]
-    r = authed_integrator.get("/health/stack", headers={"Authorization": f"Bearer {token}"})
+def test_stack_health_public_for_check_engine(authed_integrator: TestClient):
+    """Stack strip on the public check-engine dashboard must work without login."""
+    r = authed_integrator.get("/health/stack")
     assert r.status_code == 200
     body = r.json()
     assert "services" in body

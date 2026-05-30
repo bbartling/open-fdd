@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import csv
 import re
+from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from bacnet_toolshed.models import (
     DeviceInstanceRequest,
@@ -15,6 +17,7 @@ from bacnet_toolshed.models import (
     WritePropertyRequest,
 )
 
+from ..bacnet_model_sync import merge_device_into_model
 from ..commission_client import (
     bacnet_priority_array as commission_priority_array,
     bacnet_read as commission_read,
@@ -37,6 +40,15 @@ router = APIRouter(tags=["bacnet"])
 _READ = Depends(require_roles("operator", "integrator", "agent"))
 _COMMISSION = Depends(require_roles("operator", "integrator", "agent"))
 _WRITE = Depends(require_roles("integrator"))
+_INTEGRATOR = Depends(require_roles("integrator"))
+
+
+class ImportToModelBody(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    site_id: str | None = None
+    equipment_name: str | None = None
+    objects: list[dict[str, Any]] | None = None
 
 _SAFE_SITE_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
@@ -141,6 +153,21 @@ def bacnet_inventory() -> dict:
         "point_count": point_count,
         "path": str(discovered),
     }
+
+
+@router.post("/api/bacnet/import-to-model", dependencies=[_INTEGRATOR])
+def bacnet_import_to_model(body: ImportToModelBody) -> dict:
+    """Merge BACnet discovery (live objects or points_discovered.csv) into model.json."""
+    try:
+        return merge_device_into_model(
+            device_instance=body.device_instance,
+            device_address=body.device_address,
+            objects=body.objects,
+            site_id=body.site_id,
+            equipment_name=body.equipment_name,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/api/bacnet/discover", dependencies=[_COMMISSION])

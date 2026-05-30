@@ -52,14 +52,37 @@ def test_model_health_and_building_status(client: TestClient):
     r = client.get("/api/model/health")
     assert r.status_code == 200
     health = r.json()
-    assert "score" in health
-    assert health["status"] == "critical"
+    assert health["configured"] is False
+    assert health["status"] == "ok"
+    assert health["score"] is None
 
     r2 = client.get("/api/building/status")
     assert r2.status_code == 200
     status = r2.json()
-    assert status["check_engine"] is True
-    assert status["alert_count"] >= 1
+    assert status["check_engine"] is False
+    assert status["model_configured"] is False
+    assert status["alert_count"] == 0
+    assert status["model_score"] is None
+
+
+def test_stack_health_not_mixed_into_faults(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_MCP_ENABLED", "1")
+
+    r = client.get("/api/faults/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["traffic"] == "green"
+    assert body["alert_count"] == 0
+    titles = [f["title"] for fam in body["families"] for f in fam.get("faults", [])]
+    assert not any("MCP" in t for t in titles)
+
+
+def test_dashboard_websocket(client: TestClient):
+    with client.websocket_connect("/ws/dashboard") as ws:
+        payload = ws.receive_json()
+        assert "stack" in payload
+        assert "faults" in payload
+        assert payload["faults"]["model_configured"] is False
 
 
 def test_building_alerts_put(client: TestClient):

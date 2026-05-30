@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { apiFetch } from "../lib/api";
+import { formatApiError } from "../lib/formatApiError";
+import ActionButton from "../components/ActionButton";
 import BacnetPointsTree from "../components/BacnetPointsTree";
 import Spinner from "../components/Spinner";
 import {
@@ -7,6 +10,7 @@ import {
   extractWhoisDevices,
   parseDeviceInstanceFromWhoisRow,
   type InventoryDevice,
+  type PointDiscoveryObjectRow,
   type PointDiscoveryObjectRow,
   type WhoisDeviceRow,
 } from "../lib/bacnet-discovery-parse";
@@ -78,6 +82,8 @@ export default function BacnetPage() {
   const [liveDevices, setLiveDevices] = useState<LiveDevice[]>([]);
   const [discoveryPreview, setDiscoveryPreview] = useState<PointDiscoveryObjectRow[]>([]);
   const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
+  const [batchGraphPending, setBatchGraphPending] = useState(false);
+  const [modelMsg, setModelMsg] = useState("");
   const [activeJobLabel, setActiveJobLabel] = useState("");
 
   const refresh = useCallback(async () => {
@@ -138,7 +144,7 @@ export default function BacnetPage() {
           : "No I-Am responses — widen range or check BACnet bind / OT network.",
       );
     } catch (e) {
-      const msg = String(e);
+      const msg = formatApiError(e);
       setActionError(msg);
       setLog(msg);
     } finally {
@@ -169,8 +175,8 @@ export default function BacnetPage() {
       if (job.status !== "ok") setActionError(job.error || "Discover job failed");
       await refresh();
     } catch (e) {
-      setActionError(String(e));
-      setLog(String(e));
+      setActionError(formatApiError(e));
+      setLog(formatApiError(e));
     } finally {
       setDiscoverCsvPending(false);
       setActiveJobLabel("");
@@ -204,7 +210,7 @@ export default function BacnetPage() {
         error: job.error,
       };
     } catch (e) {
-      const msg = String(e);
+      const msg = formatApiError(e);
       setActionError(msg);
       return { instance, ok: false, error: msg };
     }
@@ -246,14 +252,92 @@ export default function BacnetPage() {
     setLog(`Batch point discovery finished for ${list.length} device(s).`);
   }
 
+  async function importDeviceToModel(
+    instance: number,
+    address: string,
+    objects: PointDiscoveryObjectRow[],
+  ) {
+    setActionError("");
+    setModelMsg(`Importing device ${instance} to data model…`);
+    try {
+      const body: Record<string, unknown> = {
+        device_instance: instance,
+        device_address: address,
+      };
+      if (objects.length) body.objects = objects;
+      const res = await apiFetch<{ points_added: number; equipment_id: string }>(
+        "/api/bacnet/import-to-model",
+        { method: "POST", body: JSON.stringify(body) },
+      );
+      setModelMsg(
+        `Added ${res.points_added} point(s) for device ${instance} → equipment ${res.equipment_id}. Open Data Model to tag BRICK types.`,
+      );
+    } catch (e) {
+      setActionError(formatApiError(e));
+      setModelMsg("");
+    }
+  }
+
+  async function importPointToModel(instance: number, address: string, point: { id: string; name: string }) {
+    await importDeviceToModel(instance, address, [
+      { object_identifier: point.id, name: point.name, commandable: false },
+    ]);
+  }
+
+  async function runBatchImportToModel() {
+    const list = Array.from(selectedInstances).sort((a, b) => a - b);
+    if (!list.length) return;
+    setBatchGraphPending(true);
+    setActionError("");
+    setModelMsg(`Adding ${list.length} device(s) to data model…`);
+    let total = 0;
+    for (const inst of list) {
+      const live = liveDevices.find((d) => d.device_instance === inst);
+      const addr =
+        live?.device_address ??
+        whoisDevices.map(parseDeviceInstanceFromWhoisRow).includes(inst)
+          ? String(whoisDevices.find((r) => parseDeviceInstanceFromWhoisRow(r) === inst)?.["device-address"] ?? "")
+          : "";
+      try {
+        const body: Record<string, unknown> = {
+          device_instance: inst,
+          device_address: addr,
+        };
+        if (live?.objects?.length) body.objects = live.objects;
+        const res = await apiFetch<{ points_added: number }>("/api/bacnet/import-to-model", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        total += res.points_added;
+      } catch (e) {
+        setActionError(formatApiError(e));
+        break;
+      }
+    }
+    setBatchGraphPending(false);
+    if (total > 0) setModelMsg(`Added ${total} point(s) across ${list.length} device(s).`);
+  }
+
   const agentOk = cfg?.commission_agent_ok === true;
-  const anyPending = whoisPending || discoverCsvPending || pointDiscoveryPending || batchPending;
+  const anyPending =
+    whoisPending || discoverCsvPending || pointDiscoveryPending || batchPending || batchGraphPending;
   const selectedList = Array.from(selectedInstances).sort((a, b) => a - b);
 
   return (
-    <div>
+    <div className="bacnet-page">
       <h2 className="title">BACnet commissioning</h2>
-      <p className="muted">Who-Is → select devices → point discovery → device tree. Bind must reach your OT BACnet segment.</p>
+      <p className="muted">
+        Who-Is → select devices → point discovery → add to <Link to="/data-model">Data Model</Link>.
+        Right-click devices or points in the tree for actions.
+      </p>
+
+      {anyPending ? (
+        <div className="bacnet-active-banner" role="status">
+          <Spinner label={activeJobLabel || "BACnet operation in progress…"} />
+        </div>
+      ) : null}
+
+      {modelMsg ? <p className="ok bacnet-model-msg">{modelMsg}</p> : null}
 
       <div className="panel">
         <h3>Agent status</h3>
@@ -300,12 +384,18 @@ export default function BacnetPage() {
             end
             <input type="number" value={whoisHigh} onChange={(e) => setWhoisHigh(Number(e.target.value))} />
           </label>
-          <button type="button" onClick={runWhoIs} disabled={!agentOk || anyPending}>
-            {whoisPending ? <Spinner label="Who-Is…" /> : "Who-Is"}
-          </button>
-          <button type="button" className="secondary-btn" onClick={runDiscoverCsv} disabled={!agentOk || anyPending}>
-            {discoverCsvPending ? <Spinner label="Discover CSV…" /> : "Discover → CSV"}
-          </button>
+          <ActionButton pending={whoisPending} pendingLabel="Who-Is…" disabled={!agentOk || anyPending} onClick={runWhoIs}>
+            Who-Is
+          </ActionButton>
+          <ActionButton
+            secondary
+            pending={discoverCsvPending}
+            pendingLabel="Discover CSV…"
+            disabled={!agentOk || anyPending}
+            onClick={runDiscoverCsv}
+          >
+            Discover → CSV
+          </ActionButton>
         </div>
 
         {whoisDevices.length > 0 ? (
@@ -364,21 +454,31 @@ export default function BacnetPage() {
             Manual device instance
             <input type="number" value={deviceInst} onChange={(e) => setDeviceInst(Number(e.target.value))} />
           </label>
-          <button
-            type="button"
-            onClick={() => runPointDiscoveryFor(deviceInst)}
+          <ActionButton
+            pending={pointDiscoveryPending}
+            pendingLabel="Discovering…"
             disabled={!agentOk || anyPending}
+            onClick={() => runPointDiscoveryFor(deviceInst)}
           >
-            {pointDiscoveryPending ? <Spinner label="Discovering…" /> : "Point discovery (manual)"}
-          </button>
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={runBatchPointDiscovery}
+            Point discovery (manual)
+          </ActionButton>
+          <ActionButton
+            secondary
+            pending={batchPending}
+            pendingLabel={`Batch ${selectedList.length}…`}
             disabled={!agentOk || anyPending || selectedList.length === 0}
+            onClick={runBatchPointDiscovery}
           >
-            {batchPending ? <Spinner label={`Batch ${selectedList.length}…`} /> : `Point discovery (${selectedList.length} selected)`}
-          </button>
+            Point discovery ({selectedList.length} selected)
+          </ActionButton>
+          <ActionButton
+            pending={batchGraphPending}
+            pendingLabel={`Import ${selectedList.length}…`}
+            disabled={!agentOk || anyPending || selectedList.length === 0}
+            onClick={runBatchImportToModel}
+          >
+            Add selected to data model ({selectedList.length})
+          </ActionButton>
         </div>
 
         {batchSummary?.length ? (
@@ -423,7 +523,15 @@ export default function BacnetPage() {
 
       <div className="panel">
         <h3>Device tree</h3>
-        <BacnetPointsTree inventory={inventory} liveDevices={liveDevices} />
+        <p className="muted">Grouped by BACnet object type. Right-click for discovery, data model import, or copy.</p>
+        <BacnetPointsTree
+          inventory={inventory}
+          liveDevices={liveDevices}
+          onAddDeviceToModel={importDeviceToModel}
+          onAddPointToModel={importPointToModel}
+          onDiscoverDevice={runPointDiscoveryFor}
+          onCopy={(text) => navigator.clipboard.writeText(text).catch(() => undefined)}
+        />
       </div>
 
       <div className="panel">

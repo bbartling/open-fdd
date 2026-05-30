@@ -164,14 +164,22 @@ export default function RuleLabPage() {
   async function saveRule() {
     setBusy(true);
     try {
-      const high = parseCfgHigh();
+      let config: Record<string, number> = {};
+      if (mode === "rule") {
+        const high = parseCfgHigh();
+        if (high === null) {
+          setConsole("Invalid cfg high — enter a numeric temperature before saving.");
+          return;
+        }
+        config = { high };
+      }
       const res = await apiFetch<{ ok: boolean; rule: SavedRule }>("/api/rules/save", {
         method: "POST",
         body: JSON.stringify({
           name: ruleName,
           mode,
           code,
-          config: mode === "rule" && high !== null ? { high } : {},
+          config,
           severity,
           fault_code: faultCode.trim(),
           applies_to: {

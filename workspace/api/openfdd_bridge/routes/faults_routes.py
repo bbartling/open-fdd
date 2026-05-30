@@ -1,4 +1,8 @@
-"""Fixed fault-code catalog + live equipment fault tree (check-engine light)."""
+"""Fixed fault-code catalog + live equipment fault tree (check-engine light).
+
+Read endpoints are public so the building traffic-light dashboard works without
+login on OT LAN wall displays. Writes stay behind integrator/agent auth.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,7 @@ from ..building_status import faults_by_family
 from ..deps import require_user
 from ..fault_catalog import catalog_payload, catalog_tree, entry_for_code
 
-router = APIRouter(prefix="/api/faults", tags=["faults"], dependencies=[Depends(require_user)])
+router = APIRouter(prefix="/api/faults", tags=["faults"])
 
 
 @router.get("/catalog")

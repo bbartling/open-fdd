@@ -1,0 +1,27 @@
+# Installed by Ansible when caddy_enabled — HTTP or self-signed TLS on OT LAN.
+{% if caddy_mode | default('http') == 'tls' %}
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+:443 {
+	tls /etc/openfdd/caddy/cert.pem /etc/openfdd/caddy/key.pem
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }}
+}
+{% else %}
+:80 {
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:{{ openfdd_bridge_port }}
+}
+{% endif %}

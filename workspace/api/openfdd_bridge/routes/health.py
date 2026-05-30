@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from .. import auth
-from ..deps import require_roles, require_user
+from ..building_status import dashboard_snapshot
+from ..deps import require_roles
 from ..paths import bacnet_poll_csv, data_dir, repo_root, workspace_dir
 from ..stack_health import stack_health
 
 router = APIRouter(tags=["health"])
+
+_WS_INTERVAL_SEC = float(os.environ.get("OFDD_DASHBOARD_WS_INTERVAL_SEC", "5"))
 
 
 @router.get("/health")
@@ -28,8 +32,22 @@ def health() -> dict:
 
 
 @router.get("/health/stack")
-def health_stack(_user: dict = Depends(require_user)) -> dict:
+def health_stack() -> dict:
     return stack_health()
+
+
+@router.websocket("/ws/dashboard")
+async def ws_dashboard(websocket: WebSocket) -> None:
+    """Push stack health + check-engine status for live dashboard refresh."""
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.send_json(dashboard_snapshot())
+            await asyncio.sleep(_WS_INTERVAL_SEC)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        await websocket.close()
 
 
 @router.get("/api/audit/summary")
