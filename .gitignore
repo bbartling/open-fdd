@@ -209,6 +209,7 @@ workspace/logs/
 /workspace/data/rules_store.json
 /workspace/data/building_alerts.json
 /workspace/data/feather_store/
+/workspace/**/*.feather
 /workspace/data/playground/draft_rules.json
 
 # OpenClaw lab generated / local artifacts

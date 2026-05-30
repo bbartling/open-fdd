@@ -1,6 +1,7 @@
 # Runtime artifacts under workspace (starter trees tracked via negation)
 *
 !.gitignore
+!*.env.example
 !api/
 !api/**
 **/api/**/__pycache__/
