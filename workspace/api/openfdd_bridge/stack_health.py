@@ -6,9 +6,15 @@ import os
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Literal
 
-from .commission_client import commission_base_url, commission_health, commission_status
+from .commission_client import (
+    commission_base_url,
+    commission_health,
+    commission_poll_status,
+    commission_status,
+)
 from .paths import bacnet_poll_csv, workspace_dir
 
 Status = Literal["green", "yellow", "red", "gray"]
@@ -38,6 +44,95 @@ def _status(ok: bool, configured: bool, detail: str = "") -> Status:
     return "yellow"
 
 
+def _parse_poll_at(at: str) -> float | None:
+    raw = (at or "").strip()
+    if not raw:
+        return None
+    try:
+        ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - ts).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def _bacnet_poll_service() -> dict[str, Any]:
+    """Poll loop runs inside the commission agent — use its /api/bacnet/poll/status."""
+    points = workspace_dir() / "bacnet" / "commissioning" / "points.csv"
+    poll_configured = points.is_file()
+    poll_status: Status = "gray"
+    poll_detail = "points.csv not commissioned"
+
+    if not poll_configured:
+        return {
+            "id": "bacnet_poll",
+            "label": "BACnet poll",
+            "status": poll_status,
+            "configured": False,
+            "detail": poll_detail,
+        }
+
+    code, payload = commission_poll_status()
+    if code != 200 or not isinstance(payload, dict):
+        comm_code, comm_payload = commission_health()
+        if comm_code != 200:
+            poll_status = "red"
+            poll_detail = "commission agent down — poll loop not running"
+        else:
+            poll_status = "yellow"
+            poll_detail = "poll status unavailable from commission agent"
+        return {
+            "id": "bacnet_poll",
+            "label": "BACnet poll",
+            "status": poll_status,
+            "configured": True,
+            "detail": poll_detail,
+        }
+
+    enabled = int(payload.get("enabled_points") or 0)
+    interval_s = float(payload.get("interval_s") or 60.0)
+    samples = int(payload.get("samples") or 0)
+    error = str(payload.get("error") or "").strip()
+    age_s = _parse_poll_at(str(payload.get("at") or ""))
+
+    if enabled == 0:
+        poll_status = "gray"
+        poll_detail = "points.csv present; no rows enabled for polling"
+    elif error:
+        poll_status = "red"
+        poll_detail = error
+    elif age_s is not None:
+        stale_after = max(300.0, interval_s * 2.5)
+        if age_s <= stale_after:
+            poll_status = "green"
+            poll_detail = f"{enabled} point(s) · last poll {int(age_s)}s ago ({samples} samples)"
+        else:
+            poll_status = "yellow"
+            poll_detail = f"last poll stale ({int(age_s // 60)}m ago)"
+    else:
+        poll_csv = bacnet_poll_csv()
+        if poll_csv.is_file():
+            csv_age = time.time() - poll_csv.stat().st_mtime
+            if csv_age < 300:
+                poll_status = "green"
+                poll_detail = f"poll CSV updated {int(csv_age)}s ago"
+            else:
+                poll_status = "yellow"
+                poll_detail = f"poll CSV stale ({int(csv_age // 60)}m)"
+        else:
+            poll_status = "yellow"
+            poll_detail = f"{enabled} point(s) enabled; waiting for first poll cycle"
+
+    return {
+        "id": "bacnet_poll",
+        "label": "BACnet poll",
+        "status": poll_status,
+        "configured": True,
+        "detail": poll_detail,
+    }
+
+
 def stack_health() -> dict[str, Any]:
     services: list[dict[str, Any]] = []
 
@@ -53,7 +148,7 @@ def stack_health() -> dict[str, Any]:
         }
     )
 
-    # BACnet commission agent (discover / write proxy target)
+    # BACnet commission agent (discover / write / poll loop)
     comm_url = commission_base_url()
     code, payload = commission_health()
     comm_ok = code == 200 and isinstance(payload, dict) and payload.get("ok")
@@ -68,36 +163,7 @@ def stack_health() -> dict[str, Any]:
         }
     )
 
-    # BACnet poll driver — gray if not configured, yellow if CSV stale, green if recent
-    points = workspace_dir() / "bacnet" / "commissioning" / "points.csv"
-    poll_csv = bacnet_poll_csv()
-    poll_configured = points.is_file()
-    poll_status: Status = "gray"
-    poll_detail = "points.csv not commissioned"
-    if poll_configured:
-        if poll_csv.is_file():
-            age_s = time.time() - poll_csv.stat().st_mtime
-            if age_s < 300:
-                poll_status = "green"
-                poll_detail = f"poll CSV updated {int(age_s)}s ago"
-            elif age_s < 3600:
-                poll_status = "yellow"
-                poll_detail = f"poll CSV stale ({int(age_s // 60)}m)"
-            else:
-                poll_status = "yellow"
-                poll_detail = "poll CSV exists but stale — is openfdd-bacnet-poll running?"
-        else:
-            poll_status = "yellow"
-            poll_detail = "points.csv present; poll driver not producing CSV yet"
-    services.append(
-        {
-            "id": "bacnet_poll",
-            "label": "BACnet poll",
-            "status": poll_status,
-            "configured": poll_configured,
-            "detail": poll_detail,
-        }
-    )
+    services.append(_bacnet_poll_service())
 
     # Optional MCP RAG sidecar
     mcp_base = os.environ.get("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090").rstrip("/")

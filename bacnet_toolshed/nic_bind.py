@@ -47,30 +47,48 @@ def _parse_ip_addr_show() -> list[tuple[str, int]]:
 
 def _outbound_guess() -> tuple[str, int] | None:
     """Best-effort LAN IP via UDP connect (no packets sent)."""
+    sock: socket.socket | None = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect(("8.8.8.8", 80))
         ip = sock.getsockname()[0]
-        sock.close()
         if ip and ip not in _LOOPBACK:
             return ip, 24
     except OSError:
         pass
+    finally:
+        if sock is not None:
+            sock.close()
     return None
+
+
+def _prefer_lan_address(candidates: list[tuple[str, int]]) -> tuple[str, int] | None:
+    private = [(ip, plen) for ip, plen in candidates if ipaddress.IPv4Address(ip).is_private]
+    if private:
+        return private[0]
+    return candidates[0] if candidates else None
 
 
 def detect_lan_ipv4(*, prefer_prefix: Iterable[str] = ("192.168.", "10.", "172.")) -> tuple[str, int] | None:
     """Pick the first plausible OT/LAN IPv4 address on this host."""
     candidates = _parse_ip_addr_show()
     if not candidates:
-        candidates = [x for x in [_outbound_guess()] if x]
+        guess = _outbound_guess()
+        candidates = [guess] if guess else []
     if not candidates:
         return None
+    private = [(ip, plen) for ip, plen in candidates if ipaddress.IPv4Address(ip).is_private]
+    pool = private or candidates
     for prefix in prefer_prefix:
-        for ip, plen in candidates:
+        if prefix == "172.":
+            for ip, plen in pool:
+                if ipaddress.IPv4Address(ip) in ipaddress.ip_network("172.16.0.0/12"):
+                    return ip, plen
+            continue
+        for ip, plen in pool:
             if ip.startswith(prefix):
                 return ip, plen
-    return candidates[0]
+    return _prefer_lan_address(pool)
 
 
 def normalize_bacnet_bind(raw: str, *, default_port: int = _DEFAULT_PORT) -> str:

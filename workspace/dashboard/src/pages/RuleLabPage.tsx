@@ -1,23 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import PythonCodeEditor from "../components/PythonCodeEditor";
+import PageHeader from "../components/PageHeader";
 import { apiFetch } from "../lib/api";
+import { formatApiError } from "../lib/formatApiError";
 
 const DEFAULT_RULE = `def evaluate(row, cfg, prev_row=None, rows=None):
-    """Flag when supply air temp exceeds cfg['high']."""
+    """Flag when supply air temp exceeds cfg['high']. Use row keys from Data Model fdd_input."""
     high = float(cfg.get("high", 75.0))
-    sat = row.get("SAT") or row.get("temp")
+    sat = row.get("SAT") or row.get("Supply_Air_Temperature_Sensor") or row.get("temp")
     if sat is None:
         return False
     return float(sat) > high
-`;
-
-const DEFAULT_SCRIPT = `# Full DataFrame mode: mutate df, set out dict
-import pandas as pd
-from open_fdd.engine import RuleRunner
-
-df = df.copy()
-df["scratch_flag"] = (df["SAT"] > 75).astype(int)
-out = {"df": df, "events": [{"type": "note", "text": "scratch_flag added"}]}
 `;
 
 type Mode = "rule" | "script";
@@ -28,31 +21,35 @@ type SavedRule = {
   mode: Mode;
   severity: string;
   enabled: boolean;
-  applies_to?: { equipment_type?: string; brick_type?: string; site_ids?: string[] };
+  source_path?: string;
+  fault_code?: string;
 };
 
 export default function RuleLabPage() {
   const [mode, setMode] = useState<Mode>("rule");
   const [code, setCode] = useState(DEFAULT_RULE);
+  const [sourcePath, setSourcePath] = useState("");
   const [cfgHigh, setCfgHigh] = useState("75");
   const [console, setConsole] = useState("");
   const [busy, setBusy] = useState(false);
   const [ruleName, setRuleName] = useState("Supply air temp high");
-  const [equipmentType, setEquipmentType] = useState("");
-  const [brickType, setBrickType] = useState("");
   const [severity, setSeverity] = useState("warning");
   const [faultCode, setFaultCode] = useState("");
   const [faultCodes, setFaultCodes] = useState<{ code: string; title: string; family: string }[]>([]);
   const [saved, setSaved] = useState<SavedRule[]>([]);
+  const [activeRuleId, setActiveRuleId] = useState<string>("");
 
-  async function refreshSaved() {
-    try {
-      const res = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
-      setSaved(res.rules || []);
-    } catch (e) {
-      setConsole(String(e));
-    }
-  }
+  const refreshSaved = useCallback(async () => {
+    const res = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
+    setSaved(res.rules || []);
+    return res.rules || [];
+  }, []);
+
+  const loadRuleSource = useCallback(async (ruleId: string) => {
+    const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${ruleId}/source`);
+    setCode(res.code || DEFAULT_RULE);
+    setSourcePath(res.path || "");
+  }, []);
 
   useEffect(() => {
     void refreshSaved();
@@ -67,7 +64,11 @@ export default function RuleLabPage() {
         ),
       )
       .catch(() => undefined);
-  }, []);
+  }, [refreshSaved]);
+
+  useEffect(() => {
+    if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsole(formatApiError(e)));
+  }, [activeRuleId, loadRuleSource]);
 
   async function lint() {
     setBusy(true);
@@ -84,33 +85,27 @@ export default function RuleLabPage() {
             : "Lint failed",
       );
     } catch (e) {
-      setConsole(String(e));
+      setConsole(formatApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  function parseCfgHigh(): number | null {
-    const high = Number(cfgHigh);
-    if (!Number.isFinite(high)) {
-      return null;
-    }
-    return high;
-  }
-
   async function testRun() {
     setBusy(true);
     try {
+      const high = Number(cfgHigh);
+      if (mode === "rule" && !Number.isFinite(high)) {
+        setConsole("cfg high must be a finite number");
+        return;
+      }
       if (mode === "rule") {
-        const high = parseCfgHigh();
-        if (high === null) {
-          setConsole("cfg high must be a finite number");
-          return;
-        }
         const res = await apiFetch<{
-          ok: boolean;
           rows: number;
           flagged: number;
+          data_source?: string;
+          site_id?: string;
+          preview_columns?: string[];
           events: { type: string; text?: string; status?: string; row?: number }[];
         }>("/api/playground/test-rule", {
           method: "POST",
@@ -121,7 +116,8 @@ export default function RuleLabPage() {
           }),
         });
         const lines = [
-          `rows=${res.rows} flagged=${res.flagged}`,
+          `site=${res.site_id} source=${res.data_source} rows=${res.rows} flagged=${res.flagged}`,
+          `columns: ${(res.preview_columns || []).join(", ")}`,
           ...res.events.map((ev) => {
             if (ev.type === "stdout") return ev.text || "";
             if (ev.type === "summary") return JSON.stringify(ev);
@@ -134,6 +130,8 @@ export default function RuleLabPage() {
           ok: boolean;
           stdout?: string;
           error?: string;
+          data_source?: string;
+          site_id?: string;
           flag_columns?: string[];
           preview?: Record<string, unknown>[];
         }>("/api/playground/run-script", {
@@ -145,6 +143,7 @@ export default function RuleLabPage() {
         } else {
           setConsole(
             [
+              `site=${res.site_id} source=${res.data_source}`,
               res.stdout,
               `flag_columns: ${(res.flag_columns || []).join(", ")}`,
               `preview rows: ${res.preview?.length ?? 0}`,
@@ -155,223 +154,179 @@ export default function RuleLabPage() {
         }
       }
     } catch (e) {
-      setConsole(String(e));
+      setConsole(formatApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function saveRule() {
+  async function saveSource() {
     setBusy(true);
     try {
-      let config: Record<string, number> = {};
-      if (mode === "rule") {
-        const high = parseCfgHigh();
-        if (high === null) {
-          setConsole("Invalid cfg high — enter a numeric temperature before saving.");
-          return;
-        }
-        config = { high };
+      if (activeRuleId) {
+        const res = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
+          method: "PUT",
+          body: JSON.stringify({ code }),
+        });
+        setSourcePath(res.path);
+        setConsole(`Saved ${res.path} — AI agents and operators share this file.`);
+        await refreshSaved();
+        return;
       }
-      const res = await apiFetch<{ ok: boolean; rule: SavedRule }>("/api/rules/save", {
+      const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
         method: "POST",
         body: JSON.stringify({
           name: ruleName,
           mode,
           code,
-          config,
+          config: mode === "rule" ? { high: Number(cfgHigh) || 75 } : {},
           severity,
           fault_code: faultCode.trim(),
-          applies_to: {
-            equipment_type: equipmentType.trim(),
-            brick_type: brickType.trim(),
-            site_ids: [],
-          },
+          bindings: { point_ids: [], equipment_ids: [], brick_types: [] },
         }),
       });
-      setConsole(`Saved rule "${res.rule.name}" (${res.rule.id}).`);
+      setActiveRuleId(res.rule.id);
+      setSourcePath(res.rule.source_path || "");
+      setConsole(`Created rule "${res.rule.name}" → map it on the Data Model tab.`);
       await refreshSaved();
     } catch (e) {
-      setConsole(String(e));
+      setConsole(formatApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function deleteRule(id: string) {
-    setBusy(true);
-    try {
-      await apiFetch(`/api/rules/saved/${id}`, { method: "DELETE" });
-      await refreshSaved();
-    } catch (e) {
-      setConsole(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function runBatch() {
-    setBusy(true);
-    try {
-      const res = await apiFetch<{
-        rules_run: number;
-        site_runs: number;
-        flagged_runs: number;
-        error_runs: number;
-      }>("/api/rules/batch", { method: "POST", body: JSON.stringify({ limit: 1000 }) });
-      setConsole(
-        `Batch run across BRICK model: rules=${res.rules_run} site_runs=${res.site_runs} ` +
-          `flagged=${res.flagged_runs} errors=${res.error_runs}. ` +
-          `Faults now drive the building check-engine light.`,
-      );
-    } catch (e) {
-      setConsole(String(e));
-    } finally {
-      setBusy(false);
-    }
+  function selectRule(rule: SavedRule) {
+    setActiveRuleId(rule.id);
+    setRuleName(rule.name);
+    setMode(rule.mode);
+    setSeverity(rule.severity);
+    setFaultCode(rule.fault_code || "");
+    setSourcePath(rule.source_path || "");
   }
 
   return (
-    <div>
-      <h2>Rule Lab (Bake-a-Py)</h2>
-      <p className="muted">
-        Per-row <code>evaluate()</code> or full <code>df</code> Python scripts. Rules bind to BRICK{" "}
-        <code>fdd_input</code> / <code>external_id</code> from{" "}
-        <a href="/data-model">Data Model</a> — no YAML.
-      </p>
-      <div className="row panel">
-        <label>
-          Mode{" "}
-          <select
-            value={mode}
-            onChange={(e) => {
-              const m = e.target.value as Mode;
-              setMode(m);
-              setCode(m === "rule" ? DEFAULT_RULE : DEFAULT_SCRIPT);
-            }}
-          >
-            <option value="rule">Per-row rule</option>
-            <option value="script">DataFrame script</option>
-          </select>
-        </label>
-        {mode === "rule" ? (
-          <label>
-            cfg high (°F){" "}
-            <input value={cfgHigh} onChange={(e) => setCfgHigh(e.target.value)} style={{ width: 80 }} />
-          </label>
-        ) : null}
-        <button type="button" className="secondary" disabled={busy} onClick={lint}>
-          Lint
-        </button>
-        <button type="button" disabled={busy} onClick={testRun}>
-          Test on server
-        </button>
-      </div>
-      <div className="panel">
-        <PythonCodeEditor value={code} onChange={setCode} height="360px" />
-      </div>
-      <div className="panel">
-        <h3>Console</h3>
-        <div className="console">{console || "Run Test to execute on bridge host."}</div>
-      </div>
+    <div className="page page-wide">
+      <PageHeader
+        title="Rule Lab"
+        subtitle={
+          <>
+            Edit the on-disk <code>.py</code> rule file below. Test runs against feather / live site data. Map rules
+            to BRICK points on the <a href="/data-model">Data Model</a> tab.
+          </>
+        }
+      />
 
-      <div className="panel">
-        <h3>Save &amp; apply across the BRICK model</h3>
-        <p className="muted">
-          Test above, then save. Saved rules are applied to every matching site by the scheduled FDD
-          runner and turn the <a href="/">building check-engine light</a> yellow/red on faults.
-        </p>
-        <div className="row">
-          <label>
-            Name{" "}
-            <input value={ruleName} onChange={(e) => setRuleName(e.target.value)} style={{ width: 220 }} />
-          </label>
-          <label>
-            Severity{" "}
-            <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="info">info</option>
-              <option value="warning">warning</option>
-              <option value="critical">critical</option>
-            </select>
-          </label>
-          <label>
-            Fault code{" "}
-            <input
-              list="fault-code-list"
-              value={faultCode}
-              onChange={(e) => setFaultCode(e.target.value)}
-              placeholder="e.g. AHU-02 (from catalog)"
-              style={{ width: 200 }}
-            />
-            <datalist id="fault-code-list">
-              {faultCodes.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.family} · {c.title}
+      <div className="panel rule-lab-toolbar">
+        <div className="form-grid">
+          <div className="field">
+            <label className="field-label" htmlFor="rule-select">
+              Rule
+            </label>
+            <select
+              id="rule-select"
+              value={activeRuleId}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (!id) {
+                  setActiveRuleId("");
+                  setCode(DEFAULT_RULE);
+                  setSourcePath("");
+                  return;
+                }
+                const rule = saved.find((r) => r.id === id);
+                if (rule) selectRule(rule);
+              }}
+            >
+              <option value="">New rule…</option>
+              {saved.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
                 </option>
               ))}
-            </datalist>
-          </label>
+            </select>
+          </div>
+          {!activeRuleId ? (
+            <>
+              <div className="field">
+                <label className="field-label" htmlFor="rule-name">
+                  Name
+                </label>
+                <input id="rule-name" value={ruleName} onChange={(e) => setRuleName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="rule-fault-code">
+                  Fault code
+                </label>
+                <input
+                  id="rule-fault-code"
+                  list="fault-code-list"
+                  value={faultCode}
+                  onChange={(e) => setFaultCode(e.target.value)}
+                />
+              </div>
+            </>
+          ) : null}
+          <div className="field">
+            <label className="field-label" htmlFor="rule-mode">
+              Mode
+            </label>
+            <select
+              id="rule-mode"
+              value={mode}
+              disabled={!!activeRuleId}
+              onChange={(e) => {
+                const m = e.target.value as Mode;
+                setMode(m);
+                if (!activeRuleId) setCode(m === "rule" ? DEFAULT_RULE : "# df script\nout = {'df': df}");
+              }}
+            >
+              <option value="rule">Per-row evaluate()</option>
+              <option value="script">DataFrame script</option>
+            </select>
+          </div>
+          {mode === "rule" ? (
+            <div className="field">
+              <label className="field-label" htmlFor="rule-cfg-high">
+                cfg high
+              </label>
+              <input id="rule-cfg-high" value={cfgHigh} onChange={(e) => setCfgHigh(e.target.value)} />
+            </div>
+          ) : null}
         </div>
-        <div className="row">
-          <label>
-            Applies to equipment_type{" "}
-            <input
-              value={equipmentType}
-              onChange={(e) => setEquipmentType(e.target.value)}
-              placeholder="e.g. Air_Handling_Unit (blank = all)"
-              style={{ width: 240 }}
-            />
-          </label>
-          <label>
-            or brick_type{" "}
-            <input
-              value={brickType}
-              onChange={(e) => setBrickType(e.target.value)}
-              placeholder="e.g. Supply_Air_Temperature_Sensor"
-              style={{ width: 240 }}
-            />
-          </label>
-        </div>
-        <div className="row">
-          <button type="button" disabled={busy} onClick={saveRule}>
-            Save rule
+        <div className="toolbar">
+          <button type="button" className="secondary" disabled={busy} onClick={() => void lint()}>
+            Lint
           </button>
-          <button type="button" className="secondary" disabled={busy} onClick={runBatch}>
-            Run batch now
+          <button type="button" disabled={busy} onClick={() => void testRun()}>
+            Test
+          </button>
+          <button type="button" disabled={busy} onClick={() => void saveSource()}>
+            Save .py
           </button>
         </div>
       </div>
 
+      {sourcePath ? (
+        <p className="muted code-path">
+          File: <code>{sourcePath}</code>
+        </p>
+      ) : null}
+
+      <datalist id="fault-code-list">
+        {faultCodes.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.family} · {c.title}
+          </option>
+        ))}
+      </datalist>
+
       <div className="panel">
-        <h3>Saved rules ({saved.length})</h3>
-        {saved.length ? (
-          <ul className="check-engine-list">
-            {saved.map((r) => (
-              <li key={r.id}>
-                <strong>{r.name}</strong>
-                <span className="badge">{r.mode}</span>
-                <span className="badge">{r.severity}</span>
-                {r.applies_to?.equipment_type ? (
-                  <span className="muted"> · {r.applies_to.equipment_type}</span>
-                ) : null}
-                {r.applies_to?.brick_type ? (
-                  <span className="muted"> · {r.applies_to.brick_type}</span>
-                ) : null}
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() => deleteRule(r.id)}
-                  style={{ marginLeft: 8 }}
-                >
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No saved rules yet. Test a rule above, then Save.</p>
-        )}
+        <PythonCodeEditor value={code} onChange={setCode} height="420px" />
+      </div>
+      <div className="panel">
+        <h3 className="panel-title">Console</h3>
+        <div className="console">{console || "Lint or Test to run against live feather data."}</div>
       </div>
     </div>
   );

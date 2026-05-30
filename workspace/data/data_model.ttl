@@ -4,13 +4,57 @@
 @prefix : <http://openfdd.local/site#> .
 
 :site_s1 a brick:Site ;
-  rdfs:label "Demo Site" .
+  rdfs:label "BensOffice" .
 
 :eq_e1 a brick:Air_Handling_Unit ;
   rdfs:label "AHU-1" ;
+  brick:isPartOf :site_s1 .
+
+:eq_bacnet_5007 a brick:BACnet_Device ;
+  rdfs:label "BACnet device 5007" ;
   brick:isPartOf :site_s1 .
 
 :pt_p1 a brick:Supply_Air_Temperature_Sensor ;
   rdfs:label "SAT" ;
   brick:isPointOf :eq_e1 ;
   ofdd:mapsToRuleInput "SAT" .
+
+:pt__5007_analog_input_1168 a brick:Point ;
+  rdfs:label "oa-h" ;
+  brick:isPointOf :eq_bacnet_5007 ;
+  ofdd:mapsToRuleInput "oa-h" ;
+  ofdd:externalReference "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1168" ;
+  ofdd:bacnetDeviceId "5007" ;
+  ofdd:bacnetObjectIdentifier "analog-input,1168" ;
+  ofdd:seriesId "demo#local#bacnet#5007-analog-input-1168" ;
+  ofdd:pollIntervalS "60" .
+
+:pt__5007_analog_input_1173 a brick:Point ;
+  rdfs:label "oa-t" ;
+  brick:isPointOf :eq_bacnet_5007 ;
+  ofdd:mapsToRuleInput "oa-t" ;
+  ofdd:externalReference "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1173" ;
+  ofdd:bacnetDeviceId "5007" ;
+  ofdd:bacnetObjectIdentifier "analog-input,1173" ;
+  ofdd:seriesId "demo#local#bacnet#5007-analog-input-1173" ;
+  ofdd:pollIntervalS "60" .
+
+:pt__5007_analog_input_1192 a brick:Point ;
+  rdfs:label "duct-t" ;
+  brick:isPointOf :eq_bacnet_5007 ;
+  ofdd:mapsToRuleInput "duct-t" ;
+  ofdd:externalReference "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1192" ;
+  ofdd:bacnetDeviceId "5007" ;
+  ofdd:bacnetObjectIdentifier "analog-input,1192" ;
+  ofdd:seriesId "demo#local#bacnet#5007-analog-input-1192" ;
+  ofdd:pollIntervalS "60" .
+
+:pt__5007_analog_input_10014 a brick:Point ;
+  rdfs:label "stat_zn-t" ;
+  brick:isPointOf :eq_bacnet_5007 ;
+  ofdd:mapsToRuleInput "stat_zn-t" ;
+  ofdd:externalReference "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-10014" ;
+  ofdd:bacnetDeviceId "5007" ;
+  ofdd:bacnetObjectIdentifier "analog-input,10014" ;
+  ofdd:seriesId "demo#local#bacnet#5007-analog-input-10014" ;
+  ofdd:pollIntervalS "60" .

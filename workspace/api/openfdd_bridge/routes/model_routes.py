@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from ..deps import require_roles, require_user
 from ..model_health import model_health_summary
 from ..model_service import ModelService
+from ..site_defaults import ensure_default_site
 from ..ttl_service import TtlService
 
 router = APIRouter(prefix="/api/model", tags=["model"])
@@ -46,14 +47,42 @@ def _require_site(model: dict) -> str:
 
 @router.get("/export")
 def export_model(_user: dict = Depends(require_user)) -> dict:
-    return _model().load()
+    svc = _model()
+    ensure_default_site(svc, _ttl())
+    return svc.load()
 
 
 @router.get("/sites")
 def list_sites(_user: dict = Depends(require_user)) -> dict:
-    model = _model().load()
+    svc = _model()
+    ttl = _ttl()
+    sid = ensure_default_site(svc, ttl)
+    model = svc.load()
     sites = [s for s in model.get("sites", []) if isinstance(s, dict)]
-    return {"ok": True, "sites": sites, "configured": len(sites) > 0}
+    return {"ok": True, "sites": sites, "configured": len(sites) > 0, "active_site_id": sid}
+
+
+@router.get("/tree")
+def model_tree(_user: dict = Depends(require_user)) -> dict:
+    svc = _model()
+    ensure_default_site(svc, _ttl())
+    model = svc.load()
+    equipment = [e for e in model.get("equipment", []) if isinstance(e, dict)]
+    points = [p for p in model.get("points", []) if isinstance(p, dict)]
+    brick_types = sorted(
+        {str(p.get("brick_type") or "").strip() for p in points if str(p.get("brick_type") or "").strip()}
+    )
+    eq_types = sorted(
+        {str(e.get("equipment_type") or "").strip() for e in equipment if str(e.get("equipment_type") or "").strip()}
+    )
+    return {
+        "ok": True,
+        "sites": model.get("sites") or [],
+        "equipment": equipment,
+        "points": points,
+        "brick_types": brick_types,
+        "equipment_types": eq_types,
+    }
 
 
 @router.post("/sites")
@@ -73,17 +102,19 @@ def upsert_site(body: SiteBody, _user: dict = Depends(require_roles("operator", 
 
 @router.post("/import")
 def import_model(body: ImportBody, user: dict = Depends(require_roles("integrator"))) -> dict:
-    model = _model().load()
-    _require_site(model)
     svc = _model()
     counts = svc.import_json(body.payload, replace=body.replace)
+    model = svc.load()
+    _require_site(model)
     _ttl().sync()
     return {"ok": True, **counts}
 
 
 @router.get("/health")
 def model_health(_user: dict = Depends(require_user)) -> dict:
-    model = _model().load()
+    svc = _model()
+    ensure_default_site(svc, _ttl())
+    model = svc.load()
     health = model_health_summary(model)
     ttl = _ttl()
     ttl_exists = ttl.ttl_path.is_file()

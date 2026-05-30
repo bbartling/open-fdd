@@ -156,3 +156,11 @@ def server_points() -> tuple[int, Any]:
 
 def get_job(job_id: str) -> tuple[int, Any]:
     return _request("GET", f"/api/jobs/{job_id}")
+
+
+def commission_poll_once() -> tuple[int, Any]:
+    return _request("POST", "/api/bacnet/poll/once", {})
+
+
+def commission_poll_status() -> tuple[int, Any]:
+    return _request("GET", "/api/bacnet/poll/status")

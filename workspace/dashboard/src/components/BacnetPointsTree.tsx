@@ -225,9 +225,13 @@ export default function BacnetPointsTree({
                             >
                               <code>{p.object_identifier}</code>
                               <span className="bacnet-tree-point-name">{p.object_name}</span>
-                              {p.enabled && p.present_value ? (
+                              {p.enabled && String(p.present_value ?? "") !== "" ? (
                                 <span className="badge pv-badge" title="Last present value">
                                   {p.present_value}
+                                </span>
+                              ) : p.enabled ? (
+                                <span className="badge muted-badge" title="Waiting for first poll sample">
+                                  …
                                 </span>
                               ) : null}
                               {p.enabled ? (

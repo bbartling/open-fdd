@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Local edge-like stack: Caddy :80 (or :443 TLS) → bridge 127.0.0.1:8765.
+# Local edge-like stack: Caddy :80 (or :443 TLS) → bridge 127.0.0.1:8765 → compiled React in static/app.
+# Same UI delivery as Ansible deploy (rsync workspace/api/static/app — no npm on the remote host).
 #
-#   ./scripts/run_local.sh              # same as start (restarts if already running)
+#   ./scripts/run_local.sh              # build production UI + start stack
 #   ./scripts/run_local.sh start        # Caddy + bridge + commission + ollama + MCP RAG
-#   ./scripts/run_local.sh start --dev  # also run Vite dev on :5173
+#   ./scripts/run_local.sh restart      # stop, rebuild production UI, start
 #   ./scripts/run_local.sh stop
 #   ./scripts/run_local.sh status
+#   OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh restart   # skip npm run build (UI unchanged)
+#
+# Optional (NOT production parity — Vite HMR on :5173):
+#   ./scripts/run_local.sh start --dev
 #
 # Caddy config: workspace/caddy.env.local (copy from caddy.env.example)
 #   OFDD_CADDY_MODE=http | tls | off
@@ -109,9 +114,17 @@ apply_caddy_bridge_bind() {
 apply_caddy_bridge_bind
 
 ensure_build() {
-  if [[ ! -f workspace/api/static/app/index.html ]]; then
-    ./scripts/build_and_test.sh
+  if [[ "${OFDD_SKIP_UI_BUILD:-0}" == "1" ]]; then
+    if [[ ! -f workspace/api/static/app/index.html ]]; then
+      echo "OFDD_SKIP_UI_BUILD=1 but workspace/api/static/app/index.html is missing — run without skip or ./scripts/build_operator_dashboard.sh" >&2
+      exit 1
+    fi
+    echo "Skipping UI build (OFDD_SKIP_UI_BUILD=1) — serving existing production bundle"
+    return 0
   fi
+  echo "==> Production React dashboard (same artifact Ansible rsyncs to edge hosts)"
+  ./scripts/build_operator_dashboard.sh
+  test -f workspace/api/static/app/index.html
 }
 
 pid_running() {
@@ -390,12 +403,13 @@ start_ollama() {
 }
 
 start_ui_dev() {
+  echo "WARNING: --dev serves Vite on :5173 (HMR). For Ansible/production parity use the default start without --dev." >&2
   mkdir -p "$PID_DIR"
   restart_if_running "$UI_PID" "vite.*5173" "vite dev"
   (cd workspace/dashboard && npm ci >/dev/null 2>&1 && npm run dev -- --host 0.0.0.0 --port 5173) \
     >"$UI_LOG" 2>&1 &
   echo $! >"$UI_PID"
-  echo "Vite dev pid=$(cat "$UI_PID") → http://0.0.0.0:5173"
+  echo "Vite dev pid=$(cat "$UI_PID") → http://0.0.0.0:5173 (not production — use Caddy/bridge URL for parity)"
 }
 
 wait_health() {
@@ -447,11 +461,11 @@ case "$CMD" in
       echo "Bridge (internal):     http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
     else
       echo "Dashboard (compiled): http://${LAN_IP}:${OFDD_BRIDGE_PORT}/"
-      echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/"
+      echo "                     http://127.0.0.1:${OFDD_BRIDGE_PORT}/  (production static/app bundle)"
     fi
     print_lan_note
     if [[ "$DEV_UI" == true ]]; then
-      echo "Vite dev UI:         http://127.0.0.1:5173/"
+      echo "Vite dev (optional): http://127.0.0.1:5173/  — not the same as Ansible/production UI"
     fi
     ;;
   stop)

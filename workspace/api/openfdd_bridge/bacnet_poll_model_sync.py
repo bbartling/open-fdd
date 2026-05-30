@@ -67,11 +67,16 @@ def _model_bacnet_keys(points: list[dict[str, Any]]) -> dict[str, dict[str, Any]
 
 def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool = True) -> dict[str, Any]:
     """Upsert model.json points for every enabled row in points.csv."""
+    svc = ModelService()
+    from .site_defaults import ensure_default_site
+    from .ttl_service import TtlService
+
+    ensure_default_site(svc, TtlService())
     enabled = [r for r in _load_csv(_points_csv_path()) if str(r.get("enabled") or "") in {"1", "true", "yes"}]
     discovered = {r.get("point_id", ""): r for r in _load_csv(_discovered_csv_path()) if r.get("point_id")}
-    svc = ModelService()
     added = 0
     updated = 0
+    removed = 0
     sid = ""
 
     with svc.transaction() as model:
@@ -81,6 +86,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         by_key = _model_bacnet_keys(points)
 
         devices_touched: set[str] = set()
+        desired_keys: set[str] = set()
         for row in enabled:
             pid = str(row.get("point_id") or "")
             src = discovered.get(pid, row)
@@ -91,6 +97,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
                 continue
             oid = f"{obj_type},{obj_inst}"
             key = _point_key(inst, oid)
+            desired_keys.add(key)
             eq_id = f"bacnet-{inst}"
             devices_touched.add(inst)
             if not any(isinstance(e, dict) and str(e.get("id")) == eq_id for e in equipment):
@@ -145,8 +152,36 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
                 by_key[key] = pt
                 added += 1
 
+        bacnet_eq_ids = {
+            str(e.get("id"))
+            for e in equipment
+            if isinstance(e, dict) and _is_bacnet_equipment(e)
+        }
+        before_pts = len(points)
+        model["points"] = [
+            p
+            for p in points
+            if isinstance(p, dict)
+            and not (
+                _is_bacnet_point(p, bacnet_eq_ids)
+                and _point_key(
+                    str(p.get("bacnet_device_id") or ""),
+                    str(p.get("object_identifier") or ""),
+                )
+                not in desired_keys
+            )
+        ]
+        removed = before_pts - len(model["points"])
+        remaining_eq_ids = {str(p.get("equipment_id") or "") for p in model["points"] if isinstance(p, dict)}
+        model["equipment"] = [
+            e
+            for e in equipment
+            if isinstance(e, dict)
+            and (not _is_bacnet_equipment(e) or str(e.get("id")) in remaining_eq_ids)
+        ]
+
     ttl_path = None
-    if sync_ttl and (added or updated):
+    if sync_ttl and (added or updated or removed):
         ttl_path = str(TtlService().sync())
 
     return {
@@ -154,6 +189,105 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
         "site_id": sid,
         "points_added": added,
         "points_updated": updated,
+        "points_removed": removed,
         "devices": sorted(devices_touched),
+        "ttl_path": ttl_path,
+    }
+
+
+def _is_bacnet_equipment(row: dict[str, Any]) -> bool:
+    eq_id = str(row.get("id") or "")
+    return (
+        eq_id.startswith("bacnet-")
+        or row.get("bacnet_device_id") is not None
+        or str(row.get("equipment_type") or "") == "BACnet_Device"
+    )
+
+
+def _is_bacnet_point(row: dict[str, Any], bacnet_eq_ids: set[str]) -> bool:
+    if row.get("bacnet_device_id") is not None:
+        return True
+    if str(row.get("equipment_id") or "") in bacnet_eq_ids:
+        return True
+    meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    if meta.get("point_id") and (row.get("object_identifier") or meta.get("series_id")):
+        return True
+    return False
+
+
+def remove_device_from_model(*, device_instance: int, sync_ttl: bool = True) -> dict[str, Any]:
+    """Drop one BACnet device and its points from model.json."""
+    inst = str(device_instance)
+    eq_id = f"bacnet-{inst}"
+    eq_ids = {eq_id}
+    points_removed = 0
+    equipment_removed = 0
+
+    with ModelService().transaction() as model:
+        equipment = model.get("equipment", [])
+        for eq in equipment:
+            if isinstance(eq, dict) and str(eq.get("id")) == eq_id:
+                equipment_removed = 1
+                break
+            if isinstance(eq, dict) and str(eq.get("bacnet_device_id") or "") == inst:
+                eq_ids.add(str(eq.get("id")))
+                equipment_removed += 1
+
+        before_pts = len(model.get("points", []))
+        model["points"] = [
+            p
+            for p in model.get("points", [])
+            if isinstance(p, dict)
+            and str(p.get("bacnet_device_id") or "") != inst
+            and str(p.get("equipment_id") or "") not in eq_ids
+        ]
+        points_removed = before_pts - len(model["points"])
+        model["equipment"] = [
+            e
+            for e in equipment
+            if isinstance(e, dict)
+            and str(e.get("id")) not in eq_ids
+            and str(e.get("bacnet_device_id") or "") != inst
+        ]
+
+    ttl_path = str(TtlService().sync()) if sync_ttl and (points_removed or equipment_removed) else None
+    return {
+        "ok": True,
+        "device_instance": device_instance,
+        "points_removed": points_removed,
+        "equipment_removed": equipment_removed,
+        "ttl_path": ttl_path,
+    }
+
+
+def clear_bacnet_from_model(*, sync_ttl: bool = True) -> dict[str, Any]:
+    """Remove all BACnet driver equipment/points from model.json; keep sites and manual rows."""
+    points_removed = 0
+    equipment_removed = 0
+
+    with ModelService().transaction() as model:
+        equipment = model.get("equipment", [])
+        bacnet_eq_ids = {
+            str(e.get("id"))
+            for e in equipment
+            if isinstance(e, dict) and _is_bacnet_equipment(e)
+        }
+        equipment_removed = len(bacnet_eq_ids)
+        before_pts = len(model.get("points", []))
+        model["points"] = [
+            p
+            for p in model.get("points", [])
+            if isinstance(p, dict) and not _is_bacnet_point(p, bacnet_eq_ids)
+        ]
+        points_removed = before_pts - len(model["points"])
+        model["equipment"] = [
+            e for e in equipment if isinstance(e, dict) and str(e.get("id")) not in bacnet_eq_ids
+        ]
+
+    ttl_path = str(TtlService().sync()) if sync_ttl else None
+    return {
+        "ok": True,
+        "points_removed": points_removed,
+        "equipment_removed": equipment_removed,
         "ttl_path": ttl_path,
     }

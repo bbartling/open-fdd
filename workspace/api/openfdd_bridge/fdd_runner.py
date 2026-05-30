@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from . import playground
-from .data_loader import load_frame_for_run, rows_for_evaluate
+from .data_loader import load_frame_for_run, rows_for_evaluate, enrich_rows_with_column_map, column_map_for_rule
 from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
 from .fdd_results import save_results
@@ -29,8 +29,10 @@ _log = logging.getLogger(__name__)
 DEFAULT_LIMIT = 1000
 
 
-def resolve_site_ids(model: dict[str, Any], applies_to: dict[str, Any]) -> list[str]:
+def resolve_site_ids(model: dict[str, Any], rule: dict[str, Any]) -> list[str]:
     """Resolve the data site ids a rule should run against from the BRICK model."""
+    applies_to = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
+    bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
     explicit = [str(s) for s in applies_to.get("site_ids", []) if str(s).strip()]
     if explicit:
         return explicit
@@ -39,10 +41,27 @@ def resolve_site_ids(model: dict[str, Any], applies_to: dict[str, Any]) -> list[
     equipment = [e for e in model.get("equipment", []) if isinstance(e, dict)]
     points = [p for p in model.get("points", []) if isinstance(p, dict)]
 
+    matched_site_ids: set[str] = set()
+    bound_points = {str(x) for x in bindings.get("point_ids") or [] if str(x).strip()}
+    bound_eq = {str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()}
+    bound_brick = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
+
+    if bound_points or bound_eq or bound_brick:
+        for pt in points:
+            pid = str(pt.get("id") or "")
+            eq_id = str(pt.get("equipment_id") or "")
+            brick = str(pt.get("brick_type") or "")
+            if bound_points and pid in bound_points and pt.get("site_id"):
+                matched_site_ids.add(str(pt.get("site_id")))
+            elif bound_eq and eq_id in bound_eq and pt.get("site_id"):
+                matched_site_ids.add(str(pt.get("site_id")))
+            elif bound_brick and brick in bound_brick and pt.get("site_id"):
+                matched_site_ids.add(str(pt.get("site_id")))
+        if matched_site_ids:
+            return sorted(matched_site_ids)
+
     eq_type = str(applies_to.get("equipment_type") or "").strip()
     brick_type = str(applies_to.get("brick_type") or "").strip()
-
-    matched_site_ids: set[str] = set()
     if eq_type:
         for eq in equipment:
             if str(eq.get("equipment_type") or "") == eq_type and eq.get("site_id"):
@@ -58,14 +77,25 @@ def resolve_site_ids(model: dict[str, Any], applies_to: dict[str, Any]) -> list[
         ids = sorted({str(s.get("id")) for s in sites if s.get("id")})
 
     if not ids:
-        # No BRICK sites yet: fall back to whatever the feather store holds, else demo.
         ids = sorted({entry["site_id"] for entry in FeatherStore().list_sites()})
     return ids or ["demo"]
 
 
-def _run_one(rule: dict[str, Any], site_id: str, *, limit: int) -> dict[str, Any]:
+def _rule_code(rule: dict[str, Any]) -> str:
+    from .rule_source import read_source
+
+    path = str(rule.get("source_path") or "")
+    if path:
+        disk = read_source(path)
+        if disk.strip():
+            return disk
+    return str(rule.get("code") or "")
+
+
+def _run_one(rule: dict[str, Any], site_id: str, *, limit: int, model: dict[str, Any]) -> dict[str, Any]:
     frame, origin = load_frame_for_run(site_id)
     fault_code = str(rule.get("fault_code") or "")
+    code = _rule_code(rule)
     base = {
         "rule_id": rule.get("id"),
         "rule_name": rule.get("name"),
@@ -78,7 +108,7 @@ def _run_one(rule: dict[str, Any], site_id: str, *, limit: int) -> dict[str, Any
     try:
         if rule.get("mode") == "script":
             df = frame.head(limit) if limit and len(frame) > limit else frame
-            result = playground.run_dataframe_script(rule["code"], df, cfg=rule.get("config") or {})
+            result = playground.run_dataframe_script(code, df, cfg=rule.get("config") or {})
             if not result.get("ok"):
                 return {**base, "status": "error", "rows": int(len(df)), "flagged": 0, "error": result.get("error", "")}
             flag_cols = result.get("flag_columns") or []
@@ -93,8 +123,9 @@ def _run_one(rule: dict[str, Any], site_id: str, *, limit: int) -> dict[str, Any
                 "flagged": flagged,
                 "flag_columns": flag_cols,
             }
-        rows = rows_for_evaluate(frame, limit=limit)
-        flags, _events = playground.sweep_rule(rule["code"], rule.get("config") or {}, rows, capture_print=False)
+        column_map = column_map_for_rule(model, site_id, rule)
+        rows = enrich_rows_with_column_map(rows_for_evaluate(frame, limit=limit), column_map)
+        flags, _events = playground.sweep_rule(code, rule.get("config") or {}, rows, capture_print=False)
         return {
             **base,
             "status": "ok",
@@ -111,9 +142,8 @@ def run_batch(*, limit: int = DEFAULT_LIMIT, persist: bool = True) -> dict[str, 
     rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
     runs: list[dict[str, Any]] = []
     for rule in rules:
-        applies_to = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
-        for site_id in resolve_site_ids(model, applies_to):
-            runs.append(_run_one(rule, site_id, limit=limit))
+        for site_id in resolve_site_ids(model, rule):
+            runs.append(_run_one(rule, site_id, limit=limit, model=model))
     summary = {
         "ok": True,
         "rules_run": len(rules),

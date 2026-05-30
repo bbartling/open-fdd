@@ -202,6 +202,11 @@ async def _resolve_device_target(
             f"No response from device {instance_id} to Who-Is",
             {"instance": instance_id},
         )
+    if len(i_ams) > 1:
+        raise BacnetOpsError(
+            f"Multiple devices responded to Who-Is for instance {instance_id}",
+            {"instance": instance_id, "responses": len(i_ams)},
+        )
     i_am = i_ams[0]
     return i_am.pduSource, i_am.iAmDeviceIdentifier, i_am.vendorID
 

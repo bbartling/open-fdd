@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
+import PageHeader from "../components/PageHeader";
 
 type MemBlock = {
   available?: boolean;
@@ -125,13 +126,13 @@ export default function HostStatsPage() {
   const swap = stats?.swap;
 
   return (
-    <div>
-      <h2 className="title">Host stats</h2>
-      <p className="muted">
-        Edge host OS metrics — CPU, RAM, swap, disk, and network. Refreshes every 5s.
-      </p>
+    <div className="page page-wide">
+      <PageHeader
+        title="Host stats"
+        subtitle="Edge host OS metrics — CPU, RAM, swap, disk, and network. Refreshes every 5s."
+      />
 
-      <div className="row">
+      <div className="toolbar">
         <button type="button" onClick={load} disabled={busy}>
           {busy ? "Refreshing…" : "Refresh now"}
         </button>
@@ -145,28 +146,28 @@ export default function HostStatsPage() {
       {stats ? (
         <>
           <div className="panel">
-            <h3>System</h3>
+            <h3 className="panel-title">System</h3>
             <div className="host-info-grid">
               <div>
-                <span className="muted">Hostname</span>
+                <span className="status-kv-label">Hostname</span>
                 <div>{stats.host.hostname}</div>
               </div>
               <div>
-                <span className="muted">OS</span>
+                <span className="status-kv-label">OS</span>
                 <div>
                   {stats.host.platform} {stats.host.platform_release} ({stats.host.machine})
                 </div>
               </div>
               <div>
-                <span className="muted">Uptime</span>
+                <span className="status-kv-label">Uptime</span>
                 <div>{fmtUptime(stats.host.uptime_seconds)}</div>
               </div>
               <div>
-                <span className="muted">Python</span>
+                <span className="status-kv-label">Python</span>
                 <div>{stats.host.python_version}</div>
               </div>
               <div>
-                <span className="muted">Processes</span>
+                <span className="status-kv-label">Processes</span>
                 <div>{stats.processes.count ?? "—"}</div>
               </div>
             </div>
@@ -204,7 +205,7 @@ export default function HostStatsPage() {
 
           {stats.disks.length ? (
             <div className="panel">
-              <h3>Disk</h3>
+              <h3 className="panel-title">Disk</h3>
               <div className="metric-grid">
                 {stats.disks.map((disk) => (
                   <MetricMeter
@@ -219,10 +220,10 @@ export default function HostStatsPage() {
           ) : null}
 
           <div className="panel">
-            <h3>Network &amp; local AI</h3>
+            <h3 className="panel-title">Network &amp; local AI</h3>
             <div className="host-info-grid">
               <div>
-                <span className="muted">Network (non-loopback)</span>
+                <span className="status-kv-label">Network (non-loopback)</span>
                 <div>
                   {stats.network.available
                     ? `↓ ${fmtBytes(stats.network.rx_bytes)} · ↑ ${fmtBytes(stats.network.tx_bytes)}`
@@ -230,7 +231,7 @@ export default function HostStatsPage() {
                 </div>
               </div>
               <div>
-                <span className="muted">Ollama process</span>
+                <span className="status-kv-label">Ollama process</span>
                 <div>
                   {stats.ollama
                     ? `PID ${stats.ollama.pid} · RSS ${fmtBytes(stats.ollama.rss_bytes)}`

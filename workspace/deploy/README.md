@@ -4,32 +4,37 @@
 
 | Piece | Path | Port |
 |-------|------|------|
-| FastAPI bridge + static UI | `workspace/api` | 8765 |
-| Vite dev UI (optional) | `workspace/dashboard` | 5173 |
+| FastAPI bridge + **production** static UI | `workspace/api/static/app` | 8765 (via Caddy :80 when enabled) |
+| React source (build only — not served in prod) | `workspace/dashboard` | — |
 | Data / rules | `workspace/data` | — |
 | BACnet edge CLIs | `bacnet_toolshed/` | commission 8767 |
 
-## Quick dev
+## Quick local (production UI — same as Ansible edge)
+
+Build happens on your dev machine; the bridge serves `workspace/api/static/app/` (no Vite, no npm on the host at runtime).
 
 ```bash
-./scripts/run_local.sh
-# UI  http://127.0.0.1:5173
-# API http://127.0.0.1:8765/health
+./scripts/run_local.sh restart
+# Dashboard: http://127.0.0.1/  (Caddy) or http://127.0.0.1:8765/  (bridge direct)
+# API:       http://127.0.0.1:8765/health
 ```
 
-Or manually:
-pip install -e ".[dev]"
-pip install -r workspace/api/requirements.txt
-export OPENFDD_REPO_ROOT="$(pwd)"
-export OFDD_DESKTOP_DATA_DIR="$PWD/workspace/data"
-cd workspace/api && uvicorn openfdd_bridge.main:app --reload --port 8765
-```
-
-Second terminal:
+Skip rebuild when the UI is unchanged:
 
 ```bash
-cd workspace/dashboard && npm ci && npm run dev
+OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh restart
 ```
+
+Optional Vite HMR (not production parity):
+
+```bash
+./scripts/run_local.sh start --dev   # also :5173 — use only for rapid UI iteration
+```
+
+## Ansible deploy
+
+1. `./scripts/build_and_test.sh` — build React into `workspace/api/static/app`
+2. `cd infra/ansible && ./deploy.sh` — rsync static files; **no npm on remote**
 
 ## Production (systemd)
 

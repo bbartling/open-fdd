@@ -2,52 +2,36 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiFetchText } from "../lib/api";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
 import { ModelPayload, parseImportPayload } from "../lib/modelImport";
+import PageHeader from "../components/PageHeader";
+import RuleMappingBoard from "../components/RuleMappingBoard";
 
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"export" | "import">("export");
+  const [activeTab, setActiveTab] = useState<"mapping" | "model" | "advanced">("mapping");
   const [exportJsonText, setExportJsonText] = useState("");
   const [importJsonText, setImportJsonText] = useState("");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [ttlText, setTtlText] = useState("");
   const [copiedKey, setCopiedKey] = useState("");
-  const [siteId, setSiteId] = useState("demo");
-  const [siteName, setSiteName] = useState("Demo Site");
-  const [siteConfigured, setSiteConfigured] = useState(false);
+  const [activeSiteId, setActiveSiteId] = useState("");
+  const [pointCount, setPointCount] = useState(0);
+  const [eqCount, setEqCount] = useState(0);
 
-  const loadSites = useCallback(async () => {
-    const res = await apiFetch<{ sites: SiteRow[]; configured: boolean }>("/api/model/sites");
-    setSiteConfigured(res.configured);
-    if (res.sites?.length) {
-      setSiteId(res.sites[0].id);
-      setSiteName(res.sites[0].name);
-    }
+  const refreshMeta = useCallback(async () => {
+    const [sitesRes, tree] = await Promise.all([
+      apiFetch<{ active_site_id?: string; sites: SiteRow[] }>("/api/model/sites"),
+      apiFetch<{ equipment: unknown[]; points: unknown[] }>("/api/model/tree"),
+    ]);
+    setActiveSiteId(sitesRes.active_site_id || sitesRes.sites?.[0]?.id || "");
+    setPointCount(tree.points?.length ?? 0);
+    setEqCount(tree.equipment?.length ?? 0);
   }, []);
 
   useEffect(() => {
-    loadSites().catch((e) => setOut(String(e)));
-  }, [loadSites]);
-
-  async function saveSite() {
-    try {
-      const sid = siteId.trim();
-      const name = siteName.trim();
-      if (!sid || !name) {
-        setOut("Site id and name are required.");
-        return;
-      }
-      await apiFetch("/api/model/sites", {
-        method: "POST",
-        body: JSON.stringify({ id: sid, name }),
-      });
-      setSiteConfigured(true);
-      setOut(`Site "${name}" (${sid}) saved. BRICK TTL synced.`);
-    } catch (error) {
-      setOut(`Save site failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+    refreshMeta().catch((e) => setOut(String(e)));
+  }, [refreshMeta]);
 
   async function copyText(key: string, value: string) {
     try {
@@ -60,10 +44,6 @@ export default function DataModelPage() {
   }
 
   async function doExport() {
-    if (!siteConfigured) {
-      setOut("Save a BRICK site first.");
-      return;
-    }
     try {
       const model = await apiFetch<ModelPayload>("/api/model/export");
       setExportJsonText(JSON.stringify(model, null, 2));
@@ -73,58 +53,7 @@ export default function DataModelPage() {
     }
   }
 
-  async function ensureExportJsonInEditor(): Promise<string> {
-    const trimmed = String(exportJsonText || "").trim();
-    if (trimmed) return exportJsonText;
-    const model = await apiFetch<ModelPayload>("/api/model/export");
-    const text = JSON.stringify(model, null, 2);
-    setExportJsonText(text);
-    return text;
-  }
-
-  async function downloadJsonFile() {
-    if (!siteConfigured) {
-      setOut("Save a BRICK site first.");
-      return;
-    }
-    try {
-      const source = await ensureExportJsonInEditor();
-      const payload = parseImportPayload(source);
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "open-fdd-data-model.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setOut("Downloaded open-fdd-data-model.json");
-    } catch (error) {
-      setOut(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function copyImportReadyJson() {
-    if (!siteConfigured) {
-      setOut("Save a BRICK site first.");
-      return;
-    }
-    try {
-      const source = await ensureExportJsonInEditor();
-      const payload = parseImportPayload(source);
-      await copyText("import-ready", JSON.stringify(payload, null, 2));
-      setOut("Copied import-ready JSON (sites/equipment/points only).");
-    } catch (error) {
-      setOut(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
   async function doImport() {
-    if (!siteConfigured) {
-      setOut("Save a BRICK site first.");
-      return;
-    }
     try {
       const payload = parseImportPayload(importJsonText);
       const confirmed = window.confirm(
@@ -143,6 +72,7 @@ export default function DataModelPage() {
       );
       setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}. TTL synced.`);
       setImportJsonText("");
+      await refreshMeta();
     } catch (error) {
       setOut(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -159,10 +89,6 @@ export default function DataModelPage() {
   }
 
   async function doViewTtl() {
-    if (!siteConfigured) {
-      setOut("Save a BRICK site first.");
-      return;
-    }
     setTtlLoading(true);
     setTtlText("");
     try {
@@ -177,71 +103,56 @@ export default function DataModelPage() {
   }
 
   return (
-    <div className="card">
-      <h2 className="title">Data Model BRICK</h2>
-      <p className="muted">
-        Set your building site first — required for BACnet polling sync, TTL, and AI-assisted BRICK modeling.
-      </p>
-
-      <div className="panel">
-        <h3>Site setup</h3>
-        <div className="form-row">
-          <label>
-            Site id
-            <input value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder="demo" />
-          </label>
-          <label>
-            Site name
-            <input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="Demo Site" />
-          </label>
-          <button type="button" onClick={() => void saveSite()}>
-            Save site
-          </button>
-        </div>
-        {siteConfigured ? (
-          <p className="ok">Site configured — modeling and TTL are enabled.</p>
-        ) : (
-          <p className="error">No site yet. Save a site before import, export, or View TTL.</p>
-        )}
-      </div>
+    <div className="page page-wide">
+      <PageHeader
+        title="Data Model BRICK"
+        subtitle={
+          <>
+            Site <code>{activeSiteId || "…"}</code> is configured automatically · {eqCount} equipment · {pointCount}{" "}
+            points
+          </>
+        }
+      />
 
       <div className="tab-row">
         <button
           type="button"
-          className={activeTab === "export" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("export")}
+          className={activeTab === "mapping" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("mapping")}
         >
-          Export
+          Rule mapping
         </button>
         <button
           type="button"
-          className={activeTab === "import" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("import")}
+          className={activeTab === "model" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("model")}
         >
-          Import
+          Import / export
+        </button>
+        <button
+          type="button"
+          className={activeTab === "advanced" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("advanced")}
+        >
+          Advanced
         </button>
       </div>
 
-      {activeTab === "export" ? (
-        <div className="row">
-          <button type="button" onClick={() => void doExport()} disabled={!siteConfigured}>
-            Export JSON
-          </button>
-          <button type="button" className="secondary-btn" onClick={() => void downloadJsonFile()} disabled={!siteConfigured}>
-            Download file
-          </button>
-          <button type="button" className="secondary-btn" onClick={() => void copyImportReadyJson()} disabled={!siteConfigured}>
-            {copiedKey === "import-ready" ? "Copied JSON" : "Copy JSON"}
-          </button>
-        </div>
-      ) : (
-        <div className="stack-page">
+      {activeTab === "mapping" ? (
+        <RuleMappingBoard onStatus={(msg) => setOut(msg)} />
+      ) : null}
+
+      {activeTab === "model" ? (
+        <>
           <div className="row">
-            <button type="button" onClick={() => void doImport()} disabled={!siteConfigured}>
+            <button type="button" onClick={() => void doExport()}>
+              Export JSON
+            </button>
+            <button type="button" onClick={() => void doImport()}>
               Import JSON
             </button>
             <label className="secondary-btn file-upload-btn">
-              Upload JSON file
+              Upload JSON
               <input
                 type="file"
                 accept=".json,application/json,text/plain"
@@ -253,39 +164,33 @@ export default function DataModelPage() {
               />
             </label>
           </div>
-          <p className="muted">Paste JSON or upload an LLM-generated import_ready payload.</p>
-        </div>
-      )}
+          <textarea
+            className="model-editor"
+            value={importJsonText || exportJsonText}
+            onChange={(e) => {
+              if (importJsonText) setImportJsonText(e.target.value);
+              else setExportJsonText(e.target.value);
+            }}
+            placeholder="Export to load JSON, or paste import payload here."
+          />
+        </>
+      ) : null}
 
-      <textarea
-        className="model-editor"
-        value={activeTab === "import" ? importJsonText : exportJsonText}
-        onChange={(e) => {
-          if (activeTab === "import") setImportJsonText(e.target.value);
-          else setExportJsonText(e.target.value);
-        }}
-        placeholder={
-          activeTab === "import"
-            ? "Paste import JSON here (sites / equipment / points)."
-            : "Click Export JSON to load the current model."
-        }
-      />
+      {activeTab === "advanced" ? (
+        <>
+          <div className="row">
+            <button type="button" className="secondary-btn" onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}>
+              {copiedKey === "prompt" ? "Copied Prompt" : "Copy LLM Prompt"}
+            </button>
+            <button type="button" onClick={() => void doViewTtl()}>
+              {ttlLoading ? "Loading TTL…" : "View BRICK TTL"}
+            </button>
+          </div>
+          <textarea readOnly className="ttl-editor" value={ttlText} placeholder="TTL appears after View BRICK TTL." />
+        </>
+      ) : null}
+
       <textarea readOnly className="status-line" value={out} />
-      <div className="row">
-        <button type="button" className="secondary-btn" onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}>
-          {copiedKey === "prompt" ? "Copied Prompt" : "Copy LLM Prompt"}
-        </button>
-        <button type="button" onClick={() => void doViewTtl()} disabled={!siteConfigured}>
-          {ttlLoading ? "Loading TTL…" : "View BRICK TTL"}
-        </button>
-      </div>
-      <textarea readOnly className="ttl-editor prompt-preview" value={DATA_MODEL_REDESIGN_PROMPT} />
-      <textarea
-        readOnly
-        className="ttl-editor"
-        value={ttlText}
-        placeholder="TTL content appears here after View BRICK TTL."
-      />
     </div>
   );
 }

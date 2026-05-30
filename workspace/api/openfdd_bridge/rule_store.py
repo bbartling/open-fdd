@@ -19,11 +19,22 @@ from typing import Any
 from uuid import uuid4
 
 from .paths import data_dir
+from .rule_source import read_source, write_source
 
 _LOCK = threading.RLock()
 
 VALID_MODES = frozenset({"rule", "script"})
 VALID_SEVERITIES = frozenset({"info", "warning", "critical"})
+
+
+def _normalize_bindings(raw: Any) -> dict[str, list[str]]:
+    if not isinstance(raw, dict):
+        return {"point_ids": [], "equipment_ids": [], "brick_types": []}
+    return {
+        "point_ids": [str(x) for x in raw.get("point_ids", []) if str(x).strip()],
+        "equipment_ids": [str(x) for x in raw.get("equipment_ids", []) if str(x).strip()],
+        "brick_types": [str(x) for x in raw.get("brick_types", []) if str(x).strip()],
+    }
 
 
 def rules_store_path() -> Path:
@@ -58,6 +69,12 @@ class RuleStore:
     def get(self, rule_id: str) -> dict[str, Any] | None:
         for rule in self.list_rules():
             if str(rule.get("id")) == str(rule_id):
+                path = str(rule.get("source_path") or "")
+                if path:
+                    disk = read_source(path)
+                    if disk.strip():
+                        rule = dict(rule)
+                        rule["code"] = disk
                 return rule
         return None
 
@@ -79,6 +96,13 @@ class RuleStore:
 
     def upsert(self, entry: dict[str, Any], *, saved_by: str = "operator") -> dict[str, Any]:
         normalized = normalize_rule(entry, saved_by=saved_by)
+        source_path = write_source(
+            rule_id=normalized["id"],
+            name=normalized["name"],
+            code=normalized["code"],
+            existing_path=normalized.get("source_path") or None,
+        )
+        normalized["source_path"] = source_path
         with _LOCK:
             doc = self.load()
             rules = [r for r in doc.get("rules", []) if isinstance(r, dict)]
@@ -140,6 +164,8 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
             "brick_type": str(applies_to.get("brick_type") or "").strip(),
             "site_ids": [str(s) for s in applies_to.get("site_ids", []) if str(s).strip()],
         },
+        "bindings": _normalize_bindings(entry.get("bindings")),
+        "source_path": str(entry.get("source_path") or "").strip(),
         "severity": severity,
         "enabled": bool(entry.get("enabled", True)),
         "saved_by": saved_by,

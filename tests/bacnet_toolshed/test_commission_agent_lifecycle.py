@@ -29,13 +29,16 @@ def commission_module(monkeypatch: pytest.MonkeyPatch):
 def test_whois_then_point_discovery_reuses_live_app(commission_module, monkeypatch: pytest.MonkeyPatch):
     agent = commission_module
     calls: list[str] = []
+    apps_seen: list[object] = []
 
     async def fake_whois(app, low, high):
         calls.append("whois")
+        apps_seen.append(app)
         return [{"device_instance": 5007}]
 
     async def fake_pd(app, instance_id, device_address=None):
         calls.append(f"pd:{instance_id}:{device_address}")
+        apps_seen.append(app)
         return {"device_instance": instance_id, "device_address": device_address or "x", "objects": [{"object_identifier": "ai,1", "name": "t"}]}
 
     monkeypatch.setattr(agent, "_cfg", lambda: {"BACNET_BIND": "192.168.1.1/24:47808"})
@@ -48,6 +51,7 @@ def test_whois_then_point_discovery_reuses_live_app(commission_module, monkeypat
     who = agent._sync_who_is(1, 4194303)
     assert who["count"] == 1
     assert calls == ["whois"]
+    assert apps_seen == [mock_app]
 
     async def _run_pd(app):
         return await fake_pd(app, 5007, device_address="2000:7")
@@ -55,3 +59,4 @@ def test_whois_then_point_discovery_reuses_live_app(commission_module, monkeypat
     result = agent._run_bacnet_sync(_run_pd)
     assert len(result["objects"]) == 1
     assert calls == ["whois", "pd:5007:2000:7"]
+    assert apps_seen == [mock_app, mock_app]

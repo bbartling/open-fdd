@@ -9,7 +9,9 @@ import FaultsPage from "./pages/FaultsPage";
 import HomePage from "./pages/HomePage";
 import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
+import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
+import { TabErrorBoundary } from "./components/TabDebugPanel";
 
 export default function App() {
   return (
@@ -21,11 +23,12 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="faults" element={<FaultsPage />} />
           <Route element={<RequireAuth />}>
-            <Route path="data-model" element={<DataModelPage />} />
-            <Route path="rule-lab" element={<RuleLabPage />} />
-            <Route path="bacnet" element={<BacnetPage />} />
-            <Route path="agent" element={<AgentPage />} />
-            <Route path="host" element={<HostStatsPage />} />
+            <Route path="data-model" element={<TabErrorBoundary tab="data-model"><DataModelPage /></TabErrorBoundary>} />
+            <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
+            <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
+            <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
+            <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
+            <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
             <Route path="fdd" element={<Navigate to="/rule-lab" replace />} />
           </Route>
         </Route>

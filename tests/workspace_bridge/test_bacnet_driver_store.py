@@ -124,3 +124,37 @@ def test_delete_point_and_device(driver_tmp):
     assert store.driver_tree()["devices"] == []
     with discovered.open(newline="", encoding="utf-8") as fh:
         assert list(csv.DictReader(fh)) == []
+
+
+def test_clear_registry_syncs_model(driver_tmp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    store, discovered, points = driver_tmp
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    (data / "model.json").write_text(
+        '{"sites":[{"id":"test-site","name":"Test"}],"equipment":[],"points":[]}',
+        encoding="utf-8",
+    )
+    store.sync_discovery(
+        device_instance=5007,
+        device_address="192.168.1.10",
+        objects=[
+            {"object_identifier": "analog-input,1", "name": "SAT"},
+            {"object_identifier": "analog-input,2", "name": "RAT"},
+        ],
+    )
+    pid = store.driver_tree()["devices"][0]["points"][0]["point_id"]
+    store.set_point_poll(point_id=pid, enabled=True, poll_interval_s=60)
+    from openfdd_bridge.bacnet_poll_model_sync import sync_enabled_polling_to_model  # noqa: E402
+
+    sync_enabled_polling_to_model(sync_ttl=False)
+    res = store.clear_registry(sync_model=True, sync_ttl=False)
+    assert res["ok"] is True
+    assert store.driver_tree()["devices"] == []
+    with discovered.open(newline="", encoding="utf-8") as fh:
+        assert list(csv.DictReader(fh)) == []
+    with points.open(newline="", encoding="utf-8") as fh:
+        assert list(csv.DictReader(fh)) == []
+    model = __import__("json").loads((data / "model.json").read_text(encoding="utf-8"))
+    assert model["equipment"] == []
+    assert model["points"] == []
+    assert len(model["sites"]) == 1

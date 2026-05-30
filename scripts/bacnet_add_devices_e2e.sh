@@ -23,11 +23,16 @@ wait_job() {
 }
 
 python3 - <<'PY' "$WHO" "$BASE"
-import json, subprocess, sys, time, urllib.request
+import json, sys, time, urllib.error, urllib.request
 
 who = json.loads(sys.argv[1])
 base = sys.argv[2]
 devices = who.get("devices") or []
+if not devices:
+    print("No devices found from Who-Is", file=sys.stderr)
+    sys.exit(1)
+
+failed = False
 for row in devices:
     ident = row.get("i-am-device-identifier") or ""
     inst = None
@@ -46,18 +51,36 @@ for row in devices:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        job = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            job = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        print(f"point-discovery failed for {inst}: HTTP {exc.code}", file=sys.stderr)
+        failed = True
+        continue
     jid = job["job_id"]
     print(f"Add device {inst} @ {addr} job={jid}")
+    status = "running"
     for _ in range(30):
         time.sleep(1)
         with urllib.request.urlopen(f"{base}/api/jobs/{jid}", timeout=10) as resp:
             meta = json.loads(resp.read())
-        if meta.get("status") != "running":
+        status = meta.get("status") or ""
+        if status != "running":
             n = len((meta.get("result") or {}).get("objects") or [])
-            print(f"  -> {meta.get('status')} {n} points", meta.get("error") or "")
+            print(f"  -> {status} {n} points", meta.get("error") or "")
             break
+    else:
+        print(f"Job {jid} timed out still running", file=sys.stderr)
+        failed = True
+        continue
+    if status != "success":
+        err = meta.get("error") or status
+        print(f"Job {jid} failed: {err}", file=sys.stderr)
+        failed = True
+
+if failed:
+    sys.exit(1)
 PY
 
 echo "OK"

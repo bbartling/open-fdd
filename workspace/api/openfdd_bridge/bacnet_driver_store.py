@@ -29,19 +29,28 @@ def _points_path() -> Path:
 def _commission_defaults() -> dict[str, str]:
     env_path = workspace_dir() / "bacnet" / "commissioning" / "commission.env"
     out: dict[str, str] = {"site_id": "site", "building_id": "building"}
-    if not env_path.is_file():
-        return out
-    for raw in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, val = line.split("=", 1)
-        key = key.strip().lower()
-        val = val.strip().strip('"').strip("'")
-        if key == "site_id":
-            out["site_id"] = val
-        elif key == "building_id":
-            out["building_id"] = val
+    if env_path.is_file():
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip().lower()
+            val = val.strip().strip('"').strip("'")
+            if key == "site_id":
+                out["site_id"] = val
+            elif key == "building_id":
+                out["building_id"] = val
+    try:
+        from .model_service import ModelService
+        from .site_defaults import ensure_default_site
+        from .ttl_service import TtlService
+
+        sid = ensure_default_site(ModelService(), TtlService())
+        if out["site_id"] in {"", "site", "demo"}:
+            out["site_id"] = sid
+    except Exception:
+        pass
     return out
 
 
@@ -281,12 +290,22 @@ def set_point_poll(*, point_id: str, enabled: bool, poll_interval_s: int = 60) -
     with _DRIVER_LOCK:
         _apply_point_poll_row(point_id=point_id, enabled=enabled, poll_interval_s=poll_interval_s)
     model_sync = _sync_poll_model(enabled)
+    poll_trigger: dict[str, Any] | None = None
+    if enabled:
+        try:
+            from .commission_client import commission_poll_once
+
+            code, payload = commission_poll_once()
+            poll_trigger = {"status_code": code, **(payload if isinstance(payload, dict) else {"detail": payload})}
+        except Exception as exc:
+            poll_trigger = {"ok": False, "error": str(exc)}
     return {
         "ok": True,
         "point_id": point_id,
         "enabled": enabled,
         "poll_interval_s": poll_interval_s if enabled else 0,
         "model_sync": model_sync,
+        "poll_trigger": poll_trigger,
     }
 
 
@@ -301,12 +320,22 @@ def set_device_poll(*, device_instance: int, enabled: bool, poll_interval_s: int
             _apply_point_poll_row(point_id=pt["point_id"], enabled=enabled, poll_interval_s=poll_interval_s)
             count += 1
     model_sync = _sync_poll_model(enabled)
+    poll_trigger: dict[str, Any] | None = None
+    if enabled:
+        try:
+            from .commission_client import commission_poll_once
+
+            code, payload = commission_poll_once()
+            poll_trigger = {"status_code": code, **(payload if isinstance(payload, dict) else {"detail": payload})}
+        except Exception as exc:
+            poll_trigger = {"ok": False, "error": str(exc)}
     return {
         "ok": True,
         "device_instance": device_instance,
         "points_updated": count,
         "enabled": enabled,
         "model_sync": model_sync,
+        "poll_trigger": poll_trigger,
     }
 
 
@@ -324,7 +353,56 @@ def delete_device(*, device_instance: int) -> dict[str, Any]:
         for path in (_discovered_path(), _points_path()):
             rows = [r for r in _load_csv(path) if str(r.get("device_instance") or "") != inst]
             _save_csv(path, rows)
-    return {"ok": True, "device_instance": device_instance}
+    try:
+        from .bacnet_poll_model_sync import remove_device_from_model
+
+        model_sync = remove_device_from_model(device_instance=device_instance, sync_ttl=True)
+    except Exception as exc:
+        model_sync = {"ok": False, "error": str(exc)}
+    return {"ok": True, "device_instance": device_instance, "model_sync": model_sync}
+
+
+def _clear_poll_samples() -> None:
+    from .paths import bacnet_poll_csv
+
+    path = bacnet_poll_csv()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = [
+        "timestamp_utc",
+        "site_id",
+        "building_id",
+        "system_id",
+        "point_id",
+        "series_id",
+        "device_instance",
+        "object_type",
+        "object_instance",
+        "value",
+        "units",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+
+
+def clear_registry(*, sync_model: bool = True, sync_ttl: bool = True) -> dict[str, Any]:
+    """Wipe BACnet driver CSV registries and remove BACnet rows from the data model."""
+    with _DRIVER_LOCK:
+        _save_csv(_discovered_path(), [])
+        _save_csv(_points_path(), [])
+        _clear_poll_samples()
+    model_result: dict[str, Any] | None = None
+    if sync_model:
+        from .bacnet_poll_model_sync import clear_bacnet_from_model
+
+        model_result = clear_bacnet_from_model(sync_ttl=sync_ttl)
+    return {
+        "ok": True,
+        "discovered_csv": str(_discovered_path()),
+        "points_csv": str(_points_path()),
+        "devices_cleared": True,
+        "model": model_result,
+    }
 
 
 def remap_device(

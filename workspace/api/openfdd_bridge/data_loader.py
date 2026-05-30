@@ -81,3 +81,44 @@ def rows_for_evaluate(df: pd.DataFrame, limit: int = 500) -> list[dict[str, Any]
         item["temp"] = temp
         rows.append(item)
     return rows
+
+
+def enrich_rows_with_column_map(rows: list[dict[str, Any]], column_map: dict[str, str]) -> list[dict[str, Any]]:
+    """Add BRICK/fdd_input keys onto each row using external_id column values."""
+    if not column_map:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        for rule_key, col_name in column_map.items():
+            if not rule_key or not col_name:
+                continue
+            if col_name in item and rule_key not in item:
+                item[rule_key] = item[col_name]
+        out.append(item)
+    return out
+
+
+def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]:
+    from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+
+    base = build_column_map_from_model_points(model, site_id)
+    extra = rule.get("column_map") if isinstance(rule.get("column_map"), dict) else {}
+    base.update({str(k): str(v) for k, v in extra.items() if k and v})
+    bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
+    point_ids = {str(x) for x in bindings.get("point_ids") or [] if str(x).strip()}
+    if not point_ids:
+        return base
+    scoped: dict[str, str] = {}
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict) or str(pt.get("id") or "") not in point_ids:
+            continue
+        if str(pt.get("site_id") or "") != str(site_id):
+            continue
+        ext = str(pt.get("external_id") or "").strip()
+        if not ext:
+            continue
+        for key in (str(pt.get("fdd_input") or "").strip(), str(pt.get("brick_type") or "").strip()):
+            if key:
+                scoped[key] = ext
+    return scoped or base

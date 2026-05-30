@@ -49,21 +49,28 @@ export default function LoginPage() {
           {authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}
         </p>
         {hint ? <p className="muted">{hint}</p> : null}
-        <div className="row">
-          <label>
+        <div className="field">
+          <label className="field-label" htmlFor="login-username">
             Username
-            <input value={username} onChange={(e) => setUsername(e.target.value)} />
           </label>
+          <input
+            id="login-username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+          />
         </div>
-        <div className="row">
-          <label>
+        <div className="field">
+          <label className="field-label" htmlFor="login-password">
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
           </label>
+          <input
+            id="login-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
         </div>
         {error ? <p className="error">{error}</p> : null}
         <button type="submit">Sign in</button>

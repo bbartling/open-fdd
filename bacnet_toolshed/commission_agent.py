@@ -40,8 +40,15 @@ from bacnet_toolshed.server_points import (
     update_openfdd_server_points,
 )
 from bacnet_toolshed.stack_args import bacnet_argv_from_cfg
-from bacnet_toolshed.nic_bind import resolve_commission_cfg
+from bacnet_toolshed.bacnet_poll_loop import (
+    enabled_point_count,
+    last_poll_status,
+    poll_interval_s,
+    run_poll_cycle,
+    start_poll_loop,
+)
 
+from bacnet_toolshed.nic_bind import resolve_commission_cfg
 from bacnet_toolshed.paths import (
     commissioning_dir,
     default_points_discovered,
@@ -59,6 +66,7 @@ _bacnet_app: Application | None = None
 _bacnet_app_cfg_key: tuple[tuple[str, str], ...] | None = None
 _bacnet_app_lock = threading.Lock()
 _bacnet_op_lock = threading.Lock()
+_bacnet_async_lock: asyncio.Lock | None = None
 _bacnet_loop: asyncio.AbstractEventLoop | None = None
 _bacnet_loop_ready = threading.Event()
 
@@ -248,10 +256,11 @@ def _bacnet_app_from_cfg(cfg: dict[str, str]) -> Application:
 
 
 def _bacnet_loop_thread_main() -> None:
-    global _bacnet_loop
+    global _bacnet_loop, _bacnet_async_lock
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     _bacnet_loop = loop
+    _bacnet_async_lock = asyncio.Lock()
     _bacnet_loop_ready.set()
     loop.run_forever()
 
@@ -281,6 +290,10 @@ def _run_bacnet_sync(coro_factory, timeout: float = 180.0) -> Any:
         with _bacnet_op_lock:
             cfg = _cfg()
             app = _bacnet_app_from_cfg(cfg)
+        lock = _bacnet_async_lock
+        if lock is None:
+            raise RuntimeError("BACnet async lock missing")
+        async with lock:
             return await coro_factory(app)
 
     future = asyncio.run_coroutine_threadsafe(_inner(), loop)
@@ -535,6 +548,18 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                 {"ok": True, "points": server_points_snapshot()},
             )
 
+        if path == "/api/bacnet/poll/status":
+            return _json_response(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "enabled_points": enabled_point_count(),
+                    "interval_s": poll_interval_s(),
+                    **last_poll_status(),
+                },
+            )
+
         if path == "/api/jobs":
             return _json_response(self, 200, {"jobs": _list_jobs(30)})
 
@@ -564,8 +589,12 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
             inst = body.get("device_instance")
             if inst is None:
                 return _json_response(self, 400, {"error": "device_instance required"})
+            try:
+                device_instance = int(inst)
+            except (TypeError, ValueError):
+                return _json_response(self, 400, {"error": "invalid device_instance"})
             addr = str(body.get("device_address") or "").strip()
-            started = _start_point_discovery(int(inst), device_address=addr)
+            started = _start_point_discovery(device_instance, device_address=addr)
             return _json_response(self, 202, started)
 
         if path == "/api/jobs/supervisory-check":
@@ -574,6 +603,10 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                 return _json_response(self, 400, {"error": "device_instance required"})
             started = _start_supervisory_check(int(inst))
             return _json_response(self, 202, started)
+
+        if path == "/api/bacnet/poll/once":
+            result = run_poll_cycle(_run_bacnet_sync)
+            return _json_response(self, 200, {"ok": bool(result.get("ok")), **result})
 
         if path == "/api/bacnet/whois":
             low = int(body.get("range_low", _cfg().get("DISCOVER_LOW", 1)))
@@ -636,6 +669,11 @@ def main() -> int:
     print(
         f"BACnet stack: name={cfg.get('BACNET_NAME')} instance={cfg.get('BACNET_INSTANCE')} "
         f"bind={cfg.get('BACNET_BIND')}",
+        flush=True,
+    )
+    start_poll_loop(_run_bacnet_sync)
+    print(
+        f"BACnet poll loop started (enabled points={enabled_point_count()}, interval={poll_interval_s()}s)",
         flush=True,
     )
     try:

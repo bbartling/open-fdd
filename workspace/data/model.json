@@ -2,7 +2,7 @@
   "sites": [
     {
       "id": "s1",
-      "name": "Demo Site"
+      "name": "BensOffice"
     }
   ],
   "equipment": [
@@ -11,6 +11,13 @@
       "site_id": "s1",
       "name": "AHU-1",
       "equipment_type": "Air_Handling_Unit"
+    },
+    {
+      "id": "bacnet-5007",
+      "site_id": "s1",
+      "name": "BACnet device 5007",
+      "equipment_type": "BACnet_Device",
+      "bacnet_device_id": 5007
     }
   ],
   "points": [
@@ -21,6 +28,86 @@
       "external_id": "SAT",
       "brick_type": "Supply_Air_Temperature_Sensor",
       "fdd_input": "SAT"
+    },
+    {
+      "id": "5007-analog-input-1168",
+      "site_id": "s1",
+      "equipment_id": "bacnet-5007",
+      "external_id": "oa-h",
+      "brick_type": "",
+      "fdd_input": "oa-h",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-input,1168",
+      "object_type": "analog-input",
+      "object_instance": "1168",
+      "description": "OA-H",
+      "metadata": {
+        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1168",
+        "series_id": "demo#local#bacnet#5007-analog-input-1168",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1168"
+      }
+    },
+    {
+      "id": "5007-analog-input-1173",
+      "site_id": "s1",
+      "equipment_id": "bacnet-5007",
+      "external_id": "oa-t",
+      "brick_type": "",
+      "fdd_input": "oa-t",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-input,1173",
+      "object_type": "analog-input",
+      "object_instance": "1173",
+      "description": "OA-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1173",
+        "series_id": "demo#local#bacnet#5007-analog-input-1173",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1173"
+      }
+    },
+    {
+      "id": "5007-analog-input-1192",
+      "site_id": "s1",
+      "equipment_id": "bacnet-5007",
+      "external_id": "duct-t",
+      "brick_type": "",
+      "fdd_input": "duct-t",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-input,1192",
+      "object_type": "analog-input",
+      "object_instance": "1192",
+      "description": "DUCT-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1192",
+        "series_id": "demo#local#bacnet#5007-analog-input-1192",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1192"
+      }
+    },
+    {
+      "id": "5007-analog-input-10014",
+      "site_id": "s1",
+      "equipment_id": "bacnet-5007",
+      "external_id": "stat_zn-t",
+      "brick_type": "",
+      "fdd_input": "stat_zn-t",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-input,10014",
+      "object_type": "analog-input",
+      "object_instance": "10014",
+      "description": "STAT ZN-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-10014",
+        "series_id": "demo#local#bacnet#5007-analog-input-10014",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-10014"
+      }
     }
   ]
 }

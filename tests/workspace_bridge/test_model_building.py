@@ -65,21 +65,22 @@ def test_model_import_requires_site(client: TestClient):
     assert r.status_code == 400
 
 
-def test_model_health_and_building_status(client: TestClient):
+def test_model_health_and_building_status(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OPENFDD_DEFAULT_SITE_ID", "test-site")
     r = client.get("/api/model/health")
     assert r.status_code == 200
     health = r.json()
-    assert health["configured"] is False
+    assert health["configured"] is True
     assert health["status"] == "ok"
-    assert health["score"] is None
+    assert health["score"] == 100
 
     r2 = client.get("/api/building/status")
     assert r2.status_code == 200
     status = r2.json()
     assert status["check_engine"] is False
-    assert status["model_configured"] is False
+    assert status["model_configured"] is True
     assert status["alert_count"] == 0
-    assert status["model_score"] is None
+    assert status["model_score"] == 100
 
 
 def test_stack_health_not_mixed_into_faults(client: TestClient, monkeypatch: pytest.MonkeyPatch):

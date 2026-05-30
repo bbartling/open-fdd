@@ -56,7 +56,7 @@ async def _run(args: argparse.Namespace) -> int:
     parser = SimpleArgumentParser()
     app = Application.from_args(parser.parse_args(argv))
     try:
-        i_ams = await app.who_is(low, high)
+        i_ams = await asyncio.wait_for(app.who_is(low, high), timeout=args.timeout)
         if not i_ams:
             print("No I-Am responses (check bind IP, firewall UDP/47808, and device range).", flush=True)
             return 1
@@ -75,6 +75,9 @@ def main() -> int:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:
         return 130
+    except asyncio.TimeoutError:
+        print(f"Timed out after {args.timeout}s waiting for I-Am responses.", flush=True)
+        return 1
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
+import PageHeader from "../components/PageHeader";
 
 type Code = {
   code: string;
@@ -30,14 +31,18 @@ export default function FaultsPage() {
   }, []);
 
   return (
-    <div>
-      <h2 className="title">Building fault catalog</h2>
-      <p className="muted">
-        The fixed "check-engine" codes for this building — like a car's OBD-II list. FDD focuses on
-        performance degradation, simultaneous heating &amp; cooling, sensor faults, and HVAC I/O
-        faults. This is <strong>not</strong> classic BAS nuisance alarming/dial-out. The local AI
-        agent must reuse these codes; it cannot invent new ones.
-      </p>
+    <div className="page page-wide">
+      <PageHeader
+        title="Building fault catalog"
+        subtitle={
+          <>
+            The fixed &quot;check-engine&quot; codes for this building — like a car&apos;s OBD-II list. FDD focuses on
+            performance degradation, simultaneous heating &amp; cooling, sensor faults, and HVAC I/O faults. This is{" "}
+            <strong>not</strong> classic BAS nuisance alarming/dial-out. The local AI agent must reuse these codes; it
+            cannot invent new ones.
+          </>
+        }
+      />
 
       {error ? <p className="muted">Could not load catalog: {error}</p> : null}
       {!tree && !error ? (
@@ -45,7 +50,7 @@ export default function FaultsPage() {
       ) : tree ? (
         tree.families.map((fam) => (
           <div key={fam.family} className="panel">
-            <h3>
+            <h3 className="panel-title">
               {fam.label} <span className="badge">{fam.family}</span>
             </h3>
             <p className="muted">{fam.description}</p>

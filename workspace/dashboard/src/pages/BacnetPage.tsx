@@ -3,7 +3,9 @@ import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice } from "../components/BacnetPointsTree";
+import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
+import { TabDebugPanel } from "../components/TabDebugPanel";
 import {
   extractPointDiscoveryObjects,
   extractWhoisDevices,
@@ -63,13 +65,16 @@ export default function BacnetPage() {
   const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [driverDevices, setDriverDevices] = useState<DriverDevice[]>([]);
+  const [pollStatus, setPollStatus] = useState<{ enabled_points?: number; samples?: number; at?: string; error?: string } | null>(null);
   const [activeJobLabel, setActiveJobLabel] = useState("");
 
   const loadDriverTree = useCallback(async () => {
-    const res = await apiFetch<{ devices: DriverDevice[] }>("/api/bacnet/driver/tree").catch(() => ({
-      devices: [],
-    }));
-    setDriverDevices(res.devices ?? []);
+    try {
+      const res = await apiFetch<{ devices: DriverDevice[] }>("/api/bacnet/driver/tree");
+      setDriverDevices(res.devices ?? []);
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -91,6 +96,18 @@ export default function BacnetPage() {
   useEffect(() => {
     refresh().catch((e) => setLoadError(String(e)));
   }, [refresh]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      void loadDriverTree();
+      apiFetch<{ enabled_points?: number; samples?: number; at?: string; error?: string }>(
+        "/api/bacnet/poll/status",
+      )
+        .then(setPollStatus)
+        .catch(() => undefined);
+    }, 20000);
+    return () => window.clearInterval(tick);
+  }, [loadDriverTree]);
 
   function toggleInstance(instance: number, checked: boolean) {
     setSelectedInstances((prev) => {
@@ -314,6 +331,33 @@ export default function BacnetPage() {
     }
   }
 
+  async function clearRegistry() {
+    if (
+      !window.confirm(
+        "Clear ALL BACnet devices? This removes driver CSVs, poll samples, and BACnet rows from the data model. Sites and manually modeled equipment are kept.",
+      )
+    ) {
+      return;
+    }
+    setActionError("");
+    setStatusMsg("");
+    try {
+      const res = await apiFetch<{
+        model?: { points_removed?: number; equipment_removed?: number };
+      }>("/api/bacnet/driver/registry", { method: "DELETE" });
+      await loadDriverTree();
+      const m = res.model;
+      setStatusMsg(
+        m
+          ? `Registry cleared — removed ${m.equipment_removed ?? 0} device(s) and ${m.points_removed ?? 0} point(s) from the data model.`
+          : "BACnet registry cleared.",
+      );
+      setLog("BACnet driver registry cleared (CSV + data model synced).");
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  }
+
   async function remapDevice(device: DriverDevice) {
     const newInstRaw = window.prompt(
       "Device instance (BACnet device ID)",
@@ -370,11 +414,37 @@ export default function BacnetPage() {
   const inTree = new Set(driverDevices.map((d) => d.device_instance));
 
   return (
-    <div className="bacnet-page">
-      <h2 className="title">BACnet commissioning</h2>
-      <p className="muted">
-        Scan the network, add devices, then right-click in the tree to set poll rates (1 / 5 / 10 / 15 min).
-      </p>
+    <div className="page page-wide bacnet-page">
+      <PageHeader
+        title="BACnet commissioning"
+        subtitle="Scan the network, add devices, then right-click in the tree to set poll rates (1 / 5 / 10 / 15 min)."
+      />
+      <TabDebugPanel tab="bacnet" />
+
+      {pollStatus ? (
+        <div className="panel">
+          <div className="status-bar">
+            <div className="status-kv">
+              <span className="status-kv-label">Poll driver</span>
+              <span className="status-kv-value">{pollStatus.enabled_points ?? 0} enabled point(s)</span>
+            </div>
+            {pollStatus.at ? (
+              <div className="status-kv">
+                <span className="status-kv-label">Last sample</span>
+                <span className="status-kv-value">
+                  {pollStatus.at} ({pollStatus.samples ?? 0} values)
+                </span>
+              </div>
+            ) : null}
+            {pollStatus.error ? (
+              <div className="status-kv">
+                <span className="status-kv-label">Error</span>
+                <span className="status-kv-value error">{pollStatus.error}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {anyPending ? (
         <div className="bacnet-active-banner" role="status">
@@ -385,29 +455,29 @@ export default function BacnetPage() {
       {statusMsg ? <p className="ok bacnet-model-msg">{statusMsg}</p> : null}
 
       <div className="panel">
-        <h3>Agent</h3>
+        <h3 className="panel-title">Agent</h3>
         {loadError ? <p className="error">{loadError}</p> : null}
         {cfg ? (
           <div className="host-info-grid">
             <div>
-              <span className="muted">Commission agent</span>
+              <span className="status-kv-label">Commission agent</span>
               <div className={agentOk ? "ok" : "error"}>{agentOk ? "running" : "down"}</div>
             </div>
             <div>
-              <span className="muted">BACnet bind</span>
+              <span className="status-kv-label">BACnet bind</span>
               <div>
                 <code>{status?.bacnet_bind ?? "—"}</code>
               </div>
             </div>
             <div>
-              <span className="muted">Devices in driver</span>
+              <span className="status-kv-label">Devices in driver</span>
               <div>{driverDevices.length}</div>
             </div>
           </div>
         ) : (
           <Spinner label="Loading agent…" />
         )}
-        <div className="row">
+        <div className="toolbar">
           <button type="button" className="secondary-btn" onClick={() => refresh().catch((e) => setLoadError(String(e)))}>
             Refresh
           </button>
@@ -415,36 +485,52 @@ export default function BacnetPage() {
       </div>
 
       <div className="panel">
-        <h3>Network scan</h3>
+        <h3 className="panel-title">Network scan</h3>
         <div className="form-row">
-          <label>
-            Who-Is start
-            <input type="number" value={whoisLow} onChange={(e) => setWhoisLow(Number(e.target.value))} />
-          </label>
-          <label>
-            end
-            <input type="number" value={whoisHigh} onChange={(e) => setWhoisHigh(Number(e.target.value))} />
-          </label>
-          <ActionButton pending={whoisPending} pendingLabel="Scanning…" disabled={!agentOk || anyPending} onClick={runWhoIs}>
-            Who-Is
-          </ActionButton>
-          <ActionButton
-            pending={batchPending}
-            pendingLabel={`Adding ${selectedList.length}…`}
-            disabled={!agentOk || anyPending || selectedList.length === 0}
-            onClick={() => runBatchAddDevices()}
-          >
-            Add devices ({selectedList.length} selected)
-          </ActionButton>
-          <ActionButton
-            secondary
-            pending={batchPending}
-            pendingLabel="Adding all…"
-            disabled={!agentOk || anyPending || whoisDevices.length === 0}
-            onClick={selectAllAndAddDevices}
-          >
-            Select all & add all
-          </ActionButton>
+          <div className="field">
+            <label className="field-label" htmlFor="whois-low">
+              Who-Is start
+            </label>
+            <input
+              id="whois-low"
+              type="number"
+              value={whoisLow}
+              onChange={(e) => setWhoisLow(Number(e.target.value))}
+            />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="whois-high">
+              Who-Is end
+            </label>
+            <input
+              id="whois-high"
+              type="number"
+              value={whoisHigh}
+              onChange={(e) => setWhoisHigh(Number(e.target.value))}
+            />
+          </div>
+          <div className="form-row-actions">
+            <ActionButton pending={whoisPending} pendingLabel="Scanning…" disabled={!agentOk || anyPending} onClick={runWhoIs}>
+              Who-Is
+            </ActionButton>
+            <ActionButton
+              pending={batchPending}
+              pendingLabel={`Adding ${selectedList.length}…`}
+              disabled={!agentOk || anyPending || selectedList.length === 0}
+              onClick={() => runBatchAddDevices()}
+            >
+              Add devices ({selectedList.length} selected)
+            </ActionButton>
+            <ActionButton
+              secondary
+              pending={batchPending}
+              pendingLabel="Adding all…"
+              disabled={!agentOk || anyPending || whoisDevices.length === 0}
+              onClick={selectAllAndAddDevices}
+            >
+              Select all & add all
+            </ActionButton>
+          </div>
         </div>
 
         {whoisDevices.length > 0 ? (
@@ -528,10 +614,20 @@ export default function BacnetPage() {
       </div>
 
       <div className="panel">
-        <h3>Devices &amp; points</h3>
-        <p className="muted">
-          Right-click to poll, remap, refresh, or remove. Last present value shows when polling is enabled.
-        </p>
+        <h3 className="panel-title">Devices &amp; points</h3>
+        <div className="row row-spread">
+          <p className="muted" style={{ flex: 1, margin: 0 }}>
+            Right-click to poll, remap, refresh, or remove. Last present value shows when polling is enabled.
+          </p>
+          <button
+            type="button"
+            className="danger-btn"
+            disabled={anyPending || driverDevices.length === 0}
+            onClick={() => void clearRegistry()}
+          >
+            Clear all devices
+          </button>
+        </div>
         <BacnetPointsTree
           devices={driverDevices}
           onRefreshDevice={refreshDevicePoints}

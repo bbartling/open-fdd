@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import csv
 import re
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from bacnet_toolshed.models import (
@@ -18,6 +18,7 @@ from bacnet_toolshed.models import (
 )
 
 from ..bacnet_driver_store import (
+    clear_registry,
     delete_device,
     delete_point,
     driver_tree,
@@ -42,6 +43,8 @@ from ..commission_client import (
     whois as commission_whois,
 )
 from ..deps import require_roles
+from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
+from ..commission_client import commission_poll_once, commission_poll_status
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
@@ -70,13 +73,13 @@ class SyncDiscoveryBody(BaseModel):
 class PointPollBody(BaseModel):
     point_id: str
     enabled: bool = True
-    poll_interval_s: int = Field(default=60, ge=60, le=900)
+    poll_interval_s: Literal[60, 300, 600, 900] = 60
 
 
 class DevicePollBody(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
     enabled: bool = True
-    poll_interval_s: int = Field(default=60, ge=60, le=900)
+    poll_interval_s: Literal[60, 300, 600, 900] = 60
 
 
 class RemapDeviceBody(BaseModel):
@@ -256,6 +259,12 @@ def bacnet_delete_device(device_instance: int) -> dict:
     return delete_device(device_instance=device_instance)
 
 
+@router.delete("/api/bacnet/driver/registry", dependencies=[_COMMISSION])
+def bacnet_clear_registry() -> dict:
+    """Clear all BACnet devices from driver CSVs, poll samples, and data model."""
+    return clear_registry(sync_model=True, sync_ttl=True)
+
+
 @router.patch("/api/bacnet/driver/device/remap", dependencies=[_COMMISSION])
 def bacnet_remap_device(body: RemapDeviceBody) -> dict:
     if body.new_device_instance is None and not (body.new_device_address or "").strip():
@@ -362,25 +371,36 @@ def bacnet_job_status(job_id: str) -> dict:
     return payload  # type: ignore[return-value]
 
 
+@router.get("/api/bacnet/poll/status", dependencies=[_READ])
+def bacnet_poll_status() -> dict:
+    code, payload = commission_poll_status()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/poll/once", dependencies=[_COMMISSION])
+def bacnet_trigger_poll() -> dict:
+    code, payload = commission_poll_once()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    ingest = ingest_poll_samples_to_feather()
+    return {"poll": payload, "ingest": ingest}
+
+
+@router.post("/internal/bacnet/ingest-samples")
+def internal_ingest_poll_samples(request: Request) -> dict:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="localhost only")
+    return ingest_poll_samples_to_feather()
+
+
 @router.post("/ingest/bacnet", dependencies=[_READ])
-def ingest_bacnet(site_id: str = "default") -> dict:
-    site_id = _validate_site_id(site_id)
-    poll = bacnet_poll_csv()
-    if not poll.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail=f"poll CSV not found: {poll} — run bacnet_toolshed poll_driver first",
-        )
-    df = pd.read_csv(poll)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-    out_dir = data_dir() / "feather_store" / "bacnet" / site_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    feather_path = out_dir / "latest.feather"
-    df.to_feather(feather_path)
-    return {
-        "ok": True,
-        "site_id": site_id,
-        "rows": len(df),
-        "feather_path": str(feather_path),
-    }
+def ingest_bacnet(site_id: str | None = None) -> dict:
+    if site_id:
+        _validate_site_id(site_id)
+    result = ingest_poll_samples_to_feather()
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("reason", "ingest failed"))
+    return result

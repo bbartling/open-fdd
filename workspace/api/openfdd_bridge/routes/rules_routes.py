@@ -15,6 +15,7 @@ from ..fault_catalog import is_valid_code
 from ..fdd_runner import run_batch
 from ..paths import data_dir
 from ..rule_store import RuleStore
+from ..rule_source import read_source, write_source
 
 router = APIRouter(prefix="/api/rules", tags=["rules"], dependencies=[Depends(require_user)])
 
@@ -42,8 +43,20 @@ class SaveRuleBody(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     column_map: dict[str, str] = Field(default_factory=dict)
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
+    bindings: dict[str, list[str]] = Field(default_factory=dict)
     severity: str = "warning"
     enabled: bool = True
+
+
+class RuleSourceBody(BaseModel):
+    code: str
+
+
+class RuleBindingsBody(BaseModel):
+    rule_id: str
+    point_ids: list[str] = Field(default_factory=list)
+    equipment_ids: list[str] = Field(default_factory=list)
+    brick_types: list[str] = Field(default_factory=list)
 
 
 class BatchBody(BaseModel):
@@ -121,6 +134,61 @@ def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator
         entry = RuleStore().upsert(body.model_dump(), saved_by=saved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "rule": entry}
+
+
+@router.get("/saved/{rule_id}/source")
+def get_rule_source(rule_id: str, _user: dict = Depends(require_user)) -> dict:
+    rule = RuleStore().get(rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"rule not found: {rule_id}")
+    path = str(rule.get("source_path") or "")
+    code = read_source(path) if path else str(rule.get("code") or "")
+    return {"ok": True, "rule_id": rule_id, "path": path, "code": code}
+
+
+@router.put("/saved/{rule_id}/source")
+def put_rule_source(
+    rule_id: str,
+    body: RuleSourceBody,
+    user: dict = Depends(require_roles("integrator", "agent")),
+) -> dict:
+    store = RuleStore()
+    rule = store.get(rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"rule not found: {rule_id}")
+    if not body.code.strip():
+        raise HTTPException(status_code=400, detail="code is required")
+    path = write_source(
+        rule_id=rule_id,
+        name=str(rule.get("name") or rule_id),
+        code=body.code,
+        existing_path=str(rule.get("source_path") or "") or None,
+    )
+    entry = store.upsert({**rule, "code": body.code, "source_path": path}, saved_by=str(user.get("sub") or "operator"))
+    return {"ok": True, "path": path, "rule": entry}
+
+
+@router.post("/bindings")
+def update_rule_bindings(
+    body: RuleBindingsBody,
+    user: dict = Depends(require_roles("integrator", "agent", "operator")),
+) -> dict:
+    store = RuleStore()
+    rule = store.get(body.rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"rule not found: {body.rule_id}")
+    entry = store.upsert(
+        {
+            **rule,
+            "bindings": {
+                "point_ids": body.point_ids,
+                "equipment_ids": body.equipment_ids,
+                "brick_types": body.brick_types,
+            },
+        },
+        saved_by=str(user.get("sub") or "operator"),
+    )
     return {"ok": True, "rule": entry}
 
 

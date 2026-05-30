@@ -10,6 +10,7 @@ def test_bacnet_argv_from_cfg(monkeypatch):
             "BACNET_NAME": "OpenFddEdge",
             "BACNET_INSTANCE": "599999",
             "BACNET_BIND": "192.168.204.12/24",
+            "BACNET_VENDOR_ID": "1234",
         }
     )
     assert argv == [
@@ -19,6 +20,8 @@ def test_bacnet_argv_from_cfg(monkeypatch):
         "599999",
         "--address",
         "192.168.204.12/24:47808",
+        "--vendoridentifier",
+        "1234",
     ]
 
 
