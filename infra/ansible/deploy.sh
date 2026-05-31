@@ -36,12 +36,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Prefer SSH keys. For password auth use sshpass -e (reads SSHPASS env) — never -e ansible_ssh_pass on CLI.
-if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
-  export SSHPASS
-  exec sshpass -e "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
-elif [[ "$NO_ASK_PASS" == true ]]; then
-  exec "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
-else
-  exec "$APB" -i "$INV" deploy.yml --ask-pass --ask-become-pass "${EXTRA[@]}"
+run_playbook() {
+  if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
+    export SSHPASS
+    sshpass -e "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
+  elif [[ "$NO_ASK_PASS" == true ]]; then
+    "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
+  else
+    "$APB" -i "$INV" deploy.yml --ask-pass --ask-become-pass "${EXTRA[@]}"
+  fi
+}
+
+run_playbook
+
+CHECK_SCRIPT="${DIR}/scripts/post_deploy_check.sh"
+chmod +x "$CHECK_SCRIPT" 2>/dev/null || true
+if [[ "${RUN_POST_CHECK:-1}" != "0" && -x "$CHECK_SCRIPT" ]]; then
+  LIMIT_HOST=""
+  for ((i = 0; i < ${#EXTRA[@]}; i++)); do
+    if [[ "${EXTRA[i]}" == "--limit" && $((i + 1)) -lt ${#EXTRA[@]} ]]; then
+      LIMIT_HOST="${EXTRA[i + 1]}"
+      break
+    fi
+  done
+  if [[ -n "$LIMIT_HOST" ]]; then
+    echo ""
+    echo "Running post-deploy insurance check (--limit ${LIMIT_HOST})..."
+    "$CHECK_SCRIPT" --inventory "$INV" --limit "$LIMIT_HOST"
+  fi
 fi

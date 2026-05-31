@@ -40,6 +40,9 @@ commission_agent_token: ""
 # ofdd_web_user: operator
 # ofdd_web_password: ""
 
+# Copy workspace/auth.env.local from control machine when present (operator login on edge)
+deploy_sync_auth: true
+
 # Auto-ingest poll CSV into feather after each poll cycle (optional timer)
 enable_poll_ingest_timer: false
 
@@ -69,6 +72,8 @@ caddy_tls_cn: "openfdd.local"
 edge_backup_dir: "{{ playbook_dir }}/../../edge_backup/local"
 
 run_deploy_verify: true
+post_check_lan: true
+post_check_auth_login: true
 
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
 enable_ollama: false

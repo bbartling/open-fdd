@@ -84,6 +84,23 @@
         mode: "0644"
       notify: Restart Open-FDD bridge
 
+    - name: Stat workspace auth.env.local on control machine
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../workspace/auth.env.local"
+      delegate_to: localhost
+      become: false
+      register: control_auth_env
+
+    - name: Sync auth.env.local to edge (operator login)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/auth.env.local"
+        dest: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+        mode: "0600"
+      when:
+        - deploy_sync_auth | default(true) | bool
+        - control_auth_env.stat.exists | default(false)
+      notify: Restart Open-FDD bridge
+
     - name: Copy pyproject.toml and README
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../{{ item }}"
@@ -144,13 +161,23 @@
           - "{{ openfdd_remote_dir }}/.venv"
         creates: "{{ openfdd_remote_dir }}/.venv/bin/python"
 
+    - name: Select Open-FDD pip extras for target architecture
+      ansible.builtin.set_fact:
+        openfdd_pip_extras: "{{ 'engine' if ansible_architecture in ['armv7l', 'armv6l'] else 'dev,engine' }}"
+        openfdd_bridge_requirements: >-
+          {{ openfdd_remote_dir }}/workspace/api/{{
+            'requirements-edge-armv7.txt'
+            if ansible_architecture in ['armv7l', 'armv6l']
+            else 'requirements.txt'
+          }}
+
     - name: Install Open-FDD editable package
       ansible.builtin.command:
         argv:
           - "{{ openfdd_remote_dir }}/.venv/bin/pip"
           - install
           - "-e"
-          - "{{ openfdd_remote_dir }}[dev,engine]"
+          - "{{ openfdd_remote_dir }}[{{ openfdd_pip_extras }}]"
       changed_when: true
 
     - name: Install bridge and BACnet requirements
@@ -158,8 +185,9 @@
         argv:
           - "{{ openfdd_remote_dir }}/.venv/bin/pip"
           - install
+          - "--no-cache-dir"
           - "-r"
-          - "{{ openfdd_remote_dir }}/workspace/api/requirements.txt"
+          - "{{ openfdd_bridge_requirements }}"
           - "-r"
           - "{{ openfdd_remote_dir }}/bacnet_toolshed/requirements.txt"
       changed_when: true
@@ -333,32 +361,20 @@
       become: true
       when: caddy_enabled | default(true) | bool
 
-    - name: Verify bridge health
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
-        return_content: true
-      register: bridge_health
-      failed_when: false
-      when:
-        - run_deploy_verify | default(true) | bool
-        - enable_openfdd_bridge | default(true) | bool
+    - name: Apply service restarts before insurance checks
+      ansible.builtin.meta: flush_handlers
 
-    - name: Verify Caddy entry health
-      ansible.builtin.uri:
-        url: "{{ 'https://127.0.0.1/health' if (caddy_mode | default('http') == 'tls') else 'http://127.0.0.1/health' }}"
-        validate_certs: false
-        return_content: true
-      register: caddy_health
-      failed_when: false
-      when:
-        - run_deploy_verify | default(true) | bool
-        - caddy_enabled | default(true) | bool
-
-    - name: Bridge health summary
-      ansible.builtin.debug:
-        msg: >-
-          {{ inventory_hostname }}
-          bridge={{ bridge_health.status | default('skipped') }}
-          caddy={{ caddy_health.status | default('skipped') }}
-          poll_driver={{ 'enabled' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}
+    - name: Run post-deploy insurance checks
+      ansible.builtin.include_tasks: tasks/post_deploy_check.yml
       when: run_deploy_verify | default(true) | bool
+
+    - name: Optional bench operational verify after deploy
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/scripts/bench_operational_verify.sh"
+          - --host
+          - "{{ ansible_host }}"
+          - --skip-wait
+      delegate_to: localhost
+      become: false
+      when: run_bench_operational_verify | default(false) | bool

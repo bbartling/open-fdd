@@ -27,7 +27,39 @@ from .paths import data_dir
 
 _log = logging.getLogger(__name__)
 
-LATEST_NAME = "latest.feather"
+
+def _feather_available() -> bool:
+    try:
+        import pyarrow  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+_USE_FEATHER = _feather_available()
+LATEST_NAME = "latest.feather" if _USE_FEATHER else "latest.pkl"
+_SHARD_GLOB = "*.feather" if _USE_FEATHER else "*.pkl"
+_SHARD_EXT = ".feather" if _USE_FEATHER else ".pkl"
+
+if not _USE_FEATHER:
+    _log.warning("pyarrow not installed — feather store using pandas pickle (%s)", LATEST_NAME)
+
+
+def _write_df(df: pd.DataFrame, path: Path) -> None:
+    out = df.reset_index(drop=True)
+    if _USE_FEATHER:
+        out.to_feather(path)
+    else:
+        out.to_pickle(path)
+
+
+def _read_df(path: Path) -> pd.DataFrame:
+    if _USE_FEATHER:
+        return pd.read_feather(path)
+    return pd.read_pickle(path)
+
+
 TIMESTAMP_COL = "timestamp"
 GIB = 1024**3
 _SHARD_EPOCH_RE = re.compile(r"^shard-(\d+)-")
@@ -56,7 +88,7 @@ class FeatherStore:
         site = self.site_dir(source, site_id)
         if not site.is_dir():
             return []
-        return sorted(site.glob("*.feather"))
+        return sorted(site.glob(_SHARD_GLOB))
 
     def list_sites(self, source: str | None = None) -> list[dict[str, str]]:
         out: list[dict[str, str]] = []
@@ -67,7 +99,7 @@ class FeatherStore:
             if not src_dir.is_dir():
                 continue
             for site in sorted(p for p in src_dir.iterdir() if p.is_dir()):
-                if any(site.glob("*.feather")):
+                if any(site.glob(_SHARD_GLOB)):
                     out.append({"source": src_dir.name, "site_id": site.name})
         return out
 
@@ -76,7 +108,7 @@ class FeatherStore:
         if not self.root.is_dir():
             return 0
         total = 0
-        for path in self.root.rglob("*.feather"):
+        for path in self.root.rglob(_SHARD_GLOB):
             try:
                 total += path.stat().st_size
             except OSError:
@@ -119,7 +151,7 @@ class FeatherStore:
         frames: list[pd.DataFrame] = []
         for path in files:
             try:
-                frames.append(pd.read_feather(path))
+                frames.append(_read_df(path))
             except Exception as exc:  # noqa: BLE001 - skip a corrupt shard, keep the rest
                 _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
         if not frames:
@@ -131,9 +163,9 @@ class FeatherStore:
         site = self.site_dir(source, site_id)
         site.mkdir(parents=True, exist_ok=True)
         # ms + uuid — two writes in the same millisecond must not overwrite each other.
-        name = f"shard-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}.feather"
+        name = f"shard-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}{_SHARD_EXT}"
         path = site / name
-        df.reset_index(drop=True).to_feather(path)
+        _write_df(df, path)
         return path
 
     def compact(self, *, source: str, site_id: str) -> dict[str, int]:
@@ -147,7 +179,7 @@ class FeatherStore:
         site = self.site_dir(source, site_id)
         latest = site / LATEST_NAME
         tmp = site / f".{LATEST_NAME}.tmp"
-        df.reset_index(drop=True).to_feather(tmp)
+        _write_df(df, tmp)
         tmp.replace(latest)
         removed = 0
         for path in files:
@@ -185,7 +217,7 @@ class FeatherStore:
             latest = site / LATEST_NAME
             tmp = site / f".{LATEST_NAME}.tmp"
             site.mkdir(parents=True, exist_ok=True)
-            kept.reset_index(drop=True).to_feather(tmp)
+            _write_df(kept, tmp)
             tmp.replace(latest)
             for path in self.shard_files(src, site_id):
                 if path.name != LATEST_NAME and path.exists():
@@ -210,7 +242,7 @@ class FeatherStore:
         except OSError:
             return {"rows_dropped": 0, "bytes_freed": 0}
 
-        df = pd.read_feather(latest)
+        df = _read_df(latest)
         if len(df) <= 1:
             return {"rows_dropped": 0, "bytes_freed": 0}
 
@@ -241,7 +273,7 @@ class FeatherStore:
             return {"rows_dropped": 0, "bytes_freed": 0}
 
         tmp = latest.with_name(f".{LATEST_NAME}.tmp")
-        kept.to_feather(tmp)
+        _write_df(kept, tmp)
         tmp.replace(latest)
         after_size = latest.stat().st_size
         return {"rows_dropped": dropped, "bytes_freed": max(0, before_size - after_size)}

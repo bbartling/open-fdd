@@ -39,7 +39,7 @@ from bacnet_toolshed.server_points import (
     server_points_snapshot,
     update_openfdd_server_points,
 )
-from bacnet_toolshed.stack_args import bacnet_argv_from_cfg
+from bacnet_toolshed.stack_args import bacnet_argv_from_cfg, discover_timeout_s, route_discovery_kwargs
 from bacnet_toolshed.bacnet_poll_loop import (
     enabled_point_count,
     last_poll_status,
@@ -373,7 +373,36 @@ def _start_supervisory_check(device_instance: int) -> dict[str, Any]:
 
 
 def _sync_who_is(range_low: int, range_high: int) -> dict[str, Any]:
+    cfg = _cfg()
+    route = route_discovery_kwargs(cfg)
+
     async def _run(app: Application) -> dict[str, Any]:
+        if route:
+            from bacnet_toolshed.discover_lib import collect_i_ams
+
+            i_ams = await collect_i_ams(
+                app,
+                range_low,
+                range_high,
+                router_ip=str(route["router_ip"]),
+                mstp_net=int(route["mstp_net"]),
+                timeout=discover_timeout_s(cfg),
+                local_too=bool(route.get("local_too", False)),
+            )
+            devices = []
+            for i_am in i_ams or []:
+                device_address = i_am.pduSource
+                device_identifier = i_am.iAmDeviceIdentifier
+                devices.append(
+                    {
+                        "i-am-device-identifier": str(device_identifier),
+                        "device-address": str(device_address),
+                        "max-apdu-length-accepted": i_am.maxAPDULengthAccepted,
+                        "segmentation-supported": str(i_am.segmentationSupported),
+                        "vendor-id": i_am.vendorID,
+                    }
+                )
+            return {"devices": devices, "count": len(devices)}
         devices = await perform_who_is(app, range_low, range_high)
         return {"devices": devices, "count": len(devices)}
 
