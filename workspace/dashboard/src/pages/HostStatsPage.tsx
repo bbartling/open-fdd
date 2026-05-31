@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import { apiFetch } from "../lib/api";
 import { appendHostHistory } from "../lib/hostHistory";
+import { formatDurationMs } from "../lib/formatDuration";
 import PageHeader from "../components/PageHeader";
 
 type MemBlock = {
@@ -50,6 +51,9 @@ type HostStats = {
     base_url?: string;
     models_installed?: string[];
     configured_model?: string;
+    configured_ram_tier?: string;
+    gpu_mode?: string;
+    timeout_s?: number;
     error?: string;
     pid?: number;
     rss_bytes?: number;
@@ -76,23 +80,6 @@ function fmtBytes(n: number | undefined | null): string {
     i += 1;
   }
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-function fmtOllamaStatus(ollama: HostStats["ollama"]): string {
-  if (ollama.api_ok) {
-    const n = ollama.models_installed?.length ?? 0;
-    const ram = ollama.rss_bytes ? ` · ${fmtBytes(ollama.rss_bytes)} RAM` : "";
-    const model = ollama.configured_model ? ` · ${ollama.configured_model}` : "";
-    return `API OK · ${n} model${n === 1 ? "" : "s"}${ram}${model}`;
-  }
-  if (ollama.process || ollama.pid) {
-    const ram = ollama.rss_bytes ? fmtBytes(ollama.rss_bytes) : "—";
-    return `process only · ${ram} RAM (API not responding)`;
-  }
-  if (ollama.error) {
-    return `not reachable`;
-  }
-  return "not detected";
 }
 
 function fmtUptime(seconds: number | null | undefined): string {
@@ -297,6 +284,50 @@ export default function HostStatsPage() {
           )}
 
           <div className="panel">
+            <h3 className="panel-title">Ollama</h3>
+            <div className="host-ollama-grid">
+              <div className="status-kv">
+                <span className="status-kv-label">Ollama</span>
+                <span className={`status-kv-value ${stats.ollama.api_ok ? "ok" : "error"}`}>
+                  {stats.ollama.api_ok ? "running" : "down"}
+                </span>
+              </div>
+              {stats.ollama.configured_model ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">Model</span>
+                  <span className="status-kv-value">{stats.ollama.configured_model}</span>
+                </div>
+              ) : null}
+              {stats.ollama.configured_ram_tier ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">Runtime</span>
+                  <span className="status-kv-value">
+                    {stats.ollama.configured_ram_tier}
+                    {stats.ollama.gpu_mode ? `, ${stats.ollama.gpu_mode}` : ""}
+                  </span>
+                </div>
+              ) : null}
+              {stats.ollama.timeout_s ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">Server timeout</span>
+                  <span className="status-kv-value">{formatDurationMs(stats.ollama.timeout_s * 1000)}</span>
+                </div>
+              ) : null}
+              {stats.ollama.process?.rss_bytes || stats.ollama.rss_bytes ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">Process RAM</span>
+                  <span className="status-kv-value">
+                    {fmtBytes(stats.ollama.process?.rss_bytes ?? stats.ollama.rss_bytes)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+            {stats.ollama.error && !stats.ollama.api_ok ? (
+              <p className="muted host-storage-note">{stats.ollama.error}</p>
+            ) : null}
+          </div>
+
+          <div className="panel">
             <h3 className="panel-title">System</h3>
             <div className="host-info-grid">
               <div>
@@ -310,12 +341,6 @@ export default function HostStatsPage() {
               <div>
                 <span className="status-kv-label">CPU cores</span>
                 <div>{stats.cpu.logical_cores}</div>
-              </div>
-              <div>
-                <span className="status-kv-label">Ollama</span>
-                <div title={stats.ollama.error || stats.ollama.base_url || undefined}>
-                  {fmtOllamaStatus(stats.ollama)}
-                </div>
               </div>
             </div>
           </div>

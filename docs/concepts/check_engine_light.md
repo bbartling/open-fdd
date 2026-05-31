@@ -31,8 +31,8 @@ short code list (browse them on the dashboard **Fault catalog** page).
 
 ## How it lights up
 
-Tag a Rule Lab rule with a `fault_code` → the scheduled FDD run flags faults →
+Tag a Rule Lab rule with a `fault_code` → the scheduled FDD run executes **`workspace/data/rules_py/*.py`** →
 results group by family in `GET /api/faults/status`. `ok → green`,
 `warning → yellow`, `critical → red`.
 
-See also: `skills/building-check-engine/SKILL.md`.
+See also: [Rule Lab — Python storage](../howto/rule_lab_storage), `skills/building-check-engine/SKILL.md`.

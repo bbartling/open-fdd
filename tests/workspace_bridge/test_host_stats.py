@@ -66,6 +66,9 @@ def test_collect_host_stats_shape():
     assert isinstance(ollama, dict)
     assert "api_ok" in ollama
     assert "base_url" in ollama
+    assert "configured_ram_tier" in ollama
+    assert "gpu_mode" in ollama
+    assert "timeout_s" in ollama
 
 
 def test_read_linux_meminfo_on_linux():

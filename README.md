@@ -27,7 +27,7 @@
 
 ## Operator stack (git checkout)
 
-Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy:
+Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy. Saved rules live in **`workspace/data/rules_py/`** (same files for humans and the AI agent) — see [`docs/howto/rule_lab_storage.md`](docs/howto/rule_lab_storage.md).
 
 ```bash
 ./scripts/run_local.sh restart

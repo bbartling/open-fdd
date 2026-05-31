@@ -93,6 +93,15 @@
         - pyproject.toml
         - README.md
 
+    - name: Ensure BACnet workspace layout
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
+
     - name: Stat commissioned points.csv on control machine
       ansible.builtin.stat:
         path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
@@ -107,15 +116,6 @@
         mode: "0644"
       when: local_commission_csv.stat.exists | default(false)
       notify: Restart BACnet poll driver
-
-    - name: Ensure BACnet workspace layout
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
-        - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
 
     - name: Install BACnet commission.env
       ansible.builtin.template:

@@ -90,7 +90,16 @@ Open `http://127.0.0.1:5173`. For **Ansible/production parity**, use `run_local.
 1. **Per-row rule** — `evaluate(row, cfg, …)` → `POST /api/playground/test-rule`
 2. **DataFrame script** — `out = {"df": …}` → `POST /api/playground/run-script`
 
-Saved rules live in `rules_store.json` with optional `.py` sources under `data/rules_py/`. Schedule batch runs via `POST /api/rules/batch` or the `openfdd-fdd-loop` unit.
+Saved rules use a **dual-file** layout under `workspace/data/`:
+
+- **`rules_store.json`** — metadata, config, bindings, `fault_code`, `source_path`
+- **`rules_py/*.py`** — canonical Python (always written on save; this is what `fdd_runner` executes)
+
+The Rule Lab editor loads/saves via the bridge API; the footer shows the `.py` path. Bindings (which BACnet points a rule uses) are set on **`/data-model`**, not Rule Lab.
+
+**Full detail:** [Rule Lab — Python storage & shared editing](rule_lab_storage) (browser flow, AI tools, scheduled loop, BACnet → feather pipeline).
+
+Schedule batch runs: `POST /api/rules/batch`, `./scripts/run_local.sh start` (FDD loop), or Ansible `openfdd-fdd-loop.timer`.
 
 ## Auth (OT LAN)
 
@@ -100,6 +109,9 @@ See `workspace/deploy/README.md`, `workspace/deploy/SECURITY.md`.
 
 ## AI maintainers
 
-Skills: **`fastapi-bridge-api`**, **`react-operator-dashboard`**. Optional chat: `POST /openfdd-agent/chat` when Ollama is configured.
+Skills: **`fastapi-bridge-api`**, **`react-operator-dashboard`**, **`rules-crud-and-batch-run`**.
+
+- Rule storage & shared human/AI editing: [Rule Lab — Python storage](rule_lab_storage)
+- Ollama chat: `POST /openfdd-agent/chat`; rule writes: `POST /openfdd-agent/tool` (`rules.save`) with **agent** role
 
 See also [Skills and agent shell](skills_and_agent) and [BACnet toolshed](../bacnet/index).

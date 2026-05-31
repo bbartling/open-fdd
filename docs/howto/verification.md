@@ -47,9 +47,13 @@ See [Operator dashboard](operator_dashboard).
 
 ## 2. Operator Rule Lab (Python)
 
+Storage: `workspace/data/rules_store.json` + `workspace/data/rules_py/*.py` — see [Rule Lab storage](rule_lab_storage).
+
 - Lint sample rule: `POST /api/playground/lint` with a minimal `evaluate()` body.
-- Preview on demo frame: `POST /api/playground/test-rule` with `code`, `config`, optional `site_id`.
-- Save + batch: `POST /api/rules/save` then `POST /api/rules/batch`; confirm `GET /api/building/status` reflects flagged runs.
+- Preview on demo/feather frame: `POST /api/playground/test-rule` with `code`, `config`, optional `site_id`.
+- Save: `POST /api/rules/save` (or `PUT …/source` + `POST …/save` for updates); confirm `.py` exists on disk.
+- Batch: `POST /api/rules/batch` or check `workspace/.local-run/fdd_loop.log`; confirm `GET /api/building/status` reflects flagged runs.
+- Agent write (optional): `POST /openfdd-agent/tool` with `{ "tool": "rules.save", "args": { … } }` (**agent** role).
 
 ---
 

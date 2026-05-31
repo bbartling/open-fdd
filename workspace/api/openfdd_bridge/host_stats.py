@@ -186,6 +186,9 @@ def _ollama_payload() -> dict[str, Any]:
         "base_url": health.get("base_url"),
         "models_installed": health.get("models_installed") or [],
         "configured_model": health.get("configured_model"),
+        "configured_ram_tier": health.get("configured_ram_tier") or ollama_client.configured_ram_tier(),
+        "gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
+        "timeout_s": float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S))),
         "error": health.get("error"),
         "process": proc,
     }

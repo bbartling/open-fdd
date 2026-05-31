@@ -33,7 +33,35 @@ Poll driver is **off** until `points.csv` is commissioned:
 ./stop_bacnet_polling.sh --limit acme_vm_bbartling
 ```
 
-## vs vibe_code_apps_12
+## Boss Pi test bench (`192.168.204.12`)
+
+Same host as `vibe_code_apps_12/ansible/inventory.yml` → `bacnet_pi`.
+
+| Fact | Value |
+|------|--------|
+| Hostname | `bosspi` |
+| SSH | `ben@192.168.204.12` |
+| CPU | **armv7l** (Pi 3 B+ 32-bit) |
+| RAM | ~**1 GB** (not 8 GB — use `ollama_ram_tier: 8gb` only as config label) |
+
+```bash
+./deploy.sh --limit bacnet_pi --no-ask-pass -v
+```
+
+Check-engine: `http://192.168.204.12/` (Caddy → bridge).
+
+**Ollama / tinyllama:** Official Ollama builds are **arm64 or amd64 only**. Pi 3 B+ with 32-bit Raspbian cannot run Ollama; `ollama_bootstrap.yml` fails fast with a clear message. Use bensserver or a Pi 4/5 with 64-bit OS for AI chat testing.
+
+```bash
+# Only on arm64/aarch64 or x86 hosts:
+ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit bacnet_pi \
+  -e enable_ollama=true -e ollama_ram_tier=8gb \
+  -e '{"ollama_model_for_tier":{"8gb":"tinyllama"}}'
+```
+
+Services use `Restart=always` and `WantedBy=multi-user.target` so they come back after reboot/power cycle.
+
+**Deploy roadblock on this Pi:** Open-FDD needs **pyarrow** (feather store). There is no prebuilt wheel for **Python 3.13 + armv7l**, and source builds fail on ~1 GB RAM. Use **Pi 4/5 64-bit OS** or deploy to **`acme_vm_bbartling`** for ansible dev testing. Partial sync to bosspi succeeded (code + `points.csv` + venv); systemd units were not installed.
 
 | vibe12 | open-fdd |
 |--------|----------|

@@ -8,8 +8,9 @@ description: "Runs OpenAI Codex CLI on the bridge host with bootstrap context fo
 ## Policy
 
 - Codex runs on the **bridge host** as a child process; credentials stay in `CODEX_HOME`.
-- Browser UI calls bridge `/openfdd-agent/chat`, not Codex directly.
-- Agent file writes default to `workspace/scratch`.
+- Browser **AI Agent** tab calls `POST /openfdd-agent/chat` (Ollama), not Codex directly.
+- Durable FDD Python: `workspace/data/rules_py/` via Rule Lab or `POST /openfdd-agent/tool` (`rules.save`, **agent** role) — same files humans edit in `/rule-lab`. See [docs/howto/rule_lab_storage.md](../../docs/howto/rule_lab_storage.md).
+- Scratch experiments: `workspace/scratch/` only unless promoting via `rules.save` or Rule Lab APIs.
 
 ## Bootstrap JSON
 

@@ -44,7 +44,7 @@ UI_LOG="${PID_DIR}/ui.log"
 export OPENFDD_REPO_ROOT="$ROOT"
 export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
-export PYTHONPATH="$ROOT"
+export PYTHONPATH="${ROOT}/workspace/api:${ROOT}"
 export OFDD_BRIDGE_HOST="${OFDD_BRIDGE_HOST:-0.0.0.0}"
 export OFDD_BRIDGE_PORT="${OFDD_BRIDGE_PORT:-8765}"
 export OFDD_FDD_LOOKBACK_HOURS="${OFDD_FDD_LOOKBACK_HOURS:-1}"
@@ -145,7 +145,8 @@ ui_build_restart_args() {
     skip) args+=(--ui-skip) ;;
     prod) args+=(--ui-prod) ;;
   esac
-  printf '%s\n' "${args[@]}"
+  # Single line for safe use in: exec "$0" start $(ui_build_restart_args)
+  echo "${args[*]}"
 }
 
 load_env_files "$([[ "$CMD" == "status" ]] && echo true || echo false)"
@@ -464,10 +465,14 @@ start_fdd_loop() {
   mkdir -p "$PID_DIR"
   restart_if_running "$FDD_PID" "openfdd_bridge.fdd_runner" "FDD loop"
   "${VENV}/bin/pip" install -q -e ".[dev,engine]" -r workspace/api/requirements.txt
-  nohup "${VENV}/bin/python" -m openfdd_bridge.fdd_runner \
-    --loop --interval-minutes "${OFDD_FDD_INTERVAL_MINUTES}" --lookback-hours "${OFDD_FDD_LOOKBACK_HOURS}" \
-    >"$FDD_LOG" 2>&1 &
-  echo $! >"$FDD_PID"
+  (
+    cd "${ROOT}/workspace/api"
+    nohup "${VENV}/bin/python" -m openfdd_bridge.fdd_runner \
+      --loop --interval-minutes "${OFDD_FDD_INTERVAL_MINUTES}" \
+      --lookback-hours "${OFDD_FDD_LOOKBACK_HOURS}" \
+      >>"$FDD_LOG" 2>&1 &
+    echo $! >"$FDD_PID"
+  )
   echo "FDD loop pid=$(cat "$FDD_PID") every ${OFDD_FDD_INTERVAL_MINUTES}m lookback ${OFDD_FDD_LOOKBACK_HOURS}h → ${FDD_LOG}"
 }
 
@@ -624,7 +629,7 @@ case "$CMD" in
     ./scripts/build_and_test.sh
     ;;
   feather-maintain|feather)
-    "${VENV}/bin/python" -m openfdd_bridge.feather_store --maintain
+    (cd "${ROOT}/workspace/api" && "${VENV}/bin/python" -m openfdd_bridge.feather_store --maintain)
     ;;
   *)
     echo "Usage: $0 [start|up|stop|restart|status|build-test|feather-maintain] [--dev] [--ui-prod|--ui-test|--ui-skip]" >&2

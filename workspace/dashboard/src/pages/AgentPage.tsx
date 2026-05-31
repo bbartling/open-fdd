@@ -25,14 +25,7 @@ type Context = {
   ollama_ram_tier: string;
   ollama_model: string;
   ollama_gpu_mode: string;
-  ollama_timeout_s?: number;
   ollama_thinking_models?: ThinkingModel[];
-  mcp?: {
-    mcp_enabled?: boolean;
-    mcp_rest_base?: string;
-    mcp_search_docs?: string;
-    note?: string;
-  };
 };
 
 type ChatResponse = {
@@ -61,11 +54,6 @@ function useNowTick(active: boolean): number {
     return () => window.clearInterval(id);
   }, [active]);
   return now;
-}
-
-function isThinkingModel(model: string): boolean {
-  const m = model.toLowerCase();
-  return m.includes("qwen3") || m.includes("deepseek-r1") || m.includes("gpt-oss");
 }
 
 function formatTimingMeta(m: ChatMessage): string | null {
@@ -112,6 +100,12 @@ export default function AgentPage() {
   }, [chat]);
 
   useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [chat.messages, chat.busy]);
+
+  useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
     window.addEventListener("click", close);
@@ -143,9 +137,6 @@ export default function AgentPage() {
 
   const isGptOss = chat.model.toLowerCase().includes("gpt-oss");
   const levelOptions = isGptOss ? GPT_OSS_LEVELS : BOOL_LEVELS;
-  const thinkOn = chat.thinkLevel !== THINK_OFF;
-  const cpuMode = (ctx?.ollama_gpu_mode || "cpu").toLowerCase() === "cpu";
-  const showSlowHint = cpuMode && (thinkOn || isThinkingModel(chat.model));
 
   function thinkPayload(): boolean | string | undefined {
     if (chat.thinkLevel === THINK_OFF) return undefined;
@@ -201,183 +192,155 @@ export default function AgentPage() {
   const ollamaOk = ctx?.ollama?.ok === true;
   const thinkingModels = ctx?.ollama_thinking_models || [];
   const installed = ctx?.ollama?.models_installed || [];
+  const modelOptions = [...new Set([...installed, ...thinkingModels.map((m) => m.model)])];
 
   return (
-    <div className="page">
-      <PageHeader
-        title="AI Agent"
-        subtitle="Local operator assistant — Ollama on this host. Right-click a message to delete. Recent turns are sent to the model within a token budget."
-      />
-      <TabDebugPanel tab="agent" />
-
-      {ctx ? (
-        <div className="panel">
-          <div className="status-bar">
-            <div className="status-kv">
-              <span className="status-kv-label">Ollama</span>
-              <span className={`status-kv-value ${ollamaOk ? "ok" : "error"}`}>
-                {ollamaOk ? "running" : "down"}
-              </span>
-            </div>
-            {chat.model ? (
-              <>
-                <div className="status-kv">
-                  <span className="status-kv-label">Model</span>
-                  <span className="status-kv-value">{chat.model}</span>
-                </div>
-                <div className="status-kv">
-                  <span className="status-kv-label">Runtime</span>
-                  <span className="status-kv-value">
-                    {ctx.ollama_ram_tier}, {ctx.ollama_gpu_mode}
-                  </span>
-                </div>
-                {ctx.ollama_timeout_s ? (
-                  <div className="status-kv">
-                    <span className="status-kv-label">Server timeout</span>
-                    <span className="status-kv-value">{formatDurationMs(ctx.ollama_timeout_s * 1000)}</span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-          {showSlowHint ? (
-            <p className="agent-slow-hint muted">
-              CPU + {thinkOn ? "Thinking on" : "thinking models"} can take <strong>several minutes</strong> per reply
-              (10m+ is possible on a loaded host). For faster answers: set Thinking to <strong>off</strong>, keep prompts
-              short, or set <code>OFDD_OLLAMA_GPU_MODE=auto</code> if you have a GPU.
-            </p>
-          ) : null}
-          {ctx.mcp?.mcp_enabled ? (
-            <p className="muted agent-mcp-hint">
-              MCP RAG: <code>{ctx.mcp.mcp_rest_base}</code> — doc search at{" "}
-              <code>{ctx.mcp.mcp_search_docs}</code> (included in agent system prompt).
-            </p>
-          ) : ctx.mcp?.note ? (
-            <p className="muted agent-mcp-hint">{ctx.mcp.note}</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div ref={logRef} className="agent-chat-log panel">
-        {chat.messages.length ? (
-          chat.messages.map((m) => (
-            <div
-              key={m.id}
-              className={`agent-chat-msg agent-chat-${m.role} ${m.status}`}
-              onContextMenu={(e) => openMessageMenu(e, m.id)}
-            >
-              <div className="agent-chat-head">
-                <strong>{m.role === "user" ? "You" : "Assistant"}</strong>
-                <AgentMessageTiming message={m} nowMs={nowMs} />
-              </div>
-              {m.status === "pending" ? null : <div className="agent-chat-text">{m.content}</div>}
-              {m.thinking ? (
-                <details>
-                  <summary>Thinking trace</summary>
-                  <pre className="console">{m.thinking}</pre>
-                </details>
-              ) : null}
-            </div>
-          ))
-        ) : (
-          <p className="muted">No messages yet.</p>
-        )}
+    <div className="page page-agent">
+      <div className="page-agent-top">
+        <PageHeader
+          title="AI Agent"
+          subtitle="Local operator assistant. Right-click a message to delete; recent turns are sent within a token budget."
+        />
+        <TabDebugPanel tab="agent" />
+        {ctx && !ollamaOk ? (
+          <p className="agent-offline-banner">
+            Ollama is not running — open <strong>Host stats</strong> for model/runtime details or restart the local stack.
+          </p>
+        ) : null}
       </div>
 
-      {menu ? (
-        <div
-          className="agent-chat-menu"
-          style={{ top: menu.y, left: menu.x }}
-          role="menu"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setChat((prev) => deleteMessage(prev, menu.messageId));
-              setMenu(null);
-            }}
-          >
-            Delete message
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setChat((prev) => deleteMessageAndAfter(prev, menu.messageId));
-              setMenu(null);
-            }}
-          >
-            Delete from here…
-          </button>
+      <div className="agent-layout">
+        <div ref={logRef} className="agent-chat-log">
+          {chat.messages.length ? (
+            chat.messages.map((m) => (
+              <div
+                key={m.id}
+                className={`agent-chat-msg agent-chat-${m.role} ${m.status}`}
+                onContextMenu={(e) => openMessageMenu(e, m.id)}
+              >
+                <div className="agent-chat-head">
+                  <strong>{m.role === "user" ? "You" : "Assistant"}</strong>
+                  <AgentMessageTiming message={m} nowMs={nowMs} />
+                </div>
+                {m.status === "pending" ? null : <div className="agent-chat-text">{m.content}</div>}
+                {m.thinking ? (
+                  <details>
+                    <summary>Thinking trace</summary>
+                    <pre className="console">{m.thinking}</pre>
+                  </details>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="agent-empty-state">
+              <p>Start a conversation</p>
+              <p className="agent-empty-hint">
+                Ask about BACnet, faults, or site data. On CPU hosts, turn Thinking off for faster replies.
+              </p>
+            </div>
+          )}
         </div>
-      ) : null}
 
-      <form className="panel agent-compose" onSubmit={send}>
-        <h3 className="panel-title">Compose message</h3>
-        <div className="form-grid">
-          <div className="field">
-            <label className="field-label" htmlFor="agent-model">
-              Model
-            </label>
-            <input
-              id="agent-model"
-              value={chat.model}
-              onChange={(e) => setChat({ ...chat, model: e.target.value })}
-              list="ollama-models"
-            />
-            <datalist id="ollama-models">
-              {[...new Set([...installed, ...thinkingModels.map((m) => m.model)])].map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="agent-thinking">
-              Thinking
-            </label>
-            <select
-              id="agent-thinking"
-              value={chat.thinkLevel}
-              onChange={(e) => setChat({ ...chat, thinkLevel: e.target.value })}
-            >
-              {levelOptions.map((lvl) => (
-                <option key={lvl} value={lvl}>
-                  {lvl}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="field">
-          <label className="field-label" htmlFor="agent-message">
-            Message
-          </label>
-          <textarea
-            id="agent-message"
-            rows={4}
-            value={chat.draft}
-            onChange={(e) => setChat({ ...chat, draft: e.target.value })}
-            placeholder="Ask about BACnet, faults, or site data…"
-          />
-        </div>
-        <div className="toolbar">
-          <button type="submit" disabled={chat.busy || !ollamaOk}>
-            {chat.busy ? "Waiting for Ollama…" : "Send"}
-          </button>
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => {
-              clearAgentChat();
-              setChat(loadAgentChat());
-            }}
+        {menu ? (
+          <div
+            className="agent-chat-menu"
+            style={{ top: menu.y, left: menu.x }}
+            role="menu"
+            onClick={(e) => e.stopPropagation()}
           >
-            Clear history
-          </button>
-        </div>
-      </form>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setChat((prev) => deleteMessage(prev, menu.messageId));
+                setMenu(null);
+              }}
+            >
+              Delete message
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setChat((prev) => deleteMessageAndAfter(prev, menu.messageId));
+                setMenu(null);
+              }}
+            >
+              Delete from here down…
+            </button>
+          </div>
+        ) : null}
+
+        <form className="agent-compose" onSubmit={send}>
+          <div className="agent-compose-toolbar">
+            <div className="field field-compact">
+              <label className="field-label" htmlFor="agent-model">
+                Model
+              </label>
+              <input
+                id="agent-model"
+                value={chat.model}
+                onChange={(e) => setChat({ ...chat, model: e.target.value })}
+                list="ollama-models"
+              />
+              <datalist id="ollama-models">
+                {modelOptions.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            </div>
+            <div className="field field-compact">
+              <label className="field-label" htmlFor="agent-thinking">
+                Thinking
+              </label>
+              <select
+                id="agent-thinking"
+                value={chat.thinkLevel}
+                onChange={(e) => setChat({ ...chat, thinkLevel: e.target.value })}
+              >
+                {levelOptions.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="agent-compose-actions">
+              <button type="submit" disabled={chat.busy || !ollamaOk}>
+                {chat.busy ? "Waiting…" : "Send"}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  clearAgentChat();
+                  setChat(loadAgentChat());
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="field agent-message-field">
+            <label className="field-label" htmlFor="agent-message">
+              Message
+            </label>
+            <textarea
+              id="agent-message"
+              rows={3}
+              value={chat.draft}
+              onChange={(e) => setChat({ ...chat, draft: e.target.value })}
+              placeholder="Ask about BACnet, faults, or site data…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void send(e);
+                }
+              }}
+            />
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
