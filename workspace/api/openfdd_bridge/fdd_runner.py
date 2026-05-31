@@ -17,7 +17,8 @@ import time
 from typing import Any
 
 from . import playground
-from .data_loader import load_frame_for_run, rows_for_evaluate, enrich_rows_with_column_map, column_map_for_rule
+from .data_loader import load_frame_for_run
+from .fdd_row_prep import prepare_fdd_rows
 from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
 from .fdd_results import save_results
@@ -27,6 +28,8 @@ from .rule_store import RuleStore
 _log = logging.getLogger(__name__)
 
 DEFAULT_LIMIT = 1000
+DEFAULT_LOOKBACK_HOURS = float(__import__("os").environ.get("OFDD_FDD_LOOKBACK_HOURS", "1") or 1)
+DEFAULT_INTERVAL_MINUTES = float(__import__("os").environ.get("OFDD_FDD_INTERVAL_MINUTES", "10") or 10)
 
 
 def resolve_site_ids(model: dict[str, Any], rule: dict[str, Any]) -> list[str]:
@@ -92,8 +95,24 @@ def _rule_code(rule: dict[str, Any]) -> str:
     return str(rule.get("code") or "")
 
 
-def _run_one(rule: dict[str, Any], site_id: str, *, limit: int, model: dict[str, Any]) -> dict[str, Any]:
+def _run_one(
+    rule: dict[str, Any],
+    site_id: str,
+    *,
+    limit: int,
+    model: dict[str, Any],
+    chunk_hours: float = 0,
+    lookback_hours: float = 0,
+) -> dict[str, Any]:
+    import pandas as pd
+
     frame, origin = load_frame_for_run(site_id)
+    if lookback_hours > 0 and "timestamp" in frame.columns:
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=lookback_hours)
+        ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+        trimmed = frame.loc[ts >= cutoff].copy()
+        if not trimmed.empty:
+            frame = trimmed
     fault_code = str(rule.get("fault_code") or "")
     code = _rule_code(rule)
     base = {
@@ -123,8 +142,24 @@ def _run_one(rule: dict[str, Any], site_id: str, *, limit: int, model: dict[str,
                 "flagged": flagged,
                 "flag_columns": flag_cols,
             }
-        column_map = column_map_for_rule(model, site_id, rule)
-        rows = enrich_rows_with_column_map(rows_for_evaluate(frame, limit=limit), column_map)
+        use_chunked = chunk_hours > 0 and len(frame) > 500
+        if use_chunked:
+            row_count, flagged, _events = playground.sweep_dataframe_chunked(
+                code,
+                rule.get("config") or {},
+                frame,
+                chunk_hours=chunk_hours,
+                enrich_rows=lambda rows: rows,  # legacy path; prefer prepare_fdd_rows below
+            )
+            return {
+                **base,
+                "status": "ok",
+                "rows": row_count,
+                "flagged": int(flagged),
+                "chunked": True,
+                "chunk_hours": chunk_hours,
+            }
+        rows = prepare_fdd_rows(frame, rule, model, site_id, limit=limit or len(frame))
         flags, _events = playground.sweep_rule(code, rule.get("config") or {}, rows, capture_print=False)
         return {
             **base,
@@ -136,14 +171,32 @@ def _run_one(rule: dict[str, Any], site_id: str, *, limit: int, model: dict[str,
         return {**base, "status": "error", "rows": 0, "flagged": 0, "error": str(exc)[:1000]}
 
 
-def run_batch(*, limit: int = DEFAULT_LIMIT, persist: bool = True) -> dict[str, Any]:
+def run_batch(
+    *,
+    limit: int = DEFAULT_LIMIT,
+    persist: bool = True,
+    chunk_hours: float = playground.GO_LIVE_BATCH_HOURS,
+    lookback_hours: float = DEFAULT_LOOKBACK_HOURS,
+    use_chunks: bool | None = None,
+) -> dict[str, Any]:
     started = time.time()
     model = ModelService().load()
     rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
+    lookback = max(0.0, float(lookback_hours))
+    chunk = chunk_hours if (use_chunks if use_chunks is not None else lookback > 6) else 0
     runs: list[dict[str, Any]] = []
     for rule in rules:
         for site_id in resolve_site_ids(model, rule):
-            runs.append(_run_one(rule, site_id, limit=limit, model=model))
+            runs.append(
+                _run_one(
+                    rule,
+                    site_id,
+                    limit=limit,
+                    model=model,
+                    chunk_hours=chunk,
+                    lookback_hours=lookback,
+                )
+            )
     summary = {
         "ok": True,
         "rules_run": len(rules),
@@ -152,6 +205,8 @@ def run_batch(*, limit: int = DEFAULT_LIMIT, persist: bool = True) -> dict[str, 
         "error_runs": sum(1 for r in runs if r.get("status") == "error"),
         "ms": int((time.time() - started) * 1000),
         "runs": runs,
+        "chunk_hours": chunk if chunk else None,
+        "lookback_hours": lookback,
     }
     if persist:
         doc = save_results(runs)
@@ -164,11 +219,24 @@ def _main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Open-FDD scheduled batch runner")
     parser.add_argument("--once", action="store_true", help="run a single batch and exit (default)")
-    parser.add_argument("--loop", action="store_true", help="run forever on --interval-hours")
+    parser.add_argument("--loop", action="store_true", help="run forever on interval")
     parser.add_argument(
         "--interval-hours",
         type=float,
-        default=float(os.environ.get("OFDD_RULE_INTERVAL_HOURS", "3") or 3),
+        default=float(os.environ.get("OFDD_RULE_INTERVAL_HOURS", "0") or 0),
+        help="legacy hours interval (overridden by --interval-minutes when set)",
+    )
+    parser.add_argument(
+        "--interval-minutes",
+        type=float,
+        default=DEFAULT_INTERVAL_MINUTES,
+        help="minutes between batch runs when --loop (default from OFDD_FDD_INTERVAL_MINUTES)",
+    )
+    parser.add_argument(
+        "--lookback-hours",
+        type=float,
+        default=DEFAULT_LOOKBACK_HOURS,
+        help="hours of feather history per AFDD pass (default 1)",
     )
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
     args = parser.parse_args(argv)
@@ -176,18 +244,22 @@ def _main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     def _cycle() -> None:
-        result = run_batch(limit=args.limit)
+        result = run_batch(limit=args.limit, lookback_hours=args.lookback_hours)
         _log.info(
-            "fdd batch: rules=%d site_runs=%d flagged=%d errors=%d ms=%d",
+            "fdd batch: rules=%d site_runs=%d flagged=%d errors=%d lookback=%.1fh ms=%d",
             result["rules_run"],
             result["site_runs"],
             result["flagged_runs"],
             result["error_runs"],
+            args.lookback_hours,
             result["ms"],
         )
 
     if args.loop:
-        interval = max(60.0, args.interval_hours * 3600.0)
+        if args.interval_hours and args.interval_hours > 0 and args.interval_minutes == DEFAULT_INTERVAL_MINUTES:
+            interval = max(60.0, args.interval_hours * 3600.0)
+        else:
+            interval = max(60.0, args.interval_minutes * 60.0)
         while True:
             _cycle()
             time.sleep(interval)

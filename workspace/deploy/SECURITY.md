@@ -30,8 +30,8 @@ When `OFDD_AUTH_SECRET` and at least one user are set, all `/api/*`, `/config/*`
 
 ## Network
 
-- Bridge defaults to **`0.0.0.0:8765`** on edge deploy (Ansible `openfdd_bridge_host`) so OT LAN workstations can reach the dashboard. **Always set auth** when binding non-loopback.
-- For solo dev on one machine, use **`OFDD_BRIDGE_HOST=127.0.0.1`** or keep `0.0.0.0` with UFW limited to the VLAN.
+- Bridge defaults to **`127.0.0.1:8765`** in local dev (`run_local.sh`, `OFDD_BRIDGE_HOST` unset). **Always set auth** when binding non-loopback.
+- Edge/Ansible deploy may set **`OFDD_BRIDGE_HOST=0.0.0.0`** so OT LAN workstations reach the dashboard — that is explicit operator opt-in only; pair with auth and UFW limited to the VLAN (or use Caddy on `:80` as the LAN entry).
 - Commission agent stays **`127.0.0.1:8767`**; bridge proxies BACnet ops (no direct browser access to OT stack).
 - Optional Caddy TLS/basic auth on port 80 — see `Caddyfile.example` (explicit opt-in for ingress).
 - Set **`OFDD_TRUST_X_FORWARDED_FOR=1`** only behind a trusted reverse proxy (Caddy); otherwise client IP is the socket peer.

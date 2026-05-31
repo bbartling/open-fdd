@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -75,6 +75,7 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
     setRules(saved.rules ?? []);
     setExpandedBrick(new Set(tree.brick_types ?? []));
     setExpandedEq(new Set((tree.equipment ?? []).map((e) => e.id)));
+    setError("");
   }, []);
 
   useEffect(() => {
@@ -121,17 +122,45 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
     return byEq;
   }, [points]);
 
+  const rulesByBrickType = useMemo(() => {
+    const map = new Map<string, SavedRule[]>();
+    for (const r of rules) {
+      for (const bt of r.bindings?.brick_types ?? []) {
+        if (!bt) continue;
+        const list = map.get(bt) ?? [];
+        list.push(r);
+        map.set(bt, list);
+      }
+    }
+    return map;
+  }, [rules]);
+
+  const rulesByPointId = useMemo(() => {
+    const map = new Map<string, SavedRule[]>();
+    for (const r of rules) {
+      for (const pid of r.bindings?.point_ids ?? []) {
+        const list = map.get(pid) ?? [];
+        list.push(r);
+        map.set(pid, list);
+      }
+    }
+    return map;
+  }, [rules]);
+
+  const rulesByEquipmentId = useMemo(() => {
+    const map = new Map<string, SavedRule[]>();
+    for (const r of rules) {
+      for (const eqId of r.bindings?.equipment_ids ?? []) {
+        const list = map.get(eqId) ?? [];
+        list.push(r);
+        map.set(eqId, list);
+      }
+    }
+    return map;
+  }, [rules]);
+
   function str(v: unknown): string {
     return String(v ?? "").trim();
-  }
-
-  function ruleBound(ruleId: string, kind: DropKind, targetId: string): boolean {
-    const rule = rules.find((r) => r.id === ruleId);
-    const b = rule?.bindings;
-    if (!b) return false;
-    if (kind === "point") return (b.point_ids ?? []).includes(targetId);
-    if (kind === "equipment") return (b.equipment_ids ?? []).includes(targetId);
-    return (b.brick_types ?? []).includes(targetId);
   }
 
   async function bindRule(ruleId: string, kind: DropKind, targetId: string) {
@@ -245,10 +274,28 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
     });
   }
 
-  function openContextMenu(e: React.MouseEvent, target: ContextTarget) {
+  function openContextMenu(e: MouseEvent, target: ContextTarget) {
     e.preventDefault();
     e.stopPropagation();
     setMenu({ ...target, x: e.clientX, y: e.clientY });
+  }
+
+  function deleteTargetKeyDown(e: KeyboardEvent, target: ContextTarget) {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    e.preventDefault();
+    if (target.kind === "point") void deletePoint(target.id, target.label);
+    else void deleteEquipment(target.id, target.label);
+  }
+
+  function deletableProps(target: ContextTarget) {
+    const kindLabel = target.kind === "point" ? "Point" : "Equipment";
+    return {
+      tabIndex: 0,
+      role: "button" as const,
+      "aria-label": `${kindLabel} ${target.label}. Press Delete to remove.`,
+      onContextMenu: (e: MouseEvent) => openContextMenu(e, target),
+      onKeyDown: (e: KeyboardEvent) => deleteTargetKeyDown(e, target),
+    };
   }
 
   const brickEntries = [...pointsByBrick.entries()].filter(([, pts]) => pts.length > 0);
@@ -313,13 +360,11 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
                     </button>
                     <code>{bt}</code>
                     <span className="badge">{pts.length}</span>
-                    {rules
-                      .filter((r) => bt !== "(no BRICK class)" && ruleBound(r.id, "brick_type", bt))
-                      .map((r) => (
-                        <span key={r.id} className="badge poll-badge">
-                          {r.name}
-                        </span>
-                      ))}
+                    {bt !== "(no BRICK class)" ? (rulesByBrickType.get(bt) ?? []).map((r) => (
+                      <span key={r.id} className="badge poll-badge">
+                        {r.name}
+                      </span>
+                    )) : null}
                   </header>
                   {expandedBrick.has(bt) ? (
                     <ul className="dm-point-list">
@@ -329,14 +374,14 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
                         return (
                           <li
                             key={p.id}
-                            className="dm-point-chip rule-map-drop"
+                            className="dm-point-chip rule-map-drop dm-focusable"
                             onDragOver={onDragOver}
                             onDrop={(e) => onDrop(e, "point", p.id)}
-                            onContextMenu={(e) => openContextMenu(e, { kind: "point", id: p.id, label })}
+                            {...deletableProps({ kind: "point", id: p.id, label })}
                           >
                             <span className="dm-point-label">{label}</span>
                             <span className="muted">{eq?.name || p.description || "—"}</span>
-                            {rules.filter((r) => ruleBound(r.id, "point", p.id)).map((r) => (
+                            {(rulesByPointId.get(p.id) ?? []).map((r) => (
                               <span key={r.id} className="badge poll-badge">
                                 {r.name}
                               </span>
@@ -356,22 +401,22 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
 
         <section className="dm-graph-section panel">
           <h3 className="panel-title">By equipment</h3>
-          <p className="muted">Right-click a point or equipment row to delete. BACnet rows stay aligned via Sync poll → model.</p>
+          <p className="muted">Right-click or focus and press Delete to remove a point or equipment row.</p>
           {equipment.length ? (
             equipment.map((eq) => (
               <div key={eq.id} className="dm-eq-block">
                 <div
-                  className="dm-eq-head rule-map-drop"
+                  className="dm-eq-head rule-map-drop dm-focusable"
                   onDragOver={onDragOver}
                   onDrop={(e) => onDrop(e, "equipment", eq.id)}
-                  onContextMenu={(e) => openContextMenu(e, { kind: "equipment", id: eq.id, label: eq.name || eq.id })}
+                  {...deletableProps({ kind: "equipment", id: eq.id, label: eq.name || eq.id })}
                 >
                   <button type="button" className="dm-expand-btn" onClick={() => toggleEq(eq.id)} aria-expanded={expandedEq.has(eq.id)}>
                     {expandedEq.has(eq.id) ? "▾" : "▸"}
                   </button>
                   <strong>{eq.name || eq.id}</strong>
                   {eq.equipment_type ? <span className="muted"> · {eq.equipment_type}</span> : null}
-                  {rules.filter((r) => ruleBound(r.id, "equipment", eq.id)).map((r) => (
+                  {(rulesByEquipmentId.get(eq.id) ?? []).map((r) => (
                     <span key={r.id} className="badge poll-badge">
                       {r.name}
                     </span>
@@ -382,23 +427,21 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
                     {(eqGroups.get(eq.id) ?? []).map((p) => (
                       <li
                         key={p.id}
-                        className="rule-map-drop dm-point-row"
+                        className="rule-map-drop dm-point-row dm-focusable"
                         onDragOver={onDragOver}
                         onDrop={(e) => onDrop(e, "point", p.id)}
-                        onContextMenu={(e) =>
-                          openContextMenu(e, {
-                            kind: "point",
-                            id: p.id,
-                            label: str(p.external_id) || p.id,
-                          })
-                        }
+                        {...deletableProps({
+                          kind: "point",
+                          id: p.id,
+                          label: str(p.external_id) || p.id,
+                        })}
                       >
                         <code>{p.external_id || p.fdd_input || p.id}</code>
                         <span className="muted">{p.brick_type || p.description || "—"}</span>
                         {p.metadata?.poll_interval_s ? (
                           <span className="badge poll-badge">poll {p.metadata.poll_interval_s}s</span>
                         ) : null}
-                        {rules.filter((r) => ruleBound(r.id, "point", p.id)).map((r) => (
+                        {(rulesByPointId.get(p.id) ?? []).map((r) => (
                           <span key={r.id} className="badge poll-badge">
                             {r.name}
                           </span>

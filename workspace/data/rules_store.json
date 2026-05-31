@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "bench-oa-t-flatline-1h",
+      "name": "Bench OA-T flatline 1h",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 1 \u2014 flatline over 1 hour (temp or rh via row['temp']).\"\"\"\n\nONE_HOUR_MS = 60 * 60 * 1000\nFILL_RATIO = 0.95\n\n\ndef get_last_1_hour(row, rows):\n    now_ms = row[\"ts_ms\"]\n    start_ms = now_ms - ONE_HOUR_MS\n    return [r for r in rows if start_ms <= r[\"ts_ms\"] <= now_ms]\n\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    if rows is None:\n        return False\n\n    window_rows = get_last_1_hour(row, rows)\n    if len(window_rows) < 2:\n        return False\n\n    span_ms = window_rows[-1][\"ts_ms\"] - window_rows[0][\"ts_ms\"]\n    if span_ms < ONE_HOUR_MS * FILL_RATIO:\n        return False\n\n    sym = temp_unit_symbol(cfg)\n    tol_key = \"flatline_tolerance_rh\" if row.get(\"value_kind\") == \"rh\" else \"flatline_tolerance\"\n    vals = [r.get(\"temp\") for r in window_rows if r.get(\"temp\") is not None]\n    if not vals:\n        return False\n    spread = max(vals) - min(vals)\n    tol = cfg_threshold(cfg, tol_key)\n\n    if spread < tol:\n        print(\n            f\"row={row['row']} ts={row['ts']} \"\n            f\"FLATLINE 1h spread={spread:.3f} < tol={tol:.3f} col={row.get('value_column')}\"\n        )\n        return True, window_rows\n\n    return False\n",
+      "fault_code": "VAV-03",
+      "config": {
+        "flatline_tolerance": 0.1,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1173"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/bench_oa-t_flatline_1h.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.559308+00:00",
+      "updated_at": "2026-05-31T13:50:58.559331+00:00"
+    },
+    {
+      "id": "bench-oa-t-oob",
+      "name": "Bench OA-T out of bounds",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 6 \u2014 out of bounds on rolling avg.\"\"\"\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    sym = temp_unit_symbol(cfg)\n    is_rh = row.get(\"value_kind\") == \"rh\"\n    low_key = \"bounds_low_rh\" if is_rh else \"bounds_low\"\n    high_key = \"bounds_high_rh\" if is_rh else \"bounds_high\"\n    low = cfg_threshold(cfg, low_key)\n    high = cfg_threshold(cfg, high_key)\n\n    if \"temp_rolling_avg\" in row and row[\"temp_rolling_avg\"] is not None:\n        v = row[\"temp_rolling_avg\"]\n        kind = \"avg\"\n    else:\n        v = row.get(\"temp\")\n        kind = \"raw\"\n\n    if v is None:\n        return False\n\n    if v < low or v > high:\n        print(\n            f\"{row['ts']}  OOB {kind}  {v:.2f}  (band {low:.1f}\u2013{high:.1f}) col={row.get('value_column')}\"\n        )\n        return True\n\n    return False\n",
+      "fault_code": "VAV-03",
+      "config": {
+        "bounds_low": 65,
+        "bounds_high": 85,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1173"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/bench_oa-t_out_of_bounds.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.564690+00:00",
+      "updated_at": "2026-05-31T13:50:58.564703+00:00"
+    },
+    {
+      "id": "bench-stat-zn-t-flatline-1h",
+      "name": "Bench stat ZN-T flatline 1h",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 1 \u2014 flatline over 1 hour (temp or rh via row['temp']).\"\"\"\n\nONE_HOUR_MS = 60 * 60 * 1000\nFILL_RATIO = 0.95\n\n\ndef get_last_1_hour(row, rows):\n    now_ms = row[\"ts_ms\"]\n    start_ms = now_ms - ONE_HOUR_MS\n    return [r for r in rows if start_ms <= r[\"ts_ms\"] <= now_ms]\n\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    if rows is None:\n        return False\n\n    window_rows = get_last_1_hour(row, rows)\n    if len(window_rows) < 2:\n        return False\n\n    span_ms = window_rows[-1][\"ts_ms\"] - window_rows[0][\"ts_ms\"]\n    if span_ms < ONE_HOUR_MS * FILL_RATIO:\n        return False\n\n    sym = temp_unit_symbol(cfg)\n    tol_key = \"flatline_tolerance_rh\" if row.get(\"value_kind\") == \"rh\" else \"flatline_tolerance\"\n    vals = [r.get(\"temp\") for r in window_rows if r.get(\"temp\") is not None]\n    if not vals:\n        return False\n    spread = max(vals) - min(vals)\n    tol = cfg_threshold(cfg, tol_key)\n\n    if spread < tol:\n        print(\n            f\"row={row['row']} ts={row['ts']} \"\n            f\"FLATLINE 1h spread={spread:.3f} < tol={tol:.3f} col={row.get('value_column')}\"\n        )\n        return True, window_rows\n\n    return False\n",
+      "fault_code": "VAV-03",
+      "config": {
+        "flatline_tolerance": 0.1,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-10014"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/bench_stat_zn-t_flatline_1h.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.578502+00:00",
+      "updated_at": "2026-05-31T13:50:58.578519+00:00"
+    },
+    {
+      "id": "duct-t-flatline-1h",
+      "name": "Duct-T flatline 1h",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 1 \u2014 flatline over 1 hour (temp or rh via row['temp']).\"\"\"\n\nONE_HOUR_MS = 60 * 60 * 1000\nFILL_RATIO = 0.95\n\n\ndef get_last_1_hour(row, rows):\n    now_ms = row[\"ts_ms\"]\n    start_ms = now_ms - ONE_HOUR_MS\n    return [r for r in rows if start_ms <= r[\"ts_ms\"] <= now_ms]\n\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    if rows is None:\n        return False\n\n    window_rows = get_last_1_hour(row, rows)\n    if len(window_rows) < 2:\n        return False\n\n    span_ms = window_rows[-1][\"ts_ms\"] - window_rows[0][\"ts_ms\"]\n    if span_ms < ONE_HOUR_MS * FILL_RATIO:\n        return False\n\n    sym = temp_unit_symbol(cfg)\n    tol_key = \"flatline_tolerance_rh\" if row.get(\"value_kind\") == \"rh\" else \"flatline_tolerance\"\n    vals = [r.get(\"temp\") for r in window_rows if r.get(\"temp\") is not None]\n    if not vals:\n        return False\n    spread = max(vals) - min(vals)\n    tol = cfg_threshold(cfg, tol_key)\n\n    if spread < tol:\n        print(\n            f\"row={row['row']} ts={row['ts']} \"\n            f\"FLATLINE 1h spread={spread:.3f} < tol={tol:.3f} col={row.get('value_column')}\"\n        )\n        return True, window_rows\n\n    return False\n",
+      "fault_code": "DC-03",
+      "config": {
+        "flatline_tolerance": 0.1,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1192"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/duct-t_flatline_1h.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.587768+00:00",
+      "updated_at": "2026-05-31T13:50:58.587782+00:00"
+    },
+    {
+      "id": "duct-t-spread-1h",
+      "name": "Duct-T spread 1h",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 4 \u2014 spread / min-max over 1 hour.\"\"\"\n\nONE_HOUR_MS = 60 * 60 * 1000\nFILL_RATIO = 0.95\n\n\ndef get_last_1_hour(row, rows):\n    now_ms = row[\"ts_ms\"]\n    start_ms = now_ms - ONE_HOUR_MS\n    return [r for r in rows if start_ms <= r[\"ts_ms\"] <= now_ms]\n\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    if rows is None:\n        return False\n\n    window_rows = get_last_1_hour(row, rows)\n    if not window_rows:\n        return False\n\n    span_ms = window_rows[-1][\"ts_ms\"] - window_rows[0][\"ts_ms\"]\n    if span_ms < ONE_HOUR_MS * FILL_RATIO:\n        return False\n\n    sym = temp_unit_symbol(cfg)\n    vals = [r.get(\"temp\") for r in window_rows if r.get(\"temp\") is not None]\n    if not vals:\n        return False\n    lo, hi = min(vals), max(vals)\n    spread = hi - lo\n    lim = cfg_threshold(cfg, \"max_spread\")\n\n    if spread > lim:\n        print(\n            f\"row={row['row']} ts={row['ts']} \"\n            f\"SPREAD/1h={spread:.2f} {sym} > {lim:.2f} col={row.get('value_column')}\"\n        )\n        return True, window_rows\n\n    return False\n",
+      "fault_code": "DC-03",
+      "config": {
+        "max_spread": 4.0,
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1192"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/duct-t_spread_1h.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.601032+00:00",
+      "updated_at": "2026-05-31T13:50:58.601046+00:00"
+    },
+    {
+      "id": "bench-oa-h-flatline-1h",
+      "name": "Bench humidity flatline 1h",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 1 \u2014 flatline over 1 hour (temp or rh via row['temp']).\"\"\"\n\nONE_HOUR_MS = 60 * 60 * 1000\nFILL_RATIO = 0.95\n\n\ndef get_last_1_hour(row, rows):\n    now_ms = row[\"ts_ms\"]\n    start_ms = now_ms - ONE_HOUR_MS\n    return [r for r in rows if start_ms <= r[\"ts_ms\"] <= now_ms]\n\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    if rows is None:\n        return False\n\n    window_rows = get_last_1_hour(row, rows)\n    if len(window_rows) < 2:\n        return False\n\n    span_ms = window_rows[-1][\"ts_ms\"] - window_rows[0][\"ts_ms\"]\n    if span_ms < ONE_HOUR_MS * FILL_RATIO:\n        return False\n\n    sym = temp_unit_symbol(cfg)\n    tol_key = \"flatline_tolerance_rh\" if row.get(\"value_kind\") == \"rh\" else \"flatline_tolerance\"\n    vals = [r.get(\"temp\") for r in window_rows if r.get(\"temp\") is not None]\n    if not vals:\n        return False\n    spread = max(vals) - min(vals)\n    tol = cfg_threshold(cfg, tol_key)\n\n    if spread < tol:\n        print(\n            f\"row={row['row']} ts={row['ts']} \"\n            f\"FLATLINE 1h spread={spread:.3f} < tol={tol:.3f} col={row.get('value_column')}\"\n        )\n        return True, window_rows\n\n    return False\n",
+      "fault_code": "BLD-02",
+      "config": {
+        "flatline_tolerance_rh": 1.0,
+        "value_kind": "rh",
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1168"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/bench_humidity_flatline_1h.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.610037+00:00",
+      "updated_at": "2026-05-31T13:50:58.610050+00:00"
+    },
+    {
+      "id": "bench-oa-h-oob",
+      "name": "Bench humidity out of bounds",
+      "description": "",
+      "mode": "rule",
+      "code": "\"\"\"Cookbook Recipe 6 \u2014 out of bounds on rolling avg.\"\"\"\n\ndef evaluate(row, cfg, prev_row=None, rows=None):\n    sym = temp_unit_symbol(cfg)\n    is_rh = row.get(\"value_kind\") == \"rh\"\n    low_key = \"bounds_low_rh\" if is_rh else \"bounds_low\"\n    high_key = \"bounds_high_rh\" if is_rh else \"bounds_high\"\n    low = cfg_threshold(cfg, low_key)\n    high = cfg_threshold(cfg, high_key)\n\n    if \"temp_rolling_avg\" in row and row[\"temp_rolling_avg\"] is not None:\n        v = row[\"temp_rolling_avg\"]\n        kind = \"avg\"\n    else:\n        v = row.get(\"temp\")\n        kind = \"raw\"\n\n    if v is None:\n        return False\n\n    if v < low or v > high:\n        print(\n            f\"{row['ts']}  OOB {kind}  {v:.2f}  (band {low:.1f}\u2013{high:.1f}) col={row.get('value_column')}\"\n        )\n        return True\n\n    return False\n",
+      "fault_code": "BLD-02",
+      "config": {
+        "bounds_low_rh": 15,
+        "bounds_high_rh": 75,
+        "value_kind": "rh",
+        "temp_unit": "imperial",
+        "rolling_avg_minutes": 1
+      },
+      "column_map": {},
+      "applies_to": {
+        "equipment_type": "",
+        "brick_type": "",
+        "site_ids": []
+      },
+      "bindings": {
+        "point_ids": [
+          "5007-analog-input-1168"
+        ],
+        "equipment_ids": [],
+        "brick_types": []
+      },
+      "source_path": "/home/ben/open-fdd/workspace/data/rules_py/bench_humidity_out_of_bounds.py",
+      "severity": "warning",
+      "enabled": true,
+      "saved_by": "setup_bench_afdd",
+      "created_at": "2026-05-31T13:50:58.618839+00:00",
+      "updated_at": "2026-05-31T13:50:58.618853+00:00"
+    }
+  ]
+}

@@ -60,9 +60,13 @@ def test_model_export_import(client: TestClient):
 
 
 def test_model_import_requires_site(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
     payload = {"sites": [], "equipment": [], "points": []}
     r = client.post("/api/model/import", json={"payload": payload, "replace": True})
     assert r.status_code == 400
+    export = client.get("/api/model/export").json()
+    assert export["sites"]
+    assert export["sites"][0]["id"] == "s1"
 
 
 def test_model_delete_point_and_equipment(client: TestClient):

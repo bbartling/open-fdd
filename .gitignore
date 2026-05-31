@@ -178,6 +178,7 @@ workspace/auth.env.local
 # Local Ollama operator AI config
 workspace/ollama.env.local
 workspace/caddy.env.local
+workspace/data.env.local
 workspace/deploy/caddy/certs/
 workspace/.local-run/
 

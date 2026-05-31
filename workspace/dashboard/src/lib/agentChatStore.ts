@@ -5,6 +5,10 @@ export type ChatMessage = {
   thinking?: string;
   status: "done" | "pending" | "error";
   createdAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  evalCount?: number;
+  tokensPerSec?: number;
 };
 
 export type AgentChatState = {
@@ -15,6 +19,8 @@ export type AgentChatState = {
   busy: boolean;
   pendingMessageId: string | null;
 };
+
+export type ChatHistoryTurn = { role: "user" | "assistant"; content: string };
 
 const STORAGE_KEY = "ofdd-agent-chat-v1";
 
@@ -96,22 +102,67 @@ export function appendPendingAssistant(state: AgentChatState): { state: AgentCha
   };
 }
 
+export type AssistantTiming = {
+  durationMs?: number;
+  evalCount?: number;
+  tokensPerSec?: number;
+};
+
 export function resolveAssistant(
   state: AgentChatState,
   id: string,
   content: string,
   thinking: string,
   ok: boolean,
+  timing?: AssistantTiming,
 ): AgentChatState {
+  const completedAt = new Date().toISOString();
   return {
     ...state,
     busy: false,
     pendingMessageId: null,
-    messages: state.messages.map((m) =>
-      m.id === id
-        ? { ...m, content, thinking, status: ok ? "done" : ("error" as const) }
-        : m,
-    ),
+    messages: state.messages.map((m) => {
+      if (m.id !== id) return m;
+      const started = Date.parse(m.createdAt);
+      const fallbackMs = Number.isFinite(started) ? Date.now() - started : undefined;
+      return {
+        ...m,
+        content,
+        thinking,
+        status: ok ? "done" : ("error" as const),
+        completedAt,
+        durationMs: timing?.durationMs ?? fallbackMs,
+        evalCount: timing?.evalCount,
+        tokensPerSec: timing?.tokensPerSec,
+      };
+    }),
+  };
+}
+
+/** Completed turns only — for Ollama multi-turn (backend trims further). */
+export function buildChatHistoryPayload(messages: ChatMessage[]): ChatHistoryTurn[] {
+  return messages
+    .filter((m) => m.status !== "pending" && m.content.trim() && m.content !== "…")
+    .map((m) => ({ role: m.role, content: m.content.trim() }));
+}
+
+export function deleteMessage(state: AgentChatState, id: string): AgentChatState {
+  if (state.pendingMessageId === id) {
+    return { ...state, messages: state.messages.filter((m) => m.id !== id), busy: false, pendingMessageId: null };
+  }
+  return { ...state, messages: state.messages.filter((m) => m.id !== id) };
+}
+
+/** Delete this message and everything after it (useful for trimming context manually). */
+export function deleteMessageAndAfter(state: AgentChatState, id: string): AgentChatState {
+  const idx = state.messages.findIndex((m) => m.id === id);
+  if (idx < 0) return state;
+  const pendingRemoved = state.messages.slice(idx).some((m) => m.id === state.pendingMessageId);
+  return {
+    ...state,
+    messages: state.messages.slice(0, idx),
+    busy: pendingRemoved ? false : state.busy,
+    pendingMessageId: pendingRemoved ? null : state.pendingMessageId,
   };
 }
 

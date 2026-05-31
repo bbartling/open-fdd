@@ -148,8 +148,14 @@ export async function fetchAuthStatus(): Promise<AuthStatus> {
   return apiFetch<AuthStatus>("/api/auth/status");
 }
 
+export type AuthMe = { username: string; role: string; auth_required: boolean };
+
+export async function fetchAuthMe(): Promise<AuthMe> {
+  return apiFetch<AuthMe>("/api/auth/me");
+}
+
 export async function login(username: string, password: string) {
-  return apiFetch<{ token: string; username: string }>("/api/auth/login", {
+  return apiFetch<{ token: string; username: string; role: string }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });

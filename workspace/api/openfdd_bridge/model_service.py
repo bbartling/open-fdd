@@ -60,12 +60,15 @@ class ModelService:
             raise
         return target
 
-    def import_json(self, payload: dict[str, Any], *, replace: bool = True) -> dict[str, int]:
-        normalized = {
+    def normalize_import_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
             "sites": payload.get("sites", []) if isinstance(payload.get("sites"), list) else [],
             "equipment": payload.get("equipment", []) if isinstance(payload.get("equipment"), list) else [],
             "points": payload.get("points", []) if isinstance(payload.get("points"), list) else [],
         }
+
+    def import_json(self, payload: dict[str, Any], *, replace: bool = True) -> dict[str, int]:
+        normalized = self.normalize_import_payload(payload)
         if replace:
             with self.transaction() as model:
                 model["sites"] = list(normalized["sites"])

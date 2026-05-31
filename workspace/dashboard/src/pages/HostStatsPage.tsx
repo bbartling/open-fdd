@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import { apiFetch } from "../lib/api";
 import { appendHostHistory } from "../lib/hostHistory";
@@ -45,7 +45,17 @@ type HostStats = {
   memory: MemBlock;
   storage: StorageBlock;
   network: { available?: boolean; rx_bytes?: number; tx_bytes?: number };
-  ollama: { pid?: number; command?: string; rss_bytes?: number } | null;
+  ollama: {
+    api_ok?: boolean;
+    base_url?: string;
+    models_installed?: string[];
+    configured_model?: string;
+    error?: string;
+    pid?: number;
+    rss_bytes?: number;
+    command?: string;
+    process?: { pid?: number; rss_bytes?: number };
+  };
 };
 
 type HistoryPoint = {
@@ -66,6 +76,23 @@ function fmtBytes(n: number | undefined | null): string {
     i += 1;
   }
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function fmtOllamaStatus(ollama: HostStats["ollama"]): string {
+  if (ollama.api_ok) {
+    const n = ollama.models_installed?.length ?? 0;
+    const ram = ollama.rss_bytes ? ` · ${fmtBytes(ollama.rss_bytes)} RAM` : "";
+    const model = ollama.configured_model ? ` · ${ollama.configured_model}` : "";
+    return `API OK · ${n} model${n === 1 ? "" : "s"}${ram}${model}`;
+  }
+  if (ollama.process || ollama.pid) {
+    const ram = ollama.rss_bytes ? fmtBytes(ollama.rss_bytes) : "—";
+    return `process only · ${ram} RAM (API not responding)`;
+  }
+  if (ollama.error) {
+    return `not reachable`;
+  }
+  return "not detected";
 }
 
 function fmtUptime(seconds: number | null | undefined): string {
@@ -125,7 +152,7 @@ export default function HostStatsPage() {
   const pollRef = useRef<number | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setBusy(true);
@@ -147,14 +174,14 @@ export default function HostStatsPage() {
       setBusy(false);
       pollRef.current = window.setTimeout(load, POLL_MS);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
     return () => {
       if (pollRef.current != null) window.clearTimeout(pollRef.current);
     };
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!chartRef.current || history.length < 2) return;
@@ -286,8 +313,8 @@ export default function HostStatsPage() {
               </div>
               <div>
                 <span className="status-kv-label">Ollama</span>
-                <div>
-                  {stats.ollama ? `running · ${fmtBytes(stats.ollama.rss_bytes)} RAM` : "not detected"}
+                <div title={stats.ollama.error || stats.ollama.base_url || undefined}>
+                  {fmtOllamaStatus(stats.ollama)}
                 </div>
               </div>
             </div>

@@ -4,7 +4,7 @@ import { fetchAuthStatus, login, sanitizeBridgeBaseOverride, setToken } from "..
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("operator");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(true);
@@ -44,10 +44,16 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <form className="panel login-card" onSubmit={onSubmit}>
-        <h2>Operator sign-in</h2>
+        <h2>Open-FDD sign-in</h2>
         <p className="muted">
           {authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}
         </p>
+        {authRequired ? (
+          <p className="muted login-role-hint">
+            <strong>integrator</strong> — Rule Lab, BACnet writes, model import.{" "}
+            <strong>operator</strong> — view trends, faults, agent chat. <strong>agent</strong> — automation token.
+          </p>
+        ) : null}
         {hint ? <p className="muted">{hint}</p> : null}
         <div className="field">
           <label className="field-label" htmlFor="login-username">
@@ -58,6 +64,7 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
+            placeholder="integrator"
           />
         </div>
         <div className="field">

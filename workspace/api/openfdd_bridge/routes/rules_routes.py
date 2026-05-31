@@ -50,7 +50,10 @@ class RuleBindingsBody(BaseModel):
 
 
 class BatchBody(BaseModel):
-    limit: int = Field(default=1000, ge=1, le=5000)
+    limit: int = Field(default=1000, ge=1, le=50000)
+    chunk_hours: float = Field(default=6, ge=0, le=168)
+    lookback_hours: float = Field(default=1, ge=0, le=720)
+    use_chunks: bool | None = None
 
 
 @router.get("/saved")
@@ -141,7 +144,12 @@ def delete_saved_rule(rule_id: str, _user: dict = Depends(require_roles("integra
 
 @router.post("/batch")
 def run_saved_batch(body: BatchBody, _user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
-    return run_batch(limit=body.limit)
+    return run_batch(
+        limit=body.limit,
+        chunk_hours=body.chunk_hours,
+        lookback_hours=body.lookback_hours,
+        use_chunks=body.use_chunks,
+    )
 
 
 @router.get("/drafts")

@@ -25,6 +25,7 @@ class ChatBody(BaseModel):
     model: str | None = None
     gpu_mode: str | None = None
     think: bool | str | None = None
+    history: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ToolBody(BaseModel):
@@ -42,9 +43,11 @@ def agent_context() -> dict:
         "ollama_ram_tier": tier,
         "ollama_model": ollama_client.configured_model(),
         "ollama_gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
+        "ollama_timeout_s": float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S))),
         "ollama_tiers": tiers_payload(),
         "ollama_thinking_models": thinking_models_payload(),
         "ollama_think": ollama_client.configured_think(),
+        "mcp": ollama_client.mcp_agent_hints(),
         **agent_tools.model_context(),
     }
 
@@ -103,4 +106,5 @@ def agent_chat(body: ChatBody) -> dict:
         ram_tier=body.ram_tier or ollama_client.configured_ram_tier(),
         gpu_mode=body.gpu_mode or os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
         think=body.think,
+        history=body.history,
     )

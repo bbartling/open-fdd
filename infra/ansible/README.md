@@ -23,7 +23,7 @@ export SSHPASS='...'   # Acme VM if password auth
 | `openfdd-bacnet-commission` | Discover jobs HTTP agent (8767) |
 | `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` (systemd edge; local dev uses commission agent poll loop) |
 | `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
-| `openfdd-feather-retention.timer` | Daily feather store prune/compact (`feather_retention_days`) |
+| `openfdd-feather-retention.timer` | Daily feather prune + GiB cap (`feather_retention_days`, `feather_max_gib`) |
 | `caddy` | LAN entry **:80** (or **:443** TLS) → bridge on loopback — default URL with no port |
 
 Poll driver is **off** until `points.csv` is commissioned:

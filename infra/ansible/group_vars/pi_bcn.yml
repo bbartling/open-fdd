@@ -48,10 +48,12 @@ install_fdd_loop_timer: true
 enable_fdd_loop_timer: true
 fdd_loop_interval_hours: 3
 
-# Feather store retention/compaction (drop rows older than N days, daily)
+# Feather store retention/compaction (drop rows older than N days, enforce GiB cap daily)
 install_feather_retention_timer: true
 enable_feather_retention_timer: true
 feather_retention_days: 90
+feather_max_gib: 5
+feather_trim_chunk_hours: 24
 
 # Bridge bind: loopback when Caddy is the LAN entry (default). Caddy serves :80 or :443.
 # Override openfdd_bridge_host to 0.0.0.0 only when caddy_enabled: false.

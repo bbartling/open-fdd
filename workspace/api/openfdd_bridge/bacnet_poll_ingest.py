@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from .feather_store import FeatherStore
+from .feather_store import FeatherStore, maintain_storage_if_needed
 from .model_service import ModelService
 from .paths import bacnet_poll_csv
 from .site_defaults import ensure_default_site
@@ -105,9 +105,12 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
         compact = store.compact(source="bacnet", site_id=sid)
         sites_written[sid] = int(compact.get("rows") or len(wide))
 
+    storage_trim = maintain_storage_if_needed(store)
+
     return {
         "ok": True,
         "path": str(path),
         "sites": sites_written,
         "rows_long": int(len(df)),
+        "storage_trim": storage_trim,
     }

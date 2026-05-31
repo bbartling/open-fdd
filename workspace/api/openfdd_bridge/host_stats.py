@@ -139,8 +139,8 @@ def _process_count() -> int | None:
         return None
 
 
-def _ollama_summary() -> dict[str, Any] | None:
-    """Best-effort Ollama process footprint when local AI is running."""
+def _ollama_process_summary() -> dict[str, Any] | None:
+    """Best-effort Ollama process footprint from /proc (optional RAM line on Host Stats)."""
     proc = Path("/proc")
     if not proc.is_dir():
         return None
@@ -152,7 +152,7 @@ def _ollama_summary() -> dict[str, Any] | None:
             comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").strip("\x00")
         except OSError:
             continue
-        if comm != "ollama":
+        if not comm.startswith("ollama"):
             continue
         try:
             cmdline = (entry / "cmdline").read_bytes().replace(b"\x00", b" ").decode("utf-8", errors="replace").strip()
@@ -173,6 +173,27 @@ def _ollama_summary() -> dict[str, Any] | None:
             return candidate
         best = candidate
     return best
+
+
+def _ollama_payload() -> dict[str, Any]:
+    """Ollama status for Host Stats — API reachability matches the Agent chat tab."""
+    from . import ollama_client
+
+    health = ollama_client.health(timeout=2.0)
+    proc = _ollama_process_summary()
+    payload: dict[str, Any] = {
+        "api_ok": health.get("ok") is True,
+        "base_url": health.get("base_url"),
+        "models_installed": health.get("models_installed") or [],
+        "configured_model": health.get("configured_model"),
+        "error": health.get("error"),
+        "process": proc,
+    }
+    if proc:
+        payload["pid"] = proc.get("pid")
+        payload["rss_bytes"] = proc.get("rss_bytes")
+        payload["command"] = proc.get("command")
+    return payload
 
 
 def _memory_payload(meminfo: dict[str, int] | None) -> dict[str, Any]:
@@ -231,11 +252,17 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         storage["role"] = "data"
         storage["available"] = True
         storage["note"] = "Feather store, rules, and model JSON live here"
+        from .feather_store import FeatherStore, feather_max_gib_from_env
+
+        feather_root = data_path / "feather_store"
+        store = FeatherStore(root=feather_root)
+        storage["feather_bytes"] = store.total_bytes()
+        storage["feather_max_gib"] = feather_max_gib_from_env()
     except OSError:
         pass
 
     net = _network_totals()
-    ollama = _ollama_summary()
+    ollama = _ollama_payload()
 
     return {
         "ok": True,

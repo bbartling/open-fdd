@@ -81,3 +81,15 @@ def test_playground_test_rule_uses_demo_frame(client: TestClient):
     assert body.get("ok") is True
     assert body.get("data_source") == "demo"
     assert body.get("flagged", 0) >= 0
+
+
+def test_playground_test_rule_bad_indent_not_500(client: TestClient):
+    bad = "def evaluate(row, cfg, prev_row=None, rows=None):\nreturn False\n"
+    r = client.post(
+        "/api/playground/test-rule",
+        json={"code": bad, "config": {}, "limit": 10},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is False
+    assert body.get("issues") or body.get("events")

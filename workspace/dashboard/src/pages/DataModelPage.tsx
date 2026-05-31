@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetchText } from "../lib/api";
-import { openTtlPopup } from "../lib/ttlPopup";
+import { openTtlPopup, openTextPopup } from "../lib/ttlPopup";
+import { copyToClipboard } from "../lib/clipboard";
+import { buildLlmModelBundle } from "../lib/llmModelBundle";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
+import { ModelPayload } from "../lib/modelImport";
 import ModelGraphExplorer from "../components/ModelGraphExplorer";
 import ModelImportExportPanel from "../components/ModelImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
@@ -35,13 +38,20 @@ export default function DataModelPage() {
     refreshMeta().catch((e) => setOut(String(e)));
   }, [refreshMeta]);
 
-  async function copyText(key: string, value: string) {
+  const [copyBusy, setCopyBusy] = useState(false);
+
+  async function copyForLlm() {
+    setCopyBusy(true);
     try {
-      await navigator.clipboard.writeText(value);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey(""), 1200);
+      const model = await apiFetch<ModelPayload>("/api/model/export");
+      await copyToClipboard(buildLlmModelBundle(DATA_MODEL_REDESIGN_PROMPT, model));
+      setCopiedKey("llm");
+      window.setTimeout(() => setCopiedKey(""), 2000);
+      setOut("Copied LLM prompt + current model JSON — paste into your chat session.");
     } catch (error) {
       setOut(`Copy failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCopyBusy(false);
     }
   }
 
@@ -61,18 +71,11 @@ export default function DataModelPage() {
   async function doViewJsonPopup() {
     try {
       const text = JSON.stringify(await apiFetch("/api/model/export"), null, 2);
-      const popup = window.open("", "_blank");
-      if (!popup) {
+      if (!openTextPopup("model.json", text)) {
         setOut("Popup blocked — allow popups to view raw model JSON.");
         return;
       }
-      popup.document.write(
-        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>model.json</title></head>` +
-          `<body style="margin:0;background:#fff;"><pre style="padding:1rem;font:12px ui-monospace,monospace;white-space:pre-wrap;">` +
-          `${text.replace(/</g, "&lt;")}</pre></body></html>`,
-      );
-      popup.document.close();
-      setOut("Opened model JSON in a new tab.");
+      setOut("Opened model JSON in a new browser tab.");
     } catch (error) {
       setOut(`JSON view failed: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -135,8 +138,8 @@ export default function DataModelPage() {
       {activeTab === "advanced" ? (
         <div className="dm-advanced panel">
           <p className="muted">
-            View the live graph as plain text in a new tab (same UX as the legacy stack). Import/export lives on the
-            adjacent tab.
+            <strong>Copy prompt + model for LLM</strong> bundles the redesign instructions with your live export (sites,
+            equipment, points) in one paste block. Works on HTTP LAN hosts without the Clipboard API.
           </p>
           <div className="row">
             <button type="button" onClick={() => void doViewTtlPopup()}>
@@ -145,12 +148,8 @@ export default function DataModelPage() {
             <button type="button" className="secondary-btn" onClick={() => void doViewJsonPopup()}>
               View model JSON (new tab)
             </button>
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}
-            >
-              {copiedKey === "prompt" ? "Copied LLM prompt" : "Copy LLM redesign prompt"}
+            <button type="button" className="secondary-btn" disabled={copyBusy} onClick={() => void copyForLlm()}>
+              {copiedKey === "llm" ? "Copied for LLM" : copyBusy ? "Copying…" : "Copy prompt + model for LLM"}
             </button>
           </div>
           <details className="dm-prompt-details">

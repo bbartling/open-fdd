@@ -1,23 +1,27 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearToken, fetchAuthStatus, hasToken } from "../lib/api";
+import { clearToken, fetchAuthMe, fetchAuthStatus, hasToken } from "../lib/api";
+import { useTheme } from "../contexts/theme-context";
 import StackStatusStrip from "./StackStatusStrip";
 
 const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
+  { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/data-model", icon: "🧱", label: "Data Model", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab", protected: true },
   { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
-  { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
   { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
   { to: "/host", icon: "📊", label: "Host stats", protected: true },
 ];
 
 export default function AppLayout() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [tokenPresent, setTokenPresent] = useState(hasToken());
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
+  const [sessionUser, setSessionUser] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAuthStatus()
@@ -26,7 +30,23 @@ export default function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const sync = () => setTokenPresent(hasToken());
+    const sync = () => {
+      setTokenPresent(hasToken());
+      if (!hasToken()) {
+        setSessionRole(null);
+        setSessionUser(null);
+        return;
+      }
+      fetchAuthMe()
+        .then((me) => {
+          setSessionRole(me.role);
+          setSessionUser(me.username);
+        })
+        .catch(() => {
+          setSessionRole(null);
+          setSessionUser(null);
+        });
+    };
     sync();
     window.addEventListener("storage", sync);
     window.addEventListener("focus", sync);
@@ -39,13 +59,19 @@ export default function AppLayout() {
   }, []);
 
   const signedIn = authRequired === false || tokenPresent;
+  const roleChip =
+    authRequired === false ? "dev" : sessionRole || (signedIn ? "signed in" : null);
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-row">
           <span className="brand">Open-FDD</span>
-          <span className="brand-chip">Operator</span>
+          {roleChip ? (
+            <span className="brand-chip" title={sessionUser ? `${sessionUser}` : undefined}>
+              {roleChip}
+            </span>
+          ) : null}
         </div>
         <StackStatusStrip />
         <nav className="sidebar-nav">
@@ -70,19 +96,26 @@ export default function AppLayout() {
           <button type="button" className="secondary-btn sign-out-btn" onClick={() => navigate("/login")}>
             Sign in
           </button>
-        ) : signedIn && authRequired ? (
-          <button
-            type="button"
-            className="secondary-btn sign-out-btn"
-            onClick={() => {
-              clearToken();
-              setTokenPresent(false);
-              navigate("/login");
-            }}
-          >
-            Sign out
-          </button>
-        ) : null}
+        ) : (
+          <>
+            <button type="button" className="secondary-btn theme-toggle-btn" onClick={toggleTheme}>
+              {theme === "dark" ? "Light UI" : "Dark UI"}
+            </button>
+            {signedIn && authRequired ? (
+              <button
+                type="button"
+                className="secondary-btn sign-out-btn"
+                onClick={() => {
+                  clearToken();
+                  setTokenPresent(false);
+                  navigate("/login");
+                }}
+              >
+                Sign out
+              </button>
+            ) : null}
+          </>
+        )}
       </aside>
       <main className="app-main">
         <div className="content">

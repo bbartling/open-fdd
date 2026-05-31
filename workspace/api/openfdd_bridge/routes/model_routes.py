@@ -103,9 +103,9 @@ def upsert_site(body: SiteBody, _user: dict = Depends(require_roles("operator", 
 @router.post("/import")
 def import_model(body: ImportBody, user: dict = Depends(require_roles("integrator"))) -> dict:
     svc = _model()
+    normalized = svc.normalize_import_payload(body.payload)
+    _require_site(normalized)
     counts = svc.import_json(body.payload, replace=body.replace)
-    model = svc.load()
-    _require_site(model)
     _ttl().sync()
     return {"ok": True, **counts}
 

@@ -2,19 +2,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
 import PageHeader from "../components/PageHeader";
 import { TabDebugPanel } from "../components/TabDebugPanel";
+import { useTheme } from "../contexts/theme-context";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
+import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
 
 type SiteRow = { site_id: string; name: string };
 
 export default function PlotPage() {
   const chartRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme();
   const [sites, setSites] = useState<SiteRow[]>([]);
   const [siteId, setSiteId] = useState("");
   const [columns, setColumns] = useState<string[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [kinds, setKinds] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [enabledFaults, setEnabledFaults] = useState<Set<string>>(new Set());
+  const [faultPanels, setFaultPanels] = useState<PlotReadingsResponse["fault_panels"]>([]);
+  const [plotData, setPlotData] = useState<PlotReadingsResponse | null>(null);
   const [hours, setHours] = useState(24);
+  const [showBounds, setShowBounds] = useState(true);
+  const [includeFaults, setIncludeFaults] = useState(true);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,40 +51,50 @@ export default function PlotPage() {
     if (siteId) loadSeries(siteId).catch((e) => setError(formatApiError(e)));
   }, [siteId, loadSeries]);
 
+  const renderChart = useCallback(
+    async (data: PlotReadingsResponse) => {
+      if (!chartRef.current) return;
+      const { traces, layout } = buildPlotTraces(data, {
+        enabledFaults,
+        showBounds,
+        theme,
+      });
+      await Plotly.react(
+        chartRef.current,
+        traces as Plotly.Data[],
+        {
+          ...layout,
+          title: `Feather · ${data.site_id ?? siteId} · ${data.hours ?? hours}h`,
+          height: 460,
+        },
+        { responsive: true, displayModeBar: true },
+      );
+    },
+    [enabledFaults, showBounds, theme, siteId, hours],
+  );
+
+  useEffect(() => {
+    if (plotData) void renderChart(plotData);
+  }, [plotData, renderChart]);
+
   async function refreshChart() {
-    if (!siteId || !selected.size || !chartRef.current) return;
+    if (!siteId || !selected.size) return;
     setLoading(true);
     setError("");
     try {
       const cols = [...selected].join(",");
-      const res = await apiFetch<{
-        timestamps: string[];
-        series: Record<string, (number | null)[]>;
-      }>(`/api/timeseries/plot?site_id=${encodeURIComponent(siteId)}&columns=${encodeURIComponent(cols)}&hours=${hours}`);
-      const traces = Object.entries(res.series ?? {}).map(([col, vals]) => ({
-        x: res.timestamps,
-        y: vals,
-        type: "scatter" as const,
-        mode: "lines" as const,
-        name: labels[col] || col,
-        connectgaps: true,
-      }));
-      await Plotly.react(
-        chartRef.current,
-        traces,
-        {
-          title: `Feather store · ${siteId} · ${hours}h`,
-          paper_bgcolor: "transparent",
-          plot_bgcolor: "transparent",
-          font: { color: "#c9d1d9" },
-          xaxis: { title: "Time" },
-          yaxis: { title: "Value" },
-          margin: { t: 48, r: 24, b: 48, l: 56 },
-          legend: { orientation: "h" as const, y: 1.12 },
-        },
-        { responsive: true, displayModeBar: true },
+      const res = await apiFetch<PlotReadingsResponse>(
+        `/api/timeseries/readings?site_id=${encodeURIComponent(siteId)}&columns=${encodeURIComponent(cols)}&hours=${hours}&include_faults=${includeFaults}`,
       );
-      setStatus(`Plotted ${traces.length} series from feather store.`);
+      setKinds(res.series_kinds ?? {});
+      setFaultPanels(res.fault_panels ?? []);
+      setEnabledFaults(new Set((res.fault_panels ?? []).map((p) => p.key)));
+      setPlotData(res);
+      const faultCount = Object.values(res.fault_totals ?? {}).reduce((a, b) => a + b, 0);
+      const trunc = res.chart_truncated ? ` (downsampled ×${res.chart_stride})` : "";
+      setStatus(
+        `Plotted ${Object.keys(res.series ?? {}).length} series, ${res.fault_panels?.length ?? 0} fault lanes, ${faultCount} flag samples${trunc}.`,
+      );
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -88,7 +107,7 @@ export default function PlotPage() {
     return () => {
       if (chartRef.current) Plotly.purge(chartRef.current);
     };
-  }, [siteId, hours]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [siteId, hours, includeFaults, selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleColumn(col: string) {
     setSelected((prev) => {
@@ -99,11 +118,27 @@ export default function PlotPage() {
     });
   }
 
+  function toggleFault(key: string) {
+    setEnabledFaults((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function columnKindLabel(col: string): string {
+    const k = kinds[col];
+    if (k === "humidity") return " %RH";
+    if (k === "temperature") return " °F";
+    return "";
+  }
+
   return (
     <div className="page page-wide">
       <PageHeader
         title="Trend plot"
-        subtitle="Live BACnet / feather timeseries — same Plotly pattern as the cloud pipeline dashboard."
+        subtitle="Feather telemetry with FDD fault overlays — temperature left, humidity right, fault lanes on a boolean axis."
       />
       <TabDebugPanel tab="plot" />
 
@@ -126,12 +161,21 @@ export default function PlotPage() {
               History
             </label>
             <select id="plot-hours" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
+              <option value={1}>1 h</option>
               <option value={6}>6 h</option>
               <option value={24}>24 h</option>
               <option value={72}>3 d</option>
               <option value={168}>7 d</option>
             </select>
           </div>
+          <label className="checkbox-inline">
+            <input type="checkbox" checked={includeFaults} onChange={(e) => setIncludeFaults(e.target.checked)} />
+            Evaluate FDD rules
+          </label>
+          <label className="checkbox-inline">
+            <input type="checkbox" checked={showBounds} onChange={(e) => setShowBounds(e.target.checked)} />
+            OOB guide lines
+          </label>
           <div className="form-row-actions">
             <button type="button" disabled={loading || !selected.size} onClick={() => void refreshChart()}>
               {loading ? "Loading…" : "Refresh chart"}
@@ -141,7 +185,7 @@ export default function PlotPage() {
       </div>
 
       <div className="plot-series-picker panel">
-        <h3 className="panel-title">Series</h3>
+        <h3 className="panel-title">Telemetry</h3>
         {columns.length ? (
           <div className="plot-series-chips">
             {columns.map((col) => (
@@ -152,15 +196,36 @@ export default function PlotPage() {
                 onClick={() => toggleColumn(col)}
               >
                 {labels[col] || col}
+                <span className="chip-kind">{columnKindLabel(col)}</span>
               </button>
             ))}
           </div>
         ) : (
-          <p className="muted">No numeric columns in feather store for this site — enable BACnet polling first.</p>
+          <p className="muted">No numeric columns in feather store — enable BACnet polling first.</p>
         )}
       </div>
 
-      <div className="panel">
+      {faultPanels?.length ? (
+        <div className="plot-series-picker panel">
+          <h3 className="panel-title">Fault overlays</h3>
+          <div className="plot-series-chips">
+            {faultPanels.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={enabledFaults.has(p.key) ? "chip chip-on chip-fault" : "chip chip-off chip-fault"}
+                style={{ borderColor: p.color }}
+                onClick={() => toggleFault(p.key)}
+              >
+                <span className="fault-swatch" style={{ background: p.color }} />
+                {p.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="panel plot-chart-panel">
         <div ref={chartRef} className="plot-chart" />
       </div>
       {status ? <p className="ok">{status}</p> : null}

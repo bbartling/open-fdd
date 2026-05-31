@@ -102,18 +102,32 @@ def test_health_down():
 
 def test_chat_success():
     client = _mock_httpx_client(
-        post_json={"message": {"content": "Check SAT trend in Rule Lab."}, "eval_count": 3},
+        post_json={
+            "message": {"content": "Check SAT trend in Rule Lab."},
+            "eval_count": 120,
+            "total_duration": 45_000_000_000,
+            "eval_duration": 40_000_000_000,
+        },
     )
     with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=client):
-        result = ollama_client.chat("hello", ram_tier="8gb", gpu_mode="cpu")
+        result = ollama_client.chat(
+            "hello",
+            ram_tier="8gb",
+            gpu_mode="cpu",
+            history=[{"role": "user", "content": "prior"}],
+        )
     assert result["ok"] is True
     assert result["mode"] == "ollama"
     assert result["model"] == "qwen3:1.7b"
     assert result["num_gpu"] == 0
-    assert "Rule Lab" in result["reply"]
+    assert result["duration_ms"] == 45000
+    assert result["eval_count"] == 120
+    assert result["tokens_per_sec"] == 3.0
     payload = client.post.call_args.kwargs["json"]
     assert payload["model"] == "qwen3:1.7b"
     assert payload["options"]["num_gpu"] == 0
+    assert len(payload["messages"]) >= 3
+    assert payload["messages"][-1]["content"] == "hello"
     # think omitted by default
     assert "think" not in payload
 
@@ -216,3 +230,23 @@ def test_agent_context_includes_ollama_tiers():
     assert body["ollama_tiers"]
     assert body["ollama"]["ok"] is False
     assert any(m["model"] == "qwen3" for m in body["ollama_thinking_models"])
+    assert "mcp" in body
+
+
+def test_agent_context_mcp_when_enabled(monkeypatch: pytest.MonkeyPatch):
+    from fastapi.testclient import TestClient
+
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    monkeypatch.setenv("OFDD_MCP_ENABLED", "1")
+    monkeypatch.setenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")
+    client = TestClient(create_app())
+    with patch(
+        "openfdd_bridge.routes.agent_routes.ollama_client.health",
+        return_value={"ok": False, "error": "down"},
+    ):
+        r = client.get("/openfdd-agent/context")
+    assert r.status_code == 200
+    mcp = r.json()["mcp"]
+    assert mcp["mcp_enabled"] is True
+    assert "8090" in mcp["mcp_search_docs"]

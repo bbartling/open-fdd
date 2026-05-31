@@ -18,6 +18,7 @@
 #   ./scripts/run_local.sh start --dev
 #
 # Caddy config: workspace/caddy.env.local (copy from caddy.env.example)
+# Feather / data cap: workspace/data.env.local overrides defaults (see load_data_env in run_local.sh)
 #   OFDD_CADDY_MODE=http | tls | off
 # Self-signed TLS: ./scripts/setup_caddy_certs.sh then OFDD_CADDY_MODE=tls
 set -euo pipefail
@@ -30,12 +31,14 @@ COMMISSION_PID="${PID_DIR}/commission.pid"
 OLLAMA_PID="${PID_DIR}/ollama.pid"
 CADDY_PID="${PID_DIR}/caddy.pid"
 MCP_PID="${PID_DIR}/mcp_rag.pid"
-UI_PID="${PID_DIR}/ui.pid"
+FDD_PID="${PID_DIR}/fdd_loop.pid"
+FDD_LOG="${PID_DIR}/fdd_loop.log"
 BRIDGE_LOG="${PID_DIR}/bridge.log"
 COMMISSION_LOG="${PID_DIR}/commission.log"
 OLLAMA_LOG="${PID_DIR}/ollama.log"
 CADDY_LOG="${PID_DIR}/caddy.log"
 MCP_LOG="${PID_DIR}/mcp_rag.log"
+UI_PID="${PID_DIR}/ui.pid"
 UI_LOG="${PID_DIR}/ui.log"
 
 export OPENFDD_REPO_ROOT="$ROOT"
@@ -44,7 +47,29 @@ export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
 export PYTHONPATH="$ROOT"
 export OFDD_BRIDGE_HOST="${OFDD_BRIDGE_HOST:-0.0.0.0}"
 export OFDD_BRIDGE_PORT="${OFDD_BRIDGE_PORT:-8765}"
-export OFDD_CORS_ALLOW_PRIVATE_LAN="${OFDD_CORS_ALLOW_PRIVATE_LAN:-1}"
+export OFDD_FDD_LOOKBACK_HOURS="${OFDD_FDD_LOOKBACK_HOURS:-1}"
+export OFDD_FDD_INTERVAL_MINUTES="${OFDD_FDD_INTERVAL_MINUTES:-10}"
+
+load_data_env() {
+  local quiet="${1:-false}"
+  if [[ -f "${ROOT}/workspace/data.env.local" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT}/workspace/data.env.local"
+    set +a
+    if [[ "$quiet" == false ]]; then
+      echo "Loaded workspace/data.env.local (feather max ${OFDD_FEATHER_MAX_GIB:-0} GiB, retention ${OFDD_FEATHER_RETENTION_DAYS:-?}d)"
+    fi
+  else
+    # Match workspace/data.env.example — used when no .local override exists.
+    export OFDD_FEATHER_MAX_GIB="${OFDD_FEATHER_MAX_GIB:-5}"
+    export OFDD_FEATHER_RETENTION_DAYS="${OFDD_FEATHER_RETENTION_DAYS:-90}"
+    export OFDD_FEATHER_TRIM_CHUNK_HOURS="${OFDD_FEATHER_TRIM_CHUNK_HOURS:-24}"
+    if [[ "$quiet" == false ]]; then
+      echo "Feather storage defaults (no data.env.local): max ${OFDD_FEATHER_MAX_GIB} GiB, retention ${OFDD_FEATHER_RETENTION_DAYS}d, trim ${OFDD_FEATHER_TRIM_CHUNK_HOURS}h"
+    fi
+  fi
+}
 
 load_env_files() {
   local quiet="${1:-false}"
@@ -90,6 +115,7 @@ load_env_files() {
     set +a
     echo "Created workspace/mcp.env.local from example (MCP RAG on :8090)"
   fi
+  load_data_env "$quiet"
 }
 
 VENV="${ROOT}/.venv"
@@ -434,6 +460,17 @@ start_ollama() {
   echo "Ollama started pid=$(cat "$OLLAMA_PID") but API not ready yet — see ${OLLAMA_LOG}" >&2
 }
 
+start_fdd_loop() {
+  mkdir -p "$PID_DIR"
+  restart_if_running "$FDD_PID" "openfdd_bridge.fdd_runner" "FDD loop"
+  "${VENV}/bin/pip" install -q -e ".[dev,engine]" -r workspace/api/requirements.txt
+  nohup "${VENV}/bin/python" -m openfdd_bridge.fdd_runner \
+    --loop --interval-minutes "${OFDD_FDD_INTERVAL_MINUTES}" --lookback-hours "${OFDD_FDD_LOOKBACK_HOURS}" \
+    >"$FDD_LOG" 2>&1 &
+  echo $! >"$FDD_PID"
+  echo "FDD loop pid=$(cat "$FDD_PID") every ${OFDD_FDD_INTERVAL_MINUTES}m lookback ${OFDD_FDD_LOOKBACK_HOURS}h → ${FDD_LOG}"
+}
+
 start_ui_dev() {
   echo "WARNING: --dev serves Vite on :5173 (HMR). For Ansible/production parity use the default start without --dev." >&2
   mkdir -p "$PID_DIR"
@@ -476,6 +513,7 @@ case "$CMD" in
       start_ui_dev
     fi
     wait_health
+    start_fdd_loop
     start_caddy
     echo ""
     LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
@@ -501,6 +539,8 @@ case "$CMD" in
     fi
     ;;
   stop)
+    stop_one "$FDD_PID" "FDD loop"
+    stop_by_pattern "openfdd_bridge.fdd_runner" "FDD loop"
     stop_one "$UI_PID" "vite dev"
     stop_one "$CADDY_PID" "caddy"
     stop_by_pattern "caddy run --config ${PID_DIR}/Caddyfile" "caddy"
@@ -518,6 +558,13 @@ case "$CMD" in
     exec "$0" start $(ui_build_restart_args)
     ;;
   status)
+    if pid_running "$FDD_PID"; then
+      echo "fdd_loop: running pid=$(cat "$FDD_PID") (every ${OFDD_FDD_INTERVAL_MINUTES:-10}m, lookback ${OFDD_FDD_LOOKBACK_HOURS:-1}h)"
+    elif pgrep -af "openfdd_bridge.fdd_runner" >/dev/null 2>&1; then
+      echo "fdd_loop: running (orphan)"
+    else
+      echo "fdd_loop: stopped"
+    fi
     if pid_running "$BRIDGE_PID"; then
       echo "bridge: running pid=$(cat "$BRIDGE_PID")"
     else
@@ -576,8 +623,11 @@ case "$CMD" in
   build-test)
     ./scripts/build_and_test.sh
     ;;
+  feather-maintain|feather)
+    "${VENV}/bin/python" -m openfdd_bridge.feather_store --maintain
+    ;;
   *)
-    echo "Usage: $0 [start|up|stop|restart|status|build-test] [--dev] [--ui-prod|--ui-test|--ui-skip]" >&2
+    echo "Usage: $0 [start|up|stop|restart|status|build-test|feather-maintain] [--dev] [--ui-prod|--ui-test|--ui-skip]" >&2
     exit 1
     ;;
 esac

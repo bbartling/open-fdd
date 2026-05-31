@@ -7,10 +7,16 @@
   ],
   "equipment": [
     {
-      "id": "e1",
+      "id": "bench-1",
       "site_id": "s1",
-      "name": "AHU-1",
-      "equipment_type": "Air_Handling_Unit"
+      "name": "HVAC sensor test bench",
+      "equipment_type": "Laboratory_Equipment"
+    },
+    {
+      "id": "duct-1",
+      "site_id": "s1",
+      "name": "Supply duct section",
+      "equipment_type": "Air_Duct"
     },
     {
       "id": "bacnet-5007",
@@ -24,90 +30,67 @@
     {
       "id": "p1",
       "site_id": "s1",
-      "equipment_id": "e1",
+      "equipment_id": "bench-1",
       "external_id": "SAT",
       "brick_type": "Supply_Air_Temperature_Sensor",
-      "fdd_input": "SAT"
+      "fdd_input": "SAT",
+      "description": "Legacy demo SAT column (optional)"
     },
     {
       "id": "5007-analog-input-1168",
       "site_id": "s1",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "oa-h",
-      "brick_type": "",
+      "brick_type": "Humidity_Sensor",
       "fdd_input": "oa-h",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1168",
       "object_type": "analog-input",
       "object_instance": "1168",
-      "description": "OA-H",
-      "metadata": {
-        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1168",
-        "series_id": "demo#local#bacnet#5007-analog-input-1168",
-        "poll_interval_s": "60",
-        "point_id": "5007-analog-input-1168"
-      }
+      "description": "Bench humidity (OA-H label, not outdoor air)"
     },
     {
       "id": "5007-analog-input-1173",
       "site_id": "s1",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "oa-t",
-      "brick_type": "",
+      "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1173",
       "object_type": "analog-input",
       "object_instance": "1173",
-      "description": "OA-T",
-      "metadata": {
-        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1173",
-        "series_id": "demo#local#bacnet#5007-analog-input-1173",
-        "poll_interval_s": "60",
-        "point_id": "5007-analog-input-1173"
-      }
+      "description": "Bench zone temp (OA-T label, on test bench)"
     },
     {
       "id": "5007-analog-input-1192",
       "site_id": "s1",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "duct-1",
       "external_id": "duct-t",
-      "brick_type": "",
+      "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1192",
       "object_type": "analog-input",
       "object_instance": "1192",
-      "description": "DUCT-T",
-      "metadata": {
-        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-1192",
-        "series_id": "demo#local#bacnet#5007-analog-input-1192",
-        "poll_interval_s": "60",
-        "point_id": "5007-analog-input-1192"
-      }
+      "description": "Duct-mounted discharge air temperature"
     },
     {
       "id": "5007-analog-input-10014",
       "site_id": "s1",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "stat_zn-t",
-      "brick_type": "",
+      "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,10014",
       "object_type": "analog-input",
       "object_instance": "10014",
-      "description": "STAT ZN-T",
-      "metadata": {
-        "external_ref": "feather://bacnet/s1/demo#local#bacnet#5007-analog-input-10014",
-        "series_id": "demo#local#bacnet#5007-analog-input-10014",
-        "poll_interval_s": "60",
-        "point_id": "5007-analog-input-10014"
-      }
+      "description": "Bench zone temp (stat space sensor)"
     }
   ]
 }

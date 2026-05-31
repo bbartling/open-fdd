@@ -26,8 +26,22 @@ ALLOWED_IMPORT_ROOTS = frozenset(
     {"datetime", "math", "numpy", "pandas", "open_fdd", "openfdd"}
 )
 
+GO_LIVE_BATCH_HOURS = 6
+GO_LIVE_MAX_LOOKBACK_HOURS = 168
+GO_LIVE_OVERLAP_MINUTES = 15
 
-def lint_python(code: str) -> dict[str, Any]:
+
+def _lint_error_events(lint: dict[str, Any]) -> list[dict[str, Any]]:
+    lines = [
+        f"line {issue.get('line', '?')}, col {issue.get('col', '?')}: {issue['message']}"
+        for issue in lint.get("issues", [])
+        if issue.get("severity") == "error"
+    ]
+    text = "syntax error — fix before run\n" + "\n".join(lines) if lines else "syntax error — fix before run"
+    return [{"type": "error", "text": text}]
+
+
+def lint_python(code: str, *, require_evaluate: bool = True) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     if not code.strip():
         return {"ok": True, "issues": issues}
@@ -73,6 +87,21 @@ def lint_python(code: str) -> dict[str, Any]:
                         "severity": "warning",
                     }
                 )
+
+    has_evaluate = any(
+        isinstance(node, ast.FunctionDef) and node.name == "evaluate" for node in ast.iter_child_nodes(tree)
+    )
+    if require_evaluate and not has_evaluate:
+        issues.append(
+            {
+                "line": 1,
+                "col": 1,
+                "end_col": 1,
+                "message": "rule must define evaluate(row, cfg, prev_row=None, rows=None)",
+                "severity": "error",
+            }
+        )
+
     return {"ok": not any(i["severity"] == "error" for i in issues), "issues": issues}
 
 
@@ -118,6 +147,26 @@ def _sandbox_builtins() -> dict[str, Any]:
     }
 
 
+from .fdd_row_prep import inject_rule_helpers
+
+
+def _parse_evaluate_result(raw: Any, rows: list[dict[str, Any]]) -> tuple[bool, list[int]]:
+    if isinstance(raw, tuple) and len(raw) >= 1:
+        hit = bool(raw[0])
+        if hit and len(raw) >= 2 and raw[1] is not None:
+            window = raw[1]
+            indices: list[int] = []
+            if isinstance(window, list):
+                for item in window:
+                    if isinstance(item, dict) and "row" in item:
+                        indices.append(int(item["row"]))
+                    elif isinstance(item, int):
+                        indices.append(item)
+            return hit, indices
+        return hit, []
+    return bool(raw), []
+
+
 def _rule_sandbox() -> dict[str, Any]:
     g: dict[str, Any] = {"__builtins__": _sandbox_builtins()}
     g["datetime"] = datetime
@@ -127,12 +176,26 @@ def _rule_sandbox() -> dict[str, Any]:
         g["numpy"] = np
     g["pd"] = pd
     g["pandas"] = pd
+    inject_rule_helpers(g)
     return g
 
 
 def compile_evaluate(code: str) -> Callable[..., Any]:
+    lint = lint_python(code)
+    if not lint["ok"]:
+        lines = [
+            f"line {issue.get('line', '?')}: {issue['message']}"
+            for issue in lint.get("issues", [])
+            if issue.get("severity") == "error"
+        ]
+        raise ValueError("syntax error — fix before run\n" + "\n".join(lines))
     g = _rule_sandbox()
-    exec(code, g, g)  # noqa: S102 — intentional sandboxed user code
+    try:
+        compiled = compile(code, "<rule>", "exec")
+        exec(compiled, g, g)  # noqa: S102 — intentional sandboxed user code
+    except (SyntaxError, IndentationError, TabError) as exc:
+        line = getattr(exc, "lineno", None) or "?"
+        raise ValueError(f"{exc.__class__.__name__} at line {line}: {exc.msg or exc}") from exc
     fn = g.get("evaluate")
     if not callable(fn):
         raise ValueError("rule code must define evaluate(row, cfg, prev_row=None, rows=None)")
@@ -146,17 +209,25 @@ def sweep_rule(
     *,
     capture_print: bool = True,
 ) -> tuple[list[bool], list[dict[str, Any]]]:
-    evaluate = compile_evaluate(code)
-    flags: list[bool] = []
+    lint = lint_python(code)
+    if not lint["ok"]:
+        return [False] * len(rows), _lint_error_events(lint)
+    try:
+        evaluate = compile_evaluate(code)
+    except ValueError as exc:
+        return [False] * len(rows), [
+            {"type": "error", "text": str(exc), "trace": traceback.format_exc(limit=8)},
+        ]
+    flags: list[bool] = [False] * len(rows)
     events: list[dict[str, Any]] = []
     prev: dict[str, Any] | None = None
     buf = io.StringIO()
-    flagged = 0
     for index, row in enumerate(rows):
         try:
             ctx = redirect_stdout(buf) if capture_print else nullcontext()
             with ctx:
-                fault = bool(evaluate(row, cfg, prev_row=prev, rows=rows))
+                raw = evaluate(row, cfg, prev_row=prev, rows=rows)
+            instant, paint = _parse_evaluate_result(raw, rows)
         except Exception as exc:
             events.append(
                 {
@@ -166,21 +237,24 @@ def sweep_rule(
                     "message": str(exc),
                 }
             )
-            flags.append(False)
             prev = row
             continue
-        flags.append(fault)
-        if fault:
-            flagged += 1
+        if instant:
+            flags[index] = True
+        for idx in paint:
+            if 0 <= idx < len(flags):
+                flags[idx] = True
+        row_fault = flags[index]
         events.append(
             {
                 "type": "row",
                 "row": index,
-                "status": "fault" if fault else "ok",
+                "status": "fault" if row_fault else "ok",
                 "ts": row.get("timestamp") or row.get("ts"),
             }
         )
         prev = row
+    flagged = sum(flags)
     text = buf.getvalue().strip()
     if text:
         events.insert(0, {"type": "stdout", "text": text})
@@ -236,6 +310,84 @@ def run_dataframe_script(
         "preview": preview,
         "events": out.get("events") or [],
     }
+
+
+def sweep_dataframe_chunked(
+    code: str,
+    cfg: dict[str, Any],
+    df: pd.DataFrame,
+    *,
+    chunk_hours: float = GO_LIVE_BATCH_HOURS,
+    overlap_minutes: int = GO_LIVE_OVERLAP_MINUTES,
+    enrich_rows: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+) -> tuple[int, int, list[dict[str, Any]]]:
+    """Evaluate a rule on a large frame in time chunks (bounded memory)."""
+    from .data_loader import rows_for_evaluate
+
+    if df.empty:
+        return 0, 0, [{"type": "summary", "rows": 0, "flagged": 0, "sweep_mode": "chunked"}]
+
+    if "timestamp" not in df.columns:
+        rows = rows_for_evaluate(df, limit=len(df))
+        if enrich_rows:
+            rows = enrich_rows(rows)
+        flags, events = sweep_rule(code, cfg, rows, capture_print=False)
+        return len(rows), sum(flags), events
+
+    ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+    work = df.copy()
+    work["_ts_ms"] = ts.astype("int64") // 1_000_000
+    work = work.dropna(subset=["_ts_ms"]).sort_values("_ts_ms").reset_index(drop=True)
+    if work.empty:
+        return 0, 0, [{"type": "summary", "rows": 0, "flagged": 0, "sweep_mode": "chunked"}]
+
+    start_ms = int(work["_ts_ms"].min())
+    end_ms = int(work["_ts_ms"].max())
+    chunk_ms = max(1, int(float(chunk_hours) * 3600 * 1000))
+    overlap_ms = max(int(overlap_minutes * 60_000), 10 * 60_000)
+
+    merged = [False] * len(work)
+    events: list[dict[str, Any]] = []
+    cursor = start_ms
+    chunk_num = 0
+
+    while cursor <= end_ms:
+        chunk_end = min(cursor + chunk_ms, end_ms + 1)
+        fetch_start = max(start_ms, cursor - overlap_ms) if cursor > start_ms else cursor
+        mask = (work["_ts_ms"] >= fetch_start) & (work["_ts_ms"] < chunk_end)
+        pos_indices = [i for i, hit in enumerate(mask) if hit]
+        chunk_df = work.loc[mask].drop(columns=["_ts_ms"])
+        if not chunk_df.empty:
+            rows = rows_for_evaluate(chunk_df, limit=len(chunk_df))
+            if enrich_rows:
+                rows = enrich_rows(rows)
+            flags, chunk_events = sweep_rule(code, cfg, rows, capture_print=False)
+            for k, flagged in enumerate(flags):
+                if flagged and k < len(pos_indices):
+                    merged[pos_indices[k]] = True
+            events.append(
+                {
+                    "type": "stdout",
+                    "text": f"chunk {chunk_num + 1}: rows={len(rows)} flagged={sum(flags)}",
+                }
+            )
+            if any(e.get("type") == "error" for e in chunk_events):
+                events.extend(chunk_events)
+                break
+        cursor = chunk_end
+        chunk_num += 1
+
+    flagged = sum(merged)
+    events.append(
+        {
+            "type": "summary",
+            "rows": len(work),
+            "flagged": flagged,
+            "sweep_mode": "chunked",
+            "chunk_count": chunk_num,
+        }
+    )
+    return len(work), flagged, events
 
 
 def dataframe_from_records(records: list[dict[str, Any]]) -> pd.DataFrame:

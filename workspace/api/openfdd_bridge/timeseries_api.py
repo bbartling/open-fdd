@@ -13,6 +13,22 @@ from .site_defaults import ensure_default_site
 from .ttl_service import TtlService
 
 
+def column_kinds_for_site(model: dict[str, Any], site_id: str) -> dict[str, str]:
+    kinds: dict[str, str] = {}
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict) or str(pt.get("site_id") or "") != site_id:
+            continue
+        ext = str(pt.get("external_id") or "").strip()
+        if not ext:
+            continue
+        brick = str(pt.get("brick_type") or "")
+        if "Humidity" in brick:
+            kinds[ext] = "humidity"
+        else:
+            kinds[ext] = "temperature"
+    return kinds
+
+
 def list_plot_sites() -> list[dict[str, str]]:
     model = ModelService()
     ensure_default_site(model, TtlService())
@@ -49,11 +65,13 @@ def list_plot_series(site_id: str, *, source: str = "bacnet") -> dict[str, Any]:
         if ext:
             labels[ext] = str(pt.get("description") or pt.get("brick_type") or ext)
     columns = _numeric_columns(df) if df is not None and not df.empty else []
+    kinds = column_kinds_for_site(model, site_id)
     return {
         "site_id": site_id,
         "source": source,
         "columns": columns,
         "labels": labels,
+        "kinds": kinds,
         "row_count": int(len(df)) if df is not None else 0,
     }
 

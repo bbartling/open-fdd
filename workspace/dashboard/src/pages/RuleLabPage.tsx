@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
-import { apiFetch } from "../lib/api";
+import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
+import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
+import { useTheme } from "../contexts/theme-context";
+import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
+import {
+  formatBatchSummary,
+  formatLintIssues,
+  formatRuleTestEvents,
+  type LintIssue,
+} from "../lib/rule-lab-console";
 
 const DEFAULT_RULE = `def evaluate(row, cfg, prev_row=None, rows=None):
     """Flag when supply air temp exceeds cfg['high']. Use row keys from Data Model fdd_input."""
@@ -11,6 +20,12 @@ const DEFAULT_RULE = `def evaluate(row, cfg, prev_row=None, rows=None):
     if sat is None:
         return False
     return float(sat) > high
+`;
+
+const DEFAULT_SCRIPT = `# df script — set out = {"df": df, "events": [...]}
+df = df.copy()
+df["custom_flag"] = 0
+out = {"df": df, "events": [{"type": "note", "text": "edit me"}]}
 `;
 
 type Mode = "rule" | "script";
@@ -23,21 +38,44 @@ type SavedRule = {
   enabled: boolean;
   source_path?: string;
   fault_code?: string;
+  config?: Record<string, unknown>;
 };
 
+function syntaxPillClass(ok: boolean | null, busy: boolean): string {
+  if (busy) return "syntax-pill pending";
+  if (ok === true) return "syntax-pill ok";
+  if (ok === false) return "syntax-pill err";
+  return "syntax-pill";
+}
+
 export default function RuleLabPage() {
+  const { theme, toggleTheme } = useTheme();
   const [mode, setMode] = useState<Mode>("rule");
   const [code, setCode] = useState(DEFAULT_RULE);
   const [sourcePath, setSourcePath] = useState("");
-  const [cfgHigh, setCfgHigh] = useState("75");
-  const [console, setConsole] = useState("");
+  const [cfg, setCfg] = useState<Record<string, string>>({ high: "75" });
+  const [consoleText, setConsoleText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lintBusy, setLintBusy] = useState(false);
+  const [syntaxOk, setSyntaxOk] = useState<boolean | null>(null);
+  const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
   const [ruleName, setRuleName] = useState("Supply air temp high");
   const [severity, setSeverity] = useState("warning");
   const [faultCode, setFaultCode] = useState("");
   const [faultCodes, setFaultCodes] = useState<{ code: string; title: string; family: string }[]>([]);
   const [saved, setSaved] = useState<SavedRule[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string>("");
+  const [authRole, setAuthRole] = useState<string | null>(null);
+  const [testLimit, setTestLimit] = useState("500");
+  const [testChunkHours, setTestChunkHours] = useState("6");
+  const [dirty, setDirty] = useState(false);
+  const lintTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    fetchAuthMe()
+      .then((me) => setAuthRole(me.role))
+      .catch(() => setAuthRole(null));
+  }, []);
 
   const refreshSaved = useCallback(async () => {
     const res = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
@@ -53,9 +91,7 @@ export default function RuleLabPage() {
 
   useEffect(() => {
     void refreshSaved();
-    apiFetch<{ families: { family: string; codes: { code: string; title: string }[] }[] }>(
-      "/api/faults/catalog",
-    )
+    apiFetch<{ families: { family: string; codes: { code: string; title: string }[] }[] }>("/api/faults/catalog")
       .then((res) =>
         setFaultCodes(
           (res.families || []).flatMap((f) =>
@@ -67,83 +103,136 @@ export default function RuleLabPage() {
   }, [refreshSaved]);
 
   useEffect(() => {
-    if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsole(formatApiError(e)));
+    if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsoleText(formatApiError(e)));
   }, [activeRuleId, loadRuleSource]);
 
-  async function lint() {
+  const runDebouncedLint = useCallback(
+    (source: string, lintMode: Mode) => {
+      if (lintTimer.current) window.clearTimeout(lintTimer.current);
+      lintTimer.current = window.setTimeout(() => {
+        setLintBusy(true);
+        apiFetch<{ ok: boolean; issues: LintIssue[] }>("/api/playground/lint", {
+          method: "POST",
+          body: JSON.stringify({ code: source, mode: lintMode }),
+        })
+          .then((res) => {
+            setSyntaxOk(res.ok);
+            setLintIssues(res.issues || []);
+          })
+          .catch(() => {
+            setSyntaxOk(null);
+            setLintIssues([]);
+          })
+          .finally(() => setLintBusy(false));
+      }, 400);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    runDebouncedLint(code, mode);
+    return () => {
+      if (lintTimer.current) window.clearTimeout(lintTimer.current);
+    };
+  }, [code, mode, runDebouncedLint]);
+
+  function markDirty() {
+    setDirty(true);
+  }
+
+  function onCodeChange(next: string) {
+    setCode(next);
+    markDirty();
+  }
+
+  function onCfgChange(next: Record<string, string>) {
+    setCfg(next);
+    markDirty();
+  }
+
+  function appendConsole(text: string) {
+    setConsoleText((prev) => (prev ? `${prev}\n${text}` : text));
+  }
+
+  async function lintNow() {
     setBusy(true);
     try {
-      const res = await apiFetch<{ ok: boolean; issues: { message: string; severity: string }[] }>(
-        "/api/playground/lint",
-        { method: "POST", body: JSON.stringify({ code }) },
-      );
-      setConsole(
-        res.issues.length
-          ? res.issues.map((i) => `${i.severity}: ${i.message}`).join("\n")
-          : res.ok
-            ? "Lint OK"
-            : "Lint failed",
-      );
+      const res = await apiFetch<{ ok: boolean; issues: LintIssue[] }>("/api/playground/lint", {
+        method: "POST",
+        body: JSON.stringify({ code, mode }),
+      });
+      setSyntaxOk(res.ok);
+      setLintIssues(res.issues || []);
+      appendConsole(formatLintIssues(res.issues || []));
     } catch (e) {
-      setConsole(formatApiError(e));
+      appendConsole(formatApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function testRun() {
+    if (syntaxOk === false) {
+      appendConsole("Fix syntax errors before test (see pill above editor).");
+      return;
+    }
     setBusy(true);
+    setConsoleText("");
     try {
-      const high = Number(cfgHigh);
-      if (mode === "rule" && !Number.isFinite(high)) {
-        setConsole("cfg high must be a finite number");
-        return;
-      }
+      const limit = Number(testLimit);
+      const chunkHours = Number(testChunkHours);
       if (mode === "rule") {
         const res = await apiFetch<{
+          ok?: boolean;
           rows: number;
           flagged: number;
           data_source?: string;
           site_id?: string;
           preview_columns?: string[];
-          events: { type: string; text?: string; status?: string; row?: number }[];
+          events: { type: string; text?: string; status?: string; row?: number; trace?: string }[];
+          trace?: string;
+          error?: string;
+          ms?: number;
+          chunked?: boolean;
         }>("/api/playground/test-rule", {
           method: "POST",
           body: JSON.stringify({
             code,
-            config: { high },
-            limit: 200,
+            config: configFromRecord(cfg),
+            limit: Number.isFinite(limit) ? limit : 500,
+            chunk_hours: Number.isFinite(chunkHours) && chunkHours > 0 ? chunkHours : 0,
           }),
         });
-        const lines = [
-          `site=${res.site_id} source=${res.data_source} rows=${res.rows} flagged=${res.flagged}`,
+        const header = [
+          `>>> Test rule — site=${res.site_id} source=${res.data_source} rows=${res.rows} flagged=${res.flagged} (${res.ms ?? 0} ms)`,
+          res.chunked ? `chunked: ${testChunkHours}h windows` : "",
           `columns: ${(res.preview_columns || []).join(", ")}`,
-          ...res.events.map((ev) => {
-            if (ev.type === "stdout") return ev.text || "";
-            if (ev.type === "summary") return JSON.stringify(ev);
-            return `[${ev.type}] row=${ev.row} status=${ev.status}`;
-          }),
-        ];
-        setConsole(lines.filter(Boolean).join("\n"));
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const body = formatRuleTestEvents(res.events || []);
+        const trace = res.trace || res.error || "";
+        setConsoleText([header, body, trace].filter(Boolean).join("\n\n"));
       } else {
         const res = await apiFetch<{
           ok: boolean;
           stdout?: string;
           error?: string;
+          trace?: string;
           data_source?: string;
           site_id?: string;
           flag_columns?: string[];
           preview?: Record<string, unknown>[];
         }>("/api/playground/run-script", {
           method: "POST",
-          body: JSON.stringify({ code, limit: 500 }),
+          body: JSON.stringify({ code, limit: Number.isFinite(limit) ? limit : 500 }),
         });
         if (!res.ok) {
-          setConsole(res.error || "script failed");
+          setConsoleText([res.error || "script failed", res.trace || ""].filter(Boolean).join("\n\n"));
         } else {
-          setConsole(
+          setConsoleText(
             [
-              `site=${res.site_id} source=${res.data_source}`,
+              `>>> Script test — site=${res.site_id} source=${res.data_source}`,
               res.stdout,
               `flag_columns: ${(res.flag_columns || []).join(", ")}`,
               `preview rows: ${res.preview?.length ?? 0}`,
@@ -154,44 +243,89 @@ export default function RuleLabPage() {
         }
       }
     } catch (e) {
-      setConsole(formatApiError(e));
+      setConsoleText(formatApiError(e));
     } finally {
       setBusy(false);
     }
   }
 
-  async function saveSource() {
+  async function saveRule() {
+    if (syntaxOk === false) {
+      appendConsole("Cannot save — fix syntax errors first.");
+      return;
+    }
     setBusy(true);
     try {
+      const payload = {
+        id: activeRuleId || undefined,
+        name: ruleName,
+        mode,
+        code,
+        config: configFromRecord(cfg),
+        severity,
+        fault_code: faultCode.trim(),
+        bindings: { point_ids: [], equipment_ids: [], brick_types: [] },
+      };
       if (activeRuleId) {
-        const res = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
+        const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
           method: "PUT",
           body: JSON.stringify({ code }),
         });
-        setSourcePath(res.path);
-        setConsole(`Saved ${res.path} — AI agents and operators share this file.`);
-        await refreshSaved();
-        return;
+        const saveRes = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
+          method: "POST",
+          body: JSON.stringify({ ...payload, id: activeRuleId }),
+        });
+        setSourcePath(putRes.path || saveRes.rule.source_path || sourcePath);
+        appendConsole(`>>> Updated rule .py — ${putRes.path || sourcePath}`);
+      } else {
+        const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        setActiveRuleId(res.rule.id);
+        setSourcePath(res.rule.source_path || "");
+        appendConsole(`>>> Created rule "${res.rule.name}" → map on Data Model tab.`);
       }
-      const high = Number(cfgHigh)
-      const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
-        method: "POST",
-        body: JSON.stringify({
-          name: ruleName,
-          mode,
-          code,
-          config: mode === "rule" ? { high: Number.isFinite(high) ? high : 75 } : {},
-          severity,
-          fault_code: faultCode.trim(),
-          bindings: { point_ids: [], equipment_ids: [], brick_types: [] },
-        }),
-      });
-      setActiveRuleId(res.rule.id);
-      setSourcePath(res.rule.source_path || "");
-      setConsole(`Created rule "${res.rule.name}" → map it on the Data Model tab.`);
+      setDirty(false);
       await refreshSaved();
     } catch (e) {
-      setConsole(formatApiError(e));
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateAllRecords() {
+    if (syntaxOk === false && activeRuleId) {
+      appendConsole("Save a valid rule before batch update.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (dirty && activeRuleId) {
+        await saveRule();
+      }
+      const res = await apiFetch<{
+        rules_run?: number;
+        site_runs?: number;
+        flagged_runs?: number;
+        error_runs?: number;
+        ms?: number;
+        chunk_hours?: number | null;
+        lookback_hours?: number | null;
+        runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string; error?: string; rows?: number }[];
+      }>("/api/rules/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          limit: 50000,
+          chunk_hours: 0,
+          lookback_hours: 1,
+          use_chunks: false,
+        }),
+      });
+      setConsoleText(formatBatchSummary(res));
+    } catch (e) {
+      appendConsole(formatApiError(e));
     } finally {
       setBusy(false);
     }
@@ -204,70 +338,140 @@ export default function RuleLabPage() {
     setSeverity(rule.severity);
     setFaultCode(rule.fault_code || "");
     setSourcePath(rule.source_path || "");
+    setCfg(configToRecord(rule.config || {}));
+    setDirty(false);
   }
 
+  function addRule() {
+    setActiveRuleId("");
+    setRuleName("New rule");
+    setMode("rule");
+    setCode(DEFAULT_RULE);
+    setCfg({ high: "75" });
+    setSourcePath("");
+    setFaultCode("");
+    setDirty(true);
+  }
+
+  async function removeRule() {
+    if (!activeRuleId) return;
+    if (!window.confirm(`Delete rule "${ruleName}"?`)) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/api/rules/saved/${activeRuleId}`, { method: "DELETE" });
+      const list = await refreshSaved();
+      if (list[0]) selectRule(list[0]);
+      else addRule();
+      appendConsole(`>>> Deleted rule ${activeRuleId}`);
+    } catch (e) {
+      appendConsole(formatApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const syntaxTitle = useMemo(() => {
+    if (lintBusy) return "Checking syntax…";
+    if (syntaxOk === true) return "Syntax OK";
+    if (syntaxOk === false) return lintIssues.find((i) => i.severity === "error")?.message || "Syntax error";
+    return "Syntax not checked";
+  }, [lintBusy, syntaxOk, lintIssues]);
+
+  const consoleLines = useMemo(() => consoleTextToLines(consoleText), [consoleText]);
+
   return (
-    <div className="page page-wide">
+    <div className="page page-wide rule-lab-page">
       <PageHeader
         title="Rule Lab"
         subtitle={
           <>
-            Edit the on-disk <code>.py</code> rule file below. Test runs against feather / live site data. Map rules
-            to BRICK points on the <a href="/data-model">Data Model</a> tab.
+            Edit shared on-disk <code>.py</code> rules. Live lint + test against feather data.{" "}
+            <a href="/data-model">Data Model</a> maps rules to BRICK points.
           </>
         }
       />
 
+      {authRole === "operator" ? (
+        <p className="error panel">
+          Signed in as <strong>operator</strong>. Rule Lab requires <strong>integrator</strong> or{" "}
+          <strong>agent</strong>.
+        </p>
+      ) : null}
+
       <div className="panel rule-lab-toolbar">
-        <div className="form-grid">
-          <div className="field">
-            <label className="field-label" htmlFor="rule-select">
-              Rule
-            </label>
+        <div className="rule-lab-rule-row">
+          <label className="field-label" htmlFor="rule-select">
+            Rule
+          </label>
+          <div className="rule-switcher">
+            <button
+              type="button"
+              className="secondary icon-btn"
+              disabled={!activeRuleId || busy}
+              onClick={() => void removeRule()}
+              title="Remove rule"
+            >
+              −
+            </button>
             <select
               id="rule-select"
               value={activeRuleId}
               onChange={(e) => {
                 const id = e.target.value;
                 if (!id) {
-                  setActiveRuleId("");
-                  setCode(DEFAULT_RULE);
-                  setSourcePath("");
+                  addRule();
                   return;
                 }
                 const rule = saved.find((r) => r.id === id);
                 if (rule) selectRule(rule);
               }}
             >
-              <option value="">New rule…</option>
+              {!activeRuleId ? (
+                <option value="">New rule (unsaved)</option>
+              ) : null}
               {saved.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
             </select>
+            <button type="button" className="secondary icon-btn" disabled={busy} onClick={addRule} title="Add rule">
+              +
+            </button>
           </div>
-          {!activeRuleId ? (
-            <>
-              <div className="field">
-                <label className="field-label" htmlFor="rule-name">
-                  Name
-                </label>
-                <input id="rule-name" value={ruleName} onChange={(e) => setRuleName(e.target.value)} />
-              </div>
-              <div className="field">
-                <label className="field-label" htmlFor="rule-fault-code">
-                  Fault code
-                </label>
-                <input
-                  id="rule-fault-code"
-                  list="fault-code-list"
-                  value={faultCode}
-                  onChange={(e) => setFaultCode(e.target.value)}
-                />
-              </div>
-            </>
-          ) : null}
+          <span className={syntaxPillClass(syntaxOk, lintBusy)} title={syntaxTitle}>
+            {lintBusy ? "…" : syntaxOk === true ? "syntax ok" : syntaxOk === false ? "syntax err" : "syntax —"}
+          </span>
+        </div>
+
+        <div className="form-grid">
+          <div className="field">
+            <label className="field-label" htmlFor="rule-name">
+              Name
+            </label>
+            <input
+              id="rule-name"
+              value={ruleName}
+              onChange={(e) => {
+                setRuleName(e.target.value);
+                markDirty();
+              }}
+            />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="rule-fault-code">
+              Fault code
+            </label>
+            <input
+              id="rule-fault-code"
+              list="fault-code-list"
+              value={faultCode}
+              onChange={(e) => {
+                setFaultCode(e.target.value);
+                markDirty();
+              }}
+            />
+          </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-mode">
               Mode
@@ -275,36 +479,68 @@ export default function RuleLabPage() {
             <select
               id="rule-mode"
               value={mode}
-              disabled={!!activeRuleId}
               onChange={(e) => {
                 const m = e.target.value as Mode;
                 setMode(m);
-                if (!activeRuleId) setCode(m === "rule" ? DEFAULT_RULE : "# df script\nout = {'df': df}");
+                if (!activeRuleId) setCode(m === "rule" ? DEFAULT_RULE : DEFAULT_SCRIPT);
+                markDirty();
               }}
             >
               <option value="rule">Per-row evaluate()</option>
               <option value="script">DataFrame script</option>
             </select>
           </div>
+          <div className="field">
+            <label className="field-label" htmlFor="rule-severity">
+              Severity
+            </label>
+            <select id="rule-severity" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+              <option value="info">info</option>
+              <option value="warning">warning</option>
+              <option value="critical">critical</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="test-limit">
+              Test rows
+            </label>
+            <input id="test-limit" value={testLimit} onChange={(e) => setTestLimit(e.target.value)} />
+          </div>
           {mode === "rule" ? (
             <div className="field">
-              <label className="field-label" htmlFor="rule-cfg-high">
-                cfg high
+              <label className="field-label" htmlFor="test-chunk-hours">
+                Chunk (h, 0=off)
               </label>
-              <input id="rule-cfg-high" value={cfgHigh} onChange={(e) => setCfgHigh(e.target.value)} />
+              <input id="test-chunk-hours" value={testChunkHours} onChange={(e) => setTestChunkHours(e.target.value)} />
             </div>
           ) : null}
         </div>
-        <div className="toolbar">
-          <button type="button" className="secondary" disabled={busy} onClick={() => void lint()}>
+
+        {mode === "rule" ? <RuleConfigPanel config={cfg} onChange={onCfgChange} /> : null}
+
+        <div className="toolbar rule-lab-actions">
+          <button type="button" className="secondary" disabled={busy} onClick={() => void lintNow()}>
             Lint
           </button>
-          <button type="button" disabled={busy} onClick={() => void testRun()}>
+          <button type="button" disabled={busy || syntaxOk === false} onClick={() => void testRun()}>
             Test
           </button>
-          <button type="button" disabled={busy} onClick={() => void saveSource()}>
-            Save .py
+          <button type="button" disabled={busy || authRole === "operator"} onClick={() => void saveRule()}>
+            {activeRuleId ? "Update rule .py" : "Save rule .py"}
           </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy || authRole === "operator"}
+            onClick={() => void updateAllRecords()}
+            title="Run all saved rules in 6h chunks (7d lookback) and update check-engine records"
+          >
+            Update all records
+          </button>
+          <button type="button" className="secondary" onClick={toggleTheme} title="Toggle editor theme">
+            {theme === "dark" ? "Light editor" : "Dark editor"}
+          </button>
+          {dirty ? <span className="muted dirty-hint">Unsaved changes</span> : null}
         </div>
       </div>
 
@@ -322,13 +558,19 @@ export default function RuleLabPage() {
         ))}
       </datalist>
 
-      <div className="panel">
-        <PythonCodeEditor value={code} onChange={setCode} height="420px" />
+      <div className="panel rule-lab-editor-panel">
+        <PythonCodeEditor value={code} onChange={onCodeChange} height="420px" lintIssues={lintIssues} />
       </div>
-      <div className="panel">
-        <h3 className="panel-title">Console</h3>
-        <div className="console">{console || "Lint or Test to run against live feather data."}</div>
-      </div>
+
+      <RuleLabConsole
+        lines={consoleLines}
+        placeholder="Lint or Test — errors and tracebacks appear here."
+        footer={
+          <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
+            Clear
+          </button>
+        }
+      />
     </div>
   );
 }

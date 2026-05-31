@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "generated_at": "2026-05-31T13:50:59.289835+00:00",
+  "runs": [
+    {
+      "rule_id": "bench-oa-t-flatline-1h",
+      "rule_name": "Bench OA-T flatline 1h",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "VAV-03",
+      "equipment_family": "VAV",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "bench-oa-t-oob",
+      "rule_name": "Bench OA-T out of bounds",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "VAV-03",
+      "equipment_family": "VAV",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "bench-stat-zn-t-flatline-1h",
+      "rule_name": "Bench stat ZN-T flatline 1h",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "VAV-03",
+      "equipment_family": "VAV",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "duct-t-flatline-1h",
+      "rule_name": "Duct-T flatline 1h",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "DC-03",
+      "equipment_family": "DATACENTER",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "duct-t-spread-1h",
+      "rule_name": "Duct-T spread 1h",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "DC-03",
+      "equipment_family": "DATACENTER",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "bench-oa-h-flatline-1h",
+      "rule_name": "Bench humidity flatline 1h",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "BLD-02",
+      "equipment_family": "BUILDING",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    },
+    {
+      "rule_id": "bench-oa-h-oob",
+      "rule_name": "Bench humidity out of bounds",
+      "site_id": "s1",
+      "severity": "warning",
+      "source": "demo",
+      "fault_code": "BLD-02",
+      "equipment_family": "BUILDING",
+      "status": "ok",
+      "rows": 24,
+      "flagged": 0
+    }
+  ]
+}

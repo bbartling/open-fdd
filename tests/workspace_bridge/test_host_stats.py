@@ -59,7 +59,13 @@ def test_collect_host_stats_shape():
     assert storage["path"]
     assert storage["total_bytes"] > 0
     assert "percent_used" in storage
+    assert "feather_bytes" in storage
+    assert "feather_max_gib" in storage
     assert isinstance(stats["disks"], list)
+    ollama = stats["ollama"]
+    assert isinstance(ollama, dict)
+    assert "api_ok" in ollama
+    assert "base_url" in ollama
 
 
 def test_read_linux_meminfo_on_linux():
