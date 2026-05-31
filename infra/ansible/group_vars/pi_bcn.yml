@@ -74,8 +74,13 @@ edge_backup_dir: "{{ playbook_dir }}/../../edge_backup/local"
 run_deploy_verify: true
 post_check_lan: true
 post_check_auth_login: true
+post_check_fix_caddy: true
+post_check_require_mcp: true
+post_check_require_ollama: false
 
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
+enable_mcp: true
+mcp_listen_port: 8090
 enable_ollama: false
 ollama_ram_tier: "8gb"       # 8gb | 16gb | 32gb | 64gb
 ollama_gpu_mode: "cpu"        # cpu | auto | gpu

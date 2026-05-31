@@ -1,12 +1,30 @@
 ---
-# vm-bbartling — Acme BACnet test bench
+# vm-bbartling — Acme real building (VAV/AHU/boiler on OT BACnet)
+# Copy: cp host_vars/acme_vm_bbartling.yml.example host_vars/acme_vm_bbartling.yml
+# Inventory host acme_vm_bbartling → Tailscale IP (SSH); BACnet bind is OT NIC below.
 
 site_id: acme
 building_id: vm-bbartling
 
 bacnet_instance_id: 3456791
 bacnet_device_name: OpenFddVmBbartling
+# Dedicated OT NIC — not Tailscale
 bacnet_bind_address: "10.200.200.185/24:47808"
 
+bacnet_discover_low: 1
+bacnet_discover_high: 4194303
+bacnet_discover_timeout: 30
+
+# Off until points.csv commissioned (see scripts/acme_commission_temp.sh)
 enable_bacnet_poll_driver: false
 bacnet_poll_interval: 60
+
+# 4c / 16GB VM — local Ollama qwen3:4b + MCP RAG
+enable_mcp: true
+enable_ollama: true
+ollama_required: true
+ollama_ram_tier: "16gb"
+
+# ~125 GiB feather cap ≈ 1 year at 1-min temp polling scale
+feather_max_gib: 125
+feather_retention_days: 365

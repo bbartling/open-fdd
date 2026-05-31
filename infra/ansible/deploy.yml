@@ -34,12 +34,23 @@
       when: enable_bacnet_commission_agent | default(true) | bool
 
     - name: Reload Caddy
-      ansible.builtin.systemd:
-        name: caddy
-        state: reloaded
-        daemon_reload: true
+      ansible.builtin.command:
+        argv:
+          - caddy
+          - reload
+          - --config
+          - /etc/caddy/Caddyfile
+          - --force
       become: true
       when: caddy_enabled | default(true) | bool
+
+    - name: Restart Open-FDD MCP RAG
+      ansible.builtin.systemd:
+        name: openfdd-mcp-rag
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_mcp | default(true) | bool
 
   tasks:
     - name: Ensure application directory exists
@@ -360,6 +371,14 @@
         daemon_reload: true
       become: true
       when: caddy_enabled | default(true) | bool
+
+    - name: Ensure Caddy reverse-proxies Open-FDD (not default welcome site)
+      ansible.builtin.include_tasks: tasks/ensure_caddy_openfdd.yml
+      when: caddy_enabled | default(true) | bool
+
+    - name: Enable MCP RAG sidecar for operator AI / doc search
+      ansible.builtin.include_tasks: tasks/mcp_sidecar.yml
+      when: enable_mcp | default(true) | bool
 
     - name: Apply service restarts before insurance checks
       ansible.builtin.meta: flush_handlers

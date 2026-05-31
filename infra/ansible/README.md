@@ -33,6 +33,26 @@ Poll driver is **off** until `points.csv` is commissioned:
 ./stop_bacnet_polling.sh --limit acme_vm_bbartling
 ```
 
+## Acme real building (`acme_vm_bbartling`)
+
+x86 Ubuntu VM on OT BACnet (`10.200.200.185:47808`). Inventory SSH IP is Tailscale/LAN — set in private `inventory.yml` only.
+
+```bash
+./scripts/acme_commission_gl36.sh          # GL36 + economizer poll set @ 60s
+./acme_go_live.sh --limit acme_vm_bbartling
+PYTHONPATH=../../workspace/api python3 ../../scripts/acme_gl36_site_model.py
+python3 ../../scripts/acme_gl36_mechanical_validate.py --samples /path/to/samples.csv
+```
+
+| Fact | Value |
+|------|--------|
+| Site / building | `acme` / `vm-bbartling` |
+| Poll profile | ~336 GL36 points (VAV + AHU + plant) |
+| Historian | `feather_max_gib: 125`, `feather_retention_days: 365` |
+| Ollama | `qwen3:4b` on 16 GB tier |
+
+GL36 reference: [Trim & Respond README](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md)
+
 ## Boss Pi test bench (`192.168.204.12`)
 
 Same host as `vibe_code_apps_12/ansible/inventory.yml` → `bacnet_pi`.

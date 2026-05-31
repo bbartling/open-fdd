@@ -1,0 +1,41 @@
+---
+# Bootstrap MCP RAG + refresh bridge env (no full code sync).
+#   ansible-playbook -i inventory.yml edge_ai_stack.yml --limit bacnet_pi
+
+- name: Edge AI stack (MCP + bridge env)
+  hosts: pi_bcn
+  gather_facts: false
+
+  handlers:
+    - name: Restart Open-FDD bridge
+      ansible.builtin.systemd:
+        name: openfdd-bridge
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: install_openfdd_bridge | default(true) | bool
+
+    - name: Restart Open-FDD MCP RAG
+      ansible.builtin.systemd:
+        name: openfdd-mcp-rag
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_mcp | default(true) | bool
+
+  tasks:
+    - name: Install openfdd-bridge systemd unit (mcp.env.local EnvironmentFile)
+      ansible.builtin.template:
+        src: templates/openfdd-bridge.service.j2
+        dest: /etc/systemd/system/openfdd-bridge.service
+        mode: "0644"
+      become: true
+      when: install_openfdd_bridge | default(true) | bool
+      notify: Restart Open-FDD bridge
+
+    - name: Enable MCP RAG sidecar
+      ansible.builtin.include_tasks: tasks/mcp_sidecar.yml
+      when: enable_mcp | default(true) | bool
+
+    - name: Apply bridge restart after MCP env
+      ansible.builtin.meta: flush_handlers

@@ -127,6 +127,16 @@ echo "Open-FDD bench operational verify → ${HOST}"
 TOKEN="$(login "$LOGIN_USER" "$LOGIN_PASS")"
 log_ok "Authenticated as ${LOGIN_USER}"
 
+HTTP_PROBES="${DIR}/http_probes.py"
+if [[ -f "$HTTP_PROBES" ]]; then
+  if probe_out="$(python3 "$HTTP_PROBES" check "$BASE" "$LOGIN_USER" "$LOGIN_PASS" 2>/dev/null)"; then
+    asset="$(echo "$probe_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("asset_path",""))')"
+    log_ok "Entry probes OK (React dashboard${asset:+ $asset}, login)"
+  else
+    while IFS= read -r err; do log_fail "$err"; done < <(echo "$probe_out" | python3 -c 'import json,sys; [print(e) for e in json.load(sys.stdin).get("errors",[])]' 2>/dev/null || echo "entry probe failed")
+  fi
+fi
+
 log_info "BACnet discover ${DISCOVER_LOW}..${DISCOVER_HIGH}"
 discover_body="$(python3 -c 'import json,sys; print(json.dumps({"range_low": int(sys.argv[1]), "range_high": int(sys.argv[2])}))' "$DISCOVER_LOW" "$DISCOVER_HIGH")"
 discover_resp="$(api_post "/api/bacnet/discover" "$discover_body")"

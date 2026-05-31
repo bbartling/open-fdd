@@ -1,4 +1,10 @@
 ---
+- name: Ensure Caddy reverse-proxies Open-FDD before LAN probes
+  ansible.builtin.include_tasks: ensure_caddy_openfdd.yml
+  when:
+    - caddy_enabled | default(true) | bool
+    - post_check_fix_caddy | default(true) | bool
+
 - name: Ensure Caddy is active
   ansible.builtin.systemd:
     name: caddy
@@ -89,12 +95,31 @@
     validate_certs: false
     return_content: true
   register: lan_dashboard
-  failed_when: lan_dashboard.status | default(0) != 200
+  failed_when: >-
+    lan_dashboard.status | default(0) != 200
+    or ('Open-FDD Operator' not in (lan_dashboard.content | default('')))
+    or ('Your web server is working' in (lan_dashboard.content | default('')))
+    or ('id="root"' not in (lan_dashboard.content | default('')))
   delegate_to: localhost
   become: false
   when:
     - post_check_lan | default(true) | bool
     - caddy_enabled | default(true) | bool
+
+- name: Dashboard JS bundle reachable via LAN
+  ansible.builtin.uri:
+    url: "{{ ('https://' + ansible_host if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host) + (lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"', '\\1') | default('')) }}"
+    validate_certs: false
+    status_code: 200
+  register: lan_dashboard_js
+  delegate_to: localhost
+  become: false
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+    - lan_dashboard is defined
+    - lan_dashboard.content is defined
+    - lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"') is not none
 
 - name: Stat operator auth env on control machine
   ansible.builtin.stat:

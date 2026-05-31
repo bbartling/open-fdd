@@ -16,5 +16,5 @@ all:
           ansible_user: ben
 
         acme_vm_bbartling:
-          ansible_host: 198.51.100.55
+          ansible_host: 198.51.100.55   # Tailscale or LAN — set in private inventory.yml
           ansible_user: bbartling

@@ -1,0 +1,67 @@
+---
+# Enable MCP RAG sidecar + env for bridge (import from deploy.yml when enable_mcp).
+
+- name: Ensure MCP RAG index directory on control machine
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../workspace/data/mcp/rag_index.json"
+  delegate_to: localhost
+  become: false
+  register: control_mcp_index
+
+- name: Build MCP RAG index on control machine when missing
+  ansible.builtin.command:
+    argv:
+      - "{{ playbook_dir }}/../../scripts/build_mcp_rag_index.sh"
+  delegate_to: localhost
+  become: false
+  when: not control_mcp_index.stat.exists | default(false)
+
+- name: Sync MCP RAG Python package
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../workspace/mcp_rag/"
+    dest: "{{ openfdd_remote_dir }}/workspace/mcp_rag/"
+    mode: "0644"
+  notify: Restart Open-FDD MCP RAG
+
+- name: Sync MCP RAG index data
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../workspace/data/mcp/"
+    dest: "{{ openfdd_remote_dir }}/workspace/data/mcp/"
+    mode: "0644"
+  notify: Restart Open-FDD MCP RAG
+
+- name: Install workspace mcp.env.local
+  ansible.builtin.template:
+    src: templates/mcp.env.local.j2
+    dest: "{{ openfdd_remote_dir }}/workspace/mcp.env.local"
+    mode: "0644"
+  notify:
+    - Restart Open-FDD MCP RAG
+    - Restart Open-FDD bridge
+
+- name: Install openfdd-mcp-rag systemd unit
+  ansible.builtin.template:
+    src: templates/openfdd-mcp-rag.service.j2
+    dest: /etc/systemd/system/openfdd-mcp-rag.service
+    mode: "0644"
+  become: true
+  notify: Restart Open-FDD MCP RAG
+
+- name: Enable and start openfdd-mcp-rag
+  ansible.builtin.systemd:
+    name: openfdd-mcp-rag
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Wait for MCP RAG health on loopback
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ mcp_listen_port | default(8090) }}/health"
+    return_content: true
+  register: mcp_health
+  until: >-
+    mcp_health.status | default(0) == 200
+    and (mcp_health.json.ok | default(false))
+  retries: 12
+  delay: 3

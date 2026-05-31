@@ -39,6 +39,9 @@ done
 run_playbook() {
   if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
     export SSHPASS
+    export ANSIBLE_SSH_PASS="$SSHPASS"
+    export ANSIBLE_BECOME_PASS="${ANSIBLE_BECOME_PASS:-$SSHPASS}"
+    EXTRA+=(-e "ansible_ssh_pass=${SSHPASS}" -e "ansible_become_pass=${SSHPASS}")
     sshpass -e "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
   elif [[ "$NO_ASK_PASS" == true ]]; then
     "$APB" -i "$INV" deploy.yml "${EXTRA[@]}"
