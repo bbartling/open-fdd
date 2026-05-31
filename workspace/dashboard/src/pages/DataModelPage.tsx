@@ -1,23 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, apiFetchText } from "../lib/api";
+import { apiFetchText } from "../lib/api";
+import { openTtlPopup } from "../lib/ttlPopup";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
-import { ModelPayload, parseImportPayload } from "../lib/modelImport";
+import ModelGraphExplorer from "../components/ModelGraphExplorer";
+import ModelImportExportPanel from "../components/ModelImportExportPanel";
+import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
-import RuleMappingBoard from "../components/RuleMappingBoard";
+import { apiFetch } from "../lib/api";
 
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"mapping" | "model" | "advanced">("mapping");
-  const [exportJsonText, setExportJsonText] = useState("");
-  const [importJsonText, setImportJsonText] = useState("");
+  const [activeTab, setActiveTab] = useState<"explorer" | "import" | "advanced">("explorer");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
-  const [ttlText, setTtlText] = useState("");
   const [copiedKey, setCopiedKey] = useState("");
   const [activeSiteId, setActiveSiteId] = useState("");
   const [pointCount, setPointCount] = useState(0);
   const [eqCount, setEqCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const refreshMeta = useCallback(async () => {
     const [sitesRes, tree] = await Promise.all([
@@ -27,6 +28,7 @@ export default function DataModelPage() {
     setActiveSiteId(sitesRes.active_site_id || sitesRes.sites?.[0]?.id || "");
     setPointCount(tree.points?.length ?? 0);
     setEqCount(tree.equipment?.length ?? 0);
+    setRefreshKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
@@ -43,62 +45,36 @@ export default function DataModelPage() {
     }
   }
 
-  async function doExport() {
-    try {
-      const model = await apiFetch<ModelPayload>("/api/model/export");
-      setExportJsonText(JSON.stringify(model, null, 2));
-      setOut("Exported model JSON.");
-    } catch (error) {
-      setOut(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function doImport() {
-    try {
-      const payload = parseImportPayload(importJsonText);
-      const confirmed = window.confirm(
-        "Import with replace=true will overwrite the existing model. Continue?",
-      );
-      if (!confirmed) {
-        setOut("Import canceled.");
-        return;
-      }
-      const resp = await apiFetch<{ sites: number; equipment: number; points: number }>(
-        "/api/model/import",
-        {
-          method: "POST",
-          body: JSON.stringify({ payload, replace: true }),
-        },
-      );
-      setOut(`Imported sites=${resp.sites}, equipment=${resp.equipment}, points=${resp.points}. TTL synced.`);
-      setImportJsonText("");
-      await refreshMeta();
-    } catch (error) {
-      setOut(`Import failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function onImportJsonFile(file: File | null) {
-    if (!file) return;
-    try {
-      setImportJsonText(await file.text());
-      setOut(`Loaded JSON file: ${file.name}`);
-    } catch (error) {
-      setOut(`File load failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  async function doViewTtl() {
+  async function doViewTtlPopup() {
     setTtlLoading(true);
-    setTtlText("");
     try {
-      setTtlText(await apiFetchText("/api/model/ttl?save=false", { headers: { Accept: "text/turtle" } }));
-      setOut("Loaded TTL graph below.");
-    } catch (error) {
-      setTtlText("");
-      setOut(`TTL view failed: ${error instanceof Error ? error.message : String(error)}`);
+      const err = await openTtlPopup(() =>
+        apiFetchText("/api/model/ttl?save=false", { headers: { Accept: "text/turtle" } }),
+      );
+      if (err) setOut(`TTL: ${err}`);
+      else setOut("Opened BRICK TTL in a new browser tab.");
     } finally {
       setTtlLoading(false);
+    }
+  }
+
+  async function doViewJsonPopup() {
+    try {
+      const text = JSON.stringify(await apiFetch("/api/model/export"), null, 2);
+      const popup = window.open("", "_blank");
+      if (!popup) {
+        setOut("Popup blocked — allow popups to view raw model JSON.");
+        return;
+      }
+      popup.document.write(
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>model.json</title></head>` +
+          `<body style="margin:0;background:#fff;"><pre style="padding:1rem;font:12px ui-monospace,monospace;white-space:pre-wrap;">` +
+          `${text.replace(/</g, "&lt;")}</pre></body></html>`,
+      );
+      popup.document.close();
+      setOut("Opened model JSON in a new tab.");
+    } catch (error) {
+      setOut(`JSON view failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -108,8 +84,8 @@ export default function DataModelPage() {
         title="Data Model BRICK"
         subtitle={
           <>
-            Site <code>{activeSiteId || "…"}</code> is configured automatically · {eqCount} equipment · {pointCount}{" "}
-            points
+            Site <code>{activeSiteId || "…"}</code> · {eqCount} equipment · {pointCount} points · poll CSV,{" "}
+            <code>model.json</code>, and TTL stay aligned via sync
           </>
         }
       />
@@ -117,15 +93,15 @@ export default function DataModelPage() {
       <div className="tab-row">
         <button
           type="button"
-          className={activeTab === "mapping" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("mapping")}
+          className={activeTab === "explorer" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("explorer")}
         >
-          Rule mapping
+          Explorer
         </button>
         <button
           type="button"
-          className={activeTab === "model" ? "" : "secondary-btn"}
-          onClick={() => setActiveTab("model")}
+          className={activeTab === "import" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("import")}
         >
           Import / export
         </button>
@@ -138,59 +114,57 @@ export default function DataModelPage() {
         </button>
       </div>
 
-      {activeTab === "mapping" ? (
-        <RuleMappingBoard onStatus={(msg) => setOut(msg)} />
-      ) : null}
-
-      {activeTab === "model" ? (
+      {activeTab === "explorer" ? (
         <>
-          <div className="row">
-            <button type="button" onClick={() => void doExport()}>
-              Export JSON
-            </button>
-            <button type="button" onClick={() => void doImport()}>
-              Import JSON
-            </button>
-            <label className="secondary-btn file-upload-btn">
-              Upload JSON
-              <input
-                type="file"
-                accept=".json,application/json,text/plain"
-                hidden
-                onChange={(e) => {
-                  void onImportJsonFile(e.target.files?.[0] ?? null);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-          <textarea
-            className="model-editor"
-            value={importJsonText || exportJsonText}
-            onChange={(e) => {
-              if (importJsonText) setImportJsonText(e.target.value);
-              else setExportJsonText(e.target.value);
-            }}
-            placeholder="Export to load JSON, or paste import payload here."
+          <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
+          <ModelGraphExplorer
+            refreshKey={refreshKey}
+            onStatus={setOut}
+            onModelChange={() => void refreshMeta()}
           />
         </>
       ) : null}
 
-      {activeTab === "advanced" ? (
-        <>
-          <div className="row">
-            <button type="button" className="secondary-btn" onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}>
-              {copiedKey === "prompt" ? "Copied Prompt" : "Copy LLM Prompt"}
-            </button>
-            <button type="button" onClick={() => void doViewTtl()}>
-              {ttlLoading ? "Loading TTL…" : "View BRICK TTL"}
-            </button>
-          </div>
-          <textarea readOnly className="ttl-editor" value={ttlText} placeholder="TTL appears after View BRICK TTL." />
-        </>
+      {activeTab === "import" ? (
+        <ModelImportExportPanel
+          onStatus={setOut}
+          onImported={() => void refreshMeta()}
+        />
       ) : null}
 
-      <textarea readOnly className="status-line" value={out} />
+      {activeTab === "advanced" ? (
+        <div className="dm-advanced panel">
+          <p className="muted">
+            View the live graph as plain text in a new tab (same UX as the legacy stack). Import/export lives on the
+            adjacent tab.
+          </p>
+          <div className="row">
+            <button type="button" onClick={() => void doViewTtlPopup()}>
+              {ttlLoading ? "Loading TTL…" : "View TTL (new tab)"}
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => void doViewJsonPopup()}>
+              View model JSON (new tab)
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => void copyText("prompt", DATA_MODEL_REDESIGN_PROMPT)}
+            >
+              {copiedKey === "prompt" ? "Copied LLM prompt" : "Copy LLM redesign prompt"}
+            </button>
+          </div>
+          <details className="dm-prompt-details">
+            <summary>LLM prompt preview</summary>
+            <textarea readOnly className="dm-json-editor dm-prompt-preview" value={DATA_MODEL_REDESIGN_PROMPT} />
+          </details>
+        </div>
+      ) : null}
+
+      {out ? (
+        <div className="status-bar" role="status">
+          {out}
+        </div>
+      ) : null}
     </div>
   );
 }

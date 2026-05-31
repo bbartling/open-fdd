@@ -4,6 +4,7 @@ import { formatApiError } from "../lib/formatApiError";
 import {
   appendPendingAssistant,
   appendUserMessage,
+  clearAgentChat,
   loadAgentChat,
   resolveAssistant,
   saveAgentChat,
@@ -216,7 +217,7 @@ export default function AgentPage() {
             type="button"
             className="secondary-btn"
             onClick={() => {
-              localStorage.removeItem("ofdd-agent-chat-v1");
+              clearAgentChat();
               setChat(loadAgentChat());
             }}
           >

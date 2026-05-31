@@ -71,19 +71,13 @@ def test_batch_run_lights_check_engine(client: TestClient):
     assert any(a.get("source") == "fdd" for a in status["alerts"])
 
 
-def test_run_uses_data_source_label(client: TestClient):
-    import os
-
-    # Create a YAML engine rule under the tmp data dir.
-    data_dir = Path(os.environ["OFDD_DESKTOP_DATA_DIR"]) / "rules"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "sat.yaml").write_text(
-        "name: sat_high\ntype: expression\nflag: sat_high_flag\n"
-        "inputs:\n  SAT:\n    column: SAT\nexpression: \"SAT > 50\"\n",
-        encoding="utf-8",
+def test_playground_test_rule_uses_demo_frame(client: TestClient):
+    r = client.post(
+        "/api/playground/test-rule",
+        json={"code": RULE_CODE, "config": {"high": 50}, "limit": 200},
     )
-    r = client.post("/api/rules/run", json={})
     assert r.status_code == 200
     body = r.json()
-    assert body["data_source"] == "demo"
-    assert "sat_high_flag" in body["flag_columns"]
+    assert body.get("ok") is True
+    assert body.get("data_source") == "demo"
+    assert body.get("flagged", 0) >= 0

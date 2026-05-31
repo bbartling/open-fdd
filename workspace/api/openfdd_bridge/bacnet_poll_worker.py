@@ -15,13 +15,24 @@ _log = logging.getLogger(__name__)
 _worker: threading.Thread | None = None
 _started = False
 _last_mtime: float = 0.0
+_DEFAULT_INTERVAL_S = 30.0
+
+
+def _poll_ingest_interval_s() -> float:
+    raw = os.environ.get("OFDD_POLL_INGEST_INTERVAL_S", "30").strip()
+    try:
+        return float(raw)
+    except ValueError:
+        _log.warning("Invalid OFDD_POLL_INGEST_INTERVAL_S=%r — using %.0fs", raw, _DEFAULT_INTERVAL_S)
+        return _DEFAULT_INTERVAL_S
 
 
 def _loop() -> None:
     global _last_mtime
     while True:
-        sleep_s = float(os.environ.get("OFDD_POLL_INGEST_INTERVAL_S", "30"))
+        sleep_s = _DEFAULT_INTERVAL_S
         try:
+            sleep_s = _poll_ingest_interval_s()
             path = bacnet_poll_csv()
             if path.is_file():
                 mtime = path.stat().st_mtime

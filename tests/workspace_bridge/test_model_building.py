@@ -65,6 +65,77 @@ def test_model_import_requires_site(client: TestClient):
     assert r.status_code == 400
 
 
+def test_model_delete_point_and_equipment(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    payload = {
+        "sites": [{"id": "s1", "name": "Demo Site"}],
+        "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "SAT",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+            },
+            {
+                "id": "p2",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "OAT",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+            },
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+
+    r = client.delete("/api/model/points/p1")
+    assert r.status_code == 200
+    assert r.json()["deleted"] == "p1"
+
+    export = client.get("/api/model/export").json()
+    assert len(export["points"]) == 1
+
+    r2 = client.delete("/api/model/equipment/e1")
+    assert r2.status_code == 200
+    assert r2.json()["points_removed"] == 1
+
+    export2 = client.get("/api/model/export").json()
+    assert export2["equipment"] == []
+    assert export2["points"] == []
+
+
+def test_bacnet_sync_status(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    r = client.get("/api/model/bacnet-sync")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "in_sync" in body
+    assert "poll_enabled_count" in body
+
+
+def test_model_tree(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    payload = {
+        "sites": [{"id": "s1", "name": "Demo Site"}],
+        "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "SAT",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+            }
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+    tree = client.get("/api/model/tree").json()
+    assert tree["points"]
+    assert "Supply_Air_Temperature_Sensor" in tree["brick_types"]
+
+
 def test_model_health_and_building_status(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OPENFDD_DEFAULT_SITE_ID", "test-site")
     r = client.get("/api/model/health")

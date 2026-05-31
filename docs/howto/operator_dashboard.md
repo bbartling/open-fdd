@@ -6,63 +6,100 @@ nav_order: 6
 
 # Operator dashboard (Rule Lab)
 
-The **operator stack** lives under `workspace/` (committed starter). It mirrors the Bake-a-Py pattern from edge cloud dashboards: **Python is edited in the browser and executed on the bridge host** (pandas + `open_fdd.engine`), not in the browser.
+The **operator stack** lives under `workspace/`. Python runs on the **bridge host** (pandas, NumPy, sandboxed Rule Lab code); the browser is a compiled React SPA (same artifact Ansible ships to edge hosts).
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `workspace/api/` | FastAPI bridge (`openfdd_bridge`) — port **8765** |
-| `workspace/dashboard/` | Vite + React 19 UI — dev port **5173** |
-| `workspace/data/` | Sample CSV, YAML rules, feather store |
-| `workspace/deploy/` | systemd unit examples |
-| `bacnet_toolshed/` | Edge BACnet CLIs → poll CSV → `/ingest/bacnet` |
+| `workspace/api/` | FastAPI bridge (`openfdd_bridge`) — API on **8765** |
+| `workspace/api/static/app/` | **Production** React build (served by bridge) |
+| `workspace/dashboard/` | React source — build only; not served at runtime on edge |
+| `workspace/data/` | Feather store, rules, model JSON |
+| `workspace/deploy/` | systemd + Caddy examples |
+| `bacnet_toolshed/` | BACnet commission agent + poll loop |
 
-## Development
+## Quick start (recommended)
 
 ```bash
 pip install -e ".[dev]"
 pip install -r workspace/api/requirements.txt
+cp workspace/auth.env.example workspace/auth.env.local    # optional
+cp workspace/caddy.env.example workspace/caddy.env.local  # optional; :80 entry
+
+./scripts/run_local.sh restart
+```
+
+Open **`http://127.0.0.1/`** when Caddy is enabled (default from `caddy.env.example`), or **`http://127.0.0.1:8765/`** if Caddy is off.
+
+`run_local.sh` **rebuilds the production UI** on each start/restart unless you pass **`--ui-skip`**.
+
+### UI build modes
+
+| Command | What it does |
+|---------|----------------|
+| `./scripts/run_local.sh restart` | Production `vite build` (default) |
+| `./scripts/run_local.sh restart --ui-test` | `vitest run` + production build |
+| `./scripts/run_local.sh restart --ui-skip` | Skip npm; use existing `static/app/` |
+| `./scripts/run_local.sh start --dev` | Also Vite on **5173** (HMR only — not edge parity) |
+
+CI / pre-deploy gate:
+
+```bash
+./scripts/build_and_test.sh   # vitest + prod build + pytest
+```
+
+## Manual dev (two terminals)
+
+For rapid UI iteration without rebuilding:
+
+```bash
+# Terminal 1 — API
 export OPENFDD_REPO_ROOT="$(pwd)"
 export OFDD_DESKTOP_DATA_DIR="$PWD/workspace/data"
-
-# Terminal 1 — API
 cd workspace/api && uvicorn openfdd_bridge.main:app --reload --port 8765
 
-# Terminal 2 — UI (proxies /api to 8765)
+# Terminal 2 — Vite dev (proxies /api to 8765)
 cd workspace/dashboard && npm ci && npm run dev
 ```
 
-Open `http://127.0.0.1:5173` → **Rule Lab** → edit Python → **Test on server**.
+Open `http://127.0.0.1:5173`. For **Ansible/production parity**, use `run_local.sh` without `--dev` and hit the Caddy or `:8765` compiled URL.
 
-Production build (serves UI from bridge):
+## Production build only
 
 ```bash
-scripts/build_operator_dashboard.sh   # or .ps1 on Windows
-cd workspace/api && uvicorn openfdd_bridge.main:app --host 127.0.0.1 --port 8765
-# http://127.0.0.1:8765/
+./scripts/build_operator_dashboard.sh prod   # or: test (vitest + build)
+# Bridge serves workspace/api/static/app/
 ```
+
+## Tabs (auth may be required)
+
+| Route | Page |
+|-------|------|
+| `/` | Building check-engine (public) |
+| `/faults` | Fault catalog (public) |
+| `/rule-lab` | Python Rule Lab |
+| `/data-model` | BRICK model + rule mapping |
+| `/plot` | Feather trend plots |
+| `/bacnet` | BACnet commissioning |
+| `/agent` | Local Ollama chat |
+| `/host` | CPU/RAM charts + data-disk space |
 
 ## Rule Lab modes
 
-1. **Per-row rule** — define `evaluate(row, cfg, …)`; bridge sweeps the demo frame (`POST /api/playground/test-rule`).
-2. **DataFrame script** — full `df` with `open_fdd.engine.RuleRunner`; set `out = {"df": …}` (`POST /api/playground/run-script`).
-3. **YAML FDD** — `workspace/data/rules/*.yaml` via `POST /api/rules/run` (integer `0`/`1` flag columns).
+1. **Per-row rule** — `evaluate(row, cfg, …)` → `POST /api/playground/test-rule`
+2. **DataFrame script** — `out = {"df": …}` → `POST /api/playground/run-script`
+
+Saved rules live in `rules_store.json` with optional `.py` sources under `data/rules_py/`. Schedule batch runs via `POST /api/rules/batch` or the `openfdd-fdd-loop` unit.
 
 ## Auth (OT LAN)
 
-Set on the bridge host before production:
+Copy `workspace/auth.env.example` → `auth.env.local`. When `OFDD_AUTH_SECRET` is set, protected routes require login.
 
-```bash
-export OFDD_AUTH_SECRET="$(openssl rand -hex 32)"
-export OFDD_WEB_USER=operator
-export OFDD_WEB_PASSWORD='…'
-```
-
-When unset, auth is **off** (local dev only). See `workspace/deploy/README.md` and `workspace/deploy/systemd/`.
+See `workspace/deploy/README.md`, `workspace/deploy/SECURITY.md`.
 
 ## AI maintainers
 
-Agents use skills **`fastapi-bridge-api`** and **`react-operator-dashboard`** to extend routes and pages. Codex CLI, Cursor, Claude Code, or OpenClaw run against the same repo; optional HTTP chat is `POST /openfdd-agent/chat` when `codex` is on PATH.
+Skills: **`fastapi-bridge-api`**, **`react-operator-dashboard`**. Optional chat: `POST /openfdd-agent/chat` when Ollama is configured.
 
 See also [Skills and agent shell](skills_and_agent) and [BACnet toolshed](../bacnet/index).

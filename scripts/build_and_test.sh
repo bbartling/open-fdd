@@ -17,9 +17,9 @@ echo "==> Python deps"
 "${VENV}/bin/pip" install -q -r bacnet_toolshed/requirements.txt 2>/dev/null || true
 "${VENV}/bin/pip" install -q httpx 2>/dev/null || true
 
-echo "==> Build React dashboard (ship to workspace/api/static/app)"
+echo "==> Build React dashboard (vitest + ship to workspace/api/static/app)"
 chmod +x scripts/build_operator_dashboard.sh
-./scripts/build_operator_dashboard.sh
+./scripts/build_operator_dashboard.sh test
 
 echo "==> Bridge API tests"
 export OPENFDD_REPO_ROOT="$ROOT"
@@ -33,5 +33,5 @@ test -f workspace/api/static/app/index.html
 
 echo ""
 echo "OK — build and tests passed. Next:"
-echo "  ./scripts/run_local.sh start     # local edge-like stack on 0.0.0.0:8765"
+echo "  ./scripts/run_local.sh restart   # prod UI + Caddy + bridge (see workspace/deploy/README.md)"
 echo "  cd infra/ansible && ./deploy.sh --limit bacnet_pi -v"

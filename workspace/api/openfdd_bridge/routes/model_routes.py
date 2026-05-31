@@ -136,3 +136,54 @@ def view_ttl(save: bool = False, _user: dict = Depends(require_user)) -> Respons
 def sync_ttl(_user: dict = Depends(require_roles("integrator", "operator", "agent"))) -> dict:
     path = _ttl().sync()
     return {"ok": True, "path": str(path)}
+
+
+@router.get("/bacnet-sync")
+def bacnet_sync_status(_user: dict = Depends(require_user)) -> dict:
+    from ..bacnet_poll_model_sync import bacnet_sync_status as _status
+
+    svc = _model()
+    ensure_default_site(svc, _ttl())
+    return _status()
+
+
+@router.post("/bacnet-sync")
+def bacnet_sync_run(_user: dict = Depends(require_roles("integrator", "operator", "agent"))) -> dict:
+    from ..bacnet_poll_model_sync import sync_enabled_polling_to_model
+
+    ensure_default_site(_model(), _ttl())
+    return sync_enabled_polling_to_model(sync_ttl=True)
+
+
+@router.delete("/points/{point_id}")
+def delete_point(
+    point_id: str,
+    disable_poll: bool = True,
+    user: dict = Depends(require_roles("integrator", "operator", "agent")),
+) -> dict:
+    removed = _model().delete_point(point_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"point not found: {point_id}")
+    poll_disabled = False
+    if disable_poll:
+        meta = removed.get("metadata") if isinstance(removed.get("metadata"), dict) else {}
+        poll_pid = str(meta.get("point_id") or "").strip()
+        if poll_pid:
+            from ..bacnet_driver_store import set_point_poll
+
+            set_point_poll(point_id=poll_pid, enabled=False)
+            poll_disabled = True
+    path = _ttl().sync()
+    return {"ok": True, "deleted": point_id, "poll_disabled": poll_disabled, "ttl_path": str(path)}
+
+
+@router.delete("/equipment/{equipment_id}")
+def delete_equipment(
+    equipment_id: str,
+    user: dict = Depends(require_roles("integrator", "operator", "agent")),
+) -> dict:
+    counts = _model().delete_equipment(equipment_id, cascade_points=True)
+    if counts["equipment_removed"] == 0:
+        raise HTTPException(status_code=404, detail=f"equipment not found: {equipment_id}")
+    path = _ttl().sync()
+    return {"ok": True, "equipment_id": equipment_id, **counts, "ttl_path": str(path)}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -29,11 +30,20 @@ from .routes import (
 from .settings import cors_allow_private_lan, cors_origins
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    from .bacnet_poll_worker import start_bacnet_poll_worker
+
+    start_bacnet_poll_worker()
+    yield
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Open-FDD Operator Bridge",
         description="Local REST bridge: Python Rule Lab, BRICK data model, BACnet ingest, agent context.",
         version="0.1.0",
+        lifespan=_lifespan,
     )
 
     allow_lan = cors_allow_private_lan()
@@ -94,12 +104,6 @@ def create_app() -> FastAPI:
             return FileResponse(static_resolved / "index.html")
 
     app.add_exception_handler(Exception, global_exception_handler)
-
-    @app.on_event("startup")
-    def _on_startup() -> None:
-        from .bacnet_poll_worker import start_bacnet_poll_worker
-
-        start_bacnet_poll_worker()
 
     return app
 

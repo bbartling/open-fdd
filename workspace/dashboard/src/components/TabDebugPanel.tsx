@@ -8,6 +8,10 @@ type DebugEntry = {
 
 const MAX = 40;
 
+const mountedTabs = new Set<string>();
+let origError: typeof console.error | null = null;
+let origWarn: typeof console.warn | null = null;
+
 function pushEntry(tab: string, level: DebugEntry["level"], message: string) {
   const key = `ofdd-tab-debug-${tab}`;
   let entries: DebugEntry[] = [];
@@ -18,6 +22,30 @@ function pushEntry(tab: string, level: DebugEntry["level"], message: string) {
   }
   entries.unshift({ at: new Date().toISOString(), level, message });
   localStorage.setItem(key, JSON.stringify(entries.slice(0, MAX)));
+}
+
+function installConsoleCapture() {
+  if (origError != null) return;
+  origError = console.error.bind(console);
+  origWarn = console.warn.bind(console);
+  console.error = (...args: unknown[]) => {
+    const message = args.map(String).join(" ");
+    for (const tab of mountedTabs) pushEntry(tab, "error", message);
+    origError!(...args);
+  };
+  console.warn = (...args: unknown[]) => {
+    const message = args.map(String).join(" ");
+    for (const tab of mountedTabs) pushEntry(tab, "warn", message);
+    origWarn!(...args);
+  };
+}
+
+function uninstallConsoleCapture() {
+  if (mountedTabs.size > 0 || origError == null || origWarn == null) return;
+  console.error = origError;
+  console.warn = origWarn;
+  origError = null;
+  origWarn = null;
 }
 
 export function useTabDebug(tab: string) {
@@ -35,6 +63,9 @@ export function useTabDebug(tab: string) {
     };
     load();
 
+    mountedTabs.add(tab);
+    installConsoleCapture();
+
     const onError = (ev: ErrorEvent) => {
       pushEntry(tab, "error", ev.message || "window error");
       load();
@@ -44,24 +75,14 @@ export function useTabDebug(tab: string) {
       pushEntry(tab, "error", `unhandled: ${msg}`);
       load();
     };
-    const origError = console.error.bind(console);
-    const origWarn = console.warn.bind(console);
-    console.error = (...args: unknown[]) => {
-      pushEntry(tab, "error", args.map(String).join(" "));
-      origError(...args);
-    };
-    console.warn = (...args: unknown[]) => {
-      pushEntry(tab, "warn", args.map(String).join(" "));
-      origWarn(...args);
-    };
 
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onRejection);
     return () => {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
-      console.error = origError;
-      console.warn = origWarn;
+      mountedTabs.delete(tab);
+      uninstallConsoleCapture();
     };
   }, [tab]);
 

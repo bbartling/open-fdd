@@ -54,9 +54,12 @@ def test_collect_host_stats_shape():
     assert stats["cpu"]["logical_cores"] >= 1
     assert "memory" in stats
     assert "swap" in stats
+    storage = stats["storage"]
+    assert storage.get("available") is True
+    assert storage["path"]
+    assert storage["total_bytes"] > 0
+    assert "percent_used" in storage
     assert isinstance(stats["disks"], list)
-    labels = {d["label"] for d in stats["disks"]}
-    assert "repo" in labels or "root (/)" in labels
 
 
 def test_read_linux_meminfo_on_linux():
@@ -74,3 +77,4 @@ def test_host_stats_api(client: TestClient):
     assert body["ok"] is True
     assert body["host"]["platform"]
     assert "cpu" in body
+    assert body["storage"]["available"] is True

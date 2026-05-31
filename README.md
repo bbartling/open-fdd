@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <strong>pandas-first</strong> HVAC fault detection — YAML rules via <code>open_fdd.engine</code>, summaries and charts via <code>open_fdd.reports</code>
+  <strong>pandas-first</strong> HVAC fault detection — Python rules in the operator dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
 </p>
 
 <p align="center">
@@ -25,7 +25,18 @@
 
 ---
 
-## Install
+## Operator stack (git checkout)
+
+Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy:
+
+```bash
+./scripts/run_local.sh restart
+# http://127.0.0.1/ (Caddy) or :8765 — see docs/howto/operator_dashboard.md
+```
+
+---
+
+## Library install (PyPI)
 
 ```bash
 pip install "open-fdd[engine]"
@@ -33,14 +44,14 @@ pip install "open-fdd[engine]"
 
 | Extra | Purpose |
 |-------|---------|
-| `[engine]` | YAML rules, `RuleRunner`, column-map resolvers |
+| `[engine]` | Optional YAML `RuleRunner`, column-map resolvers (library/notebooks) |
 | `[reports]` | Matplotlib plots in `open_fdd.reports` |
 
 Bare install (`pandas` only): `pip install open-fdd`. For Word reports: `pip install python-docx`.
 
 ---
 
-## Engine
+## Engine (library YAML API)
 
 ```python
 from open_fdd.engine import RuleRunner
@@ -79,7 +90,7 @@ pytest open_fdd/tests/engine
 
 Examples live under `examples/`. Optional shim package: `openfdd-engine` (re-exports the engine); most users install **`open-fdd`** only.
 
-**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` + `workspace/api`), BACnet edge tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Quick start: [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
+**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
 
 ---
 

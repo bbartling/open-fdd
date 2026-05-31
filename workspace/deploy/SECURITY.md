@@ -46,9 +46,12 @@ When `OFDD_AUTH_SECRET` and at least one user are set, all `/api/*`, `/config/*`
 
 ```bash
 cp workspace/auth.env.example workspace/auth.env.local
-./scripts/build_and_test.sh    # build React + pytest — required before edge deploy
-./scripts/run_local.sh start   # compiled SPA + bridge on 0.0.0.0:8765
+cp workspace/caddy.env.example workspace/caddy.env.local   # optional; http://127.0.0.1/ entry
+./scripts/build_and_test.sh    # vitest + prod React build + pytest — required before edge deploy
+./scripts/run_local.sh start   # prod UI + stack; Caddy :80 → bridge 127.0.0.1:8765 when enabled
 ```
+
+Use **`http://127.0.0.1/`** (Caddy) or **`http://127.0.0.1:8765/`** (Caddy off). Skip UI rebuild: `./scripts/run_local.sh restart --ui-skip`.
 
 ## Edge deploy (after local pass)
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import Plotly from "plotly.js-dist-min";
 import { apiFetch } from "../lib/api";
+import { appendHostHistory } from "../lib/hostHistory";
 import PageHeader from "../components/PageHeader";
 
 type MemBlock = {
@@ -7,6 +9,17 @@ type MemBlock = {
   total_bytes?: number;
   used_bytes?: number;
   available_bytes?: number;
+  free_bytes?: number;
+  percent_used?: number;
+};
+
+type StorageBlock = {
+  available?: boolean;
+  label?: string;
+  path?: string;
+  note?: string;
+  total_bytes?: number;
+  used_bytes?: number;
   free_bytes?: number;
   percent_used?: number;
 };
@@ -30,19 +43,18 @@ type HostStats = {
     load_15?: number;
   };
   memory: MemBlock;
-  swap: MemBlock;
-  disks: Array<{
-    label: string;
-    path: string;
-    total_bytes: number;
-    used_bytes: number;
-    free_bytes: number;
-    percent_used: number;
-  }>;
+  storage: StorageBlock;
   network: { available?: boolean; rx_bytes?: number; tx_bytes?: number };
-  processes: { count: number | null };
   ollama: { pid?: number; command?: string; rss_bytes?: number } | null;
 };
+
+type HistoryPoint = {
+  at: string;
+  cpu: number | null;
+  mem: number | null;
+};
+
+const POLL_MS = 5000;
 
 function fmtBytes(n: number | undefined | null): string {
   if (n == null || Number.isNaN(n)) return "—";
@@ -69,11 +81,25 @@ function fmtUptime(seconds: number | null | undefined): string {
 function meterClass(pct: number | undefined | null): string {
   if (pct == null) return "metric-fill-ok";
   if (pct >= 90) return "metric-fill-critical";
-  if (pct >= 70) return "metric-fill-warn";
+  if (pct >= 75) return "metric-fill-warn";
   return "metric-fill-ok";
 }
 
-function MetricMeter({ label, pct, detail }: { label: string; pct: number | null | undefined; detail: string }) {
+function appendHistory(prev: HistoryPoint[], sample: HistoryPoint): HistoryPoint[] {
+  return appendHostHistory(prev, sample);
+}
+
+function MetricMeter({
+  label,
+  pct,
+  detail,
+  warn,
+}: {
+  label: string;
+  pct: number | null | undefined;
+  detail: string;
+  warn?: string;
+}) {
   const width = pct == null ? 0 : Math.min(100, Math.max(0, pct));
   return (
     <div className="metric-card">
@@ -85,16 +111,19 @@ function MetricMeter({ label, pct, detail }: { label: string; pct: number | null
         <div className={`metric-meter-fill ${meterClass(pct)}`} style={{ width: `${width}%` }} />
       </div>
       <p className="muted metric-detail">{detail}</p>
+      {warn ? <p className="error metric-detail">{warn}</p> : null}
     </div>
   );
 }
 
 export default function HostStatsPage() {
   const [stats, setStats] = useState<HostStats | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const inFlightRef = useRef(false);
   const pollRef = useRef<number | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   async function load() {
     if (inFlightRef.current) return;
@@ -103,33 +132,97 @@ export default function HostStatsPage() {
     try {
       const data = await apiFetch<HostStats>("/api/host/stats");
       setStats(data);
+      setHistory((prev) =>
+        appendHistory(prev, {
+          at: data.collected_at,
+          cpu: data.cpu.usage_percent,
+          mem: data.memory?.percent_used ?? null,
+        }),
+      );
       setError("");
     } catch (e) {
       setError(String(e));
     } finally {
       inFlightRef.current = false;
       setBusy(false);
-      pollRef.current = window.setTimeout(load, 5000);
+      pollRef.current = window.setTimeout(load, POLL_MS);
     }
   }
 
   useEffect(() => {
     load();
     return () => {
-      if (pollRef.current != null) {
-        window.clearTimeout(pollRef.current);
-      }
+      if (pollRef.current != null) window.clearTimeout(pollRef.current);
     };
   }, []);
 
+  useEffect(() => {
+    if (!chartRef.current || history.length < 2) return;
+    const times = history.map((p) => p.at);
+    void Plotly.react(
+      chartRef.current,
+      [
+        {
+          x: times,
+          y: history.map((p) => p.cpu),
+          type: "scatter",
+          mode: "lines",
+          name: "CPU %",
+          connectgaps: true,
+          line: { color: "#4f78e8", width: 2 },
+        },
+        {
+          x: times,
+          y: history.map((p) => p.mem),
+          type: "scatter",
+          mode: "lines",
+          name: "RAM %",
+          connectgaps: true,
+          line: { color: "#7fd992", width: 2 },
+          yaxis: "y2",
+        },
+      ],
+      {
+        title: "Last hour (oldest → newest)",
+        paper_bgcolor: "transparent",
+        plot_bgcolor: "transparent",
+        font: { color: "#97a3b8", size: 11 },
+        margin: { t: 36, r: 48, b: 40, l: 44 },
+        xaxis: { title: "Time", type: "date" },
+        yaxis: { title: "CPU %", range: [0, 100], ticksuffix: "%" },
+        yaxis2: {
+          title: "RAM %",
+          overlaying: "y",
+          side: "right",
+          range: [0, 100],
+          ticksuffix: "%",
+        },
+        legend: { orientation: "h", y: 1.15 },
+        showlegend: true,
+      },
+      { responsive: true, displayModeBar: false },
+    );
+  }, [history]);
+
+  useEffect(
+    () => () => {
+      if (chartRef.current) Plotly.purge(chartRef.current);
+    },
+    [],
+  );
+
   const mem = stats?.memory;
-  const swap = stats?.swap;
+  const storage = stats?.storage;
+  const diskWarn =
+    storage?.available && (storage.percent_used ?? 0) >= 85
+      ? "Disk is getting full — feather store may fail soon."
+      : undefined;
 
   return (
     <div className="page page-wide">
       <PageHeader
         title="Host stats"
-        subtitle="Edge host OS metrics — CPU, RAM, swap, disk, and network. Refreshes every 5s."
+        subtitle="CPU, RAM, and data-disk space for this edge box. Samples every 5s; charts show the last hour."
       />
 
       <div className="toolbar">
@@ -145,6 +238,37 @@ export default function HostStatsPage() {
 
       {stats ? (
         <>
+          <div className="panel host-chart-panel">
+            <h3 className="panel-title">CPU &amp; RAM — last hour</h3>
+            {history.length < 2 ? (
+              <p className="muted">Collecting samples… chart appears after a few polls.</p>
+            ) : null}
+            <div ref={chartRef} className="host-stats-chart" />
+            <div className="host-now-row">
+              <span className="muted">
+                Now: CPU {stats.cpu.usage_percent ?? "—"}% · RAM {mem?.percent_used ?? "—"}%
+              </span>
+            </div>
+          </div>
+
+          {storage?.available ? (
+            <div className="panel">
+              <h3 className="panel-title">Data disk (feather store)</h3>
+              <p className="muted host-storage-note">
+                One number that matters for trends and rules: free space on{" "}
+                <code>{storage.path}</code>
+              </p>
+              <MetricMeter
+                label="Used"
+                pct={storage.percent_used}
+                detail={`${fmtBytes(storage.free_bytes)} free of ${fmtBytes(storage.total_bytes)} total`}
+                warn={diskWarn}
+              />
+            </div>
+          ) : (
+            <div className="panel muted">Data disk metrics unavailable on this host.</div>
+          )}
+
           <div className="panel">
             <h3 className="panel-title">System</h3>
             <div className="host-info-grid">
@@ -153,89 +277,17 @@ export default function HostStatsPage() {
                 <div>{stats.host.hostname}</div>
               </div>
               <div>
-                <span className="status-kv-label">OS</span>
-                <div>
-                  {stats.host.platform} {stats.host.platform_release} ({stats.host.machine})
-                </div>
-              </div>
-              <div>
                 <span className="status-kv-label">Uptime</span>
                 <div>{fmtUptime(stats.host.uptime_seconds)}</div>
               </div>
               <div>
-                <span className="status-kv-label">Python</span>
-                <div>{stats.host.python_version}</div>
+                <span className="status-kv-label">CPU cores</span>
+                <div>{stats.cpu.logical_cores}</div>
               </div>
               <div>
-                <span className="status-kv-label">Processes</span>
-                <div>{stats.processes.count ?? "—"}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="metric-grid">
-            <MetricMeter
-              label="CPU"
-              pct={stats.cpu.usage_percent}
-              detail={`${stats.cpu.logical_cores} cores${
-                stats.cpu.load_1 != null
-                  ? ` · load ${stats.cpu.load_1} / ${stats.cpu.load_5} / ${stats.cpu.load_15}`
-                  : ""
-              }`}
-            />
-            {mem?.available ? (
-              <MetricMeter
-                label="RAM"
-                pct={mem.percent_used}
-                detail={`${fmtBytes(mem.used_bytes)} used · ${fmtBytes(mem.available_bytes)} available · ${fmtBytes(mem.total_bytes)} total`}
-              />
-            ) : (
-              <div className="metric-card muted">RAM metrics unavailable on this host.</div>
-            )}
-            {swap?.available ? (
-              <MetricMeter
-                label="Swap"
-                pct={swap.percent_used}
-                detail={`${fmtBytes(swap.used_bytes)} used · ${fmtBytes(swap.free_bytes)} free · ${fmtBytes(swap.total_bytes)} total`}
-              />
-            ) : (
-              <div className="metric-card muted">Swap metrics unavailable.</div>
-            )}
-          </div>
-
-          {stats.disks.length ? (
-            <div className="panel">
-              <h3 className="panel-title">Disk</h3>
-              <div className="metric-grid">
-                {stats.disks.map((disk) => (
-                  <MetricMeter
-                    key={disk.path}
-                    label={disk.label}
-                    pct={disk.percent_used}
-                    detail={`${fmtBytes(disk.used_bytes)} used · ${fmtBytes(disk.free_bytes)} free · ${fmtBytes(disk.total_bytes)} total`}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="panel">
-            <h3 className="panel-title">Network &amp; local AI</h3>
-            <div className="host-info-grid">
-              <div>
-                <span className="status-kv-label">Network (non-loopback)</span>
+                <span className="status-kv-label">Ollama</span>
                 <div>
-                  {stats.network.available
-                    ? `↓ ${fmtBytes(stats.network.rx_bytes)} · ↑ ${fmtBytes(stats.network.tx_bytes)}`
-                    : "—"}
-                </div>
-              </div>
-              <div>
-                <span className="status-kv-label">Ollama process</span>
-                <div>
-                  {stats.ollama
-                    ? `PID ${stats.ollama.pid} · RSS ${fmtBytes(stats.ollama.rss_bytes)}`
-                    : "Not detected"}
+                  {stats.ollama ? `running · ${fmtBytes(stats.ollama.rss_bytes)} RAM` : "not detected"}
                 </div>
               </div>
             </div>

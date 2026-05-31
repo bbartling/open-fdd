@@ -40,3 +40,45 @@ def test_rule_source_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     path = write_source(rule_id="abc", name="SAT High", code="def evaluate(row, cfg, **kw):\n    return False\n")
     assert Path(path).is_file()
     assert "evaluate" in read_source(path)
+
+
+def test_write_source_rejects_path_outside_rules_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.rule_source import rules_py_dir, write_source  # noqa: E402
+
+    outside = tmp_path / "escape.py"
+    path = write_source(
+        rule_id="abc",
+        name="Safe",
+        code="x = 1\n",
+        existing_path=str(outside),
+    )
+    assert Path(path).resolve().is_relative_to(rules_py_dir().resolve())
+    assert not outside.is_file()
+
+
+def test_column_map_for_rule_merges_scoped_over_base():
+    from openfdd_bridge.data_loader import column_map_for_rule  # noqa: E402
+
+    model = {
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "external_id": "oa-h",
+                "fdd_input": "SAT",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+            }
+        ]
+    }
+    rule = {
+        "column_map": {"RULE_KEY": "some_col"},
+        "bindings": {"point_ids": ["p1"]},
+    }
+    merged = column_map_for_rule(model, "s1", rule)
+    assert merged["SAT"] == "oa-h"
+    assert merged["Supply_Air_Temperature_Sensor"] == "oa-h"
+    assert merged["RULE_KEY"] == "some_col"

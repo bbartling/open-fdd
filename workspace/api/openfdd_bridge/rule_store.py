@@ -2,8 +2,7 @@
 
 A saved rule is a Python ``evaluate()`` rule or a DataFrame script that was
 validated in the browser Rule Lab and persisted so the scheduled FDD runner can
-apply it across every BRICK-modeled site. This is distinct from the engine YAML
-rules under ``data/rules/`` (which still run via :mod:`open_fdd.engine`).
+apply it across every BRICK-modeled site.
 """
 
 from __future__ import annotations

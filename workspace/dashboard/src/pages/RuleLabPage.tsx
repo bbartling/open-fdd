@@ -173,13 +173,14 @@ export default function RuleLabPage() {
         await refreshSaved();
         return;
       }
+      const high = Number(cfgHigh)
       const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
         method: "POST",
         body: JSON.stringify({
           name: ruleName,
           mode,
           code,
-          config: mode === "rule" ? { high: Number(cfgHigh) || 75 } : {},
+          config: mode === "rule" ? { high: Number.isFinite(high) ? high : 75 } : {},
           severity,
           fault_code: faultCode.trim(),
           bindings: { point_ids: [], equipment_ids: [], brick_types: [] },

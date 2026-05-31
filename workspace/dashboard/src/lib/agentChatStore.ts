@@ -28,7 +28,7 @@ export function loadAgentChat(): AgentChatState {
     if (!raw) {
       return {
         messages: [],
-        draft: "hello",
+        draft: "",
         model: "",
         thinkLevel: "off",
         busy: false,

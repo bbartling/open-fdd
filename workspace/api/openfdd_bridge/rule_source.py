@@ -36,7 +36,12 @@ def read_source(path: str | Path) -> str:
 
 def write_source(*, rule_id: str, name: str, code: str, existing_path: str | None = None) -> str:
     target = Path(existing_path) if existing_path else rule_py_path(rule_id=rule_id, name=name)
-    if not str(target).startswith(str(rules_py_dir())):
+    rules_root = rules_py_dir().resolve(strict=False)
+    try:
+        resolved = target.resolve(strict=False)
+        if resolved != rules_root and rules_root not in resolved.parents:
+            target = rule_py_path(rule_id=rule_id, name=name)
+    except OSError:
         target = rule_py_path(rule_id=rule_id, name=name)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(code, encoding="utf-8")

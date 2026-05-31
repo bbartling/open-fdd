@@ -291,3 +291,60 @@ def clear_bacnet_from_model(*, sync_ttl: bool = True) -> dict[str, Any]:
         "equipment_removed": equipment_removed,
         "ttl_path": ttl_path,
     }
+
+
+def bacnet_sync_status(*, site_id: str | None = None) -> dict[str, Any]:
+    """Compare enabled BACnet poll CSV rows with model.json BACnet points."""
+    svc = ModelService()
+    from .site_defaults import ensure_default_site
+
+    ensure_default_site(svc, TtlService())
+    model = svc.load()
+    sid = (site_id or "").strip() or require_model_site(model)
+
+    enabled_rows = [
+        r for r in _load_csv(_points_csv_path()) if str(r.get("enabled") or "") in {"1", "true", "yes"}
+    ]
+    discovered = {r.get("point_id", ""): r for r in _load_csv(_discovered_csv_path()) if r.get("point_id")}
+
+    poll_keys: set[str] = set()
+    for row in enabled_rows:
+        src = discovered.get(str(row.get("point_id") or ""), row)
+        inst = str(src.get("device_instance") or row.get("device_instance") or "")
+        obj_type = str(src.get("object_type") or row.get("object_type") or "")
+        obj_inst = str(src.get("object_instance") or row.get("object_instance") or "")
+        if inst and obj_type and obj_inst:
+            poll_keys.add(_point_key(inst, f"{obj_type},{obj_inst}"))
+
+    points = [p for p in model.get("points", []) if isinstance(p, dict)]
+    bacnet_eq_ids = {
+        str(e.get("id"))
+        for e in model.get("equipment", [])
+        if isinstance(e, dict) and _is_bacnet_equipment(e)
+    }
+    model_bacnet = [p for p in points if _is_bacnet_point(p, bacnet_eq_ids) and str(p.get("site_id") or "") == sid]
+    model_keys = {
+        _point_key(str(p.get("bacnet_device_id") or ""), str(p.get("object_identifier") or ""))
+        for p in model_bacnet
+        if p.get("bacnet_device_id") is not None and p.get("object_identifier")
+    }
+
+    missing_in_model = sorted(poll_keys - model_keys)
+    extra_in_model = sorted(model_keys - poll_keys)
+    ttl = TtlService()
+    in_sync = not missing_in_model and not extra_in_model
+
+    return {
+        "ok": True,
+        "site_id": sid,
+        "in_sync": in_sync,
+        "poll_enabled_count": len(poll_keys),
+        "model_bacnet_count": len(model_keys),
+        "missing_in_model": missing_in_model[:40],
+        "extra_in_model": extra_in_model[:40],
+        "missing_in_model_total": len(missing_in_model),
+        "extra_in_model_total": len(extra_in_model),
+        "ttl_path": str(ttl.ttl_path),
+        "ttl_exists": ttl.ttl_path.is_file(),
+        "points_csv": str(_points_csv_path()),
+    }

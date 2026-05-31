@@ -72,7 +72,7 @@ def read_plot_series(
     if "timestamp" in df.columns:
         df = df.copy()
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-        cutoff = pd.Timestamp.utcnow() - pd.Timedelta(hours=max(1, hours))
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=max(1, hours))
         df = df[df["timestamp"] >= cutoff]
     df = df.sort_values("timestamp") if "timestamp" in df.columns else df
     if limit and len(df) > limit:

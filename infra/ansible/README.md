@@ -21,7 +21,7 @@ export SSHPASS='...'   # Acme VM if password auth
 |------|------|
 | `openfdd-bridge` | FastAPI Rule Lab + FDD + ingest (8765) |
 | `openfdd-bacnet-commission` | Discover jobs HTTP agent (8767) |
-| `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` |
+| `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` (systemd edge; local dev uses commission agent poll loop) |
 | `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
 | `openfdd-feather-retention.timer` | Daily feather store prune/compact (`feather_retention_days`) |
 | `caddy` | LAN entry **:80** (or **:443** TLS) → bridge on loopback — default URL with no port |
@@ -60,6 +60,10 @@ Optional bridge auth (`ofdd_auth_secret`) gates Rule Lab, BACnet writes, etc.
 ## Local dev (bensserver)
 
 ```bash
-./scripts/run_local.sh
-# http://127.0.0.1/  check-engine dashboard (Caddy default, no port)
+./scripts/build_and_test.sh      # vitest + prod UI + pytest (deploy gate)
+./scripts/run_local.sh restart   # prod React build + stack + Caddy (if enabled)
+# http://127.0.0.1/  — check-engine dashboard (Caddy default, no port)
+# http://127.0.0.1:8765/ — direct bridge if OFDD_CADDY_MODE=off
 ```
+
+UI flags: `--ui-test` (vitest + build), `--ui-skip` (no npm), `--dev` (optional Vite :5173).

@@ -1,13 +1,13 @@
 ---
 name: column-map-and-manifests
-description: "Maps BRICK/ontology input keys to pandas columns using dicts, manifests, or composite resolvers in open_fdd.engine. Use when integrating site-specific point names with YAML FDD rules."
+description: "Maps BRICK/ontology input keys to pandas columns using dicts, manifests, model JSON, or composite resolvers. Use when Python Rule Lab rules or library YAML rules reference logical point names that must bind to DataFrame columns per site."
 ---
 
 # Column map and manifests
 
 ## When to use / When not to use
 
-Use when rule YAML references logical inputs (e.g. `SAT`, `OAT`) that must bind to DataFrame columns per site.
+Use when Python rules (Rule Lab `row.get("SAT")`) or library YAML rules reference logical inputs (e.g. `SAT`, `OAT`) that must bind to DataFrame columns per site.
 
 Skip when every rule already uses raw column names matching the DataFrame.
 

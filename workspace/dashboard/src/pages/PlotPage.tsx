@@ -85,6 +85,9 @@ export default function PlotPage() {
 
   useEffect(() => {
     if (selected.size && siteId) void refreshChart();
+    return () => {
+      if (chartRef.current) Plotly.purge(chartRef.current);
+    };
   }, [siteId, hours]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleColumn(col: string) {

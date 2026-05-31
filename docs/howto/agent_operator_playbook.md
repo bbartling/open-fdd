@@ -8,7 +8,7 @@ nav_order: 12
 
 Use this page as **retrieval fodder** for assistants: it ties **human goals** on the Open-FDD **desktop bridge** to **HTTP routes**, **MCP RAG** (`POST /tools/search_docs`, `POST /tools/search_api_capabilities` on the MCP REST server), and **execution** (Codex on the bridge host, UI actions). Rebuild the MCP index after editing: `python scripts/build_mcp_rag_index.py --output stack/mcp-rag/index/rag_index.json`, then **restart `open-fdd-mcp-rag`** (or re-run **`start-local`** after stopping the old MCP process) so the server reloads the file—see **[Desktop app — Restarting start-local and MCP](desktop_app#restarting-start-local-and-mcp-important)**.
 
-**Defaults:** bridge `http://127.0.0.1:8765`, MCP RAG `http://127.0.0.1:8090`, UI `http://127.0.0.1:5173` (override with env).
+**Defaults (local `run_local.sh` stack):** dashboard **`http://127.0.0.1/`** when Caddy enabled (else **`http://127.0.0.1:8765/`**), bridge API **`http://127.0.0.1:8765`**, MCP RAG **`http://127.0.0.1:8090`**. Optional Vite HMR: **`http://127.0.0.1:5173`** only with `./scripts/run_local.sh start --dev` (not production parity).
 
 **Where Codex writes files:** new scripts and helpers go under **`workspace/scratch/`** (gitignored with **`workspace/`**); operators promote keepers into **`skills/<domain>/scripts/`**. See **[Skills and agent shell](skills_and_agent)**.
 
@@ -60,13 +60,12 @@ Use this page as **retrieval fodder** for assistants: it ties **human goals** on
 
 ## FDD (fault detection) and tuning
 
-**Human goal:** run rules, interpret faults, tune thresholds / schedules / weather gates.
+**Human goal:** run Python rules, interpret faults, tune thresholds.
 
-- **Rules:** YAML under desktop rules root; `POST /rules/run` (or batched variants per OpenAPI) with **`commit: false`** where supported for previews.
-- **Cookbook:** `docs/expression_rule_cookbook.md`, `docs/rules/overview.md`.
-- **Plots + FDD overlay:** `POST /plots/fdd-frame` — combine time series with fault columns for visualization.
-- **Tuning loop:** adjust YAML → preview run → compare episode counts / `fault_totals` in plot payloads → commit when satisfied.
-- **Execution:** Codex can edit rule files in the **repo workdir** if filesystem policy allows; otherwise use bridge import/export APIs.
+- **Rule Lab:** edit `.py` in the dashboard; lint/test via `POST /api/playground/lint`, `POST /api/playground/test-rule`, `POST /api/playground/run-script`.
+- **Persist + schedule:** `POST /api/rules/save`, `GET /api/rules/saved`, `POST /api/rules/batch` (scheduled loop: `python -m openfdd_bridge.fdd_runner --once`).
+- **Column mapping:** Data Model tab — drag rules onto points; bridge merges `fdd_input` / BRICK keys into `column_map` at run time.
+- **Tuning loop:** adjust Python + `config` → preview in Rule Lab → save → batch run → check building check-engine on `/`.
 
 ---
 

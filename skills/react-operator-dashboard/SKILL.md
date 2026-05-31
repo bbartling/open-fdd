@@ -12,9 +12,10 @@ Working UI: **`workspace/dashboard/`** (React 19 + Vite 6 + CodeMirror 6).
 | Route | Page | Bridge calls |
 |-------|------|----------------|
 | `/` | Overview | `GET /health` |
-| `/rule-lab` | Bake-a-Py editor | `POST /api/playground/lint`, `test-rule`, `run-script` |
-| `/fdd` | YAML RuleRunner | `POST /api/rules/run` |
-| `/bacnet` | BACnet status / ingest | `GET /config/bacnet`, `POST /ingest/bacnet` |
+| `/rule-lab` | Python rule editor | `POST /api/playground/lint`, `test-rule`, `run-script`; `POST /api/rules/save` |
+| `/data-model` | BRICK model + rule mapping | `GET/POST /api/model/*`, `POST /api/rules/bindings` |
+| `/plot` | Feather trends | `GET /api/timeseries/*` |
+| `/bacnet` | BACnet commissioning | BACnet agent proxy routes |
 | `/agent` | AI chat | `GET /openfdd-agent/context`, `POST /openfdd-agent/chat` |
 | `/login` | Operator login | `POST /api/auth/login` |
 
@@ -33,8 +34,9 @@ Skip when CLI/notebook-only workflows suffice.
 ## Prerequisites
 
 - Node 20+, bridge at `http://127.0.0.1:8765`.
-- Dev: `cd workspace/dashboard && npm ci && npm run dev` (port 5173, Vite proxy).
-- Prod: `scripts/build_operator_dashboard.sh` → static files in `workspace/api/static/app`.
+- **Production (default):** `./scripts/run_local.sh restart` or `./scripts/build_operator_dashboard.sh prod` → `workspace/api/static/app/` served by bridge (and Caddy on `:80` when enabled).
+- **Dev HMR:** `cd workspace/dashboard && npm ci && npm run dev` (port 5173, Vite proxy) — optional; not Ansible parity.
+- **CI gate:** `./scripts/build_operator_dashboard.sh test` (vitest + prod build).
 
 ## Core concepts
 
@@ -54,10 +56,12 @@ When adding features:
 ## Verification
 
 ```bash
-npm run dev
-curl -sf http://127.0.0.1:5173/
-# After build:
-curl -sf http://127.0.0.1:8765/
+./scripts/build_operator_dashboard.sh test   # vitest + prod build
+./scripts/run_local.sh restart --ui-skip     # serve existing bundle + stack
+curl -sf http://127.0.0.1/health             # via Caddy when enabled
+curl -sf http://127.0.0.1:8765/health        # bridge direct
+# Optional HMR only:
+cd workspace/dashboard && npm run dev
 ```
 
 ## Gotchas

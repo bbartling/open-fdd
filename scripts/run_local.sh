@@ -7,7 +7,12 @@
 #   ./scripts/run_local.sh restart      # stop, rebuild production UI, start
 #   ./scripts/run_local.sh stop
 #   ./scripts/run_local.sh status
-#   OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh restart   # skip npm run build (UI unchanged)
+#   OFDD_SKIP_UI_BUILD=1 ./scripts/run_local.sh restart   # skip npm (UI unchanged)
+#
+# UI build modes (before start/restart):
+#   --ui-prod     production vite build (default)
+#   --ui-test     vitest + production build (CI-style gate)
+#   --ui-skip     skip UI build (same as OFDD_SKIP_UI_BUILD=1)
 #
 # Optional (NOT production parity — Vite HMR on :5173):
 #   ./scripts/run_local.sh start --dev
@@ -89,14 +94,33 @@ load_env_files() {
 
 VENV="${ROOT}/.venv"
 DEV_UI=false
+UI_BUILD_MODE="prod"
 CMD="${1:-start}"
 shift || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dev) DEV_UI=true; shift ;;
+    --ui-prod) UI_BUILD_MODE=prod; shift ;;
+    --ui-test) UI_BUILD_MODE=test; shift ;;
+    --ui-skip) UI_BUILD_MODE=skip; shift ;;
     *) shift ;;
   esac
 done
+
+if [[ "${OFDD_SKIP_UI_BUILD:-0}" == "1" ]]; then
+  UI_BUILD_MODE=skip
+fi
+
+ui_build_restart_args() {
+  local args=()
+  [[ "$DEV_UI" == true ]] && args+=(--dev)
+  case "$UI_BUILD_MODE" in
+    test) args+=(--ui-test) ;;
+    skip) args+=(--ui-skip) ;;
+    prod) args+=(--ui-prod) ;;
+  esac
+  printf '%s\n' "${args[@]}"
+}
 
 load_env_files "$([[ "$CMD" == "status" ]] && echo true || echo false)"
 
@@ -114,17 +138,25 @@ apply_caddy_bridge_bind() {
 apply_caddy_bridge_bind
 
 ensure_build() {
-  if [[ "${OFDD_SKIP_UI_BUILD:-0}" == "1" ]]; then
-    if [[ ! -f workspace/api/static/app/index.html ]]; then
-      echo "OFDD_SKIP_UI_BUILD=1 but workspace/api/static/app/index.html is missing — run without skip or ./scripts/build_operator_dashboard.sh" >&2
-      exit 1
-    fi
-    echo "Skipping UI build (OFDD_SKIP_UI_BUILD=1) — serving existing production bundle"
-    return 0
-  fi
-  echo "==> Production React dashboard (same artifact Ansible rsyncs to edge hosts)"
-  ./scripts/build_operator_dashboard.sh
-  test -f workspace/api/static/app/index.html
+  case "$UI_BUILD_MODE" in
+    skip)
+      if [[ ! -f workspace/api/static/app/index.html ]]; then
+        echo "UI build skipped but workspace/api/static/app/index.html is missing — run with --ui-prod or --ui-test" >&2
+        exit 1
+      fi
+      echo "Skipping UI build (--ui-skip / OFDD_SKIP_UI_BUILD=1) — serving existing production bundle"
+      ;;
+    test)
+      echo "==> Dashboard test + production build (vitest, then vite build)"
+      ./scripts/build_operator_dashboard.sh test
+      test -f workspace/api/static/app/index.html
+      ;;
+    prod|*)
+      echo "==> Production React dashboard (same artifact Ansible rsyncs to edge hosts)"
+      ./scripts/build_operator_dashboard.sh prod
+      test -f workspace/api/static/app/index.html
+      ;;
+  esac
 }
 
 pid_running() {
@@ -482,7 +514,8 @@ case "$CMD" in
   restart)
     "$0" stop
     sleep 1
-    exec "$0" start "$([[ "$DEV_UI" == true ]] && echo --dev)"
+    # shellcheck disable=SC2046
+    exec "$0" start $(ui_build_restart_args)
     ;;
   status)
     if pid_running "$BRIDGE_PID"; then
@@ -544,7 +577,7 @@ case "$CMD" in
     ./scripts/build_and_test.sh
     ;;
   *)
-    echo "Usage: $0 [start|up|stop|restart|status|build-test] [--dev]" >&2
+    echo "Usage: $0 [start|up|stop|restart|status|build-test] [--dev] [--ui-prod|--ui-test|--ui-skip]" >&2
     exit 1
     ;;
 esac

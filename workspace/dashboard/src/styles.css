@@ -1160,6 +1160,234 @@ textarea {
   .rule-map-board {
     grid-template-columns: 1fr;
   }
+
+  .dm-explorer {
+    grid-template-columns: 1fr;
+  }
+
+  .dm-io-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Data model explorer */
+.dm-sync-bar {
+  margin-bottom: 14px;
+}
+
+.dm-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.dm-sync-meta {
+  flex: 1 1 200px;
+  font-size: 0.88rem;
+}
+
+.dm-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dm-health-issues {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.88rem;
+}
+
+.dm-explorer {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.dm-explorer-rules {
+  position: sticky;
+  top: 12px;
+}
+
+.dm-explorer-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dm-graph-section {
+  overflow: hidden;
+}
+
+.dm-brick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.dm-brick-node {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.dm-brick-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 12px;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  min-height: auto;
+}
+
+.dm-expand-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0 4px;
+}
+
+.dm-point-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dm-point-chip {
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: auto;
+  padding: 8px 10px;
+}
+
+.dm-point-label {
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+
+.dm-eq-block {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dm-eq-head {
+  padding: 10px 12px;
+  background: var(--panel-soft);
+  margin: 0;
+  border-radius: 0;
+  min-height: auto;
+}
+
+.dm-point-row {
+  flex-wrap: wrap;
+}
+
+.dm-context-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 160px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+}
+
+.dm-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dm-context-menu button:hover {
+  background: var(--panel-soft);
+}
+
+.dm-context-danger {
+  color: var(--danger);
+}
+
+.dm-io-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.dm-io-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 420px;
+}
+
+.dm-io-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-json-editor {
+  flex: 1 1 auto;
+  min-height: 320px;
+  width: 100%;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.dm-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dm-prompt-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.dm-prompt-preview {
+  min-height: 200px;
+}
+
+.model-editor {
+  min-height: 320px;
+  width: 100%;
+  margin-bottom: 10px;
 }
 
 .tab-debug {
@@ -1187,9 +1415,28 @@ textarea {
   font-size: 0.82rem;
 }
 
+.host-stats-chart {
+  min-height: 280px;
+  width: 100%;
+}
+
+.host-chart-panel {
+  margin-bottom: 1rem;
+}
+
+.host-now-row {
+  margin-top: 8px;
+  font-size: 0.88rem;
+}
+
+.host-storage-note {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
 .tab-debug-list li {
   margin-bottom: 4px;
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .agent-chat-log {

@@ -7,7 +7,7 @@ from typing import Any
 
 def build_column_map_from_model_points(model: dict[str, Any], site_id: str) -> dict[str, str]:
     """
-    Map ontology keys used in rule YAML to DataFrame column names (point ``external_id``).
+    Map logical point keys used in Python rules to DataFrame column names (point ``external_id``).
 
     For each point on ``site_id``, registers:
 

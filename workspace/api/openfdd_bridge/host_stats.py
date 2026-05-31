@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .paths import data_dir, repo_root, workspace_dir
+from .paths import data_dir
 
 
 def _bytes_from_proc_value(raw: str) -> int:
@@ -222,27 +222,17 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         cpu["load_15"] = load[2]
 
     disks: list[dict[str, Any]] = []
-    for label, path in (
-        ("repo", repo_root()),
-        ("workspace", workspace_dir()),
-        ("data", data_dir()),
-    ):
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            disk = _disk_for_path(path)
-            disk["label"] = label
-            disks.append(disk)
-        except OSError:
-            continue
-
-    root_disk = None
+    storage: dict[str, Any] = {"available": False}
     try:
-        root_disk = _disk_for_path(Path("/"))
-        root_disk["label"] = "root (/)"
+        data_path = data_dir()
+        data_path.mkdir(parents=True, exist_ok=True)
+        storage = _disk_for_path(data_path)
+        storage["label"] = "Data disk"
+        storage["role"] = "data"
+        storage["available"] = True
+        storage["note"] = "Feather store, rules, and model JSON live here"
     except OSError:
         pass
-    if root_disk and not any(d["path"] == "/" for d in disks):
-        disks.insert(0, root_disk)
 
     net = _network_totals()
     ollama = _ollama_summary()
@@ -261,6 +251,7 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         "cpu": cpu,
         "memory": _memory_payload(meminfo),
         "swap": _swap_payload(meminfo),
+        "storage": storage,
         "disks": disks,
         "network": net or {"available": False},
         "processes": {"count": _process_count()},

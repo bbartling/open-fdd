@@ -121,4 +121,8 @@ def column_map_for_rule(model: dict, site_id: str, rule: dict) -> dict[str, str]
         for key in (str(pt.get("fdd_input") or "").strip(), str(pt.get("brick_type") or "").strip()):
             if key:
                 scoped[key] = ext
-    return scoped or base
+    if not scoped:
+        return base
+    merged = base.copy()
+    merged.update(scoped)
+    return merged

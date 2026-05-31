@@ -30,17 +30,16 @@ def default_site_name() -> str:
 
 def ensure_default_site(model: ModelService, ttl: TtlService | None = None) -> str:
     """Ensure model.json has at least one site; return its id."""
-    loaded = model.load()
-    sites = loaded.get("sites") or []
-    for site in sites:
-        if isinstance(site, dict):
-            sid = str(site.get("id") or "").strip()
-            if sid:
-                return sid
     sid = default_site_id()
     name = default_site_name()
     with model.transaction() as doc:
-        doc.setdefault("sites", []).insert(0, {"id": sid, "name": name})
+        sites = doc.setdefault("sites", [])
+        for site in sites:
+            if isinstance(site, dict):
+                existing = str(site.get("id") or "").strip()
+                if existing:
+                    return existing
+        sites.insert(0, {"id": sid, "name": name})
     if ttl is not None:
         ttl.sync()
     return sid
