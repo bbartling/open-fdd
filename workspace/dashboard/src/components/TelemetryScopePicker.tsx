@@ -58,7 +58,7 @@ export default function TelemetryScopePicker({
           ) : null}
           {equipmentGroups.map((g) => (
             <option key={g.equipment_id || "_unassigned"} value={g.equipment_id}>
-              {g.name || g.label}
+              {g.label || g.name || g.equipment_id}
               {g.bacnet_device_instance != null ? ` · dev ${g.bacnet_device_instance}` : ""}
               {` · ${g.keys.length} sensors`}
             </option>

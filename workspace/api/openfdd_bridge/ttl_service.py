@@ -62,6 +62,8 @@ class TtlService:
     ttl_path: Path = field(default_factory=model_ttl_path)
 
     def build_ttl(self) -> str:
+        from .timeseries_api import plot_column_name
+
         model = self.model_store.load()
         lines = [
             "@prefix brick: <https://brickschema.org/schema/Brick#> .",
@@ -125,8 +127,6 @@ class TtlService:
                 maps_rule_input = str(bt).strip()
             if maps_rule_input:
                 lines.append(f'  ofdd:mapsToRuleInput "{_escape(maps_rule_input)}" ;')
-            from .timeseries_api import plot_column_name
-
             ts_col = plot_column_name(pt)
             if ts_col:
                 lines.append(f'  ofdd:timeseriesColumn "{_escape(ts_col)}" ;')

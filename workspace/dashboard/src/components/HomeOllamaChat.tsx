@@ -153,7 +153,11 @@ export default function HomeOllamaChat() {
         )}
       </div>
       <form className="home-ollama-form" onSubmit={send}>
+        <label className="sr-only" htmlFor="home-ollama-message">
+          Message to Ollama
+        </label>
         <input
+          id="home-ollama-message"
           type="text"
           value={chat.draft}
           onChange={(e) => setChat((prev) => ({ ...prev, draft: e.target.value }))}

@@ -97,8 +97,9 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0, o
     }
     const seen = new Set<string>();
     const out: GraphEquipment[] = [];
-    const sources = eq.filter((e) => (graph.feeds || []).some((f) => f.from_equipment_id === e.equipment_id));
-    const roots = sources.length ? sources : eq.filter((e) => !eq.some((x) => (fedBy.get(x.equipment_id) || []).includes(e.equipment_id)));
+    const roots = eq.filter(
+      (e) => !(graph.feeds || []).some((f) => f.to_equipment_id === e.equipment_id)
+    );
     const queue = [...roots];
     while (queue.length) {
       const cur = queue.shift()!;

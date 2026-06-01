@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -25,7 +26,11 @@ RENAMES: dict[str, str] = {
 
 
 def main() -> int:
-    raw = json.loads(STORE.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(STORE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Failed to read {STORE}: {exc}", file=sys.stderr)
+        return 1
     rules = raw.get("rules") or []
     changed = 0
     for rule in rules:
@@ -43,8 +48,8 @@ def main() -> int:
             changed += 1
         # Legacy RTU wording in names not covered by id map
         name = str(rule.get("name") or "")
-        if "RTU" in name and "AHU" not in name:
-            rule["name"] = name.replace("RTU", "AHU").replace("rtu", "ahu")
+        if re.search(r"\bRTU\b", name, re.IGNORECASE) and not re.search(r"\bAHU\b", name, re.IGNORECASE):
+            rule["name"] = re.sub(r"\bRTU\b", "AHU", name, flags=re.IGNORECASE)
             changed += 1
         if name.lower().startswith("acme "):
             rule["name"] = name[5:].strip()

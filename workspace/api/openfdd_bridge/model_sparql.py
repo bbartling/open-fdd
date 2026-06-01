@@ -282,11 +282,12 @@ def query_feeds(
     site = _sanitize_local_name(site_id)
     if site is None:
         return []
-    model = model if model is not None else ModelService().load()
     if ensure:
         from .model_feeds import ensure_site_feeds
 
-        ensure_site_feeds(model, site_id)
+        with ModelService().transaction() as model:
+            ensure_site_feeds(model, site_id)
+    model = model if model is not None else ModelService().load()
     ttl_text = TtlService().build_ttl()
     q = FEEDS_QUERY.format(site=site)
     sparql_rows = _run_sparql(ttl_text, q)

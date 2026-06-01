@@ -7,7 +7,7 @@ import ModelScopePicker from "../components/ModelScopePicker";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
-import { displayRuleName } from "../lib/ruleDisplay";
+import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
 import { useModelScope } from "../lib/useModelScope";
 import {
   formatBatchSummary,
@@ -339,7 +339,7 @@ export default function RuleLabPage() {
         });
         setActiveRuleId(res.rule.id);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${displayRuleName(res.rule.name)}" (BRICK: ${brickClass || "none"}).`);
+        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}" (BRICK: ${brickClass || "none"}).`);
       }
       setDirty(false);
       await refreshSaved();
@@ -485,7 +485,7 @@ export default function RuleLabPage() {
               ) : null}
               {saved.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {displayRuleName(r.name)}
+                  {formatRuleLabel(r.name)}
                 </option>
               ))}
             </select>

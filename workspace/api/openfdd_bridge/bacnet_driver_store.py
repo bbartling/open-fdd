@@ -143,7 +143,7 @@ def _latest_poll_values() -> dict[str, str]:
                 latest[pid] = (ts, val, units)
 
     out: dict[str, str] = {}
-    for pid, (ts, val, units) in latest.items():
+    for pid, (_ts, val, units) in latest.items():
         if val in ("", "nan", "None"):
             continue
         try:

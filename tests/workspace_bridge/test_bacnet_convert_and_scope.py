@@ -19,3 +19,13 @@ def test_profile_for_sample_device_override():
         point_profiles={},
     )
     assert prof == "metric_temp_f"
+
+
+def test_profile_for_sample_point_override():
+    prof = profile_for_sample(
+        point_id="12033-analog-input-1",
+        device_instance="12033",
+        device_profiles={"12033": "metric_temp_f"},
+        point_profiles={"12033-analog-input-1": "point_override"},
+    )
+    assert prof == "point_override"

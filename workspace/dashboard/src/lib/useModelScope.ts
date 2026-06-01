@@ -84,8 +84,8 @@ export function useModelScope(initialSiteId?: string, brickTypeFilter?: string):
   }, []);
 
   useEffect(() => {
-    const sid = siteId || "acme";
-    void loadScope(sid, equipmentId, brickTypeFilter);
+    if (!siteId) return;
+    void loadScope(siteId, equipmentId, brickTypeFilter);
   }, [siteId, equipmentId, brickTypeFilter, loadScope]);
 
   const activeEquipment = equipment.find((e) => e.equipment_id === equipmentId);

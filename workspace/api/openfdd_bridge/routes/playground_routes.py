@@ -184,7 +184,8 @@ def test_rule(body: RuleBody) -> dict:
         max_events = 80
         trimmed_events = events[:max_events]
         if len(events) > max_events:
-            trimmed_events = list(trimmed_events) + [
+            trimmed_events = [
+                *trimmed_events,
                 {"type": "stdout", "text": f"… {len(events) - max_events} more events omitted"},
             ]
         return {

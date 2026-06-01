@@ -98,9 +98,15 @@ def summarize_fault_run(
     low = cfg.get("bounds_low")
     high = cfg.get("bounds_high")
     if low is not None and str(low).strip() != "":
-        out["bounds_low"] = float(low)
+        try:
+            out["bounds_low"] = float(low)
+        except (TypeError, ValueError):
+            pass
     if high is not None and str(high).strip() != "":
-        out["bounds_high"] = float(high)
+        try:
+            out["bounds_high"] = float(high)
+        except (TypeError, ValueError):
+            pass
 
     if ts_list:
         ts_list.sort()
