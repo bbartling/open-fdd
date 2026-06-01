@@ -1,46 +1,10 @@
 {
   "version": 1,
-  "generated_at": "2026-06-01T13:37:17.732760+00:00",
+  "generated_at": "2026-06-01T18:47:31.493550+00:00",
   "runs": [
     {
-      "rule_id": "bench-oa-t-flatline-1h",
-      "rule_name": "Bench OA-T flatline 1h",
-      "site_id": "acme",
-      "severity": "warning",
-      "source": "demo",
-      "fault_code": "VAV-03",
-      "equipment_family": "VAV",
-      "status": "ok",
-      "rows": 24,
-      "flagged": 0
-    },
-    {
-      "rule_id": "bench-oa-t-oob",
-      "rule_name": "Bench OA-T out of bounds",
-      "site_id": "acme",
-      "severity": "warning",
-      "source": "demo",
-      "fault_code": "VAV-03",
-      "equipment_family": "VAV",
-      "status": "ok",
-      "rows": 24,
-      "flagged": 0
-    },
-    {
-      "rule_id": "bench-stat-zn-t-flatline-1h",
-      "rule_name": "Bench stat ZN-T flatline 1h",
-      "site_id": "acme",
-      "severity": "warning",
-      "source": "demo",
-      "fault_code": "VAV-03",
-      "equipment_family": "VAV",
-      "status": "ok",
-      "rows": 24,
-      "flagged": 0
-    },
-    {
       "rule_id": "duct-t-flatline-1h",
-      "rule_name": "Duct-T flatline 1h",
+      "rule_name": "Discharge_Air_Temperature_Sensor \u00b7 flatline 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -52,7 +16,7 @@
     },
     {
       "rule_id": "duct-t-spread-1h",
-      "rule_name": "Duct-T spread 1h",
+      "rule_name": "Discharge_Air_Temperature_Sensor \u00b7 spread 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -63,32 +27,8 @@
       "flagged": 0
     },
     {
-      "rule_id": "bench-oa-h-flatline-1h",
-      "rule_name": "Bench humidity flatline 1h",
-      "site_id": "acme",
-      "severity": "warning",
-      "source": "demo",
-      "fault_code": "BLD-02",
-      "equipment_family": "BUILDING",
-      "status": "ok",
-      "rows": 24,
-      "flagged": 0
-    },
-    {
-      "rule_id": "bench-oa-h-oob",
-      "rule_name": "Bench humidity out of bounds",
-      "site_id": "acme",
-      "severity": "warning",
-      "source": "demo",
-      "fault_code": "BLD-02",
-      "equipment_family": "BUILDING",
-      "status": "ok",
-      "rows": 24,
-      "flagged": 0
-    },
-    {
       "rule_id": "acme-zn-t-flatline-1h",
-      "rule_name": "Acme zone temp flatline 1h",
+      "rule_name": "Zone_Air_Temperature_Sensor \u00b7 flatline 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -100,7 +40,7 @@
     },
     {
       "rule_id": "acme-zn-t-oob-occupied",
-      "rule_name": "Acme zone temp out of bounds",
+      "rule_name": "Zone_Air_Temperature_Sensor \u00b7 out of bounds",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -112,7 +52,7 @@
     },
     {
       "rule_id": "acme-da-t-flatline-1h",
-      "rule_name": "Acme discharge temp flatline 1h",
+      "rule_name": "Discharge_Air_Temperature_Sensor \u00b7 flatline 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -124,7 +64,7 @@
     },
     {
       "rule_id": "acme-sat-flatline-1h",
-      "rule_name": "Acme AHU SAT flatline 1h (GL36 plant request input)",
+      "rule_name": "Supply_Air_Temperature_Sensor \u00b7 flatline 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -136,7 +76,7 @@
     },
     {
       "rule_id": "acme-mat-oob-economizer",
-      "rule_name": "Acme mixed air temp OOB (economizer diagnostic)",
+      "rule_name": "Mixed_Air_Temperature_Sensor \u00b7 out of bounds",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -148,7 +88,7 @@
     },
     {
       "rule_id": "acme-sap-flatline-1h",
-      "rule_name": "Acme duct static flatline 1h (GL36 duct T&R input)",
+      "rule_name": "Duct_Static_Pressure_Sensor \u00b7 flatline 1h",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -160,7 +100,7 @@
     },
     {
       "rule_id": "acme-ahu-afterhours-runtime",
-      "rule_name": "Acme AHU fan after hours with satisfied zones",
+      "rule_name": "AHU \u00b7 supply fan after hours (zones satisfied)",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",
@@ -172,7 +112,7 @@
     },
     {
       "rule_id": "acme-ahu-run-hours",
-      "rule_name": "Acme RTU-01 fan and system run hours",
+      "rule_name": "AHU \u00b7 fan and system run hours",
       "site_id": "acme",
       "severity": "warning",
       "source": "demo",

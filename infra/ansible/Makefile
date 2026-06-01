@@ -10,7 +10,7 @@ DEPLOY := ./deploy.sh
 BUILD := ../../scripts/build_operator_dashboard.sh
 ROOT := ../..
 
-.PHONY: help all ui web backend core drivers data config caddy systemd pip commission mcp ai os check docker build build-test docker-build docker-up
+.PHONY: help all ui web backend core drivers data config caddy systemd pip commission mcp ai os check docker build build-test docker-build docker-up ui-deploy docker-deploy
 
 help:
 	@$(DEPLOY) help

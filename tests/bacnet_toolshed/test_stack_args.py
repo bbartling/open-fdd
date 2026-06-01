@@ -38,8 +38,8 @@ def test_bacnet_argv_route_aware(monkeypatch):
         }
     )
     assert "--route-aware" in argv
-    assert "--network" in argv
-    assert "1" in argv
+    net_idx = argv.index("--network")
+    assert argv[net_idx + 1] == "1"
     kwargs = route_discovery_kwargs(
         {
             "ROUTER_IP": "192.168.1.1",

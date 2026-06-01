@@ -20,10 +20,14 @@ SECRETS_DIR="${DIR}/secrets"
 load_edge_secrets() {
   local limit="${1:-}"
   local secrets_file=""
-  case "$limit" in
-    acme_vm_bbartling) secrets_file="${SECRETS_DIR}/acme.env.local" ;;
-    bacnet_pi) secrets_file="${SECRETS_DIR}/bacnet_pi.env.local" ;;
-  esac
+  if [[ -n "$limit" && -f "${SECRETS_DIR}/${limit}.env.local" ]]; then
+    secrets_file="${SECRETS_DIR}/${limit}.env.local"
+  else
+    case "$limit" in
+      acme_vm_bbartling) secrets_file="${SECRETS_DIR}/acme.env.local" ;;
+      bacnet_pi) secrets_file="${SECRETS_DIR}/bacnet_pi.env.local" ;;
+    esac
+  fi
   if [[ -n "$secrets_file" && -f "$secrets_file" ]]; then
     set -a
     # shellcheck source=/dev/null
@@ -37,11 +41,19 @@ resolve_ansible_limit() {
   local prev=""
   for arg in "$@"; do
     if [[ "$prev" == --limit ]]; then
+      if [[ -z "$arg" || "$arg" == --* ]]; then
+        echo "error: --limit requires a host pattern" >&2
+        return 1
+      fi
       echo "$arg"
       return 0
     fi
     prev="$arg"
   done
+  if [[ "$prev" == --limit ]]; then
+    echo "error: --limit requires a host pattern" >&2
+    return 1
+  fi
 }
 
 if [[ -x "${DIR}/../../.ansible_venv/bin/ansible-playbook" ]]; then
@@ -174,7 +186,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-DEPLOY_LIMIT="$(resolve_ansible_limit "${ANSIBLE_EXTRA[@]}")"
+DEPLOY_LIMIT="$(resolve_ansible_limit "${ANSIBLE_EXTRA[@]}")" || exit 1
 if [[ -n "$DEPLOY_LIMIT" ]]; then
   load_edge_secrets "$DEPLOY_LIMIT"
 fi

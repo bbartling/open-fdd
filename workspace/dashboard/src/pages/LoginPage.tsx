@@ -48,12 +48,6 @@ export default function LoginPage() {
         <p className="muted">
           {authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}
         </p>
-        {authRequired ? (
-          <p className="muted login-role-hint">
-            <strong>integrator</strong> — Rule Lab, BACnet writes, model import.{" "}
-            <strong>operator</strong> — view trends, faults, agent chat. <strong>agent</strong> — automation token.
-          </p>
-        ) : null}
         {hint ? <p className="muted">{hint}</p> : null}
         <div className="field">
           <label className="field-label" htmlFor="login-username">
@@ -64,7 +58,7 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            placeholder="integrator"
+            placeholder="username"
           />
         </div>
         <div className="field">

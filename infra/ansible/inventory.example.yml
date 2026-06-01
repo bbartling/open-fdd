@@ -2,10 +2,13 @@
 # Copy to inventory.yml (gitignored) and set real IPs.
 #
 #   cp inventory.example.yml inventory.yml
+#   cp secrets/acme.env.example secrets/acme.env.local   # SSHPASS + site facts
 #
-# Deploy:
+# Deploy (deploy.sh auto-sources secrets/acme.env.local for acme limit):
 #   ./deploy.sh --limit bacnet_pi -v
 #   ./deploy.sh --limit acme_vm_bbartling -v
+#
+# See secrets/README.md and docs/edge_deploy.md — never commit real addresses.
 
 all:
   children:

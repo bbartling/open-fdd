@@ -230,8 +230,8 @@ export default function BacnetPointsTree({
                                   {p.present_value}
                                 </span>
                               ) : p.enabled ? (
-                                <span className="badge muted-badge" title="Waiting for first poll sample">
-                                  …
+                                <span className="badge muted-badge" title="Polling — no successful read yet">
+                                  no sample
                                 </span>
                               ) : null}
                               {p.enabled ? (

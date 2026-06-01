@@ -190,6 +190,7 @@ infra/ansible/secrets/*.env.local
 infra/ansible/secrets/*.local
 !infra/ansible/secrets/*.example
 !infra/ansible/secrets/README.md
+infra/ansible/.tmp/
 
 # Edge commissioning backups (real sites)
 edge_backup/local/

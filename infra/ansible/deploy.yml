@@ -152,6 +152,14 @@
       become: false
       register: local_commission_csv
 
+    - name: Stat device_poll_profiles.csv on control machine
+      tags: [commission, drivers]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/device_poll_profiles.csv"
+      delegate_to: localhost
+      become: false
+      register: local_poll_profiles_csv
+
     - name: Push commissioned points.csv to edge
       tags: [commission, drivers]
       ansible.builtin.copy:
@@ -159,6 +167,15 @@
         dest: "{{ points_csv_path }}"
         mode: "0644"
       when: local_commission_csv.stat.exists | default(false)
+      notify: Restart BACnet poll driver
+
+    - name: Push device_poll_profiles.csv to edge
+      tags: [commission, drivers]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/device_poll_profiles.csv"
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/device_poll_profiles.csv"
+        mode: "0644"
+      when: local_poll_profiles_csv.stat.exists | default(false)
       notify: Restart BACnet poll driver
 
     - name: Install BACnet commission.env

@@ -7,6 +7,35 @@ nav_order: 3
 
 Install **`open-fdd`**, run the engine test suite, and try **`open_fdd.reports`** in a notebook.
 
+For the **operator stack** (Rule Lab, BACnet, feather historian on a building VM or Pi), start with the architecture below, then [Operator dashboard](howto/operator_dashboard), [Edge deploy (secrets layout)](edge_deploy.md), and [Ansible README](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+
+---
+
+## Edge architecture (feather, Python FDD, Ansible)
+
+On a **git checkout**, Open-FDD is more than the PyPI library: each building runs an **edge stack** you install and maintain with **Ansible**. The diagram is the current reference for how pieces connect.
+
+![Open-FDD edge stack — feather historian, Python FDD, Ansible deploy](assets/Open_FDD_Ansible.png)
+
+| Layer | What it is | Where it lives |
+|-------|------------|----------------|
+| **Ansible** | Push code, UI bundle, `points.csv`, systemd units, Caddy | `infra/ansible/` — `./deploy.sh ui`, `backend`, `drivers`, or `all --limit <host>` |
+| **BACnet poll** | RPM scrape → long CSV → feather wide frames | `openfdd-bacnet-poll`, `bacnet_toolshed/` |
+| **Feather store** | Site timeseries on disk (pyarrow); retention/GiB cap | `workspace/data/feather_store/` |
+| **Bridge API** | Auth, model, Rule Lab, plots, ingest, check-engine | `openfdd-bridge` (:8765, Caddy :80) |
+| **Python FDD** | Saved rules in `rules_py/`, batch loop, playground test | `open_fdd` + `workspace/api/openfdd_bridge/` |
+
+**Typical flow:** commission BACnet points → poll writes **samples.csv** → ingest compacts **feather** → operators edit **Python rules** in Rule Lab → scheduled **FDD loop** updates fault records → **Trend plot** reads the same feather data.
+
+**App maintenance (short list):**
+
+1. Build UI locally: `./scripts/build_operator_dashboard.sh prod` (or `build_and_test.sh` before deploy).
+2. Deploy to edge: copy `secrets/acme.env.example` → `secrets/acme.env.local` (gitignored), then `cd infra/ansible && ./deploy.sh all --limit <host>` — see [edge_deploy.md](edge_deploy.md). Components: `ui`, `backend`, `drivers`, `commission` (`deploy.sh help`).
+3. Logs: `journalctl -u openfdd-bridge -u openfdd-bacnet-poll -f` on the host.
+4. Health: `curl -s http://127.0.0.1:8765/health` on the edge (poll status when commission agent is up).
+
+Details: [Rule Lab storage](howto/rule_lab_storage), [Operator dashboard](howto/operator_dashboard), [infra/ansible/README.md](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+
 ---
 
 ## Install from PyPI

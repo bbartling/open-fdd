@@ -28,7 +28,7 @@ export function formatLintIssues(issues: LintIssue[]): string {
 }
 
 export function formatRuleTestEvents(events: RuleTestEvent[], opts?: { maxLines?: number }): string {
-  const max = opts?.maxLines ?? 400;
+  const max = opts?.maxLines ?? 32;
   const lines: string[] = [];
   let n = 0;
 

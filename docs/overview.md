@@ -7,6 +7,8 @@ nav_order: 2
 
 **Open-FDD** (PyPI **`open-fdd`**, import **`open_fdd`**) runs **YAML fault rules** on **pandas** `DataFrame`s.
 
+On a **git checkout**, the same repo adds an **edge operator stack**: BACnet polling, a local **feather** historian, Python **Rule Lab** rules, and **Ansible** deploys to building VMs. See [Getting started — edge architecture](getting_started#edge-architecture-feather-python-fdd-ansible) for the current diagram and maintenance notes.
+
 ---
 
 ## Package layout

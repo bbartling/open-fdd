@@ -30,7 +30,21 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Bind services to `127.0.0.1` by default; require explicit operator opt-in for LAN (`0.0.0.0`) or Caddy ingress.
 - Secrets via environment variables or local env files — never commit credentials.
+- **Edge SSH / site facts:** `infra/ansible/secrets/<host>.env.local` (gitignored) — see [infra/ansible/secrets/README.md](infra/ansible/secrets/README.md). Examples only on GitHub (`*.example`). `deploy.sh` auto-sources `acme.env.local` for `--limit acme_vm_bbartling`.
+- **Web login:** `workspace/auth.env.local` (integrator/operator) — not SSH; also gitignored.
+- **Commissioning CSVs:** `edge_backup/local/` — gitignored.
+- Public deploy guide (no real IPs): [docs/edge_deploy.md](docs/edge_deploy.md).
 - Historical desktop/MCP how-tos under `docs/howto/` describe the **retired monolith**; prefer `skills/` for new builds.
+
+## Edge deploy (Acme / bench)
+
+Before Ansible or SSH to a field VM, read (local only):
+
+1. `infra/ansible/secrets/acme.env.local` — `SSHPASS`, Tailscale/LAN SSH IP, BACnet OT bind, dashboard URL
+2. `infra/ansible/inventory.yml` — `ansible_host`, `ansible_user`
+3. `infra/ansible/host_vars/acme_vm_bbartling.yml` — poll/feather/Ollama flags
+
+Tracked templates: `secrets/acme.env.example`, `inventory.example.yml`, `host_vars/acme_vm_bbartling.yml.example`.
 
 ## Skill routing
 

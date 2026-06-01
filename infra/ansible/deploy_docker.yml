@@ -12,10 +12,18 @@
   gather_facts: true
 
   vars:
+    openfdd_docker_stack: true
     openfdd_docker_tar_local: "{{ playbook_dir }}/../../docker/dist/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
     openfdd_docker_tar_remote: "{{ openfdd_remote_dir }}/docker/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
 
   tasks:
+    - name: Check Docker CLI on edge
+      tags: [docker, preflight]
+      ansible.builtin.command: docker --version
+      register: docker_cli_check
+      changed_when: false
+      failed_when: false
+
     - name: Install Docker engine and compose plugin
       tags: [docker, preflight]
       ansible.builtin.apt:
@@ -26,6 +34,7 @@
         update_cache: true
         cache_valid_time: 3600
       become: true
+      when: docker_cli_check.rc != 0
 
     - name: Add ansible user to docker group
       tags: [docker, preflight]
@@ -75,7 +84,7 @@
       ansible.builtin.command:
         argv:
           - bash
-          - -lc
+          - -c
           - gunzip -c "{{ openfdd_docker_tar_remote }}" | docker load
       register: docker_load
       changed_when: "'Loaded image' in docker_load.stdout"
@@ -110,11 +119,46 @@
         - { name: "ollama.env.local", content: "# ollama env" }
         - { name: "data.env.local", content: "# feather env" }
 
-    - name: Sync workspace data tree (rules, model — not live feather historian)
+    - name: Build workspace data sync archive (skip live historian + unreadable model.json)
+      tags: [data]
+      ansible.builtin.shell: |
+        set -euo pipefail
+        out="{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
+        rm -f "$out"
+        tar -czf "$out" \
+          -C "{{ playbook_dir }}/../../workspace/data" \
+          --exclude='./model.json' \
+          --exclude='./feather_store' \
+          .
+      args:
+        executable: /bin/bash
+      delegate_to: localhost
+      become: false
+      run_once: true
+      changed_when: true
+
+    - name: Ensure workspace data dir writable on edge
+      tags: [data]
+      ansible.builtin.file:
+        path: "{{ openfdd_remote_dir }}/workspace/data"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+        recurse: true
+      become: true
+
+    - name: Sync workspace data tree on edge
+      tags: [data]
+      ansible.builtin.unarchive:
+        src: "{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
+        dest: "{{ openfdd_remote_dir }}/workspace/data/"
+
+    - name: Push site BRICK model.json
       tags: [data]
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../workspace/data/"
-        dest: "{{ openfdd_remote_dir }}/workspace/data/"
+        src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('acme_gl36_model.json') }}"
+        dest: "{{ openfdd_remote_dir }}/workspace/data/model.json"
         mode: "0644"
 
     - name: Stat commissioned points.csv on control machine
@@ -139,6 +183,14 @@
         src: templates/commission.env.j2
         dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/commission.env"
         mode: "0644"
+
+    - name: Ensure /etc/openfdd exists on edge
+      tags: [config]
+      ansible.builtin.file:
+        path: /etc/openfdd
+        state: directory
+        mode: "0755"
+      become: true
 
     - name: Install bridge secret env file
       tags: [config]
@@ -182,7 +234,11 @@
           - -d
           - --remove-orphans
       register: compose_up
-      changed_when: "'Started' in compose_up.stderr or 'Creating' in compose_up.stderr or 'Recreat' in compose_up.stderr"
+      changed_when: >-
+        (compose_up.stdout ~ compose_up.stderr) is search(
+          '(Pulling|Building|Downloading|Extracting|Restarting|Created|Creating|Recreated|Started|Pulled|Downloaded|Done)',
+          ignorecase=True
+        )
 
     - name: Run post-deploy insurance checks
       tags: [verify, check]

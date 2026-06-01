@@ -6,6 +6,10 @@ describe("displayRuleName", () => {
     expect(displayRuleName("Acme zone temp flatline 1h")).toBe("zone temp flatline 1h");
   });
 
+  it("maps RTU to AHU in display", () => {
+    expect(displayRuleName("RTU-01 fan run hours")).toBe("AHU-01 fan run hours");
+  });
+
   it("strips parenthetical GL36 notes", () => {
     expect(displayRuleName("AHU SAT flatline 1h (GL36 plant request input)")).toBe("AHU SAT flatline 1h");
   });

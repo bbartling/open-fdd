@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from ..deps import require_roles, require_user
 from ..model_health import model_health_summary
 from ..model_service import ModelService
+from ..model_sparql import list_model_sites, query_model_graph, scope_bundle
 from ..site_defaults import ensure_default_site
 from ..ttl_service import TtlService
 
@@ -58,8 +59,34 @@ def list_sites(_user: dict = Depends(require_user)) -> dict:
     ttl = _ttl()
     sid = ensure_default_site(svc, ttl)
     model = svc.load()
-    sites = [s for s in model.get("sites", []) if isinstance(s, dict)]
+    sites = list_model_sites(model)
     return {"ok": True, "sites": sites, "configured": len(sites) > 0, "active_site_id": sid}
+
+
+@router.get("/graph")
+def model_graph(
+    site_id: str | None = None,
+    _user: dict = Depends(require_user),
+) -> dict:
+    """Site equipment, points, and brick:feeds edges — SPARQL over synced TTL."""
+    svc = _model()
+    ttl = _ttl()
+    sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
+    return {"ok": True, **query_model_graph(sid)}
+
+
+@router.get("/scope")
+def model_scope(
+    site_id: str | None = None,
+    equipment_id: str | None = None,
+    brick_type: str | None = None,
+    _user: dict = Depends(require_user),
+) -> dict:
+    """BRICK SPARQL scope for Rule Lab / plots — sites, equipment, sensors with timeseries columns."""
+    svc = _model()
+    ttl = _ttl()
+    sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
+    return {"ok": True, **scope_bundle(sid, equipment_id=equipment_id, brick_type=brick_type)}
 
 
 @router.get("/tree")

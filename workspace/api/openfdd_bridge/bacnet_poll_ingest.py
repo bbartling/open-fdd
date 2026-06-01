@@ -8,9 +8,10 @@ from typing import Any
 
 import pandas as pd
 
+from .bacnet_value_convert import convert_poll_value, load_convert_context, profile_for_sample
 from .feather_store import FeatherStore, maintain_storage_if_needed
 from .model_service import ModelService
-from .paths import bacnet_poll_csv
+from .paths import bacnet_poll_csv, workspace_dir
 from .site_defaults import ensure_default_site
 from .ttl_service import TtlService
 
@@ -72,6 +73,8 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
     ensure_default_site(model_svc, TtlService())
     model = model_svc.load()
     discovered = _load_discovered_by_pid()
+    commission_dir = workspace_dir() / "bacnet" / "commissioning"
+    device_profiles, point_profiles = load_convert_context(commission_dir)
 
     ts_col = "timestamp_utc" if "timestamp_utc" in df.columns else "timestamp"
     df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
@@ -93,8 +96,18 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
                     continue
                 col = _column_for_point(pid, model, discovered)
                 raw = rec.get("value")
+                units = str(rec.get("units") or discovered.get(pid, {}).get("units") or "")
+                inst = str(rec.get("device_instance") or discovered.get(pid, {}).get("device_instance") or "")
+                profile = profile_for_sample(
+                    point_id=pid,
+                    device_instance=inst,
+                    device_profiles=device_profiles,
+                    point_profiles=point_profiles,
+                )
                 try:
-                    row[col] = float(raw)
+                    num = float(raw)
+                    num, _units_out = convert_poll_value(num, units=units, profile=profile)
+                    row[col] = num
                 except (TypeError, ValueError):
                     row[col] = raw
             rows.append(row)

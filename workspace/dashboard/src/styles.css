@@ -1461,6 +1461,7 @@ textarea {
   text-align: left;
   border: none;
   background: transparent;
+  color: var(--text);
   padding: 8px 12px;
   border-radius: 8px;
   font: inherit;
@@ -2015,4 +2016,155 @@ textarea {
 
 .rule-lab-editor-panel .cm-editor {
   border-radius: 9px;
+}
+
+.home-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.home-ollama-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.home-ollama-switch {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.home-ollama-switch-ui {
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.home-ollama-switch-ui::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.home-ollama-switch:checked + .home-ollama-switch-ui {
+  background: var(--primary);
+}
+
+.home-ollama-switch:checked + .home-ollama-switch-ui::after {
+  transform: translateX(20px);
+}
+
+.home-ollama-panel {
+  margin-top: 1rem;
+}
+
+.home-ollama-log {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.home-ollama-msg {
+  margin-bottom: 0.65rem;
+  font-size: 0.9rem;
+}
+
+.home-ollama-msg p {
+  margin: 0.2rem 0 0;
+}
+
+.home-ollama-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.home-ollama-form input {
+  flex: 1;
+}
+
+.fault-analytics {
+  margin: 0.35rem 0 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 3px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.fault-analytics-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0.15rem 0;
+}
+
+.fault-analytics dt {
+  margin: 0;
+  color: var(--muted);
+}
+
+.fault-analytics dd {
+  margin: 0;
+}
+
+.fault-detail {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.dm-feeds-block {
+  margin: 0.75rem 0 1rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.dm-feeds-block h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.dm-feeds-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dm-feeds-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.88rem;
+}
+
+.dm-feed-arrow {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dm-feed-badge {
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
 }

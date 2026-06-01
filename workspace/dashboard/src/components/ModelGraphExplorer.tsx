@@ -2,25 +2,38 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 
-type ModelPoint = {
-  id: string;
-  site_id?: string;
-  equipment_id?: string;
-  external_id?: string;
-  brick_type?: string;
-  fdd_input?: string;
+type GraphPoint = {
+  point_id: string;
   name?: string;
-  description?: string;
-  bacnet_object?: string;
-  metadata?: { poll_interval_s?: string };
+  label?: string;
+  brick_type?: string;
+  timeseries_column?: string;
+  fdd_input?: string;
+  series_id?: string;
 };
 
-type ModelEquipment = {
-  id: string;
-  site_id?: string;
+type GraphEquipment = {
+  equipment_id: string;
   name?: string;
+  label?: string;
   equipment_type?: string;
-  bacnet_device_instance?: number;
+  brick_type?: string;
+  bacnet_device_instance?: number | string;
+};
+
+type FeedEdge = {
+  from_equipment_id: string;
+  to_equipment_id: string;
+  from_label?: string;
+  to_label?: string;
+};
+
+type ModelGraph = {
+  site_id: string;
+  query_engine?: string;
+  equipment: GraphEquipment[];
+  feeds: FeedEdge[];
+  points_by_equipment: Record<string, GraphPoint[]>;
 };
 
 type ContextTarget =
@@ -28,40 +41,33 @@ type ContextTarget =
   | { kind: "equipment"; id: string; label: string };
 
 type Props = {
+  siteId?: string;
   onStatus?: (msg: string) => void;
   refreshKey?: number;
   onModelChange?: () => void;
 };
 
-function pointAddress(p: ModelPoint): string {
-  const ext = String(p.external_id || "").trim();
-  if (ext) return ext;
-  const fdd = String(p.fdd_input || "").trim();
-  if (fdd) return fdd;
-  return String(p.id || "").trim();
+function eqLabel(eq: GraphEquipment): string {
+  return String(eq.label || eq.name || eq.equipment_id);
 }
 
-function pointDisplayName(p: ModelPoint): string {
-  return String(p.name || p.description || pointAddress(p) || p.id);
+function pointLabel(p: GraphPoint): string {
+  return String(p.label || p.name || p.timeseries_column || p.point_id);
 }
 
-export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelChange }: Props) {
-  const [equipment, setEquipment] = useState<ModelEquipment[]>([]);
-  const [points, setPoints] = useState<ModelPoint[]>([]);
+export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0, onModelChange }: Props) {
+  const [graph, setGraph] = useState<ModelGraph | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [menu, setMenu] = useState<(ContextTarget & { x: number; y: number }) | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const tree = await apiFetch<{
-      equipment: ModelEquipment[];
-      points: ModelPoint[];
-    }>("/api/model/tree");
-    setEquipment(tree.equipment ?? []);
-    setPoints(tree.points ?? []);
+    const q = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+    const data = await apiFetch<ModelGraph>(`/api/model/graph${q}`);
+    setGraph(data);
     setError("");
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
     load().catch((e) => setError(formatApiError(e)));
@@ -79,18 +85,36 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
     };
   }, []);
 
-  const eqGroups = useMemo(() => {
-    const byEq = new Map<string, ModelPoint[]>();
-    for (const p of points) {
-      const eq = p.equipment_id || "unassigned";
-      if (!byEq.has(eq)) byEq.set(eq, []);
-      byEq.get(eq)!.push(p);
+  const orderedEquipment = useMemo(() => {
+    if (!graph?.equipment?.length) return [];
+    const eq = graph.equipment;
+    const byId = new Map(eq.map((e) => [e.equipment_id, e]));
+    const fedBy = new Map<string, string[]>();
+    for (const edge of graph.feeds || []) {
+      const src = edge.from_equipment_id;
+      if (!fedBy.has(src)) fedBy.set(src, []);
+      fedBy.get(src)!.push(edge.to_equipment_id);
     }
-    for (const [, list] of byEq) {
-      list.sort((a, b) => pointDisplayName(a).localeCompare(pointDisplayName(b)));
+    const seen = new Set<string>();
+    const out: GraphEquipment[] = [];
+    const sources = eq.filter((e) => (graph.feeds || []).some((f) => f.from_equipment_id === e.equipment_id));
+    const roots = sources.length ? sources : eq.filter((e) => !eq.some((x) => (fedBy.get(x.equipment_id) || []).includes(e.equipment_id)));
+    const queue = [...roots];
+    while (queue.length) {
+      const cur = queue.shift()!;
+      if (seen.has(cur.equipment_id)) continue;
+      seen.add(cur.equipment_id);
+      out.push(cur);
+      for (const childId of fedBy.get(cur.equipment_id) || []) {
+        const child = byId.get(childId);
+        if (child) queue.push(child);
+      }
     }
-    return byEq;
-  }, [points]);
+    for (const e of eq) {
+      if (!seen.has(e.equipment_id)) out.push(e);
+    }
+    return out;
+  }, [graph]);
 
   async function deletePoint(id: string, label: string) {
     if (!window.confirm(`Remove point "${label}" from the model? BACnet poll will be disabled for this point.`)) return;
@@ -148,52 +172,86 @@ export default function ModelGraphExplorer({ onStatus, refreshKey = 0, onModelCh
     };
   }
 
+  const pointsMap = graph?.points_by_equipment ?? {};
+
   return (
     <div className="dm-explorer dm-explorer-single">
       <section className="dm-graph-section panel dm-tree-panel">
-        <h3 className="panel-title">By equipment</h3>
+        <h3 className="panel-title">BRICK model graph</h3>
         <p className="muted">
-          Full equipment tree (always expanded). Map fault rules to BRICK classes in{" "}
-          <a href="/rule-lab">Rule Lab</a>. Right-click or focus and press Delete to remove a row.
+          Equipment, <code>brick:feeds</code> relationships, and points loaded via SPARQL
+          {graph?.query_engine ? ` (${graph.query_engine})` : ""}. Map rules in{" "}
+          <a href="/rule-lab">Rule Lab</a>.
         </p>
-        {equipment.length ? (
+
+        {graph?.feeds?.length ? (
+          <div className="dm-feeds-block">
+            <h4>Feeds</h4>
+            <ul className="dm-feeds-list">
+              {graph.feeds.map((f) => (
+                <li key={`${f.from_equipment_id}-${f.to_equipment_id}`}>
+                  <span className="dm-feed-from">{f.from_label || f.from_equipment_id}</span>
+                  <span className="dm-feed-arrow" aria-hidden="true">
+                    → feeds →
+                  </span>
+                  <span className="dm-feed-to">{f.to_label || f.to_equipment_id}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="muted dm-feeds-empty">No feeds edges yet — sync TTL after AHU/VAV equipment exist.</p>
+        )}
+
+        {orderedEquipment.length ? (
           <div className="dm-tree">
-            {equipment.map((eq) => {
-              const pts = eqGroups.get(eq.id) ?? [];
+            {orderedEquipment.map((eq) => {
+              const pts = pointsMap[eq.equipment_id] ?? [];
               const inst = eq.bacnet_device_instance;
+              const fedFrom = (graph?.feeds || []).filter((f) => f.to_equipment_id === eq.equipment_id);
               return (
-                <div key={eq.id} className="dm-eq-block">
+                <div key={eq.equipment_id} className="dm-eq-block">
                   <div
                     className="dm-eq-head dm-focusable"
-                    {...deletableProps({ kind: "equipment", id: eq.id, label: eq.name || eq.id })}
+                    {...deletableProps({
+                      kind: "equipment",
+                      id: eq.equipment_id,
+                      label: eqLabel(eq),
+                    })}
                   >
-                    <strong>{eq.name || eq.id}</strong>
+                    <strong>{eqLabel(eq)}</strong>
+                    {fedFrom.length ? (
+                      <span className="badge dm-feed-badge">
+                        fed by {fedFrom.map((f) => f.from_label || f.from_equipment_id).join(", ")}
+                      </span>
+                    ) : null}
                     {inst != null ? <span className="muted"> · device {inst}</span> : null}
-                    {eq.equipment_type ? <span className="muted"> · {eq.equipment_type}</span> : null}
+                    {eq.equipment_type || eq.brick_type ? (
+                      <span className="muted"> · {eq.equipment_type || eq.brick_type}</span>
+                    ) : null}
                     <span className="dm-eq-count muted"> · {pts.length} pts</span>
                   </div>
                   <ul className="rule-map-points dm-tree-points">
                     {pts.map((p) => (
                       <li
-                        key={p.id}
+                        key={p.point_id}
                         className="dm-point-row dm-focusable"
                         {...deletableProps({
                           kind: "point",
-                          id: p.id,
-                          label: pointDisplayName(p),
+                          id: p.point_id,
+                          label: pointLabel(p),
                         })}
                       >
-                        <span className="dm-point-name">{pointDisplayName(p)}</span>
+                        <span className="dm-point-name">{pointLabel(p)}</span>
                         <span className="dm-point-meta">
-                          <code className="dm-point-addr">{pointAddress(p)}</code>
+                          {p.timeseries_column ? (
+                            <code className="dm-point-addr">{p.timeseries_column}</code>
+                          ) : null}
                           <span className="dm-point-sep" aria-hidden="true">
                             {" "}
                             ·{" "}
                           </span>
                           <span className="dm-point-brick">{p.brick_type || "—"}</span>
-                          {p.metadata?.poll_interval_s ? (
-                            <span className="badge poll-badge">poll {p.metadata.poll_interval_s}s</span>
-                          ) : null}
                         </span>
                       </li>
                     ))}

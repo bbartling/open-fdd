@@ -22,6 +22,22 @@
   when:
     - install_openfdd_bridge | default(true) | bool
     - enable_openfdd_bridge | default(true) | bool
+    - not (openfdd_docker_stack | default(false) | bool)
+
+- name: Ensure Open-FDD Docker stack services are running
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ openfdd_remote_dir }}/docker-compose.yml"
+      - ps
+      - --status
+      - running
+  register: docker_compose_ps
+  changed_when: false
+  failed_when: docker_compose_ps.stdout_lines | length < 2
+  when: openfdd_docker_stack | default(false) | bool
 
 - name: Ensure BACnet commission agent is active
   ansible.builtin.systemd:
@@ -32,6 +48,7 @@
   when:
     - install_bacnet_commission_unit | default(true) | bool
     - enable_bacnet_commission_agent | default(true) | bool
+    - not (openfdd_docker_stack | default(false) | bool)
 
 - name: Ensure BACnet poll driver state matches config
   ansible.builtin.systemd:
@@ -43,7 +60,9 @@
      and poll_svc.status.ActiveState | default('inactive') != 'active')
     or (not (enable_bacnet_poll_driver | default(false) | bool)
         and poll_svc.status.ActiveState | default('inactive') not in ['inactive', 'failed'])
-  when: install_bacnet_poll_unit | default(true) | bool
+  when:
+    - install_bacnet_poll_unit | default(true) | bool
+    - not (openfdd_docker_stack | default(false) | bool)
 
 - name: Wait for bridge health on loopback
   ansible.builtin.uri:

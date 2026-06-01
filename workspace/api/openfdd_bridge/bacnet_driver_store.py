@@ -111,11 +111,24 @@ def _object_row(
 
 def _latest_poll_values() -> dict[str, str]:
     """Last present-value per point_id from poll samples CSV."""
-    from .paths import bacnet_poll_csv
+    from .paths import bacnet_poll_csv, workspace_dir
+
+    from .bacnet_value_convert import convert_poll_value, load_convert_context, profile_for_sample
 
     path = bacnet_poll_csv()
     if not path.is_file():
         return {}
+    commission_dir = workspace_dir() / "bacnet" / "commissioning"
+    device_profiles, point_profiles = load_convert_context(commission_dir)
+    discovered = {}
+    disc_path = commission_dir / "points_discovered.csv"
+    if disc_path.is_file():
+        with disc_path.open(newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                pid = str(row.get("point_id") or "").strip()
+                if pid:
+                    discovered[pid] = dict(row)
+
     latest: dict[str, tuple[str, str, str]] = {}
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
@@ -128,10 +141,30 @@ def _latest_poll_values() -> dict[str, str]:
             prev = latest.get(pid)
             if prev is None or ts >= prev[0]:
                 latest[pid] = (ts, val, units)
-    return {
-        pid: f"{vals[1]}{(' ' + vals[2]) if vals[2] else ''}"
-        for pid, vals in latest.items()
-    }
+
+    out: dict[str, str] = {}
+    for pid, (ts, val, units) in latest.items():
+        if val in ("", "nan", "None"):
+            continue
+        try:
+            num = float(val)
+            if num <= -400:
+                continue
+        except ValueError:
+            num = None
+        disc = discovered.get(pid) or {}
+        inst = str(disc.get("device_instance") or "")
+        profile = profile_for_sample(
+            point_id=pid,
+            device_instance=inst,
+            device_profiles=device_profiles,
+            point_profiles=point_profiles,
+        )
+        if num is not None:
+            num, units = convert_poll_value(num, units=units, profile=profile)
+            val = str(num)
+        out[pid] = f"{val}{(' ' + units) if units else ''}"
+    return out
 
 
 def device_in_driver(device_instance: int) -> bool:
@@ -286,7 +319,8 @@ def driver_tree() -> dict[str, Any]:
         if not pid and oid:
             pid = make_point_id(inst, obj_type, obj_inst)
         poll_row = enabled_rows.get(pid, {})
-        enabled = str(poll_row.get("enabled") or raw.get("enabled") or "0").strip().lower() in {
+        # Poll badge reflects points.csv only (actual RPM list), not discovery CSV enabled flag.
+        enabled = bool(poll_row) and str(poll_row.get("enabled") or "0").strip().lower() in {
             "1",
             "true",
             "yes",

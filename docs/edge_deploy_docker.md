@@ -59,8 +59,10 @@ cd ~/open-fdd
 ```bash
 cd infra/ansible
 set -a && source secrets/acme.env.local && set +a
-./deploy.sh docker --limit acme_vm_bbartling
+./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_ollama=false
 ```
+
+Use host systemd Ollama (not the compose `ollama` service). The bridge container reaches it via `host.docker.internal:11434` — ensure `sudo systemctl enable --now ollama` on the VM.
 
 Optional tag:
 
@@ -96,7 +98,7 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 
 ## Files
 
-```
+```text
 docker/Dockerfile              multi-target build
 docker/compose.dev.yml         local bind-mount stack
 scripts/docker_build.sh        build + optional tar export

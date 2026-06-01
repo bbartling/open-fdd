@@ -7,7 +7,7 @@
 FROM node:22-bookworm-slim AS dashboard
 WORKDIR /src/workspace/dashboard
 COPY workspace/dashboard/package.json workspace/dashboard/package-lock.json ./
-RUN npm ci --omit=dev=false
+RUN npm ci
 COPY workspace/dashboard ./
 RUN npm run build
 
@@ -79,7 +79,8 @@ ENTRYPOINT ["/usr/local/bin/bacnet-commission-entrypoint.sh"]
 
 FROM python-base AS mcp-rag
 
-RUN pip install fastapi "uvicorn[standard]" httpx
+COPY workspace/api/requirements.txt /tmp/mcp-requirements.txt
+RUN pip install -r /tmp/mcp-requirements.txt
 
 COPY workspace/mcp_rag ./workspace/mcp_rag
 

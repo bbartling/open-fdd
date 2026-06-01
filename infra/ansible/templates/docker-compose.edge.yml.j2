@@ -16,7 +16,7 @@ services:
     environment:
       OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
       OFDD_MCP_REST_BASE: http://mcp-rag:{{ mcp_listen_port | default(8090) }}
-      OFDD_OLLAMA_BASE_URL: {{ ollama_base_url | default('http://127.0.0.1:11434') }}
+      OFDD_OLLAMA_BASE_URL: "{% if enable_ollama | default(false) | bool and not (openfdd_docker_ollama | default(true) | bool) %}http://host.docker.internal:11434{% elif openfdd_docker_ollama | default(true) | bool and enable_ollama | default(false) | bool %}http://ollama:11434{% else %}{{ ollama_base_url | default('http://127.0.0.1:11434') }}{% endif %}"
     env_file:
       - {{ openfdd_remote_dir }}/workspace/auth.env.local
       - {{ openfdd_remote_dir }}/workspace/mcp.env.local
@@ -26,6 +26,10 @@ services:
       - commission
 {% if enable_mcp | default(true) | bool %}
       - mcp-rag
+{% endif %}
+{% if enable_ollama | default(false) | bool and not (openfdd_docker_ollama | default(true) | bool) %}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 {% endif %}
     restart: unless-stopped
 

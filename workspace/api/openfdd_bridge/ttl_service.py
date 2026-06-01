@@ -94,6 +94,16 @@ class TtlService:
             et = _safe_brick_type(str(eq.get("equipment_type") or "Equipment"), "Equipment")
             lines.append(f":eq_{eid} a brick:{et} ;")
             lines.append(f'  rdfs:label "{_escape(str(eq.get("name", "Equipment")))}" ;')
+            inst = eq.get("bacnet_device_instance")
+            if inst is None:
+                inst = eq.get("bacnet_device_id")
+            if inst is not None and str(inst).strip() != "":
+                lines.append(f'  ofdd:bacnetDeviceInstance "{_escape(str(inst))}" ;')
+            feeds = eq.get("feeds") if isinstance(eq.get("feeds"), list) else []
+            for target in feeds:
+                tid = _sanitize_local_name(target)
+                if tid is not None:
+                    lines.append(f"  brick:feeds :eq_{tid} ;")
             lines.append(f'  brick:isPartOf :site_{sid} .')
             lines.append("")
         for pt in model.get("points", []):
@@ -103,8 +113,9 @@ class TtlService:
             if pid is None:
                 continue
             bt = _safe_brick_type(str(pt.get("brick_type") or "Point"), "Point")
+            pt_label = str(pt.get("name") or pt.get("description") or pt.get("external_id") or pid)
             lines.append(f":pt_{pid} a brick:{bt} ;")
-            lines.append(f'  rdfs:label "{_escape(str(pt.get("external_id", "")))}" ;')
+            lines.append(f'  rdfs:label "{_escape(pt_label)}" ;')
             if pt.get("equipment_id"):
                 eid = _sanitize_local_name(pt.get("equipment_id"))
                 if eid is not None:
@@ -114,6 +125,11 @@ class TtlService:
                 maps_rule_input = str(bt).strip()
             if maps_rule_input:
                 lines.append(f'  ofdd:mapsToRuleInput "{_escape(maps_rule_input)}" ;')
+            from .timeseries_api import plot_column_name
+
+            ts_col = plot_column_name(pt)
+            if ts_col:
+                lines.append(f'  ofdd:timeseriesColumn "{_escape(ts_col)}" ;')
             ext = pt.get("metadata", {}).get("external_ref") if isinstance(pt.get("metadata"), dict) else None
             if ext:
                 lines.append(f'  ofdd:externalReference "{_escape(str(ext))}" ;')
@@ -131,6 +147,11 @@ class TtlService:
         return "\n".join(lines)
 
     def sync(self) -> Path:
+        from .model_feeds import ensure_model_feeds
+        from .model_service import ModelService
+
+        with ModelService().transaction() as model:
+            ensure_model_feeds(model)
         ttl = self.build_ttl()
         self.ttl_path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(prefix=f"{self.ttl_path.name}.", suffix=".tmp", dir=str(self.ttl_path.parent))
