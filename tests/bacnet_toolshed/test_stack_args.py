@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bacnet_toolshed.stack_args import bacnet_argv_from_cfg
+from bacnet_toolshed.stack_args import bacnet_argv_from_cfg, route_discovery_kwargs
 
 
 def test_bacnet_argv_from_cfg(monkeypatch):
@@ -38,5 +38,12 @@ def test_bacnet_argv_route_aware(monkeypatch):
         }
     )
     assert "--route-aware" in argv
-    assert "--router-ip" in argv
-    assert "192.168.1.1" in argv
+    assert "--network" in argv
+    assert "1" in argv
+    kwargs = route_discovery_kwargs(
+        {
+            "ROUTER_IP": "192.168.1.1",
+            "MSTP_NET": "2000",
+        }
+    )
+    assert kwargs == {"router_ip": "192.168.1.1", "mstp_net": 2000, "local_too": False}

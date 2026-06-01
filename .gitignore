@@ -1,5 +1,5 @@
-# If a stray top-level frontend/ exists, ignore it
-/frontend/
+# Docker image bundles (build with scripts/docker_build.sh --save)
+docker/dist/
 
 .DS_Store
 /data
@@ -186,6 +186,10 @@ workspace/.local-run/
 infra/ansible/inventory.yml
 infra/ansible/host_vars/bacnet_pi.yml
 infra/ansible/host_vars/acme_vm_bbartling.yml
+infra/ansible/secrets/*.env.local
+infra/ansible/secrets/*.local
+!infra/ansible/secrets/*.example
+!infra/ansible/secrets/README.md
 
 # Edge commissioning backups (real sites)
 edge_backup/local/

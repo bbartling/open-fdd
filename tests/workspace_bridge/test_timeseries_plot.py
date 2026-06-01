@@ -48,7 +48,11 @@ def plot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Copy rules store so fault eval has bench rules
     rules_src = REPO / "workspace" / "data" / "rules_store.json"
     if rules_src.is_file():
-        (data / "rules_store.json").write_text(rules_src.read_text(encoding="utf-8"))
+        store = json.loads(rules_src.read_text(encoding="utf-8"))
+        for rule in store.get("rules") or []:
+            if isinstance(rule, dict) and rule.get("id") == "bench-oa-t-flatline-1h":
+                rule["enabled"] = True
+        (data / "rules_store.json").write_text(json.dumps(store, indent=2), encoding="utf-8")
     rules_py = REPO / "workspace" / "data" / "rules_py"
     if rules_py.is_dir():
         import shutil

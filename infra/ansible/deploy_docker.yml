@@ -1,0 +1,190 @@
+---
+# Docker-based edge deploy — images + compose on host; Caddy stays systemd by default.
+#
+#   ./scripts/docker_build.sh --save
+#   ./deploy.sh docker --limit acme_vm_bbartling
+#   ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_image_tag=2026.06.01
+#
+# Tags: docker, preflight, config, data, commission, verify
+
+- name: Deploy Open-FDD edge stack (Docker Compose)
+  hosts: pi_bcn
+  gather_facts: true
+
+  vars:
+    openfdd_docker_tar_local: "{{ playbook_dir }}/../../docker/dist/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
+    openfdd_docker_tar_remote: "{{ openfdd_remote_dir }}/docker/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
+
+  tasks:
+    - name: Install Docker engine and compose plugin
+      tags: [docker, preflight]
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+
+    - name: Add ansible user to docker group
+      tags: [docker, preflight]
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+      become: true
+
+    - name: Ensure Open-FDD docker layout on edge
+      tags: [docker, preflight]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ openfdd_remote_dir }}/docker"
+        - "{{ openfdd_remote_dir }}/docker/volumes/ollama"
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
+        - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
+
+    - name: Stat image bundle on control machine
+      tags: [docker]
+      ansible.builtin.stat:
+        path: "{{ openfdd_docker_tar_local }}"
+      delegate_to: localhost
+      become: false
+      register: local_docker_tar
+
+    - name: Fail when image bundle missing (run scripts/docker_build.sh --save)
+      tags: [docker]
+      ansible.builtin.fail:
+        msg: >-
+          Missing {{ openfdd_docker_tar_local }} on control machine.
+          Run: ./scripts/docker_build.sh --save
+      when: not local_docker_tar.stat.exists | default(false)
+
+    - name: Copy image bundle to edge
+      tags: [docker]
+      ansible.builtin.copy:
+        src: "{{ openfdd_docker_tar_local }}"
+        dest: "{{ openfdd_docker_tar_remote }}"
+        mode: "0644"
+
+    - name: Load Docker images on edge
+      tags: [docker]
+      ansible.builtin.command:
+        argv:
+          - bash
+          - -lc
+          - gunzip -c "{{ openfdd_docker_tar_remote }}" | docker load
+      register: docker_load
+      changed_when: "'Loaded image' in docker_load.stdout"
+
+    - name: Stat workspace auth.env.local on control machine
+      tags: [config]
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../workspace/auth.env.local"
+      delegate_to: localhost
+      become: false
+      register: control_auth_env
+
+    - name: Sync auth.env.local to edge
+      tags: [config]
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/auth.env.local"
+        dest: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+        mode: "0600"
+      when:
+        - deploy_sync_auth | default(true) | bool
+        - control_auth_env.stat.exists | default(false)
+
+    - name: Ensure optional workspace env stubs exist
+      tags: [config]
+      ansible.builtin.copy:
+        dest: "{{ openfdd_remote_dir }}/workspace/{{ item.name }}"
+        content: "{{ item.content }}\n"
+        mode: "0644"
+        force: false
+      loop:
+        - { name: "mcp.env.local", content: "OFDD_MCP_ENABLED=1" }
+        - { name: "ollama.env.local", content: "# ollama env" }
+        - { name: "data.env.local", content: "# feather env" }
+
+    - name: Sync workspace data tree (rules, model — not live feather historian)
+      tags: [data]
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/data/"
+        dest: "{{ openfdd_remote_dir }}/workspace/data/"
+        mode: "0644"
+
+    - name: Stat commissioned points.csv on control machine
+      tags: [commission, data]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+      delegate_to: localhost
+      become: false
+      register: local_commission_csv
+
+    - name: Push commissioned points.csv to edge
+      tags: [commission, data]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+        dest: "{{ points_csv_path }}"
+        mode: "0644"
+      when: local_commission_csv.stat.exists | default(false)
+
+    - name: Install BACnet commission.env
+      tags: [commission, config]
+      ansible.builtin.template:
+        src: templates/commission.env.j2
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/commission.env"
+        mode: "0644"
+
+    - name: Install bridge secret env file
+      tags: [config]
+      ansible.builtin.template:
+        src: templates/bridge.secret.env.j2
+        dest: /etc/openfdd/bridge.secret.env
+        mode: "0600"
+      become: true
+
+    - name: Render Docker Compose file on edge
+      tags: [docker]
+      ansible.builtin.template:
+        src: templates/docker-compose.edge.yml.j2
+        dest: "{{ openfdd_remote_dir }}/docker-compose.yml"
+        mode: "0644"
+
+    - name: Stop legacy systemd Open-FDD app units (Docker replaces them)
+      tags: [docker]
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      become: true
+      failed_when: false
+      loop:
+        - openfdd-bridge
+        - openfdd-mcp-rag
+        - openfdd-bacnet-poll
+        - openfdd-bacnet-commission
+      when: openfdd_docker_disable_systemd | default(true) | bool
+
+    - name: Start Open-FDD stack with Docker Compose
+      tags: [docker]
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ openfdd_remote_dir }}/docker-compose.yml"
+          - up
+          - -d
+          - --remove-orphans
+      register: compose_up
+      changed_when: "'Started' in compose_up.stderr or 'Creating' in compose_up.stderr or 'Recreat' in compose_up.stderr"
+
+    - name: Run post-deploy insurance checks
+      tags: [verify, check]
+      ansible.builtin.include_tasks: tasks/post_deploy_check.yml
+      when: run_deploy_verify | default(true) | bool

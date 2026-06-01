@@ -14,6 +14,35 @@ ROOT="$(cd "$DIR/../.." && pwd)"
 cd "$DIR"
 
 INV="${ANSIBLE_INVENTORY:-${DIR}/inventory.yml}"
+SECRETS_DIR="${DIR}/secrets"
+
+# Map inventory --limit host → secrets/<alias>.env.local (gitignored).
+load_edge_secrets() {
+  local limit="${1:-}"
+  local secrets_file=""
+  case "$limit" in
+    acme_vm_bbartling) secrets_file="${SECRETS_DIR}/acme.env.local" ;;
+    bacnet_pi) secrets_file="${SECRETS_DIR}/bacnet_pi.env.local" ;;
+  esac
+  if [[ -n "$secrets_file" && -f "$secrets_file" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$secrets_file"
+    set +a
+    export SSHPASS="${SSHPASS:-}"
+  fi
+}
+
+resolve_ansible_limit() {
+  local prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == --limit ]]; then
+      echo "$arg"
+      return 0
+    fi
+    prev="$arg"
+  done
+}
 
 if [[ -x "${DIR}/../../.ansible_venv/bin/ansible-playbook" ]]; then
   APB="${DIR}/../../.ansible_venv/bin/ansible-playbook"
@@ -57,8 +86,10 @@ Components:
   mcp | ai    MCP RAG sidecar (+ edge_ai_stack.yml); ai also runs Ollama bootstrap
   os          apt update + safe upgrade (os_update.yml; -e os_upgrade_reboot=true)
   check       Post-deploy insurance probes only (no file sync)
+  docker      Docker Compose stack (build images locally first — see docs/edge_deploy_docker.md)
 
 Examples:
+  ./scripts/docker_build.sh --save && ./deploy.sh docker --limit acme_vm_bbartling
   ./scripts/build_and_test.sh && ./deploy.sh ui --limit acme_vm_bbartling
   ./deploy.sh backend --limit acme_vm_bbartling
   ./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
@@ -66,10 +97,25 @@ Examples:
   ./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
 
 Env:
-  SSHPASS              Password for sshpass (optional)
+  SSHPASS              Password for sshpass (optional; or set in secrets/<host>.env.local)
   ANSIBLE_INVENTORY    Default: infra/ansible/inventory.yml
   RUN_POST_CHECK=0     Skip post_deploy_check.sh after deploy
+
+Secrets (gitignored): infra/ansible/secrets/README.md
+  acme_vm_bbartling → secrets/acme.env.local
+  bacnet_pi         → secrets/bacnet_pi.env.local
 EOF
+}
+
+require_docker_bundle() {
+  local tag="${OPENFDD_IMAGE_TAG:-local}"
+  local tar="${ROOT}/docker/dist/openfdd-images-${tag}.tar.gz"
+  if [[ ! -f "$tar" ]]; then
+    echo "Missing Docker image bundle: $tar" >&2
+    echo "Run: ./scripts/docker_build.sh --save" >&2
+    echo "Or: OPENFDD_IMAGE_TAG=yourtag ./scripts/docker_build.sh --save" >&2
+    exit 1
+  fi
 }
 
 require_ui_build() {
@@ -84,7 +130,7 @@ require_ui_build() {
 is_component() {
   case "$1" in
     help|-h|--help) return 0 ;;
-    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check) return 0 ;;
+    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -128,6 +174,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+DEPLOY_LIMIT="$(resolve_ansible_limit "${ANSIBLE_EXTRA[@]}")"
+if [[ -n "$DEPLOY_LIMIT" ]]; then
+  load_edge_secrets "$DEPLOY_LIMIT"
+fi
+
 case "$COMPONENT" in
   all) TAGS="" ;;
   ui|web) TAGS="preflight,ui" ;;
@@ -155,7 +206,18 @@ case "$COMPONENT" in
     PLAYBOOK="post_deploy_check.yml"
     RUN_POST_CHECK=0
     ;;
+  docker)
+    PLAYBOOK="deploy_docker.yml"
+    TAGS=""
+    ;;
 esac
+
+if [[ "$COMPONENT" == "docker" ]]; then
+  require_docker_bundle
+  if [[ -n "${OPENFDD_IMAGE_TAG:-}" ]]; then
+    ANSIBLE_EXTRA+=(-e "openfdd_docker_image_tag=${OPENFDD_IMAGE_TAG}")
+  fi
+fi
 
 if [[ "$NEEDS_UI" == true ]]; then
   require_ui_build
@@ -194,7 +256,7 @@ if [[ -n "$PLAYBOOK" ]]; then
 fi
 
 case "$COMPONENT" in
-  all|ui|web|backend|core|drivers|ai) ;;
+  all|ui|web|backend|core|drivers|ai|docker) ;;
   *) RUN_POST_CHECK=0 ;;
 esac
 

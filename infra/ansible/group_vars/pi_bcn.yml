@@ -78,6 +78,12 @@ post_check_fix_caddy: true
 post_check_require_mcp: true
 post_check_require_ollama: false
 
+# Docker Compose deploy (./deploy.sh docker) — see docs/edge_deploy_docker.md
+openfdd_docker_image_tag: "local"
+openfdd_docker_disable_systemd: true
+openfdd_docker_ollama: true
+openfdd_docker_bridge_secret: true
+
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
 enable_mcp: true
 mcp_listen_port: 8090

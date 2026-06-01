@@ -1,0 +1,14 @@
+# Docker build context (repo root) — see docker/Dockerfile
+.git
+.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+workspace/dashboard/node_modules
+workspace/.local-run
+workspace/logs
+edge_backup
+infra/ansible/secrets
+.cursor
+pdf

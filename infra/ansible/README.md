@@ -6,15 +6,18 @@ Inventory → component deploy → optional post-check. Same pattern as `vibe_co
 
 ```bash
 cd infra/ansible
-cp inventory.example.yml inventory.yml          # set real IPs (gitignored)
+cp inventory.example.yml inventory.yml
 cp host_vars/bacnet_pi.yml.example host_vars/bacnet_pi.yml
 cp host_vars/acme_vm_bbartling.yml.example host_vars/acme_vm_bbartling.yml
+cp secrets/acme.env.example secrets/acme.env.local   # SSH + site facts (chmod 600)
 
-export SSHPASS='...'   # Acme VM if password auth
+# deploy.sh loads secrets/acme.env.local when --limit acme_vm_bbartling
 ./deploy.sh help
 ./deploy.sh all --limit bacnet_pi -v
 ./deploy.sh all --limit acme_vm_bbartling -v
 ```
+
+**Secrets layout:** [secrets/README.md](secrets/README.md) · public overview: [docs/edge_deploy.md](../../docs/edge_deploy.md)
 
 ## Deploy components (easy buttons)
 
@@ -37,10 +40,15 @@ Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<ho
 | **`ai`** | Ollama bootstrap + MCP (`ollama_bootstrap.yml` + `edge_ai_stack.yml`) |
 | **`os`** | `apt update` + safe upgrade (`os_update.yml`) |
 | **`check`** | Post-deploy HTTP/systemd probes only |
+| **`docker`** | Docker Compose stack — see [docs/edge_deploy_docker.md](../../docs/edge_deploy_docker.md) |
 
 **Examples**
 
 ```bash
+# Docker path (Caddy on host; images built on bensserver)
+../../scripts/docker_build.sh --save
+./deploy.sh docker --limit acme_vm_bbartling
+
 # After dashboard changes (build first)
 ../../scripts/build_operator_dashboard.sh prod
 ./deploy.sh ui --limit acme_vm_bbartling
@@ -57,12 +65,14 @@ Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<ho
 # Makefile shortcuts
 make ui HOST=acme_vm_bbartling
 make ui-deploy HOST=acme_vm_bbartling   # build + ui
+make docker-build HOST=acme_vm_bbartling
+make docker-deploy HOST=acme_vm_bbartling   # build bundle + deploy
 make os HOST=acme_vm_bbartling
 ```
 
 **Build before `ui` or `all`:** `workspace/api/static/app/index.html` must exist (`../../scripts/build_and_test.sh` or `build_operator_dashboard.sh prod`).
 
-**Env:** `SSHPASS` for password SSH; `RUN_POST_CHECK=0` to skip insurance script; `ANSIBLE_INVENTORY` to override inventory path.
+**Env:** `SSHPASS` (or `secrets/acme.env.local` auto-loaded); `RUN_POST_CHECK=0` to skip insurance script; `ANSIBLE_INVENTORY` to override inventory path.
 
 ## Services on edge
 
@@ -84,7 +94,7 @@ Poll driver is **off** until `points.csv` is commissioned:
 
 ## Acme real building (`acme_vm_bbartling`)
 
-x86 Ubuntu VM on OT BACnet (`10.200.200.185:47808`). Inventory SSH IP is Tailscale/LAN — set in private `inventory.yml` only.
+x86 Ubuntu VM on OT BACnet (bind address in private `host_vars` / `secrets/acme.env.local`). SSH via Tailscale/LAN — set `ansible_host` in `inventory.yml` and `ACME_SSH_HOST` in `secrets/acme.env.local` (never commit).
 
 ```bash
 ./scripts/acme_commission_gl36.sh          # GL36 + economizer poll set @ 60s
