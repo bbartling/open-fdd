@@ -1,0 +1,41 @@
+# Reference edge stack — rendered on hosts via infra/ansible/templates/docker-compose.edge.yml.j2
+# Keep in sync with supervisor/manifest.yaml when adding addons.
+
+name: openfdd-edge
+
+services:
+  bridge:
+    image: openfdd-bridge:local
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - /home/bbartling/open-fdd/workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
+      OFDD_MCP_REST_BASE: http://mcp-rag:8090
+      OFDD_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - commission
+      - mcp-rag
+    restart: unless-stopped
+
+  commission:
+    image: openfdd-commission:local
+    volumes:
+      - /home/bbartling/open-fdd/workspace:/var/openfdd/workspace
+    restart: unless-stopped
+
+  mcp-rag:
+    image: openfdd-mcp-rag:local
+    volumes:
+      - /home/bbartling/open-fdd/workspace:/var/openfdd/workspace
+    restart: unless-stopped
+
+  bacnet-poll:
+    image: openfdd-bacnet-poll:local
+    network_mode: host
+    volumes:
+      - /home/bbartling/open-fdd/workspace:/var/openfdd/workspace
+    restart: unless-stopped

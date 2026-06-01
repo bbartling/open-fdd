@@ -29,9 +29,12 @@
 
 Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy. Saved rules live in **`workspace/data/rules_py/`** (same files for humans and the AI agent) — see [`docs/howto/rule_lab_storage.md`](docs/howto/rule_lab_storage.md).
 
+Edge layout follows [Home Assistant OS](https://github.com/home-assistant/operating-system): **`os/`** (future Buildroot) → **`supervisor/`** (compose + manifest) → **`docker/`** addon images. See [`docs/architecture/haos_alignment.md`](docs/architecture/haos_alignment.md).
+
 ```bash
-./scripts/run_local.sh restart
-# http://127.0.0.1/ (Caddy) or :8765 — see docs/howto/operator_dashboard.md
+./scripts/openfdd_stack.sh up    # Docker dev stack (recommended)
+# or ./scripts/run_local.sh restart  # legacy systemd + Caddy
+# http://127.0.0.1/ (Caddy) or :8765 — docs/howto/operator_dashboard.md
 ```
 
 ---

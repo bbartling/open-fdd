@@ -6,7 +6,8 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Rules-only library work: `pip install "open-fdd[engine]"` (or editable install) and use `open_fdd.engine.RuleRunner` on pandas DataFrames in notebooks.
 - Operator **Rule Lab** work: extend `workspace/api/` and `workspace/dashboard/` — Python rules only; no YAML hot-reload directory.
-- Do **not** add new top-level services beyond the manifest `[build]` section.
+- Edge **containers**: register addons in `supervisor/manifest.yaml` + `docker/images.yaml`; build with `scripts/docker_build.sh`; local stack `scripts/openfdd_stack.sh`. Future OS: `os/` (Buildroot). See `docs/architecture/haos_alignment.md`.
+- Do **not** add new top-level services beyond the manifest `[build]` section or `supervisor/manifest.yaml` without updating compose + Ansible templates.
 
 ## Workspace writes
 

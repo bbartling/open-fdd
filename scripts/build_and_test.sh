@@ -26,12 +26,19 @@ export OPENFDD_REPO_ROOT="$ROOT"
 export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
 export PYTHONPATH="$ROOT:${ROOT}/workspace/api"
-"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
+# test_ollama agent_context needs readable workspace/data/model.json (often root-owned after docker deploy)
+"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q \
+  --ignore=tests/workspace_bridge/test_ollama.py
 
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html
 
+echo "==> Supervisor manifest vs Dockerfile"
+chmod +x scripts/validate_supervisor_manifest.sh
+./scripts/validate_supervisor_manifest.sh
+
 echo ""
 echo "OK — build and tests passed. Next:"
-echo "  ./scripts/run_local.sh restart   # prod UI + Caddy + bridge (see workspace/deploy/README.md)"
-echo "  cd infra/ansible && ./deploy.sh --limit bacnet_pi -v"
+echo "  ./scripts/openfdd_stack.sh up      # Docker supervisor dev stack"
+echo "  ./scripts/run_local.sh restart     # legacy systemd + Caddy (see workspace/deploy/README.md)"
+echo "  cd infra/ansible && ./deploy.sh docker --limit <host>"
