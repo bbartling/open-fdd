@@ -200,8 +200,17 @@ def delete_point(
 
             set_point_poll(point_id=poll_pid, enabled=False)
             poll_disabled = True
+    from ..rule_store import RuleStore
+
+    bindings_pruned = RuleStore().prune_bindings(point_ids=[point_id])
     path = _ttl().sync()
-    return {"ok": True, "deleted": point_id, "poll_disabled": poll_disabled, "ttl_path": str(path)}
+    return {
+        "ok": True,
+        "deleted": point_id,
+        "poll_disabled": poll_disabled,
+        "bindings_pruned": bindings_pruned,
+        "ttl_path": str(path),
+    }
 
 
 @router.delete("/equipment/{equipment_id}")
@@ -209,8 +218,27 @@ def delete_equipment(
     equipment_id: str,
     user: dict = Depends(require_roles("integrator", "operator", "agent")),
 ) -> dict:
-    counts = _model().delete_equipment(equipment_id, cascade_points=True)
+    svc = _model()
+    model = svc.load()
+    removed_point_ids = [
+        str(p.get("id") or "")
+        for p in (model.get("points") or [])
+        if isinstance(p, dict) and str(p.get("equipment_id") or "") == equipment_id
+    ]
+    counts = svc.delete_equipment(equipment_id, cascade_points=True)
     if counts["equipment_removed"] == 0:
         raise HTTPException(status_code=404, detail=f"equipment not found: {equipment_id}")
+    from ..rule_store import RuleStore
+
+    bindings_pruned = RuleStore().prune_bindings(
+        point_ids=removed_point_ids,
+        equipment_ids=[equipment_id],
+    )
     path = _ttl().sync()
-    return {"ok": True, "equipment_id": equipment_id, **counts, "ttl_path": str(path)}
+    return {
+        "ok": True,
+        "equipment_id": equipment_id,
+        **counts,
+        "bindings_pruned": bindings_pruned,
+        "ttl_path": str(path),
+    }

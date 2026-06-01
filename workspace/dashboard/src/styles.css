@@ -1460,11 +1460,97 @@ textarea {
   position: fixed;
   z-index: 2000;
   min-width: 160px;
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   padding: 4px;
+}
+
+.dm-context-menu-wide {
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.dm-context-hint {
+  margin: 6px 12px 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.dm-context-muted {
+  margin: 4px 12px 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.dm-context-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+.dm-context-back {
+  font-weight: 600;
+}
+
+.dm-point-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.dm-point-row {
+  flex-direction: column;
+  align-items: flex-start !important;
+}
+
+.rule-assignments-panel {
+  margin-bottom: 16px;
+}
+
+.rule-assignments-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rule-assignment-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--panel-soft);
+}
+
+.rule-assignment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rule-assignment-block {
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.rule-assignment-label {
+  display: block;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.rule-assignment-block ul {
+  margin: 0;
+  padding-left: 1.1rem;
 }
 
 .dm-context-menu button {

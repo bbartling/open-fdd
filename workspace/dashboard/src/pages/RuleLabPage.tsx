@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import ModelScopePicker from "../components/ModelScopePicker";
+import RuleAssignmentsPanel from "../components/RuleAssignmentsPanel";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -78,6 +79,7 @@ export default function RuleLabPage() {
   const [lookbackHours, setLookbackHours] = useState("24");
   const [testSensorKey, setTestSensorKey] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [assignmentsKey, setAssignmentsKey] = useState(0);
   const lintTimer = useRef<number | null>(null);
   const scope = useModelScope("acme", brickClass);
 
@@ -186,12 +188,11 @@ export default function RuleLabPage() {
     setConsoleText((prev) => (prev ? `${prev}\n${text}` : text));
   }
 
-  function ruleBindings(): { point_ids: string[]; equipment_ids: string[]; brick_types: string[] } {
-    const bt = brickClass.trim();
+  function preservedBindings(existing?: SavedRule["bindings"]): SavedRule["bindings"] {
     return {
-      point_ids: [],
-      equipment_ids: [],
-      brick_types: bt ? [bt] : [],
+      point_ids: [...(existing?.point_ids ?? [])],
+      equipment_ids: [...(existing?.equipment_ids ?? [])],
+      brick_types: [...(existing?.brick_types ?? [])],
     };
   }
 
@@ -319,7 +320,7 @@ export default function RuleLabPage() {
         config: configFromRecord(cfg),
         severity,
         fault_code: existing?.fault_code || "",
-        bindings: ruleBindings(),
+        bindings: preservedBindings(existing?.bindings),
       };
       if (activeRuleId) {
         const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
@@ -332,6 +333,7 @@ export default function RuleLabPage() {
         });
         setSourcePath(putRes.path || saveRes.rule.source_path || sourcePath);
         appendConsole(`>>> Updated rule .py — ${putRes.path || sourcePath}`);
+        setAssignmentsKey((k) => k + 1);
       } else {
         const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
           method: "POST",
@@ -339,10 +341,11 @@ export default function RuleLabPage() {
         });
         setActiveRuleId(res.rule.id);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}" (BRICK: ${brickClass || "none"}).`);
+        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Map points on Data Model.`);
       }
       setDirty(false);
       await refreshSaved();
+      setAssignmentsKey((k) => k + 1);
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -390,7 +393,7 @@ export default function RuleLabPage() {
     setRuleName(displayRuleName(rule.name));
     setMode(rule.mode);
     setSeverity(rule.severity);
-    setBrickClass(rule.bindings?.brick_types?.[0] || "");
+    setBrickClass("");
     setSourcePath(rule.source_path || "");
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
@@ -439,8 +442,9 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Edit on-disk <code>.py</code> rules. BRICK class binds production runs. <strong>Test</strong> uses one
-            device and one sensor from feather data (same historian as <a href="/plot">Trend plot</a>).
+            Edit on-disk <code>.py</code> rules. Map points and devices on the{" "}
+            <a href="/data-model">Data Model</a> tab (right-click). <strong>Test</strong> uses one sensor from feather
+            data (same historian as <a href="/plot">Trend plot</a>).
           </>
         }
       />
@@ -451,6 +455,8 @@ export default function RuleLabPage() {
           <strong>agent</strong>.
         </p>
       ) : null}
+
+      <RuleAssignmentsPanel refreshKey={assignmentsKey} />
 
       <div className="panel rule-lab-toolbar">
         <div className="rule-lab-rule-row">
@@ -514,7 +520,7 @@ export default function RuleLabPage() {
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-brick-class">
-              BRICK class
+              Test filter (BRICK class)
             </label>
             <select
               id="rule-brick-class"

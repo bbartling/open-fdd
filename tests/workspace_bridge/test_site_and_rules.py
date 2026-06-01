@@ -82,3 +82,26 @@ def test_column_map_for_rule_merges_scoped_over_base():
     assert merged["SAT"] == "oa-h"
     assert merged["Supply_Air_Temperature_Sensor"] == "oa-h"
     assert merged["RULE_KEY"] == "some_col"
+
+
+def test_rule_store_prune_bindings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.rule_store import RuleStore  # noqa: E402
+
+    store = RuleStore()
+    store.upsert(
+        {
+            "name": "Bound",
+            "code": "def evaluate(row, cfg, **kw):\n    return False\n",
+            "bindings": {"point_ids": ["p1", "p2"], "equipment_ids": ["eq1"], "brick_types": []},
+        },
+        saved_by="test",
+    )
+    n = store.prune_bindings(point_ids=["p1"], equipment_ids=["eq1"])
+    assert n == 1
+    rule = store.list_rules()[0]
+    assert rule["bindings"]["point_ids"] == ["p2"]
+    assert rule["bindings"]["equipment_ids"] == []
