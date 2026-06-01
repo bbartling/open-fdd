@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .paths import data_dir, repo_root, workspace_dir
+from .paths import data_dir
 
 
 def _bytes_from_proc_value(raw: str) -> int:
@@ -139,8 +139,8 @@ def _process_count() -> int | None:
         return None
 
 
-def _ollama_summary() -> dict[str, Any] | None:
-    """Best-effort Ollama process footprint when local AI is running."""
+def _ollama_process_summary() -> dict[str, Any] | None:
+    """Best-effort Ollama process footprint from /proc (optional RAM line on Host Stats)."""
     proc = Path("/proc")
     if not proc.is_dir():
         return None
@@ -152,7 +152,7 @@ def _ollama_summary() -> dict[str, Any] | None:
             comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").strip("\x00")
         except OSError:
             continue
-        if comm != "ollama":
+        if not comm.startswith("ollama"):
             continue
         try:
             cmdline = (entry / "cmdline").read_bytes().replace(b"\x00", b" ").decode("utf-8", errors="replace").strip()
@@ -173,6 +173,30 @@ def _ollama_summary() -> dict[str, Any] | None:
             return candidate
         best = candidate
     return best
+
+
+def _ollama_payload() -> dict[str, Any]:
+    """Ollama status for Host Stats — API reachability matches the Agent chat tab."""
+    from . import ollama_client
+
+    health = ollama_client.health(timeout=2.0)
+    proc = _ollama_process_summary()
+    payload: dict[str, Any] = {
+        "api_ok": health.get("ok") is True,
+        "base_url": health.get("base_url"),
+        "models_installed": health.get("models_installed") or [],
+        "configured_model": health.get("configured_model"),
+        "configured_ram_tier": health.get("configured_ram_tier") or ollama_client.configured_ram_tier(),
+        "gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
+        "timeout_s": float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S))),
+        "error": health.get("error"),
+        "process": proc,
+    }
+    if proc:
+        payload["pid"] = proc.get("pid")
+        payload["rss_bytes"] = proc.get("rss_bytes")
+        payload["command"] = proc.get("command")
+    return payload
 
 
 def _memory_payload(meminfo: dict[str, int] | None) -> dict[str, Any]:
@@ -222,30 +246,26 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         cpu["load_15"] = load[2]
 
     disks: list[dict[str, Any]] = []
-    for label, path in (
-        ("repo", repo_root()),
-        ("workspace", workspace_dir()),
-        ("data", data_dir()),
-    ):
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-            disk = _disk_for_path(path)
-            disk["label"] = label
-            disks.append(disk)
-        except OSError:
-            continue
-
-    root_disk = None
+    storage: dict[str, Any] = {"available": False}
     try:
-        root_disk = _disk_for_path(Path("/"))
-        root_disk["label"] = "root (/)"
+        data_path = data_dir()
+        data_path.mkdir(parents=True, exist_ok=True)
+        storage = _disk_for_path(data_path)
+        storage["label"] = "Data disk"
+        storage["role"] = "data"
+        storage["available"] = True
+        storage["note"] = "Feather store, rules, and model JSON live here"
+        from .feather_store import FeatherStore, feather_max_gib_from_env
+
+        feather_root = data_path / "feather_store"
+        store = FeatherStore(root=feather_root)
+        storage["feather_bytes"] = store.total_bytes()
+        storage["feather_max_gib"] = feather_max_gib_from_env()
     except OSError:
         pass
-    if root_disk and not any(d["path"] == "/" for d in disks):
-        disks.insert(0, root_disk)
 
     net = _network_totals()
-    ollama = _ollama_summary()
+    ollama = _ollama_payload()
 
     return {
         "ok": True,
@@ -261,6 +281,7 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         "cpu": cpu,
         "memory": _memory_payload(meminfo),
         "swap": _swap_payload(meminfo),
+        "storage": storage,
         "disks": disks,
         "network": net or {"available": False},
         "processes": {"count": _process_count()},

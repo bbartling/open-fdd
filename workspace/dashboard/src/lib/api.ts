@@ -46,6 +46,11 @@ export function getBridgeBase(): string {
   return "";
 }
 
+function shouldRedirectLogin(): boolean {
+  const publicPaths = new Set(["/", "/faults", "/login"]);
+  return window.top === window.self && !publicPaths.has(window.location.pathname);
+}
+
 function authHeaders(): HeadersInit {
   const token = sessionStorage.getItem(TOKEN_KEY);
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -59,6 +64,7 @@ export async function apiFetch<T>(
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     ...init,
+    signal: init?.signal,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),
@@ -67,7 +73,7 @@ export async function apiFetch<T>(
   });
   if (res.status === 401 && !path.startsWith("/api/auth/login")) {
     sessionStorage.removeItem(TOKEN_KEY);
-    if (window.top === window.self) {
+    if (shouldRedirectLogin()) {
       window.location.assign("/login");
     }
     throw new Error("unauthorized");
@@ -75,12 +81,16 @@ export async function apiFetch<T>(
   if (!res.ok) {
     const text = await res.text();
     try {
-      const body = JSON.parse(text) as { detail?: string | { error?: string } };
+      const body = JSON.parse(text) as { detail?: string | { error?: string; detail?: string; message?: string } };
       if (typeof body.detail === "string") {
         throw new Error(body.detail);
       }
-      if (body.detail && typeof body.detail === "object" && "error" in body.detail) {
-        throw new Error(String(body.detail.error));
+      if (body.detail && typeof body.detail === "object") {
+        const nested = body.detail;
+        if (typeof nested.error === "string") throw new Error(nested.error);
+        if (typeof nested.detail === "string") throw new Error(nested.detail);
+        if (typeof nested.message === "string") throw new Error(nested.message);
+        throw new Error(JSON.stringify(nested));
       }
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -107,7 +117,7 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
   });
   if (res.status === 401 && !path.startsWith("/api/auth/login")) {
     sessionStorage.removeItem(TOKEN_KEY);
-    if (window.top === window.self) {
+    if (shouldRedirectLogin()) {
       window.location.assign("/login");
     }
     throw new Error("unauthorized");
@@ -121,10 +131,12 @@ export async function apiFetchText(path: string, init?: RequestInit): Promise<st
 
 export function setToken(token: string) {
   sessionStorage.setItem(TOKEN_KEY, token);
+  window.dispatchEvent(new Event("ofdd-auth"));
 }
 
 export function clearToken() {
   sessionStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new Event("ofdd-auth"));
 }
 
 export function hasToken(): boolean {
@@ -137,8 +149,14 @@ export async function fetchAuthStatus(): Promise<AuthStatus> {
   return apiFetch<AuthStatus>("/api/auth/status");
 }
 
+export type AuthMe = { username: string; role: string; auth_required: boolean };
+
+export async function fetchAuthMe(): Promise<AuthMe> {
+  return apiFetch<AuthMe>("/api/auth/me");
+}
+
 export async function login(username: string, password: string) {
-  return apiFetch<{ token: string; username: string }>("/api/auth/login", {
+  return apiFetch<{ token: string; username: string; role: string }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });

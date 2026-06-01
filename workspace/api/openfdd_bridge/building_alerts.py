@@ -87,6 +87,8 @@ def replace_alerts(
                 "title": str(item.get("title") or "Untitled")[:200],
                 "detail": str(item.get("detail") or "")[:2000],
                 "source": str(item.get("source") or "agent")[:64],
+                "code": str(item.get("code") or "")[:32],
+                "equipment_family": str(item.get("equipment_family") or "")[:32],
             }
         )
     doc = {
@@ -108,7 +110,7 @@ def merge_auto_issues(
     manual = [
         a
         for a in stored.get("alerts", [])
-        if isinstance(a, dict) and str(a.get("source", "")) not in {"model_health", "system"}
+        if isinstance(a, dict) and str(a.get("source", "")) not in {"model_health", "system", "fdd"}
     ]
     auto = [
         {

@@ -25,6 +25,23 @@ def test_lint_syntax_error():
     assert lint_python("def evaluate(:\n")["ok"] is False
 
 
+def test_lint_indentation_error():
+    bad = "def evaluate(row, cfg, prev_row=None, rows=None):\nreturn False\n"
+    result = lint_python(bad)
+    assert result["ok"] is False
+
+
+def test_lint_requires_evaluate():
+    assert lint_python("x = 1\n")["ok"] is False
+
+
+def test_sweep_bad_indent_no_crash():
+    bad = "def evaluate(row, cfg, prev_row=None, rows=None):\nreturn False\n"
+    flags, events = sweep_rule(bad, {}, [{"SAT": 1}], capture_print=False)
+    assert flags == [False]
+    assert any(e.get("type") == "error" for e in events)
+
+
 def test_sweep_flags_high_sat():
     rows = [
         {"timestamp": "2025-01-01T00:00:00Z", "SAT": 70.0, "temp": 70.0},

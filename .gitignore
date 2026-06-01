@@ -177,6 +177,9 @@ workspace/auth.env.local
 
 # Local Ollama operator AI config
 workspace/ollama.env.local
+workspace/caddy.env.local
+workspace/data.env.local
+workspace/deploy/caddy/certs/
 workspace/.local-run/
 
 # Ansible private inventory + host secrets
@@ -201,6 +204,14 @@ workspace/logs/
 !/workspace/data/**
 !/workspace/deploy/
 !/workspace/deploy/**
+
+# Runtime state written by the bridge / FDD loop (not committed)
+/workspace/data/fdd_results.json
+/workspace/data/rules_store.json
+/workspace/data/building_alerts.json
+/workspace/data/feather_store/
+/workspace/**/*.feather
+/workspace/data/playground/draft_rules.json
 
 # OpenClaw lab generated / local artifacts
 openclaw/dashboard/progress.json

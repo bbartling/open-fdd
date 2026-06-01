@@ -13,7 +13,18 @@
 
     - name: Map Ollama release architecture
       ansible.builtin.set_fact:
-        ollama_arch: "{{ 'arm64' if ansible_facts['architecture'] in ['aarch64', 'arm64'] else 'amd64' }}"
+        ollama_arch: >-
+          {%- if ansible_facts['architecture'] in ['aarch64', 'arm64'] -%}arm64
+          {%- elif ansible_facts['architecture'] in ['x86_64', 'amd64'] -%}amd64
+          {%- else -%}unsupported{%- endif -%}
+
+    - name: Skip Ollama on unsupported CPU (e.g. Pi 3 armv7l 32-bit)
+      ansible.builtin.fail:
+        msg: >-
+          Ollama has no official binary for {{ ansible_facts['architecture'] }}
+          ({{ ansible_facts['machine'] }}). Use 64-bit Pi OS (Pi 4/5 arm64) or x86.
+          Open-FDD bridge/Caddy deploy without -e enable_ollama=true.
+      when: ollama_arch == 'unsupported'
 
     - name: Ensure Ollama install tools present
       ansible.builtin.apt:

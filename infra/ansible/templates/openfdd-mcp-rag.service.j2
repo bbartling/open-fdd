@@ -1,0 +1,19 @@
+[Unit]
+Description=Open-FDD MCP RAG doc search sidecar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ ansible_user }}
+WorkingDirectory={{ openfdd_remote_dir }}/workspace
+Environment=OPENFDD_REPO_ROOT={{ openfdd_remote_dir }}
+Environment=OPENFDD_WORKSPACE_DIR={{ openfdd_remote_dir }}/workspace
+Environment=PYTHONPATH={{ openfdd_remote_dir }}/workspace:{{ openfdd_remote_dir }}/workspace/api:{{ openfdd_remote_dir }}
+EnvironmentFile={{ openfdd_remote_dir }}/workspace/mcp.env.local
+ExecStart={{ openfdd_remote_dir }}/.venv/bin/uvicorn mcp_rag.app:app --host 127.0.0.1 --port {{ mcp_listen_port | default(8090) }}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

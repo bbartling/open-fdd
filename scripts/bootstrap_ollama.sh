@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Bootstrap local Ollama for Open-FDD operator AI chat.
+# Bootstrap local Ollama for Open-FDD operator AI chat (qwen3 thinking line).
 #
-#   ./scripts/bootstrap_ollama.sh --ram-tier 8gb              # flimsiest (TinyLlama) — 8GB lab hosts
-#   ./scripts/bootstrap_ollama.sh --ram-tier 16gb --gpu auto
-#   ./scripts/bootstrap_ollama.sh --ram-tier 32gb --gpu gpu
-#   ./scripts/bootstrap_ollama.sh --ram-tier 64gb --pull-only
+#   ./scripts/bootstrap_ollama.sh --ram-tier 8gb              # qwen3:1.7b — 8GB / Raspberry Pi 5
+#   ./scripts/bootstrap_ollama.sh --ram-tier 16gb --gpu auto  # qwen3:4b  — recommended default
+#   ./scripts/bootstrap_ollama.sh --ram-tier 32gb --gpu gpu   # qwen3:8b
+#   ./scripts/bootstrap_ollama.sh --ram-tier 64gb --pull-only # qwen3:14b
+#   # 4GB Raspberry Pi: OFDD_OLLAMA_MODEL=qwen3:0.6b ./scripts/bootstrap_ollama.sh --ram-tier 8gb
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,12 +33,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$RAM_TIER" in
-  8gb)  MODEL="tinyllama" ;;
-  16gb) MODEL="llama3.2:1b" ;;
-  32gb) MODEL="llama3.2:3b" ;;
-  64gb) MODEL="llama3.1:8b" ;;
+  8gb)  MODEL="qwen3:1.7b" ;;
+  16gb) MODEL="qwen3:4b" ;;
+  32gb) MODEL="qwen3:8b" ;;
+  64gb) MODEL="qwen3:14b" ;;
   *) echo "Invalid --ram-tier (use 8gb|16gb|32gb|64gb): $RAM_TIER" >&2; exit 1 ;;
 esac
+# Allow an explicit override (e.g. qwen3:0.6b on a 4GB Raspberry Pi).
+MODEL="${OFDD_OLLAMA_MODEL:-$MODEL}"
 
 case "$GPU_MODE" in
   cpu)  NUM_GPU=0 ;;

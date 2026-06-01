@@ -1,0 +1,14 @@
+[Unit]
+Description=Open-FDD scheduled batch FDD run (saved rules across BRICK model)
+After=network-online.target openfdd-bridge.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User={{ ansible_user }}
+WorkingDirectory={{ openfdd_remote_dir }}/workspace/api
+Environment=OPENFDD_REPO_ROOT={{ openfdd_remote_dir }}
+Environment=OPENFDD_WORKSPACE_DIR={{ openfdd_remote_dir }}/workspace
+Environment=OFDD_DESKTOP_DATA_DIR={{ openfdd_remote_dir }}/workspace/data
+Environment=PYTHONPATH={{ openfdd_remote_dir }}/workspace/api:{{ openfdd_remote_dir }}
+ExecStart={{ openfdd_remote_dir }}/.venv/bin/python -m openfdd_bridge.fdd_runner --once

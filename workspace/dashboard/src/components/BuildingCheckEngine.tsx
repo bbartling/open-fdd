@@ -1,41 +1,17 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../lib/api";
-
-type Alert = {
-  id?: string;
-  severity: string;
-  title: string;
-  detail?: string;
-  source?: string;
-};
-
-type BuildingStatus = {
-  status: "ok" | "warning" | "critical";
-  check_engine: boolean;
-  model_score?: number;
-  model_summary?: string;
-  alert_count: number;
-  alerts: Alert[];
-};
+import TrafficLight from "./TrafficLight";
+import { useDashboardStream } from "../lib/dashboardStream";
 
 export default function BuildingCheckEngine() {
-  const [data, setData] = useState<BuildingStatus | null>(null);
-  const [error, setError] = useState("");
+  const { snapshot, error, live } = useDashboardStream();
 
-  useEffect(() => {
-    apiFetch<BuildingStatus>("/api/building/status")
-      .then(setData)
-      .catch((e) => setError(String(e)));
-  }, []);
-
-  if (error) {
+  if (error && !snapshot) {
     return (
       <div className="panel check-engine check-engine-gray">
         <div className="check-engine-header">
-          <span className="check-engine-icon">⬤</span>
+          <TrafficLight traffic="green" />
           <div>
-            <h3>Building status</h3>
+            <h3>Building check-engine</h3>
             <p className="muted">Could not load status: {error}</p>
           </div>
         </div>
@@ -43,56 +19,75 @@ export default function BuildingCheckEngine() {
     );
   }
 
-  if (!data) {
+  if (!snapshot) {
     return (
       <div className="panel check-engine check-engine-gray">
-        <p className="muted">Loading building status…</p>
+        <p className="muted">Loading check-engine status…</p>
       </div>
     );
   }
 
+  const faults = snapshot.faults;
+  const traffic = faults.traffic;
   const statusClass =
-    data.status === "critical"
-      ? "check-engine-critical"
-      : data.status === "warning"
-        ? "check-engine-warning"
-        : "check-engine-ok";
+    traffic === "red" ? "check-engine-critical" : traffic === "yellow" ? "check-engine-warning" : "check-engine-ok";
 
-  const icon = data.check_engine ? "⚠" : "✓";
+  if (!faults.model_configured && faults.alert_count === 0) {
+    return (
+      <div className={`panel check-engine ${statusClass}`}>
+        <div className="check-engine-header">
+          <TrafficLight traffic="green" />
+          <div>
+            <h3>Building check-engine</h3>
+            <p className="muted">No building model configured yet.</p>
+            <p className="muted">
+              Import a BRICK model under <Link to="/data-model">Data Model</Link> to enable fault detection.
+            </p>
+          </div>
+        </div>
+        {live ? <p className="live-badge">Live</p> : null}
+      </div>
+    );
+  }
+
   const headline =
-    data.status === "ok"
-      ? "All clear — no open building issues"
-      : `${data.alert_count} issue${data.alert_count === 1 ? "" : "s"} need attention`;
+    faults.status === "ok"
+      ? "All clear — no open faults"
+      : `${faults.alert_count} issue${faults.alert_count === 1 ? "" : "s"} need attention`;
 
   return (
     <div className={`panel check-engine ${statusClass}`}>
       <div className="check-engine-header">
-        <span className="check-engine-icon">{icon}</span>
+        <TrafficLight traffic={traffic} />
         <div>
           <h3>{headline}</h3>
-          {data.model_summary ? <p className="muted">{data.model_summary}</p> : null}
-          {typeof data.model_score === "number" ? (
-            <p className="muted">Data model score: {data.model_score}/100</p>
-          ) : null}
         </div>
       </div>
-      {data.alerts.length ? (
-        <ul className="check-engine-list">
-          {data.alerts.map((alert) => (
-            <li key={alert.id || alert.title} className={`alert-${alert.severity}`}>
-              <strong>{alert.title}</strong>
-              {alert.detail ? <span className="muted"> — {alert.detail}</span> : null}
-              {alert.source ? <span className="badge">{alert.source}</span> : null}
-            </li>
+      {live ? <p className="live-badge">Live</p> : null}
+
+      {faults.families.length ? (
+        <div className="fault-tree">
+          {faults.families.map((fam) => (
+            <details key={fam.family} className="fault-family" open={fam.worst === "critical"}>
+              <summary>
+                <span className={`fault-tree-dot dot-${fam.traffic}`} />
+                <strong>{fam.label}</strong>
+                <span className="badge">{fam.count}</span>
+              </summary>
+              <ul className="check-engine-list">
+                {fam.faults.map((f) => (
+                  <li key={f.id || f.title} className={`alert-${f.severity}`}>
+                    {f.code ? <span className="badge code-badge">{f.code}</span> : null}
+                    <strong>{f.title}</strong>
+                    {f.detail ? <span className="muted"> — {f.detail}</span> : null}
+                    {f.source ? <span className="badge">{f.source}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
           ))}
-        </ul>
-      ) : (
-        <p className="muted">
-          Import a BRICK model under <Link to="/data-model">Data Model</Link>, then run Python rules in{" "}
-          <Link to="/rule-lab">Rule Lab</Link>. The AI agent can update alerts via{" "}
-          <code>PUT /api/building/alerts</code>.
-        </p>
-      )}
+        </div>
+      ) : null}
     </div>
   );
 }

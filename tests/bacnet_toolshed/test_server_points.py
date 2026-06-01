@@ -22,6 +22,19 @@ def test_openfdd_server_point_specs():
     assert len(OPENFDD_SERVER_POINT_SPECS) >= 4
 
 
+def test_binary_server_point_uses_bacpypes3_enums():
+    from bacpypes3.basetypes import BinaryPV
+    from bacpypes3.local.binary import BinaryValueObject
+
+    obj = BinaryValueObject(
+        objectIdentifier=("binaryValue", 9001),
+        objectName="openfdd-edge-online",
+        presentValue=BinaryPV.active,
+        description="Open-FDD edge bridge online",
+    )
+    assert obj.objectName == "openfdd-edge-online"
+
+
 def test_update_and_snapshot_server_points():
     from bacnet_toolshed import server_points
 

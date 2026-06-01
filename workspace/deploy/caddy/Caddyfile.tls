@@ -1,0 +1,19 @@
+# Open-FDD — self-signed HTTPS for OT LAN (behind firewall, not public internet).
+# :80 redirects to :443. Trust cert.pem locally or accept the browser warning.
+# Generate certs: ./scripts/setup_caddy_certs.sh
+
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+:443 {
+	tls /etc/openfdd/caddy/cert.pem /etc/openfdd/caddy/key.pem
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:8765
+}

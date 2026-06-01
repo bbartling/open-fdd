@@ -40,20 +40,47 @@ commission_agent_token: ""
 # ofdd_web_user: operator
 # ofdd_web_password: ""
 
+# Copy workspace/auth.env.local from control machine when present (operator login on edge)
+deploy_sync_auth: true
+
 # Auto-ingest poll CSV into feather after each poll cycle (optional timer)
 enable_poll_ingest_timer: false
 
-# Bridge bind: 0.0.0.0 for OT LAN dashboard on edge Pis. Require ofdd_auth_secret + credentials in host_vars.
-# For loopback-only, override openfdd_bridge_host: "127.0.0.1" and use Caddy (see workspace/deploy/Caddyfile.example).
-openfdd_bridge_host: "0.0.0.0"
+# Scheduled FDD batch run (saved Rule Lab rules across the BRICK model -> check-engine light)
+install_fdd_loop_timer: true
+enable_fdd_loop_timer: true
+fdd_loop_interval_hours: 3
+
+# Feather store retention/compaction (drop rows older than N days, enforce GiB cap daily)
+install_feather_retention_timer: true
+enable_feather_retention_timer: true
+feather_retention_days: 90
+feather_max_gib: 5
+feather_trim_chunk_hours: 24
+
+# Bridge bind: loopback when Caddy is the LAN entry (default). Caddy serves :80 or :443.
+# Override openfdd_bridge_host to 0.0.0.0 only when caddy_enabled: false.
+openfdd_bridge_host: "127.0.0.1"
 openfdd_bridge_port: 8765
+
+# Caddy reverse proxy — default URL with no port (http://<host>/ check-engine dashboard)
+caddy_enabled: true
+caddy_mode: http
+caddy_tls_cn: "openfdd.local"
 
 # Repo backup on control machine (gitignored local/)
 edge_backup_dir: "{{ playbook_dir }}/../../edge_backup/local"
 
 run_deploy_verify: true
+post_check_lan: true
+post_check_auth_login: true
+post_check_fix_caddy: true
+post_check_require_mcp: true
+post_check_require_ollama: false
 
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
+enable_mcp: true
+mcp_listen_port: 8090
 enable_ollama: false
 ollama_ram_tier: "8gb"       # 8gb | 16gb | 32gb | 64gb
 ollama_gpu_mode: "cpu"        # cpu | auto | gpu
@@ -64,8 +91,10 @@ ollama_version: "0.24.0"
 ollama_checksum_sha256:
   amd64: "15c5f8d66ba06e0d3b4719df8868612dbd66e14e82760929bb3552e1657cdcdb"
   arm64: "6e9a3ce5f64e93312902e39c420ec336255f078a368ca25e99b339d08a6dfa4b"
+# qwen3 models per RAM tier (size tags like qwen3:1.7b support thinking when toggled in the UI).
+# On a 4GB Pi, set ollama_model_for_tier.8gb to qwen3:0.6b.
 ollama_model_for_tier:
-  8gb: "tinyllama"
-  16gb: "llama3.2:1b"
-  32gb: "llama3.2:3b"
-  64gb: "llama3.1:8b"
+  8gb: "qwen3:1.7b"
+  16gb: "qwen3:4b"
+  32gb: "qwen3:8b"
+  64gb: "qwen3:14b"

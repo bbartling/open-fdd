@@ -32,6 +32,7 @@ class DiscoverRequest(BaseModel):
 
 class DeviceInstanceRequest(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
 
 
 class WritePropertyRequest(BaseModel):

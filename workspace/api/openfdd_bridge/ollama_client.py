@@ -7,16 +7,96 @@ from typing import Any
 
 import httpx
 
+from .agent_chat_history import build_ollama_messages
 from .ollama_profiles import GpuMode, OllamaProfile, normalize_ram_tier, profile_for_tier
 
 DEFAULT_BASE = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_S = 120.0
+
+
+def _ns_to_ms(value: Any) -> int | None:
+    try:
+        return int(int(value) / 1_000_000)
+    except (TypeError, ValueError):
+        return None
+
+
+def _timing_from_response(data: dict[str, Any]) -> dict[str, Any]:
+    eval_duration_ms = _ns_to_ms(data.get("eval_duration"))
+    eval_count = data.get("eval_count")
+    tokens_per_sec: float | None = None
+    if eval_duration_ms and eval_count and eval_duration_ms > 0:
+        tokens_per_sec = round(int(eval_count) / (eval_duration_ms / 1000.0), 1)
+    return {
+        "duration_ms": _ns_to_ms(data.get("total_duration")),
+        "load_duration_ms": _ns_to_ms(data.get("load_duration")),
+        "eval_duration_ms": eval_duration_ms,
+        "eval_count": eval_count,
+        "tokens_per_sec": tokens_per_sec,
+    }
 
 SYSTEM_PROMPT = (
     "You are the Open-FDD operator assistant on an OT BACnet/FDD edge host. "
     "Be concise. Help with BRICK data modeling, Python Rule Lab faults, BACnet commissioning, "
     "and building status. Do not invent BACnet device IDs or write to field equipment unless asked."
 )
+
+
+def bridge_base_url() -> str:
+    host = os.environ.get("OFDD_BRIDGE_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    port = os.environ.get("OFDD_BRIDGE_PORT", "8765").strip() or "8765"
+    if host in {"0.0.0.0", "::"}:
+        host = "127.0.0.1"
+    return f"http://{host}:{port}"
+
+
+def mcp_agent_hints() -> dict[str, Any]:
+    """Local MCP RAG discovery — surfaced in /openfdd-agent/context and the system prompt."""
+    base = os.environ.get("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090").rstrip("/")
+    enabled = os.environ.get("OFDD_MCP_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+    hints: dict[str, Any] = {
+        "mcp_enabled": enabled,
+        "mcp_rest_base": base if enabled else None,
+        "bridge_base_url": bridge_base_url(),
+    }
+    if not enabled:
+        hints["note"] = "MCP RAG off — set OFDD_MCP_ENABLED=1 in workspace/mcp.env.local and restart run_local.sh"
+        return hints
+    hints.update(
+        {
+            "mcp_health": f"{base}/health",
+            "mcp_manifest": f"{base}/manifest",
+            "mcp_search_docs": f"{base}/tools/search_docs",
+            "mcp_search_api": f"{base}/tools/search_api_capabilities",
+            "search_docs_example": {"query": "Rule Lab BACnet", "top_k": 5},
+            "bridge_openapi": f"{bridge_base_url()}/openapi.json",
+            "bridge_agent_context": f"{bridge_base_url()}/openfdd-agent/context",
+        }
+    )
+    return hints
+
+
+def build_system_prompt(*, extra: str | None = None) -> str:
+    parts = [SYSTEM_PROMPT]
+    mcp = mcp_agent_hints()
+    if mcp.get("mcp_enabled"):
+        base = mcp["mcp_rest_base"]
+        parts.append(
+            "Local MCP RAG (same host as the bridge): "
+            f"POST {base}/tools/search_docs with JSON "
+            '{"query":"<topic>","top_k":5} for indexed Open-FDD docs; '
+            f"GET {base}/manifest for tool list; "
+            f"GET {mcp['bridge_openapi']} for REST routes. "
+            "Prefer searching docs before guessing API paths or workflows."
+        )
+    else:
+        parts.append(
+            f"Bridge API base: {mcp['bridge_base_url']} — GET /openapi.json and GET /openfdd-agent/context. "
+            "MCP doc search is disabled unless OFDD_MCP_ENABLED=1."
+        )
+    if extra and extra.strip():
+        parts.append(extra.strip())
+    return "\n\n".join(parts)
 
 
 def ollama_base_url() -> str:
@@ -52,6 +132,35 @@ def configured_num_gpu() -> int:
 def ai_backend_preference() -> str:
     """ollama | codex | auto"""
     return os.environ.get("OFDD_AI_BACKEND", "auto").strip().lower() or "auto"
+
+
+_THINK_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def normalize_think(value: Any) -> bool | str | None:
+    """Coerce a think request to what Ollama accepts.
+
+    Returns a bool (qwen3 / deepseek-r1 style), a level string for gpt-oss
+    (``low`` / ``medium`` / ``high``), or ``None`` to omit the field entirely.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in _THINK_LEVELS:
+        return text
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def configured_think() -> bool | str | None:
+    return normalize_think(os.environ.get("OFDD_OLLAMA_THINK", ""))
 
 
 def resolve_model(*, ram_tier: str | None = None, model: str | None = None) -> str:
@@ -119,19 +228,22 @@ def chat(
     ram_tier: str | None = None,
     gpu_mode: str | None = None,
     system: str | None = None,
+    history: list[dict[str, Any]] | None = None,
     timeout: float | None = None,
+    think: bool | str | None = None,
 ) -> dict[str, Any]:
     use_model = resolve_model(ram_tier=ram_tier, model=model)
     num_gpu = resolve_num_gpu(gpu_mode=gpu_mode)
+    think_value = normalize_think(think) if think is not None else configured_think()
+    sys_text = system or build_system_prompt()
     payload: dict[str, Any] = {
         "model": use_model,
-        "messages": [
-            {"role": "system", "content": system or SYSTEM_PROMPT},
-            {"role": "user", "content": message[:8000]},
-        ],
+        "messages": build_ollama_messages(message=message, history=history, system=sys_text),
         "stream": False,
         "options": {"num_gpu": num_gpu},
     }
+    if think_value is not None:
+        payload["think"] = think_value
     url = f"{ollama_base_url()}/api/chat"
     to = timeout or float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(DEFAULT_TIMEOUT_S)))
     try:
@@ -140,16 +252,21 @@ def chat(
             resp.raise_for_status()
             data = resp.json()
             content = ""
+            thinking = ""
             msg = data.get("message")
             if isinstance(msg, dict):
                 content = str(msg.get("content") or "")
+                thinking = str(msg.get("thinking") or "")
+            timing = _timing_from_response(data)
             return {
                 "ok": True,
                 "mode": "ollama",
                 "model": use_model,
                 "num_gpu": num_gpu,
+                "think": think_value,
+                "thinking": thinking.strip(),
                 "reply": content.strip() or "(empty response)",
-                "eval_count": data.get("eval_count"),
+                **timing,
             }
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text[:500] if exc.response is not None else str(exc)

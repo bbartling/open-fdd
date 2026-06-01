@@ -1,0 +1,195 @@
+---
+- name: Ensure Caddy reverse-proxies Open-FDD before LAN probes
+  ansible.builtin.include_tasks: ensure_caddy_openfdd.yml
+  when:
+    - caddy_enabled | default(true) | bool
+    - post_check_fix_caddy | default(true) | bool
+
+- name: Ensure Caddy is active
+  ansible.builtin.systemd:
+    name: caddy
+  register: caddy_svc
+  become: true
+  failed_when: caddy_svc.status.ActiveState | default('inactive') != 'active'
+  when: caddy_enabled | default(true) | bool
+
+- name: Ensure Open-FDD bridge is active
+  ansible.builtin.systemd:
+    name: openfdd-bridge
+  register: bridge_svc
+  become: true
+  failed_when: bridge_svc.status.ActiveState | default('inactive') != 'active'
+  when:
+    - install_openfdd_bridge | default(true) | bool
+    - enable_openfdd_bridge | default(true) | bool
+
+- name: Ensure BACnet commission agent is active
+  ansible.builtin.systemd:
+    name: openfdd-bacnet-commission
+  register: commission_svc
+  become: true
+  failed_when: commission_svc.status.ActiveState | default('inactive') != 'active'
+  when:
+    - install_bacnet_commission_unit | default(true) | bool
+    - enable_bacnet_commission_agent | default(true) | bool
+
+- name: Ensure BACnet poll driver state matches config
+  ansible.builtin.systemd:
+    name: openfdd-bacnet-poll
+  register: poll_svc
+  become: true
+  failed_when: >-
+    (enable_bacnet_poll_driver | default(false) | bool
+     and poll_svc.status.ActiveState | default('inactive') != 'active')
+    or (not (enable_bacnet_poll_driver | default(false) | bool)
+        and poll_svc.status.ActiveState | default('inactive') not in ['inactive', 'failed'])
+  when: install_bacnet_poll_unit | default(true) | bool
+
+- name: Wait for bridge health on loopback
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
+    return_content: true
+  register: bridge_health
+  until: >-
+    bridge_health.status | default(0) == 200
+    and (bridge_health.json.ok | default(false))
+  retries: "{{ post_check_retries | default(12) }}"
+  delay: "{{ post_check_delay_sec | default(5) }}"
+  when:
+    - install_openfdd_bridge | default(true) | bool
+    - enable_openfdd_bridge | default(true) | bool
+
+- name: Wait for Caddy health on loopback
+  ansible.builtin.uri:
+    url: "{{ 'https://127.0.0.1/health' if (caddy_mode | default('http') == 'tls') else 'http://127.0.0.1/health' }}"
+    validate_certs: false
+    return_content: true
+  register: caddy_local_health
+  until: >-
+    caddy_local_health.status | default(0) == 200
+    and (caddy_local_health.json.ok | default(false))
+  retries: "{{ post_check_retries | default(12) }}"
+  delay: "{{ post_check_delay_sec | default(5) }}"
+  when: caddy_enabled | default(true) | bool
+
+- name: LAN entry health from control machine
+  ansible.builtin.uri:
+    url: "{{ 'https://' + ansible_host + '/health' if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host + '/health' }}"
+    validate_certs: false
+    return_content: true
+  register: lan_health
+  until: >-
+    lan_health.status | default(0) == 200
+    and (lan_health.json.ok | default(false))
+  retries: "{{ post_check_retries | default(12) }}"
+  delay: "{{ post_check_delay_sec | default(5) }}"
+  delegate_to: localhost
+  become: false
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+
+- name: Dashboard static assets reachable via LAN
+  ansible.builtin.uri:
+    url: "{{ 'https://' + ansible_host + '/' if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host + '/' }}"
+    validate_certs: false
+    return_content: true
+  register: lan_dashboard
+  failed_when: >-
+    lan_dashboard.status | default(0) != 200
+    or ('Open-FDD Operator' not in (lan_dashboard.content | default('')))
+    or ('Your web server is working' in (lan_dashboard.content | default('')))
+    or ('id="root"' not in (lan_dashboard.content | default('')))
+  delegate_to: localhost
+  become: false
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+
+- name: Extract dashboard JS bundle path from HTML
+  ansible.builtin.set_fact:
+    lan_dashboard_js_path: "{{ (lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"', '\\1') | first) | default('') }}"
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+    - lan_dashboard is defined
+    - lan_dashboard.content is defined
+    - lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"') is not none
+
+- name: Dashboard JS bundle reachable via LAN
+  ansible.builtin.uri:
+    url: "{{ ('https://' + ansible_host if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host) + lan_dashboard_js_path }}"
+    validate_certs: false
+    status_code: 200
+  register: lan_dashboard_js
+  delegate_to: localhost
+  become: false
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+    - lan_dashboard_js_path is defined
+    - lan_dashboard_js_path | length > 0
+
+- name: Stat operator auth env on control machine
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../workspace/auth.env.local"
+  delegate_to: localhost
+  become: false
+  register: control_auth_env
+  when: post_check_auth_login | default(true) | bool
+
+- name: Parse operator credentials from auth.env.local
+  ansible.builtin.shell: |
+    set -a
+    # shellcheck disable=SC1091
+    source "{{ playbook_dir }}/../../workspace/auth.env.local"
+    printf 'user=%s\npass=%s\n' "${OFDD_OPERATOR_USER:-}" "${OFDD_OPERATOR_PASSWORD:-}"
+  delegate_to: localhost
+  become: false
+  register: auth_creds_raw
+  changed_when: false
+  no_log: true
+  when:
+    - post_check_auth_login | default(true) | bool
+    - control_auth_env.stat.exists | default(false)
+
+- name: Build login probe credentials
+  ansible.builtin.set_fact:
+    post_check_login_user: "{{ auth_creds_raw.stdout | regex_search('(?m)^user=(.+)$', '\\1') | default('') | trim }}"
+    post_check_login_password: "{{ auth_creds_raw.stdout | regex_search('(?m)^pass=(.+)$', '\\1') | default('') | trim }}"
+  no_log: true
+  when:
+    - post_check_auth_login | default(true) | bool
+    - auth_creds_raw is defined
+    - not (auth_creds_raw.skipped | default(false))
+
+- name: Auth login probe via LAN
+  ansible.builtin.uri:
+    url: "{{ 'https://' + ansible_host + '/api/auth/login' if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host + '/api/auth/login' }}"
+    method: POST
+    validate_certs: false
+    status_code: 200
+    body_format: json
+    body:
+      username: "{{ post_check_login_user }}"
+      password: "{{ post_check_login_password }}"
+    return_content: true
+  register: auth_login
+  failed_when: auth_login.json.token | default('') | length == 0
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when:
+    - post_check_auth_login | default(true) | bool
+    - post_check_login_user | default('') | length > 0
+    - post_check_login_password | default('') | length > 0
+
+- name: Post-deploy check summary
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} ({{ ansible_host }}) OK —
+      caddy={{ caddy_svc.status.ActiveState | default('skipped') }},
+      bridge={{ bridge_svc.status.ActiveState | default('skipped') }},
+      commission={{ commission_svc.status.ActiveState | default('skipped') }},
+      lan_health={{ lan_health.status | default('skipped') }},
+      auth_login={{ 'ok' if (auth_login is defined and not (auth_login.skipped | default(false))) else 'skipped' }}

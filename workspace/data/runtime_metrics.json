@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-01T13:37:17.738146+00:00",
+  "sites": {
+    "acme": {
+      "acme-vm-bbartling-rtu-01": {
+        "site_id": "acme",
+        "equipment_id": "acme-vm-bbartling-rtu-01",
+        "sample_rows": 24,
+        "fan_run_hours": 0.0,
+        "system_run_hours": 0.0,
+        "occupied_fan_run_hours": 0.0,
+        "afterhours_fan_run_hours": 0.0,
+        "lookback_first_ts": "2025-01-15 08:00:00+00:00",
+        "lookback_last_ts": "2025-01-15 09:55:00+00:00",
+        "rule_id": "acme-ahu-run-hours",
+        "rule_name": "Acme RTU-01 fan and system run hours",
+        "recorded_at": "2026-06-01T13:37:17.738127+00:00"
+      }
+    }
+  }
+}

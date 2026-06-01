@@ -1,6 +1,6 @@
 # Ansible edge deploy (Open-FDD)
 
-Same workflow as `vibe_code_apps_12/ansible`: inventory → `./deploy.sh --limit <host>`.
+Inventory → component deploy → optional post-check. Same pattern as `vibe_code_apps_12/ansible`.
 
 ## Quick start
 
@@ -11,9 +11,58 @@ cp host_vars/bacnet_pi.yml.example host_vars/bacnet_pi.yml
 cp host_vars/acme_vm_bbartling.yml.example host_vars/acme_vm_bbartling.yml
 
 export SSHPASS='...'   # Acme VM if password auth
-./deploy.sh --limit bacnet_pi -v
-./deploy.sh --limit acme_vm_bbartling -v
+./deploy.sh help
+./deploy.sh all --limit bacnet_pi -v
+./deploy.sh all --limit acme_vm_bbartling -v
 ```
+
+## Deploy components (easy buttons)
+
+Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<host>`** from this directory.
+
+| Component | What it updates |
+|-----------|-----------------|
+| **`all`** | Full stack (default). Same as legacy `./deploy.sh --limit HOST` |
+| **`ui`** / **`web`** | Built React dashboard → `workspace/api/static/app/` |
+| **`backend`** | Bridge API (`workspace/api/`), bridge systemd, pip deps |
+| **`core`** | `open_fdd/` Python package + editable install |
+| **`drivers`** | `bacnet_toolshed/`, poll + commission units, `points.csv`, `commission.env` |
+| **`data`** | `workspace/data/` (models, rules paths — not live historian DB) |
+| **`config`** | `auth.env.local`, bridge secrets, Caddyfile |
+| **`caddy`** | Caddy package + TLS + reverse proxy only |
+| **`systemd`** | Reload unit files; restart/enable services (no code sync) |
+| **`pip`** | venv + pip installs only |
+| **`commission`** | Push `points.csv` from `edge_backup/local/<site>/<building>/` |
+| **`mcp`** | MCP RAG sidecar (`edge_ai_stack.yml`) |
+| **`ai`** | Ollama bootstrap + MCP (`ollama_bootstrap.yml` + `edge_ai_stack.yml`) |
+| **`os`** | `apt update` + safe upgrade (`os_update.yml`) |
+| **`check`** | Post-deploy HTTP/systemd probes only |
+
+**Examples**
+
+```bash
+# After dashboard changes (build first)
+../../scripts/build_operator_dashboard.sh prod
+./deploy.sh ui --limit acme_vm_bbartling
+
+# Bridge API only
+./deploy.sh backend --limit acme_vm_bbartling
+
+# BACnet poll driver + points.csv
+./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+
+# OS packages (optional reboot)
+./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
+
+# Makefile shortcuts
+make ui HOST=acme_vm_bbartling
+make ui-deploy HOST=acme_vm_bbartling   # build + ui
+make os HOST=acme_vm_bbartling
+```
+
+**Build before `ui` or `all`:** `workspace/api/static/app/index.html` must exist (`../../scripts/build_and_test.sh` or `build_operator_dashboard.sh prod`).
+
+**Env:** `SSHPASS` for password SSH; `RUN_POST_CHECK=0` to skip insurance script; `ANSIBLE_INVENTORY` to override inventory path.
 
 ## Services on edge
 
@@ -21,16 +70,67 @@ export SSHPASS='...'   # Acme VM if password auth
 |------|------|
 | `openfdd-bridge` | FastAPI Rule Lab + FDD + ingest (8765) |
 | `openfdd-bacnet-commission` | Discover jobs HTTP agent (8767) |
-| `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` |
+| `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` (systemd edge; local dev uses commission agent poll loop) |
+| `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
+| `openfdd-feather-retention.timer` | Daily feather prune + GiB cap (`feather_retention_days`, `feather_max_gib`) |
+| `caddy` | LAN entry **:80** (or **:443** TLS) → bridge on loopback — default URL with no port |
 
 Poll driver is **off** until `points.csv` is commissioned:
 
 ```bash
-./deploy.sh --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
 ./stop_bacnet_polling.sh --limit acme_vm_bbartling
 ```
 
-## vs vibe_code_apps_12
+## Acme real building (`acme_vm_bbartling`)
+
+x86 Ubuntu VM on OT BACnet (`10.200.200.185:47808`). Inventory SSH IP is Tailscale/LAN — set in private `inventory.yml` only.
+
+```bash
+./scripts/acme_commission_gl36.sh          # GL36 + economizer poll set @ 60s
+./acme_go_live.sh --limit acme_vm_bbartling
+PYTHONPATH=../../workspace/api python3 ../../scripts/acme_gl36_site_model.py
+python3 ../../scripts/acme_gl36_mechanical_validate.py --samples /path/to/samples.csv
+```
+
+| Fact | Value |
+|------|--------|
+| Site / building | `acme` / `vm-bbartling` |
+| Poll profile | ~336 GL36 points (VAV + AHU + plant) |
+| Historian | `feather_max_gib: 125`, `feather_retention_days: 365` |
+| Ollama | `qwen3:4b` on 16 GB tier |
+
+GL36 reference: [Trim & Respond README](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md)
+
+## Boss Pi test bench (`192.168.204.12`)
+
+Same host as `vibe_code_apps_12/ansible/inventory.yml` → `bacnet_pi`.
+
+| Fact | Value |
+|------|--------|
+| Hostname | `bosspi` |
+| SSH | `ben@192.168.204.12` |
+| CPU | **armv7l** (Pi 3 B+ 32-bit) |
+| RAM | ~**1 GB** (not 8 GB — use `ollama_ram_tier: 8gb` only as config label) |
+
+```bash
+./deploy.sh all --limit bacnet_pi --no-ask-pass -v
+```
+
+Check-engine: `http://192.168.204.12/` (Caddy → bridge).
+
+**Ollama / tinyllama:** Official Ollama builds are **arm64 or amd64 only**. Pi 3 B+ with 32-bit Raspbian cannot run Ollama; `ollama_bootstrap.yml` fails fast with a clear message. Use bensserver or a Pi 4/5 with 64-bit OS for AI chat testing.
+
+```bash
+# Only on arm64/aarch64 or x86 hosts:
+ansible-playbook -i inventory.yml ollama_bootstrap.yml --limit bacnet_pi \
+  -e enable_ollama=true -e ollama_ram_tier=8gb \
+  -e '{"ollama_model_for_tier":{"8gb":"tinyllama"}}'
+```
+
+Services use `Restart=always` and `WantedBy=multi-user.target` so they come back after reboot/power cycle.
+
+**Deploy roadblock on this Pi:** Open-FDD needs **pyarrow** (feather store). There is no prebuilt wheel for **Python 3.13 + armv7l**, and source builds fail on ~1 GB RAM. Use **Pi 4/5 64-bit OS** or deploy to **`acme_vm_bbartling`** for ansible dev testing. Partial sync to bosspi succeeded (code + `points.csv` + venv); systemd units were not installed.
 
 | vibe12 | open-fdd |
 |--------|----------|
@@ -49,12 +149,18 @@ ofdd_web_user: operator
 ofdd_web_password: "..."
 ```
 
-Or use `workspace/deploy/Caddyfile.example` for path routing only.
+Or set `caddy_mode: tls` in group_vars for self-signed HTTPS on OT LAN.
+
+Check-engine dashboard (`/` and `/faults`) is **public read-only** — no login required.
+Optional bridge auth (`ofdd_auth_secret`) gates Rule Lab, BACnet writes, etc.
 
 ## Local dev (bensserver)
 
 ```bash
-./scripts/run_local.sh
-# http://127.0.0.1:5173  UI
-# http://127.0.0.1:8765  API
+./scripts/build_and_test.sh      # vitest + prod UI + pytest (deploy gate)
+./scripts/run_local.sh restart   # prod React build + stack + Caddy (if enabled)
+# http://127.0.0.1/  — check-engine dashboard (Caddy default, no port)
+# http://127.0.0.1:8765/ — direct bridge if OFDD_CADDY_MODE=off
 ```
+
+UI flags: `--ui-test` (vitest + build), `--ui-skip` (no npm), `--dev` (optional Vite :5173).

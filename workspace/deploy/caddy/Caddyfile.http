@@ -1,0 +1,12 @@
+# Open-FDD — HTTP entry on :80 (no port in the browser URL).
+# Bridge binds 127.0.0.1:8765; Caddy is the only LAN-facing listener.
+# Check-engine dashboard at http://<host>/ — no login required for read-only views.
+
+:80 {
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	reverse_proxy 127.0.0.1:8765
+}

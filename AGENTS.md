@@ -1,11 +1,11 @@
 # Open-FDD agent policy
 
-This repository is **engine-first**. The published PyPI wheel (`open-fdd`) contains pandas/YAML fault detection only. Everything beyond the engine is built on demand from `skills/` using the operator manifest (`openfdd.toml`) and the local agent shell (`packages/openfdd-agent-shell`).
+This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provides pandas fault detection (`open_fdd.engine`, optional YAML via `[engine]` extra) and reports. The **operator stack** under `workspace/` uses **Python rules in Rule Lab**, not hot-reloaded YAML files.
 
 ## Default path
 
-- Rules-only work: `pip install open-fdd` (or editable install from the repo root) and use `open_fdd.engine` on pandas DataFrames.
-- A committed **operator starter** lives in `workspace/api/` and `workspace/dashboard/` (Rule Lab + FastAPI bridge). **Extend** that code when `[build]` includes `api` or `dashboard`; do not replace it unless asked.
+- Rules-only library work: `pip install "open-fdd[engine]"` (or editable install) and use `open_fdd.engine.RuleRunner` on pandas DataFrames in notebooks.
+- Operator **Rule Lab** work: extend `workspace/api/` and `workspace/dashboard/` — Python rules only; no YAML hot-reload directory.
 - Do **not** add new top-level services beyond the manifest `[build]` section.
 
 ## Workspace writes
@@ -20,9 +20,11 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 
 ## FDD execution
 
-- Use `open_fdd.engine.RuleRunner` and YAML rules on DataFrames.
-- Authoring reference: [docs/expression_rule_cookbook.md](docs/expression_rule_cookbook.md).
-- Do not ship a bespoke rule runner in generated apps.
+- Author Python rules in **Rule Lab** (`evaluate(row, cfg, …)` or DataFrame scripts); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
+- Humans and AI share the same `.py` files: browser save and `POST /openfdd-agent/tool` (`rules.save`) both call `RuleStore.upsert()`. Doc: [docs/howto/rule_lab_storage.md](docs/howto/rule_lab_storage.md).
+- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner` (from `workspace/api/`); local stack: `./scripts/run_local.sh start`.
+- Use `open_fdd.engine.column_map_from_model` (and playground sandbox) on the bridge — not a separate YAML rule runner in generated apps.
+- For standalone **library** use outside the operator stack, `open_fdd.engine.RuleRunner` with YAML files remains available via `pip install "open-fdd[engine]"` (see [engine-pandas-fdd](skills/engine-pandas-fdd/SKILL.md)).
 
 ## Security
 
@@ -34,13 +36,16 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) conta
 
 | Operator intent | Start with |
 |-----------------|------------|
-| Run YAML rules on CSV/DataFrames | [skills/engine-pandas-fdd/SKILL.md](skills/engine-pandas-fdd/SKILL.md) |
+| Python rules in Rule Lab / batch FDD | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
+| YAML rules on CSV/DataFrames (library only) | [skills/engine-pandas-fdd/SKILL.md](skills/engine-pandas-fdd/SKILL.md) |
 | Column map / manifest | [skills/column-map-and-manifests/SKILL.md](skills/column-map-and-manifests/SKILL.md) |
 | HTTP bridge API | [skills/fastapi-bridge-api/SKILL.md](skills/fastapi-bridge-api/SKILL.md) |
 | React dashboard | [skills/react-operator-dashboard/SKILL.md](skills/react-operator-dashboard/SKILL.md) |
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
 | CSV / weather / BACnet ingest | `skills/driver-*-ingest/` |
+| BACnet single-stack / 47808 exclusivity | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
 | Rules CRUD + batch run | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
+| Building check-engine light + fault codes | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
 | Plots / cleaning | [skills/timeseries-plots-and-cleaning/SKILL.md](skills/timeseries-plots-and-cleaning/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
 | MCP doc retrieval | [skills/mcp-doc-retrieval/SKILL.md](skills/mcp-doc-retrieval/SKILL.md) |

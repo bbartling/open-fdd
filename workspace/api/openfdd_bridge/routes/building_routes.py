@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ..building_alerts import load_alerts, merge_auto_issues, replace_alerts
+from ..building_alerts import load_alerts, replace_alerts
+from ..building_status import collect_status
 from ..deps import require_roles, require_user
-from ..model_health import model_health_summary
-from ..model_service import ModelService
-from ..stack_health import stack_health
+from ..fault_catalog import is_valid_code
 
 router = APIRouter(prefix="/api/building", tags=["building"])
 
@@ -20,6 +19,8 @@ class AlertItem(BaseModel):
     title: str
     detail: str = ""
     source: str = "agent"
+    code: str = ""
+    equipment_family: str = ""
 
 
 class AlertsBody(BaseModel):
@@ -28,42 +29,22 @@ class AlertsBody(BaseModel):
 
 
 @router.get("/status")
-def building_status(_user: dict = Depends(require_user)) -> dict:
-    model = ModelService().load()
-    health = model_health_summary(model)
-    stored = load_alerts()
-    merged = merge_auto_issues(model_issues=health.get("issues", []), stored=stored)
-    stack = stack_health()
-    stack_issues: list[dict[str, str]] = []
-    for svc in stack.get("services", []):
-        if not isinstance(svc, dict):
-            continue
-        st = str(svc.get("status") or "")
-        if st in {"red", "yellow"}:
-            stack_issues.append(
-                {
-                    "id": f"stack-{svc.get('id')}",
-                    "severity": "critical" if st == "red" else "warning",
-                    "title": f"{svc.get('label', 'Service')} {st}",
-                    "detail": str(svc.get("detail") or ""),
-                    "source": "system",
-                }
-            )
-    all_alerts = merged["alerts"] + stack_issues
-    status = merged["status"]
-    if stack_issues and status == "ok":
-        status = "warning"
-    if any(a.get("severity") == "critical" for a in stack_issues):
-        status = "critical"
+def building_status() -> dict:
+    status = collect_status()
+    health = status["model_health"]
+    configured = bool(status.get("model_configured"))
     return {
         "ok": True,
-        "status": status,
-        "model_score": health.get("score"),
-        "model_summary": health.get("summary"),
-        "alert_count": len(all_alerts),
-        "alerts": all_alerts,
-        "stack": stack,
-        "check_engine": status != "ok",
+        "status": status["status"],
+        "traffic": status["traffic"],
+        "model_configured": configured,
+        "model_score": health.get("score") if configured else None,
+        "model_summary": health.get("summary") if configured else None,
+        "alert_count": len(status["alerts"]),
+        "alerts": status["alerts"],
+        "stack": status["stack"],
+        "fdd_alert_count": status["fdd_alert_count"],
+        "check_engine": status["status"] != "ok",
     }
 
 
@@ -75,6 +56,15 @@ def get_alerts(_user: dict = Depends(require_user)) -> dict:
 @router.put("/alerts")
 def put_alerts(body: AlertsBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     username = str(user.get("sub") or "agent")
+    for alert in body.alerts:
+        if alert.code and not is_valid_code(alert.code):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"unknown fault code '{alert.code}'. Use a fixed code from "
+                    "/api/faults/catalog — codes must not be invented."
+                ),
+            )
     doc = replace_alerts(
         [a.model_dump() for a in body.alerts],
         updated_by=username,

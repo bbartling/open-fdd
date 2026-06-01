@@ -39,8 +39,16 @@ from bacnet_toolshed.server_points import (
     server_points_snapshot,
     update_openfdd_server_points,
 )
-from bacnet_toolshed.stack_args import bacnet_argv_from_cfg
+from bacnet_toolshed.stack_args import bacnet_argv_from_cfg, discover_timeout_s, route_discovery_kwargs
+from bacnet_toolshed.bacnet_poll_loop import (
+    enabled_point_count,
+    last_poll_status,
+    poll_interval_s,
+    run_poll_cycle,
+    start_poll_loop,
+)
 
+from bacnet_toolshed.nic_bind import resolve_commission_cfg
 from bacnet_toolshed.paths import (
     commissioning_dir,
     default_points_discovered,
@@ -57,6 +65,10 @@ ENV_FILE = commissioning_dir() / "commission.env"
 _bacnet_app: Application | None = None
 _bacnet_app_cfg_key: tuple[tuple[str, str], ...] | None = None
 _bacnet_app_lock = threading.Lock()
+_bacnet_op_lock = threading.Lock()
+_bacnet_async_lock: asyncio.Lock | None = None
+_bacnet_loop: asyncio.AbstractEventLoop | None = None
+_bacnet_loop_ready = threading.Event()
 
 
 def _utc_now() -> str:
@@ -94,7 +106,7 @@ def _cfg() -> dict[str, str]:
         env_val = os.environ.get(key, "").strip()
         if env_val:
             merged[key] = env_val
-    return merged
+    return resolve_commission_cfg(merged)
 
 
 def _python() -> str:
@@ -243,6 +255,51 @@ def _bacnet_app_from_cfg(cfg: dict[str, str]) -> Application:
     return _get_bacnet_app(cfg)
 
 
+def _bacnet_loop_thread_main() -> None:
+    global _bacnet_loop, _bacnet_async_lock
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    _bacnet_loop = loop
+    _bacnet_async_lock = asyncio.Lock()
+    _bacnet_loop_ready.set()
+    loop.run_forever()
+
+
+def _ensure_bacnet_loop() -> asyncio.AbstractEventLoop:
+    global _bacnet_loop
+    if _bacnet_loop is not None and _bacnet_loop.is_running():
+        return _bacnet_loop
+    with _bacnet_app_lock:
+        if _bacnet_loop is not None and _bacnet_loop.is_running():
+            return _bacnet_loop
+        _bacnet_loop_ready.clear()
+        thread = threading.Thread(target=_bacnet_loop_thread_main, name="bacnet-io", daemon=True)
+        thread.start()
+        if not _bacnet_loop_ready.wait(timeout=15):
+            raise RuntimeError("BACnet I/O loop failed to start")
+        if _bacnet_loop is None:
+            raise RuntimeError("BACnet I/O loop missing after start")
+        return _bacnet_loop
+
+
+def _run_bacnet_sync(coro_factory, timeout: float = 180.0) -> Any:
+    """Run BACnet coroutine on a single dedicated asyncio loop (BACpypes3 requirement)."""
+    loop = _ensure_bacnet_loop()
+
+    async def _inner() -> Any:
+        with _bacnet_op_lock:
+            cfg = _cfg()
+            app = _bacnet_app_from_cfg(cfg)
+        lock = _bacnet_async_lock
+        if lock is None:
+            raise RuntimeError("BACnet async lock missing")
+        async with lock:
+            return await coro_factory(app)
+
+    future = asyncio.run_coroutine_threadsafe(_inner(), loop)
+    return future.result(timeout=timeout)
+
+
 def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
     log_file = _log_path(job_id)
     meta = {
@@ -256,19 +313,11 @@ def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
     _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
     jobs_dir().mkdir(parents=True, exist_ok=True)
 
-    async def _inner() -> dict[str, Any]:
-        cfg = _cfg()
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await coro_factory(app)
-        finally:
-            app.close()
-
     try:
         with log_file.open("w", encoding="utf-8") as log:
             log.write(f"# started {_utc_now()}\n# kind: {kind}\n\n")
             log.flush()
-            result = asyncio.run(_inner())
+            result = _run_bacnet_sync(coro_factory)
             log.write(json.dumps(result, indent=2))
         meta["status"] = "ok"
         meta["finished_at"] = _utc_now()
@@ -285,17 +334,29 @@ def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
         _job_path(job_id).write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
-def _start_point_discovery(device_instance: int) -> dict[str, Any]:
+def _start_point_discovery(device_instance: int, device_address: str = "") -> dict[str, Any]:
     job_id = uuid.uuid4().hex[:12]
+    addr = device_address.strip()
 
     async def _run(app: Application) -> dict[str, Any]:
-        return await point_discovery(app, device_instance)
+        return await point_discovery(
+            app,
+            device_instance,
+            device_address=addr or None,
+        )
 
     thread = threading.Thread(
         target=_run_async_bacnet_job, args=(job_id, "point_discovery", _run), daemon=True
     )
     thread.start()
-    return {"job_id": job_id, "kind": "point_discovery", "device_instance": device_instance}
+    out: dict[str, Any] = {
+        "job_id": job_id,
+        "kind": "point_discovery",
+        "device_instance": device_instance,
+    }
+    if addr:
+        out["device_address"] = addr
+    return out
 
 
 def _start_supervisory_check(device_instance: int) -> dict[str, Any]:
@@ -313,24 +374,43 @@ def _start_supervisory_check(device_instance: int) -> dict[str, Any]:
 
 def _sync_who_is(range_low: int, range_high: int) -> dict[str, Any]:
     cfg = _cfg()
+    route = route_discovery_kwargs(cfg)
 
     async def _run(app: Application) -> dict[str, Any]:
+        if route:
+            from bacnet_toolshed.discover_lib import collect_i_ams
+
+            i_ams = await collect_i_ams(
+                app,
+                range_low,
+                range_high,
+                router_ip=str(route["router_ip"]),
+                mstp_net=int(route["mstp_net"]),
+                timeout=discover_timeout_s(cfg),
+                local_too=bool(route.get("local_too", False)),
+            )
+            devices = []
+            for i_am in i_ams or []:
+                device_address = i_am.pduSource
+                device_identifier = i_am.iAmDeviceIdentifier
+                devices.append(
+                    {
+                        "i-am-device-identifier": str(device_identifier),
+                        "device-address": str(device_address),
+                        "max-apdu-length-accepted": i_am.maxAPDULengthAccepted,
+                        "segmentation-supported": str(i_am.segmentationSupported),
+                        "vendor-id": i_am.vendorID,
+                    }
+                )
+            return {"devices": devices, "count": len(devices)}
         devices = await perform_who_is(app, range_low, range_high)
         return {"devices": devices, "count": len(devices)}
 
-    async def _inner() -> dict[str, Any]:
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await _run(app)
-        finally:
-            app.close()
-
-    return asyncio.run(_inner())
+    return _run_bacnet_sync(_run)
 
 
 def _sync_bacnet_write(body: dict[str, Any]) -> dict[str, Any]:
     req = WritePropertyRequest.model_validate(body)
-    cfg = _cfg()
 
     async def _run(app: Application) -> dict[str, Any]:
         return await bacnet_write(
@@ -342,19 +422,11 @@ def _sync_bacnet_write(body: dict[str, Any]) -> dict[str, Any]:
             req.priority,
         )
 
-    async def _inner() -> dict[str, Any]:
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await _run(app)
-        finally:
-            app.close()
-
-    return asyncio.run(_inner())
+    return _run_bacnet_sync(_run)
 
 
 def _sync_bacnet_read(body: dict[str, Any]) -> dict[str, Any]:
     req = SingleReadRequest.model_validate(body)
-    cfg = _cfg()
 
     async def _run(app: Application) -> dict[str, Any]:
         return await bacnet_read(
@@ -364,51 +436,28 @@ def _sync_bacnet_read(body: dict[str, Any]) -> dict[str, Any]:
             req.property_identifier,
         )
 
-    async def _inner() -> dict[str, Any]:
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await _run(app)
-        finally:
-            app.close()
-
-    return asyncio.run(_inner())
+    return _run_bacnet_sync(_run)
 
 
 def _sync_bacnet_read_multiple(body: dict[str, Any]) -> dict[str, Any]:
     req = ReadMultiplePropertiesRequestWrapper.model_validate(body)
-    cfg = _cfg()
     requests = [(r.object_identifier, r.property_identifier) for r in req.requests]
 
     async def _run(app: Application) -> dict[str, Any]:
         return await bacnet_read_multiple(app, req.device_instance, requests)
 
-    async def _inner() -> dict[str, Any]:
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await _run(app)
-        finally:
-            app.close()
-
-    return asyncio.run(_inner())
+    return _run_bacnet_sync(_run)
 
 
 def _sync_read_priority_array(body: dict[str, Any]) -> dict[str, Any]:
     req = ReadPriorityArrayRequest.model_validate(body)
-    cfg = _cfg()
 
     async def _run(app: Application) -> dict[str, Any]:
         return await read_point_priority_array(
             app, req.device_instance, req.object_identifier
         )
 
-    async def _inner() -> dict[str, Any]:
-        app = _bacnet_app_from_cfg(cfg)
-        try:
-            return await _run(app)
-        finally:
-            app.close()
-
-    return asyncio.run(_inner())
+    return _run_bacnet_sync(_run)
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: Any) -> None:
@@ -528,6 +577,18 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                 {"ok": True, "points": server_points_snapshot()},
             )
 
+        if path == "/api/bacnet/poll/status":
+            return _json_response(
+                self,
+                200,
+                {
+                    "ok": True,
+                    "enabled_points": enabled_point_count(),
+                    "interval_s": poll_interval_s(),
+                    **last_poll_status(),
+                },
+            )
+
         if path == "/api/jobs":
             return _json_response(self, 200, {"jobs": _list_jobs(30)})
 
@@ -557,7 +618,12 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
             inst = body.get("device_instance")
             if inst is None:
                 return _json_response(self, 400, {"error": "device_instance required"})
-            started = _start_point_discovery(int(inst))
+            try:
+                device_instance = int(inst)
+            except (TypeError, ValueError):
+                return _json_response(self, 400, {"error": "invalid device_instance"})
+            addr = str(body.get("device_address") or "").strip()
+            started = _start_point_discovery(device_instance, device_address=addr)
             return _json_response(self, 202, started)
 
         if path == "/api/jobs/supervisory-check":
@@ -566,6 +632,10 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                 return _json_response(self, 400, {"error": "device_instance required"})
             started = _start_supervisory_check(int(inst))
             return _json_response(self, 202, started)
+
+        if path == "/api/bacnet/poll/once":
+            result = run_poll_cycle(_run_bacnet_sync)
+            return _json_response(self, 200, {"ok": bool(result.get("ok")), **result})
 
         if path == "/api/bacnet/whois":
             low = int(body.get("range_low", _cfg().get("DISCOVER_LOW", 1)))
@@ -622,6 +692,17 @@ def main() -> int:
     print(
         f"Open-FDD BACnet toolshed agent on http://{BIND_HOST}:{BIND_PORT} "
         f"(commissioning={commissioning_dir()}, auth={'on' if TOKEN else 'off'})",
+        flush=True,
+    )
+    cfg = _cfg()
+    print(
+        f"BACnet stack: name={cfg.get('BACNET_NAME')} instance={cfg.get('BACNET_INSTANCE')} "
+        f"bind={cfg.get('BACNET_BIND')}",
+        flush=True,
+    )
+    start_poll_loop(_run_bacnet_sync)
+    print(
+        f"BACnet poll loop started (enabled points={enabled_point_count()}, interval={poll_interval_s()}s)",
         flush=True,
     )
     try:

@@ -6,15 +6,13 @@ import logging
 from typing import Any
 
 from bacpypes3.app import Application
-from bacpypes3.basetypes import EngineeringUnits
+from bacpypes3.basetypes import BinaryPV, EngineeringUnits
 from bacpypes3.local.analog import AnalogValueObject
 from bacpypes3.local.binary import BinaryValueObject
 from bacpypes3.primitivedata import Real
 
 logger = logging.getLogger(__name__)
 
-# Open-FDD edge device exposes these local objects on the same BACpypes3 Application
-# used for commissioning (instance/name from commission.env — default OpenFddEdge/599999).
 OPENFDD_SERVER_POINT_SPECS: tuple[dict[str, Any], ...] = (
     {
         "name": "openfdd-edge-online",
@@ -52,11 +50,11 @@ point_map: dict[str, Any] = {}
 _installed = False
 
 
-def _binary_present(value: str | bool) -> str:
+def _binary_present(value: str | bool) -> BinaryPV:
     if isinstance(value, bool):
-        return "active" if value else "inactive"
+        return BinaryPV.active if value else BinaryPV.inactive
     text = str(value).strip().lower()
-    return "active" if text in {"active", "true", "1", "on", "yes"} else "inactive"
+    return BinaryPV.active if text in {"active", "true", "1", "on", "yes"} else BinaryPV.inactive
 
 
 def install_openfdd_server_points(app: Application) -> dict[str, str]:
@@ -75,10 +73,6 @@ def install_openfdd_server_points(app: Application) -> dict[str, str]:
                 objectIdentifier=("binaryValue", instance),
                 objectName=name,
                 presentValue=_binary_present(spec.get("present_value", "inactive")),
-                statusFlags=[0, 0, 0, 0],
-                eventState="normal",
-                outOfService=False,
-                polarity="normal",
                 description=str(spec.get("description", "")),
             )
         elif kind == "analogValue":
@@ -86,9 +80,6 @@ def install_openfdd_server_points(app: Application) -> dict[str, str]:
                 objectIdentifier=("analogValue", instance),
                 objectName=name,
                 presentValue=Real(float(spec.get("present_value", 0.0))),
-                statusFlags=[0, 0, 0, 0],
-                eventState="normal",
-                outOfService=False,
                 units=spec.get("units", EngineeringUnits.noUnits),
                 description=str(spec.get("description", "")),
             )
@@ -124,13 +115,17 @@ def update_openfdd_server_points(
 def server_points_snapshot() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for name, obj in point_map.items():
-        pv = getattr(obj, "presentValue", None)
+        pv = obj.presentValue
+        if hasattr(pv, "get_value"):
+            pv = pv.get_value()
+        text = str(pv)
+        if text in {"1", "0"}:
+            text = "active" if text == "1" else "inactive"
         out.append(
             {
                 "name": name,
                 "object_identifier": str(obj.objectIdentifier),
-                "present_value": str(pv) if pv is not None else None,
-                "commandable": False,
+                "present_value": text,
             }
         )
     return out

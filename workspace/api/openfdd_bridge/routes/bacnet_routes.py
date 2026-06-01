@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import csv
 import re
+from typing import Any, Literal
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field
 
 from bacnet_toolshed.models import (
     DeviceInstanceRequest,
@@ -15,6 +17,18 @@ from bacnet_toolshed.models import (
     WritePropertyRequest,
 )
 
+from ..bacnet_driver_store import (
+    clear_registry,
+    delete_device,
+    delete_point,
+    driver_tree,
+    merge_commission_rows,
+    remap_device,
+    set_device_poll,
+    set_point_poll,
+    sync_discovery,
+)
+from ..bacnet_model_sync import merge_device_into_model
 from ..commission_client import (
     bacnet_priority_array as commission_priority_array,
     bacnet_read as commission_read,
@@ -30,6 +44,8 @@ from ..commission_client import (
     whois as commission_whois,
 )
 from ..deps import require_roles
+from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
+from ..commission_client import commission_poll_once, commission_poll_status
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
@@ -37,6 +53,46 @@ router = APIRouter(tags=["bacnet"])
 _READ = Depends(require_roles("operator", "integrator", "agent"))
 _COMMISSION = Depends(require_roles("operator", "integrator", "agent"))
 _WRITE = Depends(require_roles("integrator"))
+_INTEGRATOR = Depends(require_roles("integrator"))
+
+
+class ImportToModelBody(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    site_id: str | None = None
+    equipment_name: str | None = None
+    objects: list[dict[str, Any]] | None = None
+
+
+class SyncDiscoveryBody(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    objects: list[dict[str, Any]] = Field(default_factory=list)
+    replace: bool = False
+    merge_existing: bool = False
+
+
+class MergeCommissionRowsBody(BaseModel):
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    enable_poll: bool = True
+
+
+class PointPollBody(BaseModel):
+    point_id: str
+    enabled: bool = True
+    poll_interval_s: Literal[60, 300, 600, 900] = 60
+
+
+class DevicePollBody(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    enabled: bool = True
+    poll_interval_s: Literal[60, 300, 600, 900] = 60
+
+
+class RemapDeviceBody(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    new_device_instance: int | None = Field(default=None, ge=0, le=4194303)
+    new_device_address: str | None = None
 
 _SAFE_SITE_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
@@ -143,6 +199,103 @@ def bacnet_inventory() -> dict:
     }
 
 
+@router.post("/api/bacnet/import-to-model", dependencies=[_INTEGRATOR])
+def bacnet_import_to_model(body: ImportToModelBody) -> dict:
+    """Merge BACnet discovery into model.json (integrator role)."""
+    try:
+        return merge_device_into_model(
+            device_instance=body.device_instance,
+            device_address=body.device_address,
+            objects=body.objects,
+            site_id=body.site_id,
+            equipment_name=body.equipment_name,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/api/bacnet/driver/tree", dependencies=[_READ])
+def bacnet_driver_tree() -> dict:
+    return driver_tree()
+
+
+@router.post("/api/bacnet/driver/sync-discovery", dependencies=[_COMMISSION])
+def bacnet_sync_discovery(body: SyncDiscoveryBody) -> dict:
+    try:
+        return sync_discovery(
+            device_instance=body.device_instance,
+            device_address=body.device_address,
+            objects=body.objects,
+            replace=body.replace,
+            merge_existing=body.merge_existing,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/bacnet/driver/merge-rows", dependencies=[_INTEGRATOR])
+def bacnet_merge_commission_rows(body: MergeCommissionRowsBody) -> dict:
+    """Upsert commission CSV rows into discovered + poll lists (integrator)."""
+    try:
+        return merge_commission_rows(body.rows, enable_poll=body.enable_poll)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/api/bacnet/driver/point", dependencies=[_COMMISSION])
+def bacnet_set_point_poll(body: PointPollBody) -> dict:
+    try:
+        return set_point_poll(
+            point_id=body.point_id,
+            enabled=body.enabled,
+            poll_interval_s=body.poll_interval_s,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/api/bacnet/driver/device", dependencies=[_COMMISSION])
+def bacnet_set_device_poll(body: DevicePollBody) -> dict:
+    try:
+        return set_device_poll(
+            device_instance=body.device_instance,
+            enabled=body.enabled,
+            poll_interval_s=body.poll_interval_s,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/api/bacnet/driver/point/{point_id}", dependencies=[_COMMISSION])
+def bacnet_delete_point(point_id: str) -> dict:
+    return delete_point(point_id=point_id)
+
+
+@router.delete("/api/bacnet/driver/device/{device_instance}", dependencies=[_COMMISSION])
+def bacnet_delete_device(device_instance: int) -> dict:
+    return delete_device(device_instance=device_instance)
+
+
+@router.delete("/api/bacnet/driver/registry", dependencies=[_COMMISSION])
+def bacnet_clear_registry() -> dict:
+    """Clear all BACnet devices from driver CSVs, poll samples, and data model."""
+    return clear_registry(sync_model=True, sync_ttl=True)
+
+
+@router.patch("/api/bacnet/driver/device/remap", dependencies=[_COMMISSION])
+def bacnet_remap_device(body: RemapDeviceBody) -> dict:
+    if body.new_device_instance is None and not (body.new_device_address or "").strip():
+        raise HTTPException(status_code=400, detail="provide new_device_instance and/or new_device_address")
+    try:
+        return remap_device(
+            device_instance=body.device_instance,
+            new_device_instance=body.new_device_instance,
+            new_device_address=(body.new_device_address or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/api/bacnet/discover", dependencies=[_COMMISSION])
 def bacnet_discover_devices(body: DiscoverRequest) -> dict:
     if body.range_low > body.range_high:
@@ -197,7 +350,7 @@ def bacnet_read_priority_array(body: ReadPriorityArrayRequest) -> dict:
 
 @router.post("/api/bacnet/point-discovery", dependencies=[_COMMISSION])
 def bacnet_point_discovery(body: DeviceInstanceRequest) -> dict:
-    status_code, payload = start_point_discovery(body.device_instance)
+    status_code, payload = start_point_discovery(body.device_instance, body.device_address)
     if status_code not in (200, 202):
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
@@ -235,25 +388,36 @@ def bacnet_job_status(job_id: str) -> dict:
     return payload  # type: ignore[return-value]
 
 
+@router.get("/api/bacnet/poll/status", dependencies=[_READ])
+def bacnet_poll_status() -> dict:
+    code, payload = commission_poll_status()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/poll/once", dependencies=[_COMMISSION])
+def bacnet_trigger_poll() -> dict:
+    code, payload = commission_poll_once()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    ingest = ingest_poll_samples_to_feather()
+    return {"poll": payload, "ingest": ingest}
+
+
+@router.post("/internal/bacnet/ingest-samples")
+def internal_ingest_poll_samples(request: Request) -> dict:
+    host = request.client.host if request.client else ""
+    if host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="localhost only")
+    return ingest_poll_samples_to_feather()
+
+
 @router.post("/ingest/bacnet", dependencies=[_READ])
-def ingest_bacnet(site_id: str = "default") -> dict:
-    site_id = _validate_site_id(site_id)
-    poll = bacnet_poll_csv()
-    if not poll.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail=f"poll CSV not found: {poll} — run bacnet_toolshed poll_driver first",
-        )
-    df = pd.read_csv(poll)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-    out_dir = data_dir() / "feather_store" / "bacnet" / site_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    feather_path = out_dir / "latest.feather"
-    df.to_feather(feather_path)
-    return {
-        "ok": True,
-        "site_id": site_id,
-        "rows": len(df),
-        "feather_path": str(feather_path),
-    }
+def ingest_bacnet(site_id: str | None = None) -> dict:
+    if site_id:
+        _validate_site_id(site_id)
+    result = ingest_poll_samples_to_feather()
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("reason", "ingest failed"))
+    return result

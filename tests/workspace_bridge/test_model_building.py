@@ -23,7 +23,18 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
+def test_model_site_and_ttl(client: TestClient):
+    r = client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    assert r.status_code == 200
+    assert r.json()["site_id"] == "s1"
+
+    r_ttl = client.get("/api/model/ttl?save=false")
+    assert r_ttl.status_code == 200
+    assert "brick:Site" in r_ttl.text
+
+
 def test_model_export_import(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
     payload = {
         "sites": [{"id": "s1", "name": "Demo Site"}],
         "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
@@ -48,18 +59,123 @@ def test_model_export_import(client: TestClient):
     assert len(body["points"]) == 1
 
 
-def test_model_health_and_building_status(client: TestClient):
+def test_model_import_requires_site(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    payload = {"sites": [], "equipment": [], "points": []}
+    r = client.post("/api/model/import", json={"payload": payload, "replace": True})
+    assert r.status_code == 400
+    export = client.get("/api/model/export").json()
+    assert export["sites"]
+    assert export["sites"][0]["id"] == "s1"
+
+
+def test_model_delete_point_and_equipment(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    payload = {
+        "sites": [{"id": "s1", "name": "Demo Site"}],
+        "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "SAT",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+            },
+            {
+                "id": "p2",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "OAT",
+                "brick_type": "Outside_Air_Temperature_Sensor",
+            },
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+
+    r = client.delete("/api/model/points/p1")
+    assert r.status_code == 200
+    assert r.json()["deleted"] == "p1"
+
+    export = client.get("/api/model/export").json()
+    assert len(export["points"]) == 1
+
+    r2 = client.delete("/api/model/equipment/e1")
+    assert r2.status_code == 200
+    assert r2.json()["points_removed"] == 1
+
+    export2 = client.get("/api/model/export").json()
+    assert export2["equipment"] == []
+    assert export2["points"] == []
+
+
+def test_bacnet_sync_status(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    r = client.get("/api/model/bacnet-sync")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "in_sync" in body
+    assert "poll_enabled_count" in body
+
+
+def test_model_tree(client: TestClient):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    payload = {
+        "sites": [{"id": "s1", "name": "Demo Site"}],
+        "equipment": [{"id": "e1", "site_id": "s1", "name": "AHU-1", "equipment_type": "Air_Handling_Unit"}],
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "equipment_id": "e1",
+                "external_id": "SAT",
+                "brick_type": "Supply_Air_Temperature_Sensor",
+            }
+        ],
+    }
+    client.post("/api/model/import", json={"payload": payload, "replace": True})
+    tree = client.get("/api/model/tree").json()
+    assert tree["points"]
+    assert "Supply_Air_Temperature_Sensor" in tree["brick_types"]
+
+
+def test_model_health_and_building_status(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OPENFDD_DEFAULT_SITE_ID", "test-site")
     r = client.get("/api/model/health")
     assert r.status_code == 200
     health = r.json()
-    assert "score" in health
-    assert health["status"] == "critical"
+    assert health["configured"] is True
+    assert health["status"] == "ok"
+    assert health["score"] == 100
 
     r2 = client.get("/api/building/status")
     assert r2.status_code == 200
     status = r2.json()
-    assert status["check_engine"] is True
-    assert status["alert_count"] >= 1
+    assert status["check_engine"] is False
+    assert status["model_configured"] is True
+    assert status["alert_count"] == 0
+    assert status["model_score"] == 100
+
+
+def test_stack_health_not_mixed_into_faults(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_MCP_ENABLED", "1")
+
+    r = client.get("/api/faults/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["traffic"] == "green"
+    assert body["alert_count"] == 0
+    titles = [f["title"] for fam in body["families"] for f in fam.get("faults", [])]
+    assert not any("MCP" in t for t in titles)
+
+
+def test_dashboard_websocket(client: TestClient):
+    with client.websocket_connect("/ws/dashboard") as ws:
+        payload = ws.receive_json()
+        assert "stack" in payload
+        assert "faults" in payload
+        assert payload["faults"]["model_configured"] is False
 
 
 def test_building_alerts_put(client: TestClient):

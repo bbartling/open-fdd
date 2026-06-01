@@ -54,9 +54,21 @@ def test_collect_host_stats_shape():
     assert stats["cpu"]["logical_cores"] >= 1
     assert "memory" in stats
     assert "swap" in stats
+    storage = stats["storage"]
+    assert storage.get("available") is True
+    assert storage["path"]
+    assert storage["total_bytes"] > 0
+    assert "percent_used" in storage
+    assert "feather_bytes" in storage
+    assert "feather_max_gib" in storage
     assert isinstance(stats["disks"], list)
-    labels = {d["label"] for d in stats["disks"]}
-    assert "repo" in labels or "root (/)" in labels
+    ollama = stats["ollama"]
+    assert isinstance(ollama, dict)
+    assert "api_ok" in ollama
+    assert "base_url" in ollama
+    assert "configured_ram_tier" in ollama
+    assert "gpu_mode" in ollama
+    assert "timeout_s" in ollama
 
 
 def test_read_linux_meminfo_on_linux():
@@ -74,3 +86,4 @@ def test_host_stats_api(client: TestClient):
     assert body["ok"] is True
     assert body["host"]["platform"]
     assert "cpu" in body
+    assert body["storage"]["available"] is True

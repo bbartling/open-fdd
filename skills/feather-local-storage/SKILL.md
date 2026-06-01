@@ -30,7 +30,7 @@ os.environ["OFDD_DESKTOP_DATA_DIR"] = "workspace/data"
 ## Core concepts
 
 - `model.json` and `data_model.ttl` live beside feather root when BRICK model is enabled.
-- Rules YAML default directory: `<data_dir>/rules/`.
+- Saved Python rules: `rules_store.json` + `rules_py/*.py` (see [rules-crud-and-batch-run](../rules-crud-and-batch-run/SKILL.md)).
 - Purge vs delete site: expose via bridge storage endpoints.
 
 ## Compose with other skills

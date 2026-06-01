@@ -1,8 +1,12 @@
 ---
 # Deploy Open-FDD edge stack (bridge + BACnet toolshed) to Linux gateways.
 #
-#   ./deploy.sh --limit bacnet_pi -v
-#   ./deploy.sh --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+# Component deploys (see ./deploy.sh help):
+#   ./deploy.sh ui|backend|core|drivers|all --limit HOST
+#   ansible-playbook deploy.yml --tags ui --limit HOST
+#
+# Tags: preflight, core, backend, ui, web, data, drivers, commission, pip,
+#       config, systemd, caddy, mcp, verify
 
 - name: Deploy Open-FDD edge stack
   hosts: pi_bcn
@@ -33,14 +37,35 @@
       become: true
       when: enable_bacnet_commission_agent | default(true) | bool
 
+    - name: Reload Caddy
+      ansible.builtin.command:
+        argv:
+          - caddy
+          - reload
+          - --config
+          - /etc/caddy/Caddyfile
+          - --force
+      become: true
+      when: caddy_enabled | default(true) | bool
+
+    - name: Restart Open-FDD MCP RAG
+      ansible.builtin.systemd:
+        name: openfdd-mcp-rag
+        state: restarted
+        daemon_reload: true
+      become: true
+      when: enable_mcp | default(true) | bool
+
   tasks:
     - name: Ensure application directory exists
+      tags: [preflight, always]
       ansible.builtin.file:
         path: "{{ openfdd_remote_dir }}"
         state: directory
         mode: "0755"
 
     - name: Sync open_fdd package
+      tags: [core]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../open_fdd/"
         dest: "{{ openfdd_remote_dir }}/open_fdd/"
@@ -48,6 +73,7 @@
       notify: Restart Open-FDD bridge
 
     - name: Sync bacnet_toolshed package
+      tags: [drivers]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../bacnet_toolshed/"
         dest: "{{ openfdd_remote_dir }}/bacnet_toolshed/"
@@ -57,6 +83,7 @@
         - Restart BACnet commission agent
 
     - name: Sync workspace bridge API
+      tags: [backend]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../workspace/api/"
         dest: "{{ openfdd_remote_dir }}/workspace/api/"
@@ -64,19 +91,41 @@
       notify: Restart Open-FDD bridge
 
     - name: Sync workspace data tree
+      tags: [data]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../workspace/data/"
         dest: "{{ openfdd_remote_dir }}/workspace/data/"
         mode: "0644"
 
     - name: Sync built dashboard static files
+      tags: [ui, web]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../workspace/api/static/app/"
         dest: "{{ openfdd_remote_dir }}/workspace/api/static/app/"
         mode: "0644"
       notify: Restart Open-FDD bridge
 
+    - name: Stat workspace auth.env.local on control machine
+      tags: [config]
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../workspace/auth.env.local"
+      delegate_to: localhost
+      become: false
+      register: control_auth_env
+
+    - name: Sync auth.env.local to edge (operator login)
+      tags: [config]
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../workspace/auth.env.local"
+        dest: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+        mode: "0600"
+      when:
+        - deploy_sync_auth | default(true) | bool
+        - control_auth_env.stat.exists | default(false)
+      notify: Restart Open-FDD bridge
+
     - name: Copy pyproject.toml and README
+      tags: [core, preflight]
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../../{{ item }}"
         dest: "{{ openfdd_remote_dir }}/{{ item }}"
@@ -85,22 +134,8 @@
         - pyproject.toml
         - README.md
 
-    - name: Stat commissioned points.csv on control machine
-      ansible.builtin.stat:
-        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
-      delegate_to: localhost
-      become: false
-      register: local_commission_csv
-
-    - name: Push commissioned points.csv to edge
-      ansible.builtin.copy:
-        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
-        dest: "{{ points_csv_path }}"
-        mode: "0644"
-      when: local_commission_csv.stat.exists | default(false)
-      notify: Restart BACnet poll driver
-
     - name: Ensure BACnet workspace layout
+      tags: [preflight, drivers]
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
@@ -109,7 +144,25 @@
         - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
         - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
 
+    - name: Stat commissioned points.csv on control machine
+      tags: [commission, drivers]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+      delegate_to: localhost
+      become: false
+      register: local_commission_csv
+
+    - name: Push commissioned points.csv to edge
+      tags: [commission, drivers]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points.csv"
+        dest: "{{ points_csv_path }}"
+        mode: "0644"
+      when: local_commission_csv.stat.exists | default(false)
+      notify: Restart BACnet poll driver
+
     - name: Install BACnet commission.env
+      tags: [drivers]
       ansible.builtin.template:
         src: templates/commission.env.j2
         dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/commission.env"
@@ -117,6 +170,7 @@
       notify: Restart BACnet commission agent
 
     - name: Install base Python packages (Debian / Raspberry Pi OS)
+      tags: [preflight, pip, os]
       ansible.builtin.apt:
         name:
           - python3
@@ -128,6 +182,7 @@
       become: true
 
     - name: Create virtual environment
+      tags: [preflight, pip]
       ansible.builtin.command:
         argv:
           - python3
@@ -136,27 +191,42 @@
           - "{{ openfdd_remote_dir }}/.venv"
         creates: "{{ openfdd_remote_dir }}/.venv/bin/python"
 
+    - name: Select Open-FDD pip extras for target architecture
+      tags: [pip]
+      ansible.builtin.set_fact:
+        openfdd_pip_extras: "{{ 'engine' if ansible_architecture in ['armv7l', 'armv6l'] else 'dev,engine' }}"
+        openfdd_bridge_requirements: >-
+          {{ openfdd_remote_dir }}/workspace/api/{{
+            'requirements-edge-armv7.txt'
+            if ansible_architecture in ['armv7l', 'armv6l']
+            else 'requirements.txt'
+          }}
+
     - name: Install Open-FDD editable package
+      tags: [pip, core]
       ansible.builtin.command:
         argv:
           - "{{ openfdd_remote_dir }}/.venv/bin/pip"
           - install
           - "-e"
-          - "{{ openfdd_remote_dir }}[dev,engine]"
+          - "{{ openfdd_remote_dir }}[{{ openfdd_pip_extras }}]"
       changed_when: true
 
     - name: Install bridge and BACnet requirements
+      tags: [pip, backend, drivers]
       ansible.builtin.command:
         argv:
           - "{{ openfdd_remote_dir }}/.venv/bin/pip"
           - install
+          - "--no-cache-dir"
           - "-r"
-          - "{{ openfdd_remote_dir }}/workspace/api/requirements.txt"
+          - "{{ openfdd_bridge_requirements }}"
           - "-r"
           - "{{ openfdd_remote_dir }}/bacnet_toolshed/requirements.txt"
       changed_when: true
 
     - name: Install bridge secret env file
+      tags: [config, backend]
       ansible.builtin.template:
         src: templates/bridge.secret.env.j2
         dest: /etc/openfdd/bridge.secret.env
@@ -170,6 +240,7 @@
       notify: Restart Open-FDD bridge
 
     - name: Install openfdd-bridge systemd unit
+      tags: [systemd, backend]
       ansible.builtin.template:
         src: templates/openfdd-bridge.service.j2
         dest: /etc/systemd/system/openfdd-bridge.service
@@ -179,6 +250,7 @@
       notify: Restart Open-FDD bridge
 
     - name: Install openfdd-bacnet-poll systemd unit
+      tags: [systemd, drivers]
       ansible.builtin.template:
         src: templates/openfdd-bacnet-poll.service.j2
         dest: /etc/systemd/system/openfdd-bacnet-poll.service
@@ -188,6 +260,7 @@
       notify: Restart BACnet poll driver
 
     - name: Install openfdd-bacnet-commission systemd unit
+      tags: [systemd, drivers]
       ansible.builtin.template:
         src: templates/openfdd-bacnet-commission.service.j2
         dest: /etc/systemd/system/openfdd-bacnet-commission.service
@@ -195,7 +268,32 @@
       become: true
       when: install_bacnet_commission_unit | default(true) | bool
 
+    - name: Install openfdd-fdd-loop systemd unit and timer
+      tags: [systemd, backend]
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-fdd-loop.service
+        - openfdd-fdd-loop.timer
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
+
+    - name: Install openfdd-feather-retention systemd unit and timer
+      tags: [systemd, backend]
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-feather-retention.service
+        - openfdd-feather-retention.timer
+      become: true
+      when: install_feather_retention_timer | default(true) | bool
+
     - name: Enable and start openfdd-bridge
+      tags: [systemd, backend]
       ansible.builtin.systemd:
         name: openfdd-bridge
         enabled: "{{ enable_openfdd_bridge | default(true) | bool }}"
@@ -205,6 +303,7 @@
       when: install_openfdd_bridge | default(true) | bool
 
     - name: Enable and start openfdd-bacnet-commission
+      tags: [systemd, drivers]
       ansible.builtin.systemd:
         name: openfdd-bacnet-commission
         enabled: "{{ enable_bacnet_commission_agent | default(true) | bool }}"
@@ -214,6 +313,7 @@
       when: install_bacnet_commission_unit | default(true) | bool
 
     - name: Enable and start openfdd-bacnet-poll
+      tags: [systemd, drivers]
       ansible.builtin.systemd:
         name: openfdd-bacnet-poll
         enabled: "{{ enable_bacnet_poll_driver | default(false) | bool }}"
@@ -222,17 +322,121 @@
       become: true
       when: install_bacnet_poll_unit | default(true) | bool
 
-    - name: Verify bridge health
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ openfdd_bridge_port }}/health"
-        return_content: true
-      register: bridge_health
-      failed_when: false
-      when:
-        - run_deploy_verify | default(true) | bool
-        - enable_openfdd_bridge | default(true) | bool
+    - name: Enable and start openfdd-fdd-loop timer
+      tags: [systemd, backend]
+      ansible.builtin.systemd:
+        name: openfdd-fdd-loop.timer
+        enabled: "{{ enable_fdd_loop_timer | default(true) | bool }}"
+        state: "{{ 'started' if (enable_fdd_loop_timer | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
 
-    - name: Bridge health summary
-      ansible.builtin.debug:
-        msg: "{{ inventory_hostname }} bridge={{ bridge_health.status | default('skipped') }} poll_driver={{ 'enabled' if (enable_bacnet_poll_driver | default(false) | bool) else 'stopped' }}"
+    - name: Enable and start openfdd-feather-retention timer
+      tags: [systemd, backend]
+      ansible.builtin.systemd:
+        name: openfdd-feather-retention.timer
+        enabled: "{{ enable_feather_retention_timer | default(true) | bool }}"
+        state: "{{ 'started' if (enable_feather_retention_timer | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_feather_retention_timer | default(true) | bool
+
+    - name: Install Caddy (LAN entry :80 / :443)
+      tags: [caddy, os]
+      ansible.builtin.apt:
+        name: caddy
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      become: true
+      when: caddy_enabled | default(true) | bool
+
+    - name: Ensure Open-FDD Caddy cert directory
+      tags: [caddy]
+      ansible.builtin.file:
+        path: /etc/openfdd/caddy
+        state: directory
+        mode: "0750"
+        owner: root
+        group: caddy
+      become: true
+      when:
+        - caddy_enabled | default(true) | bool
+        - caddy_mode | default('http') == 'tls'
+
+    - name: Generate self-signed TLS cert for Caddy
+      tags: [caddy]
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -newkey
+          - rsa:4096
+          - -keyout
+          - /etc/openfdd/caddy/key.pem
+          - -out
+          - /etc/openfdd/caddy/cert.pem
+          - -days
+          - "365"
+          - -nodes
+          - -subj
+          - "/CN={{ caddy_tls_cn | default('openfdd.local') }}"
+      args:
+        creates: /etc/openfdd/caddy/cert.pem
+      become: true
+      when:
+        - caddy_enabled | default(true) | bool
+        - caddy_mode | default('http') == 'tls'
+
+    - name: Install Caddyfile for Open-FDD
+      tags: [caddy, config]
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: /etc/caddy/Caddyfile
+        mode: "0644"
+      become: true
+      notify: Reload Caddy
+      when: caddy_enabled | default(true) | bool
+
+    - name: Enable and start Caddy
+      tags: [caddy, systemd]
+      ansible.builtin.systemd:
+        name: caddy
+        enabled: true
+        state: started
+        daemon_reload: true
+      become: true
+      when: caddy_enabled | default(true) | bool
+
+    - name: Ensure Caddy reverse-proxies Open-FDD (not default welcome site)
+      tags: [caddy]
+      ansible.builtin.include_tasks: tasks/ensure_caddy_openfdd.yml
+      when: caddy_enabled | default(true) | bool
+
+    - name: Enable MCP RAG sidecar for operator AI / doc search
+      tags: [mcp]
+      ansible.builtin.include_tasks: tasks/mcp_sidecar.yml
+      when: enable_mcp | default(true) | bool
+
+    - name: Apply service restarts before insurance checks
+      tags: [always]
+      ansible.builtin.meta: flush_handlers
+
+    - name: Run post-deploy insurance checks
+      tags: [verify, check]
+      ansible.builtin.include_tasks: tasks/post_deploy_check.yml
       when: run_deploy_verify | default(true) | bool
+
+    - name: Optional bench operational verify after deploy
+      tags: [verify]
+      ansible.builtin.command:
+        argv:
+          - "{{ playbook_dir }}/scripts/bench_operational_verify.sh"
+          - --host
+          - "{{ ansible_host }}"
+          - --skip-wait
+      delegate_to: localhost
+      become: false
+      when: run_bench_operational_verify | default(false) | bool

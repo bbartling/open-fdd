@@ -117,11 +117,13 @@ Wake lock files use a stale timeout (default six hours) so crashed runs can reco
 
 Field BACnet discovery, commissioning CSVs, and polling are in **`bacnet_toolshed/`** (not on PyPI). See **[BACnet toolshed](../bacnet/index)** and `openfdd.toml.example` `[build].drivers` / `driver-bacnet-ingest` skill.
 
-## Rule authoring
+## Rule authoring (operator stack)
 
-Expression and YAML semantics are unchanged. **`RuleRunner.run`** adds **integer** fault flag columns (`0` / `1`), not booleans—treat them as ints in pandas and downstream code. Missing input columns **fail** the run by default; per-rule `skip_missing_columns: true` skips checks for absent columns. Strict validation in rule params is an additional guardrail.
+Python rules for **Rule Lab** live under **`workspace/data/rules_py/`** with metadata in **`rules_store.json`**. Humans edit in **`/rule-lab`**; the **`agent`** role can write the same files via `POST /openfdd-agent/tool` (`rules.save`). See **[Rule Lab — Python storage](../docs/howto/rule_lab_storage.md)**.
 
-Start with the **[Expression rule cookbook](../expression_rule_cookbook)** and **[Rules overview](../rules/overview)**.
+Expression and YAML semantics for the **library** (`pip install "open-fdd[engine]"`) are unchanged. **`RuleRunner.run`** adds **integer** fault flag columns (`0` / `1`), not booleans—treat them as ints in pandas and downstream code. Missing input columns **fail** the run by default; per-rule `skip_missing_columns: true` skips checks for absent columns.
+
+Start with the **[Expression rule cookbook](../expression_rule_cookbook)** and **[Rules overview](../rules/overview)** for YAML/library work.
 
 ## Tests (CI)
 

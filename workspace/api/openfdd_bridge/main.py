@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -16,14 +17,25 @@ from .routes import (
     auth_routes,
     bacnet_routes,
     building_routes,
+    faults_routes,
     health,
     host_routes,
     modbus_routes,
     model_routes,
     playground_routes,
+    rules_routes,
     sites_routes,
+    timeseries_routes,
 )
 from .settings import cors_allow_private_lan, cors_origins
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    from .bacnet_poll_worker import start_bacnet_poll_worker
+
+    start_bacnet_poll_worker()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -31,6 +43,7 @@ def create_app() -> FastAPI:
         title="Open-FDD Operator Bridge",
         description="Local REST bridge: Python Rule Lab, BRICK data model, BACnet ingest, agent context.",
         version="0.1.0",
+        lifespan=_lifespan,
     )
 
     allow_lan = cors_allow_private_lan()
@@ -49,8 +62,11 @@ def create_app() -> FastAPI:
     app.include_router(auth_routes.router)
     app.include_router(audit_routes.router)
     app.include_router(playground_routes.router)
+    app.include_router(rules_routes.router)
     app.include_router(model_routes.router)
+    app.include_router(timeseries_routes.router)
     app.include_router(building_routes.router)
+    app.include_router(faults_routes.router)
     app.include_router(sites_routes.router)
     app.include_router(bacnet_routes.router)
     app.include_router(modbus_routes.router)

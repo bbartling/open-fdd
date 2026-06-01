@@ -117,6 +117,15 @@ class TtlService:
             ext = pt.get("metadata", {}).get("external_ref") if isinstance(pt.get("metadata"), dict) else None
             if ext:
                 lines.append(f'  ofdd:externalReference "{_escape(str(ext))}" ;')
+            meta = pt.get("metadata") if isinstance(pt.get("metadata"), dict) else {}
+            if pt.get("bacnet_device_id") is not None:
+                lines.append(f'  ofdd:bacnetDeviceId "{_escape(str(pt.get("bacnet_device_id")))}" ;')
+            if pt.get("object_identifier"):
+                lines.append(f'  ofdd:bacnetObjectIdentifier "{_escape(str(pt.get("object_identifier")))}" ;')
+            if meta.get("series_id"):
+                lines.append(f'  ofdd:seriesId "{_escape(str(meta.get("series_id")))}" ;')
+            if meta.get("poll_interval_s"):
+                lines.append(f'  ofdd:pollIntervalS "{_escape(str(meta.get("poll_interval_s")))}" ;')
             lines[-1] = lines[-1].rstrip(" ;") + " ."
             lines.append("")
         return "\n".join(lines)

@@ -1,16 +1,7 @@
-# LAN reverse proxy (optional) — bridge auth stays app-level Bearer tokens.
-#
-# Install Caddy on the edge host; bridge binds 127.0.0.1:8765 only.
-# Basic auth is optional; prefer OFDD_AUTH_* on the bridge for API routes.
-#
-#   sudo caddy run --config /opt/open-fdd/workspace/deploy/Caddyfile.example
+# Deprecated — use workspace/deploy/caddy/Caddyfile.http or Caddyfile.tls.
+# Ansible installs infra/ansible/templates/Caddyfile.j2 → /etc/caddy/Caddyfile.
+# Local dev: workspace/caddy.env.local + ./scripts/run_local.sh
 
 :80 {
-	@api path /api/* /health /config/* /ingest/* /openfdd-agent/*
-	handle @api {
-		reverse_proxy 127.0.0.1:8765
-	}
-	handle {
-		reverse_proxy 127.0.0.1:5173
-	}
+	reverse_proxy 127.0.0.1:8765
 }

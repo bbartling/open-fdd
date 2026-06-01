@@ -110,8 +110,13 @@ async def perform_who_is(
             device_description = await app.read_property(
                 device_address, device_identifier, "description"
             )
-        except ErrorRejectAbortNack as err:
-            device_description = f"Error: {err}"
+        except ErrorRejectAbortNack:
+            try:
+                device_description = await app.read_property(
+                    device_address, device_identifier, "object-name"
+                )
+            except ErrorRejectAbortNack as err:
+                device_description = f"Error: {err}"
         result.append(
             {
                 "i-am-device-identifier": str(device_identifier),
@@ -171,26 +176,58 @@ async def rpm_chunked(
     return combined
 
 
-async def point_discovery(app: Application, instance_id: int) -> dict[str, Any]:
+async def _resolve_device_target(
+    app: Application,
+    instance_id: int,
+    device_address: str | None = None,
+) -> tuple[Address, ObjectIdentifier, Any]:
+    """Resolve BACnet address + device object id; prefer known address from Who-Is."""
+    if device_address and str(device_address).strip():
+        addr = Address(str(device_address).strip())
+        device_identifier = ObjectIdentifier(("device", instance_id))
+        vendor_id = 0
+        try:
+            vendor_id = await app.read_property(addr, device_identifier, "vendor-identifier")
+        except ErrorRejectAbortNack:
+            pass
+        return addr, device_identifier, vendor_id
+
+    device_info = app.device_info_cache.instance_cache.get(instance_id)
+    if device_info is not None:
+        return device_info.device_address, device_info.object_identifier, device_info.vendor_identifier
+
     i_ams = await app.who_is(instance_id, instance_id)
     if not i_ams:
         raise BacnetOpsError(
             f"No response from device {instance_id} to Who-Is",
             {"instance": instance_id},
         )
-
+    if len(i_ams) > 1:
+        raise BacnetOpsError(
+            f"Multiple devices responded to Who-Is for instance {instance_id}",
+            {"instance": instance_id, "responses": len(i_ams)},
+        )
     i_am = i_ams[0]
-    device_address = i_am.pduSource
-    device_identifier = i_am.iAmDeviceIdentifier
-    vendor_info = get_vendor_info(i_am.vendorID)
+    return i_am.pduSource, i_am.iAmDeviceIdentifier, i_am.vendorID
+
+
+async def point_discovery(
+    app: Application,
+    instance_id: int,
+    device_address: str | None = None,
+) -> dict[str, Any]:
+    device_address_obj, device_identifier, vendor_id = await _resolve_device_target(
+        app, instance_id, device_address
+    )
+    vendor_info = get_vendor_info(vendor_id)
 
     try:
-        object_list = await object_identifiers(app, device_address, device_identifier)
+        object_list = await object_identifiers(app, device_address_obj, device_identifier)
     except AbortPDU as err:
         if err.apduAbortRejectReason != AbortReason.segmentationNotSupported:
             logger.error("Abort reading object-list: %s", err)
         return {
-            "device_address": str(device_address),
+            "device_address": str(device_address_obj),
             "device_instance": instance_id,
             "objects": [],
         }
@@ -199,7 +236,7 @@ async def point_discovery(app: Application, instance_id: int) -> dict[str, Any]:
     for obj_id in object_list:
         if vendor_info.get_object_class(obj_id[0]):
             rpm_requests_names.append((f"{obj_id[0]},{obj_id[1]}", "object-name"))
-    name_results = await rpm_chunked(app, device_address, rpm_requests_names, chunk_size=15)
+    name_results = await rpm_chunked(app, device_address_obj, rpm_requests_names, chunk_size=15)
     name_map = {
         normalize_oid(r.get("object_identifier")): r.get("value")
         for r in name_results
@@ -210,7 +247,7 @@ async def point_discovery(app: Application, instance_id: int) -> dict[str, Any]:
     for obj_id in object_list:
         if str(obj_id[0]).lower() in COMMANDABLE_TYPES:
             rpm_requests_pa.append((f"{obj_id[0]},{obj_id[1]}", "priority-array"))
-    pa_results = await rpm_chunked(app, device_address, rpm_requests_pa, chunk_size=15)
+    pa_results = await rpm_chunked(app, device_address_obj, rpm_requests_pa, chunk_size=15)
     commandable_oids = {
         normalize_oid(r.get("object_identifier"))
         for r in pa_results
@@ -219,7 +256,7 @@ async def point_discovery(app: Application, instance_id: int) -> dict[str, Any]:
 
     names_list = [str(name_map.get(normalize_oid(obj_id), "ERROR - Missing Data")) for obj_id in object_list]
     return {
-        "device_address": str(device_address),
+        "device_address": str(device_address_obj),
         "device_instance": instance_id,
         "objects": [
             {

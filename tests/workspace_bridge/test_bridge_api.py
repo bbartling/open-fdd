@@ -65,11 +65,13 @@ def test_agent_context(client: TestClient):
     assert "repo_root" in r.json()
 
 
-def test_model_export_empty(client: TestClient):
+def test_model_export_auto_site(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OPENFDD_DEFAULT_SITE_ID", "test-site")
     r = client.get("/api/model/export")
     assert r.status_code == 200
     body = r.json()
-    assert body["sites"] == []
+    assert len(body["sites"]) == 1
+    assert body["sites"][0]["id"] == "test-site"
 
 
 def test_spa_index_when_built(client: TestClient):

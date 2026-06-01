@@ -33,13 +33,13 @@ def test_normalize_ram_tier_defaults_to_8gb():
 
 def test_profiles_cover_all_tiers():
     assert set(OLLAMA_PROFILES) == {"8gb", "16gb", "32gb", "64gb"}
-    assert profile_for_tier("8gb").model == "tinyllama"
+    assert profile_for_tier("8gb").model == "qwen3:1.7b"
 
 
 def test_tiers_and_gpu_payloads():
     tiers = tiers_payload()
     assert tiers[0]["ram_tier"] == "8gb"
-    assert any(t["model"] == "tinyllama" for t in tiers)
+    assert any(t["model"] == "qwen3:4b" for t in tiers)
     gpu = gpu_options_payload()
     assert {g["id"] for g in gpu} == {"cpu", "auto", "gpu"}
 
@@ -47,7 +47,7 @@ def test_tiers_and_gpu_payloads():
 def test_resolve_model_and_gpu(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_OLLAMA_RAM_TIER", "16gb")
     monkeypatch.delenv("OFDD_OLLAMA_MODEL", raising=False)
-    assert ollama_client.resolve_model() == "llama3.2:1b"
+    assert ollama_client.resolve_model() == "qwen3:4b"
     assert ollama_client.resolve_model(model="custom:7b") == "custom:7b"
     assert ollama_client.resolve_num_gpu(gpu_mode="gpu") == 99
     assert ollama_client.resolve_num_gpu(gpu_mode="auto") == -1
@@ -102,18 +102,68 @@ def test_health_down():
 
 def test_chat_success():
     client = _mock_httpx_client(
-        post_json={"message": {"content": "Check SAT trend in Rule Lab."}, "eval_count": 3},
+        post_json={
+            "message": {"content": "Check SAT trend in Rule Lab."},
+            "eval_count": 120,
+            "total_duration": 45_000_000_000,
+            "eval_duration": 40_000_000_000,
+        },
     )
     with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=client):
-        result = ollama_client.chat("hello", ram_tier="8gb", gpu_mode="cpu")
+        result = ollama_client.chat(
+            "hello",
+            ram_tier="8gb",
+            gpu_mode="cpu",
+            history=[{"role": "user", "content": "prior"}],
+        )
     assert result["ok"] is True
     assert result["mode"] == "ollama"
-    assert result["model"] == "tinyllama"
+    assert result["model"] == "qwen3:1.7b"
     assert result["num_gpu"] == 0
-    assert "Rule Lab" in result["reply"]
+    assert result["duration_ms"] == 45000
+    assert result["eval_count"] == 120
+    assert result["tokens_per_sec"] == 3.0
     payload = client.post.call_args.kwargs["json"]
-    assert payload["model"] == "tinyllama"
+    assert payload["model"] == "qwen3:1.7b"
     assert payload["options"]["num_gpu"] == 0
+    assert len(payload["messages"]) >= 3
+    assert payload["messages"][-1]["content"] == "hello"
+    # think omitted by default
+    assert "think" not in payload
+
+
+def test_normalize_think():
+    assert ollama_client.normalize_think(None) is None
+    assert ollama_client.normalize_think(True) is True
+    assert ollama_client.normalize_think(False) is False
+    assert ollama_client.normalize_think("high") == "high"
+    assert ollama_client.normalize_think("MEDIUM") == "medium"
+    assert ollama_client.normalize_think("true") is True
+    assert ollama_client.normalize_think("off") is False
+    assert ollama_client.normalize_think("garbage") is None
+
+
+def test_chat_with_thinking():
+    client = _mock_httpx_client(
+        post_json={
+            "message": {"content": "3 r's.", "thinking": "s-t-r-a-w-b-e-r-r-y has 3 r"},
+            "eval_count": 9,
+        },
+    )
+    with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=client):
+        result = ollama_client.chat("count r", model="qwen3", think=True)
+    assert result["thinking"] == "s-t-r-a-w-b-e-r-r-y has 3 r"
+    assert result["think"] is True
+    payload = client.post.call_args.kwargs["json"]
+    assert payload["think"] is True
+
+
+def test_chat_think_level_for_gpt_oss():
+    client = _mock_httpx_client(post_json={"message": {"content": "ok"}})
+    with patch("openfdd_bridge.ollama_client.httpx.Client", return_value=client):
+        ollama_client.chat("hi", model="gpt-oss", think="high")
+    payload = client.post.call_args.kwargs["json"]
+    assert payload["think"] == "high"
 
 
 def test_model_installed():
@@ -179,3 +229,24 @@ def test_agent_context_includes_ollama_tiers():
     body = r.json()
     assert body["ollama_tiers"]
     assert body["ollama"]["ok"] is False
+    assert any(m["model"] == "qwen3" for m in body["ollama_thinking_models"])
+    assert "mcp" in body
+
+
+def test_agent_context_mcp_when_enabled(monkeypatch: pytest.MonkeyPatch):
+    from fastapi.testclient import TestClient
+
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    monkeypatch.setenv("OFDD_MCP_ENABLED", "1")
+    monkeypatch.setenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")
+    client = TestClient(create_app())
+    with patch(
+        "openfdd_bridge.routes.agent_routes.ollama_client.health",
+        return_value={"ok": False, "error": "down"},
+    ):
+        r = client.get("/openfdd-agent/context")
+    assert r.status_code == 200
+    mcp = r.json()["mcp"]
+    assert mcp["mcp_enabled"] is True
+    assert "8090" in mcp["mcp_search_docs"]

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import logging
 import sys
 import time
 from datetime import datetime, timezone
@@ -24,6 +25,8 @@ from bacpypes3.app import Application
 from bacnet_toolshed.config import group_by_device, load_enabled_points, validate_points
 from bacnet_toolshed.paths import polls_dir, ensure_layout
 from bacnet_toolshed.rpm import read_multiple_chunked
+
+_log = logging.getLogger(__name__)
 
 POLL_CSV_FIELDS = [
     "timestamp_utc",
@@ -98,12 +101,16 @@ async def poll_once(
     total = 0
     for r in results:
         if isinstance(r, Exception):
+            _log.warning("poll device error: %s", r)
             print(f"poll error: {r}", file=sys.stderr)
         elif isinstance(r, int):
             total += r
 
     if rows and not dry_run:
         _append_poll_rows(output_csv, rows)
+        _log.info("BACnet scrape wrote %d samples → %s", len(rows), output_csv)
+    elif dry_run:
+        _log.info("BACnet scrape dry-run %d samples (not written)", len(rows))
     return total
 
 
@@ -136,6 +143,15 @@ async def run_driver(
     app = Application.from_args(bacnet_args)
     points_by_device = group_by_device(points)
     ensure_layout()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    _log.info(
+        "BACnet poll driver start: %d points, %d devices, interval=%.0fs output=%s dry_run=%s",
+        len(points),
+        len(points_by_device),
+        interval_s,
+        output_csv,
+        dry_run,
+    )
     print(
         f"BACnet poll driver: {len(points)} points, {len(points_by_device)} devices, "
         f"interval={interval_s}s output={output_csv} dry_run={dry_run}",
@@ -147,6 +163,7 @@ async def run_driver(
             t0 = time.perf_counter()
             n = await poll_once(app, points_by_device, output_csv=output_csv, dry_run=dry_run)
             elapsed = time.perf_counter() - t0
+            _log.info("BACnet poll cycle: %d samples in %.1fs", n, elapsed)
             print(f"polled {n} samples in {elapsed:.1f}s → {output_csv}", file=sys.stderr)
             if once:
                 break
@@ -181,10 +198,6 @@ def main() -> None:
         bacnet_extra.append("--route-aware")
     if args.network is not None:
         bacnet_extra.extend(["--network", str(args.network)])
-    if args.router_ip is not None:
-        bacnet_extra.extend(["--router-ip", args.router_ip])
-    if args.mstp_net is not None:
-        bacnet_extra.extend(["--mstp-net", str(args.mstp_net)])
 
     bacnet_parser = SimpleArgumentParser()
     bacnet_args = bacnet_parser.parse_args(bacnet_extra + bacnet_argv)
