@@ -23,7 +23,7 @@ echo "=== 1/4 Commission GL36 / economizer poll points.csv ==="
 
 echo ""
 echo "=== 2/4 Deploy Open-FDD edge stack ==="
-"${DIR}/deploy.sh" --limit "$LIMIT" "${EXTRA[@]}"
+"${DIR}/deploy.sh" all --limit "$LIMIT" "${EXTRA[@]}"
 
 echo ""
 echo "=== 3/4 Ollama + MCP sidecar ==="
@@ -40,9 +40,9 @@ fi
 echo ""
 echo "=== 4/4 Enable BACnet poll driver (60s) ==="
 if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null; then
-  sshpass -e "${DIR}/deploy.sh" --limit "$LIMIT" -e enable_bacnet_poll_driver=true "${EXTRA[@]}"
+  sshpass -e "${DIR}/deploy.sh" drivers --limit "$LIMIT" -e enable_bacnet_poll_driver=true "${EXTRA[@]}"
 else
-  "${DIR}/deploy.sh" --limit "$LIMIT" -e enable_bacnet_poll_driver=true "${EXTRA[@]}"
+  "${DIR}/deploy.sh" drivers --limit "$LIMIT" -e enable_bacnet_poll_driver=true "${EXTRA[@]}"
 fi
 
 HOST="$(ansible-inventory -i inventory.yml --host "$LIMIT" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_host",""))' || true)"

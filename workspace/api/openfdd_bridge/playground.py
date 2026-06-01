@@ -300,6 +300,7 @@ def run_dataframe_script(
         result_df = g.get("df", df)
     preview = result_df.head(50).to_dict(orient="records")
     flag_cols = [c for c in result_df.columns if str(c).endswith("_flag")]
+    metrics = out.get("metrics") if isinstance(out.get("metrics"), dict) else {}
     return {
         "ok": True,
         "stdout": stdout.getvalue(),
@@ -309,6 +310,7 @@ def run_dataframe_script(
         "flag_columns": flag_cols,
         "preview": preview,
         "events": out.get("events") or [],
+        "metrics": metrics,
     }
 
 

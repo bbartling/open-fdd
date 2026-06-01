@@ -40,7 +40,13 @@ def _loop() -> None:
                     _last_mtime = mtime
                     result = ingest_poll_samples_to_feather()
                     if result.get("ok"):
-                        _log.info("feather ingest: %s", result.get("sites"))
+                        _log.info(
+                            "feather ingest after BACnet scrape: sites=%s rows_long=%s",
+                            result.get("sites"),
+                            result.get("rows_long"),
+                        )
+                    else:
+                        _log.warning("feather ingest skipped: %s", result.get("reason"))
         except Exception as exc:
             _log.warning("poll ingest worker failed: %s", exc)
         time.sleep(max(10.0, sleep_s))

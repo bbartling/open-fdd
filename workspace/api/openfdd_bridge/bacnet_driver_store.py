@@ -145,12 +145,13 @@ def sync_discovery(
     device_address: str = "",
     objects: list[dict[str, Any]],
     replace: bool = False,
+    merge_existing: bool = False,
 ) -> dict[str, Any]:
     """Merge point-discovery objects into points_discovered.csv."""
     if not objects:
         return {"ok": True, "rows_added": 0, "total": 0}
     inst = str(device_instance)
-    if not replace and device_in_driver(device_instance):
+    if not replace and not merge_existing and device_in_driver(device_instance):
         raise ValueError(
             f"device {device_instance} is already in the driver — remove it from the tree or use Refresh points"
         )
@@ -185,6 +186,86 @@ def sync_discovery(
                 added += 1
         _save_csv(_discovered_path(), rows)
     return {"ok": True, "rows_added": added, "total": len(rows)}
+
+
+def merge_commission_rows(
+    rows: list[dict[str, Any]],
+    *,
+    enable_poll: bool = True,
+) -> dict[str, Any]:
+    """Upsert full commission rows into points_discovered.csv and optional points.csv."""
+    if not rows:
+        return {"ok": True, "discovered_added": 0, "poll_enabled": 0}
+    defaults = _commission_defaults()
+    discovered_added = 0
+    poll_enabled = 0
+    with _DRIVER_LOCK:
+        discovered = _load_csv(_discovered_path())
+        by_pid = {r.get("point_id", ""): r for r in discovered if r.get("point_id")}
+        for raw in rows:
+            row = normalize_row(dict(raw), defaults)
+            pid = str(row.get("point_id") or "").strip()
+            if not pid:
+                continue
+            if pid not in by_pid:
+                discovered.append(row)
+                by_pid[pid] = row
+                discovered_added += 1
+            else:
+                existing = by_pid[pid]
+                for key in (
+                    "object_name",
+                    "brick_class",
+                    "brick_tag",
+                    "system_id",
+                    "units",
+                    "device_address",
+                ):
+                    if row.get(key):
+                        existing[key] = row[key]
+        _save_csv(_discovered_path(), discovered)
+
+        if enable_poll:
+            points = _load_csv(_points_path())
+            poll_by = {r.get("point_id", ""): r for r in points if r.get("point_id")}
+            for raw in rows:
+                if str(raw.get("enabled") or "0").strip().lower() not in {"1", "true", "yes"}:
+                    continue
+                row = normalize_row(dict(raw), defaults)
+                pid = str(row.get("point_id") or "").strip()
+                if not pid:
+                    continue
+                row["enabled"] = "1"
+                try:
+                    row["poll_interval_s"] = str(
+                        _ensure_poll_interval(int(str(row.get("poll_interval_s") or "60")))
+                    )
+                except ValueError:
+                    row["poll_interval_s"] = "60"
+                poll_by[pid] = row
+                poll_enabled += 1
+            _save_csv(_points_path(), list(poll_by.values()))
+
+    model_sync = _sync_poll_model(poll_enabled > 0)
+    poll_trigger: dict[str, Any] | None = None
+    if poll_enabled > 0:
+        try:
+            from .commission_client import commission_poll_once
+
+            code, payload = commission_poll_once()
+            poll_trigger = {
+                "status_code": code,
+                **(payload if isinstance(payload, dict) else {"detail": payload}),
+            }
+        except Exception as exc:
+            poll_trigger = {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "discovered_added": discovered_added,
+        "poll_enabled": poll_enabled,
+        "model_sync": model_sync,
+        "poll_trigger": poll_trigger,
+    }
 
 
 def driver_tree() -> dict[str, Any]:

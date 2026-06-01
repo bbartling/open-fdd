@@ -22,6 +22,7 @@ from ..bacnet_driver_store import (
     delete_device,
     delete_point,
     driver_tree,
+    merge_commission_rows,
     remap_device,
     set_device_poll,
     set_point_poll,
@@ -68,6 +69,12 @@ class SyncDiscoveryBody(BaseModel):
     device_address: str = ""
     objects: list[dict[str, Any]] = Field(default_factory=list)
     replace: bool = False
+    merge_existing: bool = False
+
+
+class MergeCommissionRowsBody(BaseModel):
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    enable_poll: bool = True
 
 
 class PointPollBody(BaseModel):
@@ -220,7 +227,17 @@ def bacnet_sync_discovery(body: SyncDiscoveryBody) -> dict:
             device_address=body.device_address,
             objects=body.objects,
             replace=body.replace,
+            merge_existing=body.merge_existing,
         )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/bacnet/driver/merge-rows", dependencies=[_INTEGRATOR])
+def bacnet_merge_commission_rows(body: MergeCommissionRowsBody) -> dict:
+    """Upsert commission CSV rows into discovered + poll lists (integrator)."""
+    try:
+        return merge_commission_rows(body.rows, enable_poll=body.enable_poll)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -29,12 +29,27 @@ def _ws_interval_sec() -> float:
 
 @router.get("/health")
 def health() -> dict:
+    poll_path = bacnet_poll_csv()
+    poll_bytes = poll_path.stat().st_size if poll_path.is_file() else 0
     payload: dict = {
         "ok": True,
         "service": "openfdd-bridge",
         "auth_required": auth.auth_enabled(),
-        "bacnet_poll_csv_exists": bacnet_poll_csv().is_file(),
+        "bacnet_poll_csv_exists": poll_path.is_file(),
+        "bacnet_poll_csv_bytes": poll_bytes,
     }
+    try:
+        from ..commission_client import commission_poll_status
+
+        code, poll_payload = commission_poll_status()
+        if code == 200 and isinstance(poll_payload, dict):
+            payload["bacnet_poll"] = {
+                "ok": bool(poll_payload.get("ok")),
+                "samples": poll_payload.get("samples"),
+                "at": poll_payload.get("at"),
+            }
+    except Exception:
+        pass
     if os.environ.get("OFDD_HEALTH_VERBOSE", "").strip().lower() in {"1", "true", "yes"}:
         payload["repo_root"] = str(repo_root())
         payload["workspace_dir"] = str(workspace_dir())

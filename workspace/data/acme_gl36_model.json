@@ -1320,6 +1320,28 @@
       "brick_tag": "OAD-CMD"
     },
     {
+      "id": "1100-analog-value-3",
+      "name": "Duct Static Pressure Setpoint BAS",
+      "brick_type": "Supply_Air_Static_Pressure_Setpoint",
+      "equipment_id": "acme-vm-bbartling-rtu-01",
+      "bacnet_object": "analog-value,3",
+      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-3",
+      "poll_interval_s": 60,
+      "units": "inches-of-water",
+      "brick_tag": "SAP-SP"
+    },
+    {
+      "id": "1100-analog-value-4",
+      "name": "Discharge Air Cooling Setpoint BAS",
+      "brick_type": "Discharge_Air_Temperature_Setpoint",
+      "equipment_id": "acme-vm-bbartling-rtu-01",
+      "bacnet_object": "analog-value,4",
+      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-4",
+      "poll_interval_s": 60,
+      "units": "degrees-fahrenheit",
+      "brick_tag": "DAT-SP"
+    },
+    {
       "id": "1100-analog-value-5",
       "name": "Cooling Capacity Status",
       "brick_type": "Cooling_Command",
@@ -1329,6 +1351,28 @@
       "poll_interval_s": 60,
       "units": "percent",
       "brick_tag": "CLG-STAT"
+    },
+    {
+      "id": "1100-analog-value-12",
+      "name": "Discharge Air Temperature Setpoint Active",
+      "brick_type": "Discharge_Air_Temperature_Setpoint",
+      "equipment_id": "acme-vm-bbartling-rtu-01",
+      "bacnet_object": "analog-value,12",
+      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-12",
+      "poll_interval_s": 60,
+      "units": "degrees-fahrenheit",
+      "brick_tag": "DAT-SP"
+    },
+    {
+      "id": "1100-analog-value-15",
+      "name": "Duct Static Pressure Setpoint Active",
+      "brick_type": "Supply_Air_Static_Pressure_Setpoint",
+      "equipment_id": "acme-vm-bbartling-rtu-01",
+      "bacnet_object": "analog-value,15",
+      "series_id": "acme#vm-bbartling#rtu-01#1100-analog-value-15",
+      "poll_interval_s": 60,
+      "units": "inches-of-water",
+      "brick_tag": "SAP-SP"
     },
     {
       "id": "1100-analog-value-8",

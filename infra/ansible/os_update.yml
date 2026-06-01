@@ -1,0 +1,47 @@
+---
+# OS package updates on edge hosts (safe apt upgrade; optional reboot).
+#
+#   ./deploy.sh os --limit acme_vm_bbartling
+#   ./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
+
+- name: Linux package updates (Open-FDD edge hosts)
+  hosts: pi_bcn
+  gather_facts: true
+
+  vars:
+    os_autoremove: true
+    os_upgrade_reboot: false
+    os_reboot_timeout: 600
+
+  tasks:
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+      become: true
+      tags: [os]
+
+    - name: Upgrade installed packages (safe)
+      ansible.builtin.apt:
+        upgrade: safe
+        autoremove: "{{ os_autoremove | bool }}"
+      become: true
+      register: os_apt_upgrade
+      tags: [os]
+
+    - name: Report packages changed by upgrade
+      ansible.builtin.debug:
+        msg: >-
+          apt upgrade changed={{ os_apt_upgrade.changed | default(false) }}.
+          Reboot recommended when kernel or libc updates were applied.
+      tags: [os]
+
+    - name: Reboot host when requested and upgrades ran
+      ansible.builtin.reboot:
+        msg: "Open-FDD deploy: reboot after apt upgrade"
+        reboot_timeout: "{{ os_reboot_timeout }}"
+      become: true
+      when:
+        - os_upgrade_reboot | default(false) | bool
+        - os_apt_upgrade.changed | default(false)
+      tags: [os]

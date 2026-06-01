@@ -1144,6 +1144,25 @@ textarea {
   margin-top: 12px;
 }
 
+.plot-series-picker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+
+.plot-series-picker-head .panel-title {
+  margin: 0;
+}
+
+.plot-series-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .plot-series-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1255,6 +1274,11 @@ textarea {
   align-items: start;
 }
 
+.dm-explorer.dm-explorer-single {
+  display: block;
+  grid-template-columns: unset;
+}
+
 .dm-explorer-rules {
   position: sticky;
   top: 12px;
@@ -1329,8 +1353,13 @@ textarea {
   font-size: 0.9rem;
 }
 
+.dm-tree-panel .dm-tree {
+  max-height: min(70vh, 720px);
+  overflow: auto;
+}
+
 .dm-eq-block {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -1344,8 +1373,75 @@ textarea {
   min-height: auto;
 }
 
+.dm-tree-points {
+  margin: 0;
+  padding: 4px 0 8px;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
 .dm-point-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 12px 8px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.dm-point-row:last-child {
+  border-bottom: none;
+}
+
+.dm-point-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.dm-point-meta {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 0.88rem;
+}
+
+.dm-point-addr {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+
+.dm-point-sep {
+  color: var(--muted);
+  user-select: none;
+}
+
+.dm-point-brick {
+  color: var(--muted);
+}
+
+.dm-eq-count {
+  font-size: 0.85rem;
+}
+
+.plot-chart-panel {
+  position: relative;
+}
+
+.plot-chart-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.rule-lab-test-scope {
+  margin-top: 12px;
 }
 
 .dm-context-menu {

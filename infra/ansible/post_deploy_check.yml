@@ -8,4 +8,5 @@
 
   tasks:
     - name: Run post-deploy insurance checks
+      tags: [verify, check]
       ansible.builtin.include_tasks: tasks/post_deploy_check.yml

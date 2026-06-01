@@ -106,9 +106,19 @@
     - post_check_lan | default(true) | bool
     - caddy_enabled | default(true) | bool
 
+- name: Extract dashboard JS bundle path from HTML
+  ansible.builtin.set_fact:
+    lan_dashboard_js_path: "{{ (lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"', '\\1') | first) | default('') }}"
+  when:
+    - post_check_lan | default(true) | bool
+    - caddy_enabled | default(true) | bool
+    - lan_dashboard is defined
+    - lan_dashboard.content is defined
+    - lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"') is not none
+
 - name: Dashboard JS bundle reachable via LAN
   ansible.builtin.uri:
-    url: "{{ ('https://' + ansible_host if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host) + (lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"', '\\1') | default('')) }}"
+    url: "{{ ('https://' + ansible_host if (caddy_mode | default('http') == 'tls') else 'http://' + ansible_host) + lan_dashboard_js_path }}"
     validate_certs: false
     status_code: 200
   register: lan_dashboard_js
@@ -117,9 +127,8 @@
   when:
     - post_check_lan | default(true) | bool
     - caddy_enabled | default(true) | bool
-    - lan_dashboard is defined
-    - lan_dashboard.content is defined
-    - lan_dashboard.content | regex_search('src=\"(/assets/[^\"]+\\.js)\"') is not none
+    - lan_dashboard_js_path is defined
+    - lan_dashboard_js_path | length > 0
 
 - name: Stat operator auth env on control machine
   ansible.builtin.stat:

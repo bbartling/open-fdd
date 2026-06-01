@@ -31,7 +31,7 @@ def _read(name: str) -> str:
 ACME_RULES = [
     {
         "id": "acme-zn-t-flatline-1h",
-        "name": "Acme zone temp flatline 1h",
+        "name": "Zone temp flatline 1h",
         "fault_code": "VAV-03",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
@@ -39,7 +39,7 @@ ACME_RULES = [
     },
     {
         "id": "acme-zn-t-oob-occupied",
-        "name": "Acme zone temp out of bounds",
+        "name": "Zone temp out of bounds",
         "fault_code": "VAV-03",
         "code_file": "oob_rolling.py",
         "config": {
@@ -52,7 +52,7 @@ ACME_RULES = [
     },
     {
         "id": "acme-da-t-flatline-1h",
-        "name": "Acme discharge temp flatline 1h",
+        "name": "Discharge temp flatline 1h",
         "fault_code": "VAV-04",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
@@ -64,7 +64,7 @@ ACME_RULES = [
     },
     {
         "id": "acme-sat-flatline-1h",
-        "name": "Acme AHU SAT flatline 1h (GL36 plant request input)",
+        "name": "AHU SAT flatline 1h",
         "fault_code": "AHU-03",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
@@ -76,7 +76,7 @@ ACME_RULES = [
     },
     {
         "id": "acme-mat-oob-economizer",
-        "name": "Acme mixed air temp OOB (economizer diagnostic)",
+        "name": "Mixed air temp OOB",
         "fault_code": "AHU-05",
         "code_file": "oob_rolling.py",
         "config": {
@@ -93,7 +93,7 @@ ACME_RULES = [
     },
     {
         "id": "acme-sap-flatline-1h",
-        "name": "Acme duct static flatline 1h (GL36 duct T&R input)",
+        "name": "Duct static flatline 1h",
         "fault_code": "AHU-06",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.02, "temp_unit": "imperial", "rolling_avg_minutes": 1},
@@ -103,6 +103,69 @@ ACME_RULES = [
             "brick_types": ["Supply_Air_Static_Pressure_Sensor"],
         },
     },
+    {
+        "id": "acme-ahu-afterhours-runtime",
+        "name": "AHU fan after hours with satisfied zones",
+        "fault_code": "BLD-03",
+        "code_file": "acme_ahu_afterhours_runtime.py",
+        "config": {
+            "occupied_start_hour": 8,
+            "occupied_end_hour": 17,
+            "tz_offset_hours": -6,
+            "fan_on_threshold": 5.0,
+            "zone_satisfied_low": 68.0,
+            "zone_satisfied_high": 76.0,
+            "min_fault_samples": 10,
+            "fan_speed_col": "supply-fan-speed-command",
+            "fan_binary_col": "supply-fan-start-stop-command",
+            "zone_avg_cols": [
+                "averagespacetemperature-first-floor-area-2",
+                "averagespacetemperature-second-floor-area-3",
+            ],
+            "column_map": {
+                "Supply_Fan_Speed_Command": "supply-fan-speed-command",
+                "Supply_Fan_Start_Stop_Command": "supply-fan-start-stop-command",
+            },
+            "temp_unit": "imperial",
+            "rolling_avg_minutes": 1,
+        },
+        "bindings": {
+            "point_ids": ["1100-analog-output-1"],
+            "equipment_ids": ["acme-vm-bbartling-rtu-01"],
+            "brick_types": [],
+        },
+        "applies_to": {"site_ids": ["acme"]},
+    },
+    {
+        "id": "acme-ahu-run-hours",
+        "name": "RTU fan and system run hours",
+        "fault_code": "",
+        "mode": "script",
+        "code_file": "acme_ahu_run_hours.py",
+        "config": {
+            "site_id": "acme",
+            "equipment_id": "acme-vm-bbartling-rtu-01",
+            "occupied_start_hour": 8,
+            "occupied_end_hour": 17,
+            "tz_offset_hours": -6,
+            "fan_on_threshold": 5.0,
+            "fan_speed_col": "supply-fan-speed-command",
+            "fan_binary_col": "supply-fan-start-stop-command",
+            "compressor_cols": [
+                "compressor-1-command",
+                "compressor-2-command",
+                "compressor-3-command",
+                "compressor-4-command",
+            ],
+            "max_gap_hours": 2.0,
+        },
+        "bindings": {
+            "point_ids": ["1100-analog-output-1"],
+            "equipment_ids": ["acme-vm-bbartling-rtu-01"],
+            "brick_types": [],
+        },
+        "applies_to": {"site_ids": ["acme"]},
+    },
 ]
 
 
@@ -110,20 +173,21 @@ def save_rules() -> None:
     store = RuleStore()
     for spec in ACME_RULES:
         code = _read(spec["code_file"])
-        lint = lint_python(code)
+        lint = lint_python(code, require_evaluate=(spec.get("mode") or "rule") != "script")
         if not lint["ok"]:
             raise SystemExit(f"Lint failed {spec['id']}: {lint['issues']}")
         store.upsert(
             {
                 "id": spec["id"],
                 "name": spec["name"],
-                "mode": "rule",
+                "mode": spec.get("mode") or "rule",
                 "code": code,
                 "fault_code": spec["fault_code"],
                 "config": spec["config"],
                 "bindings": spec["bindings"],
                 "severity": "warning",
                 "enabled": True,
+                **({"applies_to": spec["applies_to"]} if spec.get("applies_to") else {}),
             },
             saved_by="setup_acme_fdd",
         )

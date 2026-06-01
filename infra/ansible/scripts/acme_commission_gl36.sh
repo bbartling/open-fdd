@@ -59,6 +59,8 @@ GL36_BRICK = {
     "Outside_Air_Humidity_Sensor",
     "Return_Air_Humidity_Sensor",
     "Supply_Air_Static_Pressure_Sensor",
+    "Supply_Air_Static_Pressure_Setpoint",
+    "Discharge_Air_Temperature_Setpoint",
     "Supply_Air_Flow_Sensor",
     "Supply_Air_Flow_Setpoint",
     "Damper_Position_Sensor",
@@ -73,7 +75,8 @@ GL36_BRICK = {
 }
 
 GL36_TAGS = {
-    "ZN-T", "ZN-SP", "DA-T", "SAT", "RAT", "OAT", "MAT", "OAH", "RAH", "SAP",
+    "ZN-T", "ZN-SP", "DA-T", "SAT", "RAT", "OAT", "MAT", "OAH", "RAH", "SAP", "SAP-SP",
+    "DAT-SP", "SAT-SP",
     "SA-F", "SAFLOW-SP", "DPR-O", "DPR-CMD", "DPR-STAT", "OAD-CMD", "CLG-O",
     "HTG-O", "CLG-STAT", "SF-CMD", "RF-CMD", "EFFCLG-SP", "EFFHTG-SP",
     "HWS-Plant-Requests",
@@ -92,6 +95,16 @@ def gl36_row(r: dict) -> bool:
     name = (r.get("object_name") or "").lower()
     sid = (r.get("system_id") or "").lower()
     if bc in GL36_BRICK or tag in GL36_TAGS:
+        return True
+    if sid == "rtu-01" and any(
+        h in name
+        for h in (
+            "duct static pressure setpoint",
+            "discharge air temperature setpoint",
+            "discharge air cooling setpoint",
+            "discharge air heating setpoint",
+        )
+    ):
         return True
     if sid in ("rtu-01", "hw-plant", "tracer-sc") and any(h in name for h in NAME_HINTS):
         return True

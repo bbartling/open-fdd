@@ -3,50 +3,1821 @@
 @prefix ofdd: <http://openfdd.local/ontology#> .
 @prefix : <http://openfdd.local/site#> .
 
-:site_s1 a brick:Site ;
-  rdfs:label "BensOffice" .
+:site_acme a brick:Site ;
+  rdfs:label "Acme Building" .
 
-:eq_bench_1 a brick:Laboratory_Equipment ;
-  rdfs:label "HVAC sensor test bench" ;
-  brick:isPartOf :site_s1 .
+:eq_acme_vm_bbartling_trane_vav_12035 a brick:Equipment ;
+  rdfs:label "Trane Vav 12035" ;
+  brick:isPartOf :site_acme .
 
-:eq_duct_1 a brick:Air_Duct ;
-  rdfs:label "Supply duct section" ;
-  brick:isPartOf :site_s1 .
+:eq_acme_vm_bbartling_trane_vav_12033 a brick:Equipment ;
+  rdfs:label "Trane Vav 12033" ;
+  brick:isPartOf :site_acme .
 
-:eq_bacnet_5007 a brick:BACnet_Device ;
-  rdfs:label "BACnet device 5007" ;
-  brick:isPartOf :site_s1 .
+:eq_acme_vm_bbartling_trane_vav_12032 a brick:Equipment ;
+  rdfs:label "Trane Vav 12032" ;
+  brick:isPartOf :site_acme .
 
-:pt_p1 a brick:Supply_Air_Temperature_Sensor ;
-  rdfs:label "SAT" ;
-  brick:isPointOf :eq_bench_1 ;
-  ofdd:mapsToRuleInput "SAT" .
+:eq_acme_vm_bbartling_trane_vav_12028 a brick:Equipment ;
+  rdfs:label "Trane Vav 12028" ;
+  brick:isPartOf :site_acme .
 
-:pt__5007_analog_input_1168 a brick:Humidity_Sensor ;
-  rdfs:label "oa-h" ;
-  brick:isPointOf :eq_bench_1 ;
-  ofdd:mapsToRuleInput "oa-h" ;
-  ofdd:bacnetDeviceId "5007" ;
-  ofdd:bacnetObjectIdentifier "analog-input,1168" .
+:eq_acme_vm_bbartling_trane_vav_12026 a brick:Equipment ;
+  rdfs:label "Trane Vav 12026" ;
+  brick:isPartOf :site_acme .
 
-:pt__5007_analog_input_1173 a brick:Zone_Air_Temperature_Sensor ;
-  rdfs:label "oa-t" ;
-  brick:isPointOf :eq_bench_1 ;
-  ofdd:mapsToRuleInput "oa-t" ;
-  ofdd:bacnetDeviceId "5007" ;
-  ofdd:bacnetObjectIdentifier "analog-input,1173" .
+:eq_acme_vm_bbartling_trane_vav_12023 a brick:Equipment ;
+  rdfs:label "Trane Vav 12023" ;
+  brick:isPartOf :site_acme .
 
-:pt__5007_analog_input_1192 a brick:Discharge_Air_Temperature_Sensor ;
-  rdfs:label "duct-t" ;
-  brick:isPointOf :eq_duct_1 ;
-  ofdd:mapsToRuleInput "duct-t" ;
-  ofdd:bacnetDeviceId "5007" ;
-  ofdd:bacnetObjectIdentifier "analog-input,1192" .
+:eq_acme_vm_bbartling_trane_vav_11007 a brick:Equipment ;
+  rdfs:label "Trane Vav 11007" ;
+  brick:isPartOf :site_acme .
 
-:pt__5007_analog_input_10014 a brick:Zone_Air_Temperature_Sensor ;
-  rdfs:label "stat_zn-t" ;
-  brick:isPointOf :eq_bench_1 ;
-  ofdd:mapsToRuleInput "stat_zn-t" ;
-  ofdd:bacnetDeviceId "5007" ;
-  ofdd:bacnetObjectIdentifier "analog-input,10014" .
+:eq_acme_vm_bbartling_trane_vav_11002 a brick:Equipment ;
+  rdfs:label "Trane Vav 11002" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_tracer_sc a brick:Equipment ;
+  rdfs:label "Tracer Sc" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_rtu_01 a brick:Equipment ;
+  rdfs:label "Rtu 01" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_hw_plant a brick:Equipment ;
+  rdfs:label "Hw Plant" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_39 a brick:Equipment ;
+  rdfs:label "Jci Vav 39" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_38 a brick:Equipment ;
+  rdfs:label "Jci Vav 38" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_37 a brick:Equipment ;
+  rdfs:label "Jci Vav 37" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_36 a brick:Equipment ;
+  rdfs:label "Jci Vav 36" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_34 a brick:Equipment ;
+  rdfs:label "Jci Vav 34" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_31 a brick:Equipment ;
+  rdfs:label "Jci Vav 31" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_30 a brick:Equipment ;
+  rdfs:label "Jci Vav 30" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_29 a brick:Equipment ;
+  rdfs:label "Jci Vav 29" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_27 a brick:Equipment ;
+  rdfs:label "Jci Vav 27" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_25 a brick:Equipment ;
+  rdfs:label "Jci Vav 25" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_24 a brick:Equipment ;
+  rdfs:label "Jci Vav 24" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_21 a brick:Equipment ;
+  rdfs:label "Jci Vav 21" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_20 a brick:Equipment ;
+  rdfs:label "Jci Vav 20" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_19 a brick:Equipment ;
+  rdfs:label "Jci Vav 19" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_16 a brick:Equipment ;
+  rdfs:label "Jci Vav 16" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_15 a brick:Equipment ;
+  rdfs:label "Jci Vav 15" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_14 a brick:Equipment ;
+  rdfs:label "Jci Vav 14" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_13 a brick:Equipment ;
+  rdfs:label "Jci Vav 13" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_11 a brick:Equipment ;
+  rdfs:label "Jci Vav 11" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_10 a brick:Equipment ;
+  rdfs:label "Jci Vav 10" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_9 a brick:Equipment ;
+  rdfs:label "Jci Vav 9" ;
+  brick:isPartOf :site_acme .
+
+:eq_acme_vm_bbartling_jci_vav_8 a brick:Equipment ;
+  rdfs:label "Jci Vav 8" ;
+  brick:isPartOf :site_acme .
+
+:pt__12035_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12035_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12035_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12035_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12035_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12035_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12035_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12035_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12035_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12035_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12035 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__12033_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12033_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12033_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12033_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12033_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12033_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12033_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12033_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12033_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12033_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12033 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__12032_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12032_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12032_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12032_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12032_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12032_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12032_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12032_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12032_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12032_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12032 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__12028_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12028_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12028_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12028_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12028_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12028_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12028_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12028_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12028_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12028_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12028 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__12026_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12026_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12026_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12026_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12026_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12026_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12026_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12026_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12026_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12026_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12026 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__12023_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__12023_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__12023_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__12023_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__12023_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__12023_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__12023_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__12023_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__12023_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__12023_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_12023 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__11007_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__11007_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__11007_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__11007_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__11007_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__11007_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__11007_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__11007_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__11007_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__11007_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11007 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__11002_analog_input_1 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__11002_analog_input_2 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__11002_analog_input_4 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__11002_analog_input_6 a brick:Damper_Position_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Damper_Position_Sensor" .
+
+:pt__11002_analog_output_1 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__11002_analog_output_3 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__11002_analog_value_5 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__11002_analog_value_6 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__11002_analog_value_13 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__11002_analog_value_20 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_trane_vav_11002 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__10000_unknown_1 a brick:Outside_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Outside_Air_Temperature_Sensor" .
+
+:pt__10000_unknown_2 a brick:Outside_Air_Humidity_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Outside_Air_Humidity_Sensor" .
+
+:pt__10000_unknown_18 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__10000_unknown_21 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__10000_unknown_22 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__10000_unknown_30 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_tracer_sc ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__1100_unknown_1 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" .
+
+:pt__1100_unknown_2 a brick:Outside_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Outside_Air_Temperature_Sensor" .
+
+:pt__1100_unknown_3 a brick:Return_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Return_Air_Temperature_Sensor" .
+
+:pt__1100_unknown_4 a brick:Mixed_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Mixed_Air_Temperature_Sensor" .
+
+:pt__1100_unknown_5 a brick:Supply_Air_Static_Pressure_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Supply_Air_Static_Pressure_Sensor" .
+
+:pt__1100_unknown_8 a brick:Return_Air_Humidity_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Return_Air_Humidity_Sensor" .
+
+:pt__1100_analog_output_1 a brick:Supply_Fan_Speed_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Supply_Fan_Speed_Command" .
+
+:pt__1100_analog_output_2 a brick:Return_Fan_Speed_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Return_Fan_Speed_Command" .
+
+:pt__1100_analog_output_3 a brick:Outside_Air_Damper_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Outside_Air_Damper_Command" .
+
+:pt__1100_analog_value_3 a brick:Supply_Air_Static_Pressure_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Supply_Air_Static_Pressure_Setpoint" .
+
+:pt__1100_analog_value_4 a brick:Discharge_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Setpoint" .
+
+:pt__1100_analog_value_5 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__1100_analog_value_12 a brick:Discharge_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Setpoint" .
+
+:pt__1100_analog_value_15 a brick:Supply_Air_Static_Pressure_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Supply_Air_Static_Pressure_Setpoint" .
+
+:pt__1100_analog_value_8 a brick:Outside_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 ;
+  ofdd:mapsToRuleInput "Outside_Air_Temperature_Sensor" .
+
+:pt__1100_binary_output_1 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1100_binary_output_2 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1100_binary_output_3 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1100_binary_output_4 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1100_binary_output_5 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1100_binary_output_6 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_rtu_01 .
+
+:pt__1002_unknown_1 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant ;
+  ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" .
+
+:pt__1002_unknown_2 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_unknown_3 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant ;
+  ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" .
+
+:pt__1002_unknown_4 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_unknown_5 a brick:Supply_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant ;
+  ofdd:mapsToRuleInput "Supply_Air_Temperature_Sensor" .
+
+:pt__1002_unknown_6 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_unknown_8 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_unknown_10 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_unknown_11 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_analog_output_1 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_analog_output_2 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_analog_output_3 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__1002_analog_value_6 a brick:Point ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_hw_plant .
+
+:pt__39_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__39_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__39_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__39_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__39_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__39_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__39_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__39_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__39_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__39_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_39 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__38_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__38_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__38_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__38_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__38_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__38_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__38_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__38_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__38_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__38_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_38 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__37_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__37_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__37_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__37_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__37_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__37_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__37_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__37_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__37_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__37_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_37 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__36_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__36_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__36_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__36_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__36_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__36_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__36_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__36_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__36_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__36_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_36 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__34_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__34_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__34_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__34_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__34_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__34_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__34_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__34_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__34_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__34_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_34 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__31_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__31_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__31_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__31_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__31_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__31_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__31_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__31_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__31_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__31_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_31 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__30_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__30_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__30_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__30_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__30_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__30_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__30_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__30_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__30_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__30_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_30 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__29_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__29_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__29_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__29_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__29_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__29_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__29_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__29_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__29_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__29_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_29 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__27_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__27_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__27_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__27_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__27_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__27_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__27_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__27_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__27_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__27_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_27 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__25_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__25_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__25_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__25_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__25_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__25_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__25_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__25_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__25_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__25_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_25 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__24_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__24_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__24_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__24_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__24_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__24_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__24_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__24_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__24_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__24_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_24 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__21_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__21_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__21_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__21_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__21_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__21_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__21_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__21_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__21_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__21_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_21 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__20_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__20_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__20_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__20_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__20_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__20_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__20_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__20_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__20_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__20_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_20 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__19_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__19_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__19_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__19_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__19_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__19_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__19_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__19_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__19_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__19_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_19 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__16_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__16_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__16_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__16_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__16_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__16_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__16_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__16_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__16_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__16_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_16 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__15_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__15_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__15_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__15_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__15_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__15_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__15_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__15_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__15_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__15_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_15 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__14_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__14_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__14_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__14_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__14_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__14_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__14_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__14_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__14_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__14_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_14 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__13_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__13_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__13_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__13_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__13_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__13_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__13_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__13_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__13_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__13_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_13 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__11_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__11_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__11_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__11_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__11_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__11_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__11_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__11_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__11_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__11_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_11 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__10_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__10_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__10_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__10_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__10_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__10_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__10_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__10_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__10_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__10_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_10 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__9_analog_input_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__9_analog_input_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__9_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__9_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__9_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__9_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__9_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__9_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__9_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__9_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_9 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .
+
+:pt__8_unknown_1019 a brick:Discharge_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Discharge_Air_Temperature_Sensor" .
+
+:pt__8_unknown_1106 a brick:Zone_Air_Temperature_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Sensor" .
+
+:pt__8_analog_output_2014 a brick:Heating_Valve_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Heating_Valve_Command" .
+
+:pt__8_analog_output_2131 a brick:Damper_Position_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Damper_Position_Command" .
+
+:pt__8_analog_value_1103 a brick:Zone_Air_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Zone_Air_Temperature_Setpoint" .
+
+:pt__8_analog_value_3384 a brick:Supply_Air_Flow_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Setpoint" .
+
+:pt__8_analog_value_3472 a brick:Cooling_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Cooling_Temperature_Setpoint" .
+
+:pt__8_analog_value_3473 a brick:Heating_Temperature_Setpoint ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Heating_Temperature_Setpoint" .
+
+:pt__8_analog_value_3515 a brick:Supply_Air_Flow_Sensor ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Supply_Air_Flow_Sensor" .
+
+:pt__8_analog_value_3615 a brick:Cooling_Command ;
+  rdfs:label "" ;
+  brick:isPointOf :eq_acme_vm_bbartling_jci_vav_8 ;
+  ofdd:mapsToRuleInput "Cooling_Command" .

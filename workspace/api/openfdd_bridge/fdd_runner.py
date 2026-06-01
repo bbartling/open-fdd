@@ -24,6 +24,7 @@ from .feather_store import FeatherStore
 from .fdd_results import save_results
 from .model_service import ModelService
 from .rule_store import RuleStore
+from .runtime_metrics import merge_run_metrics
 
 _log = logging.getLogger(__name__)
 
@@ -127,7 +128,9 @@ def _run_one(
     try:
         if rule.get("mode") == "script":
             df = frame.head(limit) if limit and len(frame) > limit else frame
-            result = playground.run_dataframe_script(code, df, cfg=rule.get("config") or {})
+            script_cfg = dict(rule.get("config") or {})
+            script_cfg.setdefault("site_id", site_id)
+            result = playground.run_dataframe_script(code, df, cfg=script_cfg)
             if not result.get("ok"):
                 return {**base, "status": "error", "rows": int(len(df)), "flagged": 0, "error": result.get("error", "")}
             flag_cols = result.get("flag_columns") or []
@@ -135,13 +138,20 @@ def _run_one(
             for row in result.get("preview", []):
                 if any(int(row.get(col) or 0) for col in flag_cols):
                     flagged += 1
-            return {
+            run = {
                 **base,
                 "status": "ok",
                 "rows": int(result.get("rows") or 0),
                 "flagged": flagged,
                 "flag_columns": flag_cols,
             }
+            metrics = result.get("metrics")
+            if isinstance(metrics, dict) and metrics:
+                run["metrics"] = metrics
+            stdout = str(result.get("stdout") or "").strip()
+            if stdout:
+                run["stdout"] = stdout[:2000]
+            return run
         use_chunked = chunk_hours > 0 and len(frame) > 500
         if use_chunked:
             row_count, flagged, _events = playground.sweep_dataframe_chunked(
@@ -211,6 +221,10 @@ def run_batch(
     if persist:
         doc = save_results(runs)
         summary["generated_at"] = doc["generated_at"]
+        try:
+            merge_run_metrics(runs)
+        except Exception as exc:  # noqa: BLE001 — metrics sidecar must not fail the batch
+            _log.warning("runtime metrics persist failed: %s", exc)
     return summary
 
 

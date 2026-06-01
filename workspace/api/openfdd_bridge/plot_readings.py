@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 from . import playground
 from .data_loader import load_site_frame
@@ -14,7 +18,13 @@ from .model_service import ModelService
 from .rule_source import read_source
 from .rule_store import RuleStore
 from .site_defaults import ensure_default_site
-from .timeseries_api import _numeric_columns, column_kinds_for_site, list_plot_sites, list_plot_series
+from .timeseries_api import (
+    _numeric_columns,
+    column_kinds_for_site,
+    list_plot_series,
+    list_plot_sites,
+    resolve_plot_columns,
+)
 from .ttl_service import TtlService
 
 CHART_MAX_POINTS = 4000
@@ -86,24 +96,54 @@ def _rule_code(rule: dict[str, Any]) -> str:
     return str(rule.get("code") or "")
 
 
+def _brick_types_for_columns(model: dict[str, Any], site_id: str, columns: list[str]) -> set[str]:
+    from .timeseries_api import _equipment_for_site, _point_on_site, plot_column_name
+
+    col_set = set(columns)
+    bricks: set[str] = set()
+    site_eq = _equipment_for_site(model, site_id)
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict) or not _point_on_site(pt, site_id, site_eq):
+            continue
+        if plot_column_name(pt) not in col_set:
+            continue
+        bt = str(pt.get("brick_type") or "").strip()
+        if bt:
+            bricks.add(bt)
+    return bricks
+
+
 def evaluate_fault_plots(
     df: pd.DataFrame,
     site_id: str,
     model: dict[str, Any],
     *,
     rule_ids: set[str] | None = None,
+    scope_columns: list[str] | None = None,
+    max_rules: int = 12,
 ) -> tuple[dict[str, list[int]], list[dict[str, str]], dict[str, int]]:
     fault_plots: dict[str, list[int]] = {}
     fault_panels: list[dict[str, str]] = []
     fault_totals: dict[str, int] = {}
     rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
+    scope_bricks: set[str] | None = None
+    if scope_columns:
+        scope_bricks = _brick_types_for_columns(model, site_id, scope_columns)
     color_i = 0
+    evaluated = 0
     for rule in rules:
+        if evaluated >= max_rules:
+            break
         rid = str(rule.get("id") or "")
         if rule_ids is not None and rid not in rule_ids:
             continue
         if rule.get("mode") != "rule":
             continue
+        if scope_bricks is not None:
+            bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
+            rule_bricks = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
+            if rule_bricks and not (rule_bricks & scope_bricks):
+                continue
         code = _rule_code(rule)
         if not code.strip():
             continue
@@ -129,6 +169,7 @@ def evaluate_fault_plots(
                 "fault_code": str(rule.get("fault_code") or ""),
             }
         )
+        evaluated += 1
     return fault_plots, fault_panels, fault_totals
 
 
@@ -157,11 +198,20 @@ def read_plot_readings(
     include_faults: bool = True,
     rule_ids: list[str] | None = None,
 ) -> dict[str, Any]:
+    t0 = time.perf_counter()
     model_svc = ModelService()
     ensure_default_site(model_svc, TtlService())
     model = model_svc.load()
     meta = list_plot_series(site_id, source=source)
     kinds = column_kinds_for_site(model, site_id)
+    columns = resolve_plot_columns(columns, model, site_id)
+    _log.info(
+        "plot readings start site=%s cols=%d hours=%s include_faults=%s",
+        site_id,
+        len(columns),
+        hours,
+        include_faults,
+    )
     df = _prepare_frame(site_id, source=source, hours=hours, limit=limit)
     if df is None or df.empty:
         return {
@@ -203,7 +253,20 @@ def read_plot_readings(
     chart_guides: dict[str, float | None] = {}
     if include_faults:
         rid_set = {str(x) for x in rule_ids if str(x).strip()} if rule_ids else None
-        fault_plots, fault_panels, fault_totals = evaluate_fault_plots(df, site_id, model, rule_ids=rid_set)
+        t_fault = time.perf_counter()
+        fault_plots, fault_panels, fault_totals = evaluate_fault_plots(
+            df,
+            site_id,
+            model,
+            rule_ids=rid_set,
+            scope_columns=columns or None,
+        )
+        _log.info(
+            "plot fault eval site=%s rules=%d ms=%d",
+            site_id,
+            len(fault_panels),
+            int((time.perf_counter() - t_fault) * 1000),
+        )
         chart_guides = chart_guides_from_rules(RuleStore().list_rules())
 
     n = len(ts_col)
@@ -211,6 +274,14 @@ def read_plot_readings(
         n, CHART_MAX_POINTS, ts_col, series, fault_plots
     )
 
+    _log.info(
+        "plot readings done site=%s series=%d rows=%d ms=%d truncated=%s",
+        site_id,
+        len(series),
+        len(ts_col),
+        int((time.perf_counter() - t0) * 1000),
+        truncated,
+    )
     return {
         "site_id": site_id,
         "source": source,

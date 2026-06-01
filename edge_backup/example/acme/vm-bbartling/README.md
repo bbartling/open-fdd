@@ -17,7 +17,7 @@ Real BACnet discovery CSVs live under `edge_backup/local/acme/vm-bbartling/` (gi
 | Layer | Points polled |
 |-------|----------------|
 | VAV | ZN-T, ZN-SP, DA-T, SA-F, SAFLOW-SP, damper cmd/stat, CLG-O, HTG-O |
-| AHU (RTU-01) | SAT, RAT, MAT, OAT, duct static, OAD-CMD, fan cmds, CLG-STAT |
+| AHU (RTU-01) | SAT, RAT, MAT, OAT, SAP + SAP-SP (active/BAS), DAT-SP (discharge/leaving air setpoints), OAD-CMD, fan cmds, CLG-STAT |
 | Plant | HW temps, pump/boiler analogs, plant request counters |
 | Tracer | Facility OAT/OAH, zone avg/min/max temps |
 

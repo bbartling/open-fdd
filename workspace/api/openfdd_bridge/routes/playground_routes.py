@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 import traceback
 from typing import Any
@@ -13,8 +14,11 @@ from ..fdd_row_prep import prepare_fdd_rows
 from ..deps import require_roles
 from ..model_service import ModelService
 from ..site_defaults import ensure_default_site
+from ..timeseries_api import columns_for_equipment, resolve_plot_columns
 from ..ttl_service import TtlService
 from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/playground",
@@ -34,8 +38,10 @@ class RuleBody(BaseModel):
     site_id: str | None = None
     limit: int = Field(default=200, ge=1, le=10000)
     chunk_hours: float = Field(default=0, ge=0, le=168)
-    lookback_hours: float = Field(default=1, ge=0, le=168)
+    lookback_hours: float = Field(default=24, ge=0, le=168)
     point_id: str | None = None
+    point_keys: list[str] = Field(default_factory=list)
+    equipment_id: str | None = None
     value_kind: str | None = None
 
 
@@ -44,6 +50,31 @@ class ScriptBody(BaseModel):
     site_id: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)
     limit: int = Field(default=500, ge=1, le=10000)
+    lookback_hours: float = Field(default=24, ge=0, le=168)
+    equipment_id: str | None = None
+    point_keys: list[str] = Field(default_factory=list)
+
+
+def _filter_frame_to_scope(
+    df,
+    model: dict[str, Any],
+    site_id: str,
+    *,
+    equipment_id: str | None,
+    point_keys: list[str],
+):
+    cols: list[str] | None = None
+    if point_keys:
+        cols = resolve_plot_columns(point_keys, model, site_id)
+    elif equipment_id:
+        cols = columns_for_equipment(model, site_id, equipment_id.strip())
+    if not cols:
+        return df
+    meta = {"timestamp", "site_id", "building_id", "system_id"}
+    keep = [c for c in df.columns if c in meta or c in cols]
+    if len(keep) <= len(meta):
+        return df
+    return df[keep]
 
 
 def _apply_lookback(df, lookback_hours: float):
@@ -79,13 +110,23 @@ def test_rule(body: RuleBody) -> dict:
         model_svc = ModelService()
         site_id = (body.site_id or "").strip() or ensure_default_site(model_svc, TtlService())
         df, origin = load_frame_for_run(site_id)
-        df = _apply_lookback(df, body.lookback_hours or 1)
+        df = _apply_lookback(df, body.lookback_hours or 24)
+        model = model_svc.load()
+        df = _filter_frame_to_scope(
+            df,
+            model,
+            site_id,
+            equipment_id=body.equipment_id,
+            point_keys=body.point_keys or ([body.point_id] if body.point_id else []),
+        )
         if body.limit and len(df) > body.limit:
             df = df.tail(body.limit)
-        model = model_svc.load()
         rule_stub: dict[str, Any] = {
             "config": dict(body.config),
-            "bindings": {"point_ids": [body.point_id]} if body.point_id else {},
+            "bindings": {
+                "point_ids": [x for x in (body.point_keys or ([body.point_id] if body.point_id else [])) if str(x).strip()],
+                "equipment_ids": [body.equipment_id] if body.equipment_id else [],
+            },
         }
         if body.value_kind:
             rule_stub["config"]["value_kind"] = body.value_kind
@@ -106,10 +147,25 @@ def test_rule(body: RuleBody) -> dict:
             row_count = len(rows)
             flagged = sum(flags)
         ok = not any(ev.get("type") == "error" for ev in events)
+        scope_label = ""
+        if body.equipment_id:
+            scope_label = f"equipment={body.equipment_id}"
+        elif body.point_keys:
+            scope_label = f"points={len(body.point_keys)}"
+        _log.info(
+            "test-rule site=%s scope=%s rows=%d flagged=%d ms=%d",
+            site_id,
+            scope_label or "full-site",
+            row_count,
+            flagged,
+            int((time.time() - started) * 1000),
+        )
         return {
             "ok": ok,
             "site_id": site_id,
             "data_source": origin,
+            "equipment_id": body.equipment_id or "",
+            "scope_columns": [c for c in df.columns if c not in {"timestamp", "site_id", "building_id", "system_id"}],
             "rows": row_count,
             "flagged": flagged,
             "ms": int((time.time() - started) * 1000),
@@ -144,6 +200,15 @@ def run_script(body: ScriptBody) -> dict:
         model_svc = ModelService()
         site_id = (body.site_id or "").strip() or ensure_default_site(model_svc, TtlService())
         df, origin = load_frame_for_run(site_id)
+        model = model_svc.load()
+        df = _apply_lookback(df, body.lookback_hours or 24)
+        df = _filter_frame_to_scope(
+            df,
+            model,
+            site_id,
+            equipment_id=body.equipment_id,
+            point_keys=body.point_keys,
+        )
         if body.limit and len(df) > body.limit:
             df = df.head(body.limit)
         result = playground.run_dataframe_script(body.code, df, cfg=body.config)

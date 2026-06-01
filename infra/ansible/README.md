@@ -1,6 +1,6 @@
 # Ansible edge deploy (Open-FDD)
 
-Same workflow as `vibe_code_apps_12/ansible`: inventory → `./deploy.sh --limit <host>`.
+Inventory → component deploy → optional post-check. Same pattern as `vibe_code_apps_12/ansible`.
 
 ## Quick start
 
@@ -11,9 +11,58 @@ cp host_vars/bacnet_pi.yml.example host_vars/bacnet_pi.yml
 cp host_vars/acme_vm_bbartling.yml.example host_vars/acme_vm_bbartling.yml
 
 export SSHPASS='...'   # Acme VM if password auth
-./deploy.sh --limit bacnet_pi -v
-./deploy.sh --limit acme_vm_bbartling -v
+./deploy.sh help
+./deploy.sh all --limit bacnet_pi -v
+./deploy.sh all --limit acme_vm_bbartling -v
 ```
+
+## Deploy components (easy buttons)
+
+Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<host>`** from this directory.
+
+| Component | What it updates |
+|-----------|-----------------|
+| **`all`** | Full stack (default). Same as legacy `./deploy.sh --limit HOST` |
+| **`ui`** / **`web`** | Built React dashboard → `workspace/api/static/app/` |
+| **`backend`** | Bridge API (`workspace/api/`), bridge systemd, pip deps |
+| **`core`** | `open_fdd/` Python package + editable install |
+| **`drivers`** | `bacnet_toolshed/`, poll + commission units, `points.csv`, `commission.env` |
+| **`data`** | `workspace/data/` (models, rules paths — not live historian DB) |
+| **`config`** | `auth.env.local`, bridge secrets, Caddyfile |
+| **`caddy`** | Caddy package + TLS + reverse proxy only |
+| **`systemd`** | Reload unit files; restart/enable services (no code sync) |
+| **`pip`** | venv + pip installs only |
+| **`commission`** | Push `points.csv` from `edge_backup/local/<site>/<building>/` |
+| **`mcp`** | MCP RAG sidecar (`edge_ai_stack.yml`) |
+| **`ai`** | Ollama bootstrap + MCP (`ollama_bootstrap.yml` + `edge_ai_stack.yml`) |
+| **`os`** | `apt update` + safe upgrade (`os_update.yml`) |
+| **`check`** | Post-deploy HTTP/systemd probes only |
+
+**Examples**
+
+```bash
+# After dashboard changes (build first)
+../../scripts/build_operator_dashboard.sh prod
+./deploy.sh ui --limit acme_vm_bbartling
+
+# Bridge API only
+./deploy.sh backend --limit acme_vm_bbartling
+
+# BACnet poll driver + points.csv
+./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+
+# OS packages (optional reboot)
+./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
+
+# Makefile shortcuts
+make ui HOST=acme_vm_bbartling
+make ui-deploy HOST=acme_vm_bbartling   # build + ui
+make os HOST=acme_vm_bbartling
+```
+
+**Build before `ui` or `all`:** `workspace/api/static/app/index.html` must exist (`../../scripts/build_and_test.sh` or `build_operator_dashboard.sh prod`).
+
+**Env:** `SSHPASS` for password SSH; `RUN_POST_CHECK=0` to skip insurance script; `ANSIBLE_INVENTORY` to override inventory path.
 
 ## Services on edge
 
@@ -29,7 +78,7 @@ export SSHPASS='...'   # Acme VM if password auth
 Poll driver is **off** until `points.csv` is commissioned:
 
 ```bash
-./deploy.sh --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
+./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
 ./stop_bacnet_polling.sh --limit acme_vm_bbartling
 ```
 
@@ -65,7 +114,7 @@ Same host as `vibe_code_apps_12/ansible/inventory.yml` → `bacnet_pi`.
 | RAM | ~**1 GB** (not 8 GB — use `ollama_ram_tier: 8gb` only as config label) |
 
 ```bash
-./deploy.sh --limit bacnet_pi --no-ask-pass -v
+./deploy.sh all --limit bacnet_pi --no-ask-pass -v
 ```
 
 Check-engine: `http://192.168.204.12/` (Caddy → bridge).

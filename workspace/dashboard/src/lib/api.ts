@@ -64,6 +64,7 @@ export async function apiFetch<T>(
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     ...init,
+    signal: init?.signal,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),

@@ -54,8 +54,11 @@ Local Caddyfile is generated at `workspace/.local-run/Caddyfile`. If `:80` bind 
 
 ## Ansible deploy
 
-1. `./scripts/build_and_test.sh` — vitest + prod build + `pytest tests/workspace_bridge`
-2. `cd infra/ansible && ./deploy.sh` — rsyncs `workspace/api/static/app/`; **no npm on remote**
+1. `./scripts/build_and_test.sh` — vitest + prod build + `pytest tests/workspace_bridge` (required for `ui` / `all`)
+2. `cd infra/ansible && ./deploy.sh help` — component targets: `ui`, `backend`, `core`, `drivers`, `os`, `all`, …
+3. Example: `./deploy.sh ui --limit acme_vm_bbartling` — dashboard only; **no npm on remote**
+
+See [`infra/ansible/README.md`](../../infra/ansible/README.md) and `make help` in that directory.
 
 ## Production (systemd)
 

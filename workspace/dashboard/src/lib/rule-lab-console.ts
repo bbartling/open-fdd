@@ -11,7 +11,6 @@ export type RuleTestEvent = {
   rows?: number;
   flagged?: number;
   sweep_mode?: string;
-  chunk_count?: number;
 };
 
 export type LintIssue = {
@@ -63,9 +62,7 @@ export function formatRuleTestEvents(events: RuleTestEvent[], opts?: { maxLines?
     }
     if (t === "summary") {
       push(
-        `--- sweep: ${evt.flagged ?? 0} flagged / ${evt.rows ?? 0} rows (mode=${evt.sweep_mode || "per_row"}${
-          evt.chunk_count != null ? `, chunks=${evt.chunk_count}` : ""
-        }) ---`,
+        `--- sweep: ${evt.flagged ?? 0} flagged / ${evt.rows ?? 0} rows (mode=${evt.sweep_mode || "per_row"}) ---`,
       );
     }
   }
@@ -82,7 +79,6 @@ export function formatBatchSummary(body: {
   flagged_runs?: number;
   error_runs?: number;
   ms?: number;
-  chunk_hours?: number | null;
   lookback_hours?: number | null;
   runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string; error?: string; rows?: number }[];
 }): string {
@@ -90,8 +86,8 @@ export function formatBatchSummary(body: {
     ">>> Update all records — batch complete",
     `rules=${body.rules_run ?? 0} site_runs=${body.site_runs ?? 0} flagged_runs=${body.flagged_runs ?? 0} errors=${body.error_runs ?? 0} (${body.ms ?? 0} ms)`,
   ];
-  if (body.chunk_hours) {
-    lines.push(`chunked: ${body.chunk_hours}h windows, lookback ${body.lookback_hours ?? "?"}h`);
+  if (body.lookback_hours != null) {
+    lines.push(`lookback: ${body.lookback_hours}h`);
   }
   for (const run of body.runs || []) {
     const err = run.status === "error" ? ` ERROR ${run.error || ""}` : "";

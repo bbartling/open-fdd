@@ -3,9 +3,16 @@ import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
+import TelemetryScopePicker from "../components/TelemetryScopePicker";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
+import { displayRuleName } from "../lib/ruleDisplay";
+import {
+  defaultKeysForEquipment,
+  useTelemetryCatalog,
+  type SeriesOption,
+} from "../lib/telemetryCatalog";
 import {
   formatBatchSummary,
   formatLintIssues,
@@ -39,6 +46,11 @@ type SavedRule = {
   source_path?: string;
   fault_code?: string;
   config?: Record<string, unknown>;
+  bindings?: {
+    point_ids?: string[];
+    equipment_ids?: string[];
+    brick_types?: string[];
+  };
 };
 
 function syntaxPillClass(ok: boolean | null, busy: boolean): string {
@@ -61,15 +73,17 @@ export default function RuleLabPage() {
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
   const [ruleName, setRuleName] = useState("Supply air temp high");
   const [severity, setSeverity] = useState("warning");
-  const [faultCode, setFaultCode] = useState("");
-  const [faultCodes, setFaultCodes] = useState<{ code: string; title: string; family: string }[]>([]);
+  const [brickClass, setBrickClass] = useState("");
+  const [brickTypes, setBrickTypes] = useState<string[]>([]);
   const [saved, setSaved] = useState<SavedRule[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string>("");
   const [authRole, setAuthRole] = useState<string | null>(null);
   const [testLimit, setTestLimit] = useState("500");
-  const [testChunkHours, setTestChunkHours] = useState("6");
+  const [lookbackHours, setLookbackHours] = useState("24");
+  const [testPointKeys, setTestPointKeys] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
   const lintTimer = useRef<number | null>(null);
+  const catalog = useTelemetryCatalog();
 
   useEffect(() => {
     fetchAuthMe()
@@ -83,6 +97,12 @@ export default function RuleLabPage() {
     return res.rules || [];
   }, []);
 
+  const loadBrickTypes = useCallback(async () => {
+    const tree = await apiFetch<{ brick_types?: string[] }>("/api/model/tree");
+    const types = (tree.brick_types || []).filter((t) => String(t).trim());
+    setBrickTypes(types.sort((a, b) => a.localeCompare(b)));
+  }, []);
+
   const loadRuleSource = useCallback(async (ruleId: string) => {
     const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${ruleId}/source`);
     setCode(res.code || DEFAULT_RULE);
@@ -91,16 +111,22 @@ export default function RuleLabPage() {
 
   useEffect(() => {
     void refreshSaved();
-    apiFetch<{ families: { family: string; codes: { code: string; title: string }[] }[] }>("/api/faults/catalog")
-      .then((res) =>
-        setFaultCodes(
-          (res.families || []).flatMap((f) =>
-            f.codes.map((c) => ({ code: c.code, title: c.title, family: f.family })),
-          ),
-        ),
-      )
-      .catch(() => undefined);
-  }, [refreshSaved]);
+    void loadBrickTypes();
+  }, [refreshSaved, loadBrickTypes]);
+
+  useEffect(() => {
+    if (!catalog.equipmentId || catalog.seriesOptions.length === 0) return;
+    setTestPointKeys(new Set(defaultKeysForEquipment(catalog.seriesOptions, catalog.equipmentId, 8)));
+  }, [catalog.equipmentId, catalog.seriesOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const testScopeLabel = useMemo(() => {
+    const g = catalog.activeGroup;
+    if (g?.name) {
+      return `${catalog.siteId} · ${g.name}${g.bacnet_device_instance != null ? ` (dev ${g.bacnet_device_instance})` : ""}`;
+    }
+    if (catalog.equipmentId === "__all__") return `${catalog.siteId} · all devices`;
+    return catalog.siteId || "default site";
+  }, [catalog.siteId, catalog.equipmentId, catalog.activeGroup]);
 
   useEffect(() => {
     if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsoleText(formatApiError(e)));
@@ -154,6 +180,15 @@ export default function RuleLabPage() {
     setConsoleText((prev) => (prev ? `${prev}\n${text}` : text));
   }
 
+  function ruleBindings(): { point_ids: string[]; equipment_ids: string[]; brick_types: string[] } {
+    const bt = brickClass.trim();
+    return {
+      point_ids: [],
+      equipment_ids: [],
+      brick_types: bt ? [bt] : [],
+    };
+  }
+
   async function lintNow() {
     setBusy(true);
     try {
@@ -180,36 +215,46 @@ export default function RuleLabPage() {
     setConsoleText("");
     try {
       const limit = Number(testLimit);
-      const chunkHours = Number(testChunkHours);
       if (mode === "rule") {
+        const pointKeys = [...testPointKeys];
+        console.debug("[rule-lab] test-rule", {
+          site: catalog.siteId,
+          equipment: catalog.equipmentId,
+          pointKeys,
+          lookbackHours,
+        });
         const res = await apiFetch<{
           ok?: boolean;
           rows: number;
           flagged: number;
           data_source?: string;
           site_id?: string;
+          equipment_id?: string;
+          scope_columns?: string[];
           preview_columns?: string[];
           events: { type: string; text?: string; status?: string; row?: number; trace?: string }[];
           trace?: string;
           error?: string;
           ms?: number;
-          chunked?: boolean;
         }>("/api/playground/test-rule", {
           method: "POST",
           body: JSON.stringify({
             code,
             config: configFromRecord(cfg),
+            site_id: catalog.siteId || undefined,
+            equipment_id:
+              catalog.equipmentId && catalog.equipmentId !== "__all__" ? catalog.equipmentId : undefined,
+            point_keys: pointKeys.length ? pointKeys : undefined,
+            lookback_hours: Number(lookbackHours) || 24,
             limit: Number.isFinite(limit) ? limit : 500,
-            chunk_hours: Number.isFinite(chunkHours) && chunkHours > 0 ? chunkHours : 0,
+            chunk_hours: 0,
           }),
         });
         const header = [
-          `>>> Test rule — site=${res.site_id} source=${res.data_source} rows=${res.rows} flagged=${res.flagged} (${res.ms ?? 0} ms)`,
-          res.chunked ? `chunked: ${testChunkHours}h windows` : "",
-          `columns: ${(res.preview_columns || []).join(", ")}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
+          `>>> Test rule — ${testScopeLabel}`,
+          `source=${res.data_source} rows=${res.rows} flagged=${res.flagged} (${res.ms ?? 0} ms)`,
+          `scope columns: ${(res.scope_columns || res.preview_columns || []).join(", ")}`,
+        ].join("\n");
         const body = formatRuleTestEvents(res.events || []);
         const trace = res.trace || res.error || "";
         setConsoleText([header, body, trace].filter(Boolean).join("\n\n"));
@@ -256,6 +301,7 @@ export default function RuleLabPage() {
     }
     setBusy(true);
     try {
+      const existing = activeRuleId ? saved.find((r) => r.id === activeRuleId) : undefined;
       const payload = {
         id: activeRuleId || undefined,
         name: ruleName,
@@ -263,8 +309,8 @@ export default function RuleLabPage() {
         code,
         config: configFromRecord(cfg),
         severity,
-        fault_code: faultCode.trim(),
-        bindings: { point_ids: [], equipment_ids: [], brick_types: [] },
+        fault_code: existing?.fault_code || "",
+        bindings: ruleBindings(),
       };
       if (activeRuleId) {
         const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
@@ -284,7 +330,7 @@ export default function RuleLabPage() {
         });
         setActiveRuleId(res.rule.id);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${res.rule.name}" → map on Data Model tab.`);
+        appendConsole(`>>> Created rule "${displayRuleName(res.rule.name)}" (BRICK: ${brickClass || "none"}).`);
       }
       setDirty(false);
       await refreshSaved();
@@ -311,7 +357,6 @@ export default function RuleLabPage() {
         flagged_runs?: number;
         error_runs?: number;
         ms?: number;
-        chunk_hours?: number | null;
         lookback_hours?: number | null;
         runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string; error?: string; rows?: number }[];
       }>("/api/rules/batch", {
@@ -333,10 +378,10 @@ export default function RuleLabPage() {
 
   function selectRule(rule: SavedRule) {
     setActiveRuleId(rule.id);
-    setRuleName(rule.name);
+    setRuleName(displayRuleName(rule.name));
     setMode(rule.mode);
     setSeverity(rule.severity);
-    setFaultCode(rule.fault_code || "");
+    setBrickClass(rule.bindings?.brick_types?.[0] || "");
     setSourcePath(rule.source_path || "");
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
@@ -349,7 +394,7 @@ export default function RuleLabPage() {
     setCode(DEFAULT_RULE);
     setCfg({ high: "75" });
     setSourcePath("");
-    setFaultCode("");
+    setBrickClass("");
     setDirty(true);
   }
 
@@ -385,8 +430,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Edit shared on-disk <code>.py</code> rules. Live lint + test against feather data.{" "}
-            <a href="/data-model">Data Model</a> maps rules to BRICK points.
+            Edit on-disk <code>.py</code> rules. Attach a BRICK class for production binding. Test against the same
+            site/device scope as <a href="/plot">Trend plot</a> (feather historian).
           </>
         }
       />
@@ -431,7 +476,7 @@ export default function RuleLabPage() {
               ) : null}
               {saved.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {displayRuleName(r.name)}
                 </option>
               ))}
             </select>
@@ -459,18 +504,27 @@ export default function RuleLabPage() {
             />
           </div>
           <div className="field">
-            <label className="field-label" htmlFor="rule-fault-code">
-              Fault code
+            <label className="field-label" htmlFor="rule-brick-class">
+              BRICK class
             </label>
-            <input
-              id="rule-fault-code"
-              list="fault-code-list"
-              value={faultCode}
+            <select
+              id="rule-brick-class"
+              value={brickClass}
               onChange={(e) => {
-                setFaultCode(e.target.value);
+                setBrickClass(e.target.value);
                 markDirty();
               }}
-            />
+            >
+              <option value="">— Select class —</option>
+              {brickClass && !brickTypes.includes(brickClass) ? (
+                <option value={brickClass}>{brickClass}</option>
+              ) : null}
+              {brickTypes.map((bt) => (
+                <option key={bt} value={bt}>
+                  {bt}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-mode">
@@ -506,14 +560,67 @@ export default function RuleLabPage() {
             </label>
             <input id="test-limit" value={testLimit} onChange={(e) => setTestLimit(e.target.value)} />
           </div>
-          {mode === "rule" ? (
-            <div className="field">
-              <label className="field-label" htmlFor="test-chunk-hours">
-                Chunk (h, 0=off)
-              </label>
-              <input id="test-chunk-hours" value={testChunkHours} onChange={(e) => setTestChunkHours(e.target.value)} />
+          <div className="field">
+            <label className="field-label" htmlFor="test-lookback">
+              Lookback (h)
+            </label>
+            <input id="test-lookback" value={lookbackHours} onChange={(e) => setLookbackHours(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="panel rule-lab-test-scope">
+          <h3 className="panel-title">Test data scope</h3>
+          <p className="muted">
+            Feather rows for <strong>{testScopeLabel}</strong>. Same device list as Trend plot. Leave points empty to
+            use all columns on the device.
+          </p>
+          <div className="form-row">
+            <TelemetryScopePicker
+              idPrefix="rule-test"
+              sites={catalog.sites}
+              siteId={catalog.siteId}
+              onSiteChange={catalog.setSiteId}
+              equipmentGroups={catalog.equipmentGroups}
+              equipmentId={catalog.equipmentId}
+              onEquipmentChange={(id) => {
+                catalog.setEquipmentId(id);
+                setTestPointKeys(new Set(defaultKeysForEquipment(catalog.seriesOptions, id, 8)));
+              }}
+              disabled={catalog.loading}
+            />
+            <div className="form-row-actions">
+              <a
+                className="secondary-btn"
+                href={`/plot?site=${encodeURIComponent(catalog.siteId)}&device=${encodeURIComponent(catalog.equipmentId)}`}
+              >
+                Open in Trend plot
+              </a>
             </div>
-          ) : null}
+          </div>
+          {catalog.visibleOptions.length ? (
+            <div className="plot-series-chips">
+              {catalog.visibleOptions.map((opt: SeriesOption) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={testPointKeys.has(opt.key) ? "chip chip-on" : "chip chip-off"}
+                  onClick={() =>
+                    setTestPointKeys((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(opt.key)) next.delete(opt.key);
+                      else next.add(opt.key);
+                      return next;
+                    })
+                  }
+                  title={`Column: ${opt.column}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No feather columns for this device — poll BACnet or pick another device.</p>
+          )}
         </div>
 
         {mode === "rule" ? <RuleConfigPanel config={cfg} onChange={onCfgChange} /> : null}
@@ -533,7 +640,7 @@ export default function RuleLabPage() {
             className="primary"
             disabled={busy || authRole === "operator"}
             onClick={() => void updateAllRecords()}
-            title="Run all saved rules in 6h chunks (7d lookback) and update check-engine records"
+            title="Run all saved rules against feather data and update check-engine records"
           >
             Update all records
           </button>
@@ -549,14 +656,6 @@ export default function RuleLabPage() {
           File: <code>{sourcePath}</code>
         </p>
       ) : null}
-
-      <datalist id="fault-code-list">
-        {faultCodes.map((c) => (
-          <option key={c.code} value={c.code}>
-            {c.family} · {c.title}
-          </option>
-        ))}
-      </datalist>
 
       <div className="panel rule-lab-editor-panel">
         <PythonCodeEditor value={code} onChange={onCodeChange} height="420px" lintIssues={lintIssues} />
