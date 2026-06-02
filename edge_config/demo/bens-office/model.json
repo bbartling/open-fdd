@@ -10,87 +10,76 @@
       "id": "bench-1",
       "site_id": "demo",
       "name": "HVAC sensor test bench",
-      "equipment_type": "Laboratory_Equipment"
+      "equipment_type": "Laboratory_Equipment",
+      "feeds": ["duct-1"]
     },
     {
       "id": "duct-1",
       "site_id": "demo",
       "name": "Supply duct section",
       "equipment_type": "Air_Duct"
-    },
-    {
-      "id": "bacnet-5007",
-      "site_id": "demo",
-      "name": "BACnet device 5007",
-      "equipment_type": "BACnet_Device",
-      "bacnet_device_id": 5007
     }
   ],
   "points": [
     {
-      "id": "p1",
-      "site_id": "demo",
-      "equipment_id": "bench-1",
-      "external_id": "SAT",
-      "brick_type": "Supply_Air_Temperature_Sensor",
-      "fdd_input": "SAT",
-      "description": "Legacy demo SAT column (optional)"
-    },
-    {
       "id": "5007-analog-input-1168",
       "site_id": "demo",
       "equipment_id": "bench-1",
+      "name": "OA-H",
       "external_id": "oa-h",
-      "brick_type": "Humidity_Sensor",
+      "brick_type": "Outside_Air_Humidity_Sensor",
       "fdd_input": "oa-h",
+      "unit": "percent-relative-humidity",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1168",
       "object_type": "analog-input",
-      "object_instance": "1168",
-      "description": "Bench humidity (OA-H label, not outdoor air)"
+      "object_instance": "1168"
     },
     {
       "id": "5007-analog-input-1173",
       "site_id": "demo",
       "equipment_id": "bench-1",
+      "name": "OA-T",
       "external_id": "oa-t",
-      "brick_type": "Zone_Air_Temperature_Sensor",
+      "brick_type": "Outside_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
+      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1173",
       "object_type": "analog-input",
-      "object_instance": "1173",
-      "description": "Bench zone temp (OA-T label, on test bench)"
+      "object_instance": "1173"
     },
     {
       "id": "5007-analog-input-1192",
       "site_id": "demo",
       "equipment_id": "duct-1",
+      "name": "DUCT-T",
       "external_id": "duct-t",
       "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
+      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1192",
       "object_type": "analog-input",
-      "object_instance": "1192",
-      "description": "Duct-mounted discharge air temperature"
+      "object_instance": "1192"
     },
     {
       "id": "5007-analog-input-10014",
       "site_id": "demo",
       "equipment_id": "bench-1",
+      "name": "STAT ZN-T",
       "external_id": "stat_zn-t",
       "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",
+      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,10014",
       "object_type": "analog-input",
-      "object_instance": "10014",
-      "description": "Bench zone temp (stat space sensor)"
+      "object_instance": "10014"
     }
   ]
 }

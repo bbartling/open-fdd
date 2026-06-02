@@ -96,6 +96,60 @@ export async function fetchSavedRules(): Promise<SavedRule[]> {
   return (res.rules ?? []).filter((r) => r.enabled !== false);
 }
 
+export type AssignmentsDevice = {
+  device_key: string;
+  bacnet_device_id?: number | string | null;
+  bacnet_device_address?: string | null;
+  label: string;
+  point_ids: string[];
+  point_count: number;
+};
+
+export type AssignmentsPoint = {
+  point_id: string;
+  name: string;
+  object_identifier?: string;
+  unit?: string;
+  brick_type?: string;
+  equipment_id?: string;
+  equipment_name?: string;
+  device_key: string;
+  bound_rules: { rule_id: string; rule_name: string }[];
+};
+
+export type AssignmentsResponse = {
+  ok?: boolean;
+  site_id?: string | null;
+  assignment_rows: AssignmentRow[];
+  devices: AssignmentsDevice[];
+  points: AssignmentsPoint[];
+  rules: SavedRule[];
+};
+
+export async function fetchAssignments(siteId?: string): Promise<AssignmentsResponse> {
+  const q = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+  return apiFetch<AssignmentsResponse>(`/api/rules/assignments${q}`);
+}
+
+export async function patchRuleBinding(args: {
+  rule_id: string;
+  op: "add" | "remove";
+  kind: BindKind;
+  target_id: string;
+  point_ids?: string[];
+}): Promise<SavedRule> {
+  const res = await apiFetch<{ rule: SavedRule }>("/api/rules/bind", {
+    method: "POST",
+    body: JSON.stringify(args),
+  });
+  notifyAssignmentsChanged();
+  return res.rule;
+}
+
+export function notifyAssignmentsChanged(): void {
+  window.dispatchEvent(new CustomEvent("ofdd-assignments-changed"));
+}
+
 export async function persistRuleBindings(rule: SavedRule, bindings: RuleBindings): Promise<SavedRule> {
   const norm = normalizeBindings(bindings);
   const body = {
@@ -109,6 +163,7 @@ export async function persistRuleBindings(rule: SavedRule, bindings: RuleBinding
     method: "POST",
     body: JSON.stringify(body),
   });
+  notifyAssignmentsChanged();
   return res.rule;
 }
 

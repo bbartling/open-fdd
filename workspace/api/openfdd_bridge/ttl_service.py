@@ -141,6 +141,8 @@ class TtlService:
                 lines.append(f'  ofdd:bacnetDeviceId "{_escape(str(pt.get("bacnet_device_id")))}" ;')
             if pt.get("object_identifier"):
                 lines.append(f'  ofdd:bacnetObjectIdentifier "{_escape(str(pt.get("object_identifier")))}" ;')
+            if pt.get("unit"):
+                lines.append(f'  ofdd:unit "{_escape(str(pt.get("unit")))}" ;')
             if meta.get("series_id"):
                 lines.append(f'  ofdd:seriesId "{_escape(str(meta.get("series_id")))}" ;')
             if meta.get("poll_interval_s"):

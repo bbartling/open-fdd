@@ -11,6 +11,8 @@ type ModelTree = {
 
 type Props = {
   refreshKey?: number;
+  /** When false, panel is the primary mapper (no read-only banner). */
+  showReadOnlyHint?: boolean;
 };
 
 function labelForPoint(tree: ModelTree | null, pointId: string): string {
@@ -24,7 +26,7 @@ function labelForEquipment(tree: ModelTree | null, eqId: string): string {
   return String(eq?.name || eqId);
 }
 
-export default function RuleAssignmentsPanel({ refreshKey = 0 }: Props) {
+export default function RuleAssignmentsPanel({ refreshKey = 0, showReadOnlyHint = true }: Props) {
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [tree, setTree] = useState<ModelTree | null>(null);
   const [error, setError] = useState("");
@@ -51,17 +53,27 @@ export default function RuleAssignmentsPanel({ refreshKey = 0 }: Props) {
     void load();
   }, [load, refreshKey]);
 
+  useEffect(() => {
+    const onChange = () => void load();
+    window.addEventListener("ofdd-assignments-changed", onChange);
+    return () => window.removeEventListener("ofdd-assignments-changed", onChange);
+  }, [load]);
+
   return (
     <section className="panel rule-assignments-panel">
-      <h3 className="panel-title">FDD assignments (read-only)</h3>
-      <p className="muted">
-        Map rules on the <a href="/data-model">Data Model</a> tab (right-click points, equipment, or sensor
-        classes). Rule Lab edits rule code and config only.
-      </p>
+      <h3 className="panel-title">Assignment summary{showReadOnlyHint ? " (read-only)" : ""}</h3>
+      {showReadOnlyHint ? (
+        <p className="muted">
+          Pin or unpin rules in the device table below, on <a href="/data-model">Data Model</a>, or{" "}
+          <a href="/plot">Trend plot</a> (right-click). Rule Lab edits rule code only.
+        </p>
+      ) : (
+        <p className="muted">Overview of every rule-to-point mapping on this site.</p>
+      )}
       {loading ? <p className="muted">Loading assignments…</p> : null}
       {error ? <p className="error">{error}</p> : null}
       {!loading && !rows.length ? (
-        <p className="muted">No rules mapped yet — right-click a point in Data Model → Apply FDD rule.</p>
+        <p className="muted">No rules mapped yet — right-click a point below or on Data Model / Trend plot.</p>
       ) : null}
       {rows.length ? (
         <ul className="rule-assignments-list">

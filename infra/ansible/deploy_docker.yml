@@ -5,7 +5,10 @@
 #   ./deploy.sh docker --limit acme_vm_bbartling
 #   ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_image_tag=2026.06.01
 #
-# Tags: docker, preflight, config, data, commission, verify
+# Tags: docker, preflight, config, data, commission, maintain, verify
+#
+# Disk maintenance (prune old images, remove image tar) runs after compose up when
+# openfdd_docker_prune_on_deploy is true (default). Standalone: ./deploy.sh maintain
 #
 # Does NOT rsync Python/API source — only Docker images + workspace state (data/, env).
 # Image-only refresh: -e openfdd_docker_sync_workspace_data=false
@@ -162,6 +165,17 @@
         src: "{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
         dest: "{{ openfdd_remote_dir }}/workspace/data/"
 
+    - name: Ensure workspace tree owned by deploy user (Docker may write as root)
+      tags: [data, commission, config, docker]
+      ansible.builtin.file:
+        path: "{{ openfdd_remote_dir }}/workspace"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+        recurse: true
+      become: true
+
     - name: Remove root-owned model.json on edge so deploy can replace it
       tags: [data]
       become: true
@@ -211,6 +225,22 @@
         dest: "{{ points_csv_path }}"
         mode: "0644"
       when: local_commission_csv.stat.exists | default(false)
+
+    - name: Stat device_poll_profiles.csv on control machine
+      tags: [commission, config]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/device_poll_profiles.csv"
+      delegate_to: localhost
+      become: false
+      register: local_device_poll_profiles
+
+    - name: Push device_poll_profiles.csv (metric→imperial for Trane VAVs)
+      tags: [commission, config]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/device_poll_profiles.csv"
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/device_poll_profiles.csv"
+        mode: "0644"
+      when: local_device_poll_profiles.stat.exists | default(false)
 
     - name: Install BACnet commission.env
       tags: [commission, config]
@@ -274,6 +304,11 @@
           '(Pulling|Building|Downloading|Extracting|Restarting|Created|Creating|Recreated|Started|Pulled|Downloaded|Done)',
           ignorecase=True
         )
+
+    - name: Safe Docker disk maintenance after stack is up
+      tags: [docker, maintain]
+      ansible.builtin.include_tasks: tasks/docker_maintenance.yml
+      when: openfdd_docker_prune_on_deploy | default(true) | bool
 
     - name: Install openfdd-fdd-loop systemd unit and timer (runs inside bridge container)
       tags: [docker, systemd]

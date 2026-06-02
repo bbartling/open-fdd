@@ -1,0 +1,30 @@
+---
+# Safe Docker disk maintenance on Open-FDD edge hosts (no image deploy).
+#
+# Prunes stopped containers, unused networks, dangling images, and (by default) all
+# images not referenced by a running container. Optionally removes the loaded image
+# tar bundle. Never runs docker volume prune — workspace/feather data is bind-mounted.
+#
+#   ./deploy.sh maintain --limit acme_vm_bbartling
+#   ./deploy.sh maintain --limit acme_vm_bbartling -e openfdd_docker_prune_unused_images=false
+#
+# Tags: maintain, docker, verify
+
+- name: Open-FDD edge Docker maintenance
+  hosts: pi_bcn
+  gather_facts: true
+
+  vars:
+    openfdd_docker_stack: true
+    openfdd_docker_maintenance_only: true
+    openfdd_docker_tar_remote: "{{ openfdd_remote_dir }}/docker/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
+
+  tasks:
+    - name: Run Docker maintenance
+      ansible.builtin.include_tasks: tasks/docker_maintenance.yml
+      tags: [maintain, docker, always]
+
+    - name: Run post-deploy insurance checks
+      ansible.builtin.include_tasks: tasks/post_deploy_check.yml
+      tags: [verify, check]
+      when: run_deploy_verify | default(true) | bool

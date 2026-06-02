@@ -1310,6 +1310,143 @@ textarea {
   overflow: hidden;
 }
 
+.dm-network-section {
+  overflow: hidden;
+}
+
+.dm-network-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.dm-network-sub {
+  margin: 4px 0 0;
+  max-width: 52rem;
+}
+
+.dm-network-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dm-feeds-chips {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dm-feed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+
+.dm-feed-chip-arrow {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.dm-network-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft);
+  padding: 8px;
+  min-height: 200px;
+}
+
+.dm-network-chart {
+  width: 100%;
+}
+
+.dm-network-empty {
+  padding: 24px;
+  text-align: center;
+}
+
+.dm-points-section {
+  margin-top: 16px;
+}
+
+.dm-points-table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.dm-points-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.dm-points-table th,
+.dm-points-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.dm-points-table th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.dm-points-row:hover {
+  background: var(--nav-hover-bg);
+}
+
+.dm-brick-cell {
+  font-size: 0.85rem;
+  max-width: 14rem;
+  word-break: break-word;
+}
+
+.fdd-assignments-page .rule-assignments-panel {
+  margin-bottom: 16px;
+}
+
+.fdd-assign-panel {
+  margin-top: 0;
+}
+
+.fdd-assign-filters {
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.fdd-assign-device-meta {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.fdd-pin-menu {
+  min-width: 220px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.context-menu-item.danger {
+  color: var(--danger);
+}
+
 .dm-brick-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

@@ -11,6 +11,7 @@ import HostStatsPage from "./pages/HostStatsPage";
 import LoginPage from "./pages/LoginPage";
 import PlotPage from "./pages/PlotPage";
 import RuleLabPage from "./pages/RuleLabPage";
+import FddAssignmentsPage from "./pages/FddAssignmentsPage";
 import { TabErrorBoundary } from "./components/TabDebugPanel";
 
 export default function App() {
@@ -25,11 +26,12 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route path="data-model" element={<TabErrorBoundary tab="data-model"><DataModelPage /></TabErrorBoundary>} />
             <Route path="rule-lab" element={<TabErrorBoundary tab="rule-lab"><RuleLabPage /></TabErrorBoundary>} />
+            <Route path="fdd-assignments" element={<TabErrorBoundary tab="fdd-assignments"><FddAssignmentsPage /></TabErrorBoundary>} />
             <Route path="plot" element={<TabErrorBoundary tab="plot"><PlotPage /></TabErrorBoundary>} />
             <Route path="bacnet" element={<TabErrorBoundary tab="bacnet"><BacnetPage /></TabErrorBoundary>} />
             <Route path="agent" element={<TabErrorBoundary tab="agent"><AgentPage /></TabErrorBoundary>} />
             <Route path="host" element={<TabErrorBoundary tab="host"><HostStatsPage /></TabErrorBoundary>} />
-            <Route path="fdd" element={<Navigate to="/rule-lab" replace />} />
+            <Route path="fdd" element={<Navigate to="/fdd-assignments" replace />} />
           </Route>
         </Route>
       </Routes>

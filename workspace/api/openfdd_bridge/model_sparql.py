@@ -101,6 +101,32 @@ def _equipment_from_json(model: dict[str, Any], site_id: str) -> list[dict[str, 
     return rows
 
 
+def _ids_match(a: str, b: str) -> bool:
+    """Match raw model ids with TTL-sanitized SPARQL local names."""
+    left = str(a or "").strip()
+    right = str(b or "").strip()
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    sl = _sanitize_local_name(left)
+    sr = _sanitize_local_name(right)
+    return sl == sr or sl == right or left == sr
+
+
+def _meta_lookup(rows: list[dict[str, Any]], *, key: str) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        rid = str(row.get(key) or "").strip()
+        if not rid:
+            continue
+        out[rid] = row
+        san = _sanitize_local_name(rid)
+        if san:
+            out[san] = row
+    return out
+
+
 def _bacnet_sort_key(inst: Any) -> int:
     try:
         return int(inst)
@@ -126,13 +152,13 @@ def _sensors_from_json(model: dict[str, Any], site_id: str, equipment_id: str) -
         ps = str(pt.get("site_id") or "").strip()
         if ps and ps != str(site_id).strip():
             continue
-        if str(pt.get("equipment_id") or "").strip() != eid:
+        if not _ids_match(str(pt.get("equipment_id") or ""), eid):
             continue
         pid = str(pt.get("id") or "").strip()
         if not pid:
             continue
         col = plot_column_name(pt)
-        name = str(pt.get("name") or pt.get("description") or col or pid)
+        name = str(pt.get("name") or pt.get("external_id") or pt.get("description") or col or pid)
         rows.append(
             {
                 "point_id": pid,
@@ -142,6 +168,10 @@ def _sensors_from_json(model: dict[str, Any], site_id: str, equipment_id: str) -
                 "timeseries_column": col,
                 "fdd_input": str(pt.get("fdd_input") or ""),
                 "series_id": str(pt.get("series_id") or pt.get("metadata", {}).get("series_id") or ""),
+                "object_identifier": str(pt.get("object_identifier") or ""),
+                "bacnet_device_address": str(pt.get("bacnet_device_address") or ""),
+                "bacnet_device_id": pt.get("bacnet_device_id"),
+                "unit": str(pt.get("unit") or ""),
             }
         )
     rows.sort(key=lambda r: r["name"].lower())
@@ -198,7 +228,7 @@ def query_equipment(site_id: str, *, model: dict[str, Any] | None = None, ttl: T
     if not sparql_rows:
         return _equipment_from_json(model, site_id)
 
-    json_eq = {e["equipment_id"]: e for e in _equipment_from_json(model, site_id)}
+    json_eq = _meta_lookup(_equipment_from_json(model, site_id), key="equipment_id")
     out: list[dict[str, Any]] = []
     for row in sparql_rows:
         eid = _local_name(row.get("eq", ""), "eq")
@@ -242,7 +272,7 @@ def query_sensors(
     q = SENSORS_QUERY.format(equipment=eq)
     sparql_rows = _run_sparql(ttl_text, q)
     json_rows = _sensors_from_json(model, site_id, equipment_id)
-    json_by_id = {r["point_id"]: r for r in json_rows}
+    json_by_id = _meta_lookup(json_rows, key="point_id")
 
     if sparql_rows:
         out: list[dict[str, Any]] = []
@@ -251,6 +281,7 @@ def query_sensors(
             if not pid:
                 continue
             meta = json_by_id.get(pid, {})
+            canonical_id = str(meta.get("point_id") or pid)
             brick = row.get("brickType", "")
             if "#" in brick:
                 brick = brick.rsplit("#", 1)[-1]
@@ -261,13 +292,17 @@ def query_sensors(
             )
             name = meta.get("name") or col
             item = {
-                "point_id": pid,
+                "point_id": canonical_id,
                 "name": name,
                 "label": name,
                 "brick_type": brick or meta.get("brick_type", ""),
                 "timeseries_column": col,
                 "fdd_input": meta.get("fdd_input") or str(row.get("ruleInput") or ""),
                 "series_id": meta.get("series_id") or str(row.get("seriesId") or ""),
+                "object_identifier": meta.get("object_identifier") or "",
+                "bacnet_device_address": meta.get("bacnet_device_address") or "",
+                "bacnet_device_id": meta.get("bacnet_device_id"),
+                "unit": meta.get("unit") or "",
             }
             out.append(item)
         rows = out

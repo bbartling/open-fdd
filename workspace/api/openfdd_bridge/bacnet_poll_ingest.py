@@ -74,7 +74,7 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
     model = model_svc.load()
     discovered = _load_discovered_by_pid()
     commission_dir = workspace_dir() / "bacnet" / "commissioning"
-    device_profiles, point_profiles = load_convert_context(commission_dir)
+    device_profiles, point_profiles, device_ranges = load_convert_context(commission_dir)
 
     ts_col = "timestamp_utc" if "timestamp_utc" in df.columns else "timestamp"
     df[ts_col] = pd.to_datetime(df[ts_col], utc=True, errors="coerce")
@@ -103,6 +103,7 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
                     device_instance=inst,
                     device_profiles=device_profiles,
                     point_profiles=point_profiles,
+                    device_profile_ranges=device_ranges,
                 )
                 try:
                     num = float(raw)

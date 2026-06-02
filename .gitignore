@@ -194,7 +194,12 @@ infra/ansible/secrets/*.local
 infra/ansible/.tmp/
 
 # Edge commissioning backups (real sites)
-edge_backup/local/
+edge_backup/local/*
+!edge_backup/local/acme/
+edge_backup/local/acme/*
+!edge_backup/local/acme/vm-bbartling/
+edge_backup/local/acme/vm-bbartling/*
+!edge_backup/local/acme/vm-bbartling/device_poll_profiles.csv
 
 # Runtime audit / error logs (forensics — do not commit)
 workspace/logs/
@@ -215,6 +220,9 @@ workspace/logs/
 /workspace/data/fdd_results.json
 /workspace/data/rules_store.json
 /workspace/data/building_alerts.json
+/workspace/data/data_model.ttl
+/workspace/data/runtime_metrics.json
+/workspace/data/model.json
 /workspace/data/feather_store/
 /workspace/**/*.feather
 /workspace/data/playground/draft_rules.json

@@ -18,17 +18,40 @@ CONVERT_PROFILES: dict[str, str] = {
 }
 
 
-def _load_device_profiles(path: Path) -> dict[str, str]:
+def _parse_instance_range(token: str) -> tuple[int, int] | None:
+    """Parse device_instance like 11000-13000 (inclusive)."""
+    raw = str(token or "").strip()
+    if "-" not in raw:
+        return None
+    left, _, right = raw.partition("-")
+    try:
+        lo = int(left.strip())
+        hi = int(right.strip())
+    except ValueError:
+        return None
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+def _load_device_profiles(path: Path) -> tuple[dict[str, str], list[tuple[int, int, str]]]:
     if not path.is_file():
-        return {}
-    out: dict[str, str] = {}
+        return {}, []
+    exact: dict[str, str] = {}
+    ranges: list[tuple[int, int, str]] = []
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             inst = str(row.get("device_instance") or "").strip()
             profile = str(row.get("convert_profile") or row.get("profile") or "").strip()
-            if inst and profile:
-                out[inst] = profile
-    return out
+            if not inst or not profile:
+                continue
+            span = _parse_instance_range(inst)
+            if span is not None:
+                lo, hi = span
+                ranges.append((lo, hi, profile))
+            else:
+                exact[inst] = profile
+    return exact, ranges
 
 
 def _load_point_profiles(points_csv: Path) -> dict[str, str]:
@@ -77,13 +100,27 @@ def profile_for_sample(
     device_instance: str,
     device_profiles: dict[str, str],
     point_profiles: dict[str, str],
+    device_profile_ranges: list[tuple[int, int, str]] | None = None,
 ) -> str:
     if point_id in point_profiles:
         return point_profiles[point_id]
-    return device_profiles.get(str(device_instance or "").strip(), "")
+    inst_s = str(device_instance or "").strip()
+    if inst_s in device_profiles:
+        return device_profiles[inst_s]
+    try:
+        inst_n = int(inst_s)
+    except ValueError:
+        return ""
+    for lo, hi, profile in device_profile_ranges or []:
+        if lo <= inst_n <= hi:
+            return profile
+    return ""
 
 
-def load_convert_context(commission_dir: Path) -> tuple[dict[str, str], dict[str, str]]:
+def load_convert_context(
+    commission_dir: Path,
+) -> tuple[dict[str, str], dict[str, str], list[tuple[int, int, str]]]:
     dev_path = commission_dir / "device_poll_profiles.csv"
     pts_path = commission_dir / "points.csv"
-    return _load_device_profiles(dev_path), _load_point_profiles(pts_path)
+    exact, ranges = _load_device_profiles(dev_path)
+    return exact, _load_point_profiles(pts_path), ranges

@@ -99,6 +99,7 @@ Components:
   os          apt update + safe upgrade (os_update.yml; -e os_upgrade_reboot=true)
   check       Post-deploy insurance probes only (no file sync)
   docker      Docker Compose stack (build images locally first — see docs/edge_deploy_docker.md)
+  maintain    Safe Docker prune on edge only (images/networks/containers; never volumes)
 
 Examples:
   ./scripts/docker_build.sh --save && ./deploy.sh docker --limit acme_vm_bbartling
@@ -107,6 +108,7 @@ Examples:
   ./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
   export SSHPASS='...' && ./deploy.sh all --limit acme_vm_bbartling -v
   ./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
+  ./deploy.sh maintain --limit acme_vm_bbartling
 
 Env:
   SSHPASS              Password for sshpass (optional; or set in secrets/<host>.env.local)
@@ -142,7 +144,7 @@ require_ui_build() {
 is_component() {
   case "$1" in
     help|-h|--help) return 0 ;;
-    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker) return 0 ;;
+    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker|maintain) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -222,6 +224,11 @@ case "$COMPONENT" in
     PLAYBOOK="deploy_docker.yml"
     TAGS=""
     ;;
+  maintain)
+    PLAYBOOK="edge_docker_maintenance.yml"
+    TAGS=""
+    RUN_POST_CHECK=0
+    ;;
 esac
 
 if [[ "$COMPONENT" == "docker" ]]; then
@@ -268,7 +275,7 @@ if [[ -n "$PLAYBOOK" ]]; then
 fi
 
 case "$COMPONENT" in
-  all|ui|web|backend|core|drivers|ai|docker) ;;
+  all|ui|web|backend|core|drivers|ai|docker|maintain) ;;
   *) RUN_POST_CHECK=0 ;;
 esac
 

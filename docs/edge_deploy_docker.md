@@ -95,6 +95,42 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 | `openfdd_docker_ollama` | `true` | Compose `ollama/ollama` when `enable_ollama`; use `false` + `./deploy.sh ai` for host GPU |
 | `openfdd_docker_sync_workspace_data` | `true` | Tar-sync `workspace/data` (rules); set `false` for image-only |
 | `ollama_gpu_mode` | `cpu` | `gpu`/`auto` adds NVIDIA device reservation on compose Ollama |
+| `openfdd_docker_prune_on_deploy` | `true` | After `compose up`, run safe image/container/network prune |
+| `openfdd_docker_prune_unused_images` | `true` | `docker image prune -a` (only images not used by any container) |
+| `openfdd_docker_remove_image_tar` | `true` | Delete `docker/openfdd-images-*.tar.gz` on edge after load |
+| `openfdd_docker_prune_build_cache` | `false` | Optional `docker builder prune` |
+
+## Disk maintenance (safe prune)
+
+Each `./deploy.sh docker` run loads a new image bundle; without cleanup, old `openfdd-*` layers and the `.tar.gz` fill small Pi/VM disks.
+
+After the stack is **up**, Ansible runs `infra/ansible/scripts/docker_edge_maintenance.sh`:
+
+- Prunes **stopped containers**, **unused networks**, **dangling images**
+- Optionally prunes **all unused images** (`docker image prune -a`) — safe because running Compose services keep their images
+- Optionally removes the loaded **`openfdd-images-*.tar.gz`** on the edge host
+- **Never** runs `docker volume prune` or `docker system prune --volumes` (workspace/feather is bind-mounted, not in named volumes)
+
+Standalone maintenance (no image redeploy):
+
+```bash
+cd infra/ansible
+./deploy.sh maintain --limit acme_vm_bbartling
+```
+
+Conservative (dangling images only, keep old tags and tar):
+
+```bash
+./deploy.sh maintain --limit acme_vm_bbartling \
+  -e openfdd_docker_prune_unused_images=false \
+  -e openfdd_docker_remove_image_tar=false
+```
+
+Skip prune during deploy:
+
+```bash
+./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_prune_on_deploy=false
+```
 
 ## What Ansible syncs (Docker path)
 
@@ -135,6 +171,9 @@ docker/Dockerfile              multi-target build
 docker/compose.dev.yml         local bind-mount stack
 scripts/docker_build.sh        build + optional tar export
 infra/ansible/deploy_docker.yml
+infra/ansible/edge_docker_maintenance.yml
+infra/ansible/tasks/docker_maintenance.yml
+infra/ansible/scripts/docker_edge_maintenance.sh
 infra/ansible/templates/docker-compose.edge.yml.j2
 ```
 

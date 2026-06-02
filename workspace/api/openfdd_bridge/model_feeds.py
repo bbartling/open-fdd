@@ -21,6 +21,28 @@ def _is_ahu(eq: dict[str, Any]) -> bool:
     return "ahu" in name
 
 
+def _is_hot_water_plant(eq: dict[str, Any]) -> bool:
+    et = str(eq.get("equipment_type") or eq.get("brick_type") or "").upper()
+    name = str(eq.get("name") or "").lower()
+    return "HOT_WATER" in et or "hw-plant" in name or "hw plant" in name
+
+
+def _append_feeds(parent: dict[str, Any], child_ids: list[str]) -> int:
+    feeds = parent.get("feeds")
+    if not isinstance(feeds, list):
+        feeds = []
+    existing = {str(x) for x in feeds if str(x).strip()}
+    added = 0
+    for cid in child_ids:
+        if cid and cid not in existing:
+            feeds.append(cid)
+            existing.add(cid)
+            added += 1
+    if feeds:
+        parent["feeds"] = sorted(existing | {str(x) for x in feeds if str(x).strip()})
+    return added
+
+
 def ensure_site_feeds(model: dict[str, Any], site_id: str) -> int:
     """Add feeds edges: roof AHU/RTU → VAV terminals on same site. Returns edges added."""
     equipment = [e for e in model.get("equipment") or [] if isinstance(e, dict)]
@@ -31,22 +53,14 @@ def ensure_site_feeds(model: dict[str, Any], site_id: str) -> int:
         return 0
 
     added = 0
+    vav_ids = [str(v.get("id") or "") for v in vavs if str(v.get("id") or "").strip()]
     for ahu in ahus:
-        ahu_id = str(ahu.get("id") or "")
-        if not ahu_id:
-            continue
-        feeds = ahu.get("feeds")
-        if not isinstance(feeds, list):
-            feeds = []
-        existing = {str(x) for x in feeds if str(x).strip()}
-        for vav in vavs:
-            vid = str(vav.get("id") or "")
-            if vid and vid not in existing:
-                feeds.append(vid)
-                existing.add(vid)
-                added += 1
-        if feeds:
-            ahu["feeds"] = sorted(set(str(x) for x in feeds if str(x).strip()))
+        added += _append_feeds(ahu, vav_ids)
+
+    plants = [e for e in site_eq if _is_hot_water_plant(e)]
+    for plant in plants:
+        added += _append_feeds(plant, vav_ids)
+
     return added
 
 

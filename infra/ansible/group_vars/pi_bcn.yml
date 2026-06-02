@@ -86,6 +86,12 @@ openfdd_docker_bridge_secret: true
 openfdd_docker_sync_workspace_data: true
 ollama_docker_image_tag: "latest"
 
+# Docker disk maintenance (deploy_docker.yml + ./deploy.sh maintain)
+openfdd_docker_prune_on_deploy: true
+openfdd_docker_prune_unused_images: true
+openfdd_docker_remove_image_tar: true
+openfdd_docker_prune_build_cache: false
+
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
 enable_mcp: true
 mcp_listen_port: 8090

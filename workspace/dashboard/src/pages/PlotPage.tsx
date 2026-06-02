@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import FddRulePinMenu, { type RulePinTarget } from "../components/FddRulePinMenu";
 import Plotly from "plotly.js-dist-min";
 import PageHeader from "../components/PageHeader";
 import { TabDebugPanel } from "../components/TabDebugPanel";
@@ -59,6 +60,8 @@ export default function PlotPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [chartLoading, setChartLoading] = useState(false);
+  const [pinMenu, setPinMenu] = useState<(RulePinTarget & { x: number; y: number }) | null>(null);
+  const [pinStatus, setPinStatus] = useState("");
 
   const optionByKey = useMemo(() => {
     const m = new Map<string, SeriesOption>();
@@ -238,7 +241,8 @@ export default function PlotPage() {
         title="Trend plot"
         subtitle={
           <>
-            Feather telemetry with optional FDD overlays. Pick a device, select points, then refresh. Enable debug:{" "}
+            Feather telemetry with optional FDD overlays. Pick a device, select points, then refresh. Right-click a
+            series chip to pin an FDD rule. Enable debug:{" "}
             <code>localStorage.ofdd_debug_plot=1</code>
           </>
         }
@@ -318,7 +322,21 @@ export default function PlotPage() {
                   type="button"
                   className={selected.has(opt.key) ? "chip chip-on" : "chip chip-off"}
                   onClick={() => toggleKey(opt.key)}
-                  title={opt.column !== opt.key ? `Feather column: ${opt.column}` : undefined}
+                  onContextMenu={(e: MouseEvent) => {
+                    e.preventDefault();
+                    setPinMenu({
+                      kind: "point",
+                      id: opt.key,
+                      label: opt.label,
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
+                  }}
+                  title={
+                    opt.column !== opt.key
+                      ? `Feather column: ${opt.column} — right-click to pin FDD rule`
+                      : "Right-click to pin FDD rule"
+                  }
                 >
                   {opt.label}
                   <span className="chip-kind">{seriesKindLabel(opt)}</span>
@@ -359,7 +377,10 @@ export default function PlotPage() {
         {chartLoading ? <div className="plot-chart-loading">Loading chart…</div> : null}
         <div ref={chartRef} className="plot-chart" />
       </div>
+      <FddRulePinMenu menu={pinMenu} onClose={() => setPinMenu(null)} onStatus={setPinStatus} />
+
       {status ? <p className="ok">{status}</p> : null}
+      {pinStatus ? <p className="ok">{pinStatus}</p> : null}
       {(error || catalogError) ? <p className="error">{error || catalogError}</p> : null}
     </div>
   );

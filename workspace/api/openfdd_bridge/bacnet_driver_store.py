@@ -119,7 +119,7 @@ def _latest_poll_values() -> dict[str, str]:
     if not path.is_file():
         return {}
     commission_dir = workspace_dir() / "bacnet" / "commissioning"
-    device_profiles, point_profiles = load_convert_context(commission_dir)
+    device_profiles, point_profiles, device_ranges = load_convert_context(commission_dir)
     discovered = {}
     disc_path = commission_dir / "points_discovered.csv"
     if disc_path.is_file():
@@ -159,6 +159,7 @@ def _latest_poll_values() -> dict[str, str]:
             device_instance=inst,
             device_profiles=device_profiles,
             point_profiles=point_profiles,
+            device_profile_ranges=device_ranges,
         )
         if num is not None:
             num, units = convert_poll_value(num, units=units, profile=profile)

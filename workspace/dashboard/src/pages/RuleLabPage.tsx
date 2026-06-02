@@ -4,7 +4,6 @@ import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import ModelScopePicker from "../components/ModelScopePicker";
-import RuleAssignmentsPanel from "../components/RuleAssignmentsPanel";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
@@ -79,7 +78,6 @@ export default function RuleLabPage() {
   const [lookbackHours, setLookbackHours] = useState("24");
   const [testSensorKey, setTestSensorKey] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [assignmentsKey, setAssignmentsKey] = useState(0);
   const lintTimer = useRef<number | null>(null);
   const scope = useModelScope("acme", brickClass);
 
@@ -346,7 +344,6 @@ export default function RuleLabPage() {
         });
         setSourcePath(putRes.path || saveRes.rule.source_path || sourcePath);
         appendConsole(`>>> Updated rule .py — ${putRes.path || sourcePath}`);
-        setAssignmentsKey((k) => k + 1);
       } else {
         const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
           method: "POST",
@@ -354,11 +351,10 @@ export default function RuleLabPage() {
         });
         setActiveRuleId(res.rule.id);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Map points on Data Model.`);
+        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Map points on FDD assignments.`);
       }
       setDirty(false);
       await refreshSaved();
-      setAssignmentsKey((k) => k + 1);
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -433,7 +429,6 @@ export default function RuleLabPage() {
       if (list[0]) selectRule(list[0]);
       else addRule();
       appendConsole(`>>> Deleted rule ${activeRuleId}`);
-      setAssignmentsKey((k) => k + 1);
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -456,8 +451,9 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Edit on-disk <code>.py</code> rules. Map points and devices on the{" "}
-            <a href="/data-model">Data Model</a> tab (right-click). <strong>Test</strong> uses one sensor from feather
+            Edit on-disk <code>.py</code> rules. Map points on{" "}
+            <a href="/fdd-assignments">FDD assignments</a>, <a href="/data-model">Data Model</a>, or{" "}
+            <a href="/plot">Trend plot</a> (right-click). <strong>Test</strong> uses one sensor from feather
             data (same historian as <a href="/plot">Trend plot</a>).
           </>
         }
@@ -469,8 +465,6 @@ export default function RuleLabPage() {
           <strong>agent</strong>.
         </p>
       ) : null}
-
-      <RuleAssignmentsPanel refreshKey={assignmentsKey} />
 
       <div className="panel rule-lab-toolbar">
         <div className="rule-lab-rule-row">
