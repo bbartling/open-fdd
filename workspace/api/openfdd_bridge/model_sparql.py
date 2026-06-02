@@ -12,7 +12,8 @@ from .ttl_service import TtlService, _sanitize_local_name
 
 _log = logging.getLogger(__name__)
 
-DEMO_SITE_IDS = frozenset({"demo", "site", "test", "sample", "default"})
+# Placeholder site ids only — "demo" is a real bench site (bens-office), not filtered.
+DEMO_SITE_IDS = frozenset({"site", "test", "sample", "default"})
 
 EQUIPMENT_QUERY = """
 PREFIX brick: <https://brickschema.org/schema/Brick#>
@@ -154,17 +155,26 @@ def _run_sparql(ttl_text: str, query: str) -> list[dict[str, str]]:
     except ImportError:
         return []
 
-    g = Graph()
-    g.parse(data=ttl_text, format="turtle")
+    try:
+        g = Graph()
+        g.parse(data=ttl_text, format="turtle")
+    except Exception as exc:
+        _log.warning("SPARQL TTL parse failed — using JSON fallback: %s", exc)
+        return []
+
     out: list[dict[str, str]] = []
-    for row in g.query(query):
-        if not isinstance(row, ResultRow):
-            continue
-        item: dict[str, str] = {}
-        for key in row.labels:
-            val = row[key]
-            item[str(key)] = str(val) if val is not None else ""
-        out.append(item)
+    try:
+        for row in g.query(query):
+            if not isinstance(row, ResultRow):
+                continue
+            item: dict[str, str] = {}
+            for key in row.labels:
+                val = row[key]
+                item[str(key)] = str(val) if val is not None else ""
+            out.append(item)
+    except Exception as exc:
+        _log.warning("SPARQL query failed — using JSON fallback: %s", exc)
+        return []
     return out
 
 
@@ -332,9 +342,14 @@ def query_model_graph(site_id: str) -> dict[str, Any]:
     """Full site graph for Data Model UI — SPARQL-backed, no client-side grep."""
     from .model_feeds import ensure_site_feeds
 
-    with ModelService().transaction() as model:
-        ensure_site_feeds(model, site_id)
-    model = ModelService().load()
+    svc = ModelService()
+    model = svc.load()
+    try:
+        with svc.transaction() as doc:
+            ensure_site_feeds(doc, site_id)
+            model = doc
+    except OSError as exc:
+        _log.warning("model graph: skip feeds write (%s): %s", site_id, exc)
     equipment = query_equipment(site_id, model=model)
     feeds = query_feeds(site_id, model=model, ensure=False)
     points_by_eq: dict[str, list[dict[str, Any]]] = {}

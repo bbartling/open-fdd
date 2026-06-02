@@ -180,7 +180,7 @@
     set -a
     # shellcheck disable=SC1091
     source "{{ playbook_dir }}/../../workspace/auth.env.local"
-    printf 'user=%s\npass=%s\n' "${OFDD_OPERATOR_USER:-}" "${OFDD_OPERATOR_PASSWORD:-}"
+    printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
   delegate_to: localhost
   become: false
   register: auth_creds_raw
@@ -220,6 +220,36 @@
     - post_check_auth_login | default(true) | bool
     - post_check_login_user | default('') | length > 0
     - post_check_login_password | default('') | length > 0
+
+- name: Loopback login for model graph probe
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ openfdd_bridge_port }}/api/auth/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ post_check_login_user }}"
+      password: "{{ post_check_login_password }}"
+    status_code: 200
+    return_content: true
+  register: loopback_auth
+  no_log: true
+  when:
+    - post_check_auth_login | default(true) | bool
+    - post_check_login_user | default('') | length > 0
+    - site_id is defined
+    - site_id | length > 0
+
+- name: Model graph probe on loopback (Data Model tab)
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ openfdd_bridge_port }}/api/model/graph?site_id={{ site_id }}"
+    headers:
+      Authorization: "Bearer {{ loopback_auth.json.token }}"
+    status_code: 200
+    return_content: true
+  when:
+    - loopback_auth is defined
+    - not (loopback_auth.skipped | default(false))
+    - loopback_auth.json.token | default('') | length > 0
 
 - name: Post-deploy check summary
   ansible.builtin.debug:

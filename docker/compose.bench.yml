@@ -15,6 +15,8 @@ services:
       OFDD_MCP_REST_BASE: http://127.0.0.1:8090
       OFDD_BRIDGE_HOST: 127.0.0.1
       OFDD_BRIDGE_PORT: "8765"
+      OPENFDD_DEFAULT_SITE_ID: demo
+      OPENFDD_DEFAULT_SITE_NAME: Bens Office test bench
     depends_on:
       mcp-rag:
         condition: service_started

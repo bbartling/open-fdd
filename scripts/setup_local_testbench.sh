@@ -117,8 +117,15 @@ echo "==> Enable temp + humidity points for polling"
 cp -a "$POINTS" "${BENCH_BACKUP}/points.csv"
 echo "    bench points backed up to ${BENCH_BACKUP}/points.csv"
 
-echo "==> Import bench BRICK model + FDD rules"
+echo "==> Import bench BRICK model + FDD rules (bench-only; no Acme rules)"
 "${VENV}/bin/python" scripts/setup_bench_afdd.py
+if [[ -x "${ROOT}/scripts/edge_site_backup.sh" ]]; then
+  "${ROOT}/scripts/edge_site_backup.sh" demo bens-office
+  mkdir -p "${ROOT}/edge_config/demo/bens-office"
+  cp -a "${BENCH_BACKUP}/model.json" "${BENCH_BACKUP}/rules_store.json" \
+    "${BENCH_BACKUP}/points.csv" "${BENCH_BACKUP}/commission.env" \
+    "${ROOT}/edge_config/demo/bens-office/" 2>/dev/null || true
+fi
 
 chmod 644 "${ROOT}/workspace/data/model.json" 2>/dev/null || true
 

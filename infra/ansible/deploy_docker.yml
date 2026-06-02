@@ -132,6 +132,7 @@
         tar -czf "$out" \
           -C "{{ playbook_dir }}/../../workspace/data" \
           --exclude='./model.json' \
+          --exclude='./rules_store.json' \
           --exclude='./data_model.ttl' \
           --exclude='./feather_store' \
           .
@@ -174,6 +175,26 @@
         src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('acme_gl36_model.json') }}"
         dest: "{{ openfdd_remote_dir }}/workspace/data/model.json"
         mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Stat site rules_store on control machine
+      tags: [data]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/rules_store.json"
+      delegate_to: localhost
+      become: false
+      register: local_site_rules
+
+    - name: Push site rules_store.json (no cross-site rules from dev workspace)
+      tags: [data]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/rules_store.json"
+        dest: "{{ openfdd_remote_dir }}/workspace/data/rules_store.json"
+        mode: "0644"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      when: local_site_rules.stat.exists | default(false)
 
     - name: Stat commissioned points.csv on control machine
       tags: [commission, data]
