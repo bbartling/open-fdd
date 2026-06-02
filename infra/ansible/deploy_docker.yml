@@ -132,6 +132,7 @@
         tar -czf "$out" \
           -C "{{ playbook_dir }}/../../workspace/data" \
           --exclude='./model.json' \
+          --exclude='./data_model.ttl' \
           --exclude='./feather_store' \
           .
       args:
@@ -159,6 +160,13 @@
       ansible.builtin.unarchive:
         src: "{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
         dest: "{{ openfdd_remote_dir }}/workspace/data/"
+
+    - name: Remove root-owned model.json on edge so deploy can replace it
+      tags: [data]
+      become: true
+      ansible.builtin.file:
+        path: "{{ openfdd_remote_dir }}/workspace/data/model.json"
+        state: absent
 
     - name: Push site BRICK model.json
       tags: [data]
