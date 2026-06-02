@@ -83,6 +83,8 @@ openfdd_docker_image_tag: "local"
 openfdd_docker_disable_systemd: true
 openfdd_docker_ollama: true
 openfdd_docker_bridge_secret: true
+openfdd_docker_sync_workspace_data: true
+ollama_docker_image_tag: "latest"
 
 # Local Ollama AI (operator chat) — see infra/ansible/ollama_bootstrap.yml
 enable_mcp: true

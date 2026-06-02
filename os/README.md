@@ -14,7 +14,7 @@ The OS layer is intentionally **minimal**: boot, networking, Docker, and persist
 
 ## Repository layout
 
-```
+```text
 open-fdd/
   os/              ← Buildroot / board support (future)
   supervisor/      ← Addon manifest + compose contracts

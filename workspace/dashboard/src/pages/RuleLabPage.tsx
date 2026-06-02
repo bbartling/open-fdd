@@ -311,7 +311,20 @@ export default function RuleLabPage() {
     }
     setBusy(true);
     try {
-      const existing = activeRuleId ? saved.find((r) => r.id === activeRuleId) : undefined;
+      let bindingsSource: SavedRule["bindings"] | undefined;
+      let faultCode = "";
+      if (activeRuleId) {
+        try {
+          const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
+          const live = fresh.rules?.find((r) => r.id === activeRuleId);
+          bindingsSource = live?.bindings;
+          faultCode = live?.fault_code || "";
+        } catch {
+          const existing = saved.find((r) => r.id === activeRuleId);
+          bindingsSource = existing?.bindings;
+          faultCode = existing?.fault_code || "";
+        }
+      }
       const payload = {
         id: activeRuleId || undefined,
         name: ruleName,
@@ -319,8 +332,8 @@ export default function RuleLabPage() {
         code,
         config: configFromRecord(cfg),
         severity,
-        fault_code: existing?.fault_code || "",
-        bindings: preservedBindings(existing?.bindings),
+        fault_code: faultCode,
+        bindings: preservedBindings(bindingsSource),
       };
       if (activeRuleId) {
         const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
@@ -420,6 +433,7 @@ export default function RuleLabPage() {
       if (list[0]) selectRule(list[0]);
       else addRule();
       appendConsole(`>>> Deleted rule ${activeRuleId}`);
+      setAssignmentsKey((k) => k + 1);
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {

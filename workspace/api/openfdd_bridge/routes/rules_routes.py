@@ -45,6 +45,7 @@ class RuleSourceBody(BaseModel):
 class RuleBindingsBody(BaseModel):
     rule_id: str
     point_ids: list[str] = Field(default_factory=list)
+    direct_point_ids: list[str] | None = None
     equipment_ids: list[str] = Field(default_factory=list)
     brick_types: list[str] = Field(default_factory=list)
 
@@ -125,6 +126,9 @@ def update_rule_bindings(
             **rule,
             "bindings": {
                 "point_ids": body.point_ids,
+                "direct_point_ids": body.direct_point_ids
+                if body.direct_point_ids is not None
+                else body.point_ids,
                 "equipment_ids": body.equipment_ids,
                 "brick_types": body.brick_types,
             },

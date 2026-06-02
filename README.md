@@ -93,7 +93,7 @@ pytest open_fdd/tests/engine
 
 Examples live under `examples/`. Optional shim package: `openfdd-engine` (re-exports the engine); most users install **`open-fdd`** only.
 
-**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
+**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/openfdd_stack.sh up` (Docker); legacy systemd: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
 
 ---
 

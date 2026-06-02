@@ -17,6 +17,8 @@ Legacy **systemd + pip + rsync** deploy remains available via `./deploy.sh all`.
 
 State (feather, rules, model, `points.csv`) lives on the host under **`workspace/`**, bind-mounted into containers.
 
+**GHCR publish (later):** Images can be pushed to `ghcr.io/bbartling/` via manual GitHub Actions when ready. Edge still uses tar load today. See [Publish Docker addons (howto)](howto/publish_docker_addons.md).
+
 ## Local dev (bensserver)
 
 ```bash
@@ -87,7 +89,30 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 |----------|---------|---------|
 | `openfdd_docker_image_tag` | `local` | Image tag in compose |
 | `openfdd_docker_disable_systemd` | `true` | Stop legacy bridge/mcp/poll units |
-| `openfdd_docker_ollama` | `true` | Include `ollama/ollama` service when `enable_ollama` |
+| `openfdd_docker_ollama` | `true` | Compose `ollama/ollama` when `enable_ollama`; use `false` + `./deploy.sh ai` for host GPU |
+| `openfdd_docker_sync_workspace_data` | `true` | Tar-sync `workspace/data` (rules); set `false` for image-only |
+| `ollama_gpu_mode` | `cpu` | `gpu`/`auto` adds NVIDIA device reservation on compose Ollama |
+
+## What Ansible syncs (Docker path)
+
+**No Python/API git rsync** — unlike legacy `./deploy.sh all` (`deploy.yml`), the docker playbook does **not** push `workspace/api`, `open_fdd`, or built UI from source trees.
+
+| Artifact | Mechanism | Purpose |
+|----------|-----------|---------|
+| App images | `docker/dist/openfdd-images-*.tar.gz` → `docker load` | Bridge, commission, poll, MCP |
+| Workspace **state** | Optional tar of `workspace/data` (rules, not feather) | Rule store, configs |
+| `model.json` | Single file copy from control | Site BRICK model |
+| `points.csv` | From `edge_backup/local/…` | Commission table |
+| Env / secrets | `auth.env.local`, templates | Login, BACnet bind, bridge secret |
+| Compose file | Template render | Stack definition |
+
+Skip state sync on image-only deploy:
+
+```bash
+./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_sync_workspace_data=false
+```
+
+**Future:** edge `docker compose pull` from GHCR (see [publish Docker addons](howto/publish_docker_addons.md)) — no tar over SSH.
 
 ## What stays systemd
 

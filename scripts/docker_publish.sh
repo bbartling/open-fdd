@@ -3,6 +3,7 @@
 #
 #   GITHUB_TOKEN=ghp_… ./scripts/docker_publish.sh
 #   OPENFDD_IMAGE_TAG=2026.06.01 ./scripts/docker_publish.sh
+#   PUBLISH_LATEST=1 OPENFDD_IMAGE_TAG=2026.06.01-edge ./scripts/docker_publish.sh
 #
 # Requires: docker login ghcr.io, images already built (./scripts/docker_build.sh)
 #
@@ -28,10 +29,10 @@ for img in "${IMAGES[@]}"; do
   docker tag "$src" "$dst"
   echo "==> push $dst"
   docker push "$dst"
-  if [[ "$TAG" != "latest" ]]; then
+  if [[ "${PUBLISH_LATEST:-}" == "1" && "$TAG" != "latest" ]]; then
     latest="${REGISTRY}/${ORG}/${img}:latest"
     docker tag "$src" "$latest"
-    docker push "$latest" || true
+    docker push "$latest"
   fi
 done
 

@@ -28,9 +28,21 @@ VALID_SEVERITIES = frozenset({"info", "warning", "critical"})
 
 def _normalize_bindings(raw: Any) -> dict[str, list[str]]:
     if not isinstance(raw, dict):
-        return {"point_ids": [], "equipment_ids": [], "brick_types": []}
+        return {
+            "point_ids": [],
+            "direct_point_ids": [],
+            "equipment_ids": [],
+            "brick_types": [],
+        }
+    point_ids = [str(x) for x in raw.get("point_ids", []) if str(x).strip()]
+    direct = raw.get("direct_point_ids")
+    if direct is None:
+        direct_point_ids = list(point_ids)
+    else:
+        direct_point_ids = [str(x) for x in direct if str(x).strip()]
     return {
-        "point_ids": [str(x) for x in raw.get("point_ids", []) if str(x).strip()],
+        "point_ids": point_ids,
+        "direct_point_ids": direct_point_ids,
         "equipment_ids": [str(x) for x in raw.get("equipment_ids", []) if str(x).strip()],
         "brick_types": [str(x) for x in raw.get("brick_types", []) if str(x).strip()],
     }
@@ -138,6 +150,7 @@ class RuleStore:
                 before = (tuple(b["point_ids"]), tuple(b["equipment_ids"]))
                 if pset:
                     b["point_ids"] = [x for x in b["point_ids"] if x not in pset]
+                    b["direct_point_ids"] = [x for x in b["direct_point_ids"] if x not in pset]
                 if eset:
                     b["equipment_ids"] = [x for x in b["equipment_ids"] if x not in eset]
                 after = (tuple(b["point_ids"]), tuple(b["equipment_ids"]))

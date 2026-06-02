@@ -58,10 +58,19 @@ services:
 
 {% if enable_ollama | default(false) | bool and openfdd_docker_ollama | default(true) | bool %}
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:{{ ollama_docker_image_tag | default('latest') }}
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
       - {{ openfdd_remote_dir }}/docker/volumes/ollama:/root/.ollama
     restart: unless-stopped
+{% if ollama_gpu_mode | default('cpu') in ['gpu', 'auto'] %}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+{% endif %}
 {% endif %}

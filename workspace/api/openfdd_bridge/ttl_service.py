@@ -115,7 +115,10 @@ class TtlService:
             if pid is None:
                 continue
             bt = _safe_brick_type(str(pt.get("brick_type") or "Point"), "Point")
-            pt_label = str(pt.get("name") or pt.get("description") or pt.get("external_id") or pid)
+            raw_id = str(pt.get("id") or "").strip()
+            pt_label = str(
+                pt.get("name") or pt.get("description") or pt.get("external_id") or raw_id or pid
+            )
             lines.append(f":pt_{pid} a brick:{bt} ;")
             lines.append(f'  rdfs:label "{_escape(pt_label)}" ;')
             if pt.get("equipment_id"):
@@ -150,7 +153,8 @@ class TtlService:
         from .model_feeds import ensure_model_feeds
         from .model_service import ModelService
 
-        with ModelService().transaction() as model:
+        svc = ModelService(store=self.model_store)
+        with svc.transaction() as model:
             ensure_model_feeds(model)
         ttl = self.build_ttl()
         self.ttl_path.parent.mkdir(parents=True, exist_ok=True)

@@ -26,9 +26,19 @@ export OPENFDD_REPO_ROOT="$ROOT"
 export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
 export PYTHONPATH="$ROOT:${ROOT}/workspace/api"
-# test_ollama agent_context needs readable workspace/data/model.json (often root-owned after docker deploy)
-"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q \
-  --ignore=tests/workspace_bridge/test_ollama.py
+# Isolated data dir when workspace/data/model.json is root-owned after docker deploy
+TEST_DATA="${ROOT}/.build_test_data"
+mkdir -p "$TEST_DATA"
+if [[ ! -r "${ROOT}/workspace/data/model.json" ]]; then
+  cp "${ROOT}/workspace/data/bench_import_model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
+else
+  cp "${ROOT}/workspace/data/model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || cp "${ROOT}/workspace/data/bench_import_model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
+fi
+export OFDD_DESKTOP_DATA_DIR="$TEST_DATA"
+"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
 
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html

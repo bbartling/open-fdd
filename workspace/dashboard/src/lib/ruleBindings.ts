@@ -2,6 +2,8 @@ import { apiFetch } from "./api";
 
 export type RuleBindings = {
   point_ids?: string[];
+  /** Points bound explicitly (not via equipment/brick mass-bind). */
+  direct_point_ids?: string[];
   equipment_ids?: string[];
   brick_types?: string[];
 };
@@ -24,8 +26,14 @@ export type BindTarget = {
 };
 
 export function normalizeBindings(raw?: RuleBindings): Required<RuleBindings> {
+  const point_ids = [...(raw?.point_ids ?? [])];
+  const direct =
+    raw?.direct_point_ids !== undefined
+      ? [...raw.direct_point_ids]
+      : [...point_ids];
   return {
-    point_ids: [...(raw?.point_ids ?? [])],
+    point_ids,
+    direct_point_ids: direct,
     equipment_ids: [...(raw?.equipment_ids ?? [])],
     brick_types: [...(raw?.brick_types ?? [])],
   };
@@ -49,7 +57,10 @@ export function mergeBind(
   extraPointIds: string[] = [],
 ): RuleBindings {
   const next = normalizeBindings(prev);
-  if (kind === "point" && !next.point_ids.includes(id)) next.point_ids.push(id);
+  if (kind === "point") {
+    if (!next.point_ids.includes(id)) next.point_ids.push(id);
+    if (!next.direct_point_ids.includes(id)) next.direct_point_ids.push(id);
+  }
   if (kind === "equipment" && !next.equipment_ids.includes(id)) next.equipment_ids.push(id);
   if (kind === "brick_type" && !next.brick_types.includes(id)) next.brick_types.push(id);
   for (const pid of extraPointIds) {
@@ -60,16 +71,22 @@ export function mergeBind(
 
 export function unbindTarget(prev: RuleBindings | undefined, target: BindTarget): RuleBindings {
   const next = normalizeBindings(prev);
+  const direct = new Set(next.direct_point_ids);
   if (target.kind === "point") {
     next.point_ids = next.point_ids.filter((x) => x !== target.id);
+    next.direct_point_ids = next.direct_point_ids.filter((x) => x !== target.id);
   } else if (target.kind === "equipment") {
     next.equipment_ids = next.equipment_ids.filter((x) => x !== target.id);
     const drop = new Set(target.pointIds ?? []);
-    if (drop.size) next.point_ids = next.point_ids.filter((x) => !drop.has(x));
+    if (drop.size) {
+      next.point_ids = next.point_ids.filter((x) => !drop.has(x) || direct.has(x));
+    }
   } else {
     next.brick_types = next.brick_types.filter((x) => x !== target.id);
     const drop = new Set(target.pointIds ?? []);
-    if (drop.size) next.point_ids = next.point_ids.filter((x) => !drop.has(x));
+    if (drop.size) {
+      next.point_ids = next.point_ids.filter((x) => !drop.has(x) || direct.has(x));
+    }
   }
   return next;
 }
@@ -80,9 +97,13 @@ export async function fetchSavedRules(): Promise<SavedRule[]> {
 }
 
 export async function persistRuleBindings(rule: SavedRule, bindings: RuleBindings): Promise<SavedRule> {
+  const norm = normalizeBindings(bindings);
   const body = {
     rule_id: rule.id,
-    ...normalizeBindings(bindings),
+    point_ids: norm.point_ids,
+    direct_point_ids: norm.direct_point_ids,
+    equipment_ids: norm.equipment_ids,
+    brick_types: norm.brick_types,
   };
   const res = await apiFetch<{ rule: SavedRule }>("/api/rules/bindings", {
     method: "POST",

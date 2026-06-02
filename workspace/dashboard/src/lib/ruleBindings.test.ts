@@ -35,9 +35,10 @@ describe("ruleBindings", () => {
     expect(next.point_ids).toEqual(["p2", "p3"]);
   });
 
-  it("unbinds equipment and its points", () => {
+  it("unbinds equipment but keeps directly bound points", () => {
     const prev = {
       point_ids: ["p1", "p2"],
+      direct_point_ids: ["p1"],
       equipment_ids: ["eq1"],
       brick_types: [],
     };
@@ -48,7 +49,8 @@ describe("ruleBindings", () => {
       pointIds: ["p1", "p2"],
     });
     expect(next.equipment_ids).toEqual([]);
-    expect(next.point_ids).toEqual([]);
+    expect(next.point_ids).toEqual(["p1"]);
+    expect(next.direct_point_ids).toEqual(["p1"]);
   });
 
   it("builds assignment summary rows", () => {

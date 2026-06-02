@@ -34,7 +34,7 @@ Host **Caddy** (:80) is like HA’s ingress: provided by the OS layer, not insid
 
 1. **Develop apps** — change `workspace/`, `open_fdd/`, `bacnet_toolshed/`; build images with `./scripts/docker_build.sh`
 2. **Supervisor** — addon list in `supervisor/manifest.yaml`; dev stack `docker/compose.dev.yml`
-3. **Publish** — `./scripts/docker_publish.sh` (GHCR) when ready
+3. **Publish** — GHCR when operator is ready ([publish howto](../howto/publish_docker_addons.md); **deferred**, manual Actions only)
 4. **Deploy edge** — `./scripts/docker_build.sh --save` + `infra/ansible/deploy.sh docker`
 5. **Future OS** — flash `os/` Buildroot artifact; supervisor pulls pinned images (no Ansible)
 
@@ -45,7 +45,7 @@ Host **Caddy** (:80) is like HA’s ingress: provided by the OS layer, not insid
 | Local supervisor stack | `./scripts/openfdd_stack.sh up` |
 | Build all addons | `./scripts/docker_build.sh` |
 | Edge bundle (Tailscale) | `./scripts/docker_build.sh --save` |
-| Publish images | `GITHUB_TOKEN=… ./scripts/docker_publish.sh` |
+| Publish images (later) | Actions → **Publish Docker addons**, or [publish howto](../howto/publish_docker_addons.md) |
 | Acme deploy | See [Docker edge deploy](../edge_deploy_docker.md) |
 
 ## Why this matters

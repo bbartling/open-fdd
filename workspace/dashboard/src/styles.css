@@ -5,7 +5,8 @@
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  -webkit-clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
 }
@@ -345,7 +346,9 @@ button {
 }
 
 button.secondary-btn,
-button.secondary {
+button.secondary,
+a.secondary-btn,
+.secondary-btn {
   background: var(--panel-soft);
   color: var(--text);
   border: 1px solid var(--border);

@@ -126,6 +126,7 @@ celerybeat.pid
 # Environments
 .env
 stack/.env
+.build_test_data/
 .venv
 .venv-ci/
 .venv-ansible
