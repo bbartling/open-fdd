@@ -19,28 +19,33 @@ cp secrets/acme.env.example secrets/acme.env.local   # SSH + site facts (chmod 6
 
 **Secrets layout:** [secrets/README.md](secrets/README.md) · public overview: [docs/edge_deploy.md](../../docs/edge_deploy.md)
 
-## Deploy components (easy buttons)
+## Deploy paths
+
+| Path | Use when |
+|------|----------|
+| **`docker`** (recommended) | Acme VM, x86 edges — images + compose; no app systemd units |
+| **`all`** / components | Pi/lab without Docker — rsync + venv + systemd app units |
 
 Use **`./deploy.sh <component> --limit <host>`** or **`make <component> HOST=<host>`** from this directory.
 
 | Component | What it updates |
 |-----------|-----------------|
-| **`all`** | Full stack (default). Same as legacy `./deploy.sh --limit HOST` |
-| **`ui`** / **`web`** | Built React dashboard → `workspace/api/static/app/` |
-| **`backend`** | Bridge API (`workspace/api/`), bridge systemd, pip deps |
+| **`docker`** | **Primary.** Image bundle + compose + workspace state — [edge_deploy_docker.md](../../docs/edge_deploy_docker.md) |
+| **`all`** | Legacy full stack (rsync + systemd app units) |
+| **`ui`** / **`web`** | Built React dashboard → `workspace/api/static/app/` (baked into Docker image for `docker` path) |
+| **`backend`** | Bridge API rsync + **legacy** `openfdd-bridge` systemd |
 | **`core`** | `open_fdd/` Python package + editable install |
-| **`drivers`** | `bacnet_toolshed/`, poll + commission units, `points.csv`, `commission.env` |
+| **`drivers`** | `bacnet_toolshed/`, **legacy** poll/commission units, `points.csv` |
 | **`data`** | `workspace/data/` (models, rules paths — not live historian DB) |
 | **`config`** | `auth.env.local`, bridge secrets, Caddyfile |
-| **`caddy`** | Caddy package + TLS + reverse proxy only |
-| **`systemd`** | Reload unit files; restart/enable services (no code sync) |
-| **`pip`** | venv + pip installs only |
+| **`caddy`** | Caddy package + TLS + reverse proxy (host; used with Docker too) |
+| **`systemd`** | **Legacy only** — reload app unit files (ignored when `openfdd_docker_stack: true`) |
+| **`pip`** | venv + pip installs (legacy path) |
 | **`commission`** | Push `points.csv` from `edge_backup/local/<site>/<building>/` |
-| **`mcp`** | MCP RAG sidecar (`edge_ai_stack.yml`) |
-| **`ai`** | Ollama bootstrap + MCP (`ollama_bootstrap.yml` + `edge_ai_stack.yml`) |
-| **`os`** | `apt update` + safe upgrade (`os_update.yml`) |
-| **`check`** | Post-deploy HTTP/systemd probes only |
-| **`docker`** | Docker Compose stack — see [docs/edge_deploy_docker.md](../../docs/edge_deploy_docker.md) |
+| **`mcp`** | MCP RAG sidecar (`edge_ai_stack.yml`; legacy systemd or Docker) |
+| **`ai`** | Ollama bootstrap + MCP |
+| **`os`** | `apt update` + safe upgrade |
+| **`check`** | Post-deploy probes (compose or systemd, per host vars) |
 
 **Examples**
 
@@ -76,14 +81,30 @@ make os HOST=acme_vm_bbartling
 
 ## Services on edge
 
+### Docker path (`openfdd_docker_stack: true`)
+
+| Runtime | Role |
+|---------|------|
+| **compose: bridge** | FastAPI Rule Lab + FDD + ingest (:8765) |
+| **compose: commission** | BACnet discover/write HTTP (:8767) + poll loop |
+| **compose: bacnet-poll** | Optional dedicated poll container (`network_mode: host`) |
+| **compose: mcp-rag** | Doc search (:8090) |
+| **host: caddy** | LAN **:80** → loopback bridge |
+| **host: openfdd-fdd-loop.timer** | Scheduled FDD batch (`docker compose exec bridge …`) |
+| **host: openfdd-feather-retention.timer** | Feather prune |
+
+Logs: `docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission`
+
+### Legacy systemd path (e.g. `bacnet_pi`)
+
 | Unit | Role |
 |------|------|
-| `openfdd-bridge` | FastAPI Rule Lab + FDD + ingest (8765) |
-| `openfdd-bacnet-commission` | Discover jobs HTTP agent (8767) |
-| `openfdd-bacnet-poll` | RPM → `workspace/bacnet/polls/samples.csv` (systemd edge; local dev uses commission agent poll loop) |
-| `openfdd-fdd-loop.timer` | Runs saved Rule Lab rules across the BRICK model every `fdd_loop_interval_hours` → check-engine light |
-| `openfdd-feather-retention.timer` | Daily feather prune + GiB cap (`feather_retention_days`, `feather_max_gib`) |
-| `caddy` | LAN entry **:80** (or **:443** TLS) → bridge on loopback — default URL with no port |
+| `openfdd-bridge` | FastAPI (:8765) |
+| `openfdd-bacnet-commission` | Commission agent (:8767) |
+| `openfdd-bacnet-poll` | RPM → `samples.csv` |
+| `openfdd-fdd-loop.timer` | Scheduled FDD batch (host `.venv`) |
+| `openfdd-feather-retention.timer` | Feather prune |
+| `caddy` | LAN entry **:80** → bridge |
 
 Poll driver is **off** until `points.csv` is commissioned:
 

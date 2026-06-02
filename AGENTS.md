@@ -23,7 +23,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Author Python rules in **Rule Lab** (`evaluate(row, cfg, …)` or DataFrame scripts); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
 - Humans and AI share the same `.py` files: browser save and `POST /openfdd-agent/tool` (`rules.save`) both call `RuleStore.upsert()`. Doc: [docs/howto/rule_lab_storage.md](docs/howto/rule_lab_storage.md).
-- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner` (from `workspace/api/`); local stack: `./scripts/openfdd_stack.sh up` (Docker supervisor). Legacy: `./scripts/run_local.sh start` (systemd + optional Caddy).
+- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner`; local/edge app stack: `./scripts/openfdd_stack.sh up` or `./deploy.sh docker`. Legacy Pi path: `./scripts/run_local.sh start` (host systemd app units).
 - Use `open_fdd.engine.column_map_from_model` (and playground sandbox) on the bridge — not a separate YAML rule runner in generated apps.
 - For standalone **library** use outside the operator stack, `open_fdd.engine.RuleRunner` with YAML files remains available via `pip install "open-fdd[engine]"` (see [engine-pandas-fdd](skills/engine-pandas-fdd/SKILL.md)).
 
@@ -70,6 +70,6 @@ Tracked templates: `secrets/acme.env.example`, `inventory.example.yml`, `host_va
 | Workspace memory | [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md) |
 | Workspace cron | [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md) |
 | Local multi-process dev | [skills/local-dev-orchestration/SKILL.md](skills/local-dev-orchestration/SKILL.md) |
-| Caddy / systemd / Ansible bench | `skills/caddy-*`, `skills/systemd-*`, `skills/ansible-*` |
+| Docker edge / Caddy / Ansible | `docs/edge_deploy_docker.md`, `skills/caddy-*`, `skills/ansible-*` |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables, env catalogs, and legacy source maps.

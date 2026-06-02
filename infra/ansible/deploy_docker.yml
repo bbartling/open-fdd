@@ -1,5 +1,5 @@
 ---
-# Docker-based edge deploy — images + compose on host; Caddy stays systemd by default.
+# Docker-based edge deploy — app stack in Compose; host Caddy + FDD/retention timers only.
 #
 #   ./scripts/docker_build.sh --save
 #   ./deploy.sh docker --limit acme_vm_bbartling

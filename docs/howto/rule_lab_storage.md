@@ -76,7 +76,9 @@ Map rules to BACnet points on **`/data-model`** (Rule mapping board):
 
 ## Scheduled FDD (same Python)
 
-Local stack (`./scripts/run_local.sh start`) starts a background loop:
+On Docker edges, `openfdd-fdd-loop.timer` runs `fdd_runner` inside the bridge container. Local dev (`./scripts/openfdd_stack.sh up`) uses the commission poll loop; trigger FDD manually with `docker compose exec bridge python -m openfdd_bridge.fdd_runner --once` or `POST /api/rules/batch`.
+
+Legacy local stack (`./scripts/run_local.sh start`) starts a background loop:
 
 ```bash
 # workspace/api — required working directory

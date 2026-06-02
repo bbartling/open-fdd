@@ -92,7 +92,7 @@ Components:
   data        workspace/data (models, rules store paths — not live historian)
   config      auth.env.local, bridge secrets, Caddyfile
   caddy       Caddy install + TLS + reverse proxy only
-  systemd     Reload unit files and restart/enable services (no code sync)
+  systemd     Legacy only: reload openfdd-* app units (not used with deploy.sh docker)
   pip         Re-run venv + pip installs only
   commission  Push points.csv from edge_backup only
   mcp | ai    MCP RAG sidecar (+ edge_ai_stack.yml); ai also runs Ollama bootstrap

@@ -1,9 +1,11 @@
 # Docker edge deploy (Open-FDD)
 
 Run the bridge, BACnet commission, MCP RAG, and (optionally) BACnet poll as **containers**.  
-**Caddy** stays on the host (systemd) for LAN :80 → `127.0.0.1:8765` — same as the legacy playbook.
+The Open-FDD **app stack does not use systemd units** on Docker edges (`openfdd-bridge`, `openfdd-bacnet-poll`, etc. are stopped and replaced by Compose).
 
-Legacy **systemd + pip + rsync** deploy remains available via `./deploy.sh all`.
+**Caddy** (and optional host **Ollama**) stay on the host for LAN :80 and GPU access. Two small **host timers** run scheduled FDD batch and feather retention via `docker compose exec` — not separate app daemons.
+
+Legacy **pip + rsync + systemd app units** (`./deploy.sh all`) remains for Pi/lab hosts without Docker.
 
 ## Images
 
@@ -24,17 +26,18 @@ State (feather, rules, model, `points.csv`) lives on the host under **`workspace
 ```bash
 cd ~/open-fdd
 ./scripts/docker_build.sh
-docker compose -f docker/compose.dev.yml up -d
+./scripts/openfdd_stack.sh up          # or: docker compose -f docker/compose.dev.yml up -d
 curl -s http://127.0.0.1:8765/health | jq .
 
-# BACnet poll (host network — needs real OT NIC or lab bind)
-docker compose -f docker/compose.dev.yml --profile bacnet up -d
+# MSTP test bench (FEC 5007): host-network overlay + commission poll loop
+docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d
+./scripts/setup_local_testbench.sh     # discover, model, FDD rules
 
-# Ollama in compose (or use host Ollama — bridge uses host.docker.internal:11434)
+# Ollama in compose (or host Ollama — bridge uses host.docker.internal:11434)
 docker compose -f docker/compose.dev.yml --profile ai up -d
 ```
 
-Stop: `docker compose -f docker/compose.dev.yml down`
+Stop: `./scripts/openfdd_stack.sh down` or `docker compose -f docker/compose.dev.yml down`
 
 ## Acme / edge deploy
 
@@ -88,7 +91,7 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `openfdd_docker_image_tag` | `local` | Image tag in compose |
-| `openfdd_docker_disable_systemd` | `true` | Stop legacy bridge/mcp/poll units |
+| `openfdd_docker_disable_systemd` | `true` | Stop legacy `openfdd-*` app units (bridge/mcp/poll/commission) |
 | `openfdd_docker_ollama` | `true` | Compose `ollama/ollama` when `enable_ollama`; use `false` + `./deploy.sh ai` for host GPU |
 | `openfdd_docker_sync_workspace_data` | `true` | Tar-sync `workspace/data` (rules); set `false` for image-only |
 | `ollama_gpu_mode` | `cpu` | `gpu`/`auto` adds NVIDIA device reservation on compose Ollama |
@@ -114,12 +117,16 @@ Skip state sync on image-only deploy:
 
 **Future:** edge `docker compose pull` from GHCR (see [publish Docker addons](howto/publish_docker_addons.md)) — no tar over SSH.
 
-## What stays systemd
+## Host services (not Compose app containers)
 
-- **Caddy** — TLS/HTTP front door (recommended)
-- **openfdd-fdd-loop.timer** — scheduled FDD batch (for now)
-- **openfdd-feather-retention.timer** — historian trim
-- **Host Ollama** — if you prefer `ollama_bootstrap.yml` over compose Ollama
+| Host unit | Role |
+|-----------|------|
+| **caddy** | LAN :80 / TLS → `127.0.0.1:8765` |
+| **openfdd-fdd-loop.timer** | Periodic `docker compose exec bridge python -m openfdd_bridge.fdd_runner --once` |
+| **openfdd-feather-retention.timer** | Feather prune (host `.venv` today) |
+| **ollama** (optional) | GPU inference when `openfdd_docker_ollama: false` |
+
+**Logs:** `docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission` — not `journalctl -u openfdd-bridge`.
 
 ## Files
 

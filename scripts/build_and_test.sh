@@ -38,6 +38,10 @@ else
     || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
 fi
 export OFDD_DESKTOP_DATA_DIR="$TEST_DATA"
+# Inherit no credentials from workspace/auth.env.local — tests expect auth off unless they reload the app.
+unset OFDD_AUTH_SECRET OFDD_OPERATOR_USER OFDD_OPERATOR_PASSWORD \
+  OFDD_INTEGRATOR_USER OFDD_INTEGRATOR_PASSWORD OFDD_AGENT_USER OFDD_AGENT_PASSWORD \
+  OFDD_WEB_USER OFDD_WEB_PASSWORD 2>/dev/null || true
 "${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
 
 echo "==> Smoke: compiled SPA present"
@@ -50,5 +54,5 @@ chmod +x scripts/validate_supervisor_manifest.sh
 echo ""
 echo "OK — build and tests passed. Next:"
 echo "  ./scripts/openfdd_stack.sh up      # Docker supervisor dev stack"
-echo "  ./scripts/run_local.sh restart     # legacy systemd + Caddy (see workspace/deploy/README.md)"
+echo "  ./scripts/run_local.sh restart     # legacy host units (see workspace/deploy/README.md)"
 echo "  cd infra/ansible && ./deploy.sh docker --limit <host>"
