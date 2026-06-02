@@ -201,6 +201,9 @@ edge_backup/local/acme/*
 edge_backup/local/acme/vm-bbartling/*
 !edge_backup/local/acme/vm-bbartling/device_poll_profiles.csv
 
+# Local build/scratch (Acme model experiments)
+.build_acme_data/
+
 # Runtime audit / error logs (forensics — do not commit)
 workspace/logs/
 
