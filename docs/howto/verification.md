@@ -36,7 +36,8 @@ Covers manifest loading, memory truncation, cron schedules, wake lock behavior, 
 
 ```bash
 ./scripts/build_and_test.sh          # vitest + prod UI + pytest tests/workspace_bridge
-./scripts/run_local.sh restart --ui-skip   # stack only if UI already built
+./scripts/openfdd_stack.sh up              # Docker stack (recommended)
+# or: ./scripts/run_local.sh restart --ui-skip   # legacy systemd
 curl -sf http://127.0.0.1/health    # Caddy when enabled
 curl -sf http://127.0.0.1:8765/health
 ```

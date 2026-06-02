@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .fdd_fault_analytics import format_fault_detail
 from .paths import data_dir
 
 
@@ -59,10 +60,10 @@ def save_results(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return doc
 
 
-def fdd_issues() -> list[dict[str, str]]:
+def fdd_issues() -> list[dict[str, Any]]:
     """Convert the latest batch results into check-engine alert dicts."""
     doc = load_results()
-    issues: list[dict[str, str]] = []
+    issues: list[dict[str, Any]] = []
     for run in doc.get("runs", []):
         if not isinstance(run, dict):
             continue
@@ -84,21 +85,30 @@ def fdd_issues() -> list[dict[str, str]]:
             continue
         rows = int(run.get("rows") or 0)
         code = str(run.get("fault_code") or "")
-        issues.append(
-            {
-                "id": f"fdd-{run.get('rule_id')}-{run.get('site_id')}",
-                "severity": str(run.get("severity") or "warning"),
-                "title": (
-                    f"{code + ' · ' if code else ''}{run.get('rule_name')}: "
-                    f"{flagged} fault row(s) at {run.get('site_id')}"
-                ),
-                "detail": (
-                    f"{flagged}/{rows} samples flagged"
-                    f"{' (' + str(run.get('source')) + ' data)' if run.get('source') else ''}."
-                ),
-                "source": "fdd",
-                "code": code,
-                "equipment_family": str(run.get("equipment_family") or ""),
-            }
-        )
+        analytics = run.get("analytics") if isinstance(run.get("analytics"), dict) else {}
+        detail = str(run.get("detail") or "").strip()
+        if not detail and analytics:
+            detail = format_fault_detail(analytics, source=str(run.get("source") or ""))
+        if not detail:
+            detail = (
+                f"{flagged}/{rows} samples flagged"
+                f"{' (' + str(run.get('source')) + ' data)' if run.get('source') else ''}."
+            )
+        issue: dict[str, Any] = {
+            "id": f"fdd-{run.get('rule_id')}-{run.get('site_id')}",
+            "severity": str(run.get("severity") or "warning"),
+            "title": (
+                f"{code + ' · ' if code else ''}{run.get('rule_name')}: "
+                f"{flagged} fault row(s) at {run.get('site_id')}"
+            ),
+            "detail": detail,
+            "source": "fdd",
+            "code": code,
+            "equipment_family": str(run.get("equipment_family") or ""),
+            "rule_id": str(run.get("rule_id") or ""),
+            "rule_name": str(run.get("rule_name") or ""),
+        }
+        if analytics:
+            issue["analytics"] = analytics
+        issues.append(issue)
     return issues

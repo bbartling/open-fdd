@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from .data_loader import column_map_for_rule, enrich_rows_with_column_map
+from .timeseries_api import plot_column_name
 
 DEFAULT_THRESHOLDS_F: dict[str, float] = {
     "flatline_tolerance": 0.10,
@@ -61,18 +62,25 @@ def resolve_value_column(rule: dict[str, Any], model: dict[str, Any], site_id: s
 
     bindings = rule.get("bindings") if isinstance(rule.get("bindings"), dict) else {}
     point_ids = [str(x) for x in bindings.get("point_ids") or [] if str(x).strip()]
-    for pt in model.get("points") or []:
-        if not isinstance(pt, dict):
-            continue
+    equipment_ids = {str(x) for x in bindings.get("equipment_ids") or [] if str(x).strip()}
+    brick_types = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
+
+    def _matches(pt: dict[str, Any]) -> bool:
         if str(pt.get("site_id") or "") != str(site_id):
-            continue
+            return False
+        eid = str(pt.get("equipment_id") or "").strip()
+        if equipment_ids and eid not in equipment_ids:
+            return False
         if point_ids and str(pt.get("id") or "") not in point_ids:
+            return False
+        if not point_ids and brick_types and str(pt.get("brick_type") or "") not in brick_types:
+            return False
+        return True
+
+    for pt in model.get("points") or []:
+        if not isinstance(pt, dict) or not _matches(pt):
             continue
-        if not point_ids:
-            brick_types = {str(x) for x in bindings.get("brick_types") or [] if str(x).strip()}
-            if brick_types and str(pt.get("brick_type") or "") not in brick_types:
-                continue
-        col = str(pt.get("external_id") or "").strip()
+        col = plot_column_name(pt)
         if not col:
             continue
         brick = str(pt.get("brick_type") or "")

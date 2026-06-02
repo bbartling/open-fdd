@@ -20,6 +20,23 @@ export type StackHealth = {
   bacnet_bind?: string | null;
 };
 
+export type FaultAnalytics = {
+  fault_samples?: number;
+  total_samples?: number;
+  avg_value_fault?: number;
+  min_value_fault?: number;
+  max_value_fault?: number;
+  value_unit?: string;
+  bounds_low?: number;
+  bounds_high?: number;
+  fault_span_label?: string;
+  estimated_fault_duration_label?: string;
+  estimated_fault_duration_sec?: number;
+  fault_span_sec?: number;
+  sample_period_sec?: number;
+  value_columns?: string[];
+};
+
 export type FaultAlert = {
   id?: string;
   severity: string;
@@ -27,6 +44,9 @@ export type FaultAlert = {
   detail?: string;
   source?: string;
   code?: string;
+  rule_id?: string;
+  rule_name?: string;
+  analytics?: FaultAnalytics;
 };
 
 export type FaultFamily = {

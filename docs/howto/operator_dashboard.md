@@ -16,23 +16,31 @@ The **operator stack** lives under `workspace/`. Python runs on the **bridge hos
 | `workspace/api/static/app/` | **Production** React build (served by bridge) |
 | `workspace/dashboard/` | React source — build only; not served at runtime on edge |
 | `workspace/data/` | Feather store, rules, model JSON |
-| `workspace/deploy/` | systemd + Caddy examples |
+| `workspace/deploy/` | Caddy + legacy systemd unit examples (non-Docker edges) |
 | `bacnet_toolshed/` | BACnet commission agent + poll loop |
 
-## Quick start (recommended)
+## Quick start (recommended — Docker)
 
 ```bash
 pip install -e ".[dev]"
-pip install -r workspace/api/requirements.txt
 cp workspace/auth.env.example workspace/auth.env.local    # optional
-cp workspace/caddy.env.example workspace/caddy.env.local  # optional; :80 entry
 
-./scripts/run_local.sh restart
+./scripts/build_and_test.sh          # vitest + prod UI + pytest (first time)
+./scripts/docker_build.sh            # once per image change
+./scripts/openfdd_stack.sh up        # bridge + commission + mcp-rag on :8765
 ```
 
-Open **`http://127.0.0.1/`** when Caddy is enabled (default from `caddy.env.example`), or **`http://127.0.0.1:8765/`** if Caddy is off.
+Open **`http://127.0.0.1:8765/`**. On field VMs, Caddy serves **`http://<lan-ip>/`** (see [Edge deploy (Docker)](../edge_deploy_docker.md)).
 
-`run_local.sh` **rebuilds the production UI** on each start/restart unless you pass **`--ui-skip`**.
+**BACnet lab (bensserver):** `docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d` and `./scripts/setup_local_testbench.sh`.
+
+### Legacy quick start (systemd on host)
+
+```bash
+./scripts/run_local.sh restart       # venv + systemd units + optional Caddy
+```
+
+`run_local.sh` rebuilds the production UI each restart unless **`--ui-skip`**.
 
 ### UI build modes
 
@@ -99,7 +107,7 @@ The Rule Lab editor loads/saves via the bridge API; the footer shows the `.py` p
 
 **Full detail:** [Rule Lab — Python storage & shared editing](rule_lab_storage) (browser flow, AI tools, scheduled loop, BACnet → feather pipeline).
 
-Schedule batch runs: `POST /api/rules/batch`, `./scripts/run_local.sh start` (FDD loop), or Ansible `openfdd-fdd-loop.timer`.
+Schedule batch runs: `POST /api/rules/batch`, edge `openfdd-fdd-loop.timer` (Docker: exec into bridge), or local `docker compose exec bridge python -m openfdd_bridge.fdd_runner --once`.
 
 ## Auth (OT LAN)
 

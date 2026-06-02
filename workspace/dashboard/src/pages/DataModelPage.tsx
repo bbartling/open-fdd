@@ -121,6 +121,7 @@ export default function DataModelPage() {
         <>
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
           <ModelGraphExplorer
+            siteId={activeSiteId}
             refreshKey={refreshKey}
             onStatus={setOut}
             onModelChange={() => void refreshMeta()}

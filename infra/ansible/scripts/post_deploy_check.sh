@@ -15,6 +15,12 @@ HOST=""
 INV="${ANSIBLE_INVENTORY:-${ANSIBLE_DIR}/inventory.yml}"
 LIMIT=""
 SSH_USER="${ANSIBLE_REMOTE_USER:-ben}"
+SSH_OPTS=(-o ConnectTimeout=8)
+SSH_CMD=(ssh "${SSH_OPTS[@]}" -o BatchMode=yes)
+if [[ -n "${SSHPASS:-}" ]] && command -v sshpass >/dev/null 2>&1; then
+  export SSHPASS
+  SSH_CMD=(sshpass -e ssh "${SSH_OPTS[@]}" -o PreferredAuthentications=password -o PubkeyAuthentication=no)
+fi
 CADDY_TLS=0
 AUTH_ENV="${ROOT}/workspace/auth.env.local"
 FAILURES=0
@@ -40,8 +46,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$HOST" && -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&1; then
-  HOST="$(ansible-inventory -i "$INV" --host "$LIMIT" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_host",""))' || true)"
+INVENTORY_DOCKER_STACK=0
+if [[ -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&1; then
+  inv_json="$(ansible-inventory -i "$INV" --host "$LIMIT" 2>/dev/null || true)"
+  if [[ -n "$inv_json" ]]; then
+    HOST="${HOST:-$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_host",""))' 2>/dev/null || true)}"
+    inv_user="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_user",""))' 2>/dev/null || true)"
+    [[ -n "$inv_user" ]] && SSH_USER="$inv_user"
+    INVENTORY_DOCKER_STACK="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("openfdd_docker_stack") else 0)' 2>/dev/null || echo 0)"
+  fi
 fi
 [[ -n "$HOST" ]] || { echo "Need --host IP or --limit NAME with inventory." >&2; usage 1; }
 
@@ -98,9 +111,9 @@ sys.exit(0 if m.get("configured") and m.get("status") in ("green","yellow") else
   log_ok "MCP RAG enabled and healthy (via /health/stack)"
 fi
 
-if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 else 1)'; then
+if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 and d.get("model_query_engine")=="sparql" else 1)'; then
   pts="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("model_api",{}).get("model_point_count",0))')"
-  log_ok "Data modeling API /api/model/tree (${pts} points)"
+  log_ok "Data modeling API /api/model/tree (${pts} points, SPARQL)"
 fi
 
 if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("agent",{}); sys.exit(0 if d.get("agent_context_status")==200 and d.get("mcp_enabled_in_context") else 1)'; then
@@ -129,21 +142,33 @@ else
   log_ok "Auth login skipped (no credentials in ${AUTH_ENV})"
 fi
 
-if command -v ssh >/dev/null 2>&1; then
+if [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
+  log_ok "systemd units skipped (openfdd_docker_stack=true — health via /health/stack)"
+  if command -v ssh >/dev/null 2>&1; then
+    feather_b="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "du -sb ~/open-fdd/workspace/data/feather_store 2>/dev/null | awk '{print \$1}' || echo 0")"
+    log_ok "Feather store on edge: ${feather_b:-0} bytes"
+    bridge_err="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "docker logs --tail 100 \$(docker ps -q -f name=bridge | head -1) 2>&1 | grep -Ei 'ERROR|Traceback' | grep -v '404 Not Found' | tail -3 || true")"
+    if [[ -n "$bridge_err" ]]; then
+      log_fail "Bridge container log errors: ${bridge_err}"
+    else
+      log_ok "Bridge container logs clean (last 100 lines)"
+    fi
+  fi
+elif command -v ssh >/dev/null 2>&1; then
   for unit in caddy openfdd-bridge openfdd-bacnet-commission openfdd-mcp-rag; do
-    state="$(ssh -o BatchMode=yes -o ConnectTimeout=8 "${SSH_USER}@${HOST}" "systemctl is-active ${unit}" 2>/dev/null || echo missing)"
+    state="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "systemctl is-active ${unit}" 2>/dev/null || echo missing)"
     if [[ "$state" == "active" ]]; then
       log_ok "systemd ${unit} active"
     else
       log_fail "systemd ${unit} state=${state}"
     fi
   done
-  if ssh -o BatchMode=yes -o ConnectTimeout=8 "${SSH_USER}@${HOST}" "grep -q reverse_proxy /etc/caddy/Caddyfile"; then
+  if "${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "grep -q reverse_proxy /etc/caddy/Caddyfile"; then
     log_ok "Caddyfile reverse_proxy → bridge"
   else
     log_fail "Caddyfile missing reverse_proxy (default Caddy page likely)"
   fi
-  mcp_loop="$(ssh -o BatchMode=yes -o ConnectTimeout=8 "${SSH_USER}@${HOST}" "curl -fsS http://127.0.0.1:8090/health 2>/dev/null || true")"
+  mcp_loop="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "curl -fsS http://127.0.0.1:8090/health 2>/dev/null || true")"
   if echo "$mcp_loop" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read()); sys.exit(0 if d.get("ok") else 1)' 2>/dev/null; then
     log_ok "MCP RAG loopback :8090/health OK"
   else

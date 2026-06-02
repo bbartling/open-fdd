@@ -33,6 +33,10 @@ def bacnet_poll_csv() -> Path:
     return workspace_dir() / "bacnet" / "polls" / "samples.csv"
 
 
+def commissioning_dir() -> Path:
+    return workspace_dir() / "bacnet" / "commissioning"
+
+
 def static_dashboard_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "static" / "app"
 

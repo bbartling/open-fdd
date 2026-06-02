@@ -28,9 +28,21 @@ VALID_SEVERITIES = frozenset({"info", "warning", "critical"})
 
 def _normalize_bindings(raw: Any) -> dict[str, list[str]]:
     if not isinstance(raw, dict):
-        return {"point_ids": [], "equipment_ids": [], "brick_types": []}
+        return {
+            "point_ids": [],
+            "direct_point_ids": [],
+            "equipment_ids": [],
+            "brick_types": [],
+        }
+    point_ids = [str(x) for x in raw.get("point_ids", []) if str(x).strip()]
+    direct = raw.get("direct_point_ids")
+    if direct is None:
+        direct_point_ids = list(point_ids)
+    else:
+        direct_point_ids = [str(x) for x in direct if str(x).strip()]
     return {
-        "point_ids": [str(x) for x in raw.get("point_ids", []) if str(x).strip()],
+        "point_ids": point_ids,
+        "direct_point_ids": direct_point_ids,
         "equipment_ids": [str(x) for x in raw.get("equipment_ids", []) if str(x).strip()],
         "brick_types": [str(x) for x in raw.get("brick_types", []) if str(x).strip()],
     }
@@ -117,6 +129,47 @@ class RuleStore:
             doc["rules"] = rules
             self._save(doc)
         return normalized
+
+    def prune_bindings(
+        self,
+        *,
+        point_ids: list[str] | None = None,
+        equipment_ids: list[str] | None = None,
+    ) -> int:
+        """Remove stale point/equipment ids from every rule binding. Returns rules updated."""
+        pset = {str(x).strip() for x in (point_ids or []) if str(x).strip()}
+        eset = {str(x).strip() for x in (equipment_ids or []) if str(x).strip()}
+        if not pset and not eset:
+            return 0
+        changed = 0
+        with _LOCK:
+            doc = self.load()
+            rules = [r for r in doc.get("rules", []) if isinstance(r, dict)]
+            for rule in rules:
+                b = _normalize_bindings(rule.get("bindings"))
+                before = (
+                    tuple(b["point_ids"]),
+                    tuple(b["direct_point_ids"]),
+                    tuple(b["equipment_ids"]),
+                )
+                if pset:
+                    b["point_ids"] = [x for x in b["point_ids"] if x not in pset]
+                    b["direct_point_ids"] = [x for x in b["direct_point_ids"] if x not in pset]
+                if eset:
+                    b["equipment_ids"] = [x for x in b["equipment_ids"] if x not in eset]
+                after = (
+                    tuple(b["point_ids"]),
+                    tuple(b["direct_point_ids"]),
+                    tuple(b["equipment_ids"]),
+                )
+                if before != after:
+                    rule["bindings"] = b
+                    rule["updated_at"] = _now()
+                    changed += 1
+            if changed:
+                doc["rules"] = rules
+                self._save(doc)
+        return changed
 
     def delete(self, rule_id: str) -> bool:
         with _LOCK:

@@ -1,0 +1,85 @@
+---
+# Safe Docker disk maintenance — never prunes volumes (workspace bind-mounts historian state).
+#
+# Vars (group_vars/pi_bcn.yml or -e):
+#   openfdd_docker_prune_unused_images  prune images not used by any container (default true on deploy)
+#   openfdd_docker_remove_image_tar      delete loaded openfdd-images-*.tar.gz after deploy (default true)
+#   openfdd_docker_prune_build_cache    builder prune (default false)
+#   openfdd_docker_maintenance_only       skip compose health wait (standalone maintain playbook)
+
+- name: Check Docker CLI on edge
+  ansible.builtin.command: docker --version
+  register: docker_maint_cli
+  changed_when: false
+  failed_when: docker_maint_cli.rc != 0
+  tags: [maintain, docker]
+
+- name: Stat image bundle on edge (optional cleanup)
+  ansible.builtin.stat:
+    path: "{{ openfdd_docker_tar_remote }}"
+  register: remote_docker_tar
+  failed_when: false
+  tags: [maintain, docker]
+
+- name: Record Docker disk usage before maintenance
+  ansible.builtin.command: docker system df
+  register: docker_df_before
+  changed_when: false
+  tags: [maintain, docker]
+
+- name: Run safe Docker maintenance script on edge
+  ansible.builtin.script:
+    cmd: "{{ playbook_dir }}/scripts/docker_edge_maintenance.sh"
+    executable: /bin/bash
+  environment:
+    PRUNE_UNUSED_IMAGES: "{{ '1' if (openfdd_docker_prune_unused_images | default(true) | bool) else '0' }}"
+    PRUNE_BUILD_CACHE: "{{ '1' if (openfdd_docker_prune_build_cache | default(false) | bool) else '0' }}"
+    REMOVE_IMAGE_TAR: "{{ '1' if (openfdd_docker_remove_image_tar | default(true) | bool) else '0' }}"
+    IMAGE_TAR_PATH: >-
+      {{
+        openfdd_docker_tar_remote
+        if (
+          (openfdd_docker_remove_image_tar | default(true) | bool)
+          and (remote_docker_tar.stat.exists | default(false))
+        )
+        else ''
+      }}
+  register: docker_maint_run
+  changed_when: >-
+    'Total reclaimed space' in (docker_maint_run.stdout | default(''))
+    or 'deleted' in (docker_maint_run.stdout | default(''))
+    or 'Remove image bundle' in (docker_maint_run.stdout | default(''))
+  tags: [maintain, docker]
+
+- name: Record Docker disk usage after maintenance
+  ansible.builtin.command: docker system df
+  register: docker_df_after
+  changed_when: false
+  tags: [maintain, docker]
+
+- name: Docker maintenance summary
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: maintenance complete.
+      unused_images={{ openfdd_docker_prune_unused_images | default(true) }},
+      removed_tar={{ openfdd_docker_remove_image_tar | default(true) }}.
+      See task output for reclaimed space.
+  tags: [maintain, docker]
+
+- name: Ensure Open-FDD Compose stack is still healthy after prune
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - "{{ openfdd_remote_dir }}/docker-compose.yml"
+      - ps
+      - --status
+      - running
+  register: docker_ps_after_maint
+  changed_when: false
+  failed_when: docker_ps_after_maint.rc != 0
+  when:
+    - openfdd_docker_stack | default(false) | bool
+    - not (openfdd_docker_maintenance_only | default(false) | bool)
+  tags: [maintain, docker, verify]

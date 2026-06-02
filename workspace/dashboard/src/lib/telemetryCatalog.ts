@@ -15,6 +15,7 @@ export type SeriesOption = {
   column: string;
   equipment_id: string;
   label: string;
+  brick_type?: string;
 };
 
 export type EquipmentGroup = {

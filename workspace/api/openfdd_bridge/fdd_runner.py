@@ -21,6 +21,7 @@ from .data_loader import load_frame_for_run
 from .fdd_row_prep import prepare_fdd_rows
 from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
+from .fdd_fault_analytics import format_fault_detail, summarize_fault_run
 from .fdd_results import save_results
 from .model_service import ModelService
 from .rule_store import RuleStore
@@ -170,13 +171,21 @@ def _run_one(
                 "chunk_hours": chunk_hours,
             }
         rows = prepare_fdd_rows(frame, rule, model, site_id, limit=limit or len(frame))
-        flags, _events = playground.sweep_rule(code, rule.get("config") or {}, rows, capture_print=False)
-        return {
+        cfg = rule.get("config") or {}
+        flags, _events = playground.sweep_rule(code, cfg, rows, capture_print=False)
+        flagged = int(sum(1 for f in flags if f))
+        run: dict[str, Any] = {
             **base,
             "status": "ok",
             "rows": len(rows),
-            "flagged": int(sum(1 for f in flags if f)),
+            "flagged": flagged,
         }
+        if flagged > 0:
+            analytics = summarize_fault_run(rows, flags, config=cfg)
+            if analytics:
+                run["analytics"] = analytics
+                run["detail"] = format_fault_detail(analytics, source=origin)
+        return run
     except Exception as exc:  # noqa: BLE001 - surface as a run error, keep the batch going
         return {**base, "status": "error", "rows": 0, "flagged": 0, "error": str(exc)[:1000]}
 
@@ -191,7 +200,13 @@ def run_batch(
 ) -> dict[str, Any]:
     started = time.time()
     model = ModelService().load()
-    rules = [r for r in RuleStore().list_rules() if isinstance(r, dict) and r.get("enabled", True)]
+    rules = [
+        r
+        for r in RuleStore().list_rules()
+        if isinstance(r, dict)
+        and r.get("enabled", True)
+        and not str(r.get("id") or "").startswith("bench-")
+    ]
     lookback = max(0.0, float(lookback_hours))
     chunk = chunk_hours if (use_chunks if use_chunks is not None else lookback > 6) else 0
     runs: list[dict[str, Any]] = []

@@ -22,6 +22,7 @@ from .model_health import model_health_summary
 from .model_service import ModelService
 from .model_store import ModelStore
 from .paths import repo_root, workspace_dir
+from .rule_bindings import apply_bind_op
 from .rule_store import RuleStore
 
 
@@ -119,6 +120,31 @@ def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
     return {"status": doc["status"], "alert_count": len(doc["alerts"])}
 
 
+def _tool_rules_bind(args: dict[str, Any]) -> dict[str, Any]:
+    """Add or remove a point/equipment/brick_type binding on a saved rule (merge semantics)."""
+    _require(args, "rule_id", "op", "kind", "target_id")
+    op = str(args["op"]).strip().lower()
+    kind = str(args["kind"]).strip().lower()
+    if op not in {"add", "remove"}:
+        raise ToolError("op must be 'add' or 'remove'")
+    if kind not in {"point", "equipment", "brick_type"}:
+        raise ToolError("kind must be point, equipment, or brick_type")
+    store = RuleStore()
+    rule = store.get(str(args["rule_id"]))
+    if not rule:
+        raise ToolError(f"rule not found: {args['rule_id']}")
+    point_ids = [str(x) for x in args.get("point_ids") or [] if str(x).strip()]
+    bindings = apply_bind_op(
+        rule,
+        op=op,  # type: ignore[arg-type]
+        kind=kind,  # type: ignore[arg-type]
+        target_id=str(args["target_id"]),
+        point_ids=point_ids,
+    )
+    entry = store.upsert({**rule, "bindings": bindings}, saved_by="agent")
+    return {"rule_id": entry.get("id"), "bindings": entry.get("bindings")}
+
+
 def _tool_rules_run_batch(args: dict[str, Any]) -> dict[str, Any]:
     raw = args.get("limit")
     try:
@@ -182,6 +208,7 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "model.add_equipment": _tool_model_add_equipment,
     "model.add_point": _tool_model_add_point,
     "rules.save": _tool_rules_save,
+    "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
     "building.set_alerts": _tool_building_set_alerts,
     "app.edit_file": _tool_app_edit_file,
@@ -201,8 +228,13 @@ def tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "rules.save",
-            "args": ["name", "code", "fault_code?", "mode?", "config?", "applies_to?", "severity?"],
+            "args": ["name", "code", "fault_code?", "mode?", "config?", "applies_to?", "severity?", "bindings?"],
             "writes": "rules_store.json",
+        },
+        {
+            "name": "rules.bind",
+            "args": ["rule_id", "op", "kind", "target_id", "point_ids?"],
+            "writes": "rules_store.json bindings (merge add/remove)",
         },
         {"name": "rules.run_batch", "args": ["limit?"], "writes": "fdd_results.json"},
         {

@@ -26,12 +26,33 @@ export OPENFDD_REPO_ROOT="$ROOT"
 export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
 export PYTHONPATH="$ROOT:${ROOT}/workspace/api"
+# Isolated data dir when workspace/data/model.json is root-owned after docker deploy
+TEST_DATA="${ROOT}/.build_test_data"
+mkdir -p "$TEST_DATA"
+if [[ ! -r "${ROOT}/workspace/data/model.json" ]]; then
+  cp "${ROOT}/workspace/data/bench_import_model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
+else
+  cp "${ROOT}/workspace/data/model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || cp "${ROOT}/workspace/data/bench_import_model.json" "$TEST_DATA/model.json" 2>/dev/null \
+    || echo '{"sites":[],"equipment":[],"points":[]}' >"$TEST_DATA/model.json"
+fi
+export OFDD_DESKTOP_DATA_DIR="$TEST_DATA"
+# Inherit no credentials from workspace/auth.env.local — tests expect auth off unless they reload the app.
+unset OFDD_AUTH_SECRET OFDD_OPERATOR_USER OFDD_OPERATOR_PASSWORD \
+  OFDD_INTEGRATOR_USER OFDD_INTEGRATOR_PASSWORD OFDD_AGENT_USER OFDD_AGENT_PASSWORD \
+  OFDD_WEB_USER OFDD_WEB_PASSWORD 2>/dev/null || true
 "${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
 
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html
 
+echo "==> Supervisor manifest vs Dockerfile"
+chmod +x scripts/validate_supervisor_manifest.sh
+./scripts/validate_supervisor_manifest.sh
+
 echo ""
 echo "OK — build and tests passed. Next:"
-echo "  ./scripts/run_local.sh restart   # prod UI + Caddy + bridge (see workspace/deploy/README.md)"
-echo "  cd infra/ansible && ./deploy.sh --limit bacnet_pi -v"
+echo "  ./scripts/openfdd_stack.sh up      # Docker supervisor dev stack"
+echo "  ./scripts/run_local.sh restart     # legacy host units (see workspace/deploy/README.md)"
+echo "  cd infra/ansible && ./deploy.sh docker --limit <host>"

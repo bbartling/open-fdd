@@ -30,6 +30,8 @@ Bring your own CSV or historian export. No database or field bus is required.
 
 **Brick labels in examples are optional.** Cookbook YAML often includes `brick:` on inputs; you can use plain logical names and `column_map={"SAT": "RTU_11_DA_T"}` instead.
 
+**Edge deployments** (feather historian, Rule Lab, BACnet, Ansible) are documented in [Getting started — edge architecture](getting_started#edge-architecture-feather-python-fdd-ansible) with the current stack diagram.
+
 ---
 
 ## Quick start — engine

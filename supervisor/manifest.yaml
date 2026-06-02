@@ -1,0 +1,86 @@
+# Open-FDD Supervisor addon manifest (HA Supervisor analogue).
+# Source of truth for image names and compose profiles.
+# Version pins for registry pulls live in docker/images.yaml.
+
+version: 1
+project: openfdd-edge
+
+# Persistent state on the host (bind-mounted into containers)
+data:
+  workspace: /var/openfdd/workspace
+  secrets: /etc/openfdd
+
+# Host services outside compose (same pattern as HA: OS provides nginx/caddy)
+host:
+  caddy:
+    enabled: true
+    port: 80
+    upstream: "127.0.0.1:8765"
+  ollama:
+    enabled: optional  # host systemd OR compose profile ai
+    port: 11434
+
+apps:
+  # Core addon: API + compiled React SPA (ADR 001). Do not split into openfdd-dashboard
+  # until UI/API release cadence diverges or supervisor needs a separate Dashboard addon.
+  # See docs/architecture/adr-001-core-addon-spa.md
+  bridge:
+    title: Open-FDD Bridge
+    image: openfdd-bridge
+    build_target: bridge
+    role: core
+    includes_spa: true
+    ports:
+      - host: "127.0.0.1"
+        container: 8765
+    health: "http://127.0.0.1:8765/health"
+    env:
+      OPENFDD_BACNET_COMMISSION_URL: "http://commission:8767"
+      OFDD_MCP_REST_BASE: "http://mcp-rag:8090"
+
+  commission:
+    title: BACnet Commission Agent
+    image: openfdd-commission
+    build_target: commission
+    role: bacnet
+    internal_port: 8767
+
+  mcp-rag:
+    title: MCP RAG Sidecar
+    image: openfdd-mcp-rag
+    build_target: mcp-rag
+    role: ai
+    internal_port: 8090
+    optional: false
+
+  bacnet-poll:
+    title: BACnet Poll Driver
+    image: openfdd-bacnet-poll
+    build_target: bacnet-poll
+    role: bacnet
+    network_mode: host
+    profile: bacnet
+    optional: true
+
+  ollama:
+    title: Ollama (compose)
+    image: ollama/ollama
+    role: ai
+    profile: ai
+    optional: true
+    external: true
+
+# Deferred addons (not in compose today — revisit per ADR 001)
+deferred:
+  dashboard:
+    title: Open-FDD Dashboard (static nginx)
+    image: openfdd-dashboard
+    reason: "SPA stays in bridge core until independent UI releases justify split"
+    adr: docs/architecture/adr-001-core-addon-spa.md
+
+# Legacy systemd units disabled when supervisor uses Docker
+legacy_systemd:
+  - openfdd-bridge
+  - openfdd-mcp-rag
+  - openfdd-bacnet-poll
+  - openfdd-bacnet-commission

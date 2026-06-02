@@ -57,6 +57,45 @@ def _parse_poll_at(at: str) -> float | None:
         return None
 
 
+def _ollama_configured() -> bool:
+    """Show in the status strip unless explicitly disabled."""
+    flag = os.environ.get("OFDD_OLLAMA_ENABLED", "").strip().lower()
+    return flag not in {"0", "false", "no"}
+
+
+def _ollama_service() -> dict[str, Any]:
+    from . import ollama_client
+
+    configured = _ollama_configured()
+    if not configured:
+        return {
+            "id": "ollama",
+            "label": "Ollama",
+            "status": "gray",
+            "configured": False,
+            "detail": "not enabled (set OFDD_OLLAMA_ENABLED=1 or OFDD_OLLAMA_BASE_URL)",
+        }
+
+    timeout = min(float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", "120")), 5.0)
+    health = ollama_client.health(timeout=timeout)
+    ok = health.get("ok") is True
+    model = str(health.get("configured_model") or "").strip()
+    tier = str(health.get("configured_ram_tier") or "").strip()
+    gpu = os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu").strip() or "cpu"
+    if ok:
+        detail = ", ".join(x for x in [model, f"{tier}, {gpu}" if tier else gpu] if x)
+    else:
+        detail = str(health.get("error") or "unreachable")[:200]
+    return {
+        "id": "ollama",
+        "label": "Ollama",
+        "status": _status(ok, True, detail),
+        "configured": True,
+        "detail": detail,
+        "url": health.get("base_url"),
+    }
+
+
 def _bacnet_poll_service() -> dict[str, Any]:
     """Poll loop runs inside the commission agent — use its /api/bacnet/poll/status."""
     points = workspace_dir() / "bacnet" / "commissioning" / "points.csv"
@@ -190,6 +229,8 @@ def stack_health() -> dict[str, Any]:
                 "detail": "not enabled (set OFDD_MCP_ENABLED=1)",
             }
         )
+
+    services.append(_ollama_service())
 
     # Commission agent BACnet bind summary
     st_code, st_payload = commission_status()

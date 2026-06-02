@@ -29,10 +29,14 @@
 
 Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy. Saved rules live in **`workspace/data/rules_py/`** (same files for humans and the AI agent) — see [`docs/howto/rule_lab_storage.md`](docs/howto/rule_lab_storage.md).
 
+Edge layout follows [Home Assistant OS](https://github.com/home-assistant/operating-system): **`os/`** (future Buildroot) → **`supervisor/`** (compose + manifest) → **`docker/`** addon images. See [`docs/architecture/haos_alignment.md`](docs/architecture/haos_alignment.md).
+
 ```bash
-./scripts/run_local.sh restart
-# http://127.0.0.1/ (Caddy) or :8765 — see docs/howto/operator_dashboard.md
+./scripts/openfdd_stack.sh up    # Docker dev stack (local + edge default)
+# http://127.0.0.1:8765/  — or Caddy :80 on field VMs (docs/edge_deploy_docker.md)
 ```
+
+Field deploy: `./scripts/docker_build.sh --save` → `infra/ansible/deploy.sh docker --limit <host>`.
 
 ---
 
@@ -90,7 +94,7 @@ pytest open_fdd/tests/engine
 
 Examples live under `examples/`. Optional shim package: `openfdd-engine` (re-exports the engine); most users install **`open-fdd`** only.
 
-**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
+**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/openfdd_stack.sh up` (Docker); legacy systemd: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
 
 ---
 

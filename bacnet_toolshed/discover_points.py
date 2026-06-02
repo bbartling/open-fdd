@@ -88,7 +88,7 @@ async def discover_points_for_device(
             "enabled": "0",
             "poll_interval_s": "60",
         }
-        raw["point_id"] = make_point_id(dev_inst, oid[0], oid[1])
+        raw["point_id"] = make_point_id(dev_inst, str(oid[0]), oid[1])
         device_rows.append(normalize_row(raw, defaults))
     return device_rows
 

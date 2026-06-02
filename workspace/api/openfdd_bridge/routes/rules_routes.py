@@ -11,8 +11,12 @@ from ..deps import require_roles, require_user
 from ..fault_catalog import is_valid_code
 from ..fdd_runner import run_batch
 from ..paths import data_dir
+from ..rule_bindings import apply_bind_op, build_assignments_view
 from ..rule_store import RuleStore
 from ..rule_source import read_source, write_source
+from ..model_service import ModelService
+from ..site_defaults import ensure_default_site
+from ..ttl_service import TtlService
 
 router = APIRouter(prefix="/api/rules", tags=["rules"], dependencies=[Depends(require_user)])
 
@@ -45,8 +49,19 @@ class RuleSourceBody(BaseModel):
 class RuleBindingsBody(BaseModel):
     rule_id: str
     point_ids: list[str] = Field(default_factory=list)
+    direct_point_ids: list[str] | None = None
     equipment_ids: list[str] = Field(default_factory=list)
     brick_types: list[str] = Field(default_factory=list)
+
+
+class RuleBindOpBody(BaseModel):
+    """Merge-style bind/unbind — same semantics as the dashboard ruleBindings helpers."""
+
+    rule_id: str
+    op: str = Field(pattern="^(add|remove)$")
+    kind: str = Field(pattern="^(point|equipment|brick_type)$")
+    target_id: str
+    point_ids: list[str] = Field(default_factory=list)
 
 
 class BatchBody(BaseModel):
@@ -111,6 +126,45 @@ def put_rule_source(
     return {"ok": True, "path": path, "rule": entry}
 
 
+@router.get("/assignments")
+def list_rule_assignments(
+    site_id: str | None = None,
+    _user: dict = Depends(require_user),
+) -> dict:
+    svc = ModelService()
+    ttl = TtlService()
+    sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
+    model = svc.load()
+    rules = RuleStore().list_rules()
+    view = build_assignments_view(model, rules, site_id=sid)
+    return {"ok": True, **view}
+
+
+@router.post("/bind")
+def patch_rule_binding(
+    body: RuleBindOpBody,
+    user: dict = Depends(require_roles("integrator", "agent", "operator")),
+) -> dict:
+    store = RuleStore()
+    rule = store.get(body.rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"rule not found: {body.rule_id}")
+    kind = body.kind  # validated by pattern
+    op = body.op
+    bindings = apply_bind_op(
+        rule,
+        op=op,  # type: ignore[arg-type]
+        kind=kind,  # type: ignore[arg-type]
+        target_id=body.target_id.strip(),
+        point_ids=body.point_ids,
+    )
+    entry = store.upsert(
+        {**rule, "bindings": bindings},
+        saved_by=str(user.get("sub") or "operator"),
+    )
+    return {"ok": True, "rule": entry}
+
+
 @router.post("/bindings")
 def update_rule_bindings(
     body: RuleBindingsBody,
@@ -125,6 +179,9 @@ def update_rule_bindings(
             **rule,
             "bindings": {
                 "point_ids": body.point_ids,
+                "direct_point_ids": body.direct_point_ids
+                if body.direct_point_ids is not None
+                else body.point_ids,
                 "equipment_ids": body.equipment_ids,
                 "brick_types": body.brick_types,
             },

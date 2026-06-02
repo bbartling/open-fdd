@@ -1,0 +1,10 @@
+device_instance,convert_profile,notes
+11000-13000,metric_temp_f,Trane VAV (MSTP) — BACnet zone/duct temps in °C converted to °F before feather ingest
+11002,metric_temp_f,Trane VAV
+11007,metric_temp_f,Trane VAV
+12023,metric_temp_f,Trane VAV
+12026,metric_temp_f,Trane VAV
+12028,metric_temp_f,Trane VAV
+12032,metric_temp_f,Trane VAV
+12033,metric_temp_f,Trane VAV
+12035,metric_temp_f,Trane VAV

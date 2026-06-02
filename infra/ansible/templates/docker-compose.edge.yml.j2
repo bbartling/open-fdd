@@ -1,0 +1,82 @@
+# Rendered on edge host by deploy_docker.yml — do not edit on VM by hand.
+# Host Caddy (:80) → bridge on 127.0.0.1:{{ openfdd_bridge_port }}
+
+name: openfdd-edge
+
+services:
+  bridge:
+    image: openfdd-bridge:{{ openfdd_docker_image_tag | default('local') }}
+    ports:
+      - "127.0.0.1:{{ openfdd_bridge_port }}:8765"
+    volumes:
+      - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+{% if openfdd_docker_bridge_secret | default(true) | bool %}
+      - /etc/openfdd/bridge.secret.env:/etc/openfdd/bridge.secret.env:ro
+{% endif %}
+    environment:
+      OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
+      OFDD_MCP_REST_BASE: http://mcp-rag:{{ mcp_listen_port | default(8090) }}
+      OFDD_OLLAMA_BASE_URL: "{% if enable_ollama | default(false) | bool and not (openfdd_docker_ollama | default(true) | bool) %}http://host.docker.internal:11434{% elif openfdd_docker_ollama | default(true) | bool and enable_ollama | default(false) | bool %}http://ollama:11434{% else %}{{ ollama_base_url | default('http://127.0.0.1:11434') }}{% endif %}"
+    env_file:
+      - {{ openfdd_remote_dir }}/workspace/auth.env.local
+      - {{ openfdd_remote_dir }}/workspace/mcp.env.local
+      - {{ openfdd_remote_dir }}/workspace/ollama.env.local
+      - {{ openfdd_remote_dir }}/workspace/data.env.local
+    depends_on:
+      - commission
+{% if enable_mcp | default(true) | bool %}
+      - mcp-rag
+{% endif %}
+{% if enable_ollama | default(false) | bool and not (openfdd_docker_ollama | default(true) | bool) %}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+{% endif %}
+    restart: unless-stopped
+
+  commission:
+    image: openfdd-commission:{{ openfdd_docker_image_tag | default('local') }}
+    volumes:
+      - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+    restart: unless-stopped
+
+{% if enable_mcp | default(true) | bool %}
+  mcp-rag:
+    image: openfdd-mcp-rag:{{ openfdd_docker_image_tag | default('local') }}
+    volumes:
+      - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+    restart: unless-stopped
+{% endif %}
+
+{% if enable_bacnet_poll_driver | default(false) | bool %}
+  bacnet-poll:
+    image: openfdd-bacnet-poll:{{ openfdd_docker_image_tag | default('local') }}
+    network_mode: host
+    volumes:
+      - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+    restart: unless-stopped
+{% endif %}
+
+{% if enable_ollama | default(false) | bool and openfdd_docker_ollama | default(true) | bool %}
+  ollama:
+    image: ollama/ollama:{{ ollama_docker_image_tag | default('latest') }}
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - {{ openfdd_remote_dir }}/docker/volumes/ollama:/root/.ollama
+    restart: unless-stopped
+{% if ollama_gpu_mode | default('cpu') in ['gpu', 'auto'] %}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+{% endif %}
+{% endif %}

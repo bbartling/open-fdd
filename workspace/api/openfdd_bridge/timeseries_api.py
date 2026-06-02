@@ -133,6 +133,7 @@ def build_plot_series_catalog(
                 "column": col,
                 "equipment_id": eid,
                 "label": label,
+                "brick_type": str(pt.get("brick_type") or ""),
             }
         )
         mapped_cols.add(col)
@@ -163,7 +164,7 @@ def build_plot_series_catalog(
         inst = meta.get("bacnet_device_instance")
         if inst is None:
             inst = meta.get("bacnet_device_id")
-        label = f"{name} ({inst})" if inst not in (None, "") else name
+        label = name
         eq_opts = [o for o in options if str(o.get("equipment_id") or "") == eid]
         eq_cols = sorted({str(o["column"]) for o in eq_opts})
         groups.append(
@@ -221,15 +222,15 @@ def column_kinds_for_site(model: dict[str, Any], site_id: str) -> dict[str, str]
 
 
 def list_plot_sites() -> list[dict[str, str]]:
+    from .model_sparql import list_model_sites
+
     model = ModelService()
     ensure_default_site(model, TtlService())
-    sites: dict[str, str] = {}
-    for row in model.load().get("sites") or []:
-        if isinstance(row, dict) and row.get("id"):
-            sites[str(row["id"])] = str(row.get("name") or row["id"])
+    sites = {s["site_id"]: s["name"] for s in list_model_sites(model.load())}
+    demo_ids = {"demo", "site", "test", "sample", "default"}
     for entry in FeatherStore().list_sites():
-        sid = entry.get("site_id") or ""
-        if sid and sid not in sites:
+        sid = str(entry.get("site_id") or "").strip()
+        if sid and sid.lower() not in demo_ids and sid not in sites:
             sites[sid] = sid
     return [{"site_id": sid, "name": name} for sid, name in sorted(sites.items())]
 

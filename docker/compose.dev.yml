@@ -1,0 +1,96 @@
+# Local dev stack on bensserver — bind-mounts workspace/ (state + config).
+# Caddy + Ollama stay on host by default (see docs/edge_deploy_docker.md).
+#
+#   ./scripts/docker_build.sh
+#   docker compose -f docker/compose.dev.yml up -d
+#   docker compose -f docker/compose.dev.yml --profile bacnet up -d
+#   docker compose -f docker/compose.dev.yml --profile ai up -d
+
+name: openfdd-dev
+
+services:
+  bridge:
+    image: openfdd-bridge:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: bridge
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ../workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
+      OFDD_MCP_REST_BASE: http://mcp-rag:8090
+      OFDD_OLLAMA_BASE_URL: http://host.docker.internal:11434
+    env_file:
+      - path: ../workspace/auth.env.local
+        required: false
+      - path: ../workspace/mcp.env.local
+        required: false
+      - path: ../workspace/ollama.env.local
+        required: false
+      - path: ../workspace/data.env.local
+        required: false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      commission:
+        condition: service_started
+      mcp-rag:
+        condition: service_started
+    restart: unless-stopped
+
+  commission:
+    image: openfdd-commission:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: commission
+    volumes:
+      - ../workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+    expose:
+      - "8767"
+    restart: unless-stopped
+
+  mcp-rag:
+    image: openfdd-mcp-rag:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: mcp-rag
+    volumes:
+      - ../workspace:/var/openfdd/workspace
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  bacnet-poll:
+    profiles: ["bacnet"]
+    image: openfdd-bacnet-poll:${OPENFDD_IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: bacnet-poll
+    network_mode: host
+    volumes:
+      - ../workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
+    restart: unless-stopped
+
+  ollama:
+    profiles: ["ai"]
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - openfdd-ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  openfdd-ollama:

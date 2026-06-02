@@ -7,6 +7,41 @@ nav_order: 3
 
 Install **`open-fdd`**, run the engine test suite, and try **`open_fdd.reports`** in a notebook.
 
+For the **operator stack** (Rule Lab, BACnet, feather historian on a building VM or Pi), start with the architecture below, then [HA OS alignment](architecture/haos_alignment), [Operator dashboard](howto/operator_dashboard), [Edge deploy (secrets layout)](edge_deploy.md), and [Ansible README](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+
+---
+
+## Edge architecture (feather, Python FDD, Ansible)
+
+On a **git checkout**, Open-FDD is more than the PyPI library: each building runs an **edge stack** you install and maintain with **Ansible**. The diagram is the current reference for how pieces connect.
+
+![Open-FDD edge stack — feather historian, Python FDD, Ansible deploy](assets/Open_FDD_Ansible.png)
+
+| Layer | What it is | Where it lives |
+|-------|------------|----------------|
+| **OS** (future) | Thin Buildroot host + Docker + OTA | `os/` — today Ubuntu + Docker CE |
+| **Supervisor** | Addon manifest, compose, health | `supervisor/` — dev: `./scripts/openfdd_stack.sh` |
+| **Apps** | Bridge, poll, commission, MCP images | `docker/` — `./scripts/docker_build.sh` |
+| **Ansible** | Push images + workspace to field hosts | `infra/ansible/` — `./deploy.sh docker` (primary) |
+| **BACnet poll** | RPM scrape → long CSV → feather wide frames | `openfdd-bacnet-poll`, `bacnet_toolshed/` |
+| **Feather store** | Site timeseries on disk (pyarrow); retention/GiB cap | `workspace/data/feather_store/` |
+| **Bridge API** | Auth, model, Rule Lab, plots, ingest, check-engine | `openfdd-bridge` (:8765, Caddy :80) |
+| **Python FDD** | Saved rules in `rules_py/`, batch loop, playground test | `open_fdd` + `workspace/api/openfdd_bridge/` |
+
+**Typical flow:** commission BACnet points → poll writes **samples.csv** → ingest compacts **feather** → operators edit **Python rules** in Rule Lab → scheduled **FDD loop** updates fault records → **Trend plot** reads the same feather data.
+
+**App maintenance (short list):**
+
+1. Build UI + tests: `./scripts/build_and_test.sh` (or `build_operator_dashboard.sh prod`).
+2. **Docker edge (recommended):** `./scripts/docker_build.sh --save`, then `cd infra/ansible && ./deploy.sh docker --limit <host>` — see [Edge deploy (Docker)](edge_deploy_docker.md).
+3. Local dev stack: `./scripts/openfdd_stack.sh up` (or `docker compose -f docker/compose.dev.yml up -d`).
+4. Logs on edge: `docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission` (app containers). Host Caddy: `journalctl -u caddy -f`.
+5. Health: `curl -s http://127.0.0.1:8765/health` (poll status when commission is up).
+
+Legacy **systemd + rsync** (`./deploy.sh all`) remains for Pi/lab hosts without Docker — see [Ansible README](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+
+Details: [Rule Lab storage](howto/rule_lab_storage), [Operator dashboard](howto/operator_dashboard), [infra/ansible/README.md](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+
 ---
 
 ## Install from PyPI
@@ -76,7 +111,8 @@ See **`examples/README.md`** for CSV demos and notebooks.
 - [Rules overview](rules/overview)
 - [Column map resolvers](column_map_resolvers)
 - [How-to: engine-only IoT](howto/engine_only_iot)
-- [Operator dashboard](howto/operator_dashboard) — `./scripts/run_local.sh restart`, production React + Caddy
+- [Operator dashboard](howto/operator_dashboard) — `./scripts/openfdd_stack.sh up`, production React + Caddy
+- [Edge deploy (Docker)](edge_deploy_docker)
 - [Skills and agent shell](howto/skills_and_agent) — `openfdd.toml`, workspace, Codex (checkout only)
 - [BACnet toolshed](bacnet/index) — discovery and polling CLI (`bacnet_toolshed/`)
 - [Verification](howto/verification)

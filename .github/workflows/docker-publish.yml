@@ -1,0 +1,47 @@
+# Manual GHCR publish for Open-FDD addon images (supervisor/apps layer).
+# Mirrors HA OS artifact workflow — triggered when cutting an edge release.
+name: Publish Docker addons
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (e.g. 2026.05.30-edge)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build addon images
+        run: |
+          chmod +x scripts/docker_build.sh scripts/docker_publish.sh scripts/validate_supervisor_manifest.sh
+          OPENFDD_IMAGE_TAG="${{ inputs.image_tag }}" ./scripts/docker_build.sh
+          ./scripts/validate_supervisor_manifest.sh
+
+      - name: Publish to GHCR
+        env:
+          OPENFDD_IMAGE_TAG: ${{ inputs.image_tag }}
+        run: ./scripts/docker_publish.sh

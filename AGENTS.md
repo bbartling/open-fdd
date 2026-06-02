@@ -6,7 +6,8 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Rules-only library work: `pip install "open-fdd[engine]"` (or editable install) and use `open_fdd.engine.RuleRunner` on pandas DataFrames in notebooks.
 - Operator **Rule Lab** work: extend `workspace/api/` and `workspace/dashboard/` — Python rules only; no YAML hot-reload directory.
-- Do **not** add new top-level services beyond the manifest `[build]` section.
+- Edge **containers**: register addons in `supervisor/manifest.yaml` + `docker/images.yaml`; build with `scripts/docker_build.sh`; local stack `scripts/openfdd_stack.sh`. Future OS: `os/` (Buildroot). See `docs/architecture/haos_alignment.md`.
+- Do **not** add new top-level services beyond the manifest `[build]` section or `supervisor/manifest.yaml` without updating compose + Ansible templates.
 
 ## Workspace writes
 
@@ -22,7 +23,7 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Author Python rules in **Rule Lab** (`evaluate(row, cfg, …)` or DataFrame scripts); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
 - Humans and AI share the same `.py` files: browser save and `POST /openfdd-agent/tool` (`rules.save`) both call `RuleStore.upsert()`. Doc: [docs/howto/rule_lab_storage.md](docs/howto/rule_lab_storage.md).
-- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner` (from `workspace/api/`); local stack: `./scripts/run_local.sh start`.
+- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner`; local/edge app stack: `./scripts/openfdd_stack.sh up` or `./deploy.sh docker`. Legacy Pi path: `./scripts/run_local.sh start` (host systemd app units).
 - Use `open_fdd.engine.column_map_from_model` (and playground sandbox) on the bridge — not a separate YAML rule runner in generated apps.
 - For standalone **library** use outside the operator stack, `open_fdd.engine.RuleRunner` with YAML files remains available via `pip install "open-fdd[engine]"` (see [engine-pandas-fdd](skills/engine-pandas-fdd/SKILL.md)).
 
@@ -30,7 +31,23 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 
 - Bind services to `127.0.0.1` by default; require explicit operator opt-in for LAN (`0.0.0.0`) or Caddy ingress.
 - Secrets via environment variables or local env files — never commit credentials.
+- **Edge SSH / site facts:** `infra/ansible/secrets/<host>.env.local` (gitignored) — see [infra/ansible/secrets/README.md](infra/ansible/secrets/README.md). Examples only on GitHub (`*.example`). `deploy.sh` auto-sources `acme.env.local` for `--limit acme_vm_bbartling`.
+- **Web login:** `workspace/auth.env.local` (integrator/operator) — not SSH; also gitignored.
+- **Commissioning CSVs:** `edge_backup/local/` — gitignored.
+- Public deploy guide (no real IPs): [docs/edge_deploy.md](docs/edge_deploy.md).
 - Historical desktop/MCP how-tos under `docs/howto/` describe the **retired monolith**; prefer `skills/` for new builds.
+
+## Edge deploy (Acme / bench)
+
+Before Ansible or SSH to a field VM, read (local only):
+
+1. `infra/ansible/secrets/acme.env.local` — `SSHPASS`, Tailscale/LAN SSH IP, BACnet OT bind, dashboard URL
+2. `infra/ansible/inventory.yml` — `ansible_host`, `ansible_user`
+3. `infra/ansible/host_vars/acme_vm_bbartling.yml` — poll/feather/Ollama flags
+
+Tracked templates: `secrets/acme.env.example`, `inventory.example.yml`, `host_vars/acme_vm_bbartling.yml.example`.
+
+**Docker GHCR publish (deferred):** Do not run until the operator asks. When they do: `docs/howto/publish_docker_addons.md` and `workspace/memory/architecture/deferred-ghcr-publish.md`. Actions workflow: **Publish Docker addons** (manual only). Edge deploy today: tar bundle, not registry pull.
 
 ## Skill routing
 
@@ -53,6 +70,6 @@ This repository is **engine-first**. The published PyPI wheel (`open-fdd`) provi
 | Workspace memory | [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md) |
 | Workspace cron | [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md) |
 | Local multi-process dev | [skills/local-dev-orchestration/SKILL.md](skills/local-dev-orchestration/SKILL.md) |
-| Caddy / systemd / Ansible bench | `skills/caddy-*`, `skills/systemd-*`, `skills/ansible-*` |
+| Docker edge / Caddy / Ansible | `docs/edge_deploy_docker.md`, `skills/caddy-*`, `skills/ansible-*` |
 
 Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables, env catalogs, and legacy source maps.

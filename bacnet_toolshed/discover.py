@@ -120,7 +120,7 @@ async def run_discover(
                     "enabled": "0",
                     "poll_interval_s": "60",
                 }
-                raw["point_id"] = make_point_id(dev_inst, oid[0], oid[1])
+                raw["point_id"] = make_point_id(dev_inst, str(oid[0]), oid[1])
                 csv_rows.append(normalize_row(raw, defaults))
 
         out_path = output_path or getattr(app_args, "output", None)

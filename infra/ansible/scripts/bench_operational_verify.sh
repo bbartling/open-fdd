@@ -13,6 +13,7 @@ ANSIBLE_DIR="$(cd "$DIR/.." && pwd)"
 ROOT="$(cd "$ANSIBLE_DIR/../.." && pwd)"
 
 HOST=""
+PORT="${OFDD_HTTP_PORT:-}"
 INV="${ANSIBLE_INVENTORY:-${ANSIBLE_DIR}/inventory.yml}"
 LIMIT=""
 AUTH_ENV="${ROOT}/workspace/auth.env.local"
@@ -59,6 +60,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage 0 ;;
     --host) HOST="$2"; shift 2 ;;
+    --port) PORT="$2"; shift 2 ;;
     --inventory) INV="$2"; shift 2 ;;
     --limit) LIMIT="$2"; shift 2 ;;
     --auth-env) AUTH_ENV="$2"; shift 2 ;;
@@ -74,7 +76,14 @@ if [[ -z "$HOST" && -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory 
 fi
 [[ -n "$HOST" ]] || { echo "Need --host or --limit with inventory." >&2; usage 1; }
 
-BASE="http://${HOST}"
+if [[ -z "$PORT" && "$HOST" =~ ^(127\.0\.0\.1|localhost)$ ]]; then
+  PORT="8765"
+fi
+if [[ -n "$PORT" ]]; then
+  BASE="http://${HOST}:${PORT}"
+else
+  BASE="http://${HOST}"
+fi
 CURL=(curl -fsS --connect-timeout 10 --max-time 120)
 
 login() {
@@ -212,6 +221,48 @@ log_info "Validate collected poll + feather data on edge"
 exp_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "${EXPECTED_POINTS[@]}")"
 exp_b64="$(printf '%s' "$exp_json" | base64 -w0 2>/dev/null || printf '%s' "$exp_json" | base64)"
 
+if [[ "$HOST" =~ ^(127\.0\.0\.1|localhost)$ ]]; then
+  data_out="$(ROOT="$ROOT" python3 - "$MIN_SAMPLE_ROWS" "$MIN_UNIQUE_TS" "$exp_b64" "$ROOT" <<'PY'
+import base64
+import csv
+import json
+import os
+import sys
+from pathlib import Path
+
+min_rows = int(sys.argv[1])
+min_ts = int(sys.argv[2])
+expected = set(json.loads(base64.b64decode(sys.argv[3]).decode()))
+root = Path(sys.argv[4] or os.environ.get("ROOT", "."))
+polls = root / "workspace/bacnet/polls/samples.csv"
+feather_root = root / "workspace/data/feather_store/bacnet"
+
+out = {"poll_rows": 0, "unique_ts": 0, "point_ids": [], "feather_files": 0, "errors": []}
+if not polls.is_file():
+    out["errors"].append(f"missing {polls}")
+else:
+    rows = list(csv.DictReader(polls.open()))
+    out["poll_rows"] = len(rows)
+    out["unique_ts"] = len({r.get("timestamp_utc") for r in rows if r.get("timestamp_utc")})
+    out["point_ids"] = sorted({r.get("point_id") for r in rows if r.get("point_id")})
+    missing = expected - set(out["point_ids"])
+    if missing:
+        out["errors"].append(f"missing point_ids in samples: {sorted(missing)}")
+    if out["poll_rows"] < min_rows:
+        out["errors"].append(f"poll_rows {out['poll_rows']} < {min_rows}")
+    if out["unique_ts"] < min_ts:
+        out["errors"].append(f"unique timestamps {out['unique_ts']} < {min_ts}")
+
+if feather_root.is_dir():
+    out["feather_files"] = len(list(feather_root.rglob("latest.*")))
+else:
+    out["errors"].append(f"missing feather dir {feather_root}")
+
+print(json.dumps(out))
+PY
+)"
+  ssh_out="$data_out"
+else
 ssh_out="$(ssh -o BatchMode=yes ben@"${HOST}" python3 - "$MIN_SAMPLE_ROWS" "$MIN_UNIQUE_TS" "$exp_b64" <<'PY'
 import base64
 import csv
@@ -250,6 +301,7 @@ else:
 print(json.dumps(out))
 PY
 )" || ssh_out='{"errors":["ssh failed"]}'
+fi
 
 poll_rows="$(echo "$ssh_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("poll_rows",0))')"
 unique_ts="$(echo "$ssh_out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("unique_ts",0))')"

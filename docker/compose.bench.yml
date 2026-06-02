@@ -1,0 +1,31 @@
+# Bensserver BACnet lab overlay — host network for OT bind + localhost service mesh.
+#
+#   docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d
+#
+# Commission binds 192.168.204.18:47808 (see workspace/bacnet/commissioning/commission.env).
+# Bridge uses host network so it can reach commission at 127.0.0.1:8767 (Docker host-gateway is blocked for BACnet stacks).
+name: openfdd-dev
+
+services:
+  bridge:
+    network_mode: host
+    ports: !reset []
+    environment:
+      OPENFDD_BACNET_COMMISSION_URL: http://127.0.0.1:8767
+      OFDD_MCP_REST_BASE: http://127.0.0.1:8090
+      OFDD_BRIDGE_HOST: 127.0.0.1
+      OFDD_BRIDGE_PORT: "8765"
+      OPENFDD_DEFAULT_SITE_ID: demo
+      OPENFDD_DEFAULT_SITE_NAME: Bens Office test bench
+    depends_on:
+      mcp-rag:
+        condition: service_started
+
+  commission:
+    network_mode: host
+    ports: !reset []
+
+  mcp-rag:
+    ports:
+      - "127.0.0.1:8090:8090"
+

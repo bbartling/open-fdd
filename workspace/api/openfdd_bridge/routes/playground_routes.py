@@ -14,7 +14,7 @@ from ..fdd_row_prep import prepare_fdd_rows
 from ..deps import require_roles
 from ..model_service import ModelService
 from ..site_defaults import ensure_default_site
-from ..timeseries_api import columns_for_equipment, resolve_plot_columns
+from ..timeseries_api import resolve_plot_columns
 from ..ttl_service import TtlService
 from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
 
@@ -62,19 +62,38 @@ def _filter_frame_to_scope(
     *,
     equipment_id: str | None,
     point_keys: list[str],
-):
-    cols: list[str] | None = None
+) -> tuple[Any, list[str], str | None]:
+    """Return (scoped_df, data_columns_kept, warning_if_scope_missed)."""
+    import pandas as pd
+
+    meta = {"timestamp", "site_id", "building_id", "system_id"}
+    scoped = bool((point_keys and any(str(x).strip() for x in point_keys)) or (equipment_id and str(equipment_id).strip()))
+    if not scoped:
+        data_cols = [c for c in df.columns if c not in meta]
+        return df, data_cols, None
+
+    cols: list[str] = []
     if point_keys:
         cols = resolve_plot_columns(point_keys, model, site_id)
     elif equipment_id:
-        cols = columns_for_equipment(model, site_id, equipment_id.strip())
+        # Device-only scope is intentionally not supported for rule test (too wide / column collisions).
+        warning = "pick at least one sensor (point) — device-wide scope is disabled for rule test"
+        empty = df.iloc[0:0].copy()
+        return empty, [], warning
+
     if not cols:
-        return df
-    meta = {"timestamp", "site_id", "building_id", "system_id"}
+        warning = "scope requested but no model columns resolved — empty data frame"
+        empty = df.iloc[0:0].copy() if isinstance(df, pd.DataFrame) else df
+        return empty, [], warning
+
     keep = [c for c in df.columns if c in meta or c in cols]
-    if len(keep) <= len(meta):
-        return df
-    return df[keep]
+    data_kept = [c for c in keep if c not in meta]
+    if not data_kept:
+        warning = f"scope columns {cols!r} not in feather store — re-poll or check external_id"
+        empty = df.iloc[0:0].copy()
+        return empty, [], warning
+
+    return df[keep], data_kept, None
 
 
 def _apply_lookback(df, lookback_hours: float):
@@ -112,25 +131,27 @@ def test_rule(body: RuleBody) -> dict:
         df, origin = load_frame_for_run(site_id)
         df = _apply_lookback(df, body.lookback_hours or 24)
         model = model_svc.load()
-        df = _filter_frame_to_scope(
+        point_keys = [x for x in (body.point_keys or ([body.point_id] if body.point_id else [])) if str(x).strip()]
+        df, scope_cols, scope_warning = _filter_frame_to_scope(
             df,
             model,
             site_id,
             equipment_id=body.equipment_id,
-            point_keys=body.point_keys or ([body.point_id] if body.point_id else []),
+            point_keys=point_keys,
         )
         if body.limit and len(df) > body.limit:
             df = df.tail(body.limit)
         rule_stub: dict[str, Any] = {
             "config": dict(body.config),
             "bindings": {
-                "point_ids": [x for x in (body.point_keys or ([body.point_id] if body.point_id else [])) if str(x).strip()],
+                "point_ids": point_keys,
                 "equipment_ids": [body.equipment_id] if body.equipment_id else [],
             },
         }
         if body.value_kind:
             rule_stub["config"]["value_kind"] = body.value_kind
         rows = prepare_fdd_rows(df, rule_stub, model, site_id, limit=len(df))
+        value_column = rows[0].get("value_column") if rows else ""
         column_map = build_column_map_from_model_points(model, site_id)
         chunk_hours = body.chunk_hours or 0
         use_chunked = chunk_hours > 0 and len(df) > 500
@@ -160,17 +181,26 @@ def test_rule(body: RuleBody) -> dict:
             flagged,
             int((time.time() - started) * 1000),
         )
+        max_events = 80
+        trimmed_events = events[:max_events]
+        if len(events) > max_events:
+            trimmed_events = [
+                *trimmed_events,
+                {"type": "stdout", "text": f"… {len(events) - max_events} more events omitted"},
+            ]
         return {
             "ok": ok,
             "site_id": site_id,
             "data_source": origin,
             "equipment_id": body.equipment_id or "",
-            "scope_columns": [c for c in df.columns if c not in {"timestamp", "site_id", "building_id", "system_id"}],
+            "point_keys": point_keys,
+            "value_column": value_column,
+            "scope_columns": scope_cols,
+            "scope_warning": scope_warning,
             "rows": row_count,
             "flagged": flagged,
             "ms": int((time.time() - started) * 1000),
-            "events": events,
-            "preview_columns": list(df.columns),
+            "events": trimmed_events,
             "column_map": column_map,
             "chunked": use_chunked,
         }
@@ -202,7 +232,7 @@ def run_script(body: ScriptBody) -> dict:
         df, origin = load_frame_for_run(site_id)
         model = model_svc.load()
         df = _apply_lookback(df, body.lookback_hours or 24)
-        df = _filter_frame_to_scope(
+        df, _, _scope_warn = _filter_frame_to_scope(
             df,
             model,
             site_id,

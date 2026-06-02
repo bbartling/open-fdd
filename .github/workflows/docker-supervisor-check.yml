@@ -1,0 +1,33 @@
+# Validates HA-OS-style supervisor layout (manifest ↔ Dockerfile).
+name: Docker supervisor check
+
+on:
+  pull_request:
+    branches: [main, master, develop, dev, dev/**, ansible/**]
+    paths:
+      - "docker/**"
+      - "supervisor/**"
+      - "scripts/validate_supervisor_manifest.sh"
+      - "scripts/docker_build.sh"
+      - ".github/workflows/docker-supervisor-check.yml"
+  push:
+    branches: [main, master, develop, dev, dev/**, ansible/**]
+    paths:
+      - "docker/**"
+      - "supervisor/**"
+      - "scripts/validate_supervisor_manifest.sh"
+      - "scripts/docker_build.sh"
+      - ".github/workflows/docker-supervisor-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+      - name: Validate supervisor manifest
+        run: bash scripts/validate_supervisor_manifest.sh

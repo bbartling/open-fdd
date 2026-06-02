@@ -12,6 +12,8 @@ API_ROOT = Path(__file__).resolve().parents[2] / "workspace" / "api"
 REPO = Path(__file__).resolve().parents[2]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 from openfdd_bridge.plot_readings import downsample_aligned_plot  # noqa: E402
 
@@ -24,6 +26,17 @@ def _reload_bridge() -> None:
 
 def _bench_model() -> dict:
     return json.loads((REPO / "workspace" / "data" / "bench_import_model.json").read_text(encoding="utf-8"))
+
+
+def _bench_rules_store_path() -> Path | None:
+    """Committed bench rules (workspace copy is gitignored runtime)."""
+    for path in (
+        REPO / "workspace" / "data" / "rules_store.json",
+        REPO / "edge_config" / "demo" / "bens-office" / "rules_store.json",
+    ):
+        if path.is_file():
+            return path
+    return None
 
 
 def _flat_temp_frame(rows: int = 90) -> pd.DataFrame:
@@ -45,10 +58,14 @@ def plot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data.mkdir()
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    # Copy rules store so fault eval has bench rules
-    rules_src = REPO / "workspace" / "data" / "rules_store.json"
-    if rules_src.is_file():
-        (data / "rules_store.json").write_text(rules_src.read_text(encoding="utf-8"))
+    # Copy rules store so fault eval has bench rules (CI: edge_config, local: workspace/data)
+    rules_src = _bench_rules_store_path()
+    if rules_src is not None:
+        store = json.loads(rules_src.read_text(encoding="utf-8"))
+        for rule in store.get("rules") or []:
+            if isinstance(rule, dict) and rule.get("id") == "bench-oa-t-flatline-1h":
+                rule["enabled"] = True
+        (data / "rules_store.json").write_text(json.dumps(store, indent=2), encoding="utf-8")
     rules_py = REPO / "workspace" / "data" / "rules_py"
     if rules_py.is_dir():
         import shutil
@@ -59,7 +76,7 @@ def plot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from openfdd_bridge.model_service import ModelService as MS  # noqa: E402
 
     MS().import_json(_bench_model(), replace=True)
-    FS().write_shard(_flat_temp_frame(), source="bacnet", site_id="s1")
+    FS().write_shard(_flat_temp_frame(), source="bacnet", site_id="demo")
     yield data
 
 
@@ -83,9 +100,9 @@ def test_evaluate_fault_plots_flatline(plot_env: Path):
     from openfdd_bridge.plot_readings import evaluate_fault_plots as eval_faults  # noqa: E402
 
     model = MS().load()
-    df = FS().read_site("s1", source="bacnet")
+    df = FS().read_site("demo", source="bacnet")
     assert df is not None
-    plots, panels, totals = eval_faults(df, "s1", model)
+    plots, panels, totals = eval_faults(df, "demo", model)
     assert panels
     assert "bench-oa-t-flatline-1h" in plots
     assert len(plots["bench-oa-t-flatline-1h"]) == len(df)
@@ -97,7 +114,7 @@ def test_read_plot_readings_dual_axis_kinds(plot_env: Path):
     from openfdd_bridge.plot_readings import read_plot_readings as read_plots  # noqa: E402
 
     payload = read_plots(
-        "s1",
+        "demo",
         ["oa-t", "oa-h", "duct-t"],
         hours=24,
         include_faults=True,
@@ -117,7 +134,7 @@ def test_readings_api(plot_env: Path):
     client = TestClient(make_app())
     r = client.get(
         "/api/timeseries/readings",
-        params={"site_id": "s1", "columns": "oa-t,oa-h", "hours": 24, "include_faults": "true"},
+        params={"site_id": "demo", "columns": "oa-t,oa-h", "hours": 24, "include_faults": "true"},
     )
     assert r.status_code == 200
     body = r.json()

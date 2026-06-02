@@ -10,5 +10,15 @@
 !dashboard/**
 !data/
 !data/**
+# Runtime state (bridge / FDD loop — never commit; Docker may write as root)
+data/data_model.ttl
+data/model.json
+data/fdd_results.json
+data/rules_store.json
+data/runtime_metrics.json
+data/building_alerts.json
+data/feather_store/
+data/**/*.feather
+data/playground/draft_rules.json
 !deploy/
 !deploy/**

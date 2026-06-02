@@ -1,5 +1,5 @@
-# If a stray top-level frontend/ exists, ignore it
-/frontend/
+# Docker image bundles (build with scripts/docker_build.sh --save)
+docker/dist/
 
 .DS_Store
 /data
@@ -126,6 +126,7 @@ celerybeat.pid
 # Environments
 .env
 stack/.env
+.build_test_data/
 .venv
 .venv-ci/
 .venv-ansible
@@ -186,9 +187,22 @@ workspace/.local-run/
 infra/ansible/inventory.yml
 infra/ansible/host_vars/bacnet_pi.yml
 infra/ansible/host_vars/acme_vm_bbartling.yml
+infra/ansible/secrets/*.env.local
+infra/ansible/secrets/*.local
+!infra/ansible/secrets/*.example
+!infra/ansible/secrets/README.md
+infra/ansible/.tmp/
 
 # Edge commissioning backups (real sites)
-edge_backup/local/
+edge_backup/local/*
+!edge_backup/local/acme/
+edge_backup/local/acme/*
+!edge_backup/local/acme/vm-bbartling/
+edge_backup/local/acme/vm-bbartling/*
+!edge_backup/local/acme/vm-bbartling/device_poll_profiles.csv
+
+# Local build/scratch (Acme model experiments)
+.build_acme_data/
 
 # Runtime audit / error logs (forensics — do not commit)
 workspace/logs/
@@ -209,6 +223,9 @@ workspace/logs/
 /workspace/data/fdd_results.json
 /workspace/data/rules_store.json
 /workspace/data/building_alerts.json
+/workspace/data/data_model.ttl
+/workspace/data/runtime_metrics.json
+/workspace/data/model.json
 /workspace/data/feather_store/
 /workspace/**/*.feather
 /workspace/data/playground/draft_rules.json

@@ -19,7 +19,13 @@ def commission_token() -> str:
     return os.environ.get("OPENFDD_BACNET_COMMISSION_TOKEN", "").strip()
 
 
-def _request(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
+def _request(
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    *,
+    timeout: float | None = None,
+) -> tuple[int, Any]:
     url = f"{commission_base_url()}{path}"
     headers = {"Accept": "application/json"}
     token = commission_token()
@@ -30,8 +36,10 @@ def _request(method: str, path: str, body: dict[str, Any] | None = None) -> tupl
         headers["Content-Type"] = "application/json"
         data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    if timeout is None:
+        timeout = 30.0
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             payload = json.loads(raw) if raw.strip() else {}
             return resp.status, payload
@@ -162,5 +170,10 @@ def commission_poll_once() -> tuple[int, Any]:
     return _request("POST", "/api/bacnet/poll/once", {})
 
 
-def commission_poll_status() -> tuple[int, Any]:
-    return _request("GET", "/api/bacnet/poll/status")
+def commission_poll_status(*, timeout: float | None = None) -> tuple[int, Any]:
+    return _request("GET", "/api/bacnet/poll/status", timeout=timeout)
+
+
+def commission_poll_status_quick() -> tuple[int, Any]:
+    """Non-blocking health probe while the poll loop holds the BACnet stack."""
+    return commission_poll_status(timeout=2.0)

@@ -123,8 +123,10 @@ def import_model() -> dict:
     return payload
 
 
-def save_rules() -> list[dict]:
+def save_rules(*, replace_all: bool = True) -> list[dict]:
     store = RuleStore()
+    if replace_all:
+        store._save({"version": 1, "rules": []})
     saved: list[dict] = []
     for spec in BENCH_RULES:
         code = _read_rule_code(spec["code_file"])
@@ -151,7 +153,7 @@ def save_rules() -> list[dict]:
 
 
 def test_rules_on_frame(model: dict) -> None:
-    site_id = "s1"
+    site_id = "demo"
     frame, origin = load_frame_for_run(site_id)
     print(f"Test frame: origin={origin} rows={len(frame)} cols={list(frame.columns)}")
     for spec in BENCH_RULES:
