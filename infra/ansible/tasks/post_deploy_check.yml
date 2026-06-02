@@ -189,15 +189,14 @@
   ansible.builtin.shell: |
     set -a
     # shellcheck disable=SC1091
-    source /dev/stdin
+    source "{{ openfdd_remote_dir }}/workspace/auth.env.local"
     printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
-  args:
-    stdin: "{{ edge_auth_slurp.content | b64decode }}"
   register: auth_creds_raw
   changed_when: false
   no_log: true
   when:
     - post_check_auth_login | default(true) | bool
+    - openfdd_docker_stack | default(false) | bool
     - edge_auth_slurp is defined
     - edge_auth_slurp.content is defined
 
