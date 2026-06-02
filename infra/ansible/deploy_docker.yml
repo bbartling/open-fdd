@@ -228,6 +228,28 @@
         - openfdd-bacnet-commission
       when: openfdd_docker_disable_systemd | default(true) | bool
 
+    - name: Install openfdd-fdd-loop systemd unit and timer (runs inside bridge container)
+      tags: [docker, systemd]
+      ansible.builtin.template:
+        src: "templates/{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - openfdd-fdd-loop.service
+        - openfdd-fdd-loop.timer
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
+
+    - name: Enable openfdd-fdd-loop timer on edge
+      tags: [docker, systemd]
+      ansible.builtin.systemd:
+        name: openfdd-fdd-loop.timer
+        enabled: "{{ enable_fdd_loop_timer | default(true) | bool }}"
+        state: "{{ 'started' if (enable_fdd_loop_timer | default(true) | bool) else 'stopped' }}"
+        daemon_reload: true
+      become: true
+      when: install_fdd_loop_timer | default(true) | bool
+
     - name: Start Open-FDD stack with Docker Compose
       tags: [docker]
       ansible.builtin.command:
