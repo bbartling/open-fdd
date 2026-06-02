@@ -28,6 +28,17 @@ def _bench_model() -> dict:
     return json.loads((REPO / "workspace" / "data" / "bench_import_model.json").read_text(encoding="utf-8"))
 
 
+def _bench_rules_store_path() -> Path | None:
+    """Committed bench rules (workspace copy is gitignored runtime)."""
+    for path in (
+        REPO / "workspace" / "data" / "rules_store.json",
+        REPO / "edge_config" / "demo" / "bens-office" / "rules_store.json",
+    ):
+        if path.is_file():
+            return path
+    return None
+
+
 def _flat_temp_frame(rows: int = 90) -> pd.DataFrame:
     end = pd.Timestamp.now(tz="UTC").floor("min")
     ts = pd.date_range(end - pd.Timedelta(minutes=rows - 1), periods=rows, freq="1min", tz="UTC")
@@ -47,9 +58,9 @@ def plot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data.mkdir()
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    # Copy rules store so fault eval has bench rules
-    rules_src = REPO / "workspace" / "data" / "rules_store.json"
-    if rules_src.is_file():
+    # Copy rules store so fault eval has bench rules (CI: edge_config, local: workspace/data)
+    rules_src = _bench_rules_store_path()
+    if rules_src is not None:
         store = json.loads(rules_src.read_text(encoding="utf-8"))
         for rule in store.get("rules") or []:
             if isinstance(rule, dict) and rule.get("id") == "bench-oa-t-flatline-1h":
