@@ -298,6 +298,7 @@ if [[ "${RUN_POST_CHECK}" != "0" && -x "$CHECK_SCRIPT" && "$COMPONENT" != "os" ]
   if [[ -n "$LIMIT_HOST" ]]; then
     echo ""
     echo "Running post-deploy insurance check (--limit ${LIMIT_HOST})..."
+    load_edge_secrets "$LIMIT_HOST"
     "$CHECK_SCRIPT" --inventory "$INV" --limit "$LIMIT_HOST"
   fi
 fi
