@@ -45,7 +45,10 @@ curl -s http://127.0.0.1:8765/health | jq .
 docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d
 ./scripts/setup_local_testbench.sh     # discover, model, FDD rules
 
-# Ollama in compose (or host Ollama — bridge uses host.docker.internal:11434)
+# Ollama in compose (recommended on Linux dev — host.docker.internal often times out)
+docker compose -f docker/compose.dev.yml -f docker/compose.ollama-smoke.yml --profile ai up -d
+
+# Or host Ollama only (works for ./scripts/run_local.sh; bridge-in-Docker may need the override above)
 docker compose -f docker/compose.dev.yml --profile ai up -d
 ```
 
