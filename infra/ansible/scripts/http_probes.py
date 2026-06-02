@@ -176,10 +176,29 @@ def check_model_api(base: str, token: str) -> dict[str, Any]:
         payload = json.loads(body)
         points = payload.get("points") or []
         out["model_point_count"] = len(points)
+        engine = payload.get("query_engine") or ""
+        out["model_query_engine"] = engine
+        if engine != "sparql":
+            out["errors"].append(f"/api/model/tree query_engine={engine!r} (expected sparql)")
         if len(points) < 1:
             out["errors"].append("model tree has zero points")
     except json.JSONDecodeError:
         out["errors"].append("/api/model/tree not JSON")
+
+    graph_url = f"{base.rstrip('/')}/api/model/graph"
+    status, body, _ = fetch(graph_url, headers=headers)
+    out["model_graph_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/model/graph HTTP {status}")
+    else:
+        try:
+            gpayload = json.loads(body)
+            if gpayload.get("query_engine") != "sparql":
+                out["errors"].append(
+                    f"/api/model/graph query_engine={gpayload.get('query_engine')!r} (expected sparql)"
+                )
+        except json.JSONDecodeError:
+            out["errors"].append("/api/model/graph not JSON")
 
     sync_url = f"{base.rstrip('/')}/api/model/bacnet-sync"
     status, body, _ = fetch(sync_url, headers=headers)

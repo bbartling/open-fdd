@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from ..deps import require_roles, require_user
 from ..model_health import model_health_summary
 from ..model_service import ModelService
-from ..model_sparql import list_model_sites, query_model_graph, scope_bundle
+from ..model_sparql import list_model_sites, query_model_graph, query_model_tree, scope_bundle
+from ..ttl_graph import TtlGraphError
 from ..site_defaults import ensure_default_site
 from ..ttl_service import TtlService
 
@@ -72,7 +73,10 @@ def model_graph(
     svc = _model()
     ttl = _ttl()
     sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
-    return {"ok": True, **query_model_graph(sid)}
+    try:
+        return {"ok": True, **query_model_graph(sid)}
+    except TtlGraphError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/scope")
@@ -86,30 +90,21 @@ def model_scope(
     svc = _model()
     ttl = _ttl()
     sid = (site_id or "").strip() or ensure_default_site(svc, ttl)
-    return {"ok": True, **scope_bundle(sid, equipment_id=equipment_id, brick_type=brick_type)}
+    try:
+        return {"ok": True, **scope_bundle(sid, equipment_id=equipment_id, brick_type=brick_type)}
+    except TtlGraphError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/tree")
 def model_tree(_user: dict = Depends(require_user)) -> dict:
+    """Full BRICK catalog — SPARQL SELECT over synced data_model.ttl."""
     svc = _model()
     ensure_default_site(svc, _ttl())
-    model = svc.load()
-    equipment = [e for e in model.get("equipment", []) if isinstance(e, dict)]
-    points = [p for p in model.get("points", []) if isinstance(p, dict)]
-    brick_types = sorted(
-        {str(p.get("brick_type") or "").strip() for p in points if str(p.get("brick_type") or "").strip()}
-    )
-    eq_types = sorted(
-        {str(e.get("equipment_type") or "").strip() for e in equipment if str(e.get("equipment_type") or "").strip()}
-    )
-    return {
-        "ok": True,
-        "sites": model.get("sites") or [],
-        "equipment": equipment,
-        "points": points,
-        "brick_types": brick_types,
-        "equipment_types": eq_types,
-    }
+    try:
+        return {"ok": True, **query_model_tree()}
+    except TtlGraphError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/sites")

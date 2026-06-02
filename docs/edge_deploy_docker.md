@@ -21,6 +21,18 @@ State (feather, rules, model, `points.csv`) lives on the host under **`workspace
 
 **GHCR publish (later):** Images can be pushed to `ghcr.io/bbartling/` via manual GitHub Actions when ready. Edge still uses tar load today. See [Publish Docker addons (howto)](howto/publish_docker_addons.md).
 
+## Operational sync (`deploy.sh ops`)
+
+One-shot playbook for production edges: Docker deploy, safe maintenance prune, workspace ownership fix, **POST /api/model/sync-ttl**, SPARQL tree probe (`query_engine=sparql`), feather size check, bridge log scan, HTTP insurance probes.
+
+```bash
+./scripts/docker_build.sh --save
+export SSHPASS='…'   # or secrets/acme.env.local
+./deploy.sh ops --limit acme_vm_bbartling
+```
+
+BRICK reads (`/api/model/tree`, `/graph`, `/scope`) use **rdflib SPARQL** on synced `workspace/data/data_model.ttl` — not grep/text search on Turtle.
+
 ## Local dev (bensserver)
 
 ```bash

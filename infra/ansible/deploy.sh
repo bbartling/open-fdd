@@ -100,6 +100,7 @@ Components:
   check       Post-deploy insurance probes only (no file sync)
   docker      Docker Compose stack (build images locally first — see docs/edge_deploy_docker.md)
   maintain    Safe Docker prune on edge only (images/networks/containers; never volumes)
+  ops         Full Docker deploy + maintenance + TTL sync + SPARQL/feather/log health (edge_operational_sync.yml)
 
 Examples:
   ./scripts/docker_build.sh --save && ./deploy.sh docker --limit acme_vm_bbartling
@@ -109,6 +110,7 @@ Examples:
   export SSHPASS='...' && ./deploy.sh all --limit acme_vm_bbartling -v
   ./deploy.sh os --limit acme_vm_bbartling -e os_upgrade_reboot=true
   ./deploy.sh maintain --limit acme_vm_bbartling
+  ./deploy.sh ops --limit acme_vm_bbartling
 
 Env:
   SSHPASS              Password for sshpass (optional; or set in secrets/<host>.env.local)
@@ -144,7 +146,7 @@ require_ui_build() {
 is_component() {
   case "$1" in
     help|-h|--help) return 0 ;;
-    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker|maintain) return 0 ;;
+    all|ui|web|backend|core|drivers|data|config|caddy|systemd|pip|commission|mcp|ai|os|check|docker|maintain|ops) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -229,9 +231,13 @@ case "$COMPONENT" in
     TAGS=""
     RUN_POST_CHECK=0
     ;;
+  ops)
+    PLAYBOOK="edge_operational_sync.yml"
+    TAGS=""
+    ;;
 esac
 
-if [[ "$COMPONENT" == "docker" ]]; then
+if [[ "$COMPONENT" == "docker" || "$COMPONENT" == "ops" ]]; then
   require_docker_bundle
   if [[ -n "${OPENFDD_IMAGE_TAG:-}" ]]; then
     ANSIBLE_EXTRA+=(-e "openfdd_docker_image_tag=${OPENFDD_IMAGE_TAG}")
@@ -275,7 +281,7 @@ if [[ -n "$PLAYBOOK" ]]; then
 fi
 
 case "$COMPONENT" in
-  all|ui|web|backend|core|drivers|ai|docker|maintain) ;;
+  all|ui|web|backend|core|drivers|ai|docker|maintain|ops) ;;
   *) RUN_POST_CHECK=0 ;;
 esac
 
