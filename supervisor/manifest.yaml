@@ -21,11 +21,15 @@ host:
     port: 11434
 
 apps:
+  # Core addon: API + compiled React SPA (ADR 001). Do not split into openfdd-dashboard
+  # until UI/API release cadence diverges or supervisor needs a separate Dashboard addon.
+  # See docs/architecture/adr-001-core-addon-spa.md
   bridge:
     title: Open-FDD Bridge
     image: openfdd-bridge
     build_target: bridge
     role: core
+    includes_spa: true
     ports:
       - host: "127.0.0.1"
         container: 8765
@@ -65,6 +69,14 @@ apps:
     profile: ai
     optional: true
     external: true
+
+# Deferred addons (not in compose today — revisit per ADR 001)
+deferred:
+  dashboard:
+    title: Open-FDD Dashboard (static nginx)
+    image: openfdd-dashboard
+    reason: "SPA stays in bridge core until independent UI releases justify split"
+    adr: docs/architecture/adr-001-core-addon-spa.md
 
 # Legacy systemd units disabled when supervisor uses Docker
 legacy_systemd:

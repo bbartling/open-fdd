@@ -30,6 +30,8 @@ Open-FDD edge deploys follow the same **three-layer** model as [Home Assistant O
 
 Host **Caddy** (:80) is like HA’s ingress: provided by the OS layer, not inside the app containers.
 
+The **bridge** core addon includes the compiled operator SPA (same pattern as HA Core). See [ADR 001 — Core addon serves compiled SPA](adr-001-core-addon-spa.md) for why a separate frontend container is deferred.
+
 ## Monorepo workflow
 
 1. **Develop apps** — change `workspace/`, `open_fdd/`, `bacnet_toolshed/`; build images with `./scripts/docker_build.sh`

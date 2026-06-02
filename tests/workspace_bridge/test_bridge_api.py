@@ -81,3 +81,15 @@ def test_spa_index_when_built(client: TestClient):
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers.get("content-type", "")
+
+
+def test_assets_cache_control_when_built(client: TestClient):
+    assets_dir = REPO / "workspace" / "api" / "static" / "app" / "assets"
+    if not assets_dir.is_dir():
+        return
+    sample = next(assets_dir.glob("*"), None)
+    if sample is None:
+        return
+    r = client.get(f"/assets/{sample.name}")
+    assert r.status_code == 200
+    assert r.headers.get("cache-control") == "public, max-age=31536000, immutable"

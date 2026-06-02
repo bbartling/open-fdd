@@ -7,10 +7,10 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from .middleware import AuditMiddleware, global_exception_handler
 from .paths import data_dir, static_dashboard_dir
+from .static_files import CachedStaticFiles
 from .routes import (
     agent_routes,
     audit_routes,
@@ -81,7 +81,7 @@ def create_app() -> FastAPI:
 
         assets = static_dir / "assets"
         if assets.is_dir():
-            app.mount("/assets", StaticFiles(directory=assets), name="assets")
+            app.mount("/assets", CachedStaticFiles(directory=assets), name="assets")
 
         @app.get("/")
         def spa_index() -> FileResponse:
