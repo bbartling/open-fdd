@@ -147,13 +147,21 @@ class RuleStore:
             rules = [r for r in doc.get("rules", []) if isinstance(r, dict)]
             for rule in rules:
                 b = _normalize_bindings(rule.get("bindings"))
-                before = (tuple(b["point_ids"]), tuple(b["equipment_ids"]))
+                before = (
+                    tuple(b["point_ids"]),
+                    tuple(b["direct_point_ids"]),
+                    tuple(b["equipment_ids"]),
+                )
                 if pset:
                     b["point_ids"] = [x for x in b["point_ids"] if x not in pset]
                     b["direct_point_ids"] = [x for x in b["direct_point_ids"] if x not in pset]
                 if eset:
                     b["equipment_ids"] = [x for x in b["equipment_ids"] if x not in eset]
-                after = (tuple(b["point_ids"]), tuple(b["equipment_ids"]))
+                after = (
+                    tuple(b["point_ids"]),
+                    tuple(b["direct_point_ids"]),
+                    tuple(b["equipment_ids"]),
+                )
                 if before != after:
                     rule["bindings"] = b
                     rule["updated_at"] = _now()

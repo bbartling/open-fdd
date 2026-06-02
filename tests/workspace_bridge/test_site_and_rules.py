@@ -96,7 +96,12 @@ def test_rule_store_prune_bindings(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         {
             "name": "Bound",
             "code": "def evaluate(row, cfg, **kw):\n    return False\n",
-            "bindings": {"point_ids": ["p1", "p2"], "equipment_ids": ["eq1"], "brick_types": []},
+            "bindings": {
+                "point_ids": ["p1", "p2"],
+                "direct_point_ids": ["p1", "p2"],
+                "equipment_ids": ["eq1"],
+                "brick_types": [],
+            },
         },
         saved_by="test",
     )
@@ -104,4 +109,33 @@ def test_rule_store_prune_bindings(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert n == 1
     rule = store.list_rules()[0]
     assert rule["bindings"]["point_ids"] == ["p2"]
+    assert rule["bindings"]["direct_point_ids"] == ["p2"]
     assert rule["bindings"]["equipment_ids"] == []
+
+
+def test_rule_store_prune_bindings_direct_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Prune must persist when only direct_point_ids changes (point_ids already empty)."""
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.rule_store import RuleStore  # noqa: E402
+
+    store = RuleStore()
+    store.upsert(
+        {
+            "name": "Direct only",
+            "code": "def evaluate(row, cfg, **kw):\n    return False\n",
+            "bindings": {
+                "point_ids": [],
+                "direct_point_ids": ["p-stale"],
+                "equipment_ids": [],
+                "brick_types": [],
+            },
+        },
+        saved_by="test",
+    )
+    n = store.prune_bindings(point_ids=["p-stale"])
+    assert n == 1
+    b = store.list_rules()[0]["bindings"]
+    assert b["direct_point_ids"] == []
