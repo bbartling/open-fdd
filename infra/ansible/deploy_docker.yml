@@ -236,6 +236,24 @@
         - openfdd-bacnet-commission
       when: openfdd_docker_disable_systemd | default(true) | bool
 
+    - name: Start Open-FDD stack with Docker Compose
+      tags: [docker]
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ openfdd_remote_dir }}/docker-compose.yml"
+          - up
+          - -d
+          - --remove-orphans
+      register: compose_up
+      changed_when: >-
+        (compose_up.stdout ~ compose_up.stderr) is search(
+          '(Pulling|Building|Downloading|Extracting|Restarting|Created|Creating|Recreated|Started|Pulled|Downloaded|Done)',
+          ignorecase=True
+        )
+
     - name: Install openfdd-fdd-loop systemd unit and timer (runs inside bridge container)
       tags: [docker, systemd]
       ansible.builtin.template:
@@ -257,24 +275,6 @@
         daemon_reload: true
       become: true
       when: install_fdd_loop_timer | default(true) | bool
-
-    - name: Start Open-FDD stack with Docker Compose
-      tags: [docker]
-      ansible.builtin.command:
-        argv:
-          - docker
-          - compose
-          - -f
-          - "{{ openfdd_remote_dir }}/docker-compose.yml"
-          - up
-          - -d
-          - --remove-orphans
-      register: compose_up
-      changed_when: >-
-        (compose_up.stdout ~ compose_up.stderr) is search(
-          '(Pulling|Building|Downloading|Extracting|Restarting|Created|Creating|Recreated|Started|Pulled|Downloaded|Done)',
-          ignorecase=True
-        )
 
     - name: Run post-deploy insurance checks
       tags: [verify, check]

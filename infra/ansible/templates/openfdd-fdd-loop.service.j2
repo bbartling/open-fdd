@@ -1,6 +1,6 @@
 [Unit]
 Description=Open-FDD scheduled batch FDD run (saved rules across BRICK model)
-After=network-online.target docker.service
+After=network-online.target{% if openfdd_docker_stack | default(false) | bool %} docker.service{% endif %}
 Wants=network-online.target
 
 [Service]
