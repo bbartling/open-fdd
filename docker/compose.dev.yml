@@ -49,6 +49,9 @@ services:
       target: commission
     volumes:
       - ../workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
     expose:
       - "8767"
     restart: unless-stopped
@@ -75,6 +78,9 @@ services:
     network_mode: host
     volumes:
       - ../workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
     restart: unless-stopped
 
   ollama:

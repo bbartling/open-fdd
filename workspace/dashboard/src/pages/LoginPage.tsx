@@ -58,7 +58,7 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            placeholder="username"
+            placeholder="integrator (lowercase)"
           />
         </div>
         <div className="field">

@@ -70,7 +70,9 @@ _DUMMY_PASSWORD = "invalid-credential-placeholder"
 def check_credentials(username: str, password: str) -> Role | None:
     if not auth_enabled():
         return "operator"
-    entry = _load_users().get(username.strip())
+    users = _load_users()
+    key = username.strip()
+    entry = users.get(key) or users.get(key.lower())
     if entry:
         expected_password, role = entry
     else:

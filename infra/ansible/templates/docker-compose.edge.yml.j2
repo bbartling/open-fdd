@@ -37,6 +37,9 @@ services:
     image: openfdd-commission:{{ openfdd_docker_image_tag | default('local') }}
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
     restart: unless-stopped
 
 {% if enable_mcp | default(true) | bool %}
@@ -53,6 +56,9 @@ services:
     network_mode: host
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+    environment:
+      OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
+      OPENFDD_REPO_ROOT: /app
     restart: unless-stopped
 {% endif %}
 

@@ -12,7 +12,8 @@ def _slug(s: str) -> str:
 
 
 def make_point_id(device_instance: int | str, object_type: str, object_instance: int | str) -> str:
-    ot = _slug(object_type)
+    # BACpypes3 ObjectType must be str()'d before slug (analog-input enum slugs to "unknown" otherwise).
+    ot = _slug(str(object_type))
     return f"{device_instance}-{ot}-{object_instance}"
 
 

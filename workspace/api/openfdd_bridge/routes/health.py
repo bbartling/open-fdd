@@ -39,9 +39,9 @@ def health() -> dict:
         "bacnet_poll_csv_bytes": poll_bytes,
     }
     try:
-        from ..commission_client import commission_poll_status
+        from ..commission_client import commission_poll_status_quick
 
-        code, poll_payload = commission_poll_status()
+        code, poll_payload = commission_poll_status_quick()
         if code == 200 and isinstance(poll_payload, dict):
             payload["bacnet_poll"] = {
                 "ok": bool(poll_payload.get("ok")),
