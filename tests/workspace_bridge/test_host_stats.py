@@ -16,11 +16,19 @@ os.environ.setdefault("OPENFDD_REPO_ROOT", str(REPO))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
 from openfdd_bridge.host_stats import (  # noqa: E402
+    _chat_timeout_s,
     _memory_payload,
     _read_linux_meminfo,
     _swap_payload,
     collect_host_stats,
 )
+
+
+def test_chat_timeout_s_bad_env_falls_back(monkeypatch: pytest.MonkeyPatch):
+    from openfdd_bridge import ollama_client
+
+    monkeypatch.setenv("OFDD_OLLAMA_TIMEOUT_S", "not-a-number")
+    assert _chat_timeout_s() == float(ollama_client.DEFAULT_TIMEOUT_S)
 def test_memory_payload_from_meminfo():
     meminfo = {
         "MemTotal": 8 * 1024**3,

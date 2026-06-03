@@ -209,10 +209,10 @@
     - lan_dashboard_js_path is defined
     - lan_dashboard_js_path | length > 0
 
-- name: Slurp operator auth env from edge (Docker stacks sync auth.env.local)
-  ansible.builtin.slurp:
-    src: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
-  register: edge_auth_slurp
+- name: Stat operator auth env on edge (Docker stacks sync auth.env.local)
+  ansible.builtin.stat:
+    path: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+  register: edge_auth_env
   when:
     - post_check_auth_login | default(true) | bool
     - openfdd_docker_stack | default(false) | bool
@@ -239,8 +239,7 @@
   when:
     - post_check_auth_login | default(true) | bool
     - openfdd_docker_stack | default(false) | bool
-    - edge_auth_slurp is defined
-    - edge_auth_slurp.content is defined
+    - edge_auth_env.stat.exists | default(false)
 
 - name: Parse operator credentials from control auth.env.local
   ansible.builtin.shell: |

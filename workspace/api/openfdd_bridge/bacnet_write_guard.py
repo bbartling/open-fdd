@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,9 @@ from .audit import write_audit
 from .paths import workspace_dir
 from .security import bacnet_writes_enabled
 
-_OBJECT_ID_RE = re.compile(r"^([a-zA-Z]+),(\d+)$")
+_log = logging.getLogger(__name__)
+
+_OBJECT_ID_RE = re.compile(r"^([a-zA-Z][a-zA-Z0-9-]*),(\d+)$")
 
 
 def _allowlist_path() -> Path:
@@ -29,6 +32,24 @@ def load_write_allowlist() -> dict[str, Any] | None:
     except (json.JSONDecodeError, OSError) as exc:
         raise HTTPException(status_code=500, detail=f"invalid write allowlist: {exc}") from exc
     return raw if isinstance(raw, dict) else None
+
+
+def _device_allowlist(devices: list[Any]) -> set[int]:
+    allowed: set[int] = set()
+    skipped: list[str] = []
+    for entry in devices:
+        try:
+            allowed.add(int(entry))
+        except (TypeError, ValueError):
+            skipped.append(str(entry))
+    if skipped:
+        _log.warning("write allowlist: skipped non-numeric device_instances: %s", skipped)
+    if not allowed:
+        raise HTTPException(
+            status_code=500,
+            detail="write allowlist device_instances has no valid numeric entries",
+        )
+    return allowed
 
 
 def validate_priority(priority: int | None) -> int:
@@ -51,7 +72,7 @@ def validate_write_target(*, device_instance: int, object_identifier: str) -> No
         return
     devices = allowlist.get("device_instances")
     if isinstance(devices, list) and devices:
-        allowed = {int(x) for x in devices}
+        allowed = _device_allowlist(devices)
         if device_instance not in allowed:
             raise HTTPException(status_code=403, detail=f"device {device_instance} not in write allowlist")
     objects = allowlist.get("object_identifiers")

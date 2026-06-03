@@ -11,6 +11,13 @@ import { formatApiError } from "../lib/formatApiError";
 type InsightResponse = {
   ok: boolean;
   sentence: string;
+  zone_sentence?: string;
+  zone_temps?: {
+    topology_mode?: string;
+    zone_sensor_count?: number;
+    struggling_zones?: { label?: string; ahu_name?: string; reason?: string }[];
+    refresh_interval_s?: number;
+  };
   source?: string;
   generated_at?: number;
   next_refresh_at?: number;
@@ -69,6 +76,17 @@ export default function HomeBuildingInsight() {
         </button>
       </div>
       <p className="home-insight-sentence">{insight?.sentence || "Loading building summary…"}</p>
+      {insight?.zone_sentence ? (
+        <p className="home-insight-zone">{insight.zone_sentence}</p>
+      ) : null}
+      {insight?.zone_temps?.struggling_zones?.length ? (
+        <p className="muted home-insight-meta">
+          Slow recovery zones:{" "}
+          {insight.zone_temps.struggling_zones
+            .map((z) => `${z.label || "?"} (${z.ahu_name || "AHU"})`)
+            .join(", ")}
+        </p>
+      ) : null}
       <p className="muted home-insight-meta">
         {insight?.source === "ollama" ? "AI summary" : "Rule-based summary"}
         {updatedLabel ? ` · updated ${updatedLabel}` : ""}

@@ -186,6 +186,27 @@ def test_bacnet_write_disabled_by_default(client: TestClient, integrator_headers
     assert r.status_code == 403
 
 
+def test_bacnet_write_allowlist_skips_bad_device_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from fastapi import HTTPException
+
+    from openfdd_bridge.bacnet_write_guard import validate_write_target
+
+    allow = tmp_path / "bacnet"
+    allow.mkdir(parents=True)
+    (allow / "write_allowlist.json").write_text(
+        '{"device_instances": ["1001", "not-a-number", 1002]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "openfdd_bridge.bacnet_write_guard.workspace_dir",
+        lambda: tmp_path,
+    )
+    validate_write_target(device_instance=1001, object_identifier="analog-value,1")
+    with pytest.raises(HTTPException) as exc:
+        validate_write_target(device_instance=9999, object_identifier="analog-value,1")
+    assert exc.value.status_code == 403
+
+
 def test_bacnet_write_bad_priority(client: TestClient, integrator_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_ENABLE_BACNET_WRITE", "1")
     r = client.post(

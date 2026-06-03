@@ -79,7 +79,6 @@ export function buildPlotTraces(
 
   if (opts.showRollingAvg && data.aux_series && Object.keys(data.aux_series).length) {
     const rollMin = data.rolling_avg_minutes ?? 5;
-    let ri = 0;
     for (const [key, vals] of Object.entries(data.aux_series)) {
       const baseCol = key.replace(/__rolling_\d+m$/, "");
       const label = data.labels?.[baseCol] || baseCol;
@@ -95,7 +94,6 @@ export function buildPlotTraces(
         opacity: 0.85,
         hovertemplate: `%{y:.2f} · ${rollMin} min avg<extra></extra>`,
       });
-      ri += 1;
     }
   }
 

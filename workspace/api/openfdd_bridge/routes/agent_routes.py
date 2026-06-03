@@ -6,8 +6,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ..deps import require_roles
-from .. import agent_tools, audit, building_insight, ollama_client
+from ..deps import require_roles, require_user
+from .. import agent_tools, audit, building_insight, ollama_client, zone_temp_analytics
 from ..agent_tools import ToolError
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
@@ -35,7 +35,7 @@ class ToolBody(BaseModel):
 
 
 @router.get("/context")
-def agent_context(user: dict = Depends(require_roles("operator", "integrator", "agent"))) -> dict:
+def agent_context(user: dict = Depends(require_user)) -> dict:
     ollama = ollama_client.health()
     tier = ollama_client.configured_ram_tier()
     payload: dict = {
@@ -107,6 +107,15 @@ def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
     Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
     """
     return building_insight.get_building_insight(force=force)
+
+
+@router.get("/zone-temps")
+def zone_temps_snapshot(
+    force: bool = Query(default=False),
+    site_id: str | None = Query(default=None),
+) -> dict:
+    """Prebuilt zone temperature levers (day/night averages, recovery rates)."""
+    return zone_temp_analytics.get_zone_temp_snapshot(site_id=site_id, force=force)
 
 
 @router.post("/chat")

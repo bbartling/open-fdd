@@ -17,6 +17,7 @@ from typing import Any
 
 from .building_status import collect_status
 from . import ollama_client
+from .zone_temp_analytics import compact_for_llm, get_zone_temp_snapshot
 
 _CACHE: dict[str, Any] = {
     "generated_at": 0.0,
@@ -51,7 +52,7 @@ def _fallback_sentence(status: dict[str, Any]) -> str:
     return f"Status {traffic}: {headline}{extra}{fdd_bit}."
 
 
-def _compact_context(status: dict[str, Any]) -> str:
+def _compact_context(status: dict[str, Any], zone_snapshot: dict[str, Any] | None = None) -> str:
     """Minimal JSON for the LLM — no auth, no BACnet bind strings, no operator notes."""
     alerts = []
     for a in (status.get("alerts") or [])[:12]:
@@ -91,14 +92,18 @@ def _compact_context(status: dict[str, Any]) -> str:
         },
         "stack_services": services,
     }
-    return json.dumps(payload, separators=(",", ":"))[:3500]
+    if zone_snapshot:
+        payload["zone_temps"] = json.loads(compact_for_llm(zone_snapshot))
+    return json.dumps(payload, separators=(",", ":"))[:4500]
 
 
 def _ollama_sentence(context: str) -> tuple[str, str]:
     system = (
         "You summarize a BACnet/FDD building edge host for operators. "
-        "Reply with exactly ONE sentence, at most 25 words, plain English. "
-        "Mention active fault codes or HVAC health only when present. "
+        "Reply with exactly ONE sentence, at most 35 words, plain English. "
+        "Mention active fault codes or HVAC health when present. "
+        "When zone_temps is in the JSON, include one brief clause on overnight vs daytime "
+        "zone temperature or slow-recovery zones if data is present. "
         "No markdown, no bullet lists, no questions, no recommendations to change passwords."
     )
     user = f"Snapshot JSON:\n{context}\n\nOne-sentence summary:"
@@ -125,9 +130,20 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
         and _CACHE.get("sentence")
         and now < float(_CACHE.get("next_refresh_at") or 0)
     ):
+        zone_snapshot = get_zone_temp_snapshot(force=False)
         return {
             "ok": True,
             "sentence": _CACHE["sentence"],
+            "zone_sentence": str(zone_snapshot.get("summary_sentence") or ""),
+            "zone_temps": {
+                "topology_mode": zone_snapshot.get("topology_mode"),
+                "zone_sensor_count": zone_snapshot.get("zone_sensor_count"),
+                "struggling_zones": zone_snapshot.get("struggling_zones") or [],
+                "generated_at": zone_snapshot.get("generated_at"),
+                "next_refresh_at": zone_snapshot.get("next_refresh_at"),
+                "refresh_interval_s": zone_snapshot.get("refresh_interval_s"),
+                "cached": zone_snapshot.get("cached"),
+            },
             "source": _CACHE.get("source"),
             "generated_at": _CACHE.get("generated_at"),
             "next_refresh_at": _CACHE.get("next_refresh_at"),
@@ -137,13 +153,15 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
         }
 
     status = collect_status()
+    zone_snapshot = get_zone_temp_snapshot(force=force)
+    zone_sentence = str(zone_snapshot.get("summary_sentence") or "").strip()
     sentence = ""
     source = "deterministic"
     error = ""
 
     health = ollama_client.health(timeout=8.0)
     if health.get("ok") and ollama_client.should_use_ollama():
-        context = _compact_context(status)
+        context = _compact_context(status, zone_snapshot)
         sentence, err = _ollama_sentence(context)
         if sentence:
             source = "ollama"
@@ -168,6 +186,16 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
     return {
         "ok": True,
         "sentence": sentence,
+        "zone_sentence": zone_sentence,
+        "zone_temps": {
+            "topology_mode": zone_snapshot.get("topology_mode"),
+            "zone_sensor_count": zone_snapshot.get("zone_sensor_count"),
+            "struggling_zones": zone_snapshot.get("struggling_zones") or [],
+            "generated_at": zone_snapshot.get("generated_at"),
+            "next_refresh_at": zone_snapshot.get("next_refresh_at"),
+            "refresh_interval_s": zone_snapshot.get("refresh_interval_s"),
+            "cached": zone_snapshot.get("cached"),
+        },
         "source": source,
         "generated_at": now,
         "next_refresh_at": now + interval,

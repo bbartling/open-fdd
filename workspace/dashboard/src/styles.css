@@ -1415,7 +1415,7 @@ textarea {
 .dm-brick-cell {
   font-size: 0.85rem;
   max-width: 14rem;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .fdd-assignments-page .rule-assignments-panel {
@@ -2214,7 +2214,7 @@ textarea {
 
 .console-line {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   line-height: 1.45;
 }
 
@@ -2351,6 +2351,13 @@ textarea {
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.home-insight-zone {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--text-muted, #97a3b8);
 }
 
 .home-insight-sentence {

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 
 from ..deps import require_user
 from ..plot_readings import read_plot_readings
 from ..timeseries_api import list_plot_series, list_plot_sites, read_plot_series
+
+RollingAvgMinutes = Literal[1, 5, 15]
 
 router = APIRouter(prefix="/api/timeseries", tags=["timeseries"])
 
@@ -48,7 +52,7 @@ def timeseries_readings(
     limit: int = Query(default=4000, ge=100, le=8000),
     include_faults: bool = Query(default=True),
     fault_rules: str = Query(default="", description="Comma-separated rule ids to plot"),
-    rolling_avg_minutes: int = Query(default=5, ge=1, le=60),
+    rolling_avg_minutes: RollingAvgMinutes = Query(default=5),
     show_rolling_avg: bool = Query(default=True),
     _user: dict = Depends(require_user),
 ) -> dict:

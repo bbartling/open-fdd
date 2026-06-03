@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import shutil
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from .paths import data_dir
+
+_log = logging.getLogger(__name__)
 
 
 def _bytes_from_proc_value(raw: str) -> int:
@@ -96,8 +99,10 @@ def _directory_bytes(path: Path, *, max_depth: int = 4) -> int:
     if not path.exists():
         return 0
     root_depth = len(path.parts)
-    for dirpath, _dirnames, filenames in os.walk(path):
+    for dirpath, dirnames, filenames in os.walk(path):
         depth = len(Path(dirpath).parts) - root_depth
+        if depth >= max_depth:
+            dirnames[:] = []
         if depth > max_depth:
             continue
         for name in filenames:
@@ -192,13 +197,24 @@ def _ollama_process_summary() -> dict[str, Any] | None:
     return best
 
 
+def _chat_timeout_s() -> float:
+    from . import ollama_client
+
+    raw = os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S))
+    try:
+        return max(1.0, float(raw))
+    except (TypeError, ValueError):
+        _log.warning("invalid OFDD_OLLAMA_TIMEOUT_S=%r — using default", raw)
+        return float(ollama_client.DEFAULT_TIMEOUT_S)
+
+
 def _ollama_payload() -> dict[str, Any]:
     """Ollama status for Host Stats — API reachability matches the Agent chat tab."""
     from . import ollama_client
 
     health = ollama_client.health()
     proc = _ollama_process_summary()
-    chat_timeout = float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S)))
+    chat_timeout = _chat_timeout_s()
     payload: dict[str, Any] = {
         "api_ok": health.get("ok") is True,
         "base_url": health.get("base_url"),

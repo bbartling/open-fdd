@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .building_alerts import replace_alerts
+from .zone_temp_analytics import get_zone_temp_snapshot
 from .data_loader import load_demo_dataframe
 from .fault_catalog import all_codes, is_valid_code
 from .fdd_runner import run_batch
@@ -101,6 +102,23 @@ def _tool_rules_save(args: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise ToolError(str(exc)) from exc
     return {"rule": entry}
+
+
+def _tool_building_zone_temps(args: dict[str, Any]) -> dict[str, Any]:
+    """Refresh cached zone temperature analytics (BRICK sensors + feather trends)."""
+    force = str(args.get("force") or "true").strip().lower() in {"1", "true", "yes"}
+    site_id = str(args.get("site_id") or "").strip() or None
+    snap = get_zone_temp_snapshot(site_id=site_id, force=force)
+    return {
+        "summary_sentence": snap.get("summary_sentence"),
+        "topology_mode": snap.get("topology_mode"),
+        "zone_sensor_count": snap.get("zone_sensor_count"),
+        "struggling_zones": snap.get("struggling_zones") or [],
+        "systems": snap.get("systems") or [],
+        "zones": snap.get("zones") or [],
+        "generated_at": snap.get("generated_at"),
+        "data_source": snap.get("data_source"),
+    }
 
 
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
@@ -211,6 +229,7 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
     "building.set_alerts": _tool_building_set_alerts,
+    "building.zone_temps": _tool_building_zone_temps,
     "app.edit_file": _tool_app_edit_file,
     "app.rebuild_dashboard": _tool_app_rebuild_dashboard,
 }
@@ -243,6 +262,11 @@ def tool_specs() -> list[dict[str, Any]]:
             "writes": "building_alerts.json (codes validated against catalog)",
         },
         {
+            "name": "building.zone_temps",
+            "args": ["site_id?", "force?"],
+            "writes": "in-memory cache only — refreshes pandas zone lever snapshot",
+        },
+        {
             "name": "app.edit_file",
             "args": ["path", "contents"],
             "writes": "workspace/* (requires OFDD_AGENT_ALLOW_APP_EDIT=1)",
@@ -271,7 +295,15 @@ def model_context() -> dict[str, Any]:
         sample_columns = list(load_demo_dataframe().columns)
     except Exception:  # noqa: BLE001 - context is best-effort
         sample_columns = []
+    zone = get_zone_temp_snapshot(force=False)
     return {
+        "zone_temp_levers": {
+            "summary_sentence": zone.get("summary_sentence"),
+            "topology_mode": zone.get("topology_mode"),
+            "zone_sensor_count": zone.get("zone_sensor_count"),
+            "struggling_zones": (zone.get("struggling_zones") or [])[:6],
+            "refresh_tool": "building.zone_temps",
+        },
         "model_summary": {
             "sites": health["counts"]["sites"],
             "equipment": health["counts"]["equipment"],
