@@ -16,7 +16,8 @@ def _apply_resource_limits(cpu_seconds: float, memory_mb: int) -> None:
     except ImportError:
         return
 
-    cpu = max(5, int(cpu_seconds) + 5)
+    # Imports (pandas/numpy) need headroom on slow CI runners; wall timeout is enforced by the parent.
+    cpu = max(120, int(cpu_seconds) * 10 + 60)
     try:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
     except OSError:

@@ -22,7 +22,7 @@ def _reload_playground() -> None:
 @pytest.fixture
 def subprocess_playground(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("OFDD_PLAYGROUND_INPROCESS", raising=False)
-    monkeypatch.delenv("OFDD_PLAYGROUND_SUBPROCESS", raising=False)
+    monkeypatch.setenv("OFDD_PLAYGROUND_SUBPROCESS", "1")
     monkeypatch.setenv("OFDD_PLAYGROUND_TIMEOUT_S", "3")
     _reload_playground()
 
@@ -64,7 +64,9 @@ def test_subprocess_rejects_import_os(subprocess_playground):
     assert any(e.get("type") == "error" for e in events)
 
 
-def test_subprocess_run_script(subprocess_playground):
+def test_subprocess_run_script(subprocess_playground, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_PLAYGROUND_TIMEOUT_S", "15")
+    _reload_playground()
     from openfdd_bridge.playground import run_dataframe_script  # noqa: E402
 
     df = pd.DataFrame({"SAT": [70.0, 85.0]})
@@ -74,7 +76,7 @@ df["hit"] = (df["SAT"] > 75).astype(int)
 out = {"df": df, "events": []}
 """
     result = run_dataframe_script(code, df)
-    assert result["ok"] is True
+    assert result["ok"] is True, result.get("error") or result
     assert "hit" in result.get("columns", [])
 
 

@@ -123,8 +123,12 @@ def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
         env = os.environ.copy()
         env["OFDD_PLAYGROUND_SUBPROCESS"] = "1"
         env.pop("OFDD_PLAYGROUND_INPROCESS", None)
+        repo_root = os.environ.get("OPENFDD_REPO_ROOT", "").strip()
+        if repo_root:
+            env.setdefault("OPENFDD_REPO_ROOT", repo_root)
         py_path = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = os.pathsep.join(p for p in (str(api_root), py_path) if p)
+        roots = [str(api_root), repo_root] if repo_root else [str(api_root)]
+        env["PYTHONPATH"] = os.pathsep.join(p for p in (*roots, py_path) if p)
         cmd = [
             sys.executable,
             "-m",
