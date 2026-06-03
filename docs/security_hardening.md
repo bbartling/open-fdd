@@ -43,6 +43,9 @@ Optional allowlist: `workspace/bacnet/write_allowlist.json` with `device_instanc
 | Variable | Purpose |
 |----------|---------|
 | `OFDD_PLAYGROUND_TIMEOUT_S` | Total rule/script budget (default 30s) |
+| `OFDD_PLAYGROUND_MEMORY_MB` | Child process RSS cap (default 512) |
+| `OFDD_PLAYGROUND_SUBPROCESS=0` | Disable OS subprocess isolation (not recommended on edge) |
+| `OFDD_PLAYGROUND_INPROCESS=1` | Run in API process (localhost dev/tests only) |
 | `OFDD_DEBUG_TRACEBACKS=1` | Return tracebacks to browser (dev only) |
 | `OFDD_DEBUG_DIAGNOSTICS=1` | Expose `repo_root` in agent context (integrator/agent) |
 

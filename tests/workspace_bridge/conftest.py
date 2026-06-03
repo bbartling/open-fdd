@@ -33,6 +33,7 @@ def bridge_test_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("OFDD_AGENT_USER", "agent")
     monkeypatch.setenv("OFDD_AGENT_PASSWORD", "agent-secret")
     monkeypatch.delenv("OFDD_AUTH_DISABLED", raising=False)
+    monkeypatch.setenv("OFDD_PLAYGROUND_INPROCESS", "1")
     _reload_bridge_modules()
 
 

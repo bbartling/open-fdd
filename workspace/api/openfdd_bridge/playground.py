@@ -272,6 +272,35 @@ def sweep_rule(
     *,
     capture_print: bool = True,
 ) -> tuple[list[bool], list[dict[str, Any]]]:
+    from .playground_exec import run_pickled_job, subprocess_enabled
+
+    if subprocess_enabled():
+        payload = run_pickled_job(
+            {
+                "op": "sweep_rule",
+                "code": code,
+                "cfg": cfg,
+                "rows": rows,
+                "capture_print": capture_print,
+            },
+            timeout_s=_exec_timeout_s(),
+        )
+        if not payload.get("ok"):
+            err = payload.get("error") or "rule execution failed"
+            if payload.get("timed_out"):
+                err = "rule execution timed out (total budget exceeded)"
+            return [False] * len(rows), sanitize_events([{"type": "error", "text": err}])
+        return payload["flags"], payload["events"]
+    return _sweep_rule_impl(code, cfg, rows, capture_print=capture_print)
+
+
+def _sweep_rule_impl(
+    code: str,
+    cfg: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    capture_print: bool = True,
+) -> tuple[list[bool], list[dict[str, Any]]]:
     lint = lint_python(code, strict_imports=True)
     if not lint["ok"]:
         return [False] * len(rows), sanitize_events(_lint_error_events(lint))
@@ -367,6 +396,42 @@ def run_dataframe_script(
             "events": _lint_error_events(lint),
         }
 
+    from .playground_exec import run_pickled_job, subprocess_enabled
+
+    if subprocess_enabled():
+        import pickle
+
+        started = time.time()
+        payload = run_pickled_job(
+            {
+                "op": "run_script",
+                "code": code,
+                "df_bytes": pickle.dumps(df, protocol=pickle.HIGHEST_PROTOCOL),
+                "cfg": cfg or {},
+            },
+            timeout_s=_exec_timeout_s(),
+        )
+        if not payload.get("ok"):
+            err = payload.get("error") or "script failed"
+            if payload.get("timed_out"):
+                err = "script execution timed out"
+            return {
+                "ok": False,
+                "error": err,
+                "stdout": "",
+                "ms": int((time.time() - started) * 1000),
+            }
+        return payload["result"]
+
+    return _run_dataframe_script_impl(code, df, cfg=cfg)
+
+
+def _run_dataframe_script_impl(
+    code: str,
+    df: pd.DataFrame,
+    *,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     def _run() -> dict[str, Any]:
         g = _rule_sandbox()
         g["df"] = df.copy()
@@ -473,7 +538,7 @@ def sweep_dataframe_chunked(
             rows = rows_for_evaluate(chunk_df, limit=len(chunk_df))
             if enrich_rows:
                 rows = enrich_rows(rows)
-            flags, chunk_events = sweep_rule(code, cfg, rows, capture_print=False)
+            flags, chunk_events = _sweep_rule_impl(code, cfg, rows, capture_print=False)
             for k, flagged in enumerate(flags):
                 if flagged and k < len(pos_indices):
                     merged[pos_indices[k]] = True
