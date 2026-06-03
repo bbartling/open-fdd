@@ -54,8 +54,11 @@ if [[ -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&
     inv_user="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_user",""))' 2>/dev/null || true)"
     [[ -n "$inv_user" ]] && SSH_USER="$inv_user"
     INVENTORY_DOCKER_STACK="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("openfdd_docker_stack") else 0)' 2>/dev/null || echo 0)"
+    PROBE_SITE_ID="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("site_id","demo") or "demo")' 2>/dev/null || echo demo)"
+    POST_CHECK_REQUIRE_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("post_check_require_ollama") else 0)' 2>/dev/null || echo 0)"
   fi
 fi
+PROBE_SITE_ID="${PROBE_SITE_ID:-demo}"
 [[ -n "$HOST" ]] || { echo "Need --host IP or --limit NAME with inventory." >&2; usage 1; }
 
 scheme=http
@@ -66,14 +69,14 @@ if [[ -f "$AUTH_ENV" ]]; then
   # shellcheck disable=SC1090
   set -a && source "$AUTH_ENV" && set +a
 fi
-LOGIN_USER="${OFDD_OPERATOR_USER:-}"
-LOGIN_PASS="${OFDD_OPERATOR_PASSWORD:-}"
+LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
+LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
 
 echo "Open-FDD post-deploy check → ${HOST}"
 
 [[ -f "$HTTP_PROBES" ]] || { log_fail "Missing ${HTTP_PROBES}"; exit 1; }
 
-probe_args=(check "$BASE" --require-mcp)
+probe_args=(check "$BASE" --require-mcp --site-id "$PROBE_SITE_ID")
 [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" == "1" ]] && probe_args+=(--require-ollama)
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   probe_args+=("$LOGIN_USER" "$LOGIN_PASS")

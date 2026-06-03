@@ -129,3 +129,49 @@ def test_summary_sentence_struggling():
         "ahu_systems",
     )
     assert "slow zones" in text.lower()
+
+
+def test_compact_for_llm_large_snapshot_is_valid_json():
+    import json
+
+    from openfdd_bridge.zone_temp_analytics import compact_for_llm, slim_zone_for_llm
+
+    zones = [
+        {
+            "label": f"VAV-{i} zone temperature sensor",
+            "day_avg_f": 72.0 + i * 0.01,
+            "night_avg_f": 68.0,
+            "recovery_f_per_min": 0.05,
+        }
+        for i in range(16)
+    ]
+    systems = [
+        {
+            "ahu_name": f"AHU-{j}",
+            "fan_column": f"fan_{j}",
+            "median_recovery_f_per_min": 0.1,
+            "zones": [
+                {
+                    "label": f"z{k}",
+                    "recovery_f_per_min": 0.05,
+                    "day_avg_f": 72.0,
+                    "night_avg_f": 68.0,
+                }
+                for k in range(12)
+            ],
+        }
+        for j in range(6)
+    ]
+    snap = {
+        "topology_mode": "mixed",
+        "zone_sensor_count": 64,
+        "summary_sentence": "x" * 200,
+        "zones": zones,
+        "systems": systems,
+        "struggling_zones": zones[:8],
+    }
+    text = compact_for_llm(snap)
+    parsed = json.loads(text)
+    assert parsed["zone_sensor_count"] == 64
+    slim = slim_zone_for_llm(snap)
+    assert slim["zones"]

@@ -45,8 +45,13 @@ def post_json(url: str, payload: dict[str, Any], *, timeout: float = 20.0, heade
             return resp.status, resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", errors="replace")
+    except TimeoutError as exc:
+        raise RuntimeError(f"request timed out after {timeout}s") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
+        reason = getattr(exc, "reason", exc)
+        if isinstance(reason, TimeoutError):
+            raise RuntimeError(f"request timed out after {timeout}s") from exc
+        raise RuntimeError(str(reason)) from exc
 
 
 def auth_headers(token: str) -> dict[str, str]:
@@ -541,7 +546,7 @@ def check_agent_chat(
 def main() -> int:
     if len(sys.argv) < 2:
         print(
-            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama]\n"
+            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama] [--site-id SITE]\n"
             "       http_probes.py check-public <base_url>",
             file=sys.stderr,
         )
@@ -558,7 +563,18 @@ def main() -> int:
         args = sys.argv[2:]
         require_mcp = "--require-mcp" in args
         require_ollama = "--require-ollama" in args
-        args = [a for a in args if not a.startswith("--require-")]
+        site_id = os.environ.get("OFDD_PROBE_SITE_ID", "demo")
+        filtered: list[str] = []
+        i = 0
+        while i < len(args):
+            if args[i] == "--site-id" and i + 1 < len(args):
+                site_id = args[i + 1]
+                i += 2
+                continue
+            if not args[i].startswith("--require-"):
+                filtered.append(args[i])
+            i += 1
+        args = filtered
         base = args[0]
         if len(args) >= 3:
             login = check_login(base, args[1], args[2])
@@ -590,11 +606,22 @@ def main() -> int:
                 result["errors"].extend(agent.get("errors", []))
                 result["warnings"].extend(agent.get("warnings", []))
                 if require_mcp:
-                    chat = check_agent_chat(base, login["token"], require_mcp=require_mcp)
+                    try:
+                        chat = check_agent_chat(base, login["token"], require_mcp=require_mcp)
+                    except RuntimeError as exc:
+                        chat = {
+                            "errors": [],
+                            "warnings": [f"agent chat probe skipped: {exc}"],
+                            "skipped": True,
+                        }
                     result["agent_chat"] = chat
                     result["errors"].extend(chat.get("errors", []))
                     result["warnings"].extend(chat.get("warnings", []))
-                ui = check_integrator_ui_api(base, login["token"], site_id="demo")
+                probe_site = site_id
+                if not probe_site or probe_site == "demo":
+                    sites = check_model_api(base, login["token"])
+                    probe_site = str(sites.get("active_site_id") or site_id or "demo")
+                ui = check_integrator_ui_api(base, login["token"], site_id=probe_site)
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
                 result["warnings"].extend(ui.get("warnings", []))

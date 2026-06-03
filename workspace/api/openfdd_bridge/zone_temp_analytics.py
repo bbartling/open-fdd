@@ -228,6 +228,16 @@ def discover_topology(model: dict[str, Any], site_id: str) -> dict[str, Any]:
     }
 
 
+def _column_series(frame: pd.DataFrame, col: str) -> pd.Series:
+    """One numeric series for ``col`` even when the frame has duplicate column labels."""
+    if col not in frame.columns:
+        return pd.Series(dtype=float)
+    data = frame[col]
+    if isinstance(data, pd.DataFrame):
+        data = data.iloc[:, 0]
+    return pd.to_numeric(data, errors="coerce")
+
+
 def _fan_on_series(series: pd.Series, *, threshold: float = 5.0) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce")
     if s.dropna().empty:
@@ -248,12 +258,13 @@ def _recovery_rates(
 ) -> dict[str, float]:
     if fan_col not in df.columns or "timestamp" not in df.columns:
         return {}
-    work = df[["timestamp", fan_col, *zone_columns]].copy()
+    pick = list(dict.fromkeys(["timestamp", fan_col, *[c for c in zone_columns if c in df.columns]]))
+    work = df.loc[:, pick].copy()
     work["timestamp"] = pd.to_datetime(work["timestamp"], utc=True, errors="coerce")
     work = work.dropna(subset=["timestamp"]).sort_values("timestamp")
     if len(work) < 10:
         return {}
-    fan_on = _fan_on_series(work[fan_col])
+    fan_on = _fan_on_series(_column_series(work, fan_col))
     prev = fan_on.shift(1, fill_value=False)
     starts = work.index[fan_on & ~prev]
     if starts.empty:
@@ -274,7 +285,9 @@ def _recovery_rates(
         if minutes < 5:
             continue
         for col in zone_columns:
-            vals = pd.to_numeric(seg[col], errors="coerce").dropna()
+            if col not in seg.columns:
+                continue
+            vals = _column_series(seg, col).dropna()
             if len(vals) < 2:
                 continue
             delta = float(vals.iloc[-1] - vals.iloc[0])
@@ -353,7 +366,11 @@ def compute_zone_metrics(
         if not zone_cols:
             continue
         fan_col = _fan_column_on_equipment(model, site_id, str(sys.get("ahu_id") or ""), available)
-        recoveries = _recovery_rates(df, zone_cols, fan_col) if fan_col else {}
+        recoveries = {}
+        if fan_col and fan_col in available:
+            rate_cols = list(dict.fromkeys(["timestamp", fan_col, *zone_cols]))
+            rate_df = df.loc[:, [c for c in rate_cols if c in df.columns]].copy()
+            recoveries = _recovery_rates(rate_df, zone_cols, fan_col)
         sys_zones = []
         rates = [r for r in recoveries.values() if r is not None]
         median_rate = sorted(rates)[len(rates) // 2] if rates else None
@@ -494,19 +511,28 @@ def lookback_hours() -> float:
         return float(LOOKBACK_HOURS)
 
 
-def compact_for_llm(snapshot: dict[str, Any]) -> str:
-    """Small JSON blob for building-insight / agent prompts."""
-    slim = {
+def slim_zone_for_llm(
+    snapshot: dict[str, Any],
+    *,
+    max_zones: int = 16,
+    max_systems: int = 6,
+    max_zones_per_system: int = 12,
+    max_struggling: int = 8,
+) -> dict[str, Any]:
+    """Compact zone snapshot for LLM context (dict — never slice JSON mid-string)."""
+    summary = str(snapshot.get("summary_sentence") or "")[:400]
+    return {
         "topology_mode": snapshot.get("topology_mode") or snapshot.get("mode"),
         "zone_sensor_count": snapshot.get("zone_sensor_count"),
-        "summary_sentence": snapshot.get("summary_sentence"),
+        "summary_sentence": summary,
         "zones": [
             {
                 "label": z.get("label"),
                 "day_avg_f": z.get("day_avg_f"),
                 "night_avg_f": z.get("night_avg_f"),
             }
-            for z in (snapshot.get("zones") or [])[:16]
+            for z in (snapshot.get("zones") or [])[:max_zones]
+            if isinstance(z, dict)
         ],
         "systems": [
             {
@@ -520,11 +546,40 @@ def compact_for_llm(snapshot: dict[str, Any]) -> str:
                         "day_avg_f": z.get("day_avg_f"),
                         "night_avg_f": z.get("night_avg_f"),
                     }
-                    for z in (s.get("zones") or [])[:12]
+                    for z in (s.get("zones") or [])[:max_zones_per_system]
+                    if isinstance(z, dict)
                 ],
             }
-            for s in (snapshot.get("systems") or [])[:6]
+            for s in (snapshot.get("systems") or [])[:max_systems]
+            if isinstance(s, dict)
         ],
-        "struggling_zones": (snapshot.get("struggling_zones") or [])[:8],
+        "struggling_zones": [
+            z
+            for z in (snapshot.get("struggling_zones") or [])[:max_struggling]
+            if isinstance(z, dict)
+        ],
     }
-    return json.dumps(slim, separators=(",", ":"))[:2800]
+
+
+def compact_for_llm(snapshot: dict[str, Any], *, max_bytes: int = 2800) -> str:
+    """Small JSON blob for building-insight / agent prompts (always valid JSON)."""
+    limits = [
+        (16, 6, 12, 8),
+        (12, 4, 8, 6),
+        (8, 3, 6, 4),
+        (4, 2, 4, 2),
+    ]
+    for max_z, max_sys, max_zps, max_str in limits:
+        slim = slim_zone_for_llm(
+            snapshot,
+            max_zones=max_z,
+            max_systems=max_sys,
+            max_zones_per_system=max_zps,
+            max_struggling=max_str,
+        )
+        text = json.dumps(slim, separators=(",", ":"))
+        if len(text) <= max_bytes:
+            return text
+    slim = slim_zone_for_llm(snapshot, max_zones=2, max_systems=1, max_zones_per_system=2, max_struggling=2)
+    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[:120]
+    return json.dumps(slim, separators=(",", ":"))

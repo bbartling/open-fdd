@@ -17,7 +17,7 @@ from typing import Any
 
 from .building_status import collect_status
 from . import ollama_client
-from .zone_temp_analytics import compact_for_llm, get_zone_temp_snapshot
+from .zone_temp_analytics import get_zone_temp_snapshot, slim_zone_for_llm
 
 _CACHE: dict[str, Any] = {
     "generated_at": 0.0,
@@ -79,10 +79,25 @@ def _compact_context(status: dict[str, Any], zone_snapshot: dict[str, Any] | Non
                     }
                 )
     health = status.get("model_health") if isinstance(status.get("model_health"), dict) else {}
+    fault_codes = []
+    for a in alerts:
+        code = str(a.get("code") or "").strip()
+        if code:
+            fault_codes.append(code)
+    for fam in (status.get("families") or []):
+        if not isinstance(fam, dict):
+            continue
+        for fault in fam.get("faults") or []:
+            if isinstance(fault, dict):
+                code = str(fault.get("code") or "").strip()
+                if code and code not in fault_codes:
+                    fault_codes.append(code)
+
     payload = {
         "building_status": status.get("status"),
         "traffic": status.get("traffic"),
         "fdd_alert_count": status.get("fdd_alert_count"),
+        "active_fault_codes": fault_codes[:16],
         "alerts": alerts,
         "model": {
             "configured": status.get("model_configured"),
@@ -93,7 +108,7 @@ def _compact_context(status: dict[str, Any], zone_snapshot: dict[str, Any] | Non
         "stack_services": services,
     }
     if zone_snapshot:
-        payload["zone_temps"] = json.loads(compact_for_llm(zone_snapshot))
+        payload["zone_temps"] = slim_zone_for_llm(zone_snapshot)
     return json.dumps(payload, separators=(",", ":"))[:4500]
 
 

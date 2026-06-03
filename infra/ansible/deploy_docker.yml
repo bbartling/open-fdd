@@ -122,7 +122,11 @@
         force: false
       loop:
         - { name: "mcp.env.local", content: "OFDD_MCP_ENABLED=1" }
-        - { name: "ollama.env.local", content: "# ollama env" }
+        - name: "ollama.env.local"
+          content: |
+            # Host Ollama (not compose) — bridge reaches host via host.docker.internal
+            OFDD_OLLAMA_BASE_URL=http://host.docker.internal:11434
+            OFDD_OLLAMA_MODEL=qwen3:4b
         - { name: "data.env.local", content: "# feather env" }
 
     - name: Build workspace data sync archive (skip live historian + unreadable model.json)
