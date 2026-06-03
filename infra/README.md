@@ -40,6 +40,32 @@ Run from **`infra/ansible/`** (not repo root). It wraps `./deploy.sh`:
 
 Rule Lab / Plot default to **`demo`** on the bench. A **503** on `/api/model/scope?site_id=acme` means TTL was never synced for Acme on this host — use the correct site or run **Sync TTL** on the Data Model tab.
 
+## Acme VM deploy (recommended sequence)
+
+Run from **repo root** for backup; run **deploy** from `infra/ansible/`.
+
+```bash
+cd ~/open-fdd
+./scripts/docker_build.sh --save
+./scripts/edge_site_backup.sh acme vm-bbartling    # local pack snapshot (not ./scripts/ under ansible/)
+
+cd infra/ansible
+set -a && source secrets/acme.env.local && set +a
+
+# One shot: images + compose + site model/rules/points + maintenance + TTL/SPARQL probes
+./deploy.sh ops --limit acme_vm_bbartling \
+  -e openfdd_docker_sync_workspace_data=false
+
+# Or stepwise (what you ran):
+# ./deploy.sh maintain --limit acme_vm_bbartling
+# ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_sync_workspace_data=false
+# ./deploy.sh check --limit acme_vm_bbartling    # insurance only (after docker is up)
+```
+
+`openfdd_docker_sync_workspace_data=false` keeps the VM’s **feather_store** and does not overwrite with bensserver `workspace/data`. The docker playbook still pushes **Acme** `model.json`, `rules_store.json`, and `points.csv` from `edge_backup/local/acme/vm-bbartling/` (or `edge_config/acme/`).
+
+If `maintain` failed on “Illegal option -o pipefail”, pull latest `develop` (shell tasks now use `/bin/bash`) and re-run `./deploy.sh check --limit acme_vm_bbartling`.
+
 ## Docs
 
 - [docs/edge_deploy_docker.md](../docs/edge_deploy_docker.md)

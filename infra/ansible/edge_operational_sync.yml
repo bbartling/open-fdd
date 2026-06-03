@@ -102,6 +102,8 @@
           exit 0
         fi
         du -sb "$root" 2>/dev/null | awk '{print $1}'
+      args:
+        executable: /bin/bash
       register: feather_bytes
       changed_when: false
 
@@ -114,6 +116,8 @@
           exit 0
         fi
         docker logs --tail 200 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true
+      args:
+        executable: /bin/bash
       register: bridge_log_errors
       changed_when: false
       when: openfdd_docker_stack | default(false) | bool

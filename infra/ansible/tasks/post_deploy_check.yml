@@ -64,6 +64,8 @@
       cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
       echo "${svc}=${cid}"
     done
+  args:
+    executable: /bin/bash
   register: docker_log_cids
   changed_when: false
   when: openfdd_docker_stack | default(false) | bool
@@ -89,6 +91,8 @@
       exit 1
     fi
     echo "OK ${svc}"
+  args:
+    executable: /bin/bash
   loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
   register: docker_log_scan
   changed_when: false
