@@ -380,6 +380,35 @@ def check_agent_stack(
     return out
 
 
+def check_ollama_hello_chat(base: str, token: str) -> dict[str, Any]:
+    """Minimal agent chat to confirm Ollama returns a reply (no MCP keyword check)."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
+    headers = auth_headers(token)
+    url = f"{base.rstrip('/')}/openfdd-agent/chat"
+    status, body = post_json(
+        url,
+        {"message": "Reply with one short greeting word only.", "history": []},
+        headers=headers,
+        timeout=120.0,
+    )
+    out["chat_status"] = status
+    if status != 200:
+        out["errors"].append(f"ollama hello chat HTTP {status}: {body[:300]}")
+        return out
+    try:
+        payload = json.loads(body)
+        out["chat_ok"] = payload.get("ok")
+        reply = str(payload.get("reply") or "").strip()
+        out["reply_preview"] = reply[:240]
+        if not payload.get("ok"):
+            out["errors"].append(f"ollama hello chat failed: {payload.get('error') or body[:200]}")
+        elif not reply:
+            out["errors"].append("ollama hello chat returned empty reply")
+    except json.JSONDecodeError:
+        out["errors"].append("/openfdd-agent/chat not JSON (ollama hello)")
+    return out
+
+
 def check_agent_chat(
     base: str,
     token: str,

@@ -14,9 +14,11 @@ in time chunks when a GiB cap is configured via ``OFDD_FEATHER_MAX_GIB``.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,22 @@ if not _USE_FEATHER:
     _log.warning("pyarrow not installed — feather store using pandas pickle (%s)", LATEST_NAME)
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return int(raw) if raw else default
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        return default
+
+
 def _write_df(df: pd.DataFrame, path: Path) -> None:
     out = df.reset_index(drop=True)
     if _USE_FEATHER:
@@ -54,10 +72,63 @@ def _write_df(df: pd.DataFrame, path: Path) -> None:
         out.to_pickle(path)
 
 
-def _read_df(path: Path) -> pd.DataFrame:
+def _read_df(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
     if _USE_FEATHER:
+        import pyarrow.feather as feather
+
+        _apply_arrow_thread_env()
+        if columns:
+            table = feather.read_table(path, columns=_column_list(columns), use_threads=True)
+            return table.to_pandas()
         return pd.read_feather(path)
-    return pd.read_pickle(path)
+    df = pd.read_pickle(path)
+    if columns:
+        keep = [c for c in _column_list(columns) if c in df.columns]
+        return df[keep] if keep else df
+    return df
+
+
+def _column_list(columns: list[str] | str | None) -> list[str] | None:
+    if columns is None:
+        return None
+    if isinstance(columns, str):
+        columns = [columns]
+    out: list[str] = []
+    seen: set[str] = set()
+    for c in columns:
+        s = str(c).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    if not out:
+        return None
+    if TIMESTAMP_COL not in seen:
+        return [TIMESTAMP_COL, *out]
+    return out
+
+
+def _apply_arrow_thread_env() -> None:
+    n = _env_int("OFDD_ARROW_IO_THREADS", 0)
+    if n <= 0 or not _USE_FEATHER:
+        return
+    try:
+        import pyarrow as pa
+
+        pa.set_cpu_count(n)
+    except Exception:
+        pass
+
+
+def feather_compact_workers_from_env() -> int:
+    return max(1, _env_int("OFDD_FEATHER_COMPACT_WORKERS", 1))
+
+
+def feather_compact_on_ingest_from_env() -> bool:
+    return os.environ.get("OFDD_FEATHER_COMPACT_ON_INGEST", "").strip().lower() in {"1", "true", "yes"}
+
+
+def feather_compact_shard_threshold_from_env() -> int:
+    return max(2, _env_int("OFDD_FEATHER_COMPACT_SHARD_THRESHOLD", 8))
 
 
 TIMESTAMP_COL = "timestamp"
@@ -143,21 +214,61 @@ class FeatherStore:
         chunks.sort(key=lambda c: (c.sort_key, str(c.path)))
         return chunks
 
-    def read_site(self, site_id: str, source: str = "bacnet") -> pd.DataFrame | None:
+    def read_site(
+        self,
+        site_id: str,
+        source: str = "bacnet",
+        *,
+        columns: list[str] | str | None = None,
+    ) -> pd.DataFrame | None:
         """Read and merge every shard for a site, newest rows last, de-duplicated."""
+        table = self.read_site_table(site_id, source=source, columns=columns)
+        if table is None:
+            return None
+        if _USE_FEATHER:
+            return _dedupe_sort(table.to_pandas())
+        if isinstance(table, pd.DataFrame):
+            return _dedupe_sort(table)
+        return _dedupe_sort(table.to_pandas())
+
+    def read_site_table(
+        self,
+        site_id: str,
+        source: str = "bacnet",
+        *,
+        columns: list[str] | str | None = None,
+    ) -> Any | None:
+        """Merge shards into one Arrow table (or DataFrame when pyarrow is absent)."""
         files = self.shard_files(source, site_id)
         if not files:
             return None
+        col_list = _column_list(columns)
+        if _USE_FEATHER:
+            import pyarrow as pa
+            import pyarrow.feather as feather
+
+            _apply_arrow_thread_env()
+            tables: list[Any] = []
+            for path in files:
+                try:
+                    tables.append(feather.read_table(path, columns=col_list, use_threads=True))
+                except Exception as exc:  # noqa: BLE001
+                    _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
+            if not tables:
+                return None
+            if len(tables) == 1:
+                return tables[0]
+            return pa.concat_tables(tables, promote_options="default")
+
         frames: list[pd.DataFrame] = []
         for path in files:
             try:
-                frames.append(_read_df(path))
-            except Exception as exc:  # noqa: BLE001 - skip a corrupt shard, keep the rest
+                frames.append(_read_df(path, col_list))
+            except Exception as exc:  # noqa: BLE001
                 _log.warning("Skipping unreadable feather shard %s: %s", path, exc)
         if not frames:
             return None
-        df = pd.concat(frames, ignore_index=True)
-        return _dedupe_sort(df)
+        return pd.concat(frames, ignore_index=True)
 
     def write_shard(self, df: pd.DataFrame, *, source: str, site_id: str) -> Path:
         site = self.site_dir(source, site_id)
@@ -179,7 +290,16 @@ class FeatherStore:
         site = self.site_dir(source, site_id)
         latest = site / LATEST_NAME
         tmp = site / f".{LATEST_NAME}.tmp"
-        _write_df(df, tmp)
+        site.mkdir(parents=True, exist_ok=True)
+        if _USE_FEATHER:
+            import pyarrow as pa
+
+            table = pa.Table.from_pandas(df.reset_index(drop=True), preserve_index=False)
+            import pyarrow.feather as feather
+
+            feather.write_feather(table, tmp)
+        else:
+            _write_df(df, tmp)
         tmp.replace(latest)
         removed = 0
         for path in files:
@@ -187,6 +307,97 @@ class FeatherStore:
                 path.unlink()
                 removed += 1
         return {"shards": removed, "rows": int(len(df))}
+
+    def compact_all(self, *, source: str | None = None) -> dict[str, Any]:
+        """Compact every site (optionally parallel across sites)."""
+        sites = self.list_sites(source)
+        workers = min(feather_compact_workers_from_env(), max(1, len(sites)))
+
+        def _one(entry: dict[str, str]) -> dict[str, int]:
+            return self.compact(source=entry["source"], site_id=entry["site_id"])
+
+        if workers <= 1 or len(sites) <= 1:
+            results = [_one(e) for e in sites]
+        else:
+            results = []
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(_one, e) for e in sites]
+                for fut in as_completed(futures):
+                    results.append(fut.result())
+        rows = sum(int(r.get("rows") or 0) for r in results)
+        shards = sum(int(r.get("shards") or 0) for r in results)
+        return {"sites": len(sites), "rows": rows, "shards_removed": shards, "workers": workers}
+
+    def maybe_compact_after_ingest(self, *, source: str, site_id: str) -> dict[str, int] | None:
+        """Compact on ingest only when env requests it or loose shard count exceeds threshold."""
+        if feather_compact_on_ingest_from_env():
+            return self.compact(source=source, site_id=site_id)
+        loose = sum(
+            1 for p in self.shard_files(source, site_id) if p.name != LATEST_NAME and p.is_file()
+        )
+        if loose >= feather_compact_shard_threshold_from_env():
+            return self.compact(source=source, site_id=site_id)
+        return None
+
+    def _prune_one_site(self, src: str, site_id: str, cutoff: pd.Timestamp) -> dict[str, int]:
+        if _USE_FEATHER:
+            table = self.read_site_table(site_id, source=src)
+            if table is None:
+                return {"dropped": 0, "touched": 0}
+            if TIMESTAMP_COL not in table.column_names:
+                self.compact(source=src, site_id=site_id)
+                return {"dropped": 0, "touched": 0}
+            try:
+                import pyarrow as pa
+                import pyarrow.compute as pc
+
+                ts = table[TIMESTAMP_COL]
+                if not pa.types.is_timestamp(ts.type):
+                    ts = pc.cast(ts, pa.timestamp("ns", tz="UTC"))
+                cutoff_scalar = pa.scalar(cutoff.to_pydatetime(), type=ts.type)
+                keep = pc.or_(pc.is_null(ts), pc.greater_equal(ts, cutoff_scalar))
+                filtered = table.filter(keep)
+                dropped = int(table.num_rows - filtered.num_rows)
+                if dropped == 0:
+                    self.compact(source=src, site_id=site_id)
+                    return {"dropped": 0, "touched": 0}
+                df = _dedupe_sort(filtered.to_pandas())
+                site = self.site_dir(src, site_id)
+                latest = site / LATEST_NAME
+                tmp = site / f".{LATEST_NAME}.tmp"
+                site.mkdir(parents=True, exist_ok=True)
+                out = pa.Table.from_pandas(df.reset_index(drop=True), preserve_index=False)
+                import pyarrow.feather as feather
+
+                feather.write_feather(out, tmp)
+                tmp.replace(latest)
+                for path in self.shard_files(src, site_id):
+                    if path.name != LATEST_NAME and path.exists():
+                        path.unlink()
+                return {"dropped": dropped, "touched": 1}
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("Arrow prune failed for %s/%s: %s — pandas fallback", src, site_id, exc)
+
+        df = self.read_site(site_id, source=src)
+        if df is None or TIMESTAMP_COL not in df.columns:
+            return {"dropped": 0, "touched": 0}
+        ts = pd.to_datetime(df[TIMESTAMP_COL], utc=True, errors="coerce")
+        keep_mask = ts.isna() | (ts >= cutoff)
+        dropped = int((~keep_mask).sum())
+        if dropped == 0:
+            self.compact(source=src, site_id=site_id)
+            return {"dropped": 0, "touched": 0}
+        kept = df[keep_mask].reset_index(drop=True)
+        site = self.site_dir(src, site_id)
+        latest = site / LATEST_NAME
+        tmp = site / f".{LATEST_NAME}.tmp"
+        site.mkdir(parents=True, exist_ok=True)
+        _write_df(kept, tmp)
+        tmp.replace(latest)
+        for path in self.shard_files(src, site_id):
+            if path.name != LATEST_NAME and path.exists():
+                path.unlink()
+        return {"dropped": dropped, "touched": 1}
 
     def prune(self, *, retention_days: int, source: str | None = None) -> dict[str, object]:
         """Drop rows older than ``retention_days`` for every (or one) source.
@@ -197,34 +408,30 @@ class FeatherStore:
             return {"sites": 0, "rows_dropped": 0, "skipped": "retention_days<=0"}
         cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=retention_days)
         sites = self.list_sites(source)
+        workers = min(feather_compact_workers_from_env(), max(1, len(sites)))
         total_dropped = 0
         touched = 0
-        for entry in sites:
-            src = entry["source"]
-            site_id = entry["site_id"]
-            df = self.read_site(site_id, source=src)
-            if df is None or TIMESTAMP_COL not in df.columns:
-                continue
-            ts = pd.to_datetime(df[TIMESTAMP_COL], utc=True, errors="coerce")
-            keep_mask = ts.isna() | (ts >= cutoff)
-            dropped = int((~keep_mask).sum())
-            if dropped == 0:
-                # Still compact so shard sprawl is bounded.
-                self.compact(source=src, site_id=site_id)
-                continue
-            kept = df[keep_mask].reset_index(drop=True)
-            site = self.site_dir(src, site_id)
-            latest = site / LATEST_NAME
-            tmp = site / f".{LATEST_NAME}.tmp"
-            site.mkdir(parents=True, exist_ok=True)
-            _write_df(kept, tmp)
-            tmp.replace(latest)
-            for path in self.shard_files(src, site_id):
-                if path.name != LATEST_NAME and path.exists():
-                    path.unlink()
-            total_dropped += dropped
-            touched += 1
-        return {"sites": touched, "rows_dropped": total_dropped, "retention_days": retention_days}
+
+        def _one(entry: dict[str, str]) -> dict[str, int]:
+            return self._prune_one_site(entry["source"], entry["site_id"], cutoff)
+
+        if workers <= 1 or len(sites) <= 1:
+            results = [_one(e) for e in sites]
+        else:
+            results = []
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [pool.submit(_one, e) for e in sites]
+                for fut in as_completed(futures):
+                    results.append(fut.result())
+        for r in results:
+            total_dropped += int(r.get("dropped") or 0)
+            touched += int(r.get("touched") or 0)
+        return {
+            "sites": touched,
+            "rows_dropped": total_dropped,
+            "retention_days": retention_days,
+            "workers": workers,
+        }
 
     def trim_latest_oldest_chunk(
         self,
@@ -510,9 +717,8 @@ def _main(argv: list[str] | None = None) -> int:
             )
             _log.info("enforce-max: %s", result)
     if args.compact and not args.prune and not args.enforce_max:
-        for entry in store.list_sites(args.source):
-            store.compact(source=entry["source"], site_id=entry["site_id"])
-        _log.info("compacted %d site(s)", len(store.list_sites(args.source)))
+        result = store.compact_all(source=args.source)
+        _log.info("compact_all: %s", result)
     if not args.prune and not args.compact and not args.enforce_max:
         _log.info(
             "sites=%s total_bytes=%d max_gib=%s retention_days=%d",
@@ -522,26 +728,6 @@ def _main(argv: list[str] | None = None) -> int:
             args.retention_days,
         )
     return 0
-
-
-def _env_int(name: str, default: int) -> int:
-    import os
-
-    raw = os.environ.get(name, "").strip()
-    try:
-        return int(raw) if raw else default
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    import os
-
-    raw = os.environ.get(name, "").strip()
-    try:
-        return float(raw) if raw else default
-    except ValueError:
-        return default
 
 
 if __name__ == "__main__":

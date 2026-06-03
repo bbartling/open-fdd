@@ -106,7 +106,7 @@ Encoding: atomic/sequence/array → JSON-friendly values (`bacnet_ops.encode_rpm
 | **Property** | **`present-value` only** (RPM per device) |
 | **Intervals** | 60, 300, 600, 900 seconds per point (`points.csv` `poll_interval_s`) |
 | **Output** | `workspace/bacnet/polls/samples.csv` (long format) |
-| **Ingest** | `POST /api/bacnet/poll/once` or internal ingest → **feather** wide frames |
+| **Ingest** | `POST /api/bacnet/poll/once` or internal ingest → **feather** wide frames (Arrow IPC; compaction deferred — see [Arrow data plane](../architecture/arrow_data_plane.md)) |
 | **Network** | Poll container **`network_mode: host`** (same UDP bind semantics as commission) |
 
 Enable points: `bacnet_toolshed.enable_points` or bridge `PATCH /api/bacnet/driver/point`, `merge-rows`, driver tree UI.

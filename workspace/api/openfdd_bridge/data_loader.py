@@ -36,20 +36,30 @@ def load_demo_dataframe(site_id: str | None = None) -> pd.DataFrame:
     )
 
 
-def load_site_frame(site_id: str, source: str = "bacnet") -> pd.DataFrame | None:
+def load_site_frame(
+    site_id: str,
+    source: str = "bacnet",
+    *,
+    columns: list[str] | str | None = None,
+) -> pd.DataFrame | None:
     from .feather_store import FeatherStore
 
-    return FeatherStore().read_site(site_id, source=source)
+    return FeatherStore().read_site(site_id, source=source, columns=columns)
 
 
-def load_frame_for_run(site_id: str | None = None, *, source: str = "bacnet") -> tuple[pd.DataFrame, str]:
+def load_frame_for_run(
+    site_id: str | None = None,
+    *,
+    source: str = "bacnet",
+    columns: list[str] | str | None = None,
+) -> tuple[pd.DataFrame, str]:
     """Return the best available frame for a site plus its origin.
 
     Prefers real feather-stored timeseries; falls back to the demo CSV so the
     batch runner and Rule Lab still work on a fresh edge box.
     """
     if site_id:
-        frame = load_site_frame(site_id, source=source)
+        frame = load_site_frame(site_id, source=source, columns=columns)
         if frame is not None and not frame.empty:
             return frame, "feather"
     demo = load_demo_dataframe(site_id)

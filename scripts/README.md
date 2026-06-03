@@ -9,6 +9,7 @@
 | **`openfdd_edge_validate.sh`** | Bensserver / edge gate: backup → BACnet+model reset → bench setup → stack → SPARQL/http probes → operational verify → pytest → health → log scan. `--full`, `--quick`, `--pre-update-backup`, `--rebuild`. |
 | **`docker_maintenance.sh`** | Safe prune/rebuild; never prunes bind-mounted workspace volumes. |
 | **`edge_site_backup.sh`** / **`edge_site_apply.sh`** | Site data backup/restore for remote updates (preserves model, BACnet bind, trends). |
+| **`bench_feather_compact.sh`** | Local Arrow/Feather compact + column-prune timing check. |
 
 ## Typical workflow
 

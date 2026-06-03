@@ -13,6 +13,7 @@ if str(API_ROOT) not in sys.path:
 from openfdd_bridge.feather_store import (  # noqa: E402
     FeatherStore,
     _shard_epoch_ms,
+    feather_compact_on_ingest_from_env,
     feather_max_gib_from_env,
     maintain_storage,
     maintain_storage_if_needed,
@@ -197,3 +198,36 @@ def test_feather_max_gib_from_env(monkeypatch: pytest.MonkeyPatch):
     assert feather_max_gib_from_env() == 12.5
     monkeypatch.delenv("OFDD_FEATHER_MAX_GIB", raising=False)
     assert feather_max_gib_from_env() == 0.0
+
+
+def test_read_site_column_prune(store: FeatherStore):
+    wide = _large_frame("2025-01-01", 20, width=30)
+    store.write_shard(wide, source="bacnet", site_id="s1")
+    slim = store.read_site("s1", source="bacnet", columns=["timestamp", "col-00"])
+    assert slim is not None
+    assert list(slim.columns) == ["timestamp", "col-00"]
+
+
+def test_compact_all_parallel(store: FeatherStore, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("OFDD_FEATHER_COMPACT_WORKERS", "2")
+    for sid in ("a", "b"):
+        store.write_shard(_frame("2025-01-01", 4), source="bacnet", site_id=sid)
+        store.write_shard(_frame("2025-01-03", 4), source="bacnet", site_id=sid)
+    out = store.compact_all(source="bacnet")
+    assert out["sites"] == 2
+    assert out["workers"] == 2
+    for sid in ("a", "b"):
+        assert [p.name for p in store.shard_files("bacnet", sid)] == ["latest.feather"]
+
+
+def test_maybe_compact_after_ingest_threshold(store: FeatherStore, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("OFDD_FEATHER_COMPACT_ON_INGEST", raising=False)
+    monkeypatch.setenv("OFDD_FEATHER_COMPACT_SHARD_THRESHOLD", "3")
+    assert feather_compact_on_ingest_from_env() is False
+    for _ in range(2):
+        store.write_shard(_frame("2025-01-01", 2), source="bacnet", site_id="s1")
+    assert store.maybe_compact_after_ingest(source="bacnet", site_id="s1") is None
+    store.write_shard(_frame("2025-01-02", 2), source="bacnet", site_id="s1")
+    result = store.maybe_compact_after_ingest(source="bacnet", site_id="s1")
+    assert result is not None
+    assert result["rows"] >= 4

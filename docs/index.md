@@ -22,7 +22,8 @@ The same repo also ships **`open-fdd` on PyPI** — a pandas YAML rules engine f
 | 4 | [Local Ollama (check-engine)](local_ollama) — on-box AI vs your deployment AI |
 | 5 | [Operator dashboard](howto/operator_dashboard) — Rule Lab, trends, faults |
 | 6 | [BACnet driver capabilities](bacnet/capabilities) — discover, read, write, poll, mapping |
-| 7 | [Bridge HTTP API](appendix/bridge_api) — REST reference for integrators |
+| 7 | [Arrow data plane](architecture/arrow_data_plane) — Feather/Arrow historian: what is and is not columnar |
+| 8 | [Bridge HTTP API](appendix/bridge_api) — REST reference for integrators |
 
 **Quick local stack:**
 

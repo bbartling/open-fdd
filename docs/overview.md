@@ -33,7 +33,7 @@ Open-FDD on a **git checkout** is an **edge operator product**: four application
 BACnet devices
     → commission (discover / points.csv)
     → poll (host-network driver)
-    → ingest → feather wide frames
+    → ingest → feather wide frames (Apache Arrow IPC — see [Arrow data plane](architecture/arrow_data_plane))
     → Rule Lab Python rules (batch / timer)
     → fdd_results.json + check-engine (GREEN/YELLOW/RED)
     → dashboard + optional local Ollama summary
@@ -63,5 +63,6 @@ BACnet devices
 ## Related
 
 - [Getting started](getting_started)
+- [Arrow data plane](architecture/arrow_data_plane) — historian: built on Arrow vs not
 - [Edge stack layout](architecture/edge_stack)
 - [Bridge API](appendix/bridge_api)

@@ -125,15 +125,25 @@ elif [[ "$RESET_MODEL" == 1 ]]; then
   "${VENV}/bin/python" scripts/setup_bench_afdd.py || log_fail "setup_bench_afdd"
 fi
 
-if [[ "$QUICK" == 0 ]]; then
-  log_step "Ensure stack is up (bench overlay)"
-  if ! "${COMPOSE[@]}" up -d bridge commission mcp-rag; then
-    echo "error: failed to start bench overlay stack (compose.dev.yml + compose.bench.yml)" >&2
-    exit 1
+log_step "Ensure stack is up (bench overlay + Ollama)"
+if ! "${COMPOSE[@]}" up -d bridge commission mcp-rag ollama; then
+  echo "error: failed to start bench overlay stack (compose.dev.yml + compose.bench.yml)" >&2
+  exit 1
+fi
+docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
+sleep 8
+./scripts/fix_workspace_permissions.sh 2>/dev/null || true
+
+log_step "Feather compact (Arrow historian)"
+if docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml exec -T bridge \
+  python -m openfdd_bridge.feather_store --compact 2>&1; then
+  log_ok "feather_store --compact"
+else
+  if "${VENV}/bin/python" -m openfdd_bridge.feather_store --compact 2>&1; then
+    log_ok "feather_store --compact (host venv)"
+  else
+    log_fail "feather_store --compact"
   fi
-  docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
-  sleep 6
-  ./scripts/fix_workspace_permissions.sh 2>/dev/null || true
 fi
 
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
@@ -141,17 +151,47 @@ if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   api_py="${ROOT}/infra/ansible/scripts/bench_operational_verify.sh"
 
   if probe_out="$("${VENV}/bin/python" "${ROOT}/infra/ansible/scripts/http_probes.py" check \
-    "$BASE" "$LOGIN_USER" "$LOGIN_PASS" --require-mcp 2>&1)"; then
-    log_ok "http_probes (SPARQL model tree/graph/health)"
+    "$BASE" "$LOGIN_USER" "$LOGIN_PASS" --require-mcp --require-ollama 2>&1)"; then
+    log_ok "http_probes (SPARQL model + MCP + Ollama health)"
     echo "$probe_out" | "${VENV}/bin/python" -c "
 import json,sys
 d=json.load(sys.stdin)
 m=d.get('model_api') or {}
 print('    model_health:', m.get('model_health_status'), 'tree:', m.get('model_tree_status'), 'engine:', m.get('model_query_engine'))
+ag=d.get('agent') or {}
+print('    ollama_reachable:', ag.get('ollama_reachable'), 'model:', ag.get('ollama_model'))
 " 2>/dev/null || true
   else
     log_fail "http_probes failed"
     echo "$probe_out" | head -40 >&2 || true
+  fi
+
+  log_step "Ollama hello chat probe"
+  if hello_out="$("${VENV}/bin/python" -c "
+import json, sys
+sys.path.insert(0, '${ROOT}/infra/ansible/scripts')
+from http_probes import check_login, check_ollama_hello_chat
+base = '${BASE}'
+login = check_login(base, '${LOGIN_USER}', '${LOGIN_PASS}')
+if login.get('errors'):
+    print(json.dumps({'errors': login['errors']}))
+    sys.exit(0)
+out = check_ollama_hello_chat(base, login['token'])
+print(json.dumps(out))
+" 2>&1)"; then
+    if echo "$hello_out" | "${VENV}/bin/python" -c "
+import json,sys
+d=json.load(sys.stdin)
+sys.exit(0 if not d.get('errors') else 1)
+" 2>/dev/null; then
+      preview="$(echo "$hello_out" | "${VENV}/bin/python" -c "import json,sys; print((json.load(sys.stdin).get('reply_preview') or '')[:80])" 2>/dev/null || true)"
+      log_ok "ollama hello chat${preview:+ — ${preview}}"
+    else
+      log_fail "ollama hello chat"
+      echo "$hello_out" | head -20 >&2 || true
+    fi
+  else
+    log_fail "ollama hello chat probe crashed"
   fi
 
   if [[ "$FULL" == 1 && -f "$api_py" ]]; then
@@ -173,21 +213,24 @@ if "${VENV}/bin/pytest" -q \
   tests/workspace_bridge/test_zone_temp_analytics.py \
   tests/workspace_bridge/test_security.py \
   tests/test_http_probes_sparql.py \
-  tests/workspace_bridge/test_model_building.py 2>&1; then
+  tests/workspace_bridge/test_model_building.py \
+  tests/workspace_bridge/test_feather_store.py \
+  tests/workspace_bridge/test_fdd_batch_cache.py \
+  tests/workspace_bridge/test_bacnet_poll_pipeline.py 2>&1; then
   log_ok "pytest subset passed"
 else
   log_fail "pytest subset"
 fi
 
 log_step "stack_health_check"
-if OPENFDD_BASE_URL="$BASE" ./scripts/stack_health_check.sh; then
+if OPENFDD_BASE_URL="$BASE" ./scripts/stack_health_check.sh --require-ollama; then
   log_ok "stack_health_check"
 else
   log_fail "stack_health_check"
 fi
 
 log_step "Docker error scan (last 20m)"
-for svc in bridge commission mcp-rag; do
+for svc in bridge commission mcp-rag ollama; do
   cid="$(docker compose -f docker/compose.dev.yml ps -q "$svc" 2>/dev/null || true)"
   [[ -n "$cid" ]] || continue
   n="$(docker logs --since 20m "$cid" 2>&1 | grep -ciE 'ModuleNotFoundError|Traceback|CRITICAL' || true)"
@@ -205,6 +248,8 @@ if [[ "$FAILURES" -gt 0 ]]; then
   exit 1
 fi
 echo "VALIDATE OK — ${SITE_ID}/${BUILDING_ID} @ ${BASE}"
+echo "  GUI: ${BASE}/  (integrator login — workspace/auth.env.local)"
+echo "  Arrow historian: docs/architecture/arrow_data_plane.md"
 echo "  Site backup: edge_backup/local/${SITE_ID}/${BUILDING_ID}/"
 echo "  Remote update: ./scripts/edge_site_backup.sh ${SITE_ID} ${BUILDING_ID} before deploy"
 echo "  Restore:       ./scripts/edge_site_apply.sh ${SITE_ID} ${BUILDING_ID} --from-backup"
