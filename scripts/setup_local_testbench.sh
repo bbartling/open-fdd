@@ -107,13 +107,17 @@ for name in ("points_discovered.csv", "points.csv"):
     print(f"    normalized {p} ({len(rows)} rows)")
 PY
 
-echo "==> Enable temp + humidity points for polling"
+echo "==> Enable bench poll set (device 5007 @ 2000:7 — four analog inputs only)"
 "${VENV}/bin/python" -m bacnet_toolshed.enable_points \
   --input "$DISCOVERED" \
   --output "$POINTS" \
-  --match temperature --match humidity --match OA- --match STAT --match DUCT \
+  --object-instance analog-input,1168 \
+  --object-instance analog-input,1173 \
+  --object-instance analog-input,1192 \
+  --object-instance analog-input,10014 \
   --poll-interval 60
-
+mkdir -p "${ROOT}/edge_config/demo/bens-office"
+cp -a "$POINTS" "${ROOT}/edge_config/demo/bens-office/points.csv"
 cp -a "$POINTS" "${BENCH_BACKUP}/points.csv"
 echo "    bench points backed up to ${BENCH_BACKUP}/points.csv"
 

@@ -13,11 +13,9 @@ from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
 from ..security import debug_diagnostics_enabled
 
-router = APIRouter(
-    prefix="/openfdd-agent",
-    tags=["agent"],
-    dependencies=[Depends(require_roles("operator", "integrator", "agent"))],
-)
+router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
+
+_AGENT_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 
 
 class ChatBody(BaseModel):
@@ -56,7 +54,7 @@ def agent_context(user: dict = Depends(require_user)) -> dict:
 
 
 @router.get("/tools")
-def list_tools() -> dict:
+def list_tools(_user: dict = _AGENT_ROLES) -> dict:
     return {"tools": agent_tools.tool_specs(), "app_edit_enabled": agent_tools.app_edit_enabled()}
 
 
@@ -119,7 +117,7 @@ def zone_temps_snapshot(
 
 
 @router.post("/chat")
-def agent_chat(body: ChatBody) -> dict:
+def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
     """Local operator chat — always Ollama (configured via workspace/ollama.env.local)."""
     return ollama_client.chat(
         body.message,

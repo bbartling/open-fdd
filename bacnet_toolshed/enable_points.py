@@ -28,6 +28,12 @@ def main() -> None:
         default=[],
         help="Enable rows whose point_id or object_name contains this substring (repeatable)",
     )
+    parser.add_argument(
+        "--object-instance",
+        action="append",
+        default=[],
+        help="Enable exact BACnet object (repeatable), e.g. analog-input,1168",
+    )
     parser.add_argument("--poll-interval", type=int, default=60)
     args = parser.parse_args()
 
@@ -41,6 +47,9 @@ def main() -> None:
         for raw in csv.DictReader(f):
             row = normalize_row(raw)
             enable = args.all
+            if not enable and args.object_instance:
+                oid = f"{row.get('object_type', '')},{row.get('object_instance', '')}".lower()
+                enable = any(m.strip().lower() == oid for m in args.object_instance)
             if not enable and args.match:
                 hay = f"{row.get('point_id','')} {row.get('object_name','')}".lower()
                 enable = any(m.lower() in hay for m in args.match)

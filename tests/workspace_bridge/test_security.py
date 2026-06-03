@@ -110,8 +110,9 @@ def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
     assert raw_client.get("/api/host/stats").status_code == 401
 
 
-def test_anonymous_cannot_read_stack_health(raw_client: TestClient):
-    assert raw_client.get("/health/stack").status_code == 401
+def test_anonymous_can_read_public_check_engine(raw_client: TestClient):
+    assert raw_client.get("/health/stack").status_code == 200
+    assert raw_client.get("/openfdd-agent/building-insight").status_code == 200
 
 
 def test_anonymous_cannot_read_agent_context(raw_client: TestClient):

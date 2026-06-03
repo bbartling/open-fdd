@@ -7,8 +7,12 @@
 # Full bensserver bench cycle (discover → model → SPARQL → health):
 #   ./scripts/openfdd_edge_validate.sh --full
 #
-# Preserve BACnet/model, only health + pytest:
+# Preserve BACnet/model, only health + pytest (no bench reset / operational verify):
 #   ./scripts/openfdd_edge_validate.sh --quick
+#
+# Full bench cycle (destructive BACnet/model reset + operational verify):
+#   ./scripts/openfdd_edge_validate.sh --full
+#   ./scripts/openfdd_edge_validate.sh          # same as --full when no flags
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -33,7 +37,7 @@ FAILURES=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pre-update-backup|--backup) PRE_BACKUP=1; shift ;;
-    --full) FULL=1; RESET_BACNET=1; RESET_MODEL=1; shift ;;
+    --full|--long) FULL=1; RESET_BACNET=1; RESET_MODEL=1; shift ;;
     --quick) QUICK=1; shift ;;
     --reset-bacnet) RESET_BACNET=1; shift ;;
     --reset-model) RESET_MODEL=1; shift ;;
@@ -134,6 +138,15 @@ docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile b
 sleep 8
 ./scripts/fix_workspace_permissions.sh 2>/dev/null || true
 
+log_step "Public check-engine API (no auth - home / faults dashboard)"
+if public_out="$("${VENV}/bin/python" "${ROOT}/infra/ansible/scripts/http_probes.py" check-public "$BASE" 2>&1)"; then
+  log_ok "public check-engine endpoints (200, no Bearer)"
+  echo "$public_out" | "${VENV}/bin/python" -c 'import json,sys; d=json.load(sys.stdin); [print(f"    {p}: {c}") for p,c in sorted((d.get("endpoints") or {}).items())]' 2>/dev/null || true
+else
+  log_fail "public check-engine endpoints"
+  echo "$public_out" | head -30 >&2 || true
+fi
+
 log_step "Feather compact (Arrow historian)"
 if docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml exec -T bridge \
   python -m openfdd_bridge.feather_store --compact 2>&1; then
@@ -152,7 +165,7 @@ if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
 
   if probe_out="$("${VENV}/bin/python" "${ROOT}/infra/ansible/scripts/http_probes.py" check \
     "$BASE" "$LOGIN_USER" "$LOGIN_PASS" --require-mcp --require-ollama 2>&1)"; then
-    log_ok "http_probes (SPARQL model + MCP + Ollama health)"
+    log_ok "http_probes (SPARQL + scope/plot + MCP + Ollama)"
     echo "$probe_out" | "${VENV}/bin/python" -c "
 import json,sys
 d=json.load(sys.stdin)
@@ -160,6 +173,9 @@ m=d.get('model_api') or {}
 print('    model_health:', m.get('model_health_status'), 'tree:', m.get('model_tree_status'), 'engine:', m.get('model_query_engine'))
 ag=d.get('agent') or {}
 print('    ollama_reachable:', ag.get('ollama_reachable'), 'model:', ag.get('ollama_model'))
+ui=d.get('integrator_ui') or {}
+print('    model_scope:', ui.get('model_scope_status'), 'equipment:', ui.get('model_scope_equipment_count'))
+print('    timeseries:', ui.get('timeseries_readings_status'))
 " 2>/dev/null || true
   else
     log_fail "http_probes failed"
@@ -195,7 +211,7 @@ sys.exit(0 if not d.get('errors') else 1)
   fi
 
   if [[ "$FULL" == 1 && -f "$api_py" ]]; then
-    log_step "Bench operational verify (discover API, import, poll, FDD)"
+    log_step "Bench operational verify - discover, import, poll, FDD"
     bench_args=(--host 127.0.0.1 --port 8765 --wait-minutes 2)
     if [[ "${SKIP_WAIT:-0}" == 1 ]]; then
       bench_args+=(--skip-wait)
@@ -212,6 +228,7 @@ if "${VENV}/bin/pytest" -q \
   tests/workspace_bridge/test_playground_subprocess.py \
   tests/workspace_bridge/test_zone_temp_analytics.py \
   tests/workspace_bridge/test_security.py \
+  tests/workspace_bridge/test_fault_catalog.py \
   tests/test_http_probes_sparql.py \
   tests/workspace_bridge/test_model_building.py \
   tests/workspace_bridge/test_feather_store.py \
@@ -248,7 +265,7 @@ if [[ "$FAILURES" -gt 0 ]]; then
   exit 1
 fi
 echo "VALIDATE OK — ${SITE_ID}/${BUILDING_ID} @ ${BASE}"
-echo "  GUI: ${BASE}/  (integrator login — workspace/auth.env.local)"
+echo "  GUI: ${BASE}/  (home/faults public; integrator login for BACnet/Agent — workspace/auth.env.local)"
 echo "  Arrow historian: docs/architecture/arrow_data_plane.md"
 echo "  Site backup: edge_backup/local/${SITE_ID}/${BUILDING_ID}/"
 echo "  Remote update: ./scripts/edge_site_backup.sh ${SITE_ID} ${BUILDING_ID} before deploy"

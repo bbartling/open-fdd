@@ -73,6 +73,94 @@ def _stack_services(body: str) -> list[dict[str, Any]]:
         return []
 
 
+PUBLIC_CHECK_ENGINE_PATHS = (
+    "/health/stack",
+    "/api/faults/status",
+    "/api/building/status",
+    "/openfdd-agent/building-insight",
+)
+
+
+def check_integrator_ui_api(base: str, token: str, *, site_id: str = "demo") -> dict[str, Any]:
+    """Authenticated probes for Rule Lab / Plot tabs (scope SPARQL + timeseries query coercion)."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "site_id": site_id}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+
+    scope_url = f"{root}/api/model/scope?site_id={site_id}"
+    status, body, _ = fetch(scope_url, headers=headers)
+    out["model_scope_status"] = status
+    if status == 503:
+        out["errors"].append(
+            f"/api/model/scope HTTP 503 for site {site_id!r} — import model and Sync TTL (data_model.ttl missing?)"
+        )
+    elif status != 200:
+        out["errors"].append(f"/api/model/scope HTTP {status}: {body[:200]}")
+    else:
+        try:
+            payload = json.loads(body)
+            equipment = payload.get("equipment") or []
+            out["model_scope_equipment_count"] = len(equipment)
+            if not equipment:
+                out["errors"].append(f"/api/model/scope returned no equipment for site {site_id!r}")
+            if payload.get("query_engine") != "sparql":
+                out["warnings"].append(f"scope query_engine={payload.get('query_engine')!r}")
+        except json.JSONDecodeError:
+            out["errors"].append("/api/model/scope not JSON")
+
+    cols = "5007-analog-input-1173,5007-analog-input-1192"
+    readings_url = (
+        f"{root}/api/timeseries/readings?site_id={site_id}&columns={cols}"
+        "&hours=24&include_faults=false&rolling_avg_minutes=5&show_rolling_avg=true"
+    )
+    status, body, _ = fetch(readings_url, headers=headers)
+    out["timeseries_readings_status"] = status
+    if status == 422:
+        out["errors"].append(
+            "/api/timeseries/readings HTTP 422 — rolling_avg_minutes query validation failed "
+            f"(body={body[:240]})"
+        )
+    elif status not in (200, 404):
+        out["errors"].append(f"/api/timeseries/readings HTTP {status}: {body[:200]}")
+    elif status == 404:
+        out["warnings"].append("/api/timeseries/readings 404 — no feather data yet (poll may be warming up)")
+    return out
+
+
+def check_public_check_engine(base: str) -> dict[str, Any]:
+    """Anonymous read probes for home / faults traffic-light UI (no Bearer token)."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "endpoints": {}}
+    root = base.rstrip("/")
+    for path in PUBLIC_CHECK_ENGINE_PATHS:
+        url = f"{root}{path}"
+        status, body, _ = fetch(url)
+        out["endpoints"][path] = status
+        if status == 401:
+            out["errors"].append(f"{path} HTTP 401 — check-engine dashboard must not require login")
+        elif status != 200:
+            out["errors"].append(f"{path} HTTP {status}")
+            continue
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            out["errors"].append(f"{path} not JSON")
+            continue
+        if path == "/health/stack":
+            services = payload.get("services") or []
+            if not services:
+                out["errors"].append("/health/stack missing services[]")
+            bridge = next((s for s in services if s.get("id") == "bridge"), None)
+            if bridge and bridge.get("status") not in ("green", "yellow"):
+                out["errors"].append(f"bridge stack status={bridge.get('status')}")
+        elif path == "/openfdd-agent/building-insight":
+            if not (payload.get("sentence") or payload.get("ok")):
+                out["warnings"].append("/openfdd-agent/building-insight empty sentence")
+        elif path in ("/api/faults/status", "/api/building/status"):
+            if not payload.get("ok", True) and "traffic" not in payload:
+                out["warnings"].append(f"{path} unexpected payload shape")
+    return out
+
+
 def check_entry(
     base: str,
     *,
@@ -123,8 +211,11 @@ def check_entry(
     status, body, _ = fetch(stack_url, headers=stack_headers)
     out["stack_status"] = status
     out["stack_services"] = {}
-    if status == 401 and out.get("auth_required"):
-        out["warnings"].append("/health/stack requires auth (probed after login in full check)")
+    if status == 401:
+        if stack_headers:
+            out["errors"].append("/health/stack HTTP 401 with Bearer token")
+        else:
+            out["errors"].append("/health/stack HTTP 401 — must be public for check-engine dashboard")
     elif status != 200:
         out["errors"].append(f"/health/stack HTTP {status}")
     else:
@@ -450,11 +541,19 @@ def check_agent_chat(
 def main() -> int:
     if len(sys.argv) < 2:
         print(
-            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama]",
+            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama]\n"
+            "       http_probes.py check-public <base_url>",
             file=sys.stderr,
         )
         return 2
     cmd = sys.argv[1]
+    if cmd == "check-public":
+        if len(sys.argv) < 3:
+            print("usage: http_probes.py check-public <base_url>", file=sys.stderr)
+            return 2
+        result = check_public_check_engine(sys.argv[2])
+        print(json.dumps(result, indent=2))
+        return 0 if not result.get("errors") else 1
     if cmd == "check":
         args = sys.argv[2:]
         require_mcp = "--require-mcp" in args
@@ -495,6 +594,10 @@ def main() -> int:
                     result["agent_chat"] = chat
                     result["errors"].extend(chat.get("errors", []))
                     result["warnings"].extend(chat.get("warnings", []))
+                ui = check_integrator_ui_api(base, login["token"], site_id="demo")
+                result["integrator_ui"] = ui
+                result["errors"].extend(ui.get("errors", []))
+                result["warnings"].extend(ui.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

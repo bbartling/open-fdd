@@ -63,9 +63,14 @@ def test_tree_api(client: TestClient):
     assert "simultaneous_heat_cool" in ahu_cats
 
 
-def test_public_check_engine_endpoints_no_auth_header(client: TestClient):
-    for path in ("/api/building/status", "/api/faults/status", "/health/stack"):
-        r = client.get(path)
+def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
+    for path in (
+        "/api/building/status",
+        "/api/faults/status",
+        "/health/stack",
+        "/openfdd-agent/building-insight",
+    ):
+        r = raw_client.get(path)
         assert r.status_code == 200, path
 
 

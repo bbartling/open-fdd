@@ -102,8 +102,8 @@ def _columns_for_site_rules(model: dict[str, Any], site_id: str, rules: list[dic
     wanted: set[str] = {"timestamp", "site_id"}
     for rule in rules:
         cmap = column_map_for_rule(model, site_id, rule)
+        # Historian columns are point external_id / fdd_input names — not BRICK class strings.
         wanted.update(str(v) for v in cmap.values() if str(v).strip())
-        wanted.update(str(k) for k in cmap.keys() if str(k).strip())
     extra = [c for c in wanted if c not in {"timestamp", "site_id"}]
     if not extra:
         return None

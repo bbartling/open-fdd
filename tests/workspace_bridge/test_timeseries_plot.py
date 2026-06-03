@@ -164,3 +164,28 @@ def test_readings_api(plot_env: Path, raw_client: TestClient, integrator_headers
     assert body["ok"] is True
     assert "oa-t" in body["series"]
     assert body["fault_panels"]
+
+
+def test_readings_api_accepts_string_rolling_avg_minutes(
+    plot_env: Path, raw_client: TestClient, integrator_headers: dict[str, str]
+):
+    _reload_bridge()
+    from openfdd_bridge.main import create_app as make_app  # noqa: E402
+
+    client = TestClient(make_app())
+    r = client.get(
+        "/api/timeseries/readings",
+        params={
+            "site_id": "demo",
+            "columns": "5007-analog-input-1173",
+            "hours": 24,
+            "include_faults": "false",
+            "rolling_avg_minutes": "5",
+            "show_rolling_avg": "true",
+        },
+        headers=integrator_headers,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("rolling_avg_minutes") == 5
+    assert body.get("ok") is True

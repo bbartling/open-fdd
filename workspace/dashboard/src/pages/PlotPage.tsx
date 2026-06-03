@@ -151,7 +151,7 @@ export default function PlotPage() {
         columns: keys.join(","),
         hours: String(hours),
         include_faults: String(includeFaults),
-        rolling_avg_minutes: String(rollingAvgMinutes),
+        rolling_avg_minutes: String(normalizeRollingMinutes(rollingAvgMinutes)),
         show_rolling_avg: String(showRollingAvg),
       });
       const res = await apiFetch<PlotReadingsResponse>(`/api/timeseries/readings?${qs}`, {

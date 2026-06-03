@@ -34,15 +34,6 @@
   ],
   "points": [
     {
-      "id": "p1",
-      "site_id": "demo",
-      "equipment_id": "bench-1",
-      "external_id": "SAT",
-      "brick_type": "Supply_Air_Temperature_Sensor",
-      "fdd_input": "SAT",
-      "description": "Legacy demo SAT column (optional)"
-    },
-    {
       "id": "5007-analog-input-1168",
       "site_id": "demo",
       "equipment_id": "bench-1",
