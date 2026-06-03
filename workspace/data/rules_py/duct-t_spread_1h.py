@@ -13,12 +13,14 @@ def window_rows_1h(row, rows):
 def hour_window_ready(window_rows):
     if len(window_rows) < 2:
         return False
-    span_ms = window_rows[-1]["ts_ms"] - window_rows[0]["ts_ms"]
+    ts_vals = [r["ts_ms"] for r in window_rows if r.get("ts_ms") is not None]
+    if len(ts_vals) < 2:
+        return False
+    span_ms = max(ts_vals) - min(ts_vals)
     return span_ms >= ONE_HOUR_MS * FILL_RATIO
 
 
 """Cookbook Recipe 4 — min-max spread over 1 hour."""
-
 
 def evaluate(row, cfg, prev_row=None, rows=None):
     if rows is None:

@@ -57,7 +57,20 @@ More hardware notes: [Ollama on the edge (deploy)](howto/ollama_edge_deploy).
 
 ## Checklist (local AI)
 
-- [ ] `curl -s http://127.0.0.1:8765/openfdd-agent/ollama/health` → model reachable
+- [ ] Ollama health (requires auth unless dev bypass):
+
+```bash
+# Production / strict auth — login first, then:
+TOKEN=$(curl -s -X POST http://127.0.0.1:8765/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"YOUR_USER","password":"YOUR_PASSWORD"}' | jq -r .access_token)
+curl -s http://127.0.0.1:8765/openfdd-agent/ollama/health \
+  -H "Authorization: Bearer ${TOKEN}"
+
+# Local dev only: unauthenticated curl works when OFDD_AUTH_DISABLED=1 on trusted localhost
+```
+
+- [ ] Model reachable (JSON shows `reachable` or `ok`)
 - [ ] Fault catalog page loads; codes match `fault_catalog.py`
 - [ ] At least one Rule Lab rule has `fault_code` + enabled binding
 - [ ] `POST /api/rules/batch` ran after rule edits

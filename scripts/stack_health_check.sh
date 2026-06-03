@@ -107,12 +107,18 @@ fi
 echo "==> In-container MCP reachability"
 bridge_cid="$("${COMPOSE[@]}" ps -q bridge 2>/dev/null || true)"
 if [[ -n "$bridge_cid" ]]; then
-  if docker exec "$bridge_cid" python3 -c \
-    'import urllib.request; urllib.request.urlopen("http://mcp-rag:8090/health", timeout=5)' \
-    >/dev/null 2>&1; then
-    log_ok "bridge → mcp-rag:8090/health"
-  else
-    log_fail "bridge cannot reach mcp-rag:8090/health"
+  mcp_ok=0
+  for mcp_url in "http://mcp-rag:8090/health" "http://127.0.0.1:8090/health"; do
+    if docker exec "$bridge_cid" python3 -c \
+      "import urllib.request; urllib.request.urlopen('${mcp_url}', timeout=5)" \
+      >/dev/null 2>&1; then
+      log_ok "bridge → ${mcp_url}"
+      mcp_ok=1
+      break
+    fi
+  done
+  if [[ "$mcp_ok" == 0 ]]; then
+    log_fail "bridge cannot reach MCP (tried mcp-rag:8090 and 127.0.0.1:8090)"
   fi
 fi
 

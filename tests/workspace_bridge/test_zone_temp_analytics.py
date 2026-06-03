@@ -92,8 +92,7 @@ def test_recovery_with_fan_startup():
 def test_get_zone_temp_snapshot_cached(monkeypatch: pytest.MonkeyPatch):
     import openfdd_bridge.zone_temp_analytics as mod
 
-    mod._CACHE.clear()
-    mod._CACHE.update({"generated_at": 0.0, "next_refresh_at": 0.0, "payload": {}})
+    monkeypatch.setattr(mod, "_CACHE", {"generated_at": 0.0, "payload": {}})
     model = _bench_model()
     n = 48
     ts = pd.date_range("2025-06-01 12:00:00", periods=n, freq="30min", tz="UTC")

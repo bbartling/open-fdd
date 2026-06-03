@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 
 REPO = Path(__file__).resolve().parents[2]
 API_ROOT = REPO / "workspace" / "api"
-if str(API_ROOT) not in sys.path:
-    sys.path.insert(0, str(API_ROOT))
+for p in (str(REPO), str(API_ROOT)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 
 def _reload_bridge_modules() -> None:

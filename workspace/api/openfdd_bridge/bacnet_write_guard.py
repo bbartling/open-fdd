@@ -31,13 +31,21 @@ def load_write_allowlist() -> dict[str, Any] | None:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise HTTPException(status_code=500, detail=f"invalid write allowlist: {exc}") from exc
-    return raw if isinstance(raw, dict) else None
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status_code=500,
+            detail=f"write allowlist must be a JSON object, got {type(raw).__name__} ({path.name})",
+        )
+    return raw
 
 
 def _device_allowlist(devices: list[Any]) -> set[int]:
     allowed: set[int] = set()
     skipped: list[str] = []
     for entry in devices:
+        if isinstance(entry, bool):
+            skipped.append(str(entry))
+            continue
         try:
             allowed.add(int(entry))
         except (TypeError, ValueError):

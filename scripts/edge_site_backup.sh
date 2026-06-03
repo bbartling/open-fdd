@@ -12,6 +12,10 @@ export OPENFDD_WORKSPACE_DIR="${ROOT}/workspace"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
 export PYTHONPATH="${ROOT}/workspace/api"
 
+if [[ -x "${ROOT}/scripts/fix_workspace_permissions.sh" ]]; then
+  "${ROOT}/scripts/fix_workspace_permissions.sh" 2>/dev/null || true
+fi
+
 DEST="$("${ROOT}/.venv/bin/python" <<PY
 from openfdd_bridge.site_pack import SitePackRef, backup_site
 ref = SitePackRef(site_id="${SITE_ID}", building_id="${BUILDING_ID}")

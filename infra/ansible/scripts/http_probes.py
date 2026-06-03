@@ -332,7 +332,13 @@ def check_model_api(base: str, token: str) -> dict[str, Any]:
     return check_model_sparql_health(base, token)
 
 
-def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) -> dict[str, Any]:
+def check_agent_stack(
+    base: str,
+    token: str,
+    *,
+    require_ollama: bool = False,
+    require_mcp: bool = True,
+) -> dict[str, Any]:
     out: dict[str, Any] = {"errors": [], "warnings": []}
     headers = auth_headers(token)
     ctx_url = f"{base.rstrip('/')}/openfdd-agent/context"
@@ -346,7 +352,11 @@ def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) ->
         mcp = ctx.get("mcp") or {}
         out["mcp_enabled_in_context"] = mcp.get("mcp_enabled")
         if not mcp.get("mcp_enabled"):
-            out["errors"].append("agent context reports MCP disabled")
+            msg = "agent context reports MCP disabled"
+            if require_mcp:
+                out["errors"].append(msg)
+            else:
+                out["warnings"].append(msg)
     except json.JSONDecodeError:
         out["errors"].append("/openfdd-agent/context not JSON")
 
@@ -370,9 +380,19 @@ def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) ->
     return out
 
 
-def check_agent_chat(base: str, token: str, *, message: str | None = None) -> dict[str, Any]:
+def check_agent_chat(
+    base: str,
+    token: str,
+    *,
+    message: str | None = None,
+    require_mcp: bool = True,
+) -> dict[str, Any]:
     """POST agent chat — validates Ollama path; reply should mention MCP when enabled."""
-    out: dict[str, Any] = {"errors": [], "warnings": []}
+    out: dict[str, Any] = {"errors": [], "warnings": [], "skipped": False}
+    if not require_mcp:
+        out["skipped"] = True
+        out["warnings"].append("agent chat probe skipped (--require-mcp not set)")
+        return out
     headers = auth_headers(token)
     msg = message or (
         "In one sentence: is MCP RAG enabled on this bridge and what doc search URL would you use?"
@@ -431,14 +451,21 @@ def main() -> int:
                 model = check_model_api(base, login["token"])
                 result["model_api"] = model
                 result["errors"].extend(model.get("errors", []))
-                agent = check_agent_stack(base, login["token"], require_ollama=require_ollama)
+                result["warnings"].extend(model.get("warnings", []))
+                agent = check_agent_stack(
+                    base,
+                    login["token"],
+                    require_ollama=require_ollama,
+                    require_mcp=require_mcp,
+                )
                 result["agent"] = agent
                 result["errors"].extend(agent.get("errors", []))
                 result["warnings"].extend(agent.get("warnings", []))
-                chat = check_agent_chat(base, login["token"])
-                result["agent_chat"] = chat
-                result["errors"].extend(chat.get("errors", []))
-                result["warnings"].extend(chat.get("warnings", []))
+                if require_mcp:
+                    chat = check_agent_chat(base, login["token"], require_mcp=require_mcp)
+                    result["agent_chat"] = chat
+                    result["errors"].extend(chat.get("errors", []))
+                    result["warnings"].extend(chat.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

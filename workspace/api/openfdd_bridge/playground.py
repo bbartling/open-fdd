@@ -399,14 +399,12 @@ def run_dataframe_script(
     from .playground_exec import run_pickled_job, subprocess_enabled
 
     if subprocess_enabled():
-        import pickle
-
         started = time.time()
         payload = run_pickled_job(
             {
                 "op": "run_script",
                 "code": code,
-                "df_bytes": pickle.dumps(df, protocol=pickle.HIGHEST_PROTOCOL),
+                "df": df,
                 "cfg": cfg or {},
             },
             timeout_s=_exec_timeout_s(),

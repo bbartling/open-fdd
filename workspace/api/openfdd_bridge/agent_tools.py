@@ -295,15 +295,26 @@ def model_context() -> dict[str, Any]:
         sample_columns = list(load_demo_dataframe().columns)
     except Exception:  # noqa: BLE001 - context is best-effort
         sample_columns = []
-    zone = get_zone_temp_snapshot(force=False)
-    return {
-        "zone_temp_levers": {
+    try:
+        zone = get_zone_temp_snapshot(force=False)
+        zone_levers = {
             "summary_sentence": zone.get("summary_sentence"),
             "topology_mode": zone.get("topology_mode"),
             "zone_sensor_count": zone.get("zone_sensor_count"),
             "struggling_zones": (zone.get("struggling_zones") or [])[:6],
             "refresh_tool": "building.zone_temps",
-        },
+        }
+    except Exception as exc:  # noqa: BLE001 - context must not fail whole endpoint
+        zone_levers = {
+            "summary_sentence": None,
+            "topology_mode": None,
+            "zone_sensor_count": None,
+            "struggling_zones": [],
+            "refresh_tool": "building.zone_temps",
+            "error": str(exc)[:200],
+        }
+    return {
+        "zone_temp_levers": zone_levers,
         "model_summary": {
             "sites": health["counts"]["sites"],
             "equipment": health["counts"]["equipment"],

@@ -48,7 +48,7 @@ case "$ACTION" in
     wait_for_health
     if [[ "$RUN_FULL_HEALTH" == 1 ]] && [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
       OPENFDD_BASE_URL="${OPENFDD_BASE_URL:-http://127.0.0.1:8765}" \
-        "${ROOT}/scripts/stack_health_check.sh" || true
+        "${ROOT}/scripts/stack_health_check.sh"
     fi
     echo "Supervisor stack up (openfdd-dev). Caddy optional: ./scripts/run_local.sh start caddy"
     ;;
@@ -65,7 +65,7 @@ case "$ACTION" in
     wait_for_health
     if [[ "$RUN_FULL_HEALTH" == 1 ]] && [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
       OPENFDD_BASE_URL="${OPENFDD_BASE_URL:-http://127.0.0.1:8765}" \
-        "${ROOT}/scripts/stack_health_check.sh" || true
+        "${ROOT}/scripts/stack_health_check.sh"
     fi
     ;;
   -h|--help)

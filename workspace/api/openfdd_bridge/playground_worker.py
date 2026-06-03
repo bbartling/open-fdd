@@ -1,9 +1,9 @@
-"""Child process entry for isolated Rule Lab execution (pickled job in / result out)."""
+"""Child process entry for isolated Rule Lab execution (JSON + parquet IPC)."""
 
 from __future__ import annotations
 
+import json
 import os
-import pickle
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,8 +21,32 @@ def _apply_resource_limits(cpu_seconds: float, memory_mb: int) -> None:
                 if hasattr(resource, attr):
                     resource.setrlimit(getattr(resource, attr), (cap, cap))
                     break
-    except (ImportError, OSError, ValueError):
-        pass
+    except (ImportError, OSError, ValueError) as exc:
+        raise RuntimeError(
+            f"playground resource limits failed (cpu_seconds={cpu_seconds}, memory_mb={memory_mb})"
+        ) from exc
+
+
+def _load_job(work_dir: Path) -> dict[str, Any]:
+    meta_path = work_dir / "job.meta.json"
+    job_path = work_dir / "job.json"
+    if not meta_path.is_file() or not job_path.is_file():
+        raise FileNotFoundError("job.meta.json and job.json required")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    body = json.loads(job_path.read_text(encoding="utf-8"))
+    if not isinstance(meta, dict) or not isinstance(body, dict):
+        raise ValueError("job bundle must be JSON objects")
+    merged = {**body, **meta}
+    op = merged.get("op")
+    if op == "run_script":
+        from .playground_exec import _read_df_ipc
+
+        merged["df"] = _read_df_ipc(work_dir)
+    return merged
+
+
+def _write_result(result_path: Path, payload: dict[str, Any]) -> None:
+    result_path.write_text(json.dumps(payload, default=str), encoding="utf-8")
 
 
 def execute_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -40,31 +64,28 @@ def execute_job(job: dict[str, Any]) -> dict[str, Any]:
         )
         return {"ok": True, "flags": flags, "events": events}
     if op == "run_script":
-        import pandas as pd
-
         from .playground import _run_dataframe_script_impl
 
-        df = pickle.loads(job["df_bytes"])
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("run_script job missing DataFrame")
+        df = job["df"]
         return {"ok": True, "result": _run_dataframe_script_impl(job["code"], df, cfg=job.get("cfg") or {})}
     raise ValueError(f"unknown playground job op: {op!r}")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
-    if len(args) != 2:
-        print("usage: python -m openfdd_bridge.playground_worker <job.pkl> <result.pkl>", file=sys.stderr)
+    if len(args) != 1:
+        print("usage: python -m openfdd_bridge.playground_worker <work_dir>", file=sys.stderr)
         return 2
-    job_path = Path(args[0])
-    result_path = Path(args[1])
+    work_dir = Path(args[0])
+    result_path = work_dir / "result.json"
     try:
-        job = pickle.loads(job_path.read_bytes())
-        cpu_s = float(job.get("timeout_s") or 30.0)
-        mem_mb = int(job.get("memory_mb") or 512)
+        meta = json.loads((work_dir / "job.meta.json").read_text(encoding="utf-8"))
+        cpu_s = float(meta.get("timeout_s") or 30.0)
+        mem_mb = int(meta.get("memory_mb") or 512)
         _apply_resource_limits(cpu_s, mem_mb)
+        job = _load_job(work_dir)
         payload = execute_job(job)
-        result_path.write_bytes(pickle.dumps(payload))
+        _write_result(result_path, payload)
         return 0
     except Exception as exc:
         err = {
@@ -72,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             "error": str(exc)[:500],
             "error_type": exc.__class__.__name__,
         }
-        result_path.write_bytes(pickle.dumps(err))
+        _write_result(result_path, err)
         return 1
 
 

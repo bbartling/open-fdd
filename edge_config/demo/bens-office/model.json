@@ -2,7 +2,11 @@
   "sites": [
     {
       "id": "demo",
-      "name": "Bens Office test bench"
+      "name": "Bens Office test bench",
+      "metadata": {
+        "rule_pack": "bench",
+        "description": "MS/TP device 5007 \u2014 zone temp, humidity, duct discharge"
+      }
     }
   ],
   "equipment": [
@@ -11,75 +15,354 @@
       "site_id": "demo",
       "name": "HVAC sensor test bench",
       "equipment_type": "Laboratory_Equipment",
-      "feeds": ["duct-1"]
+      "feeds": [
+        "duct-1"
+      ]
     },
     {
       "id": "duct-1",
       "site_id": "demo",
       "name": "Supply duct section",
       "equipment_type": "Air_Duct"
+    },
+    {
+      "id": "bacnet-5007",
+      "site_id": "demo",
+      "name": "BACnet device 5007",
+      "equipment_type": "BACnet_Device",
+      "bacnet_device_id": 5007,
+      "bacnet_device_instance": 5007
     }
   ],
   "points": [
     {
-      "id": "5007-analog-input-1168",
+      "id": "p1",
       "site_id": "demo",
       "equipment_id": "bench-1",
-      "name": "OA-H",
+      "external_id": "SAT",
+      "brick_type": "Supply_Air_Temperature_Sensor",
+      "fdd_input": "SAT",
+      "description": "Legacy demo SAT column (optional)"
+    },
+    {
+      "id": "5007-analog-input-1168",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
       "external_id": "oa-h",
-      "brick_type": "Outside_Air_Humidity_Sensor",
+      "brick_type": "Humidity_Sensor",
       "fdd_input": "oa-h",
-      "unit": "percent-relative-humidity",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1168",
       "object_type": "analog-input",
-      "object_instance": "1168"
+      "object_instance": "1168",
+      "description": "OA-H",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-input-1168",
+        "series_id": "demo#bens-office#unknown#5007-analog-input-1168",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1168"
+      }
     },
     {
       "id": "5007-analog-input-1173",
       "site_id": "demo",
-      "equipment_id": "bench-1",
-      "name": "OA-T",
+      "equipment_id": "bacnet-5007",
       "external_id": "oa-t",
-      "brick_type": "Outside_Air_Temperature_Sensor",
+      "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
-      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1173",
       "object_type": "analog-input",
-      "object_instance": "1173"
+      "object_instance": "1173",
+      "description": "OA-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-input-1173",
+        "series_id": "demo#bens-office#unknown#5007-analog-input-1173",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1173"
+      }
     },
     {
       "id": "5007-analog-input-1192",
       "site_id": "demo",
-      "equipment_id": "duct-1",
-      "name": "DUCT-T",
+      "equipment_id": "bacnet-5007",
       "external_id": "duct-t",
       "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
-      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1192",
       "object_type": "analog-input",
-      "object_instance": "1192"
+      "object_instance": "1192",
+      "description": "DUCT-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-input-1192",
+        "series_id": "demo#bens-office#unknown#5007-analog-input-1192",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-1192"
+      }
     },
     {
       "id": "5007-analog-input-10014",
       "site_id": "demo",
-      "equipment_id": "bench-1",
-      "name": "STAT ZN-T",
+      "equipment_id": "bacnet-5007",
       "external_id": "stat_zn-t",
       "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",
-      "unit": "degrees-fahrenheit",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,10014",
       "object_type": "analog-input",
-      "object_instance": "10014"
+      "object_instance": "10014",
+      "description": "STAT ZN-T",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-input-10014",
+        "series_id": "demo#bens-office#unknown#5007-analog-input-10014",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-10014"
+      }
+    },
+    {
+      "id": "5007-analog-input-9334",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "duct-p",
+      "brick_type": "",
+      "fdd_input": "duct-p",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-input,9334",
+      "object_type": "analog-input",
+      "object_instance": "9334",
+      "description": "DUCT-P",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-input-9334",
+        "series_id": "demo#bens-office#unknown#5007-analog-input-9334",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-input-9334"
+      }
+    },
+    {
+      "id": "5007-analog-value-10011",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "stat_zn_wc-adj",
+      "brick_type": "",
+      "fdd_input": "stat_zn_wc-adj",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "analog-value,10011",
+      "object_type": "analog-value",
+      "object_instance": "10011",
+      "description": "STAT ZN WC-ADJ",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-analog-value-10011",
+        "series_id": "demo#bens-office#unknown#5007-analog-value-10011",
+        "poll_interval_s": "60",
+        "point_id": "5007-analog-value-10011"
+      }
+    },
+    {
+      "id": "5007-file-11",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "8-1_static",
+      "brick_type": "",
+      "fdd_input": "8-1_static",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "file,11",
+      "object_type": "file",
+      "object_instance": "11",
+      "description": "8-1/Static",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-file-11",
+        "series_id": "demo#bens-office#unknown#5007-file-11",
+        "poll_interval_s": "60",
+        "point_id": "5007-file-11"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10003",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "o1",
+      "brick_type": "",
+      "fdd_input": "o1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10003",
+      "object_type": "multi-state-value",
+      "object_instance": "10003",
+      "description": "O1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10003",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10003",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10003"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10004",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10004",
+      "object_type": "multi-state-value",
+      "object_instance": "10004",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10004",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10004",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10004"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10006",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10006",
+      "object_type": "multi-state-value",
+      "object_instance": "10006",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10006",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10006",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10006"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10009",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10009",
+      "object_type": "multi-state-value",
+      "object_instance": "10009",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10009",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10009",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10009"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10022",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "o1",
+      "brick_type": "",
+      "fdd_input": "o1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10022",
+      "object_type": "multi-state-value",
+      "object_instance": "10022",
+      "description": "O1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10022",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10022",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10022"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10024",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10024",
+      "object_type": "multi-state-value",
+      "object_instance": "10024",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10024",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10024",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10024"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10027",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10027",
+      "object_type": "multi-state-value",
+      "object_instance": "10027",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10027",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10027",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10027"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-10030",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "i1",
+      "brick_type": "",
+      "fdd_input": "i1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,10030",
+      "object_type": "multi-state-value",
+      "object_instance": "10030",
+      "description": "I1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-10030",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-10030",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-10030"
+      }
+    },
+    {
+      "id": "5007-multi-state-value-238197",
+      "site_id": "demo",
+      "equipment_id": "bacnet-5007",
+      "external_id": "o1",
+      "brick_type": "",
+      "fdd_input": "o1",
+      "bacnet_device_id": 5007,
+      "bacnet_device_address": "2000:7",
+      "object_identifier": "multi-state-value,238197",
+      "object_type": "multi-state-value",
+      "object_instance": "238197",
+      "description": "O1",
+      "metadata": {
+        "external_ref": "feather://bacnet/demo/demo#bens-office#unknown#5007-multi-state-value-238197",
+        "series_id": "demo#bens-office#unknown#5007-multi-state-value-238197",
+        "poll_interval_s": "60",
+        "point_id": "5007-multi-state-value-238197"
+      }
     }
   ]
 }

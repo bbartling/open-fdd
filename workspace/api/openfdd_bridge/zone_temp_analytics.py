@@ -35,10 +35,35 @@ def refresh_interval_s() -> int:
         return DEFAULT_INTERVAL_S
 
 
-def _occupied_mask(ts: pd.Series) -> pd.Series:
-    start = int(os.environ.get("OFDD_OCCUPIED_START_HOUR", "8"))
-    end = int(os.environ.get("OFDD_OCCUPIED_END_HOUR", "17"))
-    local = ts.dt.tz_convert("UTC") if ts.dt.tz else ts
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _site_timezone(model: dict[str, Any], site_id: str) -> str:
+    env_tz = os.environ.get("OFDD_SITE_TIMEZONE", "").strip()
+    if env_tz:
+        return env_tz
+    for site in model.get("sites") or []:
+        if not isinstance(site, dict):
+            continue
+        if str(site.get("id") or "") != site_id:
+            continue
+        tz = site.get("timezone") or site.get("time_zone")
+        if tz:
+            return str(tz).strip()
+    return "America/Chicago"
+
+
+def _occupied_mask(ts: pd.Series, tz_name: str) -> pd.Series:
+    start = _env_int("OFDD_OCCUPIED_START_HOUR", 8)
+    end = _env_int("OFDD_OCCUPIED_END_HOUR", 17)
+    local = pd.to_datetime(ts, utc=True, errors="coerce").dt.tz_convert(tz_name)
     return (local.dt.weekday < 5) & (local.dt.hour >= start) & (local.dt.hour < end)
 
 
@@ -285,6 +310,8 @@ def compute_zone_metrics(
     topology: dict[str, Any],
     model: dict[str, Any],
     site_id: str,
+    *,
+    site_tz: str | None = None,
 ) -> dict[str, Any]:
     """Compute day/night averages and optional recovery rates per zone / AHU."""
     zone_df = build_zone_dataframe(df, topology)
@@ -299,8 +326,9 @@ def compute_zone_metrics(
             "summary_sentence": "No zone temperature columns in the timeseries store yet.",
         }
 
+    tz_name = site_tz or _site_timezone(model, site_id)
     ts = zone_df["timestamp"]
-    occupied = _occupied_mask(ts)
+    occupied = _occupied_mask(ts, tz_name)
     zones_out: list[dict[str, Any]] = []
     for zp in topology.get("zone_points") or []:
         col = zp["column"]
@@ -418,13 +446,13 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     interval = refresh_interval_s()
     cache_key = site_id or "__default__"
     cached = _CACHE.get("payload") or {}
+    cached_entry = cached.get(cache_key) if isinstance(cached, dict) else None
     if (
         not force
-        and cached.get(cache_key)
-        and now < float(_CACHE.get("next_refresh_at") or 0)
+        and isinstance(cached_entry, dict)
+        and now < float(cached_entry.get("next_refresh_at") or 0)
     ):
-        payload = cached[cache_key]
-        return {**payload, "ok": True, "cached": True, "refresh_interval_s": interval}
+        return {**cached_entry, "ok": True, "cached": True, "refresh_interval_s": interval}
 
     model_svc = ModelService()
     sid = (site_id or "").strip() or ensure_default_site(model_svc, TtlService())
@@ -438,7 +466,8 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
         if not trimmed.empty:
             df = trimmed
 
-    metrics = compute_zone_metrics(df, topology, model, sid)
+    site_tz = _site_timezone(model, sid)
+    metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
     payload = {
         "ok": True,
         "cached": False,
@@ -446,15 +475,15 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
         "next_refresh_at": now + interval,
         "refresh_interval_s": interval,
         "data_source": origin,
+        "site_timezone": site_tz,
         "topology_mode": metrics.get("mode"),
         "zone_sensor_count": len(topology.get("zone_points") or []),
         **metrics,
     }
-    stored = dict(cached)
+    stored = dict(cached) if isinstance(cached, dict) else {}
     stored[cache_key] = payload
     _CACHE["payload"] = stored
     _CACHE["generated_at"] = now
-    _CACHE["next_refresh_at"] = now + interval
     return payload
 
 
