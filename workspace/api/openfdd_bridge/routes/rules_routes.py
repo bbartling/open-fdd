@@ -79,16 +79,20 @@ def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
 @router.post("/save")
 def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     saved_by = str(user.get("sub") or user.get("role") or "operator")
-    if body.fault_code and not is_valid_code(body.fault_code):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"unknown fault code '{body.fault_code}'. Use a fixed code from "
-                "/api/faults/catalog — codes must not be invented."
-            ),
-        )
+    payload = body.model_dump()
+    if body.fault_code:
+        code = str(body.fault_code).strip().upper()
+        if not is_valid_code(code):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"unknown fault code '{body.fault_code}'. Use a letter-suffix code from "
+                    "/api/faults/catalog (e.g. VAV-C, AHU-B) — not equipment names like VAV-03."
+                ),
+            )
+        payload["fault_code"] = code
     try:
-        entry = RuleStore().upsert(body.model_dump(), saved_by=saved_by)
+        entry = RuleStore().upsert(payload, saved_by=saved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "rule": entry}

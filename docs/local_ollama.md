@@ -71,7 +71,8 @@ curl -s http://127.0.0.1:8765/openfdd-agent/ollama/health \
 ```
 
 - [ ] Model reachable (JSON shows `reachable` or `ok`)
-- [ ] Fault catalog page loads; codes match `fault_catalog.py`
+- [ ] Fault catalog page loads; codes are letter suffix (e.g. `VAV-C`) per `fault_catalog.py`
+- [ ] Building insight / Agent context mention active `fault_code` values from FDD, not equipment names
 - [ ] At least one Rule Lab rule has `fault_code` + enabled binding
 - [ ] `POST /api/rules/batch` ran after rule edits
 - [ ] Dashboard check-engine matches `GET /api/faults/status`

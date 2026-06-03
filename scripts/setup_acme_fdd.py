@@ -32,7 +32,7 @@ ACME_RULES = [
     {
         "id": "acme-zn-t-flatline-1h",
         "name": "Zone temp flatline 1h",
-        "fault_code": "VAV-03",
+        "fault_code": "VAV-C",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": [], "equipment_ids": [], "brick_types": ["Zone_Air_Temperature_Sensor"]},
@@ -40,7 +40,7 @@ ACME_RULES = [
     {
         "id": "acme-zn-t-oob-occupied",
         "name": "Zone temp out of bounds",
-        "fault_code": "VAV-03",
+        "fault_code": "VAV-C",
         "code_file": "oob_rolling.py",
         "config": {
             "bounds_low": 65,
@@ -53,7 +53,7 @@ ACME_RULES = [
     {
         "id": "acme-da-t-flatline-1h",
         "name": "Discharge temp flatline 1h",
-        "fault_code": "VAV-04",
+        "fault_code": "VAV-D",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {
@@ -65,7 +65,7 @@ ACME_RULES = [
     {
         "id": "acme-sat-flatline-1h",
         "name": "AHU SAT flatline 1h",
-        "fault_code": "AHU-03",
+        "fault_code": "AHU-C",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.15, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {
@@ -77,7 +77,7 @@ ACME_RULES = [
     {
         "id": "acme-mat-oob-economizer",
         "name": "Mixed air temp OOB",
-        "fault_code": "AHU-05",
+        "fault_code": "AHU-E",
         "code_file": "oob_rolling.py",
         "config": {
             "bounds_low": 40,
@@ -94,7 +94,7 @@ ACME_RULES = [
     {
         "id": "acme-sap-flatline-1h",
         "name": "Duct static flatline 1h",
-        "fault_code": "AHU-06",
+        "fault_code": "AHU-F",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.02, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {
@@ -106,7 +106,7 @@ ACME_RULES = [
     {
         "id": "acme-ahu-afterhours-runtime",
         "name": "AHU fan after hours with satisfied zones",
-        "fault_code": "BLD-03",
+        "fault_code": "BLD-C",
         "code_file": "acme_ahu_afterhours_runtime.py",
         "config": {
             "occupied_start_hour": 8,

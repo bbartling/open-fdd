@@ -271,6 +271,21 @@ a {
   grid-column: 1 / -1;
 }
 
+.fault-code-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.fault-code-select select {
+  max-width: 100%;
+}
+
+.fault-code-hint {
+  font-size: 0.85rem;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

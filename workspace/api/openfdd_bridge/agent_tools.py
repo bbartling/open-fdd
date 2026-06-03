@@ -17,7 +17,7 @@ from typing import Any, Callable
 from .building_alerts import replace_alerts
 from .zone_temp_analytics import get_zone_temp_snapshot
 from .data_loader import load_demo_dataframe
-from .fault_catalog import all_codes, is_valid_code
+from .fault_catalog import all_codes, catalog_graph, is_valid_code
 from .fdd_runner import run_batch
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -328,9 +328,17 @@ def model_context() -> dict[str, Any]:
             for r in rules
         ],
         "fault_codes": [
-            {"code": c, "family": e["family"], "category": e["category"], "title": e["title"]}
+            {
+                "code": c,
+                "family": e["family"],
+                "category": e["category"],
+                "title": e["title"],
+                "suffix": e.get("suffix"),
+                "cookbook_patterns": e.get("cookbook_patterns") or [],
+            }
             for c, e in all_codes().items()
         ],
+        "fault_code_graph": catalog_graph(),
         "tools": tool_specs(),
         "app_edit_enabled": app_edit_enabled(),
     }

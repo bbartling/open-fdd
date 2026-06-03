@@ -3,6 +3,7 @@ import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
+import FaultCodeSelect from "../components/FaultCodeSelect";
 import ModelScopePicker from "../components/ModelScopePicker";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
@@ -77,6 +78,7 @@ export default function RuleLabPage() {
   const [testLimit, setTestLimit] = useState("120");
   const [lookbackHours, setLookbackHours] = useState("24");
   const [testSensorKey, setTestSensorKey] = useState("");
+  const [faultCode, setFaultCode] = useState("");
   const [dirty, setDirty] = useState(false);
   const lintTimer = useRef<number | null>(null);
   const scope = useModelScope("demo", brickClass);
@@ -310,17 +312,14 @@ export default function RuleLabPage() {
     setBusy(true);
     try {
       let bindingsSource: SavedRule["bindings"] | undefined;
-      let faultCode = "";
       if (activeRuleId) {
         try {
           const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
           const live = fresh.rules?.find((r) => r.id === activeRuleId);
           bindingsSource = live?.bindings;
-          faultCode = live?.fault_code || "";
         } catch {
           const existing = saved.find((r) => r.id === activeRuleId);
           bindingsSource = existing?.bindings;
-          faultCode = existing?.fault_code || "";
         }
       }
       const payload = {
@@ -403,6 +402,7 @@ export default function RuleLabPage() {
     setMode(rule.mode);
     setSeverity(rule.severity);
     setBrickClass("");
+    setFaultCode(rule.fault_code || "");
     setSourcePath(rule.source_path || "");
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
@@ -416,6 +416,7 @@ export default function RuleLabPage() {
     setCfg({ high: "75" });
     setSourcePath("");
     setBrickClass("");
+    setFaultCode("");
     setDirty(true);
   }
 
@@ -566,6 +567,16 @@ export default function RuleLabPage() {
               <option value="rule">Per-row evaluate()</option>
               <option value="script">DataFrame script</option>
             </select>
+          </div>
+          <div className="field form-grid-span">
+            <FaultCodeSelect
+              value={faultCode}
+              disabled={busy || authRole === "operator"}
+              onChange={(code) => {
+                setFaultCode(code);
+                markDirty();
+              }}
+            />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-severity">
