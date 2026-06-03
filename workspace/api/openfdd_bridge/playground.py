@@ -424,6 +424,9 @@ def run_dataframe_script(
         )
         if not payload.get("ok"):
             err = payload.get("error") or "script failed"
+            stderr = (payload.get("worker_stderr") or "").strip()
+            if stderr:
+                err = f"{err}: {stderr[:400]}"
             if payload.get("timed_out"):
                 err = "script execution timed out"
             return {

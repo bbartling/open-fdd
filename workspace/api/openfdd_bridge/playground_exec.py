@@ -135,7 +135,7 @@ def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
             "openfdd_bridge.playground_worker",
             str(td),
         ]
-        grace = min(10.0, max(2.0, timeout_s * 0.25))
+        grace = max(15.0, timeout_s * 0.5 + 10.0)
         try:
             proc = subprocess.run(
                 cmd,
@@ -152,10 +152,12 @@ def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
             }
 
         if not result_path.is_file():
-            stderr = (proc.stderr or b"").decode("utf-8", errors="replace")[:500]
+            stderr = (proc.stderr or b"").decode("utf-8", errors="replace")[:800]
+            stdout = (proc.stdout or b"").decode("utf-8", errors="replace")[:400]
+            detail = stderr or stdout or f"exit {proc.returncode}"
             return {
                 "ok": False,
-                "error": "playground worker produced no result",
+                "error": f"playground worker produced no result ({detail})",
                 "worker_exit": proc.returncode,
                 "worker_stderr": stderr,
             }

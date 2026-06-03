@@ -10,29 +10,12 @@ from typing import Any
 
 
 def _apply_resource_limits(cpu_seconds: float, memory_mb: int) -> None:
-    """Best-effort rlimits (CI/containers may reject some limits)."""
-    try:
-        import resource
-    except ImportError:
-        return
+    """No-op: wall-clock timeout is enforced by the parent ``subprocess.run``.
 
-    # Imports (pandas/numpy) need headroom on slow CI runners; wall timeout is enforced by the parent.
-    cpu = max(120, int(cpu_seconds) * 10 + 60)
-    try:
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
-    except OSError:
-        pass
-    if memory_mb <= 0:
-        return
-    cap = memory_mb * 1024 * 1024
-    for attr in ("RLIMIT_AS", "RLIMIT_RSS", "RLIMIT_DATA"):
-        if not hasattr(resource, attr):
-            continue
-        try:
-            resource.setrlimit(getattr(resource, attr), (cap, cap))
-            break
-        except OSError:
-            continue
+    Memory/CPU rlimits broke cold-start imports on GitHub Actions (worker exited
+    before writing ``result.json``). Subprocess isolation remains the sandbox boundary.
+    """
+    del cpu_seconds, memory_mb
 
 
 def _load_job(work_dir: Path) -> dict[str, Any]:

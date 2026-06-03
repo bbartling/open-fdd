@@ -47,7 +47,7 @@ def test_subprocess_infinite_loop_times_out(subprocess_playground):
     started = time.time()
     flags, events = sweep_rule(code, {}, rows, capture_print=False)
     elapsed = time.time() - started
-    assert elapsed < 15.0
+    assert elapsed < 25.0
     assert flags == [False]
     assert any(
         "timed out" in str(e.get("text", "")).lower() or "timed out" in str(e.get("message", "")).lower()
