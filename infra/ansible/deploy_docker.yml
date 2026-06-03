@@ -128,18 +128,18 @@
     - name: Build workspace data sync archive (skip live historian + unreadable model.json)
       tags: [data]
       when: openfdd_docker_sync_workspace_data | default(true) | bool
-      ansible.builtin.shell: |
-        set -euo pipefail
-        out="{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
-        rm -f "$out"
-        tar -czf "$out" \
-          -C "{{ playbook_dir }}/../../workspace/data" \
-          --exclude='./model.json' \
-          --exclude='./rules_store.json' \
-          --exclude='./data_model.ttl' \
-          --exclude='./feather_store' \
-          .
-      args:
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          out="{{ playbook_dir }}/.tmp/data-sync-{{ site_id | default('edge') }}.tar.gz"
+          rm -f "$out"
+          tar -czf "$out" \
+            -C "{{ playbook_dir }}/../../workspace/data" \
+            --exclude='./model.json' \
+            --exclude='./rules_store.json' \
+            --exclude='./data_model.ttl' \
+            --exclude='./feather_store' \
+            .
         executable: /bin/bash
       delegate_to: localhost
       become: false

@@ -33,12 +33,13 @@
       register: edge_auth_slurp
 
     - name: Parse operator credentials from edge auth.env.local
-      ansible.builtin.shell: |
-        set -a
-        # shellcheck disable=SC1091
-        source /dev/stdin
-        printf 'user=%s\npass=%s\n' "${OFDD_OPERATOR_USER:-}" "${OFDD_OPERATOR_PASSWORD:-}"
-      args:
+      ansible.builtin.shell:
+        cmd: |
+          set -a
+          # shellcheck disable=SC1091
+          source /dev/stdin
+          printf 'user=%s\npass=%s\n' "${OFDD_OPERATOR_USER:-}" "${OFDD_OPERATOR_PASSWORD:-}"
+        executable: /bin/bash
         stdin: "{{ edge_auth_slurp.content | b64decode }}"
       register: auth_creds_raw
       changed_when: false
@@ -94,29 +95,29 @@
         - ops_auth.json.token | default('') | length > 0
 
     - name: Feather store byte total on edge
-      ansible.builtin.shell: |
-        set -euo pipefail
-        root="{{ openfdd_remote_dir }}/workspace/data/feather_store"
-        if [[ ! -d "$root" ]]; then
-          echo 0
-          exit 0
-        fi
-        du -sb "$root" 2>/dev/null | awk '{print $1}'
-      args:
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          root="{{ openfdd_remote_dir }}/workspace/data/feather_store"
+          if [[ ! -d "$root" ]]; then
+            echo 0
+            exit 0
+          fi
+          du -sb "$root" 2>/dev/null | awk '{print $1}'
         executable: /bin/bash
       register: feather_bytes
       changed_when: false
 
     - name: Bridge container log error scan (last 200 lines)
-      ansible.builtin.shell: |
-        set -euo pipefail
-        cid="$(docker ps -q -f name=bridge | head -1)"
-        if [[ -z "$cid" ]]; then
-          echo "no-bridge-container"
-          exit 0
-        fi
-        docker logs --tail 200 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true
-      args:
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          cid="$(docker ps -q -f name=bridge | head -1)"
+          if [[ -z "$cid" ]]; then
+            echo "no-bridge-container"
+            exit 0
+          fi
+          docker logs --tail 200 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true
         executable: /bin/bash
       register: bridge_log_errors
       changed_when: false

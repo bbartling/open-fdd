@@ -64,7 +64,7 @@ set -a && source secrets/acme.env.local && set +a
 
 `openfdd_docker_sync_workspace_data=false` keeps the VM’s **feather_store** and does not overwrite with bensserver `workspace/data`. The docker playbook still pushes **Acme** `model.json`, `rules_store.json`, and `points.csv` from `edge_backup/local/acme/vm-bbartling/` (or `edge_config/acme/`).
 
-If `maintain` failed on “Illegal option -o pipefail”, pull latest `develop` (shell tasks now use `/bin/bash`) and re-run `./deploy.sh check --limit acme_vm_bbartling`.
+If `maintain` failed on “Illegal option -o pipefail”, pull latest `develop` (remote shell tasks use module `executable: /bin/bash`, not `/bin/sh`) and re-run `./deploy.sh check --limit acme_vm_bbartling`.
 
 ## Docs
 

@@ -58,13 +58,13 @@
   when: openfdd_docker_stack | default(false) | bool
 
 - name: Collect Docker container ids for log scan
-  ansible.builtin.shell: |
-    set -euo pipefail
-    for svc in bridge commission mcp-rag; do
-      cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
-      echo "${svc}=${cid}"
-    done
-  args:
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      for svc in bridge commission mcp-rag; do
+        cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
+        echo "${svc}=${cid}"
+      done
     executable: /bin/bash
   register: docker_log_cids
   changed_when: false
@@ -81,17 +81,17 @@
     - (item.split('=')[1] | trim) | length == 0
 
 - name: Scan Docker container logs for errors
-  ansible.builtin.shell: |
-    set -euo pipefail
-    cid="{{ item.split('=')[1] | trim }}"
-    svc="{{ item.split('=')[0] | trim }}"
-    err="$(docker logs --tail 80 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true)"
-    if [[ -n "$err" ]]; then
-      echo "FAIL ${svc}: ${err}"
-      exit 1
-    fi
-    echo "OK ${svc}"
-  args:
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      cid="{{ item.split('=')[1] | trim }}"
+      svc="{{ item.split('=')[0] | trim }}"
+      err="$(docker logs --tail 80 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true)"
+      if [[ -n "$err" ]]; then
+        echo "FAIL ${svc}: ${err}"
+        exit 1
+      fi
+      echo "OK ${svc}"
     executable: /bin/bash
   loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
   register: docker_log_scan
@@ -232,11 +232,13 @@
     - not (openfdd_docker_stack | default(false) | bool)
 
 - name: Parse operator credentials from edge auth.env.local
-  ansible.builtin.shell: |
-    set -a
-    # shellcheck disable=SC1091
-    source "{{ openfdd_remote_dir }}/workspace/auth.env.local"
-    printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+  ansible.builtin.shell:
+    cmd: |
+      set -a
+      # shellcheck disable=SC1091
+      source "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+      printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+    executable: /bin/bash
   register: auth_creds_raw
   changed_when: false
   no_log: true
