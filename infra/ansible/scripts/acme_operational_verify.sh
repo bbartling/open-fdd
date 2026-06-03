@@ -147,7 +147,13 @@ log_ok "Model tree points=${model_pts} zone_temp=${zat}"
 
 log_info "Setup default zone-temp FDD rules (brick-scoped)"
 export OFDD_DESKTOP_DATA_DIR="${ROOT}/workspace/data"
-python3 "${ROOT}/scripts/setup_acme_fdd.py" --host "$HOST" --token "$TOKEN" || log_fail "FDD setup script"
+python3 "${ROOT}/scripts/setup_gl36_fdd.py" \
+  --site-id "${SITE_ID:-acme}" \
+  --building-id "${BUILDING_ID:-vm-bbartling}" \
+  --ahu-system-id "${AHU_SYSTEM_ID:-rtu-01}" \
+  --fan-point-id "${FAN_POINT_ID:-1100-analog-output-1}" \
+  --zone-avg-cols "${ZONE_AVG_COLS:-}" \
+  --host "$HOST" --token "$TOKEN" || log_fail "FDD setup script"
 
 log_info "Poll once smoke test"
 poll="$(api_post "/api/bacnet/poll/once" "{}")"

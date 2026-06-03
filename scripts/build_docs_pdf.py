@@ -225,6 +225,8 @@ def main() -> int:
         "--toc",
         "--number-sections",
         f"--pdf-engine={args.pdf_engine}",
+        "--resource-path",
+        f"{DOCS_DIR}{os.pathsep}.",
         "-V",
         "documentclass=article",
         "-V",

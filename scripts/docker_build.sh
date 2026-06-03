@@ -61,5 +61,5 @@ if [[ "$SAVE" == true ]]; then
     "openfdd-mcp-rag:${TAG}" \
     | gzip -c > "$OUT"
   echo "Saved image bundle: $OUT"
-  echo "Deploy: ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_image_tag=${TAG}"
+  echo "Deploy: cd infra/ansible && ./deploy.sh docker --limit <inventory_host> -e openfdd_docker_image_tag=${TAG}"
 fi

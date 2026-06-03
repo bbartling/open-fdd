@@ -147,7 +147,7 @@ FAULT_CATALOG: dict[str, dict[str, Any]] = {
                 "Zone temperature flatlined, out of range, or stuck.",
                 ["Failed sensor", "Disconnected wiring", "Sensor behind furniture/heat source"],
                 ["Inspect zone temp trend", "Cross-check neighbor zones", "Field verify sensor"],
-                cookbook_patterns=["flatline_1h"],
+                cookbook_patterns=["flatline_1h", "oob_rolling"],
             ),
             _code(
                 "VAV-D", "io_fault", "Damper command vs airflow mismatch", "warning",

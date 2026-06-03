@@ -347,7 +347,7 @@ def compute_zone_metrics(
         col = zp["column"]
         if col not in zone_df.columns:
             continue
-        s = pd.to_numeric(zone_df[col], errors="coerce")
+        s = _column_series(zone_df, col)
         day = s[occupied].dropna()
         night = s[~occupied].dropna()
         zones_out.append(

@@ -149,7 +149,9 @@ Documentation for **this repository** lives in `docs/` and is published at **[bb
 
 **CI docs build:** Pushes that touch `docs/**` run the **Docs (GitHub Pages)** workflow (on `master`/`main`) and the **`docs`** job in **CI** on PRs — both run `bundle exec jekyll build`. Preview with `bundle exec jekyll serve` under `docs/` before merge.
 
-**Building a PDF:** To generate a single PDF of the docs (e.g. for offline use or to push to the repo), run `python3 scripts/build_docs_pdf.py`. Requires [pandoc](https://pandoc.org/) and either **weasyprint** (`pip install weasyprint`) or LaTeX. Output is `pdf/open-fdd-docs.pdf` by default; use `--output path` to change it. You can commit and push the PDF if you want it in the repo.
+**Building a PDF:** Run `python3 scripts/build_docs_pdf.py` (or `./scripts/build_docs_pdf.sh` after `pip install weasyprint pyyaml`). Requires [pandoc](https://pandoc.org/) and **weasyprint** (`pip install weasyprint`) or LaTeX (`--pdf-engine=pdflatex`). Output: `pdf/open-fdd-docs.pdf` and `pdf/open-fdd-docs.txt`.
+
+**CI / master:** Pushes to `master`/`main` that change `docs/**` run the [**Docs PDF**](https://github.com/bbartling/open-fdd/actions/workflows/docs-pdf.yml) workflow. It opens **`chore/docs-pdf-refresh`** — merge that PR so the PDF bundle in `pdf/` stays current (protected branch cannot take a direct bot commit). You can also run the workflow manually from Actions → Docs PDF → Run workflow.
 
 Open a PR with your changes; for large edits, an issue first can help align with maintainers.
 
@@ -172,7 +174,7 @@ curl -sS -o /dev/null -w "%{http_code}" "https://github.com/bbartling/open-fdd/b
 
 ---
 
-## Git workflow (branch → PR → sync)
+## Git workflow (branch → PR → sync) {#git-workflow-branch--pr--sync}
 
 Create the branch **before** committing so that after the PR is merged, `git pull` on `main`/`master` fast-forwards and you avoid divergent-branch errors (protected `main`/`master`).
 

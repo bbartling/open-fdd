@@ -70,7 +70,7 @@ curl -s http://127.0.0.1:8765/openfdd-agent/ollama/health \
 # Local dev only: unauthenticated curl works when OFDD_AUTH_DISABLED=1 on trusted localhost
 ```
 
-- [ ] Model reachable (JSON shows `reachable` or `ok`)
+- [ ] Model reachable (JSON shows `"ok": true`)
 - [ ] Fault catalog page loads; codes are letter suffix (e.g. `VAV-C`) per `fault_catalog.py`
 - [ ] Building insight / Agent context mention active `fault_code` values from FDD, not equipment names
 - [ ] At least one Rule Lab rule has `fault_code` + enabled binding

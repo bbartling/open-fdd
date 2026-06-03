@@ -7,8 +7,6 @@ nav_order: 2
 
 Open-FDD on a **git checkout** is an **edge operator product**: four application containers, host Caddy, optional host Ollama, and Ansible deploys like **Acme** and **bensserver**.
 
-![Open-FDD edge stack](assets/Open_FDD_Ansible.png)
-
 ---
 
 ## Containers (what runs where)

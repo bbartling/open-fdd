@@ -282,7 +282,7 @@ a {
   max-width: 100%;
 }
 
-.fault-code-hint {
+.muted.fault-code-hint {
   font-size: 0.85rem;
 }
 

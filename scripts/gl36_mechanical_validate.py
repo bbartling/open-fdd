@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Mechanical sanity checks for Acme GL36 polling (passive validation — not control).
+Mechanical sanity checks for GL36-style VAV/AHU sites (passive validation — not control).
 
-Validates:
-  - Temperature sensor ranges and flatline
-  - VAV GL36 pressure-request preconditions (flow ratio vs damper)
-  - VAV GL36 cooling-request preconditions (zone temp vs setpoint, CLG-O)
-  - AHU economizer mixing (MAT between OAT and RAT when OAD open)
-  - HW plant supply/return delta
+Validates temperature ranges, VAV GL36 pressure/cooling preconditions, AHU economizer
+mixing, and hot-water plant deltas. Works for any site pack or live poll API.
 
-Run against edge samples.csv or feather-backed poll API.
+Example:
+  python3 scripts/gl36_mechanical_validate.py --site-id acme --building-id vm-bbartling
+  python3 scripts/gl36_mechanical_validate.py --csv edge_backup/local/SITE/BUILDING/points.csv --samples /tmp/samples.csv
+  python3 scripts/gl36_mechanical_validate.py --host 100.x.x.x --site-id acme --building-id vm-bbartling
 """
 
 from __future__ import annotations
@@ -17,17 +16,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import sys
 import urllib.request
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-POINTS_CSV = REPO / "edge_backup/local/acme/vm-bbartling/points.gl36_poll.csv"
-FALLBACK = REPO / "edge_backup/local/acme/vm-bbartling/points.csv"
+sys.path.insert(0, str(REPO / "scripts"))
+
+from lib.site_pack_paths import points_csv  # noqa: E402
 
 
 @dataclass
@@ -58,7 +56,7 @@ def index_vav(rows: list[dict]) -> dict[str, VavBundle]:
     out: dict[str, VavBundle] = {}
     for r in rows:
         sid = r.get("system_id") or ""
-        if "vav" not in sid:
+        if "vav" not in sid.lower():
             continue
         inst = str(r.get("device_instance"))
         b = out.setdefault(inst, VavBundle(inst=inst))
@@ -81,12 +79,24 @@ def index_vav(rows: list[dict]) -> dict[str, VavBundle]:
     return out
 
 
+def discover_ahu_system_id(rows: list[dict], explicit: str) -> str:
+    if explicit.strip():
+        return explicit.strip()
+    for r in rows:
+        sid = (r.get("system_id") or "").strip()
+        if not sid:
+            continue
+        low = sid.lower()
+        if low.startswith("rtu") or "ahu" in low or low.startswith("pac"):
+            return sid
+    return ""
+
+
 def fetch_samples(host: str, token: str, lookback_min: int = 15) -> dict[str, list[float]]:
-    """Latest values per point_id column from poll status / samples file on edge via SSH-less API."""
     url = f"http://{host}/api/bacnet/poll/status"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     status = json.loads(urllib.request.urlopen(req, timeout=30).read())
-    _ = lookback_min  # future: timeseries API
+    _ = lookback_min
     latest: dict[str, list[float]] = defaultdict(list)
     for row in status.get("last_samples") or []:
         pid = row.get("point_id") or ""
@@ -150,7 +160,6 @@ def check_vav_gl36(vav: dict[str, VavBundle], samples: dict[str, list[float]]) -
         sp = last_val(samples, b.zn_sp)
         if tz is not None and sp is not None:
             diff = tz - sp
-            # GL36 cooling ladder thresholds (°F)
             lvl3 = diff >= 5.0
             lvl2 = diff >= 3.0
             checks.append(
@@ -168,7 +177,6 @@ def check_vav_gl36(vav: dict[str, VavBundle], samples: dict[str, list[float]]) -
         dpr = last_val(samples, b.damper) if b.damper else None
         if flow is not None and fsp and fsp > 0 and dpr is not None:
             ratio = flow / fsp
-            # GL36 static pressure request hints
             hint = ""
             if ratio < 0.5 and dpr >= 95:
                 hint = "pressure_req≥3"
@@ -186,10 +194,12 @@ def check_vav_gl36(vav: dict[str, VavBundle], samples: dict[str, list[float]]) -
     return checks
 
 
-def check_ahu_economizer(rows: list[dict], samples: dict[str, list[float]]) -> list[Check]:
+def check_ahu_economizer(rows: list[dict], samples: dict[str, list[float]], ahu_system_id: str) -> list[Check]:
+    if not ahu_system_id:
+        return [Check("ahu-economizer", True, "skipped (no --ahu-system-id and none discovered)")]
     by_tag: dict[str, str] = {}
     for r in rows:
-        if r.get("system_id") != "rtu-01":
+        if (r.get("system_id") or "").strip() != ahu_system_id:
             continue
         tag = (r.get("brick_tag") or "").upper()
         by_tag[tag] = r["point_id"]
@@ -204,33 +214,52 @@ def check_ahu_economizer(rows: list[dict], samples: dict[str, list[float]]) -> l
     if oat is not None and rat is not None and mat is not None:
         lo, hi = min(oat, rat) - 5, max(oat, rat) + 5
         ok = lo <= mat <= hi
-        checks.append(Check("ahu-mat_mixing", ok, f"MAT={mat:.1f} between OAT={oat:.1f} RAT={rat:.1f}"))
+        checks.append(Check(f"ahu-{ahu_system_id}-mat_mixing", ok, f"MAT={mat:.1f} between OAT={oat:.1f} RAT={rat:.1f}"))
     if oad is not None and oad > 10 and mat is not None and oat is not None:
-        ok = mat <= oat + 15  # economizer should pull MAT toward OAT when open
-        checks.append(Check("ahu-economizer_oad", ok, f"OAD={oad:.0f}% MAT={mat:.1f} OAT={oat:.1f}"))
+        ok = mat <= oat + 15
+        checks.append(
+            Check(f"ahu-{ahu_system_id}-economizer_oad", ok, f"OAD={oad:.0f}% MAT={mat:.1f} OAT={oat:.1f}")
+        )
     if sat is not None and rat is not None:
-        checks.append(Check("ahu-sat_rat", True, f"SAT={sat:.1f} RAT={rat:.1f} dT={sat-rat:.1f}F"))
+        checks.append(Check(f"ahu-{ahu_system_id}-sat_rat", True, f"SAT={sat:.1f} RAT={rat:.1f} dT={sat-rat:.1f}F"))
     return checks
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--csv", type=Path, default=POINTS_CSV)
-    ap.add_argument("--samples", type=Path, default=Path(""))
-    ap.add_argument("--host", default="")
+    ap = argparse.ArgumentParser(description="GL36 mechanical validation for any site pack")
+    ap.add_argument("--site-id", default="", help="Site id (with --building-id resolves points CSV)")
+    ap.add_argument("--building-id", default="", help="Building id under edge_backup/local/<site>/")
+    ap.add_argument("--csv", type=Path, default=None, help="Points CSV (overrides site pack path)")
+    ap.add_argument("--samples", type=Path, default=None, help="Local samples CSV")
+    ap.add_argument("--host", default="", help="Edge host for live poll status")
     ap.add_argument("--user", default="integrator")
     ap.add_argument("--password", default="")
+    ap.add_argument("--ahu-system-id", default="", help="AHU/RTU system_id in points CSV (auto-detect if omitted)")
     args = ap.parse_args()
 
-    csv_path = args.csv if args.csv.is_file() else FALLBACK
+    if args.csv and args.csv.is_file():
+        csv_path = args.csv
+    elif args.site_id and args.building_id:
+        csv_path = points_csv(args.site_id, args.building_id)
+    else:
+        print("Provide --csv or both --site-id and --building-id", file=sys.stderr)
+        return 1
+
+    if not csv_path.is_file():
+        print(f"Points CSV not found: {csv_path}", file=sys.stderr)
+        return 1
+
     rows = list(csv.DictReader(csv_path.open(newline="", encoding="utf-8")))
     vav = index_vav(rows)
+    ahu_sid = discover_ahu_system_id(rows, args.ahu_system_id)
 
-    samples: dict[str, list[float]]
     if args.host:
         import os
 
-        pw = args.password or os.environ.get("OFDD_INTEGRATOR_PASSWORD", "msi-local")
+        pw = args.password or os.environ.get("OFDD_INTEGRATOR_PASSWORD", "")
+        if not pw:
+            print("Set --password or OFDD_INTEGRATOR_PASSWORD", file=sys.stderr)
+            return 1
         login = json.dumps({"username": args.user, "password": pw}).encode()
         lr = urllib.request.Request(
             f"http://{args.host}/api/auth/login",
@@ -249,7 +278,7 @@ def main() -> int:
     checks: list[Check] = []
     checks.extend(check_temp_ranges(samples, rows))
     checks.extend(check_vav_gl36(vav, samples))
-    checks.extend(check_ahu_economizer(rows, samples))
+    checks.extend(check_ahu_economizer(rows, samples, ahu_sid))
 
     failed = [c for c in checks if not c.ok]
     for c in checks[:40]:

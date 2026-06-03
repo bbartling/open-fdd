@@ -5,7 +5,8 @@
 
 site_id: acme
 building_id: vm-bbartling
-edge_model_json: acme_gl36_model.json
+# From: python3 scripts/gl36_site_model.py --site-id acme --building-id vm-bbartling
+edge_model_json: acme_vm-bbartling_gl36_model.json
 openfdd_docker_stack: true
 
 bacnet_instance_id: 3456791

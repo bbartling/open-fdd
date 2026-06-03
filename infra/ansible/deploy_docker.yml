@@ -190,7 +190,7 @@
     - name: Push site BRICK model.json
       tags: [data]
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('acme_gl36_model.json') }}"
+        src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('model.json') }}"
         dest: "{{ openfdd_remote_dir }}/workspace/data/model.json"
         mode: "0644"
         owner: "{{ ansible_user }}"

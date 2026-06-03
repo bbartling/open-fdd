@@ -170,8 +170,11 @@ def test_compact_for_llm_large_snapshot_is_valid_json():
         "systems": systems,
         "struggling_zones": zones[:8],
     }
-    text = compact_for_llm(snap)
+    full_bytes = len(json.dumps(snap).encode("utf-8"))
+    max_bytes = max(400, full_bytes // 2)
+    text = compact_for_llm(snap, max_bytes=max_bytes)
     parsed = json.loads(text)
+    assert len(text.encode("utf-8")) <= max_bytes
     assert parsed["zone_sensor_count"] == 64
     slim = slim_zone_for_llm(snap)
     assert slim["zones"]

@@ -63,6 +63,7 @@ def test_catalog_graph_links_patterns():
     edges = {(e["from"], e["to"], e["relation"]) for e in graph["edges"]}
     assert ("VAV-C", "cat:sensor_fault", "has_category") in edges
     assert ("VAV-C", "pat:flatline_1h", "implemented_by") in edges
+    assert ("VAV-C", "pat:oob_rolling", "implemented_by") in edges
 
 
 def test_catalog_api(client: TestClient):
@@ -87,7 +88,10 @@ def test_tree_api(client: TestClient):
 def test_graph_api(client: TestClient):
     r = client.get("/api/faults/graph")
     assert r.status_code == 200
-    assert r.json()["edges"]
+    body = r.json()
+    assert body["version"] == fault_catalog.CATALOG_VERSION
+    assert body["nodes"]
+    assert body["edges"]
 
 
 def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
