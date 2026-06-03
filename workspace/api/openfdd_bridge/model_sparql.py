@@ -392,10 +392,33 @@ def query_feeds(
     return out
 
 
+def _sync_ttl_if_json_has_content(model: dict[str, Any], ttl_svc: TtlService) -> None:
+    """Keep SPARQL reads aligned with model.json when TTL was never synced on this host."""
+    has_json = bool(model.get("equipment") or model.get("points"))
+    if not has_json:
+        return
+    path = ttl_svc.ttl_path
+    if not path.is_file() or path.stat().st_size < 80:
+        ttl_svc.sync()
+        return
+    try:
+        graph = load_graph(ttl_svc)
+        rows = run_sparql(
+            graph,
+            "SELECT (COUNT(?eq) AS ?n) WHERE { ?eq a brick:Equipment . }",
+        )
+        count = int(rows[0].get("n") or 0) if rows else 0
+        if count == 0 and model.get("equipment"):
+            ttl_svc.sync()
+    except TtlGraphError:
+        ttl_svc.sync()
+
+
 def query_model_tree() -> dict[str, Any]:
     """Full model catalog for Data Model / Rule Lab — all sites, equipment, points via SPARQL."""
     model = ModelService().load()
     ttl_svc = TtlService()
+    _sync_ttl_if_json_has_content(model, ttl_svc)
     graph = load_graph(ttl_svc)
     eq_rows = run_sparql(graph, TREE_EQUIPMENT_QUERY)
     pt_rows = run_sparql(graph, TREE_POINTS_QUERY)
@@ -427,6 +450,7 @@ def query_model_graph(site_id: str) -> dict[str, Any]:
 
     svc = ModelService()
     model = svc.load()
+    _sync_ttl_if_json_has_content(model, TtlService())
     try:
         with svc.transaction() as doc:
             ensure_site_feeds(doc, site_id)

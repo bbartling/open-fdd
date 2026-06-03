@@ -55,7 +55,7 @@ def _flat_temp_frame(rows: int = 90) -> pd.DataFrame:
 @pytest.fixture
 def plot_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data = tmp_path / "data"
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     # Copy rules store so fault eval has bench rules (CI: edge_config, local: workspace/data)
@@ -85,11 +85,15 @@ def test_downsample_aligned_plot():
     ts = [str(i) for i in range(n)]
     series = {"oa-t": [float(i) for i in range(n)]}
     faults = {"rule-a": [1 if i > 50 else 0 for i in range(n)]}
-    out_ts, out_series, out_faults, stride, truncated = downsample_aligned_plot(n, 20, ts, series, faults)
+    aux = {"oa-t__rolling_5m": [float(i) for i in range(n)]}
+    out_ts, out_series, out_faults, out_aux, stride, truncated = downsample_aligned_plot(
+        n, 20, ts, series, faults, aux
+    )
     assert truncated is True
     assert len(out_ts) <= 20
     assert len(out_series["oa-t"]) == len(out_ts)
     assert len(out_faults["rule-a"]) == len(out_ts)
+    assert len(out_aux["oa-t__rolling_5m"]) == len(out_ts)
     assert stride >= 1
 
 
@@ -127,7 +131,25 @@ def test_read_plot_readings_dual_axis_kinds(plot_env: Path):
     assert len(payload["fault_plots"]["bench-oa-t-flatline-1h"]) == len(payload["timestamps"])
 
 
-def test_readings_api(plot_env: Path):
+def test_read_plot_readings_rolling_aux(plot_env: Path):
+    _reload_bridge()
+    from openfdd_bridge.plot_readings import read_plot_readings as read_plots  # noqa: E402
+
+    payload = read_plots(
+        "demo",
+        ["oa-t"],
+        hours=24,
+        include_faults=False,
+        rolling_avg_minutes=5,
+        show_rolling_avg=True,
+    )
+    assert payload["rolling_avg_minutes"] == 5
+    assert payload["aux_series"]
+    key = next(k for k in payload["aux_series"] if "rolling" in k)
+    assert len(payload["aux_series"][key]) == len(payload["timestamps"])
+
+
+def test_readings_api(plot_env: Path, raw_client: TestClient, integrator_headers: dict[str, str]):
     _reload_bridge()
     from openfdd_bridge.main import create_app as make_app  # noqa: E402
 
@@ -135,6 +157,7 @@ def test_readings_api(plot_env: Path):
     r = client.get(
         "/api/timeseries/readings",
         params={"site_id": "demo", "columns": "oa-t,oa-h", "hours": 24, "include_faults": "true"},
+        headers=integrator_headers,
     )
     assert r.status_code == 200
     body = r.json()

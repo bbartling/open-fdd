@@ -11,18 +11,6 @@ REPO = Path(__file__).resolve().parents[2]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from openfdd_bridge.main import create_app  # noqa: E402
-
-
-@pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    data = tmp_path / "data"
-    data.mkdir()
-    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    return TestClient(create_app())
-
-
 def test_model_site_and_ttl(client: TestClient):
     r = client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
     assert r.status_code == 200

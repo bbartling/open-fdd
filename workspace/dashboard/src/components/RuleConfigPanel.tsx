@@ -7,7 +7,7 @@ type Props = {
 const DEFAULT_PRESETS = [
   { key: "high", label: "High threshold", defaultValue: "75" },
   { key: "low", label: "Low threshold", defaultValue: "55" },
-  { key: "rolling_avg_minutes", label: "Rolling avg (min)", defaultValue: "5" },
+  { key: "rolling_avg_minutes", label: "Rolling avg (min: 1, 5, 15)", defaultValue: "5" },
   { key: "flatline_minutes", label: "Flatline window (min)", defaultValue: "30" },
 ];
 

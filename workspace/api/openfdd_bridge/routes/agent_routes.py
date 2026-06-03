@@ -3,14 +3,15 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..deps import require_roles
-from .. import agent_tools, audit, ollama_client
+from .. import agent_tools, audit, building_insight, ollama_client
 from ..agent_tools import ToolError
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
+from ..security import debug_diagnostics_enabled
 
 router = APIRouter(
     prefix="/openfdd-agent",
@@ -34,11 +35,10 @@ class ToolBody(BaseModel):
 
 
 @router.get("/context")
-def agent_context() -> dict:
+def agent_context(user: dict = Depends(require_roles("operator", "integrator", "agent"))) -> dict:
     ollama = ollama_client.health()
     tier = ollama_client.configured_ram_tier()
-    return {
-        "repo_root": str(repo_root()),
+    payload: dict = {
         "ollama": ollama,
         "ollama_ram_tier": tier,
         "ollama_model": ollama_client.configured_model(),
@@ -50,6 +50,9 @@ def agent_context() -> dict:
         "mcp": ollama_client.mcp_agent_hints(),
         **agent_tools.model_context(),
     }
+    if debug_diagnostics_enabled() and user.get("role") in {"integrator", "agent"}:
+        payload["repo_root"] = str(repo_root())
+    return payload
 
 
 @router.get("/tools")
@@ -95,6 +98,15 @@ def run_tool(
 @router.get("/ollama/health")
 def ollama_health() -> dict:
     return {"ok": True, **ollama_client.health()}
+
+
+@router.get("/building-insight")
+def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
+    """Read-only one-liner for the home dashboard (fixed interval cache).
+
+    Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
+    """
+    return building_insight.get_building_insight(force=force)
 
 
 @router.post("/chat")

@@ -11,22 +11,11 @@ REPO = Path(__file__).resolve().parents[2]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from openfdd_bridge.main import create_app  # noqa: E402
-
 RULE_CODE = (
     "def evaluate(row, cfg, prev_row=None, rows=None):\n"
     "    sat = row.get('SAT') or row.get('temp')\n"
     "    return sat is not None and float(sat) > float(cfg.get('high', 50))\n"
 )
-
-
-@pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    data = tmp_path / "data"
-    data.mkdir()
-    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    return TestClient(create_app())
 
 
 def test_rules_routes_registered(client: TestClient):

@@ -100,7 +100,7 @@ def test_purge_foreign_rules(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     from openfdd_bridge.site_pack import purge_foreign_rules
 
     data = tmp_path / "data"
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     store = RuleStore(path=data / "rules_store.json")
     store._save(

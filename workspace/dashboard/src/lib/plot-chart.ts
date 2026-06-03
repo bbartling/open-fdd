@@ -3,6 +3,7 @@
 export type PlotReadingsResponse = {
   timestamps: string[];
   series: Record<string, (number | null)[]>;
+  aux_series?: Record<string, (number | null)[]>;
   series_kinds?: Record<string, string>;
   labels?: Record<string, string>;
   fault_plots?: Record<string, number[]>;
@@ -13,6 +14,9 @@ export type PlotReadingsResponse = {
   chart_stride?: number;
   hours?: number;
   site_id?: string;
+  rolling_avg_minutes?: number;
+  rolling_avg_minutes_allowed?: number[];
+  show_rolling_avg?: boolean;
 };
 
 const TEMP_PALETTE = ["#58a6ff", "#79c0ff", "#a371f7", "#ffa657"];
@@ -27,6 +31,7 @@ export function buildPlotTraces(
   opts: {
     enabledFaults: Set<string>;
     showBounds: boolean;
+    showRollingAvg: boolean;
     theme: "light" | "dark";
   },
 ): { traces: Plotly.Data[]; layout: Partial<Plotly.Layout>; shapes: Partial<Plotly.Shape>[] } {
@@ -69,6 +74,28 @@ export function buildPlotTraces(
         hovertemplate: `%{y:.2f} · ${col}<extra></extra>`,
       });
       ti += 1;
+    }
+  }
+
+  if (opts.showRollingAvg && data.aux_series && Object.keys(data.aux_series).length) {
+    const rollMin = data.rolling_avg_minutes ?? 5;
+    let ri = 0;
+    for (const [key, vals] of Object.entries(data.aux_series)) {
+      const baseCol = key.replace(/__rolling_\d+m$/, "");
+      const label = data.labels?.[baseCol] || baseCol;
+      traces.push({
+        x,
+        y: vals,
+        name: `${label} (${rollMin} min avg)`,
+        type: "scatter",
+        mode: "lines",
+        line: { color: "#8b949e", width: 2, dash: "dot" },
+        yaxis: "y",
+        connectgaps: true,
+        opacity: 0.85,
+        hovertemplate: `%{y:.2f} · ${rollMin} min avg<extra></extra>`,
+      });
+      ri += 1;
     }
   }
 

@@ -5,9 +5,8 @@ import os
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from .. import auth
 from ..building_status import dashboard_snapshot
-from ..deps import require_roles
+from ..deps import public_auth_status, require_roles, require_user
 from ..paths import bacnet_poll_csv, data_dir, repo_root, workspace_dir
 from ..stack_health import stack_health
 
@@ -34,7 +33,7 @@ def health() -> dict:
     payload: dict = {
         "ok": True,
         "service": "openfdd-bridge",
-        "auth_required": auth.auth_enabled(),
+        **public_auth_status(),
         "bacnet_poll_csv_exists": poll_path.is_file(),
         "bacnet_poll_csv_bytes": poll_bytes,
     }
@@ -58,13 +57,28 @@ def health() -> dict:
 
 
 @router.get("/health/stack")
-def health_stack() -> dict:
+def health_stack(_user: dict = Depends(require_user)) -> dict:
     return stack_health()
 
 
 @router.websocket("/ws/dashboard")
 async def ws_dashboard(websocket: WebSocket) -> None:
     """Push stack health + check-engine status for live dashboard refresh."""
+    from .. import auth
+    from ..security import auth_dev_bypass_enabled, auth_strict_configured
+
+    token = websocket.query_params.get("token") or ""
+    if not token:
+        header = websocket.headers.get("authorization") or ""
+        if header.lower().startswith("bearer "):
+            token = header[7:].strip()
+    if auth_strict_configured():
+        if auth.verify_token(token) is None:
+            await websocket.close(code=4401)
+            return
+    elif not auth_dev_bypass_enabled():
+        await websocket.close(code=4503)
+        return
     await websocket.accept()
     try:
         while True:

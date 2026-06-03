@@ -23,6 +23,9 @@ type StorageBlock = {
   used_bytes?: number;
   free_bytes?: number;
   percent_used?: number;
+  feather_bytes?: number;
+  feather_max_gib?: number;
+  breakdown?: { role: string; label: string; path: string; bytes: number }[];
 };
 
 type HostStats = {
@@ -49,11 +52,14 @@ type HostStats = {
   ollama: {
     api_ok?: boolean;
     base_url?: string;
+    active_base_url?: string;
+    tried_urls?: string[];
     models_installed?: string[];
     configured_model?: string;
     configured_ram_tier?: string;
     gpu_mode?: string;
-    timeout_s?: number;
+    health_timeout_s?: number;
+    chat_timeout_s?: number;
     error?: string;
     pid?: number;
     rss_bytes?: number;
@@ -267,31 +273,52 @@ export default function HostStatsPage() {
 
           {storage?.available ? (
             <div className="panel">
-              <h3 className="panel-title">Data disk (feather store)</h3>
+              <h3 className="panel-title">Disk usage</h3>
               <p className="muted host-storage-note">
-                One number that matters for trends and rules: free space on{" "}
-                <code>{storage.path}</code>
+                Workspace data volume <code>{storage.path}</code>
+                {storage.feather_max_gib != null ? ` · feather cap ${storage.feather_max_gib} GiB` : ""}
               </p>
               <MetricMeter
-                label="Used"
+                label="Partition used"
                 pct={storage.percent_used}
                 detail={`${fmtBytes(storage.free_bytes)} free of ${fmtBytes(storage.total_bytes)} total`}
                 warn={diskWarn}
               />
+              {storage.breakdown?.length ? (
+                <div className="host-storage-breakdown">
+                  {storage.breakdown.map((row) => (
+                    <div key={row.role} className="host-storage-row">
+                      <span>{row.label}</span>
+                      <strong>{fmtBytes(row.bytes)}</strong>
+                      <span className="muted">
+                        <code>{row.path}</code>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="panel muted">Data disk metrics unavailable on this host.</div>
           )}
 
           <div className="panel">
-            <h3 className="panel-title">Ollama</h3>
+            <h3 className="panel-title">Ollama (API health)</h3>
             <div className="host-ollama-grid">
               <div className="status-kv">
-                <span className="status-kv-label">Ollama</span>
+                <span className="status-kv-label">API</span>
                 <span className={`status-kv-value ${stats.ollama.api_ok ? "ok" : "error"}`}>
-                  {stats.ollama.api_ok ? "running" : "down"}
+                  {stats.ollama.api_ok ? "reachable" : "unreachable"}
                 </span>
               </div>
+              {stats.ollama.active_base_url || stats.ollama.base_url ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">URL</span>
+                  <span className="status-kv-value mono">
+                    {stats.ollama.active_base_url || stats.ollama.base_url}
+                  </span>
+                </div>
+              ) : null}
               {stats.ollama.configured_model ? (
                 <div className="status-kv">
                   <span className="status-kv-label">Model</span>
@@ -307,15 +334,21 @@ export default function HostStatsPage() {
                   </span>
                 </div>
               ) : null}
-              {stats.ollama.timeout_s ? (
+              {stats.ollama.health_timeout_s != null ? (
                 <div className="status-kv">
-                  <span className="status-kv-label">Server timeout</span>
-                  <span className="status-kv-value">{formatDurationMs(stats.ollama.timeout_s * 1000)}</span>
+                  <span className="status-kv-label">Health probe</span>
+                  <span className="status-kv-value">{formatDurationMs(stats.ollama.health_timeout_s * 1000)}</span>
+                </div>
+              ) : null}
+              {stats.ollama.chat_timeout_s != null ? (
+                <div className="status-kv">
+                  <span className="status-kv-label">Agent chat timeout</span>
+                  <span className="status-kv-value">{formatDurationMs(stats.ollama.chat_timeout_s * 1000)}</span>
                 </div>
               ) : null}
               {stats.ollama.process?.rss_bytes || stats.ollama.rss_bytes ? (
                 <div className="status-kv">
-                  <span className="status-kv-label">Process RAM</span>
+                  <span className="status-kv-label">Host process RAM</span>
                   <span className="status-kv-value">
                     {fmtBytes(stats.ollama.process?.rss_bytes ?? stats.ollama.rss_bytes)}
                   </span>
@@ -324,6 +357,13 @@ export default function HostStatsPage() {
             </div>
             {stats.ollama.error && !stats.ollama.api_ok ? (
               <p className="muted host-storage-note">{stats.ollama.error}</p>
+            ) : null}
+            {!stats.ollama.api_ok && stats.ollama.tried_urls?.length ? (
+              <p className="muted host-storage-note">
+                Probed: {stats.ollama.tried_urls.join(", ")} — use{" "}
+                <code>docker compose --profile ai up -d</code> or set <code>OFDD_OLLAMA_BASE_URL</code> in{" "}
+                <code>workspace/ollama.env.local</code>.
+              </p>
             ) : null}
           </div>
 

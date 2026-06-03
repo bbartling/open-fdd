@@ -19,7 +19,7 @@ def test_ingest_long_poll_to_feather(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     polls = ws / "bacnet" / "polls"
     comm.mkdir(parents=True)
     polls.mkdir(parents=True)
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     (data / "model.json").write_text(
         '{"sites":[{"id":"local","name":"Local"}],"equipment":[],"points":'
         '[{"id":"5007-analog-input-1168","point_id":"5007-analog-input-1168","external_id":"oa-h","site_id":"local"}]}',

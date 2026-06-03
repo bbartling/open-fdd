@@ -21,14 +21,6 @@ from openfdd_bridge.host_stats import (  # noqa: E402
     _swap_payload,
     collect_host_stats,
 )
-from openfdd_bridge.main import create_app  # noqa: E402
-
-
-@pytest.fixture
-def client() -> TestClient:
-    return TestClient(create_app())
-
-
 def test_memory_payload_from_meminfo():
     meminfo = {
         "MemTotal": 8 * 1024**3,
@@ -68,7 +60,7 @@ def test_collect_host_stats_shape():
     assert "base_url" in ollama
     assert "configured_ram_tier" in ollama
     assert "gpu_mode" in ollama
-    assert "timeout_s" in ollama
+    assert "chat_timeout_s" in ollama
 
 
 def test_read_linux_meminfo_on_linux():
@@ -79,8 +71,8 @@ def test_read_linux_meminfo_on_linux():
     assert meminfo["MemTotal"] > 0
 
 
-def test_host_stats_api(client: TestClient):
-    r = client.get("/api/host/stats")
+def test_host_stats_api(client: TestClient, operator_headers: dict[str, str]):
+    r = client.get("/api/host/stats", headers=operator_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True

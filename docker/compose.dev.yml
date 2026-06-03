@@ -22,7 +22,9 @@ services:
     environment:
       OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
       OFDD_MCP_REST_BASE: http://mcp-rag:8090
-      OFDD_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Prefer in-compose Ollama (--profile ai); fall back to host Ollama via host-gateway.
+      OFDD_OLLAMA_BASE_URL: http://ollama:11434
+      OFDD_OLLAMA_FALLBACK_URLS: http://host.docker.internal:11434,http://127.0.0.1:11434
     env_file:
       - path: ../workspace/auth.env.local
         required: false
@@ -39,6 +41,9 @@ services:
         condition: service_started
       mcp-rag:
         condition: service_started
+      ollama:
+        condition: service_started
+        required: false
     restart: unless-stopped
 
   commission:

@@ -7,8 +7,10 @@ import builtins as _builtins
 import datetime
 import io
 import math
+import os
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import nullcontext, redirect_stdout
 from typing import Any, Callable
 
@@ -30,6 +32,62 @@ GO_LIVE_BATCH_HOURS = 6
 GO_LIVE_MAX_LOOKBACK_HOURS = 168
 GO_LIVE_OVERLAP_MINUTES = 15
 
+MAX_STDOUT_CHARS = 8000
+MAX_PUBLIC_TRACE_CHARS = 500
+_ROW_TIMEOUT_S = 2.0
+
+
+def _exec_timeout_s() -> float:
+    try:
+        return max(1.0, float(os.environ.get("OFDD_PLAYGROUND_TIMEOUT_S", "30")))
+    except ValueError:
+        return 30.0
+
+
+def _cap_text(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 20] + "\n… (truncated)"
+
+
+def sanitize_traceback_text(text: str | None) -> str | None:
+    if not text:
+        return None
+    from .security import debug_tracebacks_enabled
+
+    if debug_tracebacks_enabled():
+        return _cap_text(text, MAX_STDOUT_CHARS)
+    first_line = text.strip().splitlines()[0] if text.strip() else "execution failed"
+    return _cap_text(first_line, MAX_PUBLIC_TRACE_CHARS)
+
+
+def sanitize_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for event in events:
+        item = dict(event)
+        if "trace" in item:
+            item["trace"] = sanitize_traceback_text(str(item.get("trace") or ""))
+        if item.get("type") == "stdout" and isinstance(item.get("text"), str):
+            item["text"] = _cap_text(item["text"], MAX_STDOUT_CHARS)
+        out.append(item)
+    return out
+
+
+class _CappedStdout(io.StringIO):
+    def write(self, s: str) -> int:  # type: ignore[override]
+        cur = self.getvalue()
+        if len(cur) >= MAX_STDOUT_CHARS:
+            return 0
+        room = MAX_STDOUT_CHARS - len(cur)
+        chunk = s[:room]
+        return super().write(chunk)
+
+
+def _call_with_timeout(fn: Callable[[], Any], timeout_s: float) -> Any:
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(fn)
+        return fut.result(timeout=timeout_s)
+
 
 def _lint_error_events(lint: dict[str, Any]) -> list[dict[str, Any]]:
     lines = [
@@ -41,7 +99,12 @@ def _lint_error_events(lint: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"type": "error", "text": text}]
 
 
-def lint_python(code: str, *, require_evaluate: bool = True) -> dict[str, Any]:
+def lint_python(
+    code: str,
+    *,
+    require_evaluate: bool = True,
+    strict_imports: bool = False,
+) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     if not code.strip():
         return {"ok": True, "issues": issues}
@@ -72,7 +135,7 @@ def lint_python(code: str, *, require_evaluate: bool = True) -> dict[str, Any]:
                             "col": node.col_offset or 1,
                             "end_col": (node.col_offset or 1) + 6,
                             "message": f"import '{alias.name}' not allowed",
-                            "severity": "warning",
+                            "severity": "error" if strict_imports else "warning",
                         }
                     )
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -84,7 +147,7 @@ def lint_python(code: str, *, require_evaluate: bool = True) -> dict[str, Any]:
                         "col": node.col_offset or 1,
                         "end_col": (node.col_offset or 1) + 6,
                         "message": f"import from '{node.module}' not allowed",
-                        "severity": "warning",
+                        "severity": "error" if strict_imports else "warning",
                     }
                 )
 
@@ -181,7 +244,7 @@ def _rule_sandbox() -> dict[str, Any]:
 
 
 def compile_evaluate(code: str) -> Callable[..., Any]:
-    lint = lint_python(code)
+    lint = lint_python(code, strict_imports=True)
     if not lint["ok"]:
         lines = [
             f"line {issue.get('line', '?')}: {issue['message']}"
@@ -209,32 +272,51 @@ def sweep_rule(
     *,
     capture_print: bool = True,
 ) -> tuple[list[bool], list[dict[str, Any]]]:
-    lint = lint_python(code)
+    lint = lint_python(code, strict_imports=True)
     if not lint["ok"]:
-        return [False] * len(rows), _lint_error_events(lint)
+        return [False] * len(rows), sanitize_events(_lint_error_events(lint))
     try:
         evaluate = compile_evaluate(code)
     except ValueError as exc:
-        return [False] * len(rows), [
-            {"type": "error", "text": str(exc), "trace": traceback.format_exc(limit=8)},
-        ]
+        return [False] * len(rows), sanitize_events(
+            [{"type": "error", "text": str(exc), "trace": traceback.format_exc(limit=8)}]
+        )
     flags: list[bool] = [False] * len(rows)
     events: list[dict[str, Any]] = []
     prev: dict[str, Any] | None = None
-    buf = io.StringIO()
+    buf: io.StringIO = _CappedStdout() if capture_print else io.StringIO()
+    deadline = time.time() + _exec_timeout_s()
     for index, row in enumerate(rows):
-        try:
+        if time.time() >= deadline:
+            events.append({"type": "error", "text": "rule execution timed out (total budget exceeded)"})
+            break
+        remaining = max(0.1, min(_ROW_TIMEOUT_S, deadline - time.time()))
+
+        def _eval_row() -> Any:
             ctx = redirect_stdout(buf) if capture_print else nullcontext()
             with ctx:
-                raw = evaluate(row, cfg, prev_row=prev, rows=rows)
+                return evaluate(row, cfg, prev_row=prev, rows=rows)
+
+        try:
+            raw = _call_with_timeout(_eval_row, remaining)
             instant, paint = _parse_evaluate_result(raw, rows)
+        except FuturesTimeout:
+            events.append(
+                {
+                    "type": "row",
+                    "row": index,
+                    "status": "error",
+                    "message": "row evaluation timed out",
+                }
+            )
+            break
         except Exception as exc:
             events.append(
                 {
                     "type": "row",
                     "row": index,
                     "status": "error",
-                    "message": str(exc),
+                    "message": str(exc)[:MAX_PUBLIC_TRACE_CHARS],
                 }
             )
             prev = row
@@ -257,7 +339,7 @@ def sweep_rule(
     flagged = sum(flags)
     text = buf.getvalue().strip()
     if text:
-        events.insert(0, {"type": "stdout", "text": text})
+        events.insert(0, {"type": "stdout", "text": _cap_text(text, MAX_STDOUT_CHARS)})
     events.append(
         {
             "type": "summary",
@@ -266,7 +348,7 @@ def sweep_rule(
             "sweep_mode": "per_row",
         }
     )
-    return flags, events
+    return flags, sanitize_events(events)
 
 
 def run_dataframe_script(
@@ -276,40 +358,68 @@ def run_dataframe_script(
     cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute user script with `df`, optional `cfg`, must leave `out` dict."""
-    g = _rule_sandbox()
-    g["df"] = df.copy()
-    g["cfg"] = cfg or {}
-    g["out"] = {"df": g["df"], "events": []}
-    stdout = io.StringIO()
-    started = time.time()
-    try:
-        with redirect_stdout(stdout):
-            exec(code, g, g)  # noqa: S102
-    except Exception:
+    lint = lint_python(code, require_evaluate=False, strict_imports=True)
+    if not lint["ok"]:
         return {
             "ok": False,
-            "error": traceback.format_exc(limit=8),
+            "error": "disallowed import or syntax error",
+            "issues": lint.get("issues"),
+            "events": _lint_error_events(lint),
+        }
+
+    def _run() -> dict[str, Any]:
+        g = _rule_sandbox()
+        g["df"] = df.copy()
+        g["cfg"] = cfg or {}
+        g["out"] = {"df": g["df"], "events": []}
+        stdout = _CappedStdout()
+        with redirect_stdout(stdout):
+            exec(code, g, g)  # noqa: S102
+        out = g.get("out")
+        if not isinstance(out, dict):
+            out = {"df": g.get("df", df), "events": [{"type": "note", "text": "no out dict; using df"}]}
+        result_df = out.get("df")
+        if not isinstance(result_df, pd.DataFrame):
+            result_df = g.get("df", df)
+        return {
+            "ok": True,
             "stdout": stdout.getvalue(),
+            "df": result_df,
+            "out": out,
+        }
+
+    started = time.time()
+    try:
+        inner = _call_with_timeout(_run, _exec_timeout_s())
+    except FuturesTimeout:
+        return {
+            "ok": False,
+            "error": "script execution timed out",
+            "stdout": "",
             "ms": int((time.time() - started) * 1000),
         }
-    out = g.get("out")
-    if not isinstance(out, dict):
-        out = {"df": g.get("df", df), "events": [{"type": "note", "text": "no out dict; using df"}]}
-    result_df = out.get("df")
-    if not isinstance(result_df, pd.DataFrame):
-        result_df = g.get("df", df)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": sanitize_traceback_text(str(exc)) or "script failed",
+            "trace": sanitize_traceback_text(traceback.format_exc(limit=8)),
+            "stdout": "",
+            "ms": int((time.time() - started) * 1000),
+        }
+    result_df = inner["df"]
+    out = inner["out"]
     preview = result_df.head(50).to_dict(orient="records")
     flag_cols = [c for c in result_df.columns if str(c).endswith("_flag")]
     metrics = out.get("metrics") if isinstance(out.get("metrics"), dict) else {}
     return {
         "ok": True,
-        "stdout": stdout.getvalue(),
+        "stdout": _cap_text(str(inner.get("stdout") or ""), MAX_STDOUT_CHARS),
         "ms": int((time.time() - started) * 1000),
         "rows": len(result_df),
         "columns": list(result_df.columns),
         "flag_columns": flag_cols,
         "preview": preview,
-        "events": out.get("events") or [],
+        "events": sanitize_events(out.get("events") or []),
         "metrics": metrics,
     }
 

@@ -49,11 +49,23 @@ def test_login_writes_audit(authed_integrator: TestClient, tmp_path: Path):
     assert ev["client"]["ip"]
 
 
-def test_stack_health_public_for_check_engine(authed_integrator: TestClient):
-    """Stack strip on the public check-engine dashboard must work without login."""
+def test_stack_health_requires_auth(authed_integrator: TestClient):
+    """Detailed stack health is not public on LAN/edge deployments."""
     r = authed_integrator.get("/health/stack")
-    assert r.status_code == 200
-    body = r.json()
+    assert r.status_code == 401
+
+    login = authed_integrator.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    assert login.status_code == 200
+    token = login.json()["token"]
+    authed = authed_integrator.get(
+        "/health/stack",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert authed.status_code == 200
+    body = authed.json()
     assert "services" in body
     assert any(s["id"] == "bridge" for s in body["services"])
 

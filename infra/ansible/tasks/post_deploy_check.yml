@@ -57,6 +57,48 @@
     | difference(docker_running_services.stdout_lines | map('trim') | list)) | length > 0
   when: openfdd_docker_stack | default(false) | bool
 
+- name: Collect Docker container ids for log scan
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for svc in bridge commission mcp-rag; do
+      cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
+      echo "${svc}=${cid}"
+    done
+  register: docker_log_cids
+  changed_when: false
+  when: openfdd_docker_stack | default(false) | bool
+
+- name: Fail when Docker service containers are missing
+  ansible.builtin.fail:
+    msg: "Docker service {{ item.split('=')[0] }} has no running container"
+  loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
+  when:
+    - openfdd_docker_stack | default(false) | bool
+    - docker_log_cids is defined
+    - item.split('=') | length > 1
+    - (item.split('=')[1] | trim) | length == 0
+
+- name: Scan Docker container logs for errors
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cid="{{ item.split('=')[1] | trim }}"
+    svc="{{ item.split('=')[0] | trim }}"
+    err="$(docker logs --tail 80 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true)"
+    if [[ -n "$err" ]]; then
+      echo "FAIL ${svc}: ${err}"
+      exit 1
+    fi
+    echo "OK ${svc}"
+  loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
+  register: docker_log_scan
+  changed_when: false
+  failed_when: docker_log_scan.rc != 0
+  when:
+    - openfdd_docker_stack | default(false) | bool
+    - docker_log_cids is defined
+    - item.split('=') | length > 1
+    - (item.split('=')[1] | trim) | length > 0
+
 - name: Ensure BACnet commission agent is active
   ansible.builtin.systemd:
     name: openfdd-bacnet-commission

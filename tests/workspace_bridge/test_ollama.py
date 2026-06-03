@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.testclient import TestClient
 
 API_ROOT = Path(__file__).resolve().parents[2] / "workspace" / "api"
 REPO = Path(__file__).resolve().parents[2]
@@ -191,21 +192,15 @@ def test_should_use_ollama(monkeypatch: pytest.MonkeyPatch):
     assert ollama_client.should_use_ollama() is False
 
 
-def test_agent_chat_ollama_backend():
-    for name in list(sys.modules):
-        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
-            del sys.modules[name]
-    from fastapi.testclient import TestClient
-    from openfdd_bridge.main import create_app
-
-    client = TestClient(create_app())
+def test_agent_chat_ollama_backend(raw_client: TestClient, operator_headers: dict[str, str]):
     with patch(
         "openfdd_bridge.routes.agent_routes.ollama_client.chat",
         return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "ok"},
     ):
-        r = client.post(
+        r = raw_client.post(
             "/openfdd-agent/chat",
             json={"message": "ping"},
+            headers=operator_headers,
         )
         assert r.status_code == 200
         body = r.json()
@@ -214,17 +209,12 @@ def test_agent_chat_ollama_backend():
         assert body["reply"] == "ok"
 
 
-def test_agent_context_includes_ollama_tiers():
-    from fastapi.testclient import TestClient
-
-    from openfdd_bridge.main import create_app  # noqa: E402
-
-    client = TestClient(create_app())
+def test_agent_context_includes_ollama_tiers(raw_client: TestClient, operator_headers: dict[str, str]):
     with patch(
         "openfdd_bridge.routes.agent_routes.ollama_client.health",
         return_value={"ok": False, "error": "down"},
     ):
-        r = client.get("/openfdd-agent/context")
+        r = raw_client.get("/openfdd-agent/context", headers=operator_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["ollama_tiers"]
@@ -233,19 +223,24 @@ def test_agent_context_includes_ollama_tiers():
     assert "mcp" in body
 
 
-def test_agent_context_mcp_when_enabled(monkeypatch: pytest.MonkeyPatch):
-    from fastapi.testclient import TestClient
-
-    from openfdd_bridge.main import create_app  # noqa: E402
-
+def test_agent_context_mcp_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_client: TestClient,
+    operator_headers: dict[str, str],
+):
     monkeypatch.setenv("OFDD_MCP_ENABLED", "1")
     monkeypatch.setenv("OFDD_MCP_REST_BASE", "http://127.0.0.1:8090")
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.main import create_app  # noqa: E402
+
     client = TestClient(create_app())
     with patch(
         "openfdd_bridge.routes.agent_routes.ollama_client.health",
         return_value={"ok": False, "error": "down"},
     ):
-        r = client.get("/openfdd-agent/context")
+        r = client.get("/openfdd-agent/context", headers=operator_headers)
     assert r.status_code == 200
     mcp = r.json()["mcp"]
     assert mcp["mcp_enabled"] is True

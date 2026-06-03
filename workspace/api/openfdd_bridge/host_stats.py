@@ -91,6 +91,23 @@ def _uptime_seconds() -> float | None:
     return None
 
 
+def _directory_bytes(path: Path, *, max_depth: int = 4) -> int:
+    total = 0
+    if not path.exists():
+        return 0
+    root_depth = len(path.parts)
+    for dirpath, _dirnames, filenames in os.walk(path):
+        depth = len(Path(dirpath).parts) - root_depth
+        if depth > max_depth:
+            continue
+        for name in filenames:
+            try:
+                total += (Path(dirpath) / name).stat().st_size
+            except OSError:
+                continue
+    return total
+
+
 def _disk_for_path(path: Path) -> dict[str, Any]:
     usage = shutil.disk_usage(path)
     used = usage.used
@@ -179,16 +196,20 @@ def _ollama_payload() -> dict[str, Any]:
     """Ollama status for Host Stats — API reachability matches the Agent chat tab."""
     from . import ollama_client
 
-    health = ollama_client.health(timeout=2.0)
+    health = ollama_client.health()
     proc = _ollama_process_summary()
+    chat_timeout = float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S)))
     payload: dict[str, Any] = {
         "api_ok": health.get("ok") is True,
         "base_url": health.get("base_url"),
+        "active_base_url": health.get("base_url") if health.get("ok") else None,
+        "tried_urls": health.get("tried_urls") or [],
         "models_installed": health.get("models_installed") or [],
         "configured_model": health.get("configured_model"),
         "configured_ram_tier": health.get("configured_ram_tier") or ollama_client.configured_ram_tier(),
         "gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
-        "timeout_s": float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(ollama_client.DEFAULT_TIMEOUT_S))),
+        "health_timeout_s": health.get("health_timeout_s"),
+        "chat_timeout_s": chat_timeout,
         "error": health.get("error"),
         "process": proc,
     }
@@ -261,6 +282,45 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         store = FeatherStore(root=feather_root)
         storage["feather_bytes"] = store.total_bytes()
         storage["feather_max_gib"] = feather_max_gib_from_env()
+        breakdown: list[dict[str, Any]] = [
+            {
+                "role": "feather",
+                "label": "Feather historian",
+                "path": str(feather_root),
+                "bytes": store.total_bytes(),
+            }
+        ]
+        other_bytes = 0
+        for child in data_path.iterdir():
+            if child.name == "feather_store":
+                continue
+            if child.is_file():
+                try:
+                    other_bytes += child.stat().st_size
+                except OSError:
+                    continue
+            elif child.is_dir():
+                other_bytes += _directory_bytes(child, max_depth=3)
+        breakdown.append(
+            {
+                "role": "data_other",
+                "label": "Rules, model JSON, FDD results",
+                "path": str(data_path),
+                "bytes": other_bytes,
+            }
+        )
+        ollama_models = os.environ.get("OLLAMA_MODELS", "").strip() or os.path.expanduser("~/.ollama")
+        ollama_path = Path(ollama_models)
+        if ollama_path.is_dir():
+            breakdown.append(
+                {
+                    "role": "ollama_models",
+                    "label": "Ollama model store",
+                    "path": str(ollama_path),
+                    "bytes": _directory_bytes(ollama_path, max_depth=5),
+                }
+            )
+        storage["breakdown"] = breakdown
     except OSError:
         pass
 

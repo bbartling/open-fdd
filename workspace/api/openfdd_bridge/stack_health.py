@@ -76,8 +76,11 @@ def _ollama_service() -> dict[str, Any]:
             "detail": "not enabled (set OFDD_OLLAMA_ENABLED=1 or OFDD_OLLAMA_BASE_URL)",
         }
 
-    timeout = min(float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", "120")), 5.0)
-    health = ollama_client.health(timeout=timeout)
+    try:
+        health_timeout = float(os.environ.get("OFDD_OLLAMA_HEALTH_TIMEOUT_S", "8"))
+    except ValueError:
+        health_timeout = 8.0
+    health = ollama_client.health(timeout=health_timeout)
     ok = health.get("ok") is True
     model = str(health.get("configured_model") or "").strip()
     tier = str(health.get("configured_ram_tier") or "").strip()

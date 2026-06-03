@@ -43,6 +43,11 @@ from ..commission_client import (
     start_supervisory_check,
     whois as commission_whois,
 )
+from ..bacnet_write_guard import (
+    ensure_writes_enabled,
+    validate_priority,
+    validate_write_target,
+)
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 from ..commission_client import commission_poll_once, commission_poll_status
@@ -365,13 +370,21 @@ def bacnet_supervisory_check(body: DeviceInstanceRequest) -> dict:
 
 
 @router.post("/api/bacnet/write", dependencies=[_WRITE])
-def bacnet_write_property(body: WritePropertyRequest) -> dict:
+def bacnet_write_property(body: WritePropertyRequest, request: Request) -> dict:
+    user = getattr(request.state, "user", None)
+    body_dump = body.model_dump()
+    ensure_writes_enabled(request=request, user=user, body=body_dump)
+    priority = validate_priority(body.priority)
+    validate_write_target(
+        device_instance=body.device_instance,
+        object_identifier=body.object_identifier,
+    )
     status_code, payload = commission_write(
         body.device_instance,
         body.object_identifier,
         body.property_identifier,
         body.value,
-        body.priority,
+        priority,
     )
     if status_code != 200:
         raise _proxy_error(status_code, payload)

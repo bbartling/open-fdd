@@ -21,6 +21,13 @@ const PLOT_LOG = (...args: unknown[]) => {
 };
 
 const FETCH_TIMEOUT_MS = 120_000;
+const ROLLING_STORAGE_KEY = "ofdd_plot_rolling_avg_minutes";
+const ROLLING_ALLOWED = [1, 5, 15] as const;
+
+function normalizeRollingMinutes(v: string | number): number {
+  const m = Number(v);
+  return (ROLLING_ALLOWED as readonly number[]).includes(m) ? m : 5;
+}
 
 export default function PlotPage() {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -55,6 +62,12 @@ export default function PlotPage() {
   const [faultPanels, setFaultPanels] = useState<PlotReadingsResponse["fault_panels"]>([]);
   const [plotData, setPlotData] = useState<PlotReadingsResponse | null>(null);
   const [hours, setHours] = useState(24);
+  const [rollingAvgMinutes, setRollingAvgMinutes] = useState(() =>
+    normalizeRollingMinutes(localStorage.getItem(ROLLING_STORAGE_KEY) || "5"),
+  );
+  const [showRollingAvg, setShowRollingAvg] = useState(
+    () => localStorage.getItem("ofdd_plot_show_rolling_avg") !== "0",
+  );
   const [showBounds, setShowBounds] = useState(true);
   const [includeFaults, setIncludeFaults] = useState(false);
   const [status, setStatus] = useState("");
@@ -87,6 +100,7 @@ export default function PlotPage() {
         const { traces, layout } = buildPlotTraces(data, {
           enabledFaults,
           showBounds,
+          showRollingAvg,
           theme,
         });
         await Plotly.react(
@@ -105,7 +119,7 @@ export default function PlotPage() {
         throw e;
       }
     },
-    [enabledFaults, showBounds, theme, siteId, hours],
+    [enabledFaults, showBounds, showRollingAvg, theme, siteId, hours],
   );
 
   useEffect(() => {
@@ -137,6 +151,8 @@ export default function PlotPage() {
         columns: keys.join(","),
         hours: String(hours),
         include_faults: String(includeFaults),
+        rolling_avg_minutes: String(rollingAvgMinutes),
+        show_rolling_avg: String(showRollingAvg),
       });
       const res = await apiFetch<PlotReadingsResponse>(`/api/timeseries/readings?${qs}`, {
         signal: controller.signal,
@@ -172,7 +188,7 @@ export default function PlotPage() {
       window.clearTimeout(timer);
       if (gen === fetchGen.current) setChartLoading(false);
     }
-  }, [siteId, selected, hours, includeFaults, optionByKey]);
+  }, [siteId, selected, hours, includeFaults, rollingAvgMinutes, showRollingAvg, optionByKey]);
 
   useEffect(() => {
     if (!selected.size || !siteId) return;
@@ -183,7 +199,7 @@ export default function PlotPage() {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [siteId, hours, includeFaults, selected, refreshChart]);
+  }, [siteId, hours, includeFaults, rollingAvgMinutes, showRollingAvg, selected, refreshChart]);
 
   useEffect(() => {
     return () => {
@@ -276,6 +292,37 @@ export default function PlotPage() {
           <label className="checkbox-inline" title="Evaluates all saved rules — slow on large sites">
             <input type="checkbox" checked={includeFaults} onChange={(e) => setIncludeFaults(e.target.checked)} />
             FDD overlays (slow)
+          </label>
+          <div className="field">
+            <label className="field-label" htmlFor="plot-rolling-min">
+              Rolling avg
+            </label>
+            <select
+              id="plot-rolling-min"
+              value={rollingAvgMinutes}
+              onChange={(e) => {
+                const m = normalizeRollingMinutes(e.target.value);
+                setRollingAvgMinutes(m);
+                localStorage.setItem(ROLLING_STORAGE_KEY, String(m));
+              }}
+            >
+              {ROLLING_ALLOWED.map((m) => (
+                <option key={m} value={m}>
+                  {m} min
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={showRollingAvg}
+              onChange={(e) => {
+                setShowRollingAvg(e.target.checked);
+                localStorage.setItem("ofdd_plot_show_rolling_avg", e.target.checked ? "1" : "0");
+              }}
+            />
+            Show rolling avg
           </label>
           <label className="checkbox-inline">
             <input type="checkbox" checked={showBounds} onChange={(e) => setShowBounds(e.target.checked)} />

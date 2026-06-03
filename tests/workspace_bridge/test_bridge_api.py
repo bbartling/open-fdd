@@ -15,36 +15,25 @@ if str(API_ROOT) not in sys.path:
 os.environ.setdefault("OPENFDD_REPO_ROOT", str(REPO))
 os.environ.setdefault("OFDD_DESKTOP_DATA_DIR", str(REPO / "workspace" / "data"))
 
-from openfdd_bridge.main import create_app  # noqa: E402
-
-
-@pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    data = tmp_path / "data"
-    data.mkdir()
-    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    return TestClient(create_app())
-
-
 def test_health(client: TestClient):
     r = client.get("/health")
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert body["auth_required"] is False
+    assert body["auth_required"] is True
 
 
-def test_playground_lint(client: TestClient):
+def test_playground_lint(client: TestClient, integrator_headers: dict[str, str]):
     r = client.post(
         "/api/playground/lint",
         json={"code": "def evaluate(row, cfg, prev_row=None, rows=None):\n    return False\n"},
+        headers=integrator_headers,
     )
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
 
-def test_playground_test_rule(client: TestClient):
+def test_playground_test_rule(client: TestClient, integrator_headers: dict[str, str]):
     code = """def evaluate(row, cfg, prev_row=None, rows=None):
     sat = row.get("SAT") or row.get("temp")
     return sat is not None and float(sat) > float(cfg.get("high", 75))
@@ -52,6 +41,7 @@ def test_playground_test_rule(client: TestClient):
     r = client.post(
         "/api/playground/test-rule",
         json={"code": code, "config": {"high": 75}, "limit": 50},
+        headers=integrator_headers,
     )
     assert r.status_code == 200
     body = r.json()
@@ -59,15 +49,19 @@ def test_playground_test_rule(client: TestClient):
     assert body["rows"] > 0
 
 
-def test_agent_context(client: TestClient):
-    r = client.get("/openfdd-agent/context")
+def test_agent_context(client: TestClient, operator_headers: dict[str, str]):
+    r = client.get("/openfdd-agent/context", headers=operator_headers)
     assert r.status_code == 200
-    assert "repo_root" in r.json()
+    assert "repo_root" not in r.json()
 
 
-def test_model_export_auto_site(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def test_model_export_auto_site(
+    client: TestClient,
+    integrator_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setenv("OPENFDD_DEFAULT_SITE_ID", "test-site")
-    r = client.get("/api/model/export")
+    r = client.get("/api/model/export", headers=integrator_headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body["sites"]) == 1

@@ -12,7 +12,13 @@ _log = logging.getLogger(__name__)
 
 from . import playground
 from .data_loader import load_site_frame
-from .fdd_row_prep import prepare_fdd_rows
+from .fdd_row_prep import (
+    DEFAULT_ROLLING_AVG_MINUTES,
+    ROLLING_AVG_MINUTES_ALLOWED,
+    build_rolling_aux_series,
+    normalize_rolling_avg_minutes,
+    prepare_fdd_rows,
+)
 from .feather_store import FeatherStore
 from .model_service import ModelService
 from .rule_source import read_source
@@ -49,15 +55,25 @@ def downsample_aligned_plot(
     timestamps: list[str],
     series: dict[str, list[float | None]],
     fault_plots: dict[str, list[int]],
-) -> tuple[list[str], dict[str, list[float | None]], dict[str, list[int]], int, bool]:
+    aux_series: dict[str, list[float | None]] | None = None,
+) -> tuple[
+    list[str],
+    dict[str, list[float | None]],
+    dict[str, list[int]],
+    dict[str, list[float | None]],
+    int,
+    bool,
+]:
+    aux_series = aux_series or {}
     if n <= max_pts:
-        return timestamps, series, fault_plots, 1, False
+        return timestamps, series, fault_plots, aux_series, 1, False
     idx = chart_sample_indices(n, max_pts)
     out_ts = [timestamps[i] for i in idx]
     out_series = {k: [vals[i] for i in idx] for k, vals in series.items()}
     out_faults = {k: [flags[i] for i in idx] for k, flags in fault_plots.items()}
+    out_aux = {k: [vals[i] for i in idx] for k, vals in aux_series.items()}
     stride = max(1, n // max(len(idx) - 1, 1))
-    return out_ts, out_series, out_faults, stride, True
+    return out_ts, out_series, out_faults, out_aux, stride, True
 
 
 def chart_guides_from_rules(rules: list[dict[str, Any]]) -> dict[str, float | None]:
@@ -197,6 +213,8 @@ def read_plot_readings(
     limit: int = CHART_MAX_POINTS,
     include_faults: bool = True,
     rule_ids: list[str] | None = None,
+    rolling_avg_minutes: int | None = DEFAULT_ROLLING_AVG_MINUTES,
+    show_rolling_avg: bool = True,
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
     model_svc = ModelService()
@@ -228,8 +246,13 @@ def read_plot_readings(
             "chart_guides": {},
             "chart_stride": 1,
             "chart_truncated": False,
+            "aux_series": {},
+            "rolling_avg_minutes": normalize_rolling_avg_minutes(rolling_avg_minutes),
+            "rolling_avg_minutes_allowed": list(ROLLING_AVG_MINUTES_ALLOWED),
+            "show_rolling_avg": show_rolling_avg,
         }
 
+    roll_min = normalize_rolling_avg_minutes(rolling_avg_minutes)
     ts_col = df["timestamp"].astype(str).tolist() if "timestamp" in df.columns else [str(i) for i in range(len(df))]
     series: dict[str, list[float | None]] = {}
     use_cols = columns or _numeric_columns(df)
@@ -246,6 +269,10 @@ def read_plot_readings(
                 except (TypeError, ValueError):
                     vals.append(None)
         series[col] = vals
+
+    aux_series: dict[str, list[float | None]] = {}
+    if show_rolling_avg and roll_min > 0:
+        aux_series = build_rolling_aux_series(df, use_cols, kinds, minutes=roll_min)
 
     fault_plots: dict[str, list[int]] = {}
     fault_panels: list[dict[str, str]] = []
@@ -270,8 +297,8 @@ def read_plot_readings(
         chart_guides = chart_guides_from_rules(RuleStore().list_rules())
 
     n = len(ts_col)
-    ts_col, series, fault_plots, stride, truncated = downsample_aligned_plot(
-        n, CHART_MAX_POINTS, ts_col, series, fault_plots
+    ts_col, series, fault_plots, aux_series, stride, truncated = downsample_aligned_plot(
+        n, CHART_MAX_POINTS, ts_col, series, fault_plots, aux_series
     )
 
     _log.info(
@@ -297,6 +324,10 @@ def read_plot_readings(
         "chart_stride": stride,
         "chart_truncated": truncated,
         "row_count": n,
+        "aux_series": aux_series,
+        "rolling_avg_minutes": roll_min,
+        "rolling_avg_minutes_allowed": list(ROLLING_AVG_MINUTES_ALLOWED),
+        "show_rolling_avg": show_rolling_avg,
     }
 
 
