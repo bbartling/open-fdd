@@ -1,82 +1,71 @@
 ---
 title: Home
 nav_order: 1
-description: "Open-FDD: open_fdd.engine (YAML rules on pandas) and open_fdd.reports (fault summaries and charts). Published as open-fdd on PyPI."
+description: "Deploy Open-FDD on a building edge — Docker, Ansible, BACnet, Rule Lab, local check-engine AI."
 ---
 
 # Open-FDD
 
-The **`open-fdd`** PyPI package provides two main modules:
+Deploy a **building operator stack** on an edge VM or lab host (Acme, bensserver, field Pi): BACnet commission → feather historian → **Python Rule Lab** FDD → dashboard with a **check-engine light**.
 
-| Module | Role |
-|--------|------|
-| **`open_fdd.engine`** | Load YAML rules, map columns, run **`RuleRunner`** on a pandas `DataFrame` |
-| **`open_fdd.reports`** | Summarize fault episodes, plot flags, optional Word reports |
-
-**`open_fdd.schema`** holds pydantic result types the engine uses; you rarely import it directly.
-
-**Install:** `pip install "open-fdd[engine]"` — adds PyYAML and pydantic. Add **`[reports]`** for matplotlib plots. Bare wheel: `pip install open-fdd` (pandas only).
+The same repo also ships **`open-fdd` on PyPI** — a pandas YAML rules engine for offline CSV/notebook work. That library is documented in the back of this site under [Fault rules (engine)](rules/).
 
 ---
 
-## What it does
+## Start here
 
-- **Loads** rule definitions from YAML (bounds, flatline, hunting, expressions, schedules, weather gates, …).
-- **Maps** logical input names to DataFrame columns via **`column_map`** (dict, manifest, or resolver).
-- **Runs** checks and returns integer **`*_flag`** columns (`0` / `1`).
-- **Reports** (optional) — duration, episodes, charts, `.docx` with **`python-docx`**.
+| Step | Doc |
+|------|-----|
+| 1 | [Getting started](getting_started) — deploy checklist, **what AI can / cannot do**, BACnet NIC bind |
+| 2 | [System overview](overview) — containers, data flow, Acme-style topology |
+| 3 | [Docker edge deploy](edge_deploy_docker) — build images, Ansible `deploy.sh docker`, health |
+| 4 | [Local Ollama (check-engine)](local_ollama) — on-box AI vs your deployment AI |
+| 5 | [Operator dashboard](howto/operator_dashboard) — Rule Lab, trends, faults |
+| 6 | [BACnet driver capabilities](bacnet/capabilities) — discover, read, write, poll, mapping |
+| 7 | [Bridge HTTP API](appendix/bridge_api) — REST reference for integrators |
 
-Bring your own CSV or historian export. No database or field bus is required.
-
-**Brick labels in examples are optional.** Cookbook YAML often includes `brick:` on inputs; you can use plain logical names and `column_map={"SAT": "RTU_11_DA_T"}` instead.
-
-**Edge deployments** (feather historian, Rule Lab, BACnet, Ansible) are documented in [Getting started — edge architecture](getting_started#edge-architecture-feather-python-fdd-ansible) with the current stack diagram.
-
----
-
-## Quick start — engine
+**Quick local stack:**
 
 ```bash
-pip install "open-fdd[engine]"
+git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
+./scripts/docker_build.sh
+./scripts/openfdd_stack.sh up
+./scripts/stack_health_check.sh
 ```
 
-```python
-from open_fdd.engine import RuleRunner
-
-runner = RuleRunner(rules_path="path/to/rules")
-df_out = runner.run(df, column_map={"SAT": "supply_air_temp"})
-```
+Open `http://<host>/` (Caddy :80 → bridge :8765). Auth: `workspace/auth.env.local` (see [Security hardening](security_hardening)).
 
 ---
 
-## Quick start — reports
+## AI-assisted bootstrap
 
-```python
-from open_fdd.reports import get_fault_events, summarize_fault
+Works well with **Cursor**, **Claude Code**, or the repo **agent shell** (`openfdd.toml`, `skills/`, `AGENTS.md`). A deployment assistant can:
 
-events = get_fault_events(df_out, flag_col="flatline_flag")
-summary = summarize_fault(df_out, flag_col="flatline_flag", timestamp_col="timestamp")
-```
+- Run tests, build images, and drive Ansible from your laptop
+- Discover BACnet (Who-Is, point reads) when the OT NIC is bound correctly
+- Import inventory → **BRICK** `model.json`, wire `fdd_input` bindings, draft Rule Lab Python
+- Tune thresholds and explain fault episodes from feather + `fdd_results.json`
+
+It should **not** be treated as a substitute for locked-down production credentials, unchecked BACnet writes on live plant, or sign-off on life-safety interlocks. See the full checklist in [Getting started](getting_started).
 
 ---
 
-## Documentation
+## Distribution
 
-| Section | Description |
-|---------|-------------|
-| [Expression rule cookbook](expression_rule_cookbook) | **Primary reference** — expressions, gates, scaling |
-| [Engine API](api/engine) | `RuleRunner`, loaders, resolvers |
-| [Reports API](api/reports) | Summaries, plots, optional `.docx` |
-| [Getting started](getting_started) | Install extras, tests, examples |
-| [Rules overview](rules/overview) | Rule types and YAML structure |
-| [Column map resolvers](column_map_resolvers) | Manifests and composite maps |
-| [How-to guides](howto/index) | PyPI releases, verification, agent shell |
-| [Skills and agent shell](howto/skills_and_agent) | `openfdd.toml`, workspace, cron/wake (checkout) |
-| [BACnet toolshed](bacnet/index) | `bacnet_toolshed/` CLI on edge hosts |
-| [Appendix](appendix/index) | Technical reference, developer guide |
+| Channel | Status |
+|---------|--------|
+| **Git + Docker tar** | Today — `./scripts/docker_build.sh --save`, Ansible load on edge |
+| **PyPI** `open-fdd` | Coming soon |
+| **GHCR images** | Coming soon — [Publish Docker addons](howto/publish_docker_addons) |
+
+---
+
+## Inspiration
+
+Open-FDD’s packaging (supervisor, versioned container images, bind-mounted `workspace/` state on a thin host) is **inspired by** the [Home Assistant](https://www.home-assistant.io/) project and [Home Assistant OS](https://github.com/home-assistant/operating-system). This is an independent BACnet/FDD operator product, not a Home Assistant add-on.
 
 ---
 
 ## License
 
-MIT — see the repository **`LICENSE`** file.
+MIT — repository `LICENSE`.

@@ -1,32 +1,34 @@
 # Open-FDD OS (future)
 
-Thin Linux host image for edge BACnet buildings — modeled after [Home Assistant Operating System](https://github.com/home-assistant/operating-system).
+Thin Linux host image for edge BACnet buildings: read-only root, Docker engine, RAUC OTA.
 
-## Target architecture (HA OS analogue)
+## Layers (today vs planned)
 
-| Home Assistant | Open-FDD (this repo) | Status |
-|----------------|----------------------|--------|
-| HA OS (Buildroot) | **`os/`** — read-only root, Docker engine, RAUC OTA | **Planned** |
-| Home Assistant Supervisor | **`supervisor/`** — compose, addons manifest, health | **Today** (Ubuntu + Ansible) |
-| Home Assistant Core + Add-ons | **`docker/`** images + **`workspace/`** state | **Today** |
+| Layer | Repo | Today |
+|-------|------|--------|
+| Host OS | `os/` | Ubuntu 24.04 + Docker CE |
+| Supervisor | `supervisor/` | Compose + manifest |
+| Apps | `docker/` | bridge, commission, poll, mcp-rag |
+| State | `workspace/` | Bind-mounted on host |
+| Deploy | `infra/ansible/` | Image tar until OTA |
 
-The OS layer is intentionally **minimal**: boot, networking, Docker, and persistent `/var/openfdd`. All application logic lives in **published container images** managed by the supervisor.
+Application logic stays in **published container images**, not the OS image.
 
-## Repository layout
+## Layout
 
 ```text
 open-fdd/
-  os/              ← Buildroot / board support (future)
-  supervisor/      ← Addon manifest + compose contracts
-  docker/          ← Image build (Dockerfile targets)
-  workspace/       ← Bind-mounted state (feather, rules, model)
-  infra/ansible/   ← Pushes supervisor + images to field hosts (until OTA)
+  os/              ← Buildroot / board support (planned)
+  supervisor/      ← Addon manifest + compose
+  docker/          ← Image build
+  workspace/       ← Feather, rules, model
+  infra/ansible/   ← Field deploy
 ```
 
 ## Roadmap
 
-See [Documentation/roadmap.md](Documentation/roadmap.md).
+[Documentation/roadmap.md](Documentation/roadmap.md)
 
 ## Development today
 
-Use a normal Ubuntu 24.04 edge host (Acme VM, Pi) with Docker CE and `./infra/ansible/deploy.sh docker`. Do **not** depend on this directory for current deploys.
+Use Ubuntu edge hosts (Acme VM, bensserver, Pi) with `./infra/ansible/deploy.sh docker`. Do **not** depend on `os/` for current deploys. Docs: [Getting started](../docs/getting_started.md).

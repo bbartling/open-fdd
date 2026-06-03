@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -71,7 +73,13 @@ def _stack_services(body: str) -> list[dict[str, Any]]:
         return []
 
 
-def check_entry(base: str, *, require_mcp: bool = True, require_ollama: bool = False) -> dict[str, Any]:
+def check_entry(
+    base: str,
+    *,
+    require_mcp: bool = True,
+    require_ollama: bool = False,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Probe LAN entry: health, dashboard HTML, JS bundle, stack services."""
     out: dict[str, Any] = {"base": base, "errors": [], "warnings": []}
     health_url = f"{base.rstrip('/')}/health"
@@ -111,10 +119,13 @@ def check_entry(base: str, *, require_mcp: bool = True, require_ollama: bool = F
         out["errors"].append("no /assets/*.js in dashboard HTML")
 
     stack_url = f"{base.rstrip('/')}/health/stack"
-    status, body, _ = fetch(stack_url)
+    stack_headers = headers if headers else None
+    status, body, _ = fetch(stack_url, headers=stack_headers)
     out["stack_status"] = status
     out["stack_services"] = {}
-    if status != 200:
+    if status == 401 and out.get("auth_required"):
+        out["warnings"].append("/health/stack requires auth (probed after login in full check)")
+    elif status != 200:
         out["errors"].append(f"/health/stack HTTP {status}")
     else:
         services = _stack_services(body)
@@ -162,50 +173,163 @@ def check_login(base: str, username: str, password: str) -> dict[str, Any]:
     return out
 
 
-def check_model_api(base: str, token: str) -> dict[str, Any]:
-    """Authenticated BRICK / data-modeling API probes."""
-    out: dict[str, Any] = {"errors": []}
+def _min_model_points() -> int:
+    try:
+        return max(0, int(os.environ.get("OPENFDD_HEALTH_MIN_MODEL_POINTS", "1")))
+    except ValueError:
+        return 1
+
+
+def _min_model_equipment() -> int:
+    try:
+        return max(0, int(os.environ.get("OPENFDD_HEALTH_MIN_MODEL_EQUIPMENT", "0")))
+    except ValueError:
+        return 0
+
+
+def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
+    """BRICK data model health: JSON summary + SPARQL tree/graph over synced TTL."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
     headers = auth_headers(token)
-    tree_url = f"{base.rstrip('/')}/api/model/tree"
+    root = base.rstrip("/")
+    min_points = _min_model_points()
+    min_equipment = _min_model_equipment()
+
+    sites_url = f"{root}/api/model/sites"
+    status, body, _ = fetch(sites_url, headers=headers)
+    out["model_sites_status"] = status
+    site_id = ""
+    if status != 200:
+        out["errors"].append(f"/api/model/sites HTTP {status}")
+    else:
+        try:
+            sites_payload = json.loads(body)
+            site_id = str(sites_payload.get("active_site_id") or "").strip()
+            if not site_id:
+                sites = sites_payload.get("sites") or []
+                if sites and isinstance(sites[0], dict):
+                    site_id = str(sites[0].get("site_id") or "").strip()
+            out["active_site_id"] = site_id
+            if not site_id:
+                out["errors"].append("no active BRICK site_id from /api/model/sites")
+        except json.JSONDecodeError:
+            out["errors"].append("/api/model/sites not JSON")
+
+    health_url = f"{root}/api/model/health"
+    status, body, _ = fetch(health_url, headers=headers)
+    out["model_health_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/model/health HTTP {status}")
+    else:
+        try:
+            health = json.loads(body)
+            out["model_configured"] = health.get("configured")
+            out["model_health_score"] = health.get("score")
+            out["model_health_status_label"] = health.get("status")
+            out["ttl_exists"] = health.get("ttl_exists")
+            out["ttl_path"] = health.get("ttl_path")
+            counts = health.get("counts") or {}
+            if isinstance(counts, dict):
+                out["model_site_count"] = counts.get("sites")
+                out["model_equipment_count_json"] = counts.get("equipment")
+                out["model_point_count_json"] = counts.get("points")
+            if not health.get("ttl_exists"):
+                out["errors"].append(
+                    "data_model.ttl missing — import model.json then POST /api/model/sync-ttl"
+                )
+            if health.get("configured") is False:
+                out["errors"].append("BRICK model empty (no sites, equipment, or points in model.json)")
+            if str(health.get("status") or "") == "critical":
+                out["errors"].append(
+                    f"model health critical (score={health.get('score')}); fix orphans in Data Model tab"
+                )
+            critical_issues = [
+                i for i in (health.get("issues") or []) if isinstance(i, dict) and i.get("severity") == "critical"
+            ]
+            if critical_issues:
+                out["errors"].append(
+                    f"model has {len(critical_issues)} critical issue(s): {critical_issues[0].get('title', '')}"
+                )
+        except json.JSONDecodeError:
+            out["errors"].append("/api/model/health not JSON")
+
+    tree_url = f"{root}/api/model/tree"
     status, body, _ = fetch(tree_url, headers=headers)
     out["model_tree_status"] = status
     if status != 200:
-        out["errors"].append(f"/api/model/tree HTTP {status}")
-        return out
-    try:
-        payload = json.loads(body)
-        points = payload.get("points") or []
-        out["model_point_count"] = len(points)
-        engine = payload.get("query_engine") or ""
-        out["model_query_engine"] = engine
-        if engine != "sparql":
-            out["errors"].append(f"/api/model/tree query_engine={engine!r} (expected sparql)")
-        if len(points) < 1:
-            out["errors"].append("model tree has zero points")
-    except json.JSONDecodeError:
-        out["errors"].append("/api/model/tree not JSON")
-
-    graph_url = f"{base.rstrip('/')}/api/model/graph"
-    status, body, _ = fetch(graph_url, headers=headers)
-    out["model_graph_status"] = status
-    if status != 200:
-        out["errors"].append(f"/api/model/graph HTTP {status}")
+        detail = ""
+        if status == 503:
+            try:
+                detail = json.loads(body).get("detail", "")
+            except json.JSONDecodeError:
+                detail = body[:200]
+            if detail:
+                out["errors"].append(f"/api/model/tree HTTP 503: {detail}")
+            else:
+                out["errors"].append(f"/api/model/tree HTTP {status}")
+        else:
+            out["errors"].append(f"/api/model/tree HTTP {status}")
     else:
         try:
-            gpayload = json.loads(body)
-            if gpayload.get("query_engine") != "sparql":
+            payload = json.loads(body)
+            points = payload.get("points") or []
+            out["model_point_count"] = len(points)
+            out["model_equipment_count_tree"] = len(payload.get("equipment") or [])
+            engine = payload.get("query_engine") or ""
+            out["model_query_engine"] = engine
+            if engine != "sparql":
+                out["errors"].append(f"/api/model/tree query_engine={engine!r} (expected sparql)")
+            if len(points) < min_points:
                 out["errors"].append(
-                    f"/api/model/graph query_engine={gpayload.get('query_engine')!r} (expected sparql)"
+                    f"SPARQL model tree has {len(points)} point(s) (need >={min_points})"
                 )
         except json.JSONDecodeError:
-            out["errors"].append("/api/model/graph not JSON")
+            out["errors"].append("/api/model/tree not JSON")
 
-    sync_url = f"{base.rstrip('/')}/api/model/bacnet-sync"
-    status, body, _ = fetch(sync_url, headers=headers)
-    out["bacnet_sync_status"] = status
-    if status != 200:
-        out["errors"].append(f"/api/model/bacnet-sync HTTP {status}")
+    if site_id:
+        graph_qs = urllib.parse.urlencode({"site_id": site_id})
+        graph_url = f"{root}/api/model/graph?{graph_qs}"
+        status, body, _ = fetch(graph_url, headers=headers)
+        out["model_graph_status"] = status
+        if status != 200:
+            detail = ""
+            if status == 503:
+                try:
+                    detail = json.loads(body).get("detail", "")
+                except json.JSONDecodeError:
+                    detail = body[:200]
+                out["errors"].append(f"/api/model/graph HTTP 503: {detail or 'sync TTL'}")
+            else:
+                out["errors"].append(f"/api/model/graph HTTP {status}")
+        else:
+            try:
+                gpayload = json.loads(body)
+                if gpayload.get("query_engine") != "sparql":
+                    out["errors"].append(
+                        f"/api/model/graph query_engine={gpayload.get('query_engine')!r} (expected sparql)"
+                    )
+                equipment = gpayload.get("equipment") or []
+                out["model_equipment_count"] = len(equipment)
+                if len(equipment) < min_equipment:
+                    out["errors"].append(
+                        f"SPARQL site graph has {len(equipment)} equipment (need >={min_equipment})"
+                    )
+            except json.JSONDecodeError:
+                out["errors"].append("/api/model/graph not JSON")
+
+    if os.environ.get("OPENFDD_HEALTH_PROBE_BACNET_SYNC", "").strip().lower() in {"1", "true", "yes"}:
+        sync_url = f"{root}/api/model/bacnet-sync"
+        status, body, _ = fetch(sync_url, headers=headers)
+        out["bacnet_sync_status"] = status
+        if status != 200:
+            out["warnings"].append(f"/api/model/bacnet-sync HTTP {status} (optional probe)")
+
     return out
+
+
+def check_model_api(base: str, token: str) -> dict[str, Any]:
+    """Authenticated BRICK / data-modeling API probes (SPARQL + model health)."""
+    return check_model_sparql_health(base, token)
 
 
 def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) -> dict[str, Any]:
@@ -226,7 +350,7 @@ def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) ->
     except json.JSONDecodeError:
         out["errors"].append("/openfdd-agent/context not JSON")
 
-    ollama_url = f"{base.rstrip('/')}/api/agent/ollama/health"
+    ollama_url = f"{base.rstrip('/')}/openfdd-agent/ollama/health"
     status, body, _ = fetch(ollama_url, headers=headers)
     out["ollama_health_status"] = status
     if status == 200:
@@ -237,12 +361,40 @@ def check_agent_stack(base: str, token: str, *, require_ollama: bool = False) ->
             if require_ollama and not out.get("ollama_reachable"):
                 out["errors"].append(f"Ollama not reachable: {oh}")
         except json.JSONDecodeError:
-            out["errors"].append("/api/agent/ollama/health not JSON")
+            out["errors"].append("/openfdd-agent/ollama/health not JSON")
     elif require_ollama:
-        out["errors"].append(f"/api/agent/ollama/health HTTP {status}")
+        out["errors"].append(f"/openfdd-agent/ollama/health HTTP {status}")
     else:
         out["warnings"].append("Ollama not running on edge (expected on Pi 3 armv7l)")
 
+    return out
+
+
+def check_agent_chat(base: str, token: str, *, message: str | None = None) -> dict[str, Any]:
+    """POST agent chat — validates Ollama path; reply should mention MCP when enabled."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
+    headers = auth_headers(token)
+    msg = message or (
+        "In one sentence: is MCP RAG enabled on this bridge and what doc search URL would you use?"
+    )
+    url = f"{base.rstrip('/')}/openfdd-agent/chat"
+    status, body = post_json(url, {"message": msg, "history": []}, headers=headers, timeout=120.0)
+    out["chat_status"] = status
+    if status != 200:
+        out["errors"].append(f"/openfdd-agent/chat HTTP {status}: {body[:300]}")
+        return out
+    try:
+        payload = json.loads(body)
+        out["chat_ok"] = payload.get("ok")
+        out["chat_mode"] = payload.get("mode")
+        reply = str(payload.get("reply") or "").lower()
+        out["reply_preview"] = (payload.get("reply") or "")[:240]
+        if not payload.get("ok"):
+            out["errors"].append(f"chat failed: {payload.get('error') or body[:200]}")
+        elif "mcp" not in reply and "8090" not in reply and "search_docs" not in reply:
+            out["warnings"].append("chat reply did not mention MCP (Ollama may be down or model ignored context)")
+    except json.JSONDecodeError:
+        out["errors"].append("/openfdd-agent/chat not JSON")
     return out
 
 
@@ -260,11 +412,21 @@ def main() -> int:
         require_ollama = "--require-ollama" in args
         args = [a for a in args if not a.startswith("--require-")]
         base = args[0]
-        result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         if len(args) >= 3:
             login = check_login(base, args[1], args[2])
+            result: dict[str, Any] = {"errors": [], "warnings": []}
             result["login"] = login
             result["errors"].extend(login.get("errors", []))
+            auth_hdrs = auth_headers(login["token"]) if login.get("token") else None
+            entry = check_entry(
+                base,
+                require_mcp=require_mcp,
+                require_ollama=require_ollama,
+                headers=auth_hdrs,
+            )
+            result.update(entry)
+            result["errors"].extend(entry.get("errors", []))
+            result["warnings"].extend(entry.get("warnings", []))
             if login.get("token"):
                 model = check_model_api(base, login["token"])
                 result["model_api"] = model
@@ -273,6 +435,12 @@ def main() -> int:
                 result["agent"] = agent
                 result["errors"].extend(agent.get("errors", []))
                 result["warnings"].extend(agent.get("warnings", []))
+                chat = check_agent_chat(base, login["token"])
+                result["agent_chat"] = chat
+                result["errors"].extend(chat.get("errors", []))
+                result["warnings"].extend(chat.get("warnings", []))
+        else:
+            result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))
         return 0 if not result.get("errors") else 1
     print(f"unknown command: {cmd}", file=sys.stderr)

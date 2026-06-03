@@ -40,7 +40,13 @@ RULES_PY = DATA / "rules_py"
 
 
 def _read_rule_code(name: str) -> str:
-    return (RULES_PY / name).read_text(encoding="utf-8")
+    """Load rule source; inline bench_fdd_common when rules import it."""
+    main = (RULES_PY / name).read_text(encoding="utf-8")
+    if "bench_fdd_common" not in main:
+        return main
+    common = (RULES_PY / "bench_fdd_common.py").read_text(encoding="utf-8")
+    # Playground rules cannot import local modules — prepend shared helpers.
+    return common + "\n\n" + main.replace("from bench_fdd_common import hour_window_ready, window_rows_1h\n\n", "")
 
 
 BENCH_RULES: list[dict] = [

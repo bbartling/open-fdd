@@ -6,9 +6,9 @@ description: "Map Brick-style rule input names to DataFrame columns: dict, manif
 
 # Column map & resolvers
 
-YAML rules name their **`inputs`** with **logical keys**—often **Brick** class names (e.g. `Supply_Air_Temperature_Sensor`), but the same **`column_map`** mechanism supports **Haystack** refs, **DBO** types, **223P** / **`s223`** strings, or any custom key you put on the input dict. Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …). See [Expression rule cookbook — ontology labels](expression_rule_cookbook#ontology-labels).
+YAML rules name their **`inputs`** with **logical keys**—often **Brick** class names (e.g. `Supply_Air_Temperature_Sensor`), but the same **`column_map`** mechanism supports **Haystack** refs, **DBO** types, **223P** / **`s223`** strings, or any custom key you put on the input dict. Your **`pandas`** frame uses **your** column names (`sat`, `AHU1_SupplyTemp`, …). See [YAML expression cookbook — ontology labels](expression_rule_cookbook_yaml#ontology-labels).
 
-**`column_map`** is the bridge: `dict[str, str]` where each **key** is a **logical label** (Brick class, or a string from the rule’s optional **`haystack` / `dbo` / `s223` / `223p`** fields on that input), and each **value** is the **actual `DataFrame` column name**. `RuleRunner` tries those fields in order until one matches a map key; see [Expression Rule Cookbook](expression_rule_cookbook#ontology-labels).
+**`column_map`** is the bridge: `dict[str, str]` where each **key** is a **logical label** (Brick class, or a string from the rule’s optional **`haystack` / `dbo` / `s223` / `223p`** fields on that input), and each **value** is the **actual `DataFrame` column name**. `RuleRunner` tries those fields in order until one matches a map key; see [YAML expression cookbook](expression_rule_cookbook_yaml#ontology-labels).
 
 Pass it to **`RuleRunner.run(..., column_map=...)`**. You can build that dict by hand, load it from a manifest, or **merge** several sources with a composite resolver. Deriving the map from a Brick **`.ttl`** file with SPARQL is done in **your** services (typically with **rdflib** installed there), not inside the **`open-fdd`** wheel.
 

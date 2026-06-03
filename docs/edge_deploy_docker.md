@@ -1,3 +1,8 @@
+---
+title: Docker edge deploy
+nav_order: 5
+---
+
 # Docker edge deploy (Open-FDD)
 
 Run the bridge, BACnet commission, MCP RAG, and (optionally) BACnet poll as **containers**.  

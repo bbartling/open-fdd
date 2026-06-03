@@ -3,117 +3,153 @@ title: Getting Started
 nav_order: 3
 ---
 
-# Getting Started
+# Getting started
 
-Install **`open-fdd`**, run the engine test suite, and try **`open_fdd.reports`** in a notebook.
-
-For the **operator stack** (Rule Lab, BACnet, feather historian on a building VM or Pi), start with the architecture below, then [HA OS alignment](architecture/haos_alignment), [Operator dashboard](howto/operator_dashboard), [Edge deploy (secrets layout)](edge_deploy.md), and [Ansible README](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
+Use this page as a **deployment checklist** for a building edge (Acme-style VM or lab host). For library-only pandas/YAML work, jump to [Fault rules (engine)](rules/) at the end.
 
 ---
 
-## Edge architecture (feather, Python FDD, Ansible)
-
-On a **git checkout**, Open-FDD is more than the PyPI library: each building runs an **edge stack** you install and maintain with **Ansible**. The diagram is the current reference for how pieces connect.
-
-![Open-FDD edge stack — feather historian, Python FDD, Ansible deploy](assets/Open_FDD_Ansible.png)
-
-| Layer | What it is | Where it lives |
-|-------|------------|----------------|
-| **OS** (future) | Thin Buildroot host + Docker + OTA | `os/` — today Ubuntu + Docker CE |
-| **Supervisor** | Addon manifest, compose, health | `supervisor/` — dev: `./scripts/openfdd_stack.sh` |
-| **Apps** | Bridge, poll, commission, MCP images | `docker/` — `./scripts/docker_build.sh` |
-| **Ansible** | Push images + workspace to field hosts | `infra/ansible/` — `./deploy.sh docker` (primary) |
-| **BACnet poll** | RPM scrape → long CSV → feather wide frames | `openfdd-bacnet-poll`, `bacnet_toolshed/` |
-| **Feather store** | Site timeseries on disk (pyarrow); retention/GiB cap | `workspace/data/feather_store/` |
-| **Bridge API** | Auth, model, Rule Lab, plots, ingest, check-engine | `openfdd-bridge` (:8765, Caddy :80) |
-| **Python FDD** | Saved rules in `rules_py/`, batch loop, playground test | `open_fdd` + `workspace/api/openfdd_bridge/` |
-
-**Typical flow:** commission BACnet points → poll writes **samples.csv** → ingest compacts **feather** → operators edit **Python rules** in Rule Lab → scheduled **FDD loop** updates fault records → **Trend plot** reads the same feather data.
-
-**App maintenance (short list):**
-
-1. Build UI + tests: `./scripts/build_and_test.sh` (or `build_operator_dashboard.sh prod`).
-2. **Docker edge (recommended):** `./scripts/docker_build.sh --save`, then `cd infra/ansible && ./deploy.sh docker --limit <host>` — see [Edge deploy (Docker)](edge_deploy_docker.md).
-3. Local dev stack: `./scripts/openfdd_stack.sh up` (or `docker compose -f docker/compose.dev.yml up -d`).
-4. Logs on edge: `docker compose -f ~/open-fdd/docker-compose.yml logs -f bridge commission` (app containers). Host Caddy: `journalctl -u caddy -f`.
-5. Health: `curl -s http://127.0.0.1:8765/health` (poll status when commission is up).
-
-Legacy **systemd + rsync** (`./deploy.sh all`) remains for Pi/lab hosts without Docker — see [Ansible README](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
-
-Details: [Rule Lab storage](howto/rule_lab_storage), [Operator dashboard](howto/operator_dashboard), [infra/ansible/README.md](https://github.com/bbartling/open-fdd/blob/master/infra/ansible/README.md).
-
----
-
-## Install from PyPI
-
-```bash
-pip install "open-fdd[engine]"
-pip install "open-fdd[reports]"   # optional: matplotlib for plots
-pip install python-docx           # optional: Word reports only
-```
-
-Bare wheel (pandas only):
-
-```bash
-pip install open-fdd
-```
-
-Python **3.10+** is required.
-
----
-
-## Develop from a git checkout
+## 1. Clone, test, run locally
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git
 cd open-fdd
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -U pip
-pip install -e ".[dev]"
-python -c "from open_fdd.engine import RuleRunner; from open_fdd import reports; print('OK')"
+./scripts/build_and_test.sh          # UI + pytest (workspace bridge tests)
+./scripts/docker_build.sh
+./scripts/openfdd_stack.sh up        # or: docker compose -f docker/compose.dev.yml up -d
+./scripts/stack_health_check.sh
+```
+
+| Check | Command / URL |
+|-------|----------------|
+| Bridge up | `curl -s http://127.0.0.1:8765/health` |
+| Stack probe | `./scripts/stack_health_check.sh` |
+| Dashboard | `http://127.0.0.1/` (with Caddy) or `:8765` |
+| Auth | Copy `workspace/auth.env.local.example` → `auth.env.local` |
+
+---
+
+## 2. Docker containers (four apps)
+
+| Container | You need it when… |
+|-----------|-------------------|
+| **bridge** | Always — UI, API, Rule Lab, model, faults |
+| **commission** | BACnet discover/read/write on OT LAN |
+| **bacnet-poll** | Continuous historian (host network) |
+| **mcp-rag** | Deployment AI doc search (optional) |
+
+Details: [System overview](overview). Production push: [Edge deploy (Docker)](edge_deploy_docker).
+
+```bash
+./scripts/docker_build.sh --save
+cd infra/ansible && ./deploy.sh docker --limit acme_vm_bbartling
+./deploy.sh ops --limit acme_vm_bbartling    # sync TTL, SPARQL probe, feather check
+```
+
+---
+
+## 3. BACnet lab bind (see devices on OT NIC)
+
+Commission and poll use **BACpypes** with a bind address from env. For bensserver MSTP bench, copy/adjust:
+
+`workspace/bacnet/commissioning/commission.env`:
+
+```bash
+BACNET_BIND=192.168.204.18/24:47808   # your OT interface IP + UDP 47808
+BACNET_INSTANCE=599999
+DISCOVER_LOW=5007
+DISCOVER_HIGH=5007
+DISCOVER_TIMEOUT=30
+```
+
+Bring up bench overlay:
+
+```bash
+docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml up -d
+./scripts/setup_local_testbench.sh     # discover → model → seed rules
+```
+
+**Test discovery from bridge** (auth token required in prod): `POST /api/bacnet/whois`, `POST /api/bacnet/discover`, then `POST /api/bacnet/import-to-model`. Wrong `BACNET_BIND` → zero I-Am responses (fix NIC/IP before blaming rules).
+
+Field Acme uses Ansible `commission.env.j2` — do not copy lab `commission.env` to production.
+
+---
+
+## 4. AI-assisted deployment — what works / what does not
+
+Use **Cursor**, **Claude**, or `openfdd-agent-shell` with repo `skills/` and `AGENTS.md`. Treat the model as a **commissioning partner**, not an autonomous operator.
+
+### AI can help with
+
+| Area | Examples |
+|------|----------|
+| **Repo / CI** | `pytest`, `build_and_test.sh`, Dockerfile fixes, Ansible playbook edits |
+| **BACnet discovery** | Who-Is interpretation, `points.csv` cleanup, bind troubleshooting *when* OT network is reachable from the edge host |
+| **BRICK modeling** | Import rows → equipment/points, `fdd_input` suggestions, SPARQL tree sanity |
+| **Rule Lab (Python)** | Draft `evaluate()` rules, flatline/spread/OOB patterns, `fault_code` from catalog |
+| **FDD tuning** | Threshold params in rule `config`, explain spread episodes from feather samples |
+| **Deploy** | `deploy.sh docker`, `stack_health_check.sh`, journal/compose log triage |
+| **Docs / skills** | Keep `skills/*.md` aligned with working paths in `workspace/` |
+
+### AI cannot replace
+
+| Area | Why |
+|------|-----|
+| **Physical OT access** | VLANs, BBMD, router MSTP port, firewall 47808 — must be correct on site |
+| **Safety sign-off** | Writes to live plant, overrides, interlocks — human + RBAC |
+| **Secrets** | `auth.env.local`, SSH, API keys — never commit; model must not invent credentials |
+| **Guaranteed discovery** | If bind/NIC is wrong, no amount of prompting finds devices |
+| **Regulatory compliance** | Your AHJ / customer MOP for overrides and alarms |
+
+### Two different AIs
+
+| | **Deployment AI** (Cursor / Claude / MCP) | **Local Ollama** (on edge) |
+|--|-------------------------------------------|----------------------------|
+| **Purpose** | Build, deploy, model, write rules, debug stack | **Check-engine light** copy + short building insight |
+| **Reach** | Full repo, Ansible, tests, many bridge tools via MCP | Curated context: faults, trends, catalog codes — [Local Ollama](local_ollama) |
+| **Runs where** | Your laptop / CI | Acme GPU host or compose sidecar |
+
+---
+
+## 5. Operator workflow (after stack is healthy)
+
+1. **Commission** BACnet → `points.csv` / inventory APIs.
+2. **Import model** → BRICK TTL + `model.json`; `POST /api/model/sync-ttl`.
+3. **Bind rules** — `fdd_input` per point; save Python in Rule Lab → `rules_py/`.
+4. **Run batch** — `POST /api/rules/batch` or host timer; watch **Faults** / check-engine.
+5. **Tune** — adjust `config` thresholds; re-test in Rule Lab playground.
+
+Guides: [Operator dashboard](howto/operator_dashboard), [Rule Lab storage](howto/rule_lab_storage), [Skills and agent shell](howto/skills_and_agent).
+
+---
+
+## 6. Expression / rule references
+
+| Style | Where |
+|-------|--------|
+| **Python** (production edge) | [Expression cookbook (Python / Rule Lab)](expression_rule_cookbook_python) |
+| **YAML** (PyPI engine / CSV) | [Expression cookbook (YAML / pandas)](expression_rule_cookbook_yaml) |
+
+---
+
+## PyPI engine only (back of the book)
+
+```bash
+pip install "open-fdd[engine]"
 pytest open_fdd/tests/engine
 ```
 
-Optional **agent shell** (not on PyPI): `pip install -e packages/openfdd-agent-shell`, copy `openfdd.toml.example` → `openfdd.toml`, then see **[Skills and agent shell](howto/skills_and_agent)**.
-
----
-
-## Minimal engine + reports
-
-```python
-from open_fdd.engine import RuleRunner
-from open_fdd.reports import summarize_fault, get_fault_events
-
-runner = RuleRunner(rules_path="path/to/rules")
-df_out = runner.run(df, column_map={"SAT": "supply_air_temp"})
-
-flag = "my_rule_flag"
-events = get_fault_events(df_out, flag_col=flag)
-summary = summarize_fault(df_out, flag_col=flag, timestamp_col="timestamp")
-```
-
-Use any **`column_map`** keys you choose; example rules under **`examples/`** may use optional **`brick:`** fields — see [Column map resolvers](column_map_resolvers).
-
----
-
-## Examples
-
-See **`examples/README.md`** for CSV demos and notebooks.
+- [Rules overview](rules/overview)
+- [Engine API](api/engine)
+- [Standalone CSV + pandas](standalone_csv_pandas)
 
 ---
 
 ## Where to read next
 
-- [Expression rule cookbook](expression_rule_cookbook)
-- [Engine API](api/engine)
-- [Reports API](api/reports)
-- [Rules overview](rules/overview)
-- [Column map resolvers](column_map_resolvers)
-- [How-to: engine-only IoT](howto/engine_only_iot)
-- [Operator dashboard](howto/operator_dashboard) — `./scripts/openfdd_stack.sh up`, production React + Caddy
-- [Edge deploy (Docker)](edge_deploy_docker)
-- [Skills and agent shell](howto/skills_and_agent) — `openfdd.toml`, workspace, Codex (checkout only)
-- [BACnet toolshed](bacnet/index) — discovery and polling CLI (`bacnet_toolshed/`)
-- [Verification](howto/verification)
-- [Contributing](contributing)
+- [System overview](overview)
+- [Docker edge deploy](edge_deploy_docker)
+- [BACnet driver capabilities](bacnet/capabilities)
+- [Local Ollama](local_ollama)
+- [Security hardening](security_hardening)
+- [Bridge HTTP API](appendix/bridge_api)

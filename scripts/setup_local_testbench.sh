@@ -136,6 +136,9 @@ if [[ "$NO_DOCKER" == 0 ]]; then
   docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
   sleep 8
   ./scripts/openfdd_stack.sh health || true
+  if [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
+    OPENFDD_BASE_URL=http://127.0.0.1:8765 "${ROOT}/scripts/stack_health_check.sh" || true
+  fi
 fi
 
 echo "==> Operational verify (localhost)"

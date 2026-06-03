@@ -1,6 +1,6 @@
 # Open-FDD Supervisor
 
-Orchestrates **Docker addons** on an edge host — the [Home Assistant Supervisor](https://github.com/home-assistant/supervisor) analogue.
+Orchestrates **Docker addons** on an edge host (manifest, compose, health).
 
 ## Responsibilities
 

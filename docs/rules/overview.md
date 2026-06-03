@@ -8,7 +8,7 @@ nav_order: 1
 
 Fault rules are **YAML-defined** checks run against **pandas** `DataFrame`s. Each rule produces integer fault flag columns (`0` / `1`, and related outputs) via **`RuleRunner`**.
 
-Each rule declares **logical input names** in YAML. You supply a **`column_map`** from those names (or optional ontology keys like **Brick** class labels) to your DataFrame columns. See [Column map resolvers](../column_map_resolvers) and the [Expression rule cookbook](../expression_rule_cookbook).
+Each rule declares **logical input names** in YAML. You supply a **`column_map`** from those names (or optional ontology keys like **Brick** class labels) to your DataFrame columns. See [Column map resolvers](../column_map_resolvers) and the [YAML expression cookbook](../expression_rule_cookbook_yaml).
 
 ---
 
@@ -16,7 +16,7 @@ Each rule declares **logical input names** in YAML. You supply a **`column_map`*
 
 Keep rule YAML in a **single directory** (for example `my_rules/`) or pass parsed dicts to **`RuleRunner(rules=[...])`**. Example snippets live under **`examples/`** and **`open_fdd/tests/fixtures/rules/`** in this repository.
 
-See the [Expression rule cookbook](../expression_rule_cookbook) to add or adapt rules. For how YAML becomes pandas operations, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
+See the [YAML expression cookbook](../expression_rule_cookbook_yaml) to add or adapt rules. For how YAML becomes pandas operations, see [YAML rules → Pandas (under the hood)](pandas_yaml_dataframes).
 
 ---
 
@@ -37,7 +37,7 @@ See the [Expression rule cookbook](../expression_rule_cookbook) to add or adapt 
 | `oa_fraction` | OA fraction vs design airflow error |
 | `erv_efficiency` | ERV effectiveness out of range |
 
-These six values are the built-in `type` values in the engine. **Occupied-hours and weather gating are not separate rule types**; they are optional masks injected for `type: expression` rules (`schedule_occupied`, `weather_allows_fdd`). See the [Expression rule cookbook](../expression_rule_cookbook#occupied-hours-and-weather-gating-expressions).
+These six values are the built-in `type` values in the engine. **Occupied-hours and weather gating are not separate rule types**; they are optional masks injected for `type: expression` rules (`schedule_occupied`, `weather_allows_fdd`). See the [YAML expression cookbook](../expression_rule_cookbook_yaml#occupied-hours-and-weather-gating-expressions).
 
 ---
 
@@ -84,4 +84,4 @@ Downstream analytics often combine **fault flags** from **`RuleRunner`** with **
 
 ## Cookbook
 
-See [Expression rule cookbook](../expression_rule_cookbook) for AHU, chiller, weather, and advanced recipes.
+See [YAML expression cookbook](../expression_rule_cookbook_yaml) and `examples/AHU/rules/` for GL36-style recipes.

@@ -1,5 +1,5 @@
 # Manual GHCR publish for Open-FDD addon images (supervisor/apps layer).
-# Mirrors HA OS artifact workflow — triggered when cutting an edge release.
+# Manual edge image publish — triggered when cutting a release.
 name: Publish Docker addons
 
 on:

@@ -1,11 +1,11 @@
 ---
-title: Modular Architecture
-nav_order: 4
+title: Modular Architecture (PyPI)
+nav_order: 56
 ---
 
-# Modular architecture
+# Modular architecture (PyPI)
 
-The **`open_fdd`** package is a small library: **rules on pandas**, optional **reporting**.
+The **`open_fdd`** package is a small library: **rules on pandas**, optional **reporting**. For edge deploy, see [System overview](overview) and [Getting started](getting_started).
 
 ---
 
@@ -44,5 +44,5 @@ After **`RuleRunner.run`**, use **`open_fdd.reports`** for:
 
 - [Engine API](api/engine)
 - [Reports API](api/reports)
-- [Expression rule cookbook](expression_rule_cookbook)
+- [YAML expression cookbook](expression_rule_cookbook_yaml)
 - [Column map resolvers](column_map_resolvers)

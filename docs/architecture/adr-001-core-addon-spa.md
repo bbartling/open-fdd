@@ -4,54 +4,33 @@ nav_order: 5
 parent: Getting Started
 ---
 
-# ADR 001 — Operator dashboard stays in the bridge core addon
+# ADR 001 — Core addon serves compiled SPA
 
-**Status:** Accepted  
-**Date:** 2026-06-02  
-**Context:** Docker-first edge deploy; question whether to split React UI into a separate `openfdd-dashboard` container.
+**Status:** Accepted
+
+## Context
+
+The operator UI is a Vite/React SPA. We could split a static `openfdd-dashboard` image or serve the SPA from Caddy on the host.
 
 ## Decision
 
-Keep the **compiled React SPA** baked into the **`openfdd-bridge` image** and served by FastAPI at runtime (same pattern as Home Assistant Core: one core container with UI + API).
-
-Production always uses **Vite build output** (`workspace/api/static/app/`), never the Vite dev server on edge hosts.
-
-## Rationale
-
-| Factor | Core addon (chosen) | Separate dashboard container |
-|--------|---------------------|------------------------------|
-| HA OS alignment | Matches HA Core (UI + backend together) | Organizational only; not required for Buildroot/supervisor/OTA |
-| Operations | One health check, one loopback upstream via Caddy | Two services + path-based Caddy routing |
-| Same-origin | Browser hits `/` and `/api/*` on one upstream | Requires careful ingress split |
-| Security | Acceptable with loopback bind + auth on `/api/*` | Slightly smaller API route table; modest gain |
-| Release cadence | UI change rebuilds bridge image | Independent UI image updates |
-
-HA-at-scale readiness comes from **supervisor manifest**, **pinned images**, **host ingress (Caddy)**, and **persistent workspace bind-mounts** — not from splitting static file serving.
-
-Future **GPU/Ollama** workloads remain separate addons (`ollama`, `mcp-rag`); they do not depend on where static JS is served.
+Keep the **compiled React SPA** baked into the **`openfdd-bridge` image** and served by FastAPI at runtime (one container: UI + API).
 
 ## Consequences
 
-- `docker/Dockerfile` retains `dashboard` → `bridge` multi-stage build.
-- [`supervisor/manifest.yaml`](../../supervisor/manifest.yaml) lists `bridge` as `role: core` (includes SPA).
-- Hashed assets under `/assets/*` use long-lived `Cache-Control` (see bridge static mount).
-- `index.html` and SPA routes are not long-cached (client routing + deploy updates).
+| Pro | Con |
+|-----|-----|
+| Single image to version and health-check | UI rebuild requires bridge image rebuild |
+| Same auth/CORS/session as API | Larger bridge image |
+| Matches current Acme/bensserver deploy | Separate dashboard image deferred |
 
-## Deferred: `openfdd-dashboard` addon
+## Alternatives considered
 
-Revisit a dedicated nginx static container **only if**:
-
-1. UI releases much faster than bridge API (independent rollouts needed).
-2. Bridge image size on ARM edge hardware becomes painful.
-3. Supervisor productization requires a visible Dashboard addon in the manifest.
-4. Policy requires the API process to expose zero non-API HTTP routes.
-
-If implemented later: nginx container on loopback `:8080`, Caddy routes `/api/*` and `/health` → bridge, all other paths → dashboard; see evaluation notes in project planning docs.
+- **Sidecar static image** — extra compose service; only worth it if UI release cadence diverges from API.
+- **Host Caddy `file_server`** — splits cache headers and deploy paths.
 
 ## References
 
-- [HA OS alignment](haos_alignment.md)
-- [Operator dashboard](../howto/operator_dashboard.md)
-- [Edge deploy (Docker)](../edge_deploy_docker.md)
-- Build: [`docker/Dockerfile`](../../docker/Dockerfile), [`scripts/build_operator_dashboard.sh`](../../scripts/build_operator_dashboard.sh)
-- Serve: [`workspace/api/openfdd_bridge/main.py`](../../workspace/api/openfdd_bridge/main.py)
+- [Edge stack layout](edge_stack)
+- `workspace/api/openfdd_bridge/main.py` — SPA fallback routes
+- `scripts/build_operator_dashboard.sh`

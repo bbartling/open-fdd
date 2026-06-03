@@ -6,9 +6,7 @@ nav_order: 4
 
 # Building check-engine light
 
-The building has one **GREEN / YELLOW / RED** light on the home dashboard, like a
-car. A tree underneath breaks faults down by equipment. The local Ollama agent
-drives the light but uses a **fixed** code list — it never invents codes.
+The building has one **GREEN / YELLOW / RED** light on the home dashboard. A tree underneath breaks faults down by equipment. **Local Ollama** explains the light using a **fixed** code list — it never invents codes. See [Local Ollama](../local_ollama).
 
 ## Fixed fault codes
 

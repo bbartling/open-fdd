@@ -6,10 +6,14 @@ has_children: true
 
 # Appendix
 
-Technical deep dives and maintainer reference material.
+Integrator and maintainer reference.
 
 | Page | Description |
 |------|-------------|
-| [API Reference](api_reference) | [Engine API](../api/engine) and [Reports API](../api/reports). |
-| [Technical reference](technical_reference) | Repository layout, tests, and maintainer notes. |
-| [Developer guide](developer_guide) | Contributing workflow for the `open_fdd` package. |
+| [Operator Bridge API](bridge_api) | REST routes (auth, BACnet, rules, faults, agent) |
+| [BACnet driver capabilities](../bacnet/capabilities) | What discovery, read, write, poll, and mapping cover |
+| [API reference (index)](api_reference) | Bridge vs PyPI engine |
+| [Engine API](../api/engine) | `RuleRunner`, YAML loaders |
+| [Reports API](../api/reports) | Summaries, plots, `.docx` |
+| [Technical reference](technical_reference) | Repo layout, tests |
+| [Developer guide](developer_guide) | Contributing to `open_fdd` |

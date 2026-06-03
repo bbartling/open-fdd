@@ -111,9 +111,10 @@ sys.exit(0 if m.get("configured") and m.get("status") in ("green","yellow") else
   log_ok "MCP RAG enabled and healthy (via /health/stack)"
 fi
 
-if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 and d.get("model_query_engine")=="sparql" else 1)'; then
+if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_health_status")==200 and d.get("ttl_exists") and d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 and d.get("model_query_engine")=="sparql" else 1)'; then
   pts="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("model_api",{}).get("model_point_count",0))')"
-  log_ok "Data modeling API /api/model/tree (${pts} points, SPARQL)"
+  score="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("model_api",{}).get("model_health_score",""))')"
+  log_ok "BRICK model health + SPARQL tree (${pts} points, score=${score})"
 fi
 
 if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("agent",{}); sys.exit(0 if d.get("agent_context_status")==200 and d.get("mcp_enabled_in_context") else 1)'; then
