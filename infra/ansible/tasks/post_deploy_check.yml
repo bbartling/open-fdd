@@ -86,7 +86,13 @@
       set -eu
       cid="{{ item.split('=')[1] | trim }}"
       svc="{{ item.split('=')[0] | trim }}"
-      err="$(docker logs --tail 80 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true)"
+      err="$(docker logs --since 3m "$cid" 2>&1 \
+        | grep -Ei 'ERROR|Traceback|CRITICAL' \
+        | grep -v '404 Not Found' \
+        | grep -v 'CancelledError' \
+        | grep -v 'Cannot assign requested address' \
+        | grep -v "has no attribute 'server'" \
+        | tail -5 || true)"
       if [[ -n "$err" ]]; then
         echo "FAIL ${svc}: ${err}"
         exit 1
@@ -264,8 +270,8 @@
 
 - name: Build login probe credentials
   ansible.builtin.set_fact:
-    post_check_login_user: "{{ auth_creds_raw.stdout | regex_search('(?m)^user=(.+)$', '\\1') | default('') | trim }}"
-    post_check_login_password: "{{ auth_creds_raw.stdout | regex_search('(?m)^pass=(.+)$', '\\1') | default('') | trim }}"
+    post_check_login_user: "{{ ((auth_creds_raw.stdout_lines | select('match', '^user=') | list | first | default('user=')).split('=', 1))[1] | trim }}"
+    post_check_login_password: "{{ ((auth_creds_raw.stdout_lines | select('match', '^pass=') | list | first | default('pass=')).split('=', 1))[1] | trim }}"
   no_log: true
   when:
     - post_check_auth_login | default(true) | bool

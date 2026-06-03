@@ -40,31 +40,55 @@ Run from **`infra/ansible/`** (not repo root). It wraps `./deploy.sh`:
 
 Rule Lab / Plot default to **`demo`** on the bench. A **503** on `/api/model/scope?site_id=acme` means TTL was never synced for Acme on this host — use the correct site or run **Sync TTL** on the Data Model tab.
 
-## Acme VM deploy (recommended sequence)
+## Acme VM deploy (bensserver → VM)
 
-Run from **repo root** for backup; run **deploy** from `infra/ansible/`.
+Bensserver is the dev source of truth: **commit/push to GitHub when you want a backup on GitHub**; the VM deploy uses **local files on bensserver**, not `git pull` on the server (unless you edited on another machine).
+
+### Full refresh (images + site pack + TTL/SPARQL probes) — **use this most of the time**
 
 ```bash
 cd ~/open-fdd
 ./scripts/docker_build.sh --save
-./scripts/edge_site_backup.sh acme vm-bbartling    # local pack snapshot (not ./scripts/ under ansible/)
+./scripts/edge_site_backup.sh acme vm-bbartling   # repo root — snapshots edge pack before push
 
 cd infra/ansible
 set -a && source secrets/acme.env.local && set +a
 
-# One shot: images + compose + site model/rules/points + maintenance + TTL/SPARQL probes
 ./deploy.sh ops --limit acme_vm_bbartling \
   -e openfdd_docker_sync_workspace_data=false
-
-# Or stepwise (what you ran):
-# ./deploy.sh maintain --limit acme_vm_bbartling
-# ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_sync_workspace_data=false
-# ./deploy.sh check --limit acme_vm_bbartling    # insurance only (after docker is up)
 ```
 
-`openfdd_docker_sync_workspace_data=false` keeps the VM’s **feather_store** and does not overwrite with bensserver `workspace/data`. The docker playbook still pushes **Acme** `model.json`, `rules_store.json`, and `points.csv` from `edge_backup/local/acme/vm-bbartling/` (or `edge_config/acme/`).
+**`ops`** = `deploy_docker` (load images, compose up, push Acme `model.json` / `rules_store.json` / `points.csv` / `commission.env`) + edge maintenance + **POST /api/model/sync-ttl** + SPARQL/feather/log checks.
 
-If `maintain` failed on “Illegal option -o pipefail”, pull latest `develop` (remote shell tasks use module `executable: /bin/bash`, not `/bin/sh`) and re-run `./deploy.sh check --limit acme_vm_bbartling`.
+`openfdd_docker_sync_workspace_data=false` keeps the VM **feather_store**; it does **not** skip the Acme site pack — that still comes from `edge_backup/local/acme/vm-bbartling/`.
+
+### Stack already up after a partial deploy — verify only
+
+```bash
+cd ~/open-fdd/infra/ansible
+set -a && source secrets/acme.env.local && set +a
+./deploy.sh check --limit acme_vm_bbartling
+```
+
+### Do **not** chain these after a full `docker` or `ops` (redundant)
+
+| Step | Why skip |
+|------|----------|
+| `maintain` then `docker` then `ops` | `ops` already runs `deploy_docker` + maintenance |
+| `commission` after `docker` / `ops` | `docker` already pushes `points.csv` (commission tag) |
+| `docker` then `ops` | Runs the full image deploy **twice** |
+
+Use **either** `docker` **or** `ops`, not both. Prefer **`ops`** when you want TTL sync and health probes in one go.
+
+### Piecemeal (only when you mean it)
+
+| Command | When |
+|---------|------|
+| `maintain` | Disk prune only; ends with `check` if verify enabled |
+| `docker -e openfdd_docker_sync_workspace_data=false` | New images + compose + site pack, no bensserver `workspace/data` tar |
+| `commission` | **Only** `points.csv` from edge backup (no image rebuild) |
+| `check` | Insurance probes only (Caddy, compose, login, dashboard HTML) |
+| `ui` | Dashboard static only (run `build_operator_dashboard.sh prod` first) |
 
 ## Docs
 
