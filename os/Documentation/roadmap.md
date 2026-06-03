@@ -1,6 +1,6 @@
 # Open-FDD OS roadmap
 
-Aligned with [Home Assistant OS](https://github.com/home-assistant/operating-system) principles:
+Design principles:
 
 - **Lightweight** — no desktop distribution; Buildroot LTS kernel only
 - **Docker-first** — container engine is the only app runtime

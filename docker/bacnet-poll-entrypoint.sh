@@ -2,6 +2,12 @@
 # BACnet poll driver — reads commission.env on the mounted workspace volume.
 set -euo pipefail
 
+WS="${OPENFDD_WORKSPACE_DIR:-/var/openfdd/workspace}"
+if [[ -d "$WS/bacnet" ]]; then
+  chown -R "$(stat -c '%u:%g' "$WS" 2>/dev/null || echo '1000:1000')" "$WS/bacnet" 2>/dev/null || \
+    chown -R 1000:1000 "$WS/bacnet" 2>/dev/null || true
+fi
+
 ENV_FILE="${COMMISSION_ENV:-/var/openfdd/workspace/bacnet/commissioning/commission.env}"
 POINTS="${POINTS_CSV:-/var/openfdd/workspace/bacnet/commissioning/points.csv}"
 OUTPUT="${POLLS_CSV:-/var/openfdd/workspace/bacnet/polls/samples.csv}"

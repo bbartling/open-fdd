@@ -123,7 +123,7 @@ Python rules for **Rule Lab** live under **`workspace/data/rules_py/`** with met
 
 Expression and YAML semantics for the **library** (`pip install "open-fdd[engine]"`) are unchanged. **`RuleRunner.run`** adds **integer** fault flag columns (`0` / `1`), not booleans—treat them as ints in pandas and downstream code. Missing input columns **fail** the run by default; per-rule `skip_missing_columns: true` skips checks for absent columns.
 
-Start with the **[Expression rule cookbook](../expression_rule_cookbook)** and **[Rules overview](../rules/overview)** for YAML/library work.
+For edge Python rules: **[Python expression cookbook](../expression_rule_cookbook_python)**. For PyPI YAML: **[YAML cookbook](../expression_rule_cookbook_yaml)** and **[Rules overview](../rules/overview)**.
 
 ## Tests (CI)
 

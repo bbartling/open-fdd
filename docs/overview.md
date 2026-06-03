@@ -5,38 +5,64 @@ nav_order: 2
 
 # System overview
 
-**Open-FDD** (PyPI **`open-fdd`**, import **`open_fdd`**) runs **YAML fault rules** on **pandas** `DataFrame`s.
+Open-FDD on a **git checkout** is an **edge operator product**: four application containers, host Caddy, optional host Ollama, and Ansible deploys like **Acme** and **bensserver**.
 
-On a **git checkout**, the same repo adds an **edge operator stack**: BACnet polling, a local **feather** historian, Python **Rule Lab** rules, and **Ansible** deploys to building VMs. See [Getting started — edge architecture](getting_started#edge-architecture-feather-python-fdd-ansible) for the current diagram and maintenance notes.
-
----
-
-## Package layout
-
-| Module | Purpose |
-|--------|---------|
-| **`open_fdd.engine`** | **`RuleRunner`**, rule loading, checks, **`column_map`** resolvers |
-| **`open_fdd.reports`** | Fault summaries, episode analysis, plots, optional Word export |
-| **`open_fdd.schema`** | Canonical fault result/event models (used by the engine) |
-
-Install **`open-fdd[engine]`** for rule execution; add **`open-fdd[reports]`** for matplotlib-based plots.
+![Open-FDD edge stack](assets/Open_FDD_Ansible.png)
 
 ---
 
-## Data flow
+## Containers (what runs where)
 
-1. **Your pipeline** builds a time-indexed `DataFrame`.
-2. **`column_map`** maps rule input names to column names (optional Brick/Haystack keys in YAML are conventions, not required).
-3. **`RuleRunner.run`** returns the DataFrame with **`*_flag`** columns.
-4. **`open_fdd.reports`** (optional) summarizes episodes and produces charts or `.docx` reports.
+| Image | Port / network | Role |
+|-------|----------------|------|
+| **`openfdd-bridge`** | `8765` (published) | FastAPI + React SPA: auth, model, Rule Lab API, plots, check-engine, agent routes |
+| **`openfdd-commission`** | `8767` | BACnet commission agent (Who-Is, read/write jobs) — talks to field devices |
+| **`openfdd-bacnet-poll`** | `network_mode: host` | RPM poll driver → `samples.csv` → feather ingest |
+| **`openfdd-mcp-rag`** | `8090` | Doc/skill retrieval for deployment AI (optional) |
+| **`ollama/ollama`** | `11434` (optional) | Local LLM for **check-engine** narrative only — see [Local Ollama](local_ollama) |
 
-There is no bundled database, HTTP service, or message bus.
+**On the host (not in app images):** **Caddy** `:80` → bridge; optional **host Ollama** for GPU; **systemd timers** for FDD batch + feather retention (`docker compose exec bridge …`).
+
+**State** lives under **`workspace/`** (bind-mounted): `data/feather_store/`, `data/rules_py/`, `data/model.json`, `bacnet/`, `auth.env.local`.
 
 ---
 
-## Related topics
+## Data flow (one building)
 
-- [Modular architecture](modular_architecture)
-- [Expression rule cookbook](expression_rule_cookbook)
-- [Engine API](api/engine)
-- [Reports API](api/reports)
+```text
+BACnet devices
+    → commission (discover / points.csv)
+    → poll (host-network driver)
+    → ingest → feather wide frames (Apache Arrow IPC — see [Arrow data plane](architecture/arrow_data_plane))
+    → Rule Lab Python rules (batch / timer)
+    → fdd_results.json + check-engine (GREEN/YELLOW/RED)
+    → dashboard + optional local Ollama summary
+```
+
+**BRICK model:** `workspace/data/data_model.ttl` synced from BACnet; bridge exposes SPARQL tree/graph APIs. Rules bind logical inputs via `rules_store.json` + model `fdd_input` keys.
+
+---
+
+## Deploy paths
+
+| Path | When |
+|------|------|
+| **Docker + Ansible** (recommended) | Acme VM, production edges — [Edge deploy (Docker)](edge_deploy_docker) |
+| **Local dev stack** | Laptop/server — `./scripts/openfdd_stack.sh up` |
+| **MSTP lab overlay** | `compose.bench.yml` + `workspace/bacnet/commissioning/commission.env` NIC bind |
+| **Legacy systemd + rsync** | Pi without Docker — Ansible `deploy.sh all` |
+
+---
+
+## PyPI library (secondary)
+
+`pip install "open-fdd[engine]"` runs **YAML** rules on pandas DataFrames only — no BACnet, no bridge. Use when exporting historian CSVs offline. See [Fault rules (engine)](rules/) and [Expression cookbook (YAML / pandas)](expression_rule_cookbook_yaml).
+
+---
+
+## Related
+
+- [Getting started](getting_started)
+- [Arrow data plane](architecture/arrow_data_plane) — historian: built on Arrow vs not
+- [Edge stack layout](architecture/edge_stack)
+- [Bridge API](appendix/bridge_api)

@@ -16,6 +16,8 @@ _SECRET = os.environ.get("OFDD_AUTH_SECRET", "").strip()
 
 ROLES: tuple[Role, ...] = ("operator", "integrator", "agent")
 
+_DEV_USER = {"sub": "dev", "role": "operator", "exp": 0}
+
 
 def _parse_token_ttl() -> int:
     raw = os.environ.get("OFDD_AUTH_TTL_SEC", "").strip()
@@ -54,12 +56,19 @@ def _load_users() -> dict[str, tuple[str, Role]]:
     return users
 
 
-def auth_enabled() -> bool:
+def credentials_configured() -> bool:
     return bool(_SECRET and _load_users())
 
 
+def auth_enabled() -> bool:
+    """True when the deployment accepts API traffic (configured auth or explicit dev bypass)."""
+    from .security import auth_dev_bypass_enabled
+
+    return credentials_configured() or auth_dev_bypass_enabled()
+
+
 def user_roles() -> list[str]:
-    if not auth_enabled():
+    if not credentials_configured():
         return []
     return sorted({role for _, role in _load_users().values()})
 
@@ -68,8 +77,12 @@ _DUMMY_PASSWORD = "invalid-credential-placeholder"
 
 
 def check_credentials(username: str, password: str) -> Role | None:
-    if not auth_enabled():
-        return "operator"
+    if not credentials_configured():
+        from .security import auth_dev_bypass_enabled
+
+        if auth_dev_bypass_enabled():
+            return "operator"
+        return None
     users = _load_users()
     key = username.strip()
     entry = users.get(key) or users.get(key.lower())
@@ -84,6 +97,8 @@ def check_credentials(username: str, password: str) -> Role | None:
 
 
 def issue_token(username: str, role: Role) -> str:
+    if not credentials_configured():
+        raise RuntimeError("cannot issue token without OFDD_AUTH_SECRET and user passwords")
     payload = {"sub": username, "role": role, "exp": int(time.time()) + _TOKEN_TTL_SEC}
     body = (
         base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
@@ -96,8 +111,12 @@ def issue_token(username: str, role: Role) -> str:
 
 
 def verify_token(token: str | None) -> dict[str, Any] | None:
-    if not auth_enabled():
-        return {"sub": "open", "role": "integrator", "exp": 0}
+    from .security import auth_dev_bypass_enabled
+
+    if not credentials_configured():
+        if auth_dev_bypass_enabled() and (not token or token == "open"):
+            return dict(_DEV_USER)
+        return None
     if not token or "." not in token:
         return None
     body, sig_b64 = token.split(".", 1)
@@ -122,6 +141,10 @@ def verify_token(token: str | None) -> dict[str, Any] | None:
 
 
 def role_allows(role: str | None, allowed: tuple[Role, ...]) -> bool:
-    if not auth_enabled():
-        return True
+    if not credentials_configured():
+        from .security import auth_dev_bypass_enabled
+
+        if auth_dev_bypass_enabled():
+            return role in allowed
+        return False
     return role in allowed

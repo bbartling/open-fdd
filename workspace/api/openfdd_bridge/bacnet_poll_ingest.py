@@ -116,8 +116,8 @@ def ingest_poll_samples_to_feather(*, samples_path: Path | None = None) -> dict[
             continue
         wide = pd.DataFrame(rows).sort_values("timestamp")
         store.write_shard(wide, source="bacnet", site_id=sid)
-        compact = store.compact(source="bacnet", site_id=sid)
-        sites_written[sid] = int(compact.get("rows") or len(wide))
+        compact = store.maybe_compact_after_ingest(source="bacnet", site_id=sid)
+        sites_written[sid] = int((compact or {}).get("rows") or len(wide))
 
     storage_trim = maintain_storage_if_needed(store)
 

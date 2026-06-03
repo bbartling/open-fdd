@@ -42,7 +42,6 @@ def building_status() -> dict:
         "model_summary": health.get("summary") if configured else None,
         "alert_count": len(status["alerts"]),
         "alerts": status["alerts"],
-        "stack": status["stack"],
         "fdd_alert_count": status["fdd_alert_count"],
         "check_engine": status["status"] != "ok",
     }

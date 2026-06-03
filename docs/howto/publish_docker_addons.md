@@ -44,7 +44,7 @@ Not implemented yet on Acme:
 
 1. Pin tag in `supervisor/manifest.yaml` / host_vars (`openfdd_docker_image_tag`).
 2. Replace tar load in Ansible with `docker compose pull` + `up`.
-3. See [HA OS alignment](../architecture/haos_alignment.md) and `os/Documentation/roadmap.md`.
+3. See [Edge stack layout](../architecture/edge_stack.md) and `os/Documentation/roadmap.md`.
 
 Until then, keep:
 

@@ -2,7 +2,11 @@
   "sites": [
     {
       "id": "demo",
-      "name": "Bens Office test bench"
+      "name": "Bens Office test bench",
+      "metadata": {
+        "rule_pack": "bench",
+        "description": "MS/TP device 5007 — zone temp, humidity, duct discharge"
+      }
     }
   ],
   "equipment": [
@@ -10,7 +14,8 @@
       "id": "bench-1",
       "site_id": "demo",
       "name": "HVAC sensor test bench",
-      "equipment_type": "Laboratory_Equipment"
+      "equipment_type": "Laboratory_Equipment",
+      "feeds": ["duct-1"]
     },
     {
       "id": "duct-1",
@@ -23,46 +28,38 @@
       "site_id": "demo",
       "name": "BACnet device 5007",
       "equipment_type": "BACnet_Device",
-      "bacnet_device_id": 5007
+      "bacnet_device_id": 5007,
+      "bacnet_device_instance": 5007
     }
   ],
   "points": [
-    {
-      "id": "p1",
-      "site_id": "demo",
-      "equipment_id": "bench-1",
-      "external_id": "SAT",
-      "brick_type": "Supply_Air_Temperature_Sensor",
-      "fdd_input": "SAT",
-      "description": "Legacy demo SAT column (optional)"
-    },
     {
       "id": "5007-analog-input-1168",
       "site_id": "demo",
       "equipment_id": "bench-1",
       "external_id": "oa-h",
-      "brick_type": "Humidity_Sensor",
+      "brick_type": "Outside_Air_Humidity_Sensor",
       "fdd_input": "oa-h",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1168",
       "object_type": "analog-input",
       "object_instance": "1168",
-      "description": "Bench humidity (OA-H label, not outdoor air)"
+      "description": "Bench humidity sensor"
     },
     {
       "id": "5007-analog-input-1173",
       "site_id": "demo",
       "equipment_id": "bench-1",
       "external_id": "oa-t",
-      "brick_type": "Zone_Air_Temperature_Sensor",
+      "brick_type": "Outside_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
       "object_identifier": "analog-input,1173",
       "object_type": "analog-input",
       "object_instance": "1173",
-      "description": "Bench zone temp (OA-T label, on test bench)"
+      "description": "Outside air temperature (OA-T)"
     },
     {
       "id": "5007-analog-input-1192",
@@ -76,7 +73,7 @@
       "object_identifier": "analog-input,1192",
       "object_type": "analog-input",
       "object_instance": "1192",
-      "description": "Duct-mounted discharge air temperature"
+      "description": "Duct discharge air temperature"
     },
     {
       "id": "5007-analog-input-10014",
@@ -90,7 +87,7 @@
       "object_identifier": "analog-input,10014",
       "object_type": "analog-input",
       "object_instance": "10014",
-      "description": "Bench zone temp (stat space sensor)"
+      "description": "Bench zone temp (space stat)"
     }
   ]
 }

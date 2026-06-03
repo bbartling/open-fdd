@@ -96,4 +96,6 @@ See `bacnet_toolshed/systemd/` for unit templates. After `workspace/` API + dash
 | `poll_driver` | RPM poll → `polls/samples.csv` |
 | `commission_agent` | HTTP discover jobs |
 
-**Not included:** `mqtt_payload`, AWS IoT `read_driver` (use `poll_driver` instead).
+**Not included:** `mqtt_payload`, AWS IoT `read_driver` (use `poll_driver` instead), COV, WritePropertyMultiple, ReadRange, BBMD auto-registration.
+
+**Full capability matrix:** [docs/bacnet/capabilities.md](../docs/bacnet/capabilities.md) (published: [bbartling.github.io/open-fdd/bacnet/capabilities](https://bbartling.github.io/open-fdd/bacnet/capabilities/)).

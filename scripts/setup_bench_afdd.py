@@ -40,7 +40,20 @@ RULES_PY = DATA / "rules_py"
 
 
 def _read_rule_code(name: str) -> str:
-    return (RULES_PY / name).read_text(encoding="utf-8")
+    """Load rule source; inline bench_fdd_common when rules import it."""
+    import re
+
+    main = (RULES_PY / name).read_text(encoding="utf-8")
+    if "bench_fdd_common" not in main:
+        return main
+    common = (RULES_PY / "bench_fdd_common.py").read_text(encoding="utf-8")
+    stripped = re.sub(
+        r"^\s*(?:from\s+bench_fdd_common\s+import\s+.+|import\s+bench_fdd_common(?:\s+as\s+\w+)?)\s*$",
+        "",
+        main,
+        flags=re.MULTILINE,
+    ).strip()
+    return common + "\n\n" + stripped
 
 
 BENCH_RULES: list[dict] = [

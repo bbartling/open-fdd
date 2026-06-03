@@ -79,7 +79,7 @@ export default function RuleLabPage() {
   const [testSensorKey, setTestSensorKey] = useState("");
   const [dirty, setDirty] = useState(false);
   const lintTimer = useRef<number | null>(null);
-  const scope = useModelScope("acme", brickClass);
+  const scope = useModelScope("demo", brickClass);
 
   useEffect(() => {
     fetchAuthMe()

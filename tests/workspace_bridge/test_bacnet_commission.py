@@ -173,7 +173,7 @@ def test_bacnet_write_rejects_invalid_object_identifier(authed_client: TestClien
 
 def test_bacnet_import_to_model(authed_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     data = tmp_path / "data"
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     login = authed_client.post(
         "/api/auth/login",

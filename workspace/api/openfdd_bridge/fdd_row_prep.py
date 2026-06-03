@@ -10,6 +10,10 @@ import pandas as pd
 from .data_loader import column_map_for_rule, enrich_rows_with_column_map
 from .timeseries_api import plot_column_name
 
+# Trailing time-mean windows (playground_core / web_lambda parity; 5 & 15 min for BACnet poll grids).
+ROLLING_AVG_MINUTES_ALLOWED = (1, 5, 15)
+DEFAULT_ROLLING_AVG_MINUTES = 5
+
 DEFAULT_THRESHOLDS_F: dict[str, float] = {
     "flatline_tolerance": 0.10,
     "max_temp_per_hour": 5.0,
@@ -30,6 +34,17 @@ DEFAULT_THRESHOLDS_F: dict[str, float] = {
 def temp_unit_symbol(cfg: dict[str, Any] | None) -> str:
     unit = str((cfg or {}).get("temp_unit") or "imperial").lower()
     return "°C" if unit in {"metric", "c", "celsius"} else "°F"
+
+
+def normalize_rolling_avg_minutes(value: Any) -> int:
+    """Clamp to allowed windows: 1, 5, or 15 minutes."""
+    try:
+        m = int(value)
+    except (TypeError, ValueError):
+        m = DEFAULT_ROLLING_AVG_MINUTES
+    if m not in ROLLING_AVG_MINUTES_ALLOWED:
+        return min(ROLLING_AVG_MINUTES_ALLOWED, key=lambda x: abs(x - m))
+    return m
 
 
 def cfg_threshold(cfg: dict[str, Any] | None, key: str) -> float:
@@ -105,10 +120,11 @@ def _median_sample_ms(rows: list[dict[str, Any]]) -> int:
     return int(statistics.median(dts)) if dts else 60_000
 
 
-def attach_rolling_avg(rows: list[dict[str, Any]], *, minutes: int = 1) -> None:
+def attach_rolling_avg(rows: list[dict[str, Any]], *, minutes: int = DEFAULT_ROLLING_AVG_MINUTES) -> None:
     if not rows:
         return
-    window_ms = max(1, int(minutes)) * 60_000
+    minutes = normalize_rolling_avg_minutes(minutes)
+    window_ms = minutes * 60_000
     period_ms = _median_sample_ms(rows)
     j_start = 0
     for i, row in enumerate(rows):
@@ -125,6 +141,71 @@ def attach_rolling_avg(rows: list[dict[str, Any]], *, minutes: int = 1) -> None:
         row["sample_period_ms"] = period_ms
         row["rolling_avg_minutes"] = minutes
         row["samples_in_avg"] = len(window)
+        row["rolling_window_ms"] = window_ms
+
+
+def rolling_avg_values_for_column(
+    df: pd.DataFrame,
+    column: str,
+    *,
+    minutes: int = DEFAULT_ROLLING_AVG_MINUTES,
+) -> list[float | None]:
+    """Trailing mean aligned 1:1 with dataframe rows (for plot overlays)."""
+    if df.empty or column not in df.columns:
+        return []
+    minutes = normalize_rolling_avg_minutes(minutes)
+    out: list[float | None] = [None] * len(df)
+    prep_rows: list[dict[str, Any]] = []
+    index_map: list[int] = []
+    for idx, (_, series_row) in enumerate(df.iterrows()):
+        ts_ms = _ts_ms_from_value(series_row.get("timestamp") or series_row.get("ts"))
+        if ts_ms is None:
+            continue
+        raw_val = series_row.get(column)
+        if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
+            val = None
+        else:
+            try:
+                val = float(raw_val)
+            except (TypeError, ValueError):
+                val = None
+        prep_rows.append({"ts_ms": ts_ms, "temp": val, "degF": val})
+        index_map.append(idx)
+    if not prep_rows:
+        return out
+    attach_rolling_avg(prep_rows, minutes=minutes)
+    for prep_i, df_i in enumerate(index_map):
+        avg = prep_rows[prep_i].get("temp_rolling_avg")
+        if avg is None or (isinstance(avg, float) and pd.isna(avg)):
+            out[df_i] = None
+        else:
+            out[df_i] = float(avg)
+    return out
+
+
+def aux_series_key(column: str, minutes: int) -> str:
+    return f"{column}__rolling_{normalize_rolling_avg_minutes(minutes)}m"
+
+
+def build_rolling_aux_series(
+    df: pd.DataFrame,
+    columns: list[str],
+    kinds: dict[str, str],
+    *,
+    minutes: int = DEFAULT_ROLLING_AVG_MINUTES,
+) -> dict[str, list[float | None]]:
+    """Per-column trailing means for temperature series (humidity skipped)."""
+    minutes = normalize_rolling_avg_minutes(minutes)
+    aux: dict[str, list[float | None]] = {}
+    for col in columns:
+        if col not in df.columns:
+            continue
+        if kinds.get(col) == "humidity":
+            continue
+        vals = rolling_avg_values_for_column(df, col, minutes=minutes)
+        if vals:
+            aux[aux_series_key(col, minutes)] = vals
+    return aux
 
 
 def prepare_fdd_rows(
@@ -141,7 +222,7 @@ def prepare_fdd_rows(
     work = df.tail(limit) if limit and len(df) > limit else df
     value_col, kind = resolve_value_column(rule, model, site_id)
     cfg = rule.get("config") if isinstance(rule.get("config"), dict) else {}
-    rolling_min = int(cfg.get("rolling_avg_minutes") or 1)
+    rolling_min = normalize_rolling_avg_minutes(cfg.get("rolling_avg_minutes"))
 
     rows: list[dict[str, Any]] = []
     for _, series_row in work.iterrows():

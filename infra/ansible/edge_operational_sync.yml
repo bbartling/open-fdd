@@ -7,10 +7,11 @@
 - ansible.builtin.import_playbook: deploy_docker.yml
 
 - name: Open-FDD edge operational health
-  hosts: edge
+  hosts: pi_bcn
   gather_facts: false
   vars:
-    openfdd_bridge_port: "{{ openfdd_bridge_port | default(8765) }}"
+    openfdd_docker_stack: true
+    openfdd_docker_tar_remote: "{{ openfdd_remote_dir }}/docker/openfdd-images-{{ openfdd_docker_image_tag | default('local') }}.tar.gz"
   tasks:
     - name: Run safe Docker maintenance
       ansible.builtin.import_tasks: tasks/docker_maintenance.yml
@@ -33,12 +34,13 @@
       register: edge_auth_slurp
 
     - name: Parse operator credentials from edge auth.env.local
-      ansible.builtin.shell: |
-        set -a
-        # shellcheck disable=SC1091
-        source /dev/stdin
-        printf 'user=%s\npass=%s\n' "${OFDD_OPERATOR_USER:-}" "${OFDD_OPERATOR_PASSWORD:-}"
-      args:
+      ansible.builtin.shell:
+        cmd: |
+          set -a
+          # shellcheck disable=SC1091
+          source /dev/stdin
+          printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+        executable: /bin/bash
         stdin: "{{ edge_auth_slurp.content | b64decode }}"
       register: auth_creds_raw
       changed_when: false
@@ -46,8 +48,8 @@
 
     - name: Set login facts
       ansible.builtin.set_fact:
-        ops_login_user: "{{ auth_creds_raw.stdout | regex_search('(?m)^user=(.+)$', '\\1') | default('') | trim }}"
-        ops_login_password: "{{ auth_creds_raw.stdout | regex_search('(?m)^pass=(.+)$', '\\1') | default('') | trim }}"
+        ops_login_user: "{{ ((auth_creds_raw.stdout_lines | select('match', '^user=') | list | first | default('user=')).split('=', 1))[1] | trim }}"
+        ops_login_password: "{{ ((auth_creds_raw.stdout_lines | select('match', '^pass=') | list | first | default('pass=')).split('=', 1))[1] | trim }}"
       no_log: true
       when:
         - auth_creds_raw is defined
@@ -94,26 +96,30 @@
         - ops_auth.json.token | default('') | length > 0
 
     - name: Feather store byte total on edge
-      ansible.builtin.shell: |
-        set -euo pipefail
-        root="{{ openfdd_remote_dir }}/workspace/data/feather_store"
-        if [[ ! -d "$root" ]]; then
-          echo 0
-          exit 0
-        fi
-        du -sb "$root" 2>/dev/null | awk '{print $1}'
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          root="{{ openfdd_remote_dir }}/workspace/data/feather_store"
+          if [[ ! -d "$root" ]]; then
+            echo 0
+            exit 0
+          fi
+          du -sb "$root" 2>/dev/null | awk '{print $1}'
+        executable: /bin/bash
       register: feather_bytes
       changed_when: false
 
     - name: Bridge container log error scan (last 200 lines)
-      ansible.builtin.shell: |
-        set -euo pipefail
-        cid="$(docker ps -q -f name=bridge | head -1)"
-        if [[ -z "$cid" ]]; then
-          echo "no-bridge-container"
-          exit 0
-        fi
-        docker logs --tail 200 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          cid="$(docker ps -q -f name=bridge | head -1)"
+          if [[ -z "$cid" ]]; then
+            echo "no-bridge-container"
+            exit 0
+          fi
+          docker logs --tail 200 "$cid" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true
+        executable: /bin/bash
       register: bridge_log_errors
       changed_when: false
       when: openfdd_docker_stack | default(false) | bool

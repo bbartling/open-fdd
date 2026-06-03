@@ -111,9 +111,10 @@ sys.exit(0 if m.get("configured") and m.get("status") in ("green","yellow") else
   log_ok "MCP RAG enabled and healthy (via /health/stack)"
 fi
 
-if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 and d.get("model_query_engine")=="sparql" else 1)'; then
+if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("model_api",{}); sys.exit(0 if d.get("model_health_status")==200 and d.get("ttl_exists") and d.get("model_tree_status")==200 and d.get("model_point_count",0)>0 and d.get("model_query_engine")=="sparql" else 1)'; then
   pts="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("model_api",{}).get("model_point_count",0))')"
-  log_ok "Data modeling API /api/model/tree (${pts} points, SPARQL)"
+  score="$(echo "$probe_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("model_api",{}).get("model_health_score",""))')"
+  log_ok "BRICK model health + SPARQL tree (${pts} points, score=${score})"
 fi
 
 if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("agent",{}); sys.exit(0 if d.get("agent_context_status")==200 and d.get("mcp_enabled_in_context") else 1)'; then
@@ -147,12 +148,20 @@ if [[ "$INVENTORY_DOCKER_STACK" == "1" ]]; then
   if command -v ssh >/dev/null 2>&1; then
     feather_b="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "du -sb ~/open-fdd/workspace/data/feather_store 2>/dev/null | awk '{print \$1}' || echo 0")"
     log_ok "Feather store on edge: ${feather_b:-0} bytes"
-    bridge_err="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "docker logs --tail 100 \$(docker ps -q -f name=bridge | head -1) 2>&1 | grep -Ei 'ERROR|Traceback' | grep -v '404 Not Found' | tail -3 || true")"
-    if [[ -n "$bridge_err" ]]; then
-      log_fail "Bridge container log errors: ${bridge_err}"
-    else
-      log_ok "Bridge container logs clean (last 100 lines)"
-    fi
+    for svc in bridge commission mcp-rag bacnet-poll; do
+      cid="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "docker ps -q -f name=${svc} 2>/dev/null | head -1" || true)"
+      if [[ -z "$cid" ]]; then
+        [[ "$svc" == "bacnet-poll" ]] && continue
+        log_fail "Docker service ${svc}: no running container"
+        continue
+      fi
+      err_lines="$("${SSH_CMD[@]}" "${SSH_USER}@${HOST}" "docker logs --tail 80 \"${cid}\" 2>&1 | grep -Ei 'ERROR|Traceback|CRITICAL' | grep -v '404 Not Found' | tail -5 || true")"
+      if [[ -n "$err_lines" ]]; then
+        log_fail "Docker ${svc} (${cid:0:12}) log errors: ${err_lines}"
+      else
+        log_ok "Docker ${svc} logs clean (last 80 lines, cid ${cid:0:12})"
+      fi
+    done
   fi
 elif command -v ssh >/dev/null 2>&1; then
   for unit in caddy openfdd-bridge openfdd-bacnet-commission openfdd-mcp-rag; do

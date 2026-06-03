@@ -98,12 +98,12 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
             oid = f"{obj_type},{obj_inst}"
             key = _point_key(inst, oid)
             desired_keys.add(key)
-            eq_id = f"bacnet-{inst}"
+            default_eq_id = f"bacnet-{inst}"
             devices_touched.add(inst)
-            if not any(isinstance(e, dict) and str(e.get("id")) == eq_id for e in equipment):
+            if not any(isinstance(e, dict) and str(e.get("id")) == default_eq_id for e in equipment):
                 equipment.append(
                     {
-                        "id": eq_id,
+                        "id": default_eq_id,
                         "site_id": sid,
                         "name": f"BACnet device {inst}",
                         "equipment_type": "BACnet_Device",
@@ -123,6 +123,12 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
             if key in by_key:
                 pt = by_key[key]
                 pt["site_id"] = sid
+                existing_eq = str(pt.get("equipment_id") or "").strip()
+                eq_id = (
+                    existing_eq
+                    if existing_eq and not existing_eq.startswith("bacnet-")
+                    else default_eq_id
+                )
                 pt["equipment_id"] = eq_id
                 pt["bacnet_device_id"] = int(inst) if inst.isdigit() else inst
                 pt["bacnet_device_address"] = str(src.get("device_address") or "")
@@ -133,6 +139,7 @@ def sync_enabled_polling_to_model(*, site_id: str | None = None, sync_ttl: bool 
                 pt["metadata"] = {**(pt.get("metadata") if isinstance(pt.get("metadata"), dict) else {}), **metadata}
                 updated += 1
             else:
+                eq_id = default_eq_id
                 pt = {
                     "id": pid or f"{eq_id}-{obj_type}-{obj_inst}",
                     "site_id": sid,

@@ -4,32 +4,34 @@ nav_order: 10
 has_children: true
 ---
 
-# How-to Guides
+# How-to guides
 
-Recipes for **`pip install open-fdd`**, **`[engine]`** extras, releases, and embedding **`RuleRunner`** on **pandas**.
-
----
-
-## Agent-maintained stack (git checkout)
-
-- [Operator dashboard (Rule Lab)](operator_dashboard) — `./scripts/openfdd_stack.sh up`, Rule Lab, BACnet, host stats.
-- [Edge deploy (Docker)](../edge_deploy_docker) — Acme / field VMs.
-- [Rule Lab — Python storage & shared editing](rule_lab_storage) — `rules_py/`, browser save flow, AI `rules.save`, FDD loop.
-- [Skills and agent shell](skills_and_agent) — `openfdd.toml`, Codex REPL, workspace cron/wake, memory, tests.
-- [Agent & operator playbook](agent_operator_playbook) — bridge + MCP routes when `workspace/api` is generated.
-- [Desktop app (retired)](desktop_app) — historical gateway/MCP/UI reference only.
+**Deploy and operate** the edge stack first; PyPI engine how-tos are listed last.
 
 ---
 
-## Engine
+## Deploy & operate
 
-- [PyPI releases (open-fdd)](openfdd_engine_pypi) — tags, trusted publishing, `twine check`.
-- [The optional openfdd-engine package](openfdd_engine) — `openfdd_engine` vs `open_fdd.engine`.
-- [Engine-only deployment and external IoT pipelines](engine_only_iot) — `RuleRunner` on DataFrames.
-- [Verification](verification) — focused pytest for expressions and cookbook regressions.
-- [Cloning and porting](cloning_and_porting) — portable rules and envs.
-- [Operations (engine)](operations) — CI and scheduling notes.
-- [Danger zone](danger_zone) — expression safety and sharp edges.
-- [Quick reference](quick_reference) — imports and common commands.
+| Guide | Topic |
+|-------|--------|
+| [Operator dashboard](operator_dashboard) | Rule Lab, `./scripts/openfdd_stack.sh` |
+| [Edge deploy (Docker)](../edge_deploy_docker) | Acme / field VMs |
+| [Rule Lab storage](rule_lab_storage) | `rules_py/`, bindings, batch |
+| [Ollama hardware](ollama_edge_deploy) | GPU/CPU install paths |
+| [Skills and agent shell](skills_and_agent) | Cursor/Codex, `openfdd.toml`, cron |
+| [Agent playbook](agent_operator_playbook) | Bridge + MCP tools |
+| [Verification](verification) | pytest focus |
 
-Published site: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**
+---
+
+## Engine (PyPI / offline)
+
+| Guide | Topic |
+|-------|--------|
+| [PyPI releases](openfdd_engine_pypi) | Tags, publishing |
+| [Engine-only IoT](engine_only_iot) | `RuleRunner` on DataFrames |
+| [Quick reference](quick_reference) | Imports |
+| [Cloning and porting](cloning_and_porting) | Portable YAML |
+| [Danger zone](danger_zone) | Expression safety |
+
+Historical: [Desktop app (retired)](desktop_app).

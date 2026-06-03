@@ -57,6 +57,58 @@
     | difference(docker_running_services.stdout_lines | map('trim') | list)) | length > 0
   when: openfdd_docker_stack | default(false) | bool
 
+- name: Collect Docker container ids for log scan
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      for svc in bridge commission mcp-rag; do
+        cid="$(docker ps -q -f "name=${svc}" 2>/dev/null | head -1 || true)"
+        echo "${svc}=${cid}"
+      done
+    executable: /bin/bash
+  register: docker_log_cids
+  changed_when: false
+  when: openfdd_docker_stack | default(false) | bool
+
+- name: Fail when Docker service containers are missing
+  ansible.builtin.fail:
+    msg: "Docker service {{ item.split('=')[0] }} has no running container"
+  loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
+  when:
+    - openfdd_docker_stack | default(false) | bool
+    - docker_log_cids is defined
+    - item.split('=') | length > 1
+    - (item.split('=')[1] | trim) | length == 0
+
+- name: Scan Docker container logs for errors
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      cid="{{ item.split('=')[1] | trim }}"
+      svc="{{ item.split('=')[0] | trim }}"
+      err="$(docker logs --since 3m "$cid" 2>&1 \
+        | grep -Ei 'ERROR|Traceback|CRITICAL' \
+        | grep -v '404 Not Found' \
+        | grep -v 'CancelledError' \
+        | grep -v 'Cannot assign requested address' \
+        | grep -v "has no attribute 'server'" \
+        | tail -5 || true)"
+      if [[ -n "$err" ]]; then
+        echo "FAIL ${svc}: ${err}"
+        exit 1
+      fi
+      echo "OK ${svc}"
+    executable: /bin/bash
+  loop: "{{ docker_log_cids.stdout_lines | default([]) }}"
+  register: docker_log_scan
+  changed_when: false
+  failed_when: docker_log_scan.rc != 0
+  when:
+    - openfdd_docker_stack | default(false) | bool
+    - docker_log_cids is defined
+    - item.split('=') | length > 1
+    - (item.split('=')[1] | trim) | length > 0
+
 - name: Ensure BACnet commission agent is active
   ansible.builtin.systemd:
     name: openfdd-bacnet-commission
@@ -167,10 +219,10 @@
     - lan_dashboard_js_path is defined
     - lan_dashboard_js_path | length > 0
 
-- name: Slurp operator auth env from edge (Docker stacks sync auth.env.local)
-  ansible.builtin.slurp:
-    src: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
-  register: edge_auth_slurp
+- name: Stat operator auth env on edge (Docker stacks sync auth.env.local)
+  ansible.builtin.stat:
+    path: "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+  register: edge_auth_env
   when:
     - post_check_auth_login | default(true) | bool
     - openfdd_docker_stack | default(false) | bool
@@ -186,20 +238,20 @@
     - not (openfdd_docker_stack | default(false) | bool)
 
 - name: Parse operator credentials from edge auth.env.local
-  ansible.builtin.shell: |
-    set -a
-    # shellcheck disable=SC1091
-    source /dev/stdin
-    printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
-  args:
-    stdin: "{{ edge_auth_slurp.content | b64decode }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -a
+      # shellcheck disable=SC1091
+      source "{{ openfdd_remote_dir }}/workspace/auth.env.local"
+      printf 'user=%s\npass=%s\n' "${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}" "${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
+    executable: /bin/bash
   register: auth_creds_raw
   changed_when: false
   no_log: true
   when:
     - post_check_auth_login | default(true) | bool
-    - edge_auth_slurp is defined
-    - edge_auth_slurp.content is defined
+    - openfdd_docker_stack | default(false) | bool
+    - edge_auth_env.stat.exists | default(false)
 
 - name: Parse operator credentials from control auth.env.local
   ansible.builtin.shell: |
@@ -218,8 +270,8 @@
 
 - name: Build login probe credentials
   ansible.builtin.set_fact:
-    post_check_login_user: "{{ auth_creds_raw.stdout | regex_search('(?m)^user=(.+)$', '\\1') | default('') | trim }}"
-    post_check_login_password: "{{ auth_creds_raw.stdout | regex_search('(?m)^pass=(.+)$', '\\1') | default('') | trim }}"
+    post_check_login_user: "{{ ((auth_creds_raw.stdout_lines | select('match', '^user=') | list | first | default('user=')).split('=', 1))[1] | trim }}"
+    post_check_login_password: "{{ ((auth_creds_raw.stdout_lines | select('match', '^pass=') | list | first | default('pass=')).split('=', 1))[1] | trim }}"
   no_log: true
   when:
     - post_check_auth_login | default(true) | bool

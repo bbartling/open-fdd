@@ -13,7 +13,7 @@ REPO = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def sparql_model_env(tmp_path, monkeypatch):
     data = tmp_path / "data"
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     model = {
         "sites": [{"id": "demo", "name": "Bench"}],
         "equipment": [

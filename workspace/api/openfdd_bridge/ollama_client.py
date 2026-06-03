@@ -12,6 +12,8 @@ from .ollama_profiles import GpuMode, OllamaProfile, normalize_ram_tier, profile
 
 DEFAULT_BASE = "http://127.0.0.1:11434"
 DEFAULT_TIMEOUT_S = 120.0
+DEFAULT_HEALTH_TIMEOUT_S = 8.0
+_WORKING_BASE: str | None = None
 
 
 def _ns_to_ms(value: Any) -> int | None:
@@ -103,6 +105,31 @@ def ollama_base_url() -> str:
     return os.environ.get("OFDD_OLLAMA_BASE_URL", DEFAULT_BASE).rstrip("/")
 
 
+def ollama_base_candidates() -> list[str]:
+    """Probe order for Docker dev (in-compose ``ollama``) and host Ollama."""
+    primary = ollama_base_url()
+    extra = [
+        u.strip().rstrip("/")
+        for u in os.environ.get("OFDD_OLLAMA_FALLBACK_URLS", "").split(",")
+        if u.strip()
+    ]
+    defaults = ["http://ollama:11434", "http://host.docker.internal:11434", DEFAULT_BASE]
+    seen: set[str] = set()
+    out: list[str] = []
+    for url in [primary, *extra, *defaults]:
+        if url and url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out
+
+
+def _active_ollama_base() -> str:
+    global _WORKING_BASE
+    if _WORKING_BASE:
+        return _WORKING_BASE
+    return ollama_base_url()
+
+
 def configured_ram_tier() -> str:
     return normalize_ram_tier(os.environ.get("OFDD_OLLAMA_RAM_TIER", "8gb"))
 
@@ -182,31 +209,48 @@ def resolve_num_gpu(*, gpu_mode: str | None = None) -> int:
     return configured_num_gpu()
 
 
-def health(timeout: float = 3.0) -> dict[str, Any]:
-    base = ollama_base_url()
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            tags = client.get(f"{base}/api/tags")
-            tags.raise_for_status()
-            body = tags.json()
-            names = [m.get("name", "") for m in body.get("models", []) if isinstance(m, dict)]
-            return {
-                "ok": True,
-                "base_url": base,
-                "models_installed": names,
-                "configured_model": configured_model(),
-                "configured_ram_tier": configured_ram_tier(),
-                "num_gpu": configured_num_gpu(),
-            }
-    except Exception as exc:
-        return {
-            "ok": False,
-            "base_url": base,
-            "error": str(exc)[:500],
-            "configured_model": configured_model(),
-            "configured_ram_tier": configured_ram_tier(),
-            "num_gpu": configured_num_gpu(),
-        }
+def health(timeout: float | None = None) -> dict[str, Any]:
+    global _WORKING_BASE
+    to = timeout
+    if to is None:
+        try:
+            to = float(os.environ.get("OFDD_OLLAMA_HEALTH_TIMEOUT_S", str(DEFAULT_HEALTH_TIMEOUT_S)))
+        except ValueError:
+            to = DEFAULT_HEALTH_TIMEOUT_S
+    last_err = ""
+    tried: list[str] = []
+    for base in ollama_base_candidates():
+        tried.append(base)
+        try:
+            with httpx.Client(timeout=to) as client:
+                tags = client.get(f"{base}/api/tags")
+                tags.raise_for_status()
+                body = tags.json()
+                names = [m.get("name", "") for m in body.get("models", []) if isinstance(m, dict)]
+                _WORKING_BASE = base
+                return {
+                    "ok": True,
+                    "base_url": base,
+                    "models_installed": names,
+                    "configured_model": configured_model(),
+                    "configured_ram_tier": configured_ram_tier(),
+                    "num_gpu": configured_num_gpu(),
+                    "health_timeout_s": to,
+                    "tried_urls": tried,
+                }
+        except Exception as exc:
+            last_err = str(exc)[:500]
+    _WORKING_BASE = None
+    return {
+        "ok": False,
+        "base_url": ollama_base_url(),
+        "error": last_err or "no reachable Ollama URL",
+        "configured_model": configured_model(),
+        "configured_ram_tier": configured_ram_tier(),
+        "num_gpu": configured_num_gpu(),
+        "health_timeout_s": to,
+        "tried_urls": tried,
+    }
 
 
 def model_installed(model: str, *, timeout: float = 3.0) -> bool:
@@ -244,7 +288,7 @@ def chat(
     }
     if think_value is not None:
         payload["think"] = think_value
-    url = f"{ollama_base_url()}/api/chat"
+    url = f"{_active_ollama_base()}/api/chat"
     to = timeout or float(os.environ.get("OFDD_OLLAMA_TIMEOUT_S", str(DEFAULT_TIMEOUT_S)))
     try:
         with httpx.Client(timeout=to) as client:

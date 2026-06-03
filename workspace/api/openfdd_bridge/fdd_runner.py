@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from . import playground
-from .data_loader import load_frame_for_run
+from .data_loader import column_map_for_rule, load_frame_for_run
 from .fdd_row_prep import prepare_fdd_rows
 from .fault_catalog import family_for_code
 from .feather_store import FeatherStore
@@ -97,6 +97,30 @@ def _rule_code(rule: dict[str, Any]) -> str:
     return str(rule.get("code") or "")
 
 
+def _columns_for_site_rules(model: dict[str, Any], site_id: str, rules: list[dict[str, Any]]) -> list[str] | None:
+    """Union of feather columns needed by all rules on one site (prunes wide BACnet frames)."""
+    wanted: set[str] = {"timestamp", "site_id"}
+    for rule in rules:
+        cmap = column_map_for_rule(model, site_id, rule)
+        # Historian columns are point external_id / fdd_input names — not BRICK class strings.
+        wanted.update(str(v) for v in cmap.values() if str(v).strip())
+    extra = [c for c in wanted if c not in {"timestamp", "site_id"}]
+    if not extra:
+        return None
+    return ["timestamp", *sorted(extra)]
+
+
+def _trim_lookback(frame: Any, lookback_hours: float) -> Any:
+    import pandas as pd
+
+    if lookback_hours <= 0 or "timestamp" not in frame.columns:
+        return frame
+    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=lookback_hours)
+    ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
+    trimmed = frame.loc[ts >= cutoff].copy()
+    return trimmed if not trimmed.empty else frame
+
+
 def _run_one(
     rule: dict[str, Any],
     site_id: str,
@@ -105,16 +129,17 @@ def _run_one(
     model: dict[str, Any],
     chunk_hours: float = 0,
     lookback_hours: float = 0,
+    frame: Any | None = None,
+    origin: str | None = None,
 ) -> dict[str, Any]:
     import pandas as pd
 
-    frame, origin = load_frame_for_run(site_id)
-    if lookback_hours > 0 and "timestamp" in frame.columns:
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=lookback_hours)
-        ts = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce")
-        trimmed = frame.loc[ts >= cutoff].copy()
-        if not trimmed.empty:
-            frame = trimmed
+    if frame is None:
+        frame, origin = load_frame_for_run(site_id)
+    else:
+        origin = origin or "feather"
+    if lookback_hours > 0 and frame is not None:
+        frame = _trim_lookback(frame, lookback_hours)
     fault_code = str(rule.get("fault_code") or "")
     code = _rule_code(rule)
     base = {
@@ -210,8 +235,21 @@ def run_batch(
     lookback = max(0.0, float(lookback_hours))
     chunk = chunk_hours if (use_chunks if use_chunks is not None else lookback > 6) else 0
     runs: list[dict[str, Any]] = []
+
+    site_rules: dict[str, list[dict[str, Any]]] = {}
     for rule in rules:
         for site_id in resolve_site_ids(model, rule):
+            site_rules.setdefault(site_id, []).append(rule)
+
+    site_frames: dict[str, tuple[Any, str]] = {}
+    for site_id, site_rule_list in site_rules.items():
+        cols = _columns_for_site_rules(model, site_id, site_rule_list)
+        frame, origin = load_frame_for_run(site_id, columns=cols)
+        site_frames[site_id] = (_trim_lookback(frame, lookback), origin)
+
+    for rule in rules:
+        for site_id in resolve_site_ids(model, rule):
+            frame, origin = site_frames[site_id]
             runs.append(
                 _run_one(
                     rule,
@@ -219,7 +257,9 @@ def run_batch(
                     limit=limit,
                     model=model,
                     chunk_hours=chunk,
-                    lookback_hours=lookback,
+                    lookback_hours=0,
+                    frame=frame,
+                    origin=origin,
                 )
             )
     summary = {

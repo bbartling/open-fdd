@@ -1,8 +1,9 @@
-# Open-FDD edge deploy shortcuts (run from infra/ansible)
+# Open-FDD edge deploy shortcuts — run from infra/ansible (see ../README.md).
 #
 #   make help
-#   make ui HOST=acme_vm_bbartling
-#   make all HOST=bacnet_pi
+#   make ui-deploy HOST=acme_vm_bbartling   # prod dashboard build + rsync
+#   make docker-deploy HOST=acme_vm_bbartling
+#   make build-test                         # vitest + pytest before push
 #   SSHPASS='...' make os HOST=acme_vm_bbartling
 
 HOST ?= bacnet_pi

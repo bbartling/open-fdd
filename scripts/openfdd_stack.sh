@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open-FDD Supervisor — local dev stack (HA OS model: supervisor brings up addons).
+# Open-FDD Supervisor — local dev stack (supervisor brings up addons).
 #
 #   ./scripts/openfdd_stack.sh up      # stop legacy systemd stack, compose up, health
 #   ./scripts/openfdd_stack.sh down
@@ -11,9 +11,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 COMPOSE=(docker compose -f docker/compose.dev.yml)
+PROFILES=()
+if [[ "${OPENFDD_COMPOSE_PROFILES:-ai}" == *ai* ]]; then
+  PROFILES+=(--profile ai)
+fi
 ACTION="${1:-up}"
 HEALTH_URL="${OPENFDD_HEALTH_URL:-http://127.0.0.1:8765/health}"
 HEALTH_DEADLINE_SEC="${OPENFDD_HEALTH_DEADLINE_SEC:-90}"
+RUN_FULL_HEALTH="${OPENFDD_STACK_FULL_HEALTH:-1}"
 
 wait_for_health() {
   local start now
@@ -39,8 +44,12 @@ case "$ACTION" in
     if ! docker image inspect openfdd-bridge:local >/dev/null 2>&1; then
       ./scripts/docker_build.sh
     fi
-    "${COMPOSE[@]}" up -d
+    "${COMPOSE[@]}" "${PROFILES[@]}" up -d
     wait_for_health
+    if [[ "$RUN_FULL_HEALTH" == 1 ]] && [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
+      OPENFDD_BASE_URL="${OPENFDD_BASE_URL:-http://127.0.0.1:8765}" \
+        "${ROOT}/scripts/stack_health_check.sh"
+    fi
     echo "Supervisor stack up (openfdd-dev). Caddy optional: ./scripts/run_local.sh start caddy"
     ;;
   down)
@@ -52,8 +61,12 @@ case "$ACTION" in
   rebuild)
     ./scripts/run_local.sh stop 2>/dev/null || true
     ./scripts/docker_build.sh
-    "${COMPOSE[@]}" up -d --force-recreate
+    "${COMPOSE[@]}" "${PROFILES[@]}" up -d --force-recreate
     wait_for_health
+    if [[ "$RUN_FULL_HEALTH" == 1 ]] && [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
+      OPENFDD_BASE_URL="${OPENFDD_BASE_URL:-http://127.0.0.1:8765}" \
+        "${ROOT}/scripts/stack_health_check.sh"
+    fi
     ;;
   -h|--help)
     sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'

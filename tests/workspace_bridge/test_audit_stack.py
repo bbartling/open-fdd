@@ -50,12 +50,25 @@ def test_login_writes_audit(authed_integrator: TestClient, tmp_path: Path):
 
 
 def test_stack_health_public_for_check_engine(authed_integrator: TestClient):
-    """Stack strip on the public check-engine dashboard must work without login."""
+    """Stack traffic-light is public (same as /api/faults/status) for OT wall displays."""
     r = authed_integrator.get("/health/stack")
     assert r.status_code == 200
     body = r.json()
     assert "services" in body
     assert any(s["id"] == "bridge" for s in body["services"])
+
+    login = authed_integrator.post(
+        "/api/auth/login",
+        json={"username": "integrator", "password": "msi"},
+    )
+    assert login.status_code == 200
+    token = login.json()["token"]
+    authed = authed_integrator.get(
+        "/health/stack",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert authed.status_code == 200
+    assert "services" in authed.json()
 
 
 def test_audit_api_integrator_only(authed_integrator: TestClient):

@@ -6,98 +6,58 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
   <img src="https://img.shields.io/badge/status-Beta-blue" alt="Beta">
   <img src="https://img.shields.io/badge/Python-%3E%3D3.10-blue?logo=python&logoColor=white" alt="Python 3.10+">
-  <a href="https://pypi.org/project/open-fdd/"><img src="https://img.shields.io/pypi/v/open-fdd?label=PyPI&logo=pypi&logoColor=white" alt="PyPI"></a>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png" alt="open-fdd logo" width="220">
+  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image.png" alt="Open-FDD logo" width="440">
 </p>
 
 <p align="center">
-  <strong>pandas-first</strong> HVAC fault detection — Python rules in the operator dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
+  <strong>pandas-first</strong> HVAC fault detection for building operators — Python rules in the dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
 </p>
 
 <p align="center">
-  <a href="https://bbartling.github.io/open-fdd/"><strong>Documentation</strong></a>
+  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/Documentation-read_online-2563EB?style=for-the-badge" alt="Documentation"></a>
+</p>
+
+<p align="center">
+  <a href="https://bbartling.github.io/open-fdd/"><strong>bbartling.github.io/open-fdd</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://pypi.org/project/open-fdd/">PyPI</a>
+  PyPI package <em>coming soon</em>
+  &nbsp;·&nbsp;
+  Docker images <em>coming soon</em>
 </p>
 
 ---
 
-## Operator stack (git checkout)
+Everything you need to run the **operator bridge**, BACnet commissioning, Rule Lab, feather historian, and edge deploy lives in the **[online documentation](https://bbartling.github.io/open-fdd/)** — start with [Getting started](https://bbartling.github.io/open-fdd/getting_started/).
 
-Python **Rule Lab** in the browser; rules run server-side on pandas/NumPy. Saved rules live in **`workspace/data/rules_py/`** (same files for humans and the AI agent) — see [`docs/howto/rule_lab_storage.md`](docs/howto/rule_lab_storage.md).
+| Topic | Doc |
+|-------|-----|
+| Deploy checklist + AI can/cannot | [Getting started](https://bbartling.github.io/open-fdd/getting_started/) |
+| Docker containers + Acme flow | [Edge deploy (Docker)](https://bbartling.github.io/open-fdd/edge_deploy_docker/) |
+| Local Ollama (check-engine) | [Local Ollama](https://bbartling.github.io/open-fdd/local_ollama/) |
+| BACnet discover / read / write / poll | [BACnet capabilities](https://bbartling.github.io/open-fdd/bacnet/capabilities/) |
+| Bridge REST API | [Bridge API](https://bbartling.github.io/open-fdd/appendix/bridge_api/) |
+| Security / LAN hardening | [Security hardening](https://bbartling.github.io/open-fdd/security_hardening/) |
 
-Edge layout follows [Home Assistant OS](https://github.com/home-assistant/operating-system): **`os/`** (future Buildroot) → **`supervisor/`** (compose + manifest) → **`docker/`** addon images. See [`docs/architecture/haos_alignment.md`](docs/architecture/haos_alignment.md).
-
-```bash
-./scripts/openfdd_stack.sh up    # Docker dev stack (local + edge default)
-# http://127.0.0.1:8765/  — or Caddy :80 on field VMs (docs/edge_deploy_docker.md)
-```
-
-Field deploy: `./scripts/docker_build.sh --save` → `infra/ansible/deploy.sh docker --limit <host>`.
-
----
-
-## Library install (PyPI)
-
-```bash
-pip install "open-fdd[engine]"
-```
-
-| Extra | Purpose |
-|-------|---------|
-| `[engine]` | Optional YAML `RuleRunner`, column-map resolvers (library/notebooks) |
-| `[reports]` | Matplotlib plots in `open_fdd.reports` |
-
-Bare install (`pandas` only): `pip install open-fdd`. For Word reports: `pip install python-docx`.
+**Distribution:** The `open-fdd` **PyPI** wheel and **Docker** addon images (`openfdd-bridge`, BACnet poll, commission, MCP) will be published after the next release gate. Until then, build from this repo (`./scripts/docker_build.sh`, `./scripts/openfdd_stack.sh up`).
 
 ---
 
-## Engine (library YAML API)
-
-```python
-from open_fdd.engine import RuleRunner
-
-runner = RuleRunner(rules_path="path/to/rules")
-df_out = runner.run(df, column_map={"SAT": "supply_air_temp"})
-```
-
-`column_map` is any logical name → DataFrame column. Cookbook examples may use optional `brick:` labels; plain dicts work too.
-
----
-
-## Reports
-
-```python
-from open_fdd.reports import summarize_fault, get_fault_events
-
-flag = "my_rule_flag"
-events = get_fault_events(df_out, flag_col=flag)
-summary = summarize_fault(df_out, flag_col=flag, timestamp_col="timestamp")
-```
-
-Plots need the `[reports]` extra. See the [Reports API](https://bbartling.github.io/open-fdd/api/reports/) docs.
-
----
-
-## Develop
+## Develop locally
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -U pip
-pip install -e ".[dev]"
-pytest open_fdd/tests/engine
+./scripts/docker_build.sh
+./scripts/openfdd_stack.sh up
+./scripts/stack_health_check.sh
 ```
 
-Examples live under `examples/`. Optional shim package: `openfdd-engine` (re-exports the engine); most users install **`open-fdd`** only.
-
-**Git checkout extras:** operator **Rule Lab** dashboard (`workspace/dashboard` → `workspace/api/static/app`), BACnet tools [`bacnet_toolshed/README.md`](bacnet_toolshed/README.md), agent shell [`docs/howto/skills_and_agent.md`](docs/howto/skills_and_agent.md). Local stack: `./scripts/openfdd_stack.sh up` (Docker); legacy systemd: `./scripts/run_local.sh restart` — [`docs/howto/operator_dashboard.md`](docs/howto/operator_dashboard.md).
+See [Getting started](https://bbartling.github.io/open-fdd/getting_started/) and `AGENTS.md` for contributor layout.
 
 ---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

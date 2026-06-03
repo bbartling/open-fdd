@@ -12,13 +12,14 @@ bacnet_instance_id: 3456791
 bacnet_device_name: OpenFddVmBbartling
 # Dedicated OT NIC — not Tailscale
 bacnet_bind_address: "10.200.200.185/24:47808"
+bacnet_commission_network_host: true
 
 bacnet_discover_low: 1
 bacnet_discover_high: 4194303
 bacnet_discover_timeout: 30
 
-# Commissioned — poll container uses network_mode: host + points.csv from edge_backup
-enable_bacnet_poll_driver: true
+# Poll via commission agent on host network (do not also enable bacnet-poll — double BACnet bind).
+enable_bacnet_poll_driver: false
 bacnet_poll_interval: 60
 
 # 4c / 16GB VM — local Ollama qwen3:4b + MCP RAG

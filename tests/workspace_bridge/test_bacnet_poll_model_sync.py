@@ -18,7 +18,7 @@ def model_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     data = tmp_path / "data"
     comm = tmp_path / "bacnet" / "commissioning"
     comm.mkdir(parents=True)
-    data.mkdir()
+    data.mkdir(parents=True, exist_ok=True)
     (comm / "commission.env").write_text('site_id="demo"\nbuilding_id="local"\n', encoding="utf-8")
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))

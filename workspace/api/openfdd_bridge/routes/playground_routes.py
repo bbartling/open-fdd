@@ -115,7 +115,7 @@ def lint_code(body: LintBody) -> dict:
 @router.post("/test-rule")
 def test_rule(body: RuleBody) -> dict:
     started = time.time()
-    lint = playground.lint_python(body.code)
+    lint = playground.lint_python(body.code, strict_imports=True)
     if not lint["ok"]:
         return {
             "ok": False,
@@ -205,20 +205,22 @@ def test_rule(body: RuleBody) -> dict:
             "chunked": use_chunked,
         }
     except Exception as exc:
+        err = playground.sanitize_traceback_text(str(exc)) or "rule test failed"
+        trace = playground.sanitize_traceback_text(traceback.format_exc(limit=12))
         return {
             "ok": False,
-            "error": str(exc),
-            "trace": traceback.format_exc(limit=12),
+            "error": err,
+            "trace": trace,
             "rows": 0,
             "flagged": 0,
             "ms": int((time.time() - started) * 1000),
-            "events": [{"type": "error", "text": str(exc), "trace": traceback.format_exc(limit=12)}],
+            "events": [{"type": "error", "text": err, "trace": trace}],
         }
 
 
 @router.post("/run-script")
 def run_script(body: ScriptBody) -> dict:
-    lint = playground.lint_python(body.code, require_evaluate=False)
+    lint = playground.lint_python(body.code, require_evaluate=False, strict_imports=True)
     if not lint["ok"]:
         return {
             "ok": False,
@@ -248,8 +250,8 @@ def run_script(body: ScriptBody) -> dict:
     except Exception as exc:
         return {
             "ok": False,
-            "error": str(exc),
-            "trace": traceback.format_exc(limit=12),
+            "error": playground.sanitize_traceback_text(str(exc)) or "script failed",
+            "trace": playground.sanitize_traceback_text(traceback.format_exc(limit=12)),
         }
 
 

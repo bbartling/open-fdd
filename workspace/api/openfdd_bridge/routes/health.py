@@ -5,9 +5,8 @@ import os
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from .. import auth
 from ..building_status import dashboard_snapshot
-from ..deps import require_roles
+from ..deps import public_auth_status, require_roles
 from ..paths import bacnet_poll_csv, data_dir, repo_root, workspace_dir
 from ..stack_health import stack_health
 
@@ -34,7 +33,7 @@ def health() -> dict:
     payload: dict = {
         "ok": True,
         "service": "openfdd-bridge",
-        "auth_required": auth.auth_enabled(),
+        **public_auth_status(),
         "bacnet_poll_csv_exists": poll_path.is_file(),
         "bacnet_poll_csv_bytes": poll_bytes,
     }
@@ -59,12 +58,13 @@ def health() -> dict:
 
 @router.get("/health/stack")
 def health_stack() -> dict:
+    """Public read — same policy as ``/api/faults/status`` for OT wall displays."""
     return stack_health()
 
 
 @router.websocket("/ws/dashboard")
 async def ws_dashboard(websocket: WebSocket) -> None:
-    """Push stack health + check-engine status for live dashboard refresh."""
+    """Push stack health + check-engine status (public read — no Bearer token)."""
     await websocket.accept()
     try:
         while True:

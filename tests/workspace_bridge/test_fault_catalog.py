@@ -12,22 +12,11 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from openfdd_bridge import fault_catalog  # noqa: E402
-from openfdd_bridge.main import create_app  # noqa: E402
-
 RULE_CODE = (
     "def evaluate(row, cfg, prev_row=None, rows=None):\n"
     "    sat = row.get('SAT') or row.get('temp')\n"
     "    return sat is not None and float(sat) > float(cfg.get('high', 50))\n"
 )
-
-
-@pytest.fixture
-def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    data = tmp_path / "data"
-    data.mkdir()
-    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    return TestClient(create_app())
 
 
 def test_catalog_integrity():
@@ -74,9 +63,14 @@ def test_tree_api(client: TestClient):
     assert "simultaneous_heat_cool" in ahu_cats
 
 
-def test_public_check_engine_endpoints_no_auth_header(client: TestClient):
-    for path in ("/api/building/status", "/api/faults/status", "/health/stack"):
-        r = client.get(path)
+def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
+    for path in (
+        "/api/building/status",
+        "/api/faults/status",
+        "/health/stack",
+        "/openfdd-agent/building-insight",
+    ):
+        r = raw_client.get(path)
         assert r.status_code == 200, path
 
 

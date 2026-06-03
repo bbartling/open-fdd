@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 
 from .middleware import AuditMiddleware, global_exception_handler
 from .paths import data_dir, static_dashboard_dir
+from .security import validate_startup_auth
+from .security_headers import SecurityHeadersMiddleware
 from .static_files import CachedStaticFiles
 from .routes import (
     agent_routes,
@@ -27,7 +29,7 @@ from .routes import (
     sites_routes,
     timeseries_routes,
 )
-from .settings import cors_allow_private_lan, cors_origins
+from .settings import cors_allow_headers, cors_allow_methods, cors_origins
 
 
 @asynccontextmanager
@@ -39,6 +41,7 @@ async def _lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    validate_startup_auth()
     app = FastAPI(
         title="Open-FDD Operator Bridge",
         description="Local REST bridge: Python Rule Lab, BRICK data model, BACnet ingest, agent context.",
@@ -46,16 +49,15 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
 
-    allow_lan = cors_allow_private_lan()
     origins = cors_origins()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=cors_allow_methods(),
+        allow_headers=cors_allow_headers(),
     )
-
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(AuditMiddleware)
 
     app.include_router(health.router)

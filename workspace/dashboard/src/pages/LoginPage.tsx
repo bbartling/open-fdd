@@ -8,12 +8,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [authRequired, setAuthRequired] = useState(true);
-
   const [hint, setHint] = useState("");
 
   useEffect(() => {
     if (sanitizeBridgeBaseOverride()) {
-      setHint("Cleared stale localhost API override — retry login.");
+      setHint("Cleared stale API override — retry sign-in.");
     }
     fetchAuthStatus()
       .then((s) => {
@@ -45,9 +44,7 @@ export default function LoginPage() {
     <div className="login-page">
       <form className="panel login-card" onSubmit={onSubmit}>
         <h2>Open-FDD sign-in</h2>
-        <p className="muted">
-          {authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}
-        </p>
+        <p className="muted">{authRequired ? "Sign in to continue." : "Auth disabled on bridge (dev only)."}</p>
         {hint ? <p className="muted">{hint}</p> : null}
         <div className="field">
           <label className="field-label" htmlFor="login-username">
@@ -58,7 +55,6 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            placeholder="integrator (lowercase)"
           />
         </div>
         <div className="field">

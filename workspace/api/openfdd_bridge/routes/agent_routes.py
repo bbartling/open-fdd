@@ -3,20 +3,19 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ..deps import require_roles
-from .. import agent_tools, audit, ollama_client
+from ..deps import require_roles, require_user
+from .. import agent_tools, audit, building_insight, ollama_client, zone_temp_analytics
 from ..agent_tools import ToolError
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
+from ..security import debug_diagnostics_enabled
 
-router = APIRouter(
-    prefix="/openfdd-agent",
-    tags=["agent"],
-    dependencies=[Depends(require_roles("operator", "integrator", "agent"))],
-)
+router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
+
+_AGENT_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 
 
 class ChatBody(BaseModel):
@@ -34,11 +33,10 @@ class ToolBody(BaseModel):
 
 
 @router.get("/context")
-def agent_context() -> dict:
+def agent_context(user: dict = Depends(require_user)) -> dict:
     ollama = ollama_client.health()
     tier = ollama_client.configured_ram_tier()
-    return {
-        "repo_root": str(repo_root()),
+    payload: dict = {
         "ollama": ollama,
         "ollama_ram_tier": tier,
         "ollama_model": ollama_client.configured_model(),
@@ -50,10 +48,13 @@ def agent_context() -> dict:
         "mcp": ollama_client.mcp_agent_hints(),
         **agent_tools.model_context(),
     }
+    if debug_diagnostics_enabled() and user.get("role") in {"integrator", "agent"}:
+        payload["repo_root"] = str(repo_root())
+    return payload
 
 
 @router.get("/tools")
-def list_tools() -> dict:
+def list_tools(_user: dict = _AGENT_ROLES) -> dict:
     return {"tools": agent_tools.tool_specs(), "app_edit_enabled": agent_tools.app_edit_enabled()}
 
 
@@ -97,8 +98,26 @@ def ollama_health() -> dict:
     return {"ok": True, **ollama_client.health()}
 
 
+@router.get("/building-insight")
+def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
+    """Read-only one-liner for the home dashboard (fixed interval cache).
+
+    Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
+    """
+    return building_insight.get_building_insight(force=force)
+
+
+@router.get("/zone-temps")
+def zone_temps_snapshot(
+    force: bool = Query(default=False),
+    site_id: str | None = Query(default=None),
+) -> dict:
+    """Prebuilt zone temperature levers (day/night averages, recovery rates)."""
+    return zone_temp_analytics.get_zone_temp_snapshot(site_id=site_id, force=force)
+
+
 @router.post("/chat")
-def agent_chat(body: ChatBody) -> dict:
+def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
     """Local operator chat — always Ollama (configured via workspace/ollama.env.local)."""
     return ollama_client.chat(
         body.message,
