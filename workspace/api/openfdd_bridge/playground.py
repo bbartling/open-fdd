@@ -12,6 +12,7 @@ import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from contextlib import nullcontext, redirect_stdout
+from collections.abc import Mapping
 from typing import Any, Callable
 
 import pandas as pd
@@ -61,10 +62,16 @@ def sanitize_traceback_text(text: str | None) -> str | None:
     return _cap_text(first_line, MAX_PUBLIC_TRACE_CHARS)
 
 
-def sanitize_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _coerce_event_item(event: Any) -> dict[str, Any]:
+    if isinstance(event, Mapping):
+        return dict(event)
+    return {"_invalid_event": True, "raw": str(event)[:MAX_PUBLIC_TRACE_CHARS]}
+
+
+def sanitize_events(events: list[Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for event in events:
-        item = dict(event)
+        item = _coerce_event_item(event)
         if "trace" in item:
             item["trace"] = sanitize_traceback_text(str(item.get("trace") or ""))
         if item.get("type") == "stdout" and isinstance(item.get("text"), str):
@@ -84,9 +91,15 @@ class _CappedStdout(io.StringIO):
 
 
 def _call_with_timeout(fn: Callable[[], Any], timeout_s: float) -> Any:
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(fn)
+    executor = ThreadPoolExecutor(max_workers=1)
+    fut = executor.submit(fn)
+    try:
         return fut.result(timeout=timeout_s)
+    except FuturesTimeout:
+        fut.cancel()
+        raise
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _lint_error_events(lint: dict[str, Any]) -> list[dict[str, Any]]:

@@ -47,9 +47,9 @@
     {
       "id": "5007-analog-input-1168",
       "site_id": "demo",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "oa-h",
-      "brick_type": "Humidity_Sensor",
+      "brick_type": "Outside_Air_Humidity_Sensor",
       "fdd_input": "oa-h",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
@@ -67,9 +67,9 @@
     {
       "id": "5007-analog-input-1173",
       "site_id": "demo",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "oa-t",
-      "brick_type": "Zone_Air_Temperature_Sensor",
+      "brick_type": "Outside_Air_Temperature_Sensor",
       "fdd_input": "oa-t",
       "bacnet_device_id": 5007,
       "bacnet_device_address": "2000:7",
@@ -87,7 +87,7 @@
     {
       "id": "5007-analog-input-1192",
       "site_id": "demo",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "duct-1",
       "external_id": "duct-t",
       "brick_type": "Discharge_Air_Temperature_Sensor",
       "fdd_input": "duct-t",
@@ -107,7 +107,7 @@
     {
       "id": "5007-analog-input-10014",
       "site_id": "demo",
-      "equipment_id": "bacnet-5007",
+      "equipment_id": "bench-1",
       "external_id": "stat_zn-t",
       "brick_type": "Zone_Air_Temperature_Sensor",
       "fdd_input": "stat_zn-t",

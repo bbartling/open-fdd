@@ -28,7 +28,9 @@ def _bench_model() -> dict:
 def test_discover_topology_sensors_only():
     topo = discover_topology(_bench_model(), "demo")
     assert topo["mode"] in {"sensors_only", "mixed", "ahu_systems"}
-    assert len(topo["zone_points"]) >= 2
+    zone_cols = {z["column"] for z in topo["zone_points"]}
+    assert "stat_zn-t" in zone_cols
+    assert "oa-t" not in zone_cols  # OA-T is Outside_Air_Temperature_Sensor, not zone
 
 
 def test_compute_zone_metrics_day_night():

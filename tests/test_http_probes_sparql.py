@@ -31,7 +31,8 @@ def bridge_client(monkeypatch: pytest.MonkeyPatch, tmp_path):
             del sys.modules[name]
     from openfdd_bridge.main import create_app  # noqa: E402
 
-    return TestClient(create_app())
+    with TestClient(create_app()) as client:
+        yield client
 
 
 def test_model_sparql_health_endpoints(bridge_client: TestClient):

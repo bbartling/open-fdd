@@ -10,21 +10,28 @@ from typing import Any
 
 
 def _apply_resource_limits(cpu_seconds: float, memory_mb: int) -> None:
+    """Best-effort rlimits (CI/containers may reject some limits)."""
     try:
         import resource
+    except ImportError:
+        return
 
-        cpu = max(5, int(cpu_seconds) + 5)
+    cpu = max(5, int(cpu_seconds) + 5)
+    try:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
-        if memory_mb > 0:
-            cap = memory_mb * 1024 * 1024
-            for attr in ("RLIMIT_AS", "RLIMIT_RSS", "RLIMIT_DATA"):
-                if hasattr(resource, attr):
-                    resource.setrlimit(getattr(resource, attr), (cap, cap))
-                    break
-    except (ImportError, OSError, ValueError) as exc:
-        raise RuntimeError(
-            f"playground resource limits failed (cpu_seconds={cpu_seconds}, memory_mb={memory_mb})"
-        ) from exc
+    except OSError:
+        pass
+    if memory_mb <= 0:
+        return
+    cap = memory_mb * 1024 * 1024
+    for attr in ("RLIMIT_AS", "RLIMIT_RSS", "RLIMIT_DATA"):
+        if not hasattr(resource, attr):
+            continue
+        try:
+            resource.setrlimit(getattr(resource, attr), (cap, cap))
+            break
+        except OSError:
+            continue
 
 
 def _load_job(work_dir: Path) -> dict[str, Any]:

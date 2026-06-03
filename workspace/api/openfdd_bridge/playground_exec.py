@@ -49,8 +49,11 @@ def _write_df_ipc(work_dir: Path, df: Any) -> None:
     if not isinstance(df, pd.DataFrame):
         raise TypeError("run_script job missing DataFrame")
     if _parquet_available():
-        df.to_parquet(work_dir / "job.parquet", index=False)
-        return
+        try:
+            df.to_parquet(work_dir / "job.parquet", index=False)
+            return
+        except Exception:
+            pass
     df.to_json(work_dir / "job.df.json", orient="split", date_format="iso")
 
 
@@ -107,10 +110,6 @@ def _read_result_json(result_path: Path) -> dict[str, Any]:
 def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
     """Spawn ``playground_worker``; return parsed result.json (pickle-free IPC)."""
     job = dict(job)
-    if job.get("op") == "run_script" and "df_bytes" in job:
-        import pickle
-
-        job["df"] = pickle.loads(job.pop("df_bytes"))
 
     with tempfile.TemporaryDirectory(prefix="ofdd-pg-") as tmp:
         td = Path(tmp)

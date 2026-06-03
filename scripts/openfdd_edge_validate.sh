@@ -39,7 +39,14 @@ while [[ $# -gt 0 ]]; do
     --reset-model) RESET_MODEL=1; shift ;;
     --rebuild) REBUILD=1; shift ;;
     --skip-discover) SKIP_DISCOVER=1; shift ;;
-    --base) BASE="$2"; shift 2 ;;
+    --base)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --base requires a URL argument" >&2
+        exit 1
+      fi
+      BASE="$2"
+      shift 2
+      ;;
     -h|--help)
       sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -120,8 +127,10 @@ fi
 
 if [[ "$QUICK" == 0 ]]; then
   log_step "Ensure stack is up (bench overlay)"
-  "${COMPOSE[@]}" up -d bridge commission mcp-rag 2>/dev/null || \
-    docker compose -f docker/compose.dev.yml up -d bridge commission mcp-rag
+  if ! "${COMPOSE[@]}" up -d bridge commission mcp-rag; then
+    echo "error: failed to start bench overlay stack (compose.dev.yml + compose.bench.yml)" >&2
+    exit 1
+  fi
   docker compose -f docker/compose.dev.yml -f docker/compose.bench.yml --profile bacnet stop bacnet-poll 2>/dev/null || true
   sleep 6
   ./scripts/fix_workspace_permissions.sh 2>/dev/null || true
@@ -147,8 +156,11 @@ print('    model_health:', m.get('model_health_status'), 'tree:', m.get('model_t
 
   if [[ "$FULL" == 1 && -f "$api_py" ]]; then
     log_step "Bench operational verify (discover API, import, poll, FDD)"
-    RUN_WAIT_MINUTES=2 SKIP_WAIT=0 \
-      "${api_py}" --host 127.0.0.1 --port 8765 --wait-minutes 2 --skip-wait || log_fail "bench_operational_verify"
+    bench_args=(--host 127.0.0.1 --port 8765 --wait-minutes 2)
+    if [[ "${SKIP_WAIT:-0}" == 1 ]]; then
+      bench_args+=(--skip-wait)
+    fi
+    RUN_WAIT_MINUTES=2 "${api_py}" "${bench_args[@]}" || log_fail "bench_operational_verify"
   fi
 else
   log_fail "missing credentials in ${AUTH_ENV}"
