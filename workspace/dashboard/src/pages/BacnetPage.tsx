@@ -438,7 +438,7 @@ export default function BacnetPage() {
               <span className="status-kv-label">Poll driver</span>
               <span className="status-kv-value">{pollStatus.enabled_points ?? 0} enabled point(s)</span>
             </div>
-            {pollStatus.at || pollStatus.at_local_display ? (
+            {pollStatus.at || pollStatus.at_local || pollStatus.at_local_display ? (
               <div className="status-kv">
                 <span className="status-kv-label">Last sample</span>
                 <span className="status-kv-value">

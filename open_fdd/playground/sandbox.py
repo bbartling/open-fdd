@@ -111,8 +111,8 @@ def lint_python(
 
 def _restricted_import(
     name: str,
-    globals: Any = None,
-    locals: Any = None,
+    _globals: Any = None,
+    _locals: Any = None,
     fromlist: Any = (),
     level: int = 0,
 ) -> Any:
@@ -120,7 +120,7 @@ def _restricted_import(
     if root not in ALLOWED_IMPORT_ROOTS:
         allowed = ", ".join(sorted(ALLOWED_IMPORT_ROOTS))
         raise ImportError(f"import of '{name}' not allowed (allowed: {allowed})")
-    return _builtins.__import__(name, globals, locals, fromlist, level)
+    return _builtins.__import__(name, _globals, _locals, fromlist, level)
 
 
 def _sandbox_builtins() -> dict[str, Any]:
@@ -260,7 +260,7 @@ def sweep_rule(
         try:
             raw = _eval_row()
             instant, paint = parse_evaluate_result(raw, rows)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — user rule code
             events.append(
                 {
                     "type": "row",

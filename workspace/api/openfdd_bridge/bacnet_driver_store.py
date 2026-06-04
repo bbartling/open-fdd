@@ -302,14 +302,15 @@ def merge_commission_rows(
     }
 
 
-def _ensure_discovered_from_poll_rows() -> None:
+def _ensure_discovered_from_poll_rows() -> bool:
     """Rebuild points_discovered.csv from points.csv when discovery inventory was lost on deploy."""
     discovered_path = _discovered_path()
     points_path = _points_path()
     poll_rows = _load_csv(points_path)
     if not poll_rows:
-        return
+        return False
     discovered = _load_csv(discovered_path)
+    had_discovered = bool(discovered)
     by_pid = {str(r.get("point_id") or "").strip(): r for r in discovered if r.get("point_id")}
     defaults = _commission_defaults()
     added = 0
@@ -337,12 +338,13 @@ def _ensure_discovered_from_poll_rows() -> None:
         added += 1
     if added:
         _save_csv(discovered_path, list(by_pid.values()))
+    return bool(added) or (not had_discovered and bool(poll_rows))
 
 
 def driver_tree() -> dict[str, Any]:
     """Device tree from discovered CSV merged with points.csv poll flags."""
     with _DRIVER_LOCK:
-        _ensure_discovered_from_poll_rows()
+        rebuilt_from_poll = _ensure_discovered_from_poll_rows()
         discovered = _load_csv(_discovered_path())
         enabled_rows = {r.get("point_id", ""): r for r in _load_csv(_points_path()) if r.get("point_id")}
     latest_pv = _latest_poll_values()
@@ -403,7 +405,11 @@ def driver_tree() -> dict[str, Any]:
         "discovered_path": str(_discovered_path()),
         "points_path": str(_points_path()),
         "poll_intervals": [{"seconds": s, "label": POLL_LABELS[s]} for s in POLL_INTERVALS_S],
-        "inventory_source": "discovered" if discovered else ("poll_csv" if enabled_rows else "empty"),
+        "inventory_source": (
+            "poll_csv"
+            if rebuilt_from_poll
+            else ("discovered" if discovered else ("poll_csv" if enabled_rows else "empty"))
+        ),
     }
 
 

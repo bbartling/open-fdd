@@ -107,6 +107,15 @@ def validate_pack(ref: SitePackRef, pack_root: Path, *, forbid_acme_rules: bool 
         errors.extend(_validate_model(_read_json(model_path), ref))
     points_path = pack_root / "points.csv"
     errors.extend(_validate_points_csv(points_path, ref))
+    errors.extend(_validate_points_csv(pack_root / "points_discovered.csv", ref))
+    profiles = pack_root / "device_poll_profiles.csv"
+    if profiles.is_file():
+        import csv
+
+        with profiles.open(newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "device_instance" not in (reader.fieldnames or []):
+                errors.append("device_poll_profiles.csv missing device_instance column")
     rules_path = pack_root / "rules_store.json"
     if rules_path.is_file():
         raw = _read_json(rules_path)

@@ -65,9 +65,11 @@ PROBE_SITE_ID="${PROBE_SITE_ID:-demo}"
 INV_ENABLE_OLLAMA="${INV_ENABLE_OLLAMA:-0}"
 INV_DOCKER_OLLAMA="${INV_DOCKER_OLLAMA:-1}"
 INV_OLLAMA_REQUIRED="${INV_OLLAMA_REQUIRED:-0}"
-# Ollama post-check only when explicitly flagged or in-stack Ollama is expected (not -e openfdd_docker_ollama=false).
-if [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" != "1" ]]; then
-  if [[ "${INV_OLLAMA_REQUIRED}" == "1" && "${INV_ENABLE_OLLAMA}" == "1" && "${INV_DOCKER_OLLAMA}" == "1" ]]; then
+# Host Ollama (compose ollama=false) is not probed as required — only in-stack compose Ollama.
+if [[ "${INV_DOCKER_OLLAMA}" == "0" ]]; then
+  POST_CHECK_REQUIRE_OLLAMA=0
+elif [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" != "1" ]]; then
+  if [[ "${INV_OLLAMA_REQUIRED}" == "1" && "${INV_ENABLE_OLLAMA}" == "1" ]]; then
     POST_CHECK_REQUIRE_OLLAMA=1
   else
     POST_CHECK_REQUIRE_OLLAMA=0
@@ -95,7 +97,11 @@ probe_args=(check "$BASE" --require-mcp --site-id "$PROBE_SITE_ID")
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   probe_args+=("$LOGIN_USER" "$LOGIN_PASS")
 fi
-probe_json="$(python3 "$HTTP_PROBES" "${probe_args[@]}")" || probe_json='{"errors":["http_probes.py exited with error"]}'
+# Capture JSON even when probes return exit 1 (errors in payload); do not use cmd || fallback (loses stdout).
+probe_json="$(python3 "$HTTP_PROBES" "${probe_args[@]}" 2>/dev/null)" || true
+if ! echo "$probe_json" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+  probe_json='{"errors":["http_probes.py produced no JSON"]}'
+fi
 
 while IFS= read -r err; do
   [[ -n "$err" ]] && log_fail "$err"

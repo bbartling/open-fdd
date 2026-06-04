@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -10,7 +11,21 @@ REPO = Path(__file__).resolve().parents[1]
 RULES = REPO / "workspace" / "data" / "rules_py"
 
 
+def _assert_wheel_import() -> None:
+    """Fail CI smoke when PYTHONPATH forces a repo checkout over the installed wheel."""
+    import open_fdd
+
+    mod = Path(getattr(open_fdd, "__file__", "") or "").resolve()
+    repo = REPO.resolve()
+    if mod.is_relative_to(repo):
+        raise SystemExit(
+            f"open_fdd loaded from repo ({mod}), not site-packages — unset PYTHONPATH for wheel smoke"
+        )
+
+
 def main() -> int:
+    if os.environ.get("OFDD_WHEEL_SMOKE", "").strip().lower() in {"1", "true", "yes"}:
+        _assert_wheel_import()
     from open_fdd.playground.sandbox import compile_evaluate, lint_python, sweep_rule
 
     acme_files = sorted(RULES.glob("acme_*.py"))
@@ -49,6 +64,12 @@ def main() -> int:
             if only_missing_eval and lint.get("issues"):
                 print(f"SKIP {path.name} (dataframe script, no evaluate)")
                 continue
+            print(f"FAIL {path.name}: lint errors", file=sys.stderr)
+            for issue in lint.get("issues", []):
+                if issue.get("severity") == "error":
+                    print(f"  {issue.get('message')}", file=sys.stderr)
+            failed += 1
+            continue
         try:
             compile_evaluate(code)
             sweep_rule(code, cfg, rows[-10:], capture_print=False)

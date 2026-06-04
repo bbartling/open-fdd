@@ -19,6 +19,23 @@ def test_window_rows_1h_and_ready():
     assert hour_window_ready(window)
 
 
+def test_cfg_threshold_malformed_config():
+    assert cfg_threshold({"bounds_low": "bad"}, "bounds_low") == 65.0
+    assert cfg_threshold({"bounds_low": None}, "bounds_low") == 65.0
+
+
+def test_readings_to_evaluate_rows_malformed_skipped():
+    readings = [
+        {"ts_ms": 1_700_000_000_000, "degF": 72.0, "ts": "2024-01-01T12:00:00Z"},
+        {"ts_ms": "nope", "degF": 70.0},
+        {"ts_ms": 1_700_000_001_000, "value": "not-a-number"},
+    ]
+    rows = readings_to_evaluate_rows(readings)
+    assert len(rows) == 1
+    assert rows[0]["temp"] == 72.0
+    assert "temp_rolling_avg" in rows[0]
+
+
 def test_readings_to_evaluate_rows():
     readings = [{"ts_ms": 1_700_000_000_000, "degF": 72.0, "ts": "2024-01-01T12:00:00Z"}]
     rows = readings_to_evaluate_rows(readings)

@@ -71,7 +71,7 @@ jobs:
           flags, _ = sweep_rule(code, {\"bounds_high\": 80}, rows, capture_print=False)
           assert flags[0]
           "
-          PYTHONPATH=. /tmp/ofdd-playground-smoke/bin/python scripts/validate_acme_rules_pypi.py
+          env -u PYTHONPATH OFDD_WHEEL_SMOKE=1 /tmp/ofdd-playground-smoke/bin/python scripts/validate_acme_rules_pypi.py
 
       - name: Pytest playground (source tree)
         run: |

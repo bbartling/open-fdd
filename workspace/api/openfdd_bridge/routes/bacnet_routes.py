@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -420,7 +420,7 @@ def _enrich_poll_status(payload: dict[str, Any]) -> dict[str, Any]:
         out["at_utc"] = at_raw
         out["at_local"] = local.isoformat()
         out["at_local_display"] = local.strftime("%Y-%m-%d %H:%M:%S %Z")
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
         out["at_utc"] = at_raw
     return out
 

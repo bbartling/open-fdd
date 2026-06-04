@@ -46,7 +46,10 @@ def normalize_rolling_avg_minutes(value: Any) -> int:
 def cfg_threshold(cfg: dict[str, Any] | None, key: str) -> float:
     cfg = cfg or {}
     if key in cfg and cfg[key] is not None and str(cfg[key]).strip() != "":
-        return float(cfg[key])
+        try:
+            return float(cfg[key])
+        except (TypeError, ValueError):
+            return float(DEFAULT_THRESHOLDS_F.get(key, 0.0))
     return float(DEFAULT_THRESHOLDS_F.get(key, 0.0))
 
 

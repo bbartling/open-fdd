@@ -190,7 +190,13 @@ def _tool_timeseries_snapshot(args: dict[str, Any]) -> dict[str, Any]:
         columns = [str(c).strip() for c in raw_cols if str(c).strip()]
     else:
         columns = [c.strip() for c in str(raw_cols or "").split(",") if c.strip()]
-    hours = int(args.get("hours") or analytics_lookback_days() * 24)
+    if args.get("hours") is None:
+        hours = analytics_lookback_days() * 24
+    else:
+        try:
+            hours = int(args.get("hours"))
+        except (TypeError, ValueError) as exc:
+            raise ToolError(f"invalid hours value: {args.get('hours')!r}") from exc
     hours = max(1, min(hours, 24 * 90))
     df, origin = load_frame_for_run(site_id)
     df = trim_frame_to_lookback(df, hours=float(hours))
@@ -455,8 +461,8 @@ def run_tool(name: str, args: dict[str, Any] | None, *, role: str | None = None)
     fn = _TOOLS.get(name)
     if fn is None:
         raise ToolError(f"unknown tool: {name}")
-    if role == "operator" and tool_requires_write_role(name):
-        raise ToolError(f"tool {name} requires integrator or agent role")
+    if tool_requires_write_role(name) and role not in ("integrator", "agent"):
+        raise ToolError(f"tool {name} requires integrator or agent role (got {role!r})")
     return fn(args or {})
 
 

@@ -12,10 +12,19 @@ HOST="${EDGE_HOST:-}"
 shift 2 || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --host) HOST="$2"; shift 2 ;;
+    --host)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "ERROR: --host requires an IP or hostname" >&2
+        exit 1
+      fi
+      HOST="$2"
+      shift 2
+      ;;
     *) echo "Unknown: $1" >&2; exit 1 ;;
   esac
 done
+
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 
 PACK="${ROOT}/edge_backup/local/${SITE}/${BLDG}"
 DISC="${PACK}/points_discovered.csv"
@@ -43,11 +52,11 @@ REMOTE="${ANSIBLE_REMOTE_USER:-ben}@${HOST}"
 REMOTE_DIR="${OPENFDD_REMOTE_DIR:-/home/ben/open-fdd}"
 
 echo "Copying BACnet inventory to ${REMOTE}..."
-scp "$DISC" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points_discovered.csv"
-[[ -f "$PTS" ]] && scp "$PTS" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points.csv" || true
+scp "${SSH_OPTS[@]}" "$DISC" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points_discovered.csv"
+[[ -f "$PTS" ]] && scp "${SSH_OPTS[@]}" "$PTS" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points.csv" || true
 
 echo "Restarting bridge + commission containers..."
-ssh "$REMOTE" "cd ${REMOTE_DIR} && docker compose -f docker/compose.edge.yml restart bridge commission 2>/dev/null || docker compose restart bridge commission"
+ssh "${SSH_OPTS[@]}" "$REMOTE" "cd ${REMOTE_DIR} && docker compose -f docker/compose.edge.yml restart bridge commission 2>/dev/null || docker compose restart bridge commission"
 
 echo "Done. Open BACnet → Devices & points; tree should list devices. Verify:"
 echo "  cd ${ROOT}/infra/ansible && ./scripts/post_deploy_check.sh --host ${HOST}"

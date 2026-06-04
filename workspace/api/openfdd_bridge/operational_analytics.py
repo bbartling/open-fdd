@@ -32,7 +32,7 @@ def trim_frame_to_lookback(df: pd.DataFrame, *, hours: float | None = None) -> p
     cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=window_h)
     ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
     trimmed = df.loc[ts >= cutoff]
-    return trimmed if not trimmed.empty else df
+    return trimmed
 
 
 def analytics_methodology() -> dict[str, Any]:

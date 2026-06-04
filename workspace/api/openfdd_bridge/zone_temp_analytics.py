@@ -644,7 +644,7 @@ def compact_for_llm(snapshot: dict[str, Any], *, max_bytes: int = 2800) -> str:
             max_struggling=max_str,
         )
         text = json.dumps(slim, separators=(",", ":"))
-        if len(text) <= max_bytes:
+        if len(text.encode("utf-8")) <= max_bytes:
             return text
     slim = slim_zone_for_llm(snapshot, max_zones=2, max_systems=1, max_zones_per_system=2, max_struggling=2)
     return _compact_json_under_bytes(slim, max_bytes=max_bytes, summary_cap=120)

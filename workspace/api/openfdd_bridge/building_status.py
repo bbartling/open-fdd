@@ -38,9 +38,9 @@ def collect_status() -> dict[str, Any]:
 
     all_alerts = merged["alerts"] + fdd_alerts + poll_alerts
     status = merged["status"]
-    if fdd_alerts and status == "ok":
+    if (fdd_alerts or poll_alerts) and status == "ok":
         status = "warning"
-    if any(a.get("severity") == "critical" for a in fdd_alerts):
+    if any(a.get("severity") == "critical" for a in all_alerts):
         status = "critical"
 
     return {

@@ -286,6 +286,14 @@ def _min_model_equipment() -> int:
         return 0
 
 
+def _bacnet_fetch_timeout_s() -> float:
+    raw = os.environ.get("OPENFDD_PROBE_BACNET_TIMEOUT_S", "60").strip()
+    try:
+        return max(10.0, float(raw))
+    except ValueError:
+        return 60.0
+
+
 def check_bacnet_driver(
     base: str,
     token: str,
@@ -298,6 +306,7 @@ def check_bacnet_driver(
     out: dict[str, Any] = {"errors": [], "warnings": []}
     headers = auth_headers(token)
     root = base.rstrip("/")
+    bacnet_to = _bacnet_fetch_timeout_s()
     if max_poll_age_s is None:
         raw = os.environ.get("OPENFDD_HEALTH_MAX_POLL_AGE_S", "900").strip()
         try:
@@ -306,7 +315,11 @@ def check_bacnet_driver(
             max_poll_age_s = 900.0
 
     tree_url = f"{root}/api/bacnet/driver/tree"
-    status, body, _ = fetch(tree_url, headers=headers)
+    try:
+        status, body, _ = fetch(tree_url, headers=headers, timeout=bacnet_to)
+    except RuntimeError as exc:
+        out["errors"].append(f"/api/bacnet/driver/tree unreachable: {exc}")
+        return out
     out["bacnet_tree_status"] = status
     if status != 200:
         out["errors"].append(f"/api/bacnet/driver/tree HTTP {status}: {body[:200]}")
@@ -335,7 +348,11 @@ def check_bacnet_driver(
         out["errors"].append("BACnet inventory_source=empty (no points.csv / points_discovered.csv)")
 
     poll_url = f"{root}/api/bacnet/poll/status"
-    status, body, _ = fetch(poll_url, headers=headers)
+    try:
+        status, body, _ = fetch(poll_url, headers=headers, timeout=bacnet_to)
+    except RuntimeError as exc:
+        out["errors"].append(f"/api/bacnet/poll/status unreachable: {exc}")
+        return out
     out["bacnet_poll_status"] = status
     if status != 200:
         out["errors"].append(f"/api/bacnet/poll/status HTTP {status}: {body[:200]}")
@@ -374,10 +391,13 @@ def check_bacnet_driver(
             out["warnings"].append(f"Could not parse poll timestamp: {at_raw!r}")
 
     comm_url = f"{root}/api/bacnet/commission/status"
-    status, body, _ = fetch(comm_url, headers=headers)
-    out["bacnet_commission_status"] = status
-    if status not in (200, 503):
-        out["warnings"].append(f"/api/bacnet/commission/status HTTP {status}")
+    try:
+        comm_status, _body, _ = fetch(comm_url, headers=headers, timeout=bacnet_to)
+        out["bacnet_commission_status"] = comm_status
+        if comm_status not in (200, 503):
+            out["warnings"].append(f"/api/bacnet/commission/status HTTP {comm_status}")
+    except RuntimeError as exc:
+        out["warnings"].append(f"/api/bacnet/commission/status skipped: {exc}")
     return out
 
 
@@ -741,7 +761,8 @@ def main() -> int:
                             "agent chat probe had errors (Ollama may be off)"
                         )
                     result["agent_chat"] = chat
-                    result["errors"].extend(chat.get("errors", []))
+                    for chat_err in chat.get("errors", []):
+                        result["warnings"].append(f"agent chat probe: {chat_err}")
                     result["warnings"].extend(chat.get("warnings", []))
                 probe_site = site_id
                 if not probe_site or probe_site == "demo":

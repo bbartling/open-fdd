@@ -55,9 +55,9 @@ def test_main_continues_bacnet_when_agent_context_times_out():
         patch.object(http_probes, "check_model_api", return_value={"errors": [], "warnings": [], "active_site_id": "acme"}),
         patch.object(http_probes, "check_agent_stack", side_effect=fake_agent),
         patch.object(http_probes, "check_integrator_ui_api", return_value={"errors": [], "warnings": []}),
-        patch.object(http_probes, "check_bacnet_driver", return_value=bacnet_ok),
+        patch.object(http_probes, "check_bacnet_driver", return_value=bacnet_ok) as mock_bacnet,
         patch.object(http_probes, "check_agent_chat", return_value={"errors": [], "warnings": [], "skipped": True}),
     ):
         rc = http_probes.main()
     assert rc == 1
-    # BACnet ran — errors should include agent failure, not a bare traceback exit
+    mock_bacnet.assert_called()

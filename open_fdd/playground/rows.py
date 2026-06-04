@@ -25,22 +25,40 @@ def timestamp_to_ts_ms(raw: Any) -> int | None:
         return None
 
 
+def _safe_float(raw: Any, default: float | None = None) -> float | None:
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 def readings_to_evaluate_rows(readings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """DynamoDB/MQTT samples → rows (parity with AWS ``fdd_lambda`` ``series_readings_to_rows``)."""
     rows: list[dict[str, Any]] = []
-    for i, r in enumerate(readings):
-        ts_iso = r.get("ts") or r.get("ts_iso") or ""
+    for r in readings:
+        if r.get("ts_ms") is None:
+            continue
+        try:
+            ts_ms = int(r["ts_ms"])
+        except (TypeError, ValueError):
+            continue
         if "degF" in r:
-            deg_f = float(r["degF"])
+            deg_f = _safe_float(r.get("degF"))
         else:
-            deg_f = float(r.get("value", 0))
+            deg_f = _safe_float(r.get("value"))
+        if deg_f is None:
+            continue
+        ts_iso = r.get("ts") or r.get("ts_iso") or ""
+        deg_c = _safe_float(r.get("degC"), (deg_f - 32) * 5 / 9)
         rows.append(
             {
-                "row": i,
-                "ts_ms": int(r["ts_ms"]),
+                "row": len(rows),
+                "ts_ms": ts_ms,
                 "ts": str(ts_iso).replace("T", " ")[:19],
                 "degF": deg_f,
-                "degC": float(r.get("degC", (deg_f - 32) * 5 / 9)),
+                "degC": deg_c if deg_c is not None else (deg_f - 32) * 5 / 9,
                 "temp": deg_f,
                 "value": r.get("value", deg_f),
                 "unit": r.get("unit", ""),
