@@ -647,5 +647,36 @@ def compact_for_llm(snapshot: dict[str, Any], *, max_bytes: int = 2800) -> str:
         if len(text) <= max_bytes:
             return text
     slim = slim_zone_for_llm(snapshot, max_zones=2, max_systems=1, max_zones_per_system=2, max_struggling=2)
-    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[:120]
+    return _compact_json_under_bytes(slim, max_bytes=max_bytes, summary_cap=120)
+
+
+def _compact_json_under_bytes(
+    slim: dict[str, Any],
+    *,
+    max_bytes: int,
+    summary_cap: int = 120,
+) -> str:
+    """Trim string fields until JSON fits max_bytes (valid JSON guaranteed)."""
+    slim = dict(slim)
+    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[:summary_cap]
+    cap = 80
+    while cap >= 8:
+        text = json.dumps(slim, separators=(",", ":"))
+        if len(text.encode("utf-8")) <= max_bytes:
+            return text
+        for key, val in list(slim.items()):
+            if isinstance(val, str) and len(val) > cap:
+                slim[key] = val[:cap]
+            elif isinstance(val, list):
+                slim[key] = [
+                    {
+                        k: (v[:cap] if isinstance(v, str) and len(v) > cap else v)
+                        for k, v in (item.items() if isinstance(item, dict) else [])
+                    }
+                    if isinstance(item, dict)
+                    else item
+                    for item in val
+                ]
+        cap //= 2
+    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[: min(summary_cap, 40)]
     return json.dumps(slim, separators=(",", ":"))

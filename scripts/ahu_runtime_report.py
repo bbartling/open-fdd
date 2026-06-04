@@ -92,7 +92,9 @@ def main() -> int:
             print(f"  {key}: {metrics[key]}")
 
     if args.json_out:
-        Path(args.json_out).write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+        out_path = Path(args.json_out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
         print(f"Wrote {args.json_out}")
 
     return 0

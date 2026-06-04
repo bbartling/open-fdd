@@ -197,9 +197,10 @@ def check_vav_gl36(vav: dict[str, VavBundle], samples: dict[str, list[float]]) -
 def check_ahu_economizer(rows: list[dict], samples: dict[str, list[float]], ahu_system_id: str) -> list[Check]:
     if not ahu_system_id:
         return [Check("ahu-economizer", True, "skipped (no --ahu-system-id and none discovered)")]
+    ahu_key = ahu_system_id.strip().lower()
     by_tag: dict[str, str] = {}
     for r in rows:
-        if (r.get("system_id") or "").strip() != ahu_system_id:
+        if (r.get("system_id") or "").strip().lower() != ahu_key:
             continue
         tag = (r.get("brick_tag") or "").upper()
         by_tag[tag] = r["point_id"]

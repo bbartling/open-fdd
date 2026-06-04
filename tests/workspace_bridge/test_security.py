@@ -112,6 +112,15 @@ def test_startup_localhost_auth_disabled_ok(monkeypatch: pytest.MonkeyPatch, tmp
     create_app()
 
 
+def test_startup_lan_ip_no_auth_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _clear_auth_env(monkeypatch)
+    _reload_security(monkeypatch, tmp_path, OFDD_BRIDGE_HOST="192.168.1.50")
+    from openfdd_bridge.security import validate_startup_auth  # noqa: E402
+
+    with pytest.raises(RuntimeError, match="cannot start"):
+        validate_startup_auth()
+
+
 def test_startup_public_bind_no_auth_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     _clear_auth_env(monkeypatch)
     _reload_security(monkeypatch, tmp_path, OFDD_BRIDGE_HOST="0.0.0.0")
@@ -252,9 +261,12 @@ def test_ws_ticket_and_connect(raw_client: TestClient, integrator_headers: dict[
 
 
 def test_ws_rejected_without_ticket(raw_client: TestClient):
-    with pytest.raises(Exception):
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect) as excinfo:
         with raw_client.websocket_connect("/ws/dashboard"):
             pass
+    assert excinfo.value.code == 1008
 
 
 def test_anonymous_cannot_read_agent_context(raw_client: TestClient):

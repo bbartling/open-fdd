@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 
@@ -22,7 +23,16 @@ def bridge_bind_is_localhost_only() -> bool:
 
 
 def bridge_bind_is_public() -> bool:
-    return bridge_host() in _PUBLIC_BIND_HOSTS
+    """True when the API is reachable off-loopback (wildcard, LAN IP, or hostname)."""
+    host = bridge_host().strip().lower()
+    if host in _LOCAL_BIND_HOSTS:
+        return False
+    if host in _PUBLIC_BIND_HOSTS:
+        return True
+    try:
+        return not ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return True
 
 
 def insecure_lan_dev_allowed() -> bool:

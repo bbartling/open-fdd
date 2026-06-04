@@ -10,7 +10,7 @@ The Open-FDD bridge and React dashboard run on BACnet/OT edge hosts. Default pos
 | **LAN demo (insecure)** | `0.0.0.0` or `::` | `OFDD_AUTH_DISABLED=1` **and** `OFDD_INSECURE_LAN_DEV=1` (or `OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV=1`) | Commissioning lab on trusted LAN only — not production |
 | **Edge / production** | `0.0.0.0` or `::` (behind Caddy) | `OFDD_AUTH_SECRET` + role passwords **required** | BACnet edge VM, OT network |
 
-Startup **fails** if the bridge listens on `0.0.0.0` / `::` without configured credentials and without the explicit insecure LAN dev flags above.
+Startup **fails** if the bridge listens on any non-loopback address (`0.0.0.0`, `::`, or a concrete LAN IP such as `192.168.x.x`) without configured credentials and without the explicit insecure LAN dev flags above.
 
 ## Required for LAN / edge production
 

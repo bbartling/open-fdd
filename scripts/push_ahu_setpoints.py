@@ -92,7 +92,15 @@ def main() -> int:
         return 1
 
     base = f"http://{args.host}"
-    token = _login(base, args.user, password)
+    try:
+        token = _login(base, args.user, password)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode(errors="replace")[:300]
+        print(f"Login failed for {args.user}@{base}: HTTP {exc.code} {detail}", file=sys.stderr)
+        return 1
+    except (urllib.error.URLError, KeyError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Login failed for {args.user}@{base}: {exc}", file=sys.stderr)
+        return 1
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     body = json.dumps({"rows": extra, "enable_poll": True}).encode()

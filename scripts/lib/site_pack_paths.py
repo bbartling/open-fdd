@@ -11,6 +11,8 @@ def repo_root() -> Path:
 
 def pack_dir(site_id: str, building_id: str, *, source: str = "backup") -> Path:
     """``source``: ``backup`` → edge_backup/local; ``config`` → edge_config."""
+    if source not in {"backup", "config"}:
+        raise ValueError(f"pack_dir source must be 'backup' or 'config', got {source!r}")
     base = "edge_backup/local" if source == "backup" else "edge_config"
     return repo_root() / base / site_id.strip() / building_id.strip()
 

@@ -143,14 +143,12 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
     };
 
     const connectWs = async () => {
+      if (cancelled) return;
       const ticket = await fetchWsTicket();
-      if (cancelled || !ticket) {
-        if (!cancelled) startPolling();
-        return;
-      }
+      if (cancelled) return;
       try {
         const url = new URL(wsBaseUrl());
-        url.searchParams.set("ticket", ticket);
+        if (ticket) url.searchParams.set("ticket", ticket);
         ws = new WebSocket(url.toString());
         ws.onopen = () => {
           if (!cancelled) setLive(true);

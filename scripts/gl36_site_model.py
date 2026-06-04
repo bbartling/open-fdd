@@ -74,7 +74,9 @@ def build_model_from_csv(
                 "building_id": bid,
                 "bacnet_device_instance": int(r["device_instance"]),
             }
-        pid = r.get("point_id") or ""
+        pid = (r.get("point_id") or "").strip()
+        if not pid:
+            continue
         points.append(
             {
                 "id": pid,
