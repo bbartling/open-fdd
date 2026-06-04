@@ -17,7 +17,7 @@ On every PR and push to **`main`**, **`master`**, or **`develop`**:
 1. Install **`pip install -e ".[dev]"`**
 2. Build combined docs text (`python scripts/build_docs_pdf.py --no-pdf`) for consistency checks
 3. Run **`pytest`** on `open_fdd/tests`
-4. Dry-run **`python -m build`** + **`twine check`** for **`open-fdd`** and **`packages/openfdd-engine`**
+4. Dry-run **`python -m build`** + **`twine check`** for **`open-fdd`** (engine + playground in one wheel)
 
 ---
 

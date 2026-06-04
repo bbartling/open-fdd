@@ -1,3 +1,6 @@
+# Single PyPI distribution: open-fdd (open_fdd.engine + open_fdd.playground + schema/reports).
+# Tag open-fdd-vX.Y.Z to publish. Do not use the retired openfdd-engine workflow.
+
 name: Publish open-fdd
 
 on:
@@ -25,7 +28,6 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Prevents tagging open-fdd-v2.0.14 while pyproject.toml still says 2.0.13 (build would upload 2.0.13 → PyPI 400).
       - name: Verify release tag matches pyproject.toml version
         if: startsWith(github.ref, 'refs/tags/open-fdd-v')
         run: |
@@ -44,20 +46,16 @@ jobs:
           python -m build
           twine check dist/*
 
-      - name: Verify wheel imports engine with extras
+      - name: Verify wheel (engine + playground)
         run: |
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
-
-      - name: Verify wheel playground + Acme rule smoke
-        run: |
-          python -m venv /tmp/ofdd-playground-smoke
-          wheel="$(ls -1t dist/*.whl | head -n 1)"
-          /tmp/ofdd-playground-smoke/bin/pip install "$wheel"
-          /tmp/ofdd-playground-smoke/bin/python -c "
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/python -c "
+          from open_fdd.engine import RuleRunner
+          import open_fdd
+          assert open_fdd.__version__
           from open_fdd.playground import compile_evaluate, sweep_rule, cfg_threshold
           from open_fdd.playground.cookbook import window_rows_1h
           assert cfg_threshold({}, 'bounds_low') == 65.0
@@ -71,15 +69,13 @@ jobs:
           flags, _ = sweep_rule(code, {\"bounds_high\": 80}, rows, capture_print=False)
           assert flags[0]
           "
-          env -u PYTHONPATH OFDD_WHEEL_SMOKE=1 /tmp/ofdd-playground-smoke/bin/python scripts/validate_acme_rules_pypi.py
+          env -u PYTHONPATH OFDD_WHEEL_SMOKE=1 /tmp/ofdd-wheel-smoke/bin/python scripts/validate_acme_rules_pypi.py
 
       - name: Pytest playground (source tree)
         run: |
           python -m pip install pytest
           python -m pytest open_fdd/tests/playground -q
 
-      # PyPI Trusted Publishing (OIDC) — no TWINE_PASSWORD secret required.
-      # Configure each PyPI project: Publishing → add GitHub trusted publisher for this workflow file.
       - name: Publish to PyPI
         if: startsWith(github.ref, 'refs/tags/open-fdd-v')
         uses: pypa/gh-action-pypi-publish@release/v1

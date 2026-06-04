@@ -11,8 +11,8 @@ The **front-runner product** is the **operator web app** in this repo: Docker br
 **PyPI** ships library wheels for notebooks, CI, AWS lambda, and offline CSV work:
 
 ```bash
-pip install open-fdd
-pip install "open-fdd[engine]"   # YAML RuleRunner (pyyaml, pydantic)
+pip install open-fdd             # engine (YAML RuleRunner) + playground
+pip install "open-fdd[engine]"   # same as base since 2.4.x (alias)
 pip install "open-fdd[reports]"  # matplotlib summaries (optional)
 ```
 
@@ -111,7 +111,6 @@ See [Fault rules (engine)](rules/) and [YAML expression cookbook](expression_rul
 
 | Package | PyPI |
 |---------|------|
-| `open-fdd` | [open-fdd](https://pypi.org/project/open-fdd/) |
-| `openfdd-engine` | Thin re-export of `open_fdd.engine` (tag `openfdd-engine-v*`) |
+| `open-fdd` | [open-fdd](https://pypi.org/project/open-fdd/) — engine + playground (tag `open-fdd-v*`) |
 
 Docker images (`openfdd-bridge`, commission, MCP) are built from this repo — see [Publish Docker addons](howto/publish_docker_addons).

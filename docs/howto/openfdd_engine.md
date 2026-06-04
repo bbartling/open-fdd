@@ -1,12 +1,15 @@
 ---
-title: The optional openfdd-engine package
+title: The optional openfdd-engine package (deprecated)
 parent: How-to Guides
 nav_order: 22
+nav_exclude: true
 ---
 
-# The optional `openfdd-engine` package (`openfdd_engine`)
+# The optional `openfdd-engine` package (`openfdd_engine`) — deprecated
 
-Open-FDD has **one rules implementation**: YAML files evaluated on **pandas** via **`RuleRunner`** in **`open_fdd.engine`**. The **`packages/openfdd-engine/`** tree (PyPI name **`openfdd-engine`**, import **`openfdd_engine`**) is a **thin re-export** of selected symbols from **`open_fdd.engine`** — useful when procurement or legacy imports expect the **`openfdd_engine`** package name.
+> **Use `pip install open-fdd` only.** PyPI publishing is **`open-fdd-v*`** via [PyPI releases](openfdd_engine_pypi.md). The **`openfdd-engine`** PyPI workflow was removed; **`packages/openfdd-engine/`** is a legacy editable shim only.
+
+Open-FDD has **one rules implementation**: YAML on **pandas** via **`RuleRunner`** in **`open_fdd.engine`**, plus **`open_fdd.playground`** in the same wheel. The **`openfdd_engine`** import name was a thin re-export for old procurement wording.
 
 ---
 

@@ -6,21 +6,27 @@ nav_order: 20
 
 # PyPI releases (`open-fdd`)
 
-**Canonical public install for the 2.x rules engine:**
+**One PyPI project** — canonical install:
 
 ```bash
 pip install open-fdd
 ```
 
-That distribution ships **`open_fdd.engine`** (`RuleRunner`, YAML rules, same stack as the platform FDD loop). **Why does PyPI “Release history” mix `0.1.x` and `2.x`?** That is still **one** project, **`open-fdd`**: older **0.1.x** uploads were the legacy, hard-coded pandas era; **2.x** is the current config-driven engine + platform-capable tree. Pip resolves the latest **2.x** unless you pin an old version.
+That wheel ships:
 
----
+| Module | Role |
+|--------|------|
+| **`open_fdd.engine`** | YAML **`RuleRunner`** on pandas (PyYAML + Pydantic in core deps) |
+| **`open_fdd.playground`** | Portable **`evaluate(row, cfg, …)`** sandbox (Rule Lab / lambda style) |
+| **`open_fdd.reports`** | Optional — `pip install "open-fdd[reports]"` |
 
-## `openfdd-engine` (optional second PyPI name)
+**`pip install "open-fdd[engine]"`** still works (empty extra; engine deps are in the base install since 2.4.x).
 
-The repo also contains **`packages/openfdd-engine/`** (import name **`openfdd_engine`**): a thin re-export that **depends on `open-fdd`**. Its **`version` is kept the same as `open-fdd` 2.x** (e.g. both `2.0.13`) so release numbers stay easy to reason about, even though it is a **separate** PyPI project name.
+**Why does PyPI “Release history” mix `0.1.x` and `2.x`?** Still **one** project: **0.1.x** was the legacy era; **2.x** is the current tree. Pip resolves latest **2.x** unless pinned.
 
-Publishing uses **`.github/workflows/publish-openfdd-engine.yml`**: push tag **`openfdd-engine-vX.Y.Z`** after the **`openfdd-engine`** PyPI project has a **trusted publisher** for that workflow (same OIDC idea as `open-fdd`). **`workflow_dispatch`** builds only; upload runs on matching tags.
+**CI:** only **`.github/workflows/publish-open-fdd.yml`** — tag **`open-fdd-vX.Y.Z`** to upload. No separate `openfdd-engine` publish workflow.
+
+The repo folder **`packages/openfdd-engine/`** is a **deprecated local shim** (`import openfdd_engine`); do not publish it to PyPI on new releases.
 
 ---
 
@@ -36,8 +42,8 @@ curl -s https://pypi.org/pypi/open-fdd/json | python3 -c "import sys, json; prin
 
 ## 1) Before a release of `open-fdd`
 
-1. **Version** — Root **`pyproject.toml`** → `[project] version` (e.g. `2.0.11`).
-2. **`openfdd-engine`** — Bump **`packages/openfdd-engine/pyproject.toml`** `version` to the **same `X.Y.Z`** as `open-fdd`, and set **`open-fdd>=X.Y.Z`** in dependencies. Tag **`openfdd-engine-vX.Y.Z`** if you publish that project.
+1. **Version** — Root **`pyproject.toml`** → `[project] version` (e.g. `2.4.1`).
+2. **Tests** — `pytest open_fdd/tests` green; optional `workflow_dispatch` on **Publish open-fdd** for a dry run before tagging.
 
 ### Transition checklist (legacy 0.1.x → 2.x on PyPI)
 
@@ -102,17 +108,9 @@ git push origin open-fdd-v2.0.11
 
 ---
 
-## 3) Publish `openfdd-engine` (second PyPI project)
-
-1. Create project **`openfdd-engine`** on PyPI (if it does not exist).
-2. Add a **trusted publisher** pointing at workflow **`publish-openfdd-engine.yml`** (same repository as `open-fdd`).
-3. Tag **`openfdd-engine-vX.Y.Z`** (same numbers as **`open-fdd-vX.Y.Z`**) and push — only after PyPI is configured, or OIDC fails with `invalid-publisher`.
-
----
-
 ## Scope policy
 
-- **PyPI** ships the **Python packages** (**`open-fdd`** is the supported public name for 2.x).
-- This repository is the **rules engine** only — YAML rules, **`RuleRunner`**, and **`column_map`** on pandas.
+- **PyPI** = **`open-fdd`** only (engine + playground in one wheel).
+- **GHCR** = edge operator images (`openfdd-bridge`, etc.) — separate workflow; see [Publish Docker addons](publish_docker_addons.md).
 
-See also: [Engine-only deployment and external IoT pipelines](engine_only_iot).
+See also: [PyPI playground](open_fdd_playground_pypi.md), [Engine-only deployment and external IoT pipelines](engine_only_iot).
