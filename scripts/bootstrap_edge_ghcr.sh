@@ -45,13 +45,13 @@ fi
 export OPENFDD_IMAGE_TAG="$TAG"
 export RUN_POST_CHECK="${RUN_POST_CHECK:-1}"
 
-echo "==> Caddy (host :80 → bridge)"
-./deploy.sh caddy --limit "$LIMIT" "${EXTRA[@]}"
-
 echo "==> Docker stack (GHCR pull + workspace sync)"
 ./deploy.sh docker --limit "$LIMIT" -e openfdd_docker_ollama=false "${EXTRA[@]}"
 
-echo "==> Host Ollama + MCP (when enabled in host_vars)"
+echo "==> Caddy (host :80 → bridge; after compose is up)"
+./deploy.sh caddy --limit "$LIMIT" "${EXTRA[@]}"
+
+echo '==> Host Ollama + MCP when enabled in host_vars'
 ./deploy.sh ai --limit "$LIMIT" "${EXTRA[@]}" || true
 
 echo "==> Operational sync (TTL, probes, feather check)"
