@@ -18,7 +18,9 @@ _PACK_FILES = (
     "model.json",
     "rules_store.json",
     "points.csv",
+    "points_discovered.csv",
     "commission.env",
+    "device_poll_profiles.csv",
 )
 
 
@@ -121,15 +123,21 @@ def backup_site(ref: SitePackRef, dest: Path | None = None) -> Path:
     src_model = data_dir() / "model.json"
     src_rules = data_dir() / "rules_store.json"
     src_points = commissioning_dir() / "points.csv"
+    src_discovered = commissioning_dir() / "points_discovered.csv"
     src_comm = commissioning_dir() / "commission.env"
+    src_profiles = commissioning_dir() / "device_poll_profiles.csv"
     if src_model.is_file():
         shutil.copy2(src_model, dest / "model.json")
     if src_rules.is_file():
         shutil.copy2(src_rules, dest / "rules_store.json")
     if src_points.is_file():
         shutil.copy2(src_points, dest / "points.csv")
+    if src_discovered.is_file():
+        shutil.copy2(src_discovered, dest / "points_discovered.csv")
     if src_comm.is_file():
         shutil.copy2(src_comm, dest / "commission.env")
+    if src_profiles.is_file():
+        shutil.copy2(src_profiles, dest / "device_poll_profiles.csv")
     meta = {
         "site_id": ref.site_id,
         "building_id": ref.building_id,
@@ -180,6 +188,20 @@ def apply_site(
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(comm_path, dest)
         applied["commission.env"] = str(dest)
+
+    disc_path = root / "points_discovered.csv"
+    if disc_path.is_file():
+        dest = commissioning_dir() / "points_discovered.csv"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(disc_path, dest)
+        applied["points_discovered.csv"] = str(dest)
+
+    profiles_path = root / "device_poll_profiles.csv"
+    if profiles_path.is_file():
+        dest = commissioning_dir() / "device_poll_profiles.csv"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(profiles_path, dest)
+        applied["device_poll_profiles.csv"] = str(dest)
 
     if sync_ttl and applied.get("model.json"):
         TtlService().sync()

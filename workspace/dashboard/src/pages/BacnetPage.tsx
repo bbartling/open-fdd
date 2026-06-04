@@ -13,6 +13,7 @@ import {
   type PointDiscoveryObjectRow,
   type WhoisDeviceRow,
 } from "../lib/bacnet-discovery-parse";
+import { formatPollSampleAt } from "../lib/formatPollTime";
 
 type BacnetConfig = {
   commission_agent_ok: boolean;
@@ -65,7 +66,16 @@ export default function BacnetPage() {
   const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [driverDevices, setDriverDevices] = useState<DriverDevice[]>([]);
-  const [pollStatus, setPollStatus] = useState<{ enabled_points?: number; samples?: number; at?: string; error?: string } | null>(null);
+  const [pollStatus, setPollStatus] = useState<{
+    enabled_points?: number;
+    samples?: number;
+    at?: string;
+    at_local_display?: string;
+    at_local?: string;
+    at_utc?: string;
+    site_timezone?: string;
+    error?: string;
+  } | null>(null);
   const [activeJobLabel, setActiveJobLabel] = useState("");
 
   const loadDriverTree = useCallback(async () => {
@@ -428,11 +438,16 @@ export default function BacnetPage() {
               <span className="status-kv-label">Poll driver</span>
               <span className="status-kv-value">{pollStatus.enabled_points ?? 0} enabled point(s)</span>
             </div>
-            {pollStatus.at ? (
+            {pollStatus.at || pollStatus.at_local_display ? (
               <div className="status-kv">
                 <span className="status-kv-label">Last sample</span>
                 <span className="status-kv-value">
-                  {pollStatus.at} ({pollStatus.samples ?? 0} values)
+                  {formatPollSampleAt(pollStatus)} ({pollStatus.samples ?? 0} values)
+                  {pollStatus.at_utc ? (
+                    <span className="muted" style={{ display: "block", fontSize: "0.85em" }}>
+                      UTC {pollStatus.at_utc}
+                    </span>
+                  ) : null}
                 </span>
               </div>
             ) : null}

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import csv
+import os
 import re
+from datetime import datetime, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -401,11 +404,34 @@ def bacnet_job_status(job_id: str) -> dict:
     return payload  # type: ignore[return-value]
 
 
+def _enrich_poll_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Add browser-friendly local time alongside UTC poll timestamp."""
+    out = dict(payload)
+    at_raw = str(payload.get("at") or "").strip()
+    tz_name = os.environ.get("OFDD_SITE_TIMEZONE", "America/Chicago").strip() or "America/Chicago"
+    out["site_timezone"] = tz_name
+    if not at_raw:
+        return out
+    try:
+        ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        local = ts.astimezone(ZoneInfo(tz_name))
+        out["at_utc"] = at_raw
+        out["at_local"] = local.isoformat()
+        out["at_local_display"] = local.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (TypeError, ValueError):
+        out["at_utc"] = at_raw
+    return out
+
+
 @router.get("/api/bacnet/poll/status", dependencies=[_READ])
 def bacnet_poll_status() -> dict:
     code, payload = commission_poll_status()
     if code != 200:
         raise _proxy_error(code, payload)
+    if isinstance(payload, dict):
+        return _enrich_poll_status(payload)
     return payload  # type: ignore[return-value]
 
 

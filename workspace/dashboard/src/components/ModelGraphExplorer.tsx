@@ -78,7 +78,7 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
         ) : null}
 
         <div ref={networkChartRef} className="dm-network-wrap">
-          <BrickNetworkGraph graph={graph} height={480} />
+          <BrickNetworkGraph graph={graph} height={640} />
         </div>
       </section>
 

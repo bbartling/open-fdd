@@ -10,6 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -273,6 +274,101 @@ def _min_model_equipment() -> int:
         return max(0, int(os.environ.get("OPENFDD_HEALTH_MIN_MODEL_EQUIPMENT", "0")))
     except ValueError:
         return 0
+
+
+def check_bacnet_driver(
+    base: str,
+    token: str,
+    *,
+    min_devices: int = 1,
+    min_enabled_points: int = 1,
+    max_poll_age_s: float | None = None,
+) -> dict[str, Any]:
+    """BACnet poll driver: device tree inventory + fresh poll samples."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+    if max_poll_age_s is None:
+        raw = os.environ.get("OPENFDD_HEALTH_MAX_POLL_AGE_S", "900").strip()
+        try:
+            max_poll_age_s = float(raw)
+        except ValueError:
+            max_poll_age_s = 900.0
+
+    tree_url = f"{root}/api/bacnet/driver/tree"
+    status, body, _ = fetch(tree_url, headers=headers)
+    out["bacnet_tree_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/bacnet/driver/tree HTTP {status}: {body[:200]}")
+        return out
+    try:
+        tree = json.loads(body)
+    except json.JSONDecodeError:
+        out["errors"].append("/api/bacnet/driver/tree not JSON")
+        return out
+
+    devices = tree.get("devices") or []
+    out["bacnet_device_count"] = len(devices)
+    out["bacnet_inventory_source"] = tree.get("inventory_source") or ""
+    enabled = sum(int(d.get("poll_count") or 0) for d in devices)
+    out["bacnet_enabled_points"] = enabled
+    if len(devices) < min_devices:
+        out["errors"].append(
+            f"BACnet driver tree has {len(devices)} device(s) (need >={min_devices}); "
+            "points_discovered.csv may be missing on edge — run edge_site_backup then redeploy"
+        )
+    if enabled < min_enabled_points:
+        out["errors"].append(
+            f"BACnet driver has {enabled} enabled point(s) in tree (need >={min_enabled_points})"
+        )
+    if out["bacnet_inventory_source"] == "empty":
+        out["errors"].append("BACnet inventory_source=empty (no points.csv / points_discovered.csv)")
+
+    poll_url = f"{root}/api/bacnet/poll/status"
+    status, body, _ = fetch(poll_url, headers=headers)
+    out["bacnet_poll_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/bacnet/poll/status HTTP {status}: {body[:200]}")
+        return out
+    try:
+        poll = json.loads(body)
+    except json.JSONDecodeError:
+        out["errors"].append("/api/bacnet/poll/status not JSON")
+        return out
+
+    out["poll_enabled_points"] = poll.get("enabled_points")
+    out["poll_samples"] = poll.get("samples")
+    out["poll_at_utc"] = poll.get("at_utc") or poll.get("at")
+    out["poll_at_local_display"] = poll.get("at_local_display")
+    out["poll_site_timezone"] = poll.get("site_timezone")
+    poll_err = str(poll.get("error") or "").strip()
+    if poll_err:
+        out["errors"].append(f"BACnet poll driver error: {poll_err}")
+
+    at_raw = str(poll.get("at_utc") or poll.get("at") or "").strip()
+    if not at_raw and enabled >= min_enabled_points:
+        out["warnings"].append("BACnet poll enabled but no last sample timestamp yet")
+    elif at_raw:
+        try:
+            ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            age_s = (datetime.now(timezone.utc) - ts).total_seconds()
+            out["poll_age_seconds"] = round(age_s, 1)
+            if max_poll_age_s > 0 and age_s > max_poll_age_s:
+                out["errors"].append(
+                    f"BACnet poll last sample {int(age_s)}s old (max {int(max_poll_age_s)}s); "
+                    f"UTC {at_raw}"
+                )
+        except ValueError:
+            out["warnings"].append(f"Could not parse poll timestamp: {at_raw!r}")
+
+    comm_url = f"{root}/api/bacnet/commission/status"
+    status, body, _ = fetch(comm_url, headers=headers)
+    out["bacnet_commission_status"] = status
+    if status not in (200, 503):
+        out["warnings"].append(f"/api/bacnet/commission/status HTTP {status}")
+    return out
 
 
 def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
@@ -616,6 +712,10 @@ def main() -> int:
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
                 result["warnings"].extend(ui.get("warnings", []))
+                bacnet = check_bacnet_driver(base, login["token"])
+                result["bacnet"] = bacnet
+                result["errors"].extend(bacnet.get("errors", []))
+                result["warnings"].extend(bacnet.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

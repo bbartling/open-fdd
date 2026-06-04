@@ -124,6 +124,19 @@ if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get(
   log_ok "Agent context + MCP hints for AI-assisted modeling"
 fi
 
+if echo "$probe_json" | python3 -c '
+import json,sys
+b=json.load(sys.stdin).get("bacnet",{})
+sys.exit(0 if b.get("bacnet_tree_status")==200 and b.get("bacnet_device_count",0)>=1 and not b.get("errors") else 1)
+'; then
+  devs="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("bacnet_device_count",0))')"
+  pts="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("bacnet_enabled_points",0))')"
+  poll="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("poll_at_local_display") or b.get("poll_at_utc") or "—")')"
+  log_ok "BACnet driver tree (${devs} devices, ${pts} enabled points); last poll ${poll}"
+else
+  log_fail "BACnet driver tree or poll health failed (see http_probes bacnet errors)"
+fi
+
 while IFS= read -r warn; do
   [[ -n "$warn" ]] && printf '  WARN %s\n' "$warn"
 done < <(echo "$probe_json" | python3 -c 'import json,sys; [print(w) for w in json.load(sys.stdin).get("warnings",[])]')

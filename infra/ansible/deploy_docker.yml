@@ -230,6 +230,22 @@
         mode: "0644"
       when: local_commission_csv.stat.exists | default(false)
 
+    - name: Stat points_discovered.csv on control machine
+      tags: [commission, data]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points_discovered.csv"
+      delegate_to: localhost
+      become: false
+      register: local_discovered_csv
+
+    - name: Push points_discovered.csv to edge (device tree inventory)
+      tags: [commission, data]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points_discovered.csv"
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/points_discovered.csv"
+        mode: "0644"
+      when: local_discovered_csv.stat.exists | default(false)
+
     - name: Stat device_poll_profiles.csv on control machine
       tags: [commission, config]
       ansible.builtin.stat:
