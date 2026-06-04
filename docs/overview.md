@@ -54,7 +54,7 @@ BACnet devices
 
 ## PyPI library (secondary)
 
-`pip install "open-fdd[engine]"` runs **YAML** rules on pandas DataFrames only — no BACnet, no bridge. Use when exporting historian CSVs offline. See [Fault rules (engine)](rules/) and [Expression cookbook (YAML / pandas)](expression_rule_cookbook_yaml).
+`pip install open-fdd` ships **`open_fdd.engine`** (YAML on pandas), **`open_fdd.playground`** (portable `evaluate()` rules), and optional **`open_fdd.reports`**. It does **not** include BACnet, the React dashboard, or commission drivers — those are the operator stack above. See [PyPI — engine, reports, and playground](open_fdd_playground_pypi) and [Fault rules (engine)](rules/).
 
 ---
 

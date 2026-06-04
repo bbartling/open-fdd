@@ -28,6 +28,10 @@ enable_mcp: true
 enable_ollama: true
 ollama_required: true
 ollama_ram_tier: "16gb"
+# In-stack Ollama container (set false when deploying with -e openfdd_docker_ollama=false)
+openfdd_docker_ollama: true
+# Post-deploy requires reachable Ollama only when in-stack Ollama is enabled (see post_deploy_check.sh)
+# post_check_require_ollama: true
 
 # ~125 GiB feather cap ≈ 1 year at 1-min temp polling scale
 feather_max_gib: 125

@@ -23,9 +23,9 @@
 <p align="center">
   <a href="https://bbartling.github.io/open-fdd/"><strong>bbartling.github.io/open-fdd</strong></a>
   &nbsp;·&nbsp;
-  PyPI package <em>coming soon</em>
+  <a href="https://pypi.org/project/open-fdd/"><strong>PyPI open-fdd</strong></a>
   &nbsp;·&nbsp;
-  Docker images <em>coming soon</em>
+  Docker images via <code>./scripts/docker_build.sh</code>
 </p>
 
 ---
@@ -41,7 +41,7 @@ Everything you need to run the **operator bridge**, BACnet commissioning, Rule L
 | Bridge REST API | [Bridge API](https://bbartling.github.io/open-fdd/appendix/bridge_api/) |
 | Security / LAN hardening | [Security hardening](https://bbartling.github.io/open-fdd/security_hardening/) |
 
-**Distribution:** The `open-fdd` **PyPI** wheel and **Docker** addon images (`openfdd-bridge`, BACnet poll, commission, MCP) will be published after the next release gate. Until then, build from this repo (`./scripts/docker_build.sh`, `./scripts/openfdd_stack.sh up`).
+**Distribution:** The **operator web app** (bridge + dashboard) runs from this repo via Docker/Ansible. **`pip install open-fdd`** provides the YAML engine, **`open_fdd.playground`** (`evaluate()` rules), and optional reports — see [PyPI docs](https://bbartling.github.io/open-fdd/open_fdd_playground_pypi.html).
 
 ---
 

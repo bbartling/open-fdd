@@ -55,8 +55,9 @@ It should **not** be treated as a substitute for locked-down production credenti
 
 | Channel | Status |
 |---------|--------|
-| **Git + Docker tar** | Today — `./scripts/docker_build.sh --save`, Ansible load on edge |
-| **PyPI** `open-fdd` | Coming soon |
+| **Operator web app** | This repo — Docker bridge + dashboard ([Getting started](getting_started)) |
+| **Git + Docker tar** | `./scripts/docker_build.sh --save`, Ansible load on edge |
+| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | `engine`, `playground`, `reports` — [PyPI packages](open_fdd_playground_pypi) (library; not the full edge UI) |
 | **GHCR images** | Coming soon — [Publish Docker addons](howto/publish_docker_addons) |
 
 ---

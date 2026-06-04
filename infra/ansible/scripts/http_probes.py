@@ -33,8 +33,18 @@ def fetch(url: str, *, timeout: float = 20.0, headers: dict[str, str] | None = N
         body = exc.read().decode("utf-8", errors="replace")
         hdrs = {k.lower(): v for k, v in exc.headers.items()}
         return exc.code, body, hdrs
+    except TimeoutError as exc:
+        raise RuntimeError(f"request timed out after {timeout}s") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(str(exc.reason)) from exc
+
+
+def _agent_fetch_timeout_s() -> float:
+    raw = os.environ.get("OPENFDD_PROBE_AGENT_TIMEOUT_S", "45").strip()
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 45.0
 
 
 def post_json(url: str, payload: dict[str, Any], *, timeout: float = 20.0, headers: dict[str, str] | None = None) -> tuple[int, str]:
@@ -526,7 +536,11 @@ def check_agent_stack(
     out: dict[str, Any] = {"errors": [], "warnings": []}
     headers = auth_headers(token)
     ctx_url = f"{base.rstrip('/')}/openfdd-agent/context"
-    status, body, _ = fetch(ctx_url, headers=headers)
+    try:
+        status, body, _ = fetch(ctx_url, headers=headers, timeout=_agent_fetch_timeout_s())
+    except RuntimeError as exc:
+        out["errors"].append(f"/openfdd-agent/context unreachable: {exc}")
+        return out
     out["agent_context_status"] = status
     if status != 200:
         out["errors"].append(f"/openfdd-agent/context HTTP {status}")
@@ -545,7 +559,14 @@ def check_agent_stack(
         out["errors"].append("/openfdd-agent/context not JSON")
 
     ollama_url = f"{base.rstrip('/')}/openfdd-agent/ollama/health"
-    status, body, _ = fetch(ollama_url, headers=headers)
+    try:
+        status, body, _ = fetch(ollama_url, headers=headers, timeout=15.0)
+    except RuntimeError as exc:
+        if require_ollama:
+            out["errors"].append(f"/openfdd-agent/ollama/health unreachable: {exc}")
+        else:
+            out["warnings"].append(f"Ollama health probe skipped: {exc}")
+        return out
     out["ollama_health_status"] = status
     if status == 200:
         try:
@@ -680,39 +701,59 @@ def main() -> int:
             result["errors"].extend(entry.get("errors", []))
             result["warnings"].extend(entry.get("warnings", []))
             if login.get("token"):
-                model = check_model_api(base, login["token"])
+                def _run_probe(name: str, fn: Any) -> dict[str, Any]:
+                    try:
+                        return fn()
+                    except RuntimeError as exc:
+                        return {
+                            "errors": [f"{name} probe failed: {exc}"],
+                            "warnings": [],
+                        }
+                    except Exception as exc:  # noqa: BLE001 — keep deploy checks running
+                        return {
+                            "errors": [f"{name} probe failed: {exc}"],
+                            "warnings": [],
+                        }
+
+                model = _run_probe("model_api", lambda: check_model_api(base, login["token"]))
                 result["model_api"] = model
                 result["errors"].extend(model.get("errors", []))
                 result["warnings"].extend(model.get("warnings", []))
-                agent = check_agent_stack(
-                    base,
-                    login["token"],
-                    require_ollama=require_ollama,
-                    require_mcp=require_mcp,
+                agent = _run_probe(
+                    "agent",
+                    lambda: check_agent_stack(
+                        base,
+                        login["token"],
+                        require_ollama=require_ollama,
+                        require_mcp=require_mcp,
+                    ),
                 )
                 result["agent"] = agent
                 result["errors"].extend(agent.get("errors", []))
                 result["warnings"].extend(agent.get("warnings", []))
                 if require_mcp:
-                    try:
-                        chat = check_agent_chat(base, login["token"], require_mcp=require_mcp)
-                    except RuntimeError as exc:
-                        chat = {
-                            "errors": [],
-                            "warnings": [f"agent chat probe skipped: {exc}"],
-                            "skipped": True,
-                        }
+                    chat = _run_probe(
+                        "agent_chat",
+                        lambda: check_agent_chat(base, login["token"], require_mcp=require_mcp),
+                    )
+                    if chat.get("errors") and "skipped" not in chat:
+                        chat.setdefault("warnings", []).append(
+                            "agent chat probe had errors (Ollama may be off)"
+                        )
                     result["agent_chat"] = chat
                     result["errors"].extend(chat.get("errors", []))
                     result["warnings"].extend(chat.get("warnings", []))
                 probe_site = site_id
                 if not probe_site or probe_site == "demo":
                     probe_site = str(model.get("active_site_id") or site_id or "demo")
-                ui = check_integrator_ui_api(base, login["token"], site_id=probe_site)
+                ui = _run_probe(
+                    "integrator_ui",
+                    lambda: check_integrator_ui_api(base, login["token"], site_id=probe_site),
+                )
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
                 result["warnings"].extend(ui.get("warnings", []))
-                bacnet = check_bacnet_driver(base, login["token"])
+                bacnet = _run_probe("bacnet", lambda: check_bacnet_driver(base, login["token"]))
                 result["bacnet"] = bacnet
                 result["errors"].extend(bacnet.get("errors", []))
                 result["warnings"].extend(bacnet.get("warnings", []))

@@ -35,7 +35,8 @@ class ToolBody(BaseModel):
 
 @router.get("/context")
 def agent_context(user: dict = Depends(require_user)) -> dict:
-    ollama = ollama_client.health()
+    # Cap total Ollama probe time so /context stays under reverse-proxy health budgets.
+    ollama = ollama_client.health(timeout=2.0, max_total_s=6.0)
     tier = ollama_client.configured_ram_tier()
     payload: dict = {
         "ollama": ollama,

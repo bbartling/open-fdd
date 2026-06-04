@@ -56,9 +56,23 @@ if [[ -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&
     INVENTORY_DOCKER_STACK="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("openfdd_docker_stack") else 0)' 2>/dev/null || echo 0)"
     PROBE_SITE_ID="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("site_id","demo") or "demo")' 2>/dev/null || echo demo)"
     POST_CHECK_REQUIRE_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("post_check_require_ollama") else 0)' 2>/dev/null || echo 0)"
+    INV_ENABLE_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("enable_ollama") else 0)' 2>/dev/null || echo 0)"
+    INV_DOCKER_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(0 if d.get("openfdd_docker_ollama") is False else 1)' 2>/dev/null || echo 1)"
+    INV_OLLAMA_REQUIRED="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("ollama_required") else 0)' 2>/dev/null || echo 0)"
   fi
 fi
 PROBE_SITE_ID="${PROBE_SITE_ID:-demo}"
+INV_ENABLE_OLLAMA="${INV_ENABLE_OLLAMA:-0}"
+INV_DOCKER_OLLAMA="${INV_DOCKER_OLLAMA:-1}"
+INV_OLLAMA_REQUIRED="${INV_OLLAMA_REQUIRED:-0}"
+# Ollama post-check only when explicitly flagged or in-stack Ollama is expected (not -e openfdd_docker_ollama=false).
+if [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" != "1" ]]; then
+  if [[ "${INV_OLLAMA_REQUIRED}" == "1" && "${INV_ENABLE_OLLAMA}" == "1" && "${INV_DOCKER_OLLAMA}" == "1" ]]; then
+    POST_CHECK_REQUIRE_OLLAMA=1
+  else
+    POST_CHECK_REQUIRE_OLLAMA=0
+  fi
+fi
 [[ -n "$HOST" ]] || { echo "Need --host IP or --limit NAME with inventory." >&2; usage 1; }
 
 scheme=http
