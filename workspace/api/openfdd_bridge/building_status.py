@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from .building_alerts import load_alerts, merge_auto_issues
+from .device_poll_health import get_device_poll_snapshot, poll_health_alerts
 from .fault_catalog import family_for_code, family_label
 from .fdd_results import fdd_issues
 from .model_health import model_health_summary
@@ -29,8 +30,13 @@ def collect_status() -> dict[str, Any]:
     stored = load_alerts()
     merged = merge_auto_issues(model_issues=model_issues, stored=stored)
     fdd_alerts = fdd_issues()
+    try:
+        poll_snap = get_device_poll_snapshot(force=False)
+        poll_alerts = poll_health_alerts(poll_snap)
+    except Exception:
+        poll_alerts = []
 
-    all_alerts = merged["alerts"] + fdd_alerts
+    all_alerts = merged["alerts"] + fdd_alerts + poll_alerts
     status = merged["status"]
     if fdd_alerts and status == "ok":
         status = "warning"

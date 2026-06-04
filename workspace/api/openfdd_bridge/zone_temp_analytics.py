@@ -16,6 +16,11 @@ import pandas as pd
 from .data_loader import load_frame_for_run
 from .model_feeds import _is_ahu, _is_vav
 from .model_service import ModelService
+from .operational_analytics import (
+    analytics_lookback_days,
+    analytics_methodology,
+    trim_frame_to_lookback,
+)
 from .site_defaults import ensure_default_site
 from .timeseries_api import plot_column_name
 from .ttl_service import TtlService
@@ -25,7 +30,6 @@ _CACHE: dict[str, Any] = {"generated_at": 0.0, "next_refresh_at": 0.0, "payload"
 ZONE_BRICK_MARKERS = ("zone_air_temperature", "zone temperature")
 FAN_BRICK_MARKERS = ("supply_fan", "fan_speed", "fan_command", "fan_status", "fan_start")
 DEFAULT_INTERVAL_S = 3600
-LOOKBACK_HOURS = 48
 
 
 def refresh_interval_s() -> int:
@@ -387,6 +391,8 @@ def compute_zone_metrics(
                 "recovery_f_per_min": round(rec, 4) if rec is not None else None,
             }
             sys_zones.append(entry)
+            if zrow is not None and rec is not None:
+                zrow["recovery_f_per_min"] = round(rec, 4)
             if rec is not None and median_rate is not None and median_rate > 0.02:
                 if rec < 0.5 * median_rate:
                     struggling.append(
@@ -410,6 +416,7 @@ def compute_zone_metrics(
             }
         )
 
+    worst_zones = _worst_zones(zones_out, systems_out, struggling)
     sentence = _summary_sentence(zones_out, systems_out, struggling, topology.get("mode"))
     preview = zone_df.tail(120).copy()
     for c in preview.columns:
@@ -418,13 +425,49 @@ def compute_zone_metrics(
     return {
         "mode": topology.get("mode"),
         "site_id": site_id,
+        "lookback_days": analytics_lookback_days(),
+        "methodology": analytics_methodology(),
         "zones": zones_out,
         "systems": systems_out,
         "struggling_zones": struggling,
+        "worst_zones": worst_zones,
         "dataframe_rows": len(zone_df),
         "dataframe_preview": preview.to_dict(orient="records"),
         "summary_sentence": sentence,
     }
+
+
+def _worst_zones(
+    zones_out: list[dict[str, Any]],
+    systems_out: list[dict[str, Any]],
+    struggling: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rank zones for operator/LLM focus (slow recovery, large day/night spread)."""
+    recovery_by_col: dict[str, float] = {}
+    for sys in systems_out:
+        for z in sys.get("zones") or []:
+            col = z.get("column")
+            rec = z.get("recovery_f_per_min")
+            if col and rec is not None:
+                recovery_by_col[col] = float(rec)
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for z in zones_out:
+        col = z.get("column")
+        score = 0.0
+        day = z.get("day_avg_f")
+        night = z.get("night_avg_f")
+        if day is not None and night is not None:
+            score += abs(float(day) - float(night))
+        rec = recovery_by_col.get(col or "")
+        if rec is not None and rec < 0.03:
+            score += 5.0
+        for s in struggling:
+            if s.get("column") == col:
+                score += 10.0
+        if score > 0:
+            scored.append((score, {**z, "recovery_f_per_min": rec}))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:8]]
 
 
 def _summary_sentence(
@@ -476,12 +519,7 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     model = model_svc.load()
     topology = discover_topology(model, sid)
     df, origin = load_frame_for_run(sid)
-    if lookback_hours() > 0 and not df.empty and "timestamp" in df.columns:
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=lookback_hours())
-        ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-        trimmed = df.loc[ts >= cutoff]
-        if not trimmed.empty:
-            df = trimmed
+    df = trim_frame_to_lookback(df)
 
     site_tz = _site_timezone(model, sid)
     metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
@@ -502,13 +540,6 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     _CACHE["payload"] = stored
     _CACHE["generated_at"] = now
     return payload
-
-
-def lookback_hours() -> float:
-    try:
-        return max(6.0, float(os.environ.get("OFDD_ZONE_TEMP_LOOKBACK_HOURS", str(LOOKBACK_HOURS))))
-    except ValueError:
-        return float(LOOKBACK_HOURS)
 
 
 def slim_zone_for_llm(
@@ -558,6 +589,17 @@ def slim_zone_for_llm(
             for z in (snapshot.get("struggling_zones") or [])[:max_struggling]
             if isinstance(z, dict)
         ],
+        "worst_zones": [
+            {
+                "label": z.get("label"),
+                "day_avg_f": z.get("day_avg_f"),
+                "night_avg_f": z.get("night_avg_f"),
+                "recovery_f_per_min": z.get("recovery_f_per_min"),
+            }
+            for z in (snapshot.get("worst_zones") or [])[:6]
+            if isinstance(z, dict)
+        ],
+        "lookback_days": snapshot.get("lookback_days"),
     }
 
 

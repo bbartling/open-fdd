@@ -21,7 +21,7 @@ On the edge, **Ollama is not your commissioning copilot**. It powers the **build
 | Trend snippets | Recent feather series (bounded context) |
 | MCP RAG (optional) | Project docs — lighter than full repo checkout |
 
-Routes: `GET /openfdd-agent/ollama/health`, `POST /openfdd-agent/chat`, `GET /openfdd-agent/building-insight`. Implementation: `agent_routes.py`, `building_insight.py`, `fault_catalog.py`.
+Routes: `GET /openfdd-agent/ollama/health`, `POST /openfdd-agent/chat`, `GET /openfdd-agent/building-insight`, `GET /openfdd-agent/operational-brief`, `GET /openfdd-agent/zone-temps`, `GET /openfdd-agent/device-poll-health`. Home insight uses a **14-day** feather window (`OFDD_ANALYTICS_LOOKBACK_DAYS`) for zone day/night averages, fan-on recovery °F/min, and per-equipment poll online/flaky (BLD-D alerts when all points on a device are stale/FDD). Implementation: `building_insight.py`, `zone_temp_analytics.py`, `device_poll_health.py`, `agent_tools.py` (`building.zone_temps`, `building.device_health`, `building.operational_brief`).
 
 ---
 

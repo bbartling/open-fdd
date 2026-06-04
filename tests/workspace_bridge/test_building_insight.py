@@ -12,7 +12,11 @@ from openfdd_bridge.building_insight import _fallback_sentence, get_building_ins
 
 
 def test_fallback_sentence_no_alerts():
-    text = _fallback_sentence({"alerts": [], "status": "ok", "traffic": "green"})
+    text = _fallback_sentence(
+        {"alerts": [], "status": "ok", "traffic": "green"},
+        {"summary_sentence": "Zone temps: ok."},
+        {"summary_sentence": "Poll health: 2/2 healthy."},
+    )
     assert "no active faults" in text.lower()
 
 
@@ -23,9 +27,21 @@ def test_fallback_sentence_with_alerts():
             "status": "warning",
             "traffic": "yellow",
             "fdd_alert_count": 1,
-        }
+        },
+        {},
+        {},
     )
-    assert "OA temp high" in text
+    assert "OA temp high" in text or "alert" in text.lower()
+
+
+def test_fault_sentences_from_alerts():
+    from openfdd_bridge.building_insight import fault_sentences_from_alerts
+
+    lines = fault_sentences_from_alerts(
+        [{"code": "VAV-C", "title": "Zone temp OOB", "detail": "12 samples", "severity": "warning"}]
+    )
+    assert len(lines) == 1
+    assert "VAV-C" in lines[0]
 
 
 def test_get_building_insight_deterministic_when_ollama_down(monkeypatch):
@@ -36,11 +52,23 @@ def test_get_building_insight_deterministic_when_ollama_down(monkeypatch):
         "collect_status",
         lambda: {"alerts": [], "status": "ok", "traffic": "green", "fdd_alert_count": 0},
     )
+    monkeypatch.setattr(
+        mod,
+        "get_zone_temp_snapshot",
+        lambda **_: {"summary_sentence": "Zone temps: test.", "worst_zones": [], "struggling_zones": []},
+    )
+    monkeypatch.setattr(
+        mod,
+        "get_device_poll_snapshot",
+        lambda **_: {"summary_sentence": "Devices ok.", "offline_equipment": [], "flaky_equipment": []},
+    )
     monkeypatch.setattr(mod.ollama_client, "health", lambda **_: {"ok": False, "error": "down"})
     monkeypatch.setattr(mod.ollama_client, "should_use_ollama", lambda: False)
     mod._CACHE.clear()
-    mod._CACHE.update({"generated_at": 0.0, "sentence": "", "next_refresh_at": 0.0})
+    mod._CACHE.update({"generated_at": 0.0, "sentence": "", "next_refresh_at": 0.0, "payload": {}})
     out = get_building_insight(force=True)
     assert out["ok"] is True
     assert out["sentence"]
     assert out["source"] == "deterministic"
+    assert out.get("lookback_days") == 14
+    assert "methodology" in out

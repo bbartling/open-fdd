@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..deps import require_roles, require_user
-from .. import agent_tools, audit, building_insight, ollama_client, zone_temp_analytics
+from .. import agent_tools, audit, building_insight, ollama_client, device_poll_health, zone_temp_analytics
 from ..agent_tools import ToolError
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
@@ -100,11 +100,26 @@ def ollama_health() -> dict:
 
 @router.get("/building-insight")
 def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
-    """Read-only one-liner for the home dashboard (fixed interval cache).
+    """Read-only briefing for the home dashboard (fixed interval cache).
 
     Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
     """
     return building_insight.get_building_insight(force=force)
+
+
+@router.get("/operational-brief")
+def operational_brief(force: bool = Query(default=False)) -> dict:
+    """Structured zone-temp, device poll health, and fault lines (same window as home insight)."""
+    return building_insight.get_operational_brief(force=force)
+
+
+@router.get("/device-poll-health")
+def device_poll_health_snapshot(
+    force: bool = Query(default=False),
+    site_id: str | None = Query(default=None),
+) -> dict:
+    """Per-equipment online/flaky status from feather poll timestamps (+ FDD bindings)."""
+    return device_poll_health.get_device_poll_snapshot(site_id=site_id, force=force)
 
 
 @router.get("/zone-temps")

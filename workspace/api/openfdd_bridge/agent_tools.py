@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .building_alerts import replace_alerts
+from .device_poll_health import get_device_poll_snapshot
+from .operational_analytics import analytics_methodology, methodology_prompt_blurb
 from .zone_temp_analytics import get_zone_temp_snapshot
 from .data_loader import load_demo_dataframe
 from .fault_catalog import all_codes, catalog_graph, is_valid_code
@@ -113,12 +115,40 @@ def _tool_building_zone_temps(args: dict[str, Any]) -> dict[str, Any]:
         "summary_sentence": snap.get("summary_sentence"),
         "topology_mode": snap.get("topology_mode"),
         "zone_sensor_count": snap.get("zone_sensor_count"),
+        "lookback_days": snap.get("lookback_days"),
+        "methodology": snap.get("methodology"),
+        "worst_zones": snap.get("worst_zones") or [],
         "struggling_zones": snap.get("struggling_zones") or [],
         "systems": snap.get("systems") or [],
         "zones": snap.get("zones") or [],
         "generated_at": snap.get("generated_at"),
         "data_source": snap.get("data_source"),
     }
+
+
+def _tool_building_device_health(args: dict[str, Any]) -> dict[str, Any]:
+    """Refresh per-equipment poll/FDD health from feather (online, flaky, offline)."""
+    force = str(args.get("force") or "true").strip().lower() in {"1", "true", "yes"}
+    site_id = str(args.get("site_id") or "").strip() or None
+    snap = get_device_poll_snapshot(site_id=site_id, force=force)
+    return {
+        "summary_sentence": snap.get("summary_sentence"),
+        "lookback_days": snap.get("lookback_days"),
+        "healthy_count": snap.get("healthy_count"),
+        "offline_equipment": snap.get("offline_equipment") or [],
+        "flaky_equipment": snap.get("flaky_equipment") or [],
+        "degraded_equipment": snap.get("degraded_equipment") or [],
+        "equipment": snap.get("equipment") or [],
+        "generated_at": snap.get("generated_at"),
+        "data_source": snap.get("data_source"),
+    }
+
+
+def _tool_building_operational_brief(args: dict[str, Any]) -> dict[str, Any]:
+    from .building_insight import get_operational_brief
+
+    force = str(args.get("force") or "false").strip().lower() in {"1", "true", "yes"}
+    return get_operational_brief(force=force)
 
 
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
@@ -230,6 +260,8 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "rules.run_batch": _tool_rules_run_batch,
     "building.set_alerts": _tool_building_set_alerts,
     "building.zone_temps": _tool_building_zone_temps,
+    "building.device_health": _tool_building_device_health,
+    "building.operational_brief": _tool_building_operational_brief,
     "app.edit_file": _tool_app_edit_file,
     "app.rebuild_dashboard": _tool_app_rebuild_dashboard,
 }
@@ -264,7 +296,17 @@ def tool_specs() -> list[dict[str, Any]]:
         {
             "name": "building.zone_temps",
             "args": ["site_id?", "force?"],
-            "writes": "in-memory cache only — refreshes pandas zone lever snapshot",
+            "writes": "in-memory cache — zone day/night + fan-on recovery (OFDD_ANALYTICS_LOOKBACK_DAYS)",
+        },
+        {
+            "name": "building.device_health",
+            "args": ["site_id?", "force?"],
+            "writes": "in-memory cache — equipment online/flaky from feather poll gaps",
+        },
+        {
+            "name": "building.operational_brief",
+            "args": ["force?"],
+            "writes": "read-only — zone temps + device health + fault sentences JSON",
         },
         {
             "name": "app.edit_file",
@@ -301,6 +343,8 @@ def model_context() -> dict[str, Any]:
             "summary_sentence": zone.get("summary_sentence"),
             "topology_mode": zone.get("topology_mode"),
             "zone_sensor_count": zone.get("zone_sensor_count"),
+            "lookback_days": zone.get("lookback_days"),
+            "worst_zones": (zone.get("worst_zones") or [])[:6],
             "struggling_zones": (zone.get("struggling_zones") or [])[:6],
             "refresh_tool": "building.zone_temps",
         }
@@ -309,12 +353,40 @@ def model_context() -> dict[str, Any]:
             "summary_sentence": None,
             "topology_mode": None,
             "zone_sensor_count": None,
+            "worst_zones": [],
             "struggling_zones": [],
             "refresh_tool": "building.zone_temps",
             "error": str(exc)[:200],
         }
+    try:
+        devices = get_device_poll_snapshot(force=False)
+        device_levers = {
+            "summary_sentence": devices.get("summary_sentence"),
+            "healthy_count": devices.get("healthy_count"),
+            "offline": (devices.get("offline_equipment") or [])[:6],
+            "flaky": (devices.get("flaky_equipment") or [])[:6],
+            "refresh_tool": "building.device_health",
+        }
+    except Exception as exc:  # noqa: BLE001
+        device_levers = {
+            "summary_sentence": None,
+            "healthy_count": None,
+            "offline": [],
+            "flaky": [],
+            "refresh_tool": "building.device_health",
+            "error": str(exc)[:200],
+        }
     return {
+        "analytics_methodology": analytics_methodology(),
+        "methodology_blurb": methodology_prompt_blurb(),
+        "data_pipeline": [
+            "BACnet poll → feather_store/",
+            "load_frame_for_run → zone_temp_analytics + device_poll_health",
+            "building_insight / operational-brief for dashboard",
+        ],
         "zone_temp_levers": zone_levers,
+        "device_poll_health": device_levers,
+        "operational_brief_tool": "building.operational_brief",
         "model_summary": {
             "sites": health["counts"]["sites"],
             "equipment": health["counts"]["equipment"],

@@ -83,6 +83,8 @@ Wall-display check-engine traffic lights still use public `GET /api/faults/statu
 | `OFDD_DEBUG_DIAGNOSTICS=1` | Verbose stack health (`url`, `bacnet_bind`) and `repo_root` in agent context |
 | `OFDD_PUBLIC_DASHBOARD_WS=1` | Unauthenticated WebSocket with **redacted** snapshot (lab wall display only) |
 | `OFDD_WS_TICKET_TTL_SEC` | WebSocket ticket lifetime (default 120, max 600) |
+| `OFDD_ANALYTICS_LOOKBACK_DAYS` | Zone temp + device poll health window for home insight (default 14) |
+| `OFDD_DEVICE_HEALTH_INTERVAL_S` | Cache TTL for device poll health snapshot (default 3600) |
 
 ## Agent app edit
 
