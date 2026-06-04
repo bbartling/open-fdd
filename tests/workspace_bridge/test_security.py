@@ -59,12 +59,112 @@ def test_auth_disabled_rejected_on_public_bind(monkeypatch: pytest.MonkeyPatch, 
     monkeypatch.setenv("OFDD_AUTH_DISABLED", "1")
     monkeypatch.setenv("OFDD_BRIDGE_HOST", "0.0.0.0")
     monkeypatch.delenv("OFDD_AUTH_SECRET", raising=False)
+    monkeypatch.delenv("OFDD_INSECURE_LAN_DEV", raising=False)
+    monkeypatch.delenv("OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV", raising=False)
     for name in list(sys.modules):
         if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
             del sys.modules[name]
     from openfdd_bridge.security import auth_dev_bypass_enabled  # noqa: E402
 
     assert auth_dev_bypass_enabled() is False
+
+
+def _clear_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in (
+        "OFDD_AUTH_SECRET",
+        "OFDD_OPERATOR_USER",
+        "OFDD_OPERATOR_PASSWORD",
+        "OFDD_INTEGRATOR_USER",
+        "OFDD_INTEGRATOR_PASSWORD",
+        "OFDD_AGENT_USER",
+        "OFDD_AGENT_PASSWORD",
+        "OFDD_WEB_USER",
+        "OFDD_WEB_PASSWORD",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def _reload_security(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **env: str) -> None:
+    data = tmp_path / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
+    for key, value in env.items():
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+
+
+def test_startup_localhost_auth_disabled_ok(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _clear_auth_env(monkeypatch)
+    _reload_security(
+        monkeypatch,
+        tmp_path,
+        OFDD_BRIDGE_HOST="127.0.0.1",
+        OFDD_AUTH_DISABLED="1",
+    )
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    create_app()
+
+
+def test_startup_public_bind_no_auth_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _clear_auth_env(monkeypatch)
+    _reload_security(monkeypatch, tmp_path, OFDD_BRIDGE_HOST="0.0.0.0")
+    from openfdd_bridge.security import validate_startup_auth  # noqa: E402
+
+    with pytest.raises(RuntimeError, match="cannot start"):
+        validate_startup_auth()
+
+
+def test_startup_public_bind_auth_disabled_without_insecure_flag_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    _clear_auth_env(monkeypatch)
+    monkeypatch.delenv("OFDD_INSECURE_LAN_DEV", raising=False)
+    monkeypatch.delenv("OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV", raising=False)
+    _reload_security(
+        monkeypatch,
+        tmp_path,
+        OFDD_BRIDGE_HOST="0.0.0.0",
+        OFDD_AUTH_DISABLED="1",
+    )
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    with pytest.raises(RuntimeError, match="cannot start"):
+        create_app()
+
+
+def test_startup_public_bind_with_configured_auth_ok(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _reload_security(
+        monkeypatch,
+        tmp_path,
+        OFDD_BRIDGE_HOST="0.0.0.0",
+        OFDD_AUTH_SECRET="test-secret-key-32chars-minimum!!",
+        OFDD_INTEGRATOR_USER="integrator",
+        OFDD_INTEGRATOR_PASSWORD="msi",
+    )
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    create_app()
+
+
+def test_startup_public_bind_insecure_lan_dev_ok(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    _clear_auth_env(monkeypatch)
+    _reload_security(
+        monkeypatch,
+        tmp_path,
+        OFDD_BRIDGE_HOST="::",
+        OFDD_AUTH_DISABLED="1",
+        OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV="1",
+    )
+    from openfdd_bridge.main import create_app  # noqa: E402
+
+    create_app()
 
 
 def test_integrator_route_rejects_operator(raw_client: TestClient, operator_headers: dict[str, str]):

@@ -110,4 +110,23 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+class _LazyASGI:
+    """Defer ``create_app()`` (and startup auth checks) until first request — import-safe for tests."""
+
+    def __init__(self) -> None:
+        self._inner: FastAPI | None = None
+
+    def _load(self) -> FastAPI:
+        if self._inner is None:
+            self._inner = create_app()
+        return self._inner
+
+    async def __call__(self, scope, receive, send):
+        await self._load()(scope, receive, send)
+
+    def __getattr__(self, name: str):
+        return getattr(self._load(), name)
+
+
+# uvicorn openfdd_bridge.main:app
+app = _LazyASGI()

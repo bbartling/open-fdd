@@ -1,6 +1,16 @@
 # Operator Bridge security hardening
 
-The Open-FDD bridge and React dashboard run on BACnet/OT edge hosts. Default posture is **fail closed**: authentication required, BACnet writes off, Rule Lab execution bounded, minimal error detail to browsers.
+The Open-FDD bridge and React dashboard run on BACnet/OT edge hosts. Default posture is **fail closed**: authentication required on any non-loopback bind, BACnet writes off, Rule Lab execution bounded, minimal error detail to browsers.
+
+## Safe deployment modes
+
+| Mode | `OFDD_BRIDGE_HOST` | Auth | Typical use |
+|------|-------------------|------|-------------|
+| **Localhost dev** | `127.0.0.1` | `OFDD_AUTH_DISABLED=1` optional | Single-machine `uvicorn` / compose on laptop |
+| **LAN demo (insecure)** | `0.0.0.0` or `::` | `OFDD_AUTH_DISABLED=1` **and** `OFDD_INSECURE_LAN_DEV=1` (or `OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV=1`) | Commissioning lab on trusted LAN only — not production |
+| **Edge / production** | `0.0.0.0` or `::` (behind Caddy) | `OFDD_AUTH_SECRET` + role passwords **required** | BACnet edge VM, OT network |
+
+Startup **fails** if the bridge listens on `0.0.0.0` / `::` without configured credentials and without the explicit insecure LAN dev flags above.
 
 ## Required for LAN / edge production
 
@@ -17,11 +27,23 @@ Set in `workspace/auth.env.local` (gitignored). Caddy should reverse-proxy to th
 
 | Variable | Purpose |
 |----------|---------|
-| `OFDD_AUTH_DISABLED=1` | Skip Bearer tokens **only** when `OFDD_BRIDGE_HOST` is `127.0.0.1` / `localhost` |
-| `OFDD_INSECURE_LAN_DEV=1` | Allows `OFDD_AUTH_DISABLED` on non-localhost bind (lab only) |
+| `OFDD_AUTH_DISABLED=1` | Skip Bearer tokens when `OFDD_BRIDGE_HOST` is loopback (`127.0.0.1`, `localhost`, `::1`) |
 | `OFDD_BRIDGE_HOST=127.0.0.1` | Recommended for local `uvicorn` / compose on one machine |
 
-Missing auth on `0.0.0.0` bind logs a warning; set `OFDD_AUTH_STRICT_STARTUP=1` to **fail startup** instead.
+## Dev-only (insecure LAN — lab)
+
+| Variable | Purpose |
+|----------|---------|
+| `OFDD_INSECURE_LAN_DEV=1` | Allows `OFDD_AUTH_DISABLED` on `0.0.0.0` / `::` bind |
+| `OFDD_ALLOW_PUBLIC_UNAUTHENTICATED_DEV=1` | Alias for `OFDD_INSECURE_LAN_DEV` (extra explicit name) |
+
+Both insecure flags require `OFDD_AUTH_DISABLED=1`. Do not set on field/production edges.
+
+## Optional strictness
+
+| Variable | Purpose |
+|----------|---------|
+| `OFDD_AUTH_STRICT_STARTUP=1` | Also **fail startup** when auth is missing on a non-public bind (e.g. single NIC IP) |
 
 ## CORS
 
