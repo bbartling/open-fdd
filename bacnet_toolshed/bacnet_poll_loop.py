@@ -97,17 +97,23 @@ def run_poll_cycle(run_bacnet_sync) -> dict[str, Any]:
 
 def _notify_bridge_ingest() -> None:
     import os
+    import urllib.error
     import urllib.request
 
     port = os.environ.get("OFDD_BRIDGE_PORT", "8765").strip() or "8765"
     url = f"http://127.0.0.1:{port}/internal/bacnet/ingest-samples"
     try:
+        timeout_s = float(os.environ.get("OFDD_BRIDGE_INGEST_TIMEOUT_S", "180") or 180)
+    except ValueError:
+        timeout_s = 180.0
+    timeout_s = max(30.0, min(timeout_s, 600.0))
+    try:
         req = urllib.request.Request(url, method="POST", data=b"{}")
         req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=15):
+        with urllib.request.urlopen(req, timeout=timeout_s):
             pass
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"BACnet poll ingest notify failed ({url}): {exc}", file=sys.stderr)
 
 
 def _poll_loop(run_bacnet_sync) -> None:

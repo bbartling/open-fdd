@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import BrickNetworkGraph, { downloadBrickNetworkPng } from "./BrickNetworkGraph";
+import Spinner from "./Spinner";
 import type { BrickNetworkInput } from "../lib/brickNetworkGraph";
 
 type ModelGraph = BrickNetworkInput & {
@@ -18,14 +19,20 @@ type Props = {
 
 export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }: Props) {
   const [graph, setGraph] = useState<ModelGraph | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const networkChartRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const q = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
-    const data = await apiFetch<ModelGraph>(`/api/model/graph${q}`);
-    setGraph(data);
-    setError("");
+    setLoading(true);
+    try {
+      const q = siteId ? `?site_id=${encodeURIComponent(siteId)}` : "";
+      const data = await apiFetch<ModelGraph>(`/api/model/graph${q}`);
+      setGraph(data);
+      setError("");
+    } finally {
+      setLoading(false);
+    }
   }, [siteId]);
 
   useEffect(() => {
@@ -78,7 +85,11 @@ export default function ModelGraphExplorer({ siteId, onStatus, refreshKey = 0 }:
         ) : null}
 
         <div ref={networkChartRef} className="dm-network-wrap">
-          <BrickNetworkGraph graph={graph} height={640} />
+          {loading && !graph?.equipment?.length ? (
+            <Spinner label="Building BRICK network graph…" />
+          ) : (
+            <BrickNetworkGraph graph={graph} height={640} layoutMode="spring" />
+          )}
         </div>
       </section>
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
+import Spinner from "../components/Spinner";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
 import FaultCodeSelect from "../components/FaultCodeSelect";
@@ -9,6 +10,7 @@ import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
+import { useActiveSiteId } from "../lib/useActiveSiteId";
 import { useModelScope } from "../lib/useModelScope";
 import {
   formatBatchSummary,
@@ -81,7 +83,8 @@ export default function RuleLabPage() {
   const [faultCode, setFaultCode] = useState("");
   const [dirty, setDirty] = useState(false);
   const lintTimer = useRef<number | null>(null);
-  const scope = useModelScope("demo", brickClass);
+  const activeSiteId = useActiveSiteId();
+  const scope = useModelScope(activeSiteId, brickClass);
 
   useEffect(() => {
     fetchAuthMe()
@@ -604,6 +607,7 @@ export default function RuleLabPage() {
 
         <div className="panel rule-lab-test-scope">
           <h3 className="panel-title">Test against one sensor</h3>
+          {scope.loading ? <Spinner label="Loading model scope for test sensor…" /> : null}
           {scope.error ? <p className="error">{scope.error}</p> : null}
           <div className="form-row model-scope-row">
             <ModelScopePicker

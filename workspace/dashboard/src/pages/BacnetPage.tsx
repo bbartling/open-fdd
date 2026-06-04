@@ -66,6 +66,7 @@ export default function BacnetPage() {
   const [batchSummary, setBatchSummary] = useState<BatchRow[] | null>(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [driverDevices, setDriverDevices] = useState<DriverDevice[]>([]);
+  const [treeLoading, setTreeLoading] = useState(true);
   const [pollStatus, setPollStatus] = useState<{
     enabled_points?: number;
     samples?: number;
@@ -79,11 +80,14 @@ export default function BacnetPage() {
   const [activeJobLabel, setActiveJobLabel] = useState("");
 
   const loadDriverTree = useCallback(async () => {
+    setTreeLoading(true);
     try {
       const res = await apiFetch<{ devices: DriverDevice[] }>("/api/bacnet/driver/tree");
       setDriverDevices(res.devices ?? []);
     } catch (e) {
       setActionError(formatApiError(e));
+    } finally {
+      setTreeLoading(false);
     }
   }, []);
 
@@ -643,16 +647,25 @@ export default function BacnetPage() {
             Clear all devices
           </button>
         </div>
-        <BacnetPointsTree
-          devices={driverDevices}
-          onRefreshDevice={refreshDevicePoints}
-          onSetPointPoll={setPointPoll}
-          onSetDevicePoll={setDevicePoll}
-          onDeletePoint={deletePoint}
-          onDeleteDevice={deleteDevice}
-          onRemapDevice={remapDevice}
-          onCopy={(text) => navigator.clipboard.writeText(text).catch(() => undefined)}
-        />
+        {treeLoading && driverDevices.length === 0 ? (
+          <Spinner label="Loading BACnet driver tree (large sites may take 30–60s)…" />
+        ) : (
+          <BacnetPointsTree
+            devices={driverDevices}
+            onRefreshDevice={refreshDevicePoints}
+            onSetPointPoll={setPointPoll}
+            onSetDevicePoll={setDevicePoll}
+            onDeletePoint={deletePoint}
+            onDeleteDevice={deleteDevice}
+            onRemapDevice={remapDevice}
+            onCopy={(text) => navigator.clipboard.writeText(text).catch(() => undefined)}
+          />
+        )}
+        {treeLoading && driverDevices.length > 0 ? (
+          <p className="muted">
+            <Spinner label="Refreshing tree…" />
+          </p>
+        ) : null}
       </div>
 
       <div className="panel">

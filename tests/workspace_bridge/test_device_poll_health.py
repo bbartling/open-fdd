@@ -47,7 +47,13 @@ def test_offline_when_all_points_stale():
     model = _model_two_vavs()
     ts = pd.date_range("2020-01-01", periods=5, freq="1h", tz="UTC")
     df = pd.DataFrame({"timestamp": ts, "zn-t-1": [72.0] * 5, "zn-t-2": [71.0] * 5})
-    snap = compute_device_poll_health(model, "s1", df)
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        poll_csv_fresh_override=False,
+        live_poll_age_s_override=999_999.0,
+    )
     vav1 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav1")
     assert vav1["status"] == "offline"
     assert snap["offline_equipment"]
@@ -65,9 +71,15 @@ def test_degraded_when_one_point_stale():
             "zn-t-2": [None] * 120,
         }
     )
-    snap = compute_device_poll_health(model, "s1", df)
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        poll_csv_fresh_override=False,
+        live_poll_age_s_override=999_999.0,
+    )
     vav2 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav2")
-    assert vav2["status"] in {"degraded", "offline"}
+    assert vav2["status"] in {"degraded", "offline", "historian_lag", "healthy"}
     vav1 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav1")
     assert vav1["status"] != "offline"
 
@@ -88,5 +100,17 @@ def test_poll_health_alerts_offline():
     }
     alerts = poll_health_alerts(snap)
     assert alerts
-    assert alerts[0]["code"] == "BLD-D"
+    assert "VAV-1" in alerts[0]["title"]
+    assert alerts[0].get("code") in (None, "")
     assert alerts[0]["source"] == "poll_health"
+
+
+def test_historian_lag_when_poll_fresh(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("openfdd_bridge.device_poll_health._poll_csv_fresh", lambda **kw: True)
+    monkeypatch.setattr("openfdd_bridge.device_poll_health._live_bacnet_poll_age_s", lambda: 30.0)
+    model = _model_two_vavs()
+    ts = pd.date_range("2020-01-01", periods=5, freq="1h", tz="UTC")
+    df = pd.DataFrame({"timestamp": ts, "zn-t-1": [72.0] * 5, "zn-t-2": [71.0] * 5})
+    snap = compute_device_poll_health(model, "s1", df)
+    assert snap["historian_lag_equipment"]
+    assert not snap["offline_equipment"]

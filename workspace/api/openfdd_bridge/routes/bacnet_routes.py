@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import logging
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -53,6 +55,9 @@ from ..bacnet_write_guard import (
 )
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
+
+_log = logging.getLogger(__name__)
+_ingest_lock = threading.Lock()
 from ..commission_client import commission_poll_once, commission_poll_status
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
@@ -444,12 +449,34 @@ def bacnet_trigger_poll() -> dict:
     return {"poll": payload, "ingest": ingest}
 
 
+def _internal_ingest_client_allowed(request: Request) -> bool:
+    """Host-network commission hits bridge via published 127.0.0.1 — client IP may be docker0."""
+    host = (request.client.host if request.client else "").strip()
+    if host in {"127.0.0.1", "::1"}:
+        return True
+    # Same-host Docker publish / LAN edge — not exposed on WAN when Caddy only fronts :80
+    return host.startswith(("172.", "10.", "192.168."))
+
+
+def _run_ingest_background() -> None:
+    if not _ingest_lock.acquire(blocking=False):
+        return
+    try:
+        result = ingest_poll_samples_to_feather()
+        if not result.get("ok"):
+            _log.warning("bacnet poll ingest: %s", result.get("reason") or result)
+    except Exception:
+        _log.exception("bacnet poll ingest failed")
+    finally:
+        _ingest_lock.release()
+
+
 @router.post("/internal/bacnet/ingest-samples")
 def internal_ingest_poll_samples(request: Request) -> dict:
-    host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1"}:
+    if not _internal_ingest_client_allowed(request):
         raise HTTPException(status_code=403, detail="localhost only")
-    return ingest_poll_samples_to_feather()
+    threading.Thread(target=_run_ingest_background, name="bacnet-ingest", daemon=True).start()
+    return {"ok": True, "queued": True}
 
 
 @router.post("/ingest/bacnet", dependencies=[_READ])

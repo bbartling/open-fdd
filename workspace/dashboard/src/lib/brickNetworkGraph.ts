@@ -184,6 +184,82 @@ function layerEquipment(
   return { layers, layerTitles };
 }
 
+/** Force-directed layout (NetworkX spring_layout style) for equipment nodes. */
+function springLayoutEquipment(
+  equipment: NetworkGraphEquipment[],
+  feeds: NetworkFeedEdge[],
+  iterations = 60,
+): Map<string, { x: number; y: number }> {
+  const ids = equipment.map((e) => e.equipment_id);
+  const pos = new Map<string, { x: number; y: number }>();
+  const n = Math.max(ids.length, 1);
+  ids.forEach((id, i) => {
+    const angle = (2 * Math.PI * i) / n;
+    pos.set(id, { x: Math.cos(angle) * 4, y: Math.sin(angle) * 4 });
+  });
+  const repulsion = 1.8;
+  const attraction = 0.08;
+  for (let iter = 0; iter < iterations; iter += 1) {
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const a = pos.get(ids[i])!;
+        const b = pos.get(ids[j])!;
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let dist = Math.hypot(dx, dy) || 0.05;
+        const force = repulsion / (dist * dist);
+        dx = (dx / dist) * force;
+        dy = (dy / dist) * force;
+        a.x += dx;
+        a.y += dy;
+        b.x -= dx;
+        b.y -= dy;
+      }
+    }
+    for (const edge of feeds) {
+      const a = pos.get(edge.from_equipment_id);
+      const b = pos.get(edge.to_equipment_id);
+      if (!a || !b) continue;
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.05;
+      const force = dist * attraction;
+      dx = (dx / dist) * force;
+      dy = (dy / dist) * force;
+      a.x += dx * 0.5;
+      a.y += dy * 0.5;
+      b.x -= dx * 0.5;
+      b.y -= dy * 0.5;
+    }
+  }
+  return pos;
+}
+
+function buildSpringLayout(
+  graph: BrickNetworkInput,
+  theme: Theme,
+): { nodes: LayoutNode[]; layerAnnotations: Partial<Plotly.Annotations>[] } {
+  const colors = themeColors(theme);
+  const positions = springLayoutEquipment(graph.equipment, graph.feeds);
+  const nodes: LayoutNode[] = [];
+  for (const eq of graph.equipment) {
+    const p = positions.get(eq.equipment_id) ?? { x: 0, y: 0 };
+    const et = eq.equipment_type || eq.brick_type || "";
+    nodes.push({
+      id: eq.equipment_id,
+      kind: "equipment",
+      label: eqLabel(eq),
+      sublabel: et,
+      equipmentType: et,
+      x: p.x,
+      y: p.y,
+      size: 32,
+      color: EQUIP_PALETTE[et] || colors.equipDefault,
+    });
+  }
+  return { nodes, layerAnnotations: [] };
+}
+
 function buildLayout(
   graph: BrickNetworkInput,
   theme: Theme,
@@ -250,12 +326,18 @@ function buildLayout(
   return { nodes, layerAnnotations };
 }
 
+export type BrickNetworkLayoutMode = "hierarchy" | "spring";
+
 export function buildBrickNetworkPlot(
   graph: BrickNetworkInput,
   theme: Theme,
+  layoutMode: BrickNetworkLayoutMode = "hierarchy",
 ): { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; nodeByIndex: LayoutNode[] } {
   const colors = themeColors(theme);
-  const { nodes, layerAnnotations } = buildLayout(graph, theme);
+  const useSpring = layoutMode === "spring" || graph.equipment.length > 24;
+  const { nodes, layerAnnotations } = useSpring
+    ? buildSpringLayout(graph, theme)
+    : buildLayout(graph, theme);
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
   const edgeX: (number | null)[] = [];
@@ -278,16 +360,18 @@ export function buildBrickNetworkPlot(
     });
   }
 
-  for (const node of nodes) {
-    if (node.kind !== "point" || !node.equipmentId) continue;
-    const parent = nodeById.get(node.equipmentId);
-    if (!parent) continue;
-    edgeX.push(parent.x, node.x, null);
-    edgeY.push(parent.y, node.y, null);
+  if (!useSpring) {
+    for (const node of nodes) {
+      if (node.kind !== "point" || !node.equipmentId) continue;
+      const parent = nodeById.get(node.equipmentId);
+      if (!parent) continue;
+      edgeX.push(parent.x, node.x, null);
+      edgeY.push(parent.y, node.y, null);
+    }
   }
 
   const equipNodes = nodes.filter((n) => n.kind === "equipment");
-  const pointNodes = nodes.filter((n) => n.kind === "point");
+  const pointNodes = useSpring ? [] : nodes.filter((n) => n.kind === "point");
 
   const edgeTrace: Plotly.Data = {
     type: "scatter",

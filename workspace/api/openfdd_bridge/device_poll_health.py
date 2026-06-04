@@ -8,9 +8,11 @@ from typing import Any
 
 import pandas as pd
 
+from .commission_client import commission_poll_status
 from .data_loader import load_frame_for_run
 from .fdd_results import fdd_issues
 from .model_service import ModelService
+from .paths import bacnet_poll_csv
 from .operational_analytics import (
     analytics_lookback_days,
     analytics_methodology,
@@ -26,6 +28,29 @@ _CACHE: dict[str, Any] = {"generated_at": 0.0, "payload": {}}
 DEFAULT_INTERVAL_S = 60
 STALE_MULTIPLIER = 2.5
 FLAKY_FLIPS_PER_DAY = 6.0
+
+
+def _poll_csv_fresh(*, max_age_s: float) -> bool:
+    path = bacnet_poll_csv()
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+    return (time.time() - path.stat().st_mtime) <= max_age_s
+
+
+def _live_bacnet_poll_age_s() -> float | None:
+    code, payload = commission_poll_status()
+    if code != 200 or not isinstance(payload, dict):
+        return None
+    at_raw = str(payload.get("at") or "").strip()
+    if not at_raw:
+        return None
+    try:
+        ts = pd.Timestamp(at_raw.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        return max(0.0, (pd.Timestamp.now(tz="UTC") - ts).total_seconds())
+    except (TypeError, ValueError):
+        return None
 
 
 def refresh_interval_s() -> int:
@@ -153,12 +178,26 @@ def compute_device_poll_health(
     frame: pd.DataFrame,
     *,
     fdd_by_point: dict[str, list[dict[str, Any]]] | None = None,
+    poll_csv_fresh_override: bool | None = None,
+    live_poll_age_s_override: float | None = None,
 ) -> dict[str, Any]:
     lookback_days = analytics_lookback_days()
     fdd_by_point = fdd_by_point if fdd_by_point is not None else _fdd_points_by_point_id()
     eq_index = _equipment_for_site(model, site_id)
     by_eq = _points_by_equipment(model, site_id)
     interval_s = _median_interval_sec(frame["timestamp"]) if not frame.empty else float(DEFAULT_INTERVAL_S)
+    stale_after_s = STALE_MULTIPLIER * interval_s
+    poll_csv_fresh = (
+        poll_csv_fresh_override
+        if poll_csv_fresh_override is not None
+        else _poll_csv_fresh(max_age_s=stale_after_s)
+    )
+    live_poll_age_s = (
+        live_poll_age_s_override
+        if live_poll_age_s_override is not None
+        else _live_bacnet_poll_age_s()
+    )
+    live_poll_fresh = live_poll_age_s is not None and live_poll_age_s <= stale_after_s
     equipment_rows: list[dict[str, Any]] = []
 
     for eid, points in sorted(by_eq.items()):
@@ -189,7 +228,10 @@ def compute_device_poll_health(
         if polled == 0:
             status = "unknown"
         elif stale_n == polled or (fdd_n == polled and polled > 0):
-            status = "offline"
+            if (poll_csv_fresh or live_poll_fresh) and fdd_n < polled:
+                status = "historian_lag"
+            else:
+                status = "offline"
         elif flaky_n > 0 or stale_n > 0 or fdd_n > 0:
             status = "degraded"
         else:
@@ -213,6 +255,7 @@ def compute_device_poll_health(
         )
 
     offline = [e for e in equipment_rows if e["status"] == "offline"]
+    historian_lag = [e for e in equipment_rows if e["status"] == "historian_lag"]
     flaky = [e for e in equipment_rows if e["status"] == "flaky"]
     degraded = [e for e in equipment_rows if e["status"] == "degraded"]
     healthy_n = sum(1 for e in equipment_rows if e["status"] == "healthy")
@@ -224,6 +267,7 @@ def compute_device_poll_health(
         "median_poll_interval_s": round(interval_s, 1),
         "equipment": equipment_rows,
         "offline_equipment": offline[:12],
+        "historian_lag_equipment": historian_lag[:12],
         "flaky_equipment": flaky[:12],
         "degraded_equipment": degraded[:12],
         "healthy_count": healthy_n,
@@ -259,44 +303,67 @@ def _health_summary_sentence(
 
 
 def poll_health_alerts(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-    """Check-engine alerts for offline/flaky equipment (BLD-D family)."""
+    """Check-engine alerts for offline/flaky equipment (operator-facing device names, not fault codes)."""
     alerts: list[dict[str, Any]] = []
     for eq in snapshot.get("offline_equipment") or []:
         if not isinstance(eq, dict):
             continue
         eid = eq.get("equipment_id")
+        name = str(eq.get("equipment_name") or eid or "Equipment").strip()
         alerts.append(
             {
                 "id": f"poll-offline-{eid}",
                 "severity": "critical",
-                "title": f"{eq.get('equipment_name')}: device offline (poll/FDD)",
+                "title": f"{name}: no recent telemetry",
                 "detail": (
-                    f"All {eq.get('points_polled')} polled point(s) stale or FDD-flagged in the last "
-                    f"{snapshot.get('lookback_days')} days."
+                    f"All {eq.get('points_polled')} mapped point(s) are stale or FDD-flagged in the last "
+                    f"{snapshot.get('lookback_days')} days. BACnet polling may be down or points are not ingesting "
+                    "into the historian."
                 ),
                 "source": "poll_health",
-                "code": "BLD-D",
-                "equipment_family": str(eq.get("equipment_family") or "BUILDING"),
+                "equipment_family": "POLL",
                 "equipment_id": eid,
+                "equipment_name": name,
+            }
+        )
+    for eq in snapshot.get("historian_lag_equipment") or []:
+        if not isinstance(eq, dict):
+            continue
+        eid = eq.get("equipment_id")
+        name = str(eq.get("equipment_name") or eid or "Equipment").strip()
+        alerts.append(
+            {
+                "id": f"poll-historian-{eid}",
+                "severity": "warning",
+                "title": f"{name}: historian behind live poll",
+                "detail": (
+                    f"BACnet poll CSV is fresh but feather columns for this device are stale "
+                    f"({eq.get('points_polled')} point(s)). Check bridge ingest after poll cycles."
+                ),
+                "source": "poll_health",
+                "equipment_family": "POLL",
+                "equipment_id": eid,
+                "equipment_name": name,
             }
         )
     for eq in snapshot.get("flaky_equipment") or []:
         if not isinstance(eq, dict):
             continue
         eid = eq.get("equipment_id")
+        name = str(eq.get("equipment_name") or eid or "Equipment").strip()
         alerts.append(
             {
                 "id": f"poll-flaky-{eid}",
                 "severity": "warning",
-                "title": f"{eq.get('equipment_name')}: flaky BACnet poll",
+                "title": f"{name}: flaky BACnet poll",
                 "detail": (
                     f"Up to {eq.get('max_flips_per_day')} online/offline transitions per day "
                     f"across points (last {snapshot.get('lookback_days')} days)."
                 ),
                 "source": "poll_health",
-                "code": "BLD-D",
-                "equipment_family": str(eq.get("equipment_family") or "BUILDING"),
+                "equipment_family": "POLL",
                 "equipment_id": eid,
+                "equipment_name": name,
             }
         )
     return alerts

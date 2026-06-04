@@ -44,10 +44,16 @@ function FaultAnalyticsBlock({ a }: { a: FaultAnalytics }) {
   );
 }
 
+function showFaultCode(f: FaultAlert): boolean {
+  const src = String(f.source || "");
+  if (src === "poll_health" || src === "model_health") return false;
+  return Boolean(f.code?.trim());
+}
+
 function FaultRow({ f }: { f: FaultAlert }) {
   return (
     <li className={`alert-${f.severity}`}>
-      {f.code ? <span className="badge code-badge">{f.code}</span> : null}
+      {showFaultCode(f) ? <span className="badge code-badge">{f.code}</span> : null}
       <strong>{f.title}</strong>
       {f.analytics ? <FaultAnalyticsBlock a={f.analytics} /> : null}
       {f.detail ? <p className="fault-detail muted">{f.detail}</p> : null}

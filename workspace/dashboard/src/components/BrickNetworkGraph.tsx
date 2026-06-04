@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useRef } from "react";
 import Plotly from "plotly.js-dist-min";
 import { useTheme } from "../contexts/theme-context";
-import { buildBrickNetworkPlot, type BrickNetworkInput } from "../lib/brickNetworkGraph";
+import {
+  buildBrickNetworkPlot,
+  type BrickNetworkInput,
+  type BrickNetworkLayoutMode,
+} from "../lib/brickNetworkGraph";
 
 type Props = {
   graph: BrickNetworkInput | null;
   className?: string;
   height?: number;
+  layoutMode?: BrickNetworkLayoutMode;
 };
 
-export default function BrickNetworkGraph({ graph, className = "", height = 420 }: Props) {
+export default function BrickNetworkGraph({
+  graph,
+  className = "",
+  height = 420,
+  layoutMode = "hierarchy",
+}: Props) {
   const chartRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
 
@@ -19,9 +29,9 @@ export default function BrickNetworkGraph({ graph, className = "", height = 420 
       if (el) await Plotly.purge(el);
       return;
     }
-    const { data, layout } = buildBrickNetworkPlot(graph, theme);
+    const { data, layout } = buildBrickNetworkPlot(graph, theme, layoutMode);
     await Plotly.react(el, data, { ...layout, height }, { displayModeBar: false, responsive: true });
-  }, [graph, theme, height]);
+  }, [graph, theme, height, layoutMode]);
 
   useEffect(() => {
     render().catch(() => undefined);

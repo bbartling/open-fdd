@@ -142,6 +142,102 @@ def check_integrator_ui_api(base: str, token: str, *, site_id: str = "demo") -> 
     return out
 
 
+def check_building_dashboard_health(
+    base: str,
+    token: str,
+    *,
+    site_id: str = "demo",
+    poll_fresh_max_s: float = 180.0,
+) -> dict[str, Any]:
+    """Detect false offline poll_health alerts and feather lag while BACnet poll is live."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "site_id": site_id}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+
+    poll_url = f"{root}/api/bacnet/poll/status"
+    try:
+        poll_status, poll_body, _ = fetch(poll_url, headers=headers, timeout=_bacnet_fetch_timeout_s())
+    except RuntimeError as exc:
+        out["warnings"].append(f"building health: poll status unreachable: {exc}")
+        return out
+    poll_age_s: float | None = None
+    if poll_status == 200:
+        try:
+            poll = json.loads(poll_body)
+            at_raw = str(poll.get("at_utc") or poll.get("at") or "").strip()
+            if at_raw:
+                ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                poll_age_s = (datetime.now(timezone.utc) - ts).total_seconds()
+                out["poll_age_seconds"] = round(poll_age_s, 1)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    faults_url = f"{root}/api/faults/status"
+    try:
+        f_status, f_body, _ = fetch(faults_url, headers=headers, timeout=30.0)
+    except RuntimeError as exc:
+        out["warnings"].append(f"building health: faults/status unreachable: {exc}")
+        return out
+    if f_status != 200:
+        out["warnings"].append(f"/api/faults/status HTTP {f_status}")
+        return out
+    try:
+        faults = json.loads(f_body)
+    except json.JSONDecodeError:
+        out["warnings"].append("/api/faults/status not JSON")
+        return out
+
+    families = faults.get("families") or []
+    poll_offline = 0
+    poll_historian = 0
+    bld_d_badges = 0
+    for fam in families:
+        if not isinstance(fam, dict):
+            continue
+        for alert in fam.get("faults") or []:
+            if not isinstance(alert, dict):
+                continue
+            src = str(alert.get("source") or "")
+            title = str(alert.get("title") or "")
+            if alert.get("code") == "BLD-D" and src in {"poll_health", "model_health"}:
+                bld_d_badges += 1
+            if src != "poll_health":
+                continue
+            if "device offline" in title.lower():
+                poll_offline += 1
+            if "historian behind" in title.lower():
+                poll_historian += 1
+    out["poll_health_offline_alerts"] = poll_offline
+    out["poll_health_historian_lag_alerts"] = poll_historian
+    if bld_d_badges:
+        out["errors"].append(
+            f"Dashboard shows {bld_d_badges} poll/model alert(s) with BLD-D code badge "
+            "(should show device names only)"
+        )
+    if poll_age_s is not None and poll_age_s <= poll_fresh_max_s and poll_offline >= 3:
+        out["errors"].append(
+            f"False offline: {poll_offline} poll_health 'device offline' alerts while BACnet poll "
+            f"is fresh ({int(poll_age_s)}s ago) — check feather ingest"
+        )
+    if poll_historian:
+        out["warnings"].append(
+            f"{poll_historian} device(s) historian behind live poll — bridge ingest may be slow"
+        )
+
+    scope_url = f"{root}/api/model/scope?site_id={site_id}"
+    try:
+        scope_status, scope_body, _ = fetch(scope_url, headers=headers, timeout=60.0)
+        out["model_scope_status"] = scope_status
+        if scope_status == 503:
+            out["errors"].append(f"/api/model/scope HTTP 503 for site {site_id!r} (Rule Lab / plots broken)")
+    except RuntimeError as exc:
+        out["warnings"].append(f"model scope probe failed: {exc}")
+
+    return out
+
+
 def check_public_check_engine(base: str) -> dict[str, Any]:
     """Anonymous read probes for home / faults traffic-light UI (no Bearer token)."""
     out: dict[str, Any] = {"errors": [], "warnings": [], "endpoints": {}}
@@ -778,6 +874,15 @@ def main() -> int:
                 result["bacnet"] = bacnet
                 result["errors"].extend(bacnet.get("errors", []))
                 result["warnings"].extend(bacnet.get("warnings", []))
+                dash = _run_probe(
+                    "building_dashboard",
+                    lambda: check_building_dashboard_health(
+                        base, login["token"], site_id=probe_site
+                    ),
+                )
+                result["building_dashboard"] = dash
+                result["errors"].extend(dash.get("errors", []))
+                result["warnings"].extend(dash.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))
