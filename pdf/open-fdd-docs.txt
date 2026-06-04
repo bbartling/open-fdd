@@ -60,9 +60,9 @@ It should **not** be treated as a substitute for locked-down production credenti
 | Channel | Status |
 |---------|--------|
 | **Operator web app** | This repo — Docker bridge + dashboard ([Getting started](getting_started)) |
-| **Git + Docker tar** | `./scripts/docker_build.sh --save`, Ansible load on edge |
+| **GHCR edge images** | [Publish Docker addons](howto/publish_docker_addons) → `ghcr.io/bbartling/openfdd-*:<tag>` → `OPENFDD_IMAGE_TAG=… ./deploy.sh docker` |
+| **Docker tar (legacy)** | `OPENFDD_DOCKER_PULL_FROM_GHCR=0` + `docker_build.sh --save` — lab / air-gap |
 | **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | `engine`, `playground`, `reports` — [PyPI packages](open_fdd_playground_pypi) (library; not the full edge UI) |
-| **GHCR images** | Coming soon — [Publish Docker addons](howto/publish_docker_addons) |
 
 ---
 
@@ -288,10 +288,22 @@ cd open-fdd
 
 Details: [System overview](overview). Production push: [Edge deploy (Docker)](edge_deploy_docker).
 
+**Production (GHCR — default):** publish a tag in GitHub Actions, then:
+
 ```bash
-./scripts/docker_build.sh --save
-cd infra/ansible && ./deploy.sh docker --limit acme_vm_bbartling
-./deploy.sh ops --limit acme_vm_bbartling    # sync TTL, SPARQL probe, feather check
+cd infra/ansible
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh ops --limit acme_vm_bbartling
+```
+
+See [Publish Docker addons](howto/publish_docker_addons.md) and [GitHub branches / release](howto/github_branches_and_release.md).
+
+**Lab / air-gap (tar):**
+
+```bash
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=local ./scripts/docker_build.sh --save
+cd infra/ansible
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit acme_vm_bbartling
 ```
 
 ---
@@ -415,7 +427,7 @@ Three layers on a field host (today: **Ubuntu + Docker CE**; future: thin image 
 | **Supervisor** | `supervisor/` | Manifest, compose contracts, health — `./scripts/openfdd_stack.sh` |
 | **Apps** | `docker/` images | bridge, commission, poll, mcp-rag |
 | **State** | `workspace/` | Feather, rules, BRICK model, BACnet config (bind-mounted) |
-| **Deploy** | `infra/ansible/` | Image tar + workspace sync — `deploy.sh docker` |
+| **Deploy** | `infra/ansible/` | GHCR `compose pull` + workspace sync — `deploy.sh docker` (tar optional) |
 
 ```text
   [Caddy :80]
@@ -625,29 +637,39 @@ set -a && source secrets/acme.env.local && set +a
 ./deploy.sh caddy --limit acme_vm_bbartling
 ```
 
-### Build images + bundle on bensserver
+### Publish images (GitHub Actions)
 
-```bash
-cd ~/open-fdd
-./scripts/build_and_test.sh          # or build_operator_dashboard.sh prod
-./scripts/docker_build.sh --save     # writes docker/dist/openfdd-images-local.tar.gz
-```
+1. Actions → **Publish Docker addons** → run with tag e.g. `2026.06.04-edge`.
+2. Wait for green build (four images pushed to `ghcr.io/bbartling/`).
 
-### Push to Acme via Ansible
+Details: [Publish Docker addons](howto/publish_docker_addons.md). Bot/feature branch cleanup: [GitHub branches and release](howto/github_branches_and_release.md).
+
+### Deploy to Acme (pull from GHCR — default)
+
+Pin the tag in `host_vars/acme_vm_bbartling.yml` (`openfdd_docker_pull_from_ghcr: true`, `openfdd_docker_image_tag`) or pass it on the CLI:
 
 ```bash
 cd infra/ansible
 set -a && source secrets/acme.env.local && set +a
-./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_ollama=false
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_ollama=false
 ```
+
+Ansible renders `ghcr.io/bbartling/openfdd-*:<tag>` in `docker-compose.yml`, runs **`docker compose pull`** on the VM, then **`up -d`**. No `docker/dist/*.tar.gz` copy for this path.
 
 Use host systemd Ollama (not the compose `ollama` service). The bridge container reaches it via `host.docker.internal:11434` — ensure `sudo systemctl enable --now ollama` on the VM.
 
-Optional tag:
+**Local `:local` builds** (`./scripts/docker_build.sh` on bensserver) are for dev only; Acme does not use them when GHCR pull is enabled.
+
+### Legacy: tar bundle over Ansible
+
+For lab hosts without registry access:
 
 ```bash
-OPENFDD_IMAGE_TAG=2026.06.01 ./scripts/docker_build.sh --save
-./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_image_tag=2026.06.01
+cd ~/open-fdd
+./scripts/build_and_test.sh
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=local ./scripts/docker_build.sh --save
+cd infra/ansible
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit acme_vm_bbartling
 ```
 
 ### BACnet poll on Acme
@@ -664,7 +686,9 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `openfdd_docker_image_tag` | `local` | Image tag in compose |
+| `openfdd_docker_pull_from_ghcr` | `true` (via `deploy.sh docker`) | Pull from `ghcr.io/bbartling/*`; set `false` for tar load |
+| `openfdd_docker_image_tag` | required for GHCR | Must match published tag (not `local`) |
+| `openfdd_docker_registry_org` | `bbartling` | GHCR org/user |
 | `openfdd_docker_disable_systemd` | `true` | Stop legacy `openfdd-*` app units (bridge/mcp/poll/commission) |
 | `openfdd_docker_ollama` | `true` | Compose `ollama/ollama` when `enable_ollama`; use `false` + `./deploy.sh ai` for host GPU |
 | `openfdd_docker_sync_workspace_data` | `true` | Tar-sync `workspace/data` (rules); set `false` for image-only |
@@ -676,7 +700,7 @@ Re-run `./deploy.sh docker …` — poll container uses **`network_mode: host`**
 
 ## Disk maintenance (safe prune)
 
-Each `./deploy.sh docker` run loads a new image bundle; without cleanup, old `openfdd-*` layers and the `.tar.gz` fill small Pi/VM disks.
+Each deploy may leave old `openfdd-*` image layers on disk; without cleanup, small Pi/VM disks fill up (tar path also leaves `.tar.gz` until removed).
 
 After the stack is **up**, Ansible runs `infra/ansible/scripts/docker_edge_maintenance.sh`:
 
@@ -708,24 +732,22 @@ Skip prune during deploy:
 
 ## What Ansible syncs (Docker path)
 
-**No Python/API git rsync** — unlike legacy `./deploy.sh all` (`deploy.yml`), the docker playbook does **not** push `workspace/api`, `open_fdd`, or built UI from source trees.
+Unlike legacy `./deploy.sh all` (`deploy.yml`), the docker playbook does **not** rsync the full Python tree from git on every run. The **bridge image** carries the compiled SPA; **`workspace/api`** is still bind-mounted on edges for config and hotfixes (see compose template).
 
-| Artifact | Mechanism | Purpose |
-|----------|-----------|---------|
-| App images | `docker/dist/openfdd-images-*.tar.gz` → `docker load` | Bridge, commission, poll, MCP |
-| Workspace **state** | Optional tar of `workspace/data` (rules, not feather) | Rule store, configs |
-| `model.json` | Single file copy from control | Site BRICK model |
-| `points.csv` | From `edge_backup/local/…` | Commission table |
-| Env / secrets | `auth.env.local`, templates | Login, BACnet bind, bridge secret |
-| Compose file | Template render | Stack definition |
+| Artifact | GHCR path (default) | Tar path (`OPENFDD_DOCKER_PULL_FROM_GHCR=0`) |
+|----------|---------------------|-----------------------------------------------|
+| App images | `docker compose pull` on edge | `docker/dist/openfdd-images-*.tar.gz` → `docker load` |
+| Workspace **state** | Optional tar of `workspace/data` (rules, not feather) | Same |
+| `model.json` | Copy from control | Same |
+| `points.csv` | From `edge_backup/local/…` | Same |
+| Env / secrets | `auth.env.local`, templates | Same |
+| Compose file | Template → `~/open-fdd/docker-compose.yml` | Same |
 
 Skip state sync on image-only deploy:
 
 ```bash
 ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_sync_workspace_data=false
 ```
-
-**Future:** edge `docker compose pull` from GHCR (see [publish Docker addons](howto/publish_docker_addons.md)) — no tar over SSH.
 
 ## Host services (not Compose app containers)
 
@@ -751,16 +773,11 @@ infra/ansible/scripts/docker_edge_maintenance.sh
 infra/ansible/templates/docker-compose.edge.yml.j2
 ```
 
-## Next steps (registry)
+## Related
 
-Replace `docker save` / `copy` / `load` with a private registry pull when you have many sites:
-
-```bash
-docker tag openfdd-bridge:local registry.example/openfdd-bridge:1.2.3
-docker push registry.example/openfdd-bridge:1.2.3
-```
-
-Ansible then runs `docker compose pull` instead of loading a tar.
+- [Publish Docker addons (GHCR)](howto/publish_docker_addons.md)
+- [GitHub branches and release automation](howto/github_branches_and_release.md)
+- `infra/ansible/host_vars/acme_vm_bbartling.yml.example` — Acme pins
 
 
 # Engine API
@@ -2223,6 +2240,88 @@ On every PR and push to **`main`**, **`master`**, or **`develop`**:
 If you maintain a separate hardware or BACnet lab, keep its automation **outside** this repository and pass normalized **`DataFrame`s** into **`RuleRunner`** here.
 
 
+# Publish Docker addons (GHCR)
+
+# Publish Docker addons to GHCR
+
+Production edges (Acme, Pi) **pull** images from **`ghcr.io/bbartling/`** after you publish a tag. Ansible runs `docker compose pull` on the host — no image tar over SSH unless you opt into the legacy path.
+
+**For AI agents:** Publish only when the operator asks to cut an edge release tag. Do not publish on every PR merge.
+
+Branch hygiene and bot PRs: [GitHub branches and release automation](github_branches_and_release.md).
+
+## Prerequisites
+
+- Images defined in `docker/images.yaml` and `supervisor/manifest.yaml`
+- `OPENFDD_IMAGE_TAG` must **not** be `local` (release version only)
+- GHCR packages under `ghcr.io/bbartling/` (org in `docker/images.yaml`)
+
+## Option A — GitHub Actions (preferred)
+
+1. Merge workflow `.github/workflows/docker-publish.yml` to default branch (or run from branch that contains it).
+2. GitHub → **Actions** → **Publish Docker addons** → **Run workflow**.
+3. Input **image_tag**, e.g. `2026.06.01-edge`.
+4. Workflow builds four addons, runs `scripts/validate_supervisor_manifest.sh`, pushes (set `PUBLISH_LATEST=1` in the workflow env only when you also want `:latest` tags):
+   - `ghcr.io/bbartling/openfdd-bridge:<tag>`
+   - `ghcr.io/bbartling/openfdd-commission:<tag>`
+   - `ghcr.io/bbartling/openfdd-bacnet-poll:<tag>`
+   - `ghcr.io/bbartling/openfdd-mcp-rag:<tag>`
+5. After first publish: set GHCR package visibility (public or grant edge host read) if pulls are needed.
+
+Uses `GITHUB_TOKEN` with `packages: write` — no extra secret for same-repo publish.
+
+## Option B — Local (control machine)
+
+```bash
+cd ~/open-fdd
+OPENFDD_IMAGE_TAG=2026.06.01-edge ./scripts/docker_build.sh
+docker login ghcr.io
+OPENFDD_IMAGE_TAG=2026.06.01-edge ./scripts/docker_publish.sh
+```
+
+## After publish — deploy Acme (GHCR pull)
+
+1. GitHub Actions **Publish Docker addons** finishes with your tag (e.g. `2026.06.04-edge`).
+2. Pin the same tag in `infra/ansible/host_vars/acme_vm_bbartling.yml` (`openfdd_docker_image_tag`) and/or pass `OPENFDD_IMAGE_TAG` on the command line.
+3. Ensure `openfdd_docker_pull_from_ghcr: true` (default via `./deploy.sh docker`).
+4. GHCR packages must be **public**, or set `openfdd_ghcr_token` in host_vars for `docker login` on the edge.
+
+```bash
+cd infra/ansible
+set -a && source secrets/acme.env.local && set +a
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_ollama=false
+```
+
+Ansible renders `docker-compose.yml` with `ghcr.io/bbartling/openfdd-*:<tag>`, runs **`docker compose pull`**, then **`up -d`**. Workspace/API files and env still sync from the control machine; only **images** come from GHCR.
+
+**Ops pass** (TTL sync, probes, feather check): same tag — `OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh ops --limit acme_vm_bbartling`.
+
+Legacy tar (no registry):
+
+```bash
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=2026.06.04-edge ./scripts/docker_build.sh --save
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit <host>
+```
+
+## Related files
+
+| File | Role |
+|------|------|
+| `scripts/docker_build.sh` | Build all Dockerfile targets |
+| `scripts/docker_publish.sh` | Tag + push to GHCR |
+| `scripts/validate_supervisor_manifest.sh` | CI + pre-publish check |
+| `.github/workflows/docker-publish.yml` | Manual `workflow_dispatch` only |
+| `.github/workflows/docker-supervisor-check.yml` | PR validation (no publish) |
+
+## Operator checklist (release day)
+
+- [ ] `./scripts/build_and_test.sh` green
+- [ ] Choose `OPENFDD_IMAGE_TAG` (semver or date-edge)
+- [ ] Run Actions workflow or local publish
+- [ ] Smoke one host with `OPENFDD_IMAGE_TAG=… ./deploy.sh docker` (GHCR pull)
+- [ ] Note tag in PR / release notes
+
+
 # Operations
 
 # Operations
@@ -2396,6 +2495,62 @@ The **`open-fdd`** wheel does **not** require a fixed `OFDD_*` namespace for **`
 - [Rules overview](rules/overview)
 - [Engine-only / IoT](howto/engine_only_iot)
 - [Getting started](getting_started)
+
+
+# GitHub branches and release automation
+
+# GitHub branches and release automation
+
+How **feature branches**, **bot PRs**, and **manual Docker publishes** fit together after GHCR deploy landed on `master`.
+
+## Branch types
+
+| Branch / PR | Who creates it | What to do |
+|-------------|----------------|------------|
+| **`master`** | You merge feature PRs here | Production docs site, CI, and edge deploy pins |
+| **`deploy/*`, `fix/*`, feature branches** | Developers | Open a PR → merge → **delete the branch** (GitHub “Delete branch” or `git push origin --delete <name>`) |
+| **`chore/docs-pdf-refresh`** | **Docs PDF** workflow on GitHub (`docs-pdf.yml`) | Bot opens/updates a PR for `pdf/open-fdd-docs.pdf` and `.txt`. **Merge when the PR is current** so the bundle stays in sync with `docs/`. If **Create PR** failed with `stale info`, re-run the workflow or merge the existing open PR. |
+| **Tags on GHCR** | **Publish Docker addons** workflow (manual dispatch) | Not a git branch — image tag e.g. `2026.06.04-edge`. Pin the same tag in `host_vars` / `OPENFDD_IMAGE_TAG`. |
+
+Merged examples (delete if still on disk): `deploy/ghcr-pull-acme` (PR #190), `fault-codes-updates` (PR #188).
+
+## Typical release flow (Acme / production edge)
+
+1. **Code on `master`** — feature PRs merged; CI green.
+2. **Publish images** — Actions → **Publish Docker addons** → input tag (e.g. `2026.06.04-edge`). Wait for success.
+3. **Deploy edge** — from `infra/ansible`: `OPENFDD_IMAGE_TAG=<same-tag> ./deploy.sh docker --limit acme_vm_bbartling` (see [Publish Docker addons](publish_docker_addons.md)).
+4. **Docs PDF (optional same day)** — If **Docs PDF** opened PR #189-style branch, merge the bot PR so `pdf/open-fdd-docs.pdf` / `.txt` match `docs/`.
+5. **Cleanup** — Delete merged feature branches locally and on `origin`.
+
+## Docs PDF workflow notes
+
+- Triggers on pushes to `master`/`main` that touch `docs/**`, `scripts/build_docs_pdf.py`, or the workflow file.
+- Uses `peter-evans/create-pull-request` with branch `chore/docs-pdf-refresh`.
+- If **Create PR** fails with `stale info` on `git push --force-with-lease`, another run may have updated the branch first — check for an **open PR** and merge it, or re-run **Docs PDF** from Actions.
+- Protected `master` cannot take direct bot pushes; the PR is required.
+
+## Docker publish workflow notes
+
+- **Manual only** (`workflow_dispatch`) — does not run on every merge.
+- Requires `workspace/mcp_rag` in git (tracked for `openfdd-mcp-rag` image).
+- First publish after adding an image: set GHCR package **visibility** (public or token on edge).
+
+## Starting new work
+
+After release cleanup:
+
+```bash
+git checkout master && git pull
+git checkout -b fix/your-topic    # or feat/…
+```
+
+Use one branch per PR; avoid long-lived `deploy/*` branches after merge.
+
+## Related
+
+- [Publish Docker addons (GHCR)](publish_docker_addons.md)
+- [Docker edge deploy](../edge_deploy_docker.md)
+- [Contributing](../contributing.md)
 
 
 # Contributing
