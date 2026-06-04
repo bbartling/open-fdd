@@ -101,10 +101,33 @@ def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def dashboard_snapshot() -> dict[str, Any]:
+def dashboard_snapshot(*, redacted: bool = False) -> dict[str, Any]:
     """Single payload for dashboard polling / WebSocket push."""
     status = collect_status()
-    return {
-        "stack": status["stack"],
-        "faults": faults_by_family(status),
-    }
+    stack = status["stack"]
+    if redacted:
+        stack = {
+            "ok": stack.get("ok"),
+            "overall": stack.get("overall"),
+            "services": [
+                {
+                    "id": s.get("id"),
+                    "label": s.get("label"),
+                    "status": s.get("status"),
+                    "configured": s.get("configured"),
+                }
+                for s in stack.get("services", [])
+                if isinstance(s, dict)
+            ],
+        }
+        faults = {
+            "status": status["status"],
+            "traffic": status["traffic"],
+            "check_engine": status["status"] != "ok",
+            "alert_count": len(status.get("alerts", [])),
+            "model_configured": bool(status.get("model_configured")),
+            "families": [],
+        }
+    else:
+        faults = faults_by_family(status)
+    return {"stack": stack, "faults": faults}

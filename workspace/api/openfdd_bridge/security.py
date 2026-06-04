@@ -60,6 +60,11 @@ def debug_diagnostics_enabled() -> bool:
     return _env_flag("OFDD_DEBUG_DIAGNOSTICS")
 
 
+def public_dashboard_ws_allowed() -> bool:
+    """Allow unauthenticated /ws/dashboard (redacted snapshot only)."""
+    return _env_flag("OFDD_PUBLIC_DASHBOARD_WS")
+
+
 def bacnet_writes_enabled() -> bool:
     return _env_flag("OFDD_ENABLE_BACNET_WRITE")
 

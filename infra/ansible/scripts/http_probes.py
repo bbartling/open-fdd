@@ -79,7 +79,6 @@ def _stack_services(body: str) -> list[dict[str, Any]]:
 
 
 PUBLIC_CHECK_ENGINE_PATHS = (
-    "/health/stack",
     "/api/faults/status",
     "/api/building/status",
     "/openfdd-agent/building-insight",
@@ -150,14 +149,7 @@ def check_public_check_engine(base: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             out["errors"].append(f"{path} not JSON")
             continue
-        if path == "/health/stack":
-            services = payload.get("services") or []
-            if not services:
-                out["errors"].append("/health/stack missing services[]")
-            bridge = next((s for s in services if s.get("id") == "bridge"), None)
-            if bridge and bridge.get("status") not in ("green", "yellow"):
-                out["errors"].append(f"bridge stack status={bridge.get('status')}")
-        elif path == "/openfdd-agent/building-insight":
+        if path == "/openfdd-agent/building-insight":
             if not (payload.get("sentence") or payload.get("ok")):
                 out["warnings"].append("/openfdd-agent/building-insight empty sentence")
         elif path in ("/api/faults/status", "/api/building/status"):
@@ -217,10 +209,10 @@ def check_entry(
     out["stack_status"] = status
     out["stack_services"] = {}
     if status == 401:
-        if stack_headers:
-            out["errors"].append("/health/stack HTTP 401 with Bearer token")
+        if not stack_headers:
+            out["warnings"].append("/health/stack HTTP 401 without auth (expected — use integrator login)")
         else:
-            out["errors"].append("/health/stack HTTP 401 — must be public for check-engine dashboard")
+            out["errors"].append("/health/stack HTTP 401 with Bearer token")
     elif status != 200:
         out["errors"].append(f"/health/stack HTTP {status}")
     else:

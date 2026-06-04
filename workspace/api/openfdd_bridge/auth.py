@@ -140,6 +140,81 @@ def verify_token(token: str | None) -> dict[str, Any] | None:
     return payload
 
 
+_WS_TICKET_TYP = "ws"
+
+
+def _ws_ticket_ttl_sec() -> int:
+    raw = os.environ.get("OFDD_WS_TICKET_TTL_SEC", "").strip()
+    default = 120
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(30, min(value, 600))
+
+
+def issue_ws_ticket(username: str, role: Role) -> tuple[str, int]:
+    """Short-lived WebSocket ticket (not the long-lived Bearer token)."""
+    ttl = _ws_ticket_ttl_sec()
+    if not credentials_configured():
+        from .security import auth_dev_bypass_enabled
+
+        if auth_dev_bypass_enabled():
+            return "dev", ttl
+        raise RuntimeError("cannot issue WebSocket ticket without OFDD_AUTH_SECRET")
+    payload = {
+        "sub": username,
+        "role": role,
+        "typ": _WS_TICKET_TYP,
+        "exp": int(time.time()) + ttl,
+    }
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
+        .rstrip(b"=")
+        .decode()
+    )
+    sig = hmac.new(_SECRET.encode(), body.encode(), hashlib.sha256).digest()
+    sig_b64 = base64.urlsafe_b64encode(sig).rstrip(b"=").decode()
+    return f"{body}.{sig_b64}", ttl
+
+
+def verify_ws_ticket(ticket: str | None) -> dict[str, Any] | None:
+    from .security import auth_dev_bypass_enabled
+
+    if not ticket or not ticket.strip():
+        return None
+    ticket = ticket.strip()
+    if not credentials_configured():
+        if auth_dev_bypass_enabled() and ticket == "dev":
+            return dict(_DEV_USER)
+        return None
+    if "." not in ticket:
+        return None
+    body, sig_b64 = ticket.split(".", 1)
+    expected = hmac.new(_SECRET.encode(), body.encode(), hashlib.sha256).digest()
+    try:
+        got = base64.urlsafe_b64decode(sig_b64 + "==")
+    except Exception:
+        return None
+    if not hmac.compare_digest(expected, got):
+        return None
+    pad = "=" * (-len(body) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(body + pad))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if payload.get("typ") != _WS_TICKET_TYP:
+        return None
+    if int(payload.get("exp", 0)) < int(time.time()):
+        return None
+    role = payload.get("role")
+    if role not in ROLES:
+        payload["role"] = "operator"
+    return payload
+
+
 def role_allows(role: str | None, allowed: tuple[Role, ...]) -> bool:
     if not credentials_configured():
         from .security import auth_dev_bypass_enabled

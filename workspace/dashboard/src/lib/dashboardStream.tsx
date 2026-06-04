@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, getBridgeBase } from "./api";
+import { apiFetch, fetchWsTicket, getBridgeBase } from "./api";
 import type { Traffic } from "../components/TrafficLight";
 
 export type ServiceStatus = "green" | "yellow" | "red" | "gray";
@@ -84,7 +84,7 @@ const DashboardStreamContext = createContext<DashboardStreamValue>({
   live: false,
 });
 
-function wsUrl(): string {
+function wsBaseUrl(): string {
   const base = getBridgeBase();
   if (base) {
     const parsed = new URL(base);
@@ -142,25 +142,35 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
       }
     };
 
-    try {
-      ws = new WebSocket(wsUrl());
-      ws.onopen = () => {
-        if (!cancelled) setLive(true);
-      };
-      ws.onmessage = (ev) => {
-        try {
-          apply(JSON.parse(ev.data) as DashboardSnapshot);
-        } catch {
-          /* ignore malformed frame */
-        }
-      };
-      ws.onerror = () => ws?.close();
-      ws.onclose = () => {
+    const connectWs = async () => {
+      const ticket = await fetchWsTicket();
+      if (cancelled || !ticket) {
         if (!cancelled) startPolling();
-      };
-    } catch {
-      startPolling();
-    }
+        return;
+      }
+      try {
+        const url = new URL(wsBaseUrl());
+        url.searchParams.set("ticket", ticket);
+        ws = new WebSocket(url.toString());
+        ws.onopen = () => {
+          if (!cancelled) setLive(true);
+        };
+        ws.onmessage = (ev) => {
+          try {
+            apply(JSON.parse(ev.data) as DashboardSnapshot);
+          } catch {
+            /* ignore malformed frame */
+          }
+        };
+        ws.onerror = () => ws?.close();
+        ws.onclose = () => {
+          if (!cancelled) startPolling();
+        };
+      } catch {
+        if (!cancelled) startPolling();
+      }
+    };
+    void connectWs();
 
     const fallbackTimer = window.setTimeout(() => {
       if (!cancelled && !gotData) startPolling();

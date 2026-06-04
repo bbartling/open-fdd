@@ -98,11 +98,11 @@ def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
     for path in (
         "/api/building/status",
         "/api/faults/status",
-        "/health/stack",
         "/openfdd-agent/building-insight",
     ):
         r = raw_client.get(path)
         assert r.status_code == 200, path
+    assert raw_client.get("/health/stack").status_code == 401
 
 
 def test_status_api_starts_green(client: TestClient):

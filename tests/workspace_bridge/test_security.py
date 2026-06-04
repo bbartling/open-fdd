@@ -211,8 +211,50 @@ def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
 
 
 def test_anonymous_can_read_public_check_engine(raw_client: TestClient):
-    assert raw_client.get("/health/stack").status_code == 200
+    assert raw_client.get("/health/stack").status_code == 401
     assert raw_client.get("/openfdd-agent/building-insight").status_code == 200
+
+
+def test_health_minimal_public(raw_client: TestClient):
+    r = raw_client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["service"] == "openfdd-bridge"
+    assert "version" in body
+    assert "auth_required" in body
+    assert "bacnet_poll" not in body
+    assert "repo_root" not in body
+    assert "data_dir" not in body
+
+
+def test_health_stack_requires_auth(raw_client: TestClient):
+    assert raw_client.get("/health/stack").status_code == 401
+
+
+def test_health_stack_integrator(client: TestClient):
+    r = client.get("/health/stack")
+    assert r.status_code == 200
+    body = r.json()
+    assert "services" in body
+    assert any(s["id"] == "bridge" for s in body["services"])
+
+
+def test_ws_ticket_and_connect(raw_client: TestClient, integrator_headers: dict[str, str]):
+    ticket_r = raw_client.post("/api/auth/ws-ticket", headers=integrator_headers)
+    assert ticket_r.status_code == 200
+    ticket = ticket_r.json()["ticket"]
+    assert ticket
+    with raw_client.websocket_connect(f"/ws/dashboard?ticket={ticket}") as ws:
+        payload = ws.receive_json()
+        assert "stack" in payload
+        assert "faults" in payload
+
+
+def test_ws_rejected_without_ticket(raw_client: TestClient):
+    with pytest.raises(Exception):
+        with raw_client.websocket_connect("/ws/dashboard"):
+            pass
 
 
 def test_anonymous_cannot_read_agent_context(raw_client: TestClient):

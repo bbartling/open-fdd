@@ -175,7 +175,7 @@ def _bacnet_poll_service() -> dict[str, Any]:
     }
 
 
-def stack_health() -> dict[str, Any]:
+def stack_health(*, verbose: bool = False) -> dict[str, Any]:
     services: list[dict[str, Any]] = []
 
     # Bridge (self)
@@ -249,9 +249,16 @@ def stack_health() -> dict[str, Any]:
         if svc["status"] == "yellow" and overall == "green":
             overall = "yellow"
 
-    return {
+    out: dict[str, Any] = {
         "ok": overall in {"green", "yellow"},
         "overall": overall,
         "services": services,
-        "bacnet_bind": bacnet_bind,
     }
+    if verbose:
+        out["bacnet_bind"] = bacnet_bind
+        return out
+    for svc in services:
+        svc.pop("url", None)
+        if isinstance(svc.get("detail"), dict):
+            svc["detail"] = "unavailable"
+    return out
