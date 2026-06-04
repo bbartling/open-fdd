@@ -49,6 +49,11 @@ jobs:
       - name: Build PDF and plain-text bundle
         run: python scripts/build_docs_pdf.py --pdf-engine=weasyprint
 
+      # Fresh bot branch from master — avoids pushing stale commits that touch .github/workflows/*
+      # (GITHUB_TOKEN cannot update workflow files without workflows: write).
+      - name: Reset bot branch on origin
+        run: git push origin --delete chore/docs-pdf-refresh 2>/dev/null || true
+
       - name: Open PR with updated bundle (if changed)
         uses: peter-evans/create-pull-request@v7
         with:
