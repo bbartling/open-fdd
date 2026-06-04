@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..building_status import faults_by_family
 from ..deps import require_user
-from ..fault_catalog import catalog_payload, catalog_tree, entry_for_code
+from ..fault_catalog import catalog_graph, catalog_payload, catalog_tree, entry_for_code
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
@@ -25,6 +25,12 @@ def get_catalog() -> dict:
 def get_catalog_tree() -> dict:
     """Reference tree: equipment family -> category -> fault codes (what CAN go wrong)."""
     return {"ok": True, **catalog_tree()}
+
+
+@router.get("/graph")
+def get_catalog_graph() -> dict:
+    """Link graph: fault_code → category → expression-rule cookbook pattern."""
+    return {"ok": True, **catalog_graph()}
 
 
 @router.get("/code/{code}")

@@ -21,7 +21,7 @@ On the edge, **Ollama is not your commissioning copilot**. It powers the **build
 | Trend snippets | Recent feather series (bounded context) |
 | MCP RAG (optional) | Project docs — lighter than full repo checkout |
 
-Routes: `GET /openfdd-agent/ollama/health`, `POST /openfdd-agent/chat`, `GET /openfdd-agent/building-insight`. Implementation: `agent_routes.py`, `building_insight.py`, `fault_catalog.py`.
+Routes: `GET /openfdd-agent/ollama/health`, `POST /openfdd-agent/chat`, `GET /openfdd-agent/building-insight`, `GET /openfdd-agent/operational-brief`, `GET /openfdd-agent/zone-temps`, `GET /openfdd-agent/device-poll-health`. Home insight uses a **14-day** feather window (`OFDD_ANALYTICS_LOOKBACK_DAYS`) for zone day/night averages, fan-on recovery °F/min, **zone energy research** (setback + sensor cross-check), and per-equipment poll online/flaky (BLD-D alerts when all points on a device are stale/FDD). When recovery is ~0°F/min and day/night temps are flat, the LLM is prompted to investigate missing setback and energy savings — after validating poll/FDD sensor health. See **[operational_analytics.md](operational_analytics.md)**. BRICK interlink: `brick_model_context.py` feeds building insight + Agent chat; operators can run read-only tools (`model.graph`, `timeseries.snapshot`, `faults.lookup`) via `POST /openfdd-agent/tool`. Implementation: `building_insight.py`, `zone_temp_analytics.py`, `zone_energy_research.py`, `device_poll_health.py`, `agent_tools.py`, `brick_model_context.py`.
 
 ---
 
@@ -70,8 +70,9 @@ curl -s http://127.0.0.1:8765/openfdd-agent/ollama/health \
 # Local dev only: unauthenticated curl works when OFDD_AUTH_DISABLED=1 on trusted localhost
 ```
 
-- [ ] Model reachable (JSON shows `reachable` or `ok`)
-- [ ] Fault catalog page loads; codes match `fault_catalog.py`
+- [ ] Model reachable (JSON shows `"ok": true`)
+- [ ] Fault catalog page loads; codes are letter suffix (e.g. `VAV-C`) per `fault_catalog.py`
+- [ ] Building insight / Agent context mention active `fault_code` values from FDD, not equipment names
 - [ ] At least one Rule Lab rule has `fault_code` + enabled binding
 - [ ] `POST /api/rules/batch` ran after rule edits
 - [ ] Dashboard check-engine matches `GET /api/faults/status`

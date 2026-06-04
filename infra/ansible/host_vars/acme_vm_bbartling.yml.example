@@ -5,11 +5,13 @@
 
 site_id: acme
 building_id: vm-bbartling
-edge_model_json: acme_gl36_model.json
+# From: python3 scripts/gl36_site_model.py --site-id acme --building-id vm-bbartling
+edge_model_json: acme_vm-bbartling_gl36_model.json
 openfdd_docker_stack: true
 
+# BACnet Device instance (Who-Is / bind). Change only if the OT network requires a fixed ID.
 bacnet_instance_id: 3456791
-bacnet_device_name: OpenFddVmBbartling
+bacnet_device_name: OpenFDD
 # Dedicated OT NIC — not Tailscale
 bacnet_bind_address: "10.200.200.185/24:47808"
 bacnet_commission_network_host: true
@@ -27,6 +29,10 @@ enable_mcp: true
 enable_ollama: true
 ollama_required: true
 ollama_ram_tier: "16gb"
+# In-stack Ollama container (set false when deploying with -e openfdd_docker_ollama=false)
+openfdd_docker_ollama: true
+# Post-deploy requires reachable Ollama only when in-stack Ollama is enabled (see post_deploy_check.sh)
+# post_check_require_ollama: true
 
 # ~125 GiB feather cap ≈ 1 year at 1-min temp polling scale
 feather_max_gib: 125

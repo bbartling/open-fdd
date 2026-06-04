@@ -10,7 +10,8 @@ building_id: edge
 # BACnet/IP bind — override in host_vars (OT NIC vs SSH IP)
 bacnet_bind_address: "{{ ansible_host }}/24:47808"
 bacnet_instance_id: 599999
-bacnet_device_name: OpenFddEdge
+# Local BACnet server identity (commission + poll). Override instance per host in host_vars.
+bacnet_device_name: OpenFDD
 
 # Poll driver (local CSV → bridge ingest → FDD)
 install_bacnet_poll_unit: true

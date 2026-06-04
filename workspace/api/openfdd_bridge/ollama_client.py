@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import httpx
@@ -39,8 +40,12 @@ def _timing_from_response(data: dict[str, Any]) -> dict[str, Any]:
 
 SYSTEM_PROMPT = (
     "You are the Open-FDD operator assistant on an OT BACnet/FDD edge host. "
-    "Be concise. Help with BRICK data modeling, Python Rule Lab faults, BACnet commissioning, "
-    "and building status. Do not invent BACnet device IDs or write to field equipment unless asked."
+    "Be concise. Help with BRICK data modeling (equipment, brick:feeds, Zone_Air_Temperature_Sensor), "
+    "Python Rule Lab faults (fixed catalog codes like VAV-C), BACnet commissioning, feather historian trends, "
+    "and building status. Interlink active faults to BRICK equipment names and feeds chains. "
+    "Recommend POST /openfdd-agent/tool for read-only queries (model.graph, timeseries.snapshot, faults.lookup) "
+    "or GET /api/model/graph and /api/timeseries/readings when operators need live data. "
+    "Do not invent BACnet device IDs or write to field equipment unless asked."
 )
 
 
@@ -209,7 +214,7 @@ def resolve_num_gpu(*, gpu_mode: str | None = None) -> int:
     return configured_num_gpu()
 
 
-def health(timeout: float | None = None) -> dict[str, Any]:
+def health(timeout: float | None = None, *, max_total_s: float | None = None) -> dict[str, Any]:
     global _WORKING_BASE
     to = timeout
     if to is None:
@@ -217,12 +222,23 @@ def health(timeout: float | None = None) -> dict[str, Any]:
             to = float(os.environ.get("OFDD_OLLAMA_HEALTH_TIMEOUT_S", str(DEFAULT_HEALTH_TIMEOUT_S)))
         except ValueError:
             to = DEFAULT_HEALTH_TIMEOUT_S
+    if max_total_s is None:
+        try:
+            max_total_s = float(os.environ.get("OFDD_OLLAMA_HEALTH_MAX_TOTAL_S", "12"))
+        except ValueError:
+            max_total_s = 12.0
     last_err = ""
     tried: list[str] = []
+    started = time.monotonic()
     for base in ollama_base_candidates():
+        remaining = max_total_s - (time.monotonic() - started)
+        if remaining <= 0.15:
+            last_err = last_err or "Ollama health budget exceeded"
+            break
+        per_try = min(to, remaining)
         tried.append(base)
         try:
-            with httpx.Client(timeout=to) as client:
+            with httpx.Client(timeout=per_try) as client:
                 tags = client.get(f"{base}/api/tags")
                 tags.raise_for_status()
                 body = tags.json()
@@ -235,7 +251,8 @@ def health(timeout: float | None = None) -> dict[str, Any]:
                     "configured_model": configured_model(),
                     "configured_ram_tier": configured_ram_tier(),
                     "num_gpu": configured_num_gpu(),
-                    "health_timeout_s": to,
+                    "health_timeout_s": per_try,
+                    "health_max_total_s": max_total_s,
                     "tried_urls": tried,
                 }
         except Exception as exc:
@@ -249,6 +266,7 @@ def health(timeout: float | None = None) -> dict[str, Any]:
         "configured_ram_tier": configured_ram_tier(),
         "num_gpu": configured_num_gpu(),
         "health_timeout_s": to,
+        "health_max_total_s": max_total_s,
         "tried_urls": tried,
     }
 

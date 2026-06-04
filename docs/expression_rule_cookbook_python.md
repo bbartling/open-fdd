@@ -51,7 +51,16 @@ def evaluate(row, cfg, prev_row=None, rows=None):
     return False
 ```
 
-Copy from `rules_py/flatline_1h.py`. Tag rule with `fault_code: sensor_fault` in Rule Lab.
+Copy from `rules_py/flatline_1h.py`. Tag rule with a **letter fault code** in Rule Lab (e.g. `VAV-C` for zone temp sensor fault — category `sensor_fault`).
+
+| Cookbook pattern | Typical fault codes | Rule file |
+|------------------|---------------------|-----------|
+| `flatline_1h` | `VAV-C`, `AHU-C`, `DC-C`, `BLD-B` (OAT) | `flatline_1h.py` |
+| `spread_1h` | `VAV-B`, `AHU-A`, `CH-B` | `spread_1h.py`, `duct-t_spread_1h.py` |
+| `oob_rolling` | `VAV-C` (bounds), `AHU-D` | `oob_rolling.py` |
+| `custom_evaluate` | `AHU-B`, `VAV-A` | site-specific `rules_py` |
+
+Browse the full map: `GET /api/faults/graph` or dashboard **Fault catalog**.
 
 ---
 
@@ -79,10 +88,12 @@ Acme examples: `acme_mixed_air_temp_oob_economizer_diagnostic.py`, `acme_zone_te
 |------|--------|
 | Thresholds | Rule `config` in UI → passed as `cfg` |
 | Point columns | Bindings → feather column names from BRICK `fdd_input` |
-| Fault code | Must exist in `GET /api/faults/catalog` |
+| Fault code | Letter suffix only (`VAV-C`, not `VAV-03`); must exist in `GET /api/faults/catalog` |
 | Enable | Per-binding flag in `rules_store.json` |
 
 Test: **Lint** → **Test rule** in Rule Lab (`POST /api/playground/test-rule`).
+
+**PyPI (portable rules):** helpers and `compile_evaluate` / `sweep_rule` live in `open_fdd.playground` — see [open_fdd_playground_pypi.md](open_fdd_playground_pypi.md). Acme production rules import `from open_fdd.playground.cookbook import …`.
 
 ---
 
@@ -96,7 +107,7 @@ Bench seed: `python scripts/setup_bench_afdd.py`.
 
 ## AI drafting tips
 
-- Start from `flatline_1h.py` or `spread_1h.py`; change only thresholds and `fault_code`.
+- Start from `flatline_1h.py` or `spread_1h.py`; change thresholds and pick matching `fault_code` from the catalog (same `cookbook_patterns` row).
 - Ask AI to explain **spread** and **window length** from test-rule output, not to skip batch run.
 - `bench-*` rule ids are excluded from default scheduled batch — use `duct-*` or site prefixes for production timers.
 

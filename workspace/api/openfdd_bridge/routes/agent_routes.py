@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..deps import require_roles, require_user
-from .. import agent_tools, audit, building_insight, ollama_client, zone_temp_analytics
+from .. import agent_tools, audit, building_insight, ollama_client, device_poll_health, zone_temp_analytics
 from ..agent_tools import ToolError
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
@@ -16,6 +16,7 @@ from ..security import debug_diagnostics_enabled
 router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
 
 _AGENT_ROLES = Depends(require_roles("operator", "integrator", "agent"))
+_TOOL_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 
 
 class ChatBody(BaseModel):
@@ -34,7 +35,8 @@ class ToolBody(BaseModel):
 
 @router.get("/context")
 def agent_context(user: dict = Depends(require_user)) -> dict:
-    ollama = ollama_client.health()
+    # Cap total Ollama probe time so /context stays under reverse-proxy health budgets.
+    ollama = ollama_client.health(timeout=2.0, max_total_s=6.0)
     tier = ollama_client.configured_ram_tier()
     payload: dict = {
         "ollama": ollama,
@@ -62,11 +64,11 @@ def list_tools(_user: dict = _AGENT_ROLES) -> dict:
 def run_tool(
     body: ToolBody,
     request: Request,
-    user: dict = Depends(require_roles("agent")),
+    user: dict = _TOOL_ROLES,
 ) -> dict:
-    """Execute an agent maintenance tool. Restricted to the `agent` role, audited."""
+    """Execute agent tools. Read-only tools allowed for operator; writes need integrator/agent."""
     try:
-        result = agent_tools.run_tool(body.tool, body.args)
+        result = agent_tools.run_tool(body.tool, body.args, role=str(user.get("role") or ""))
     except ToolError as exc:
         audit.write_audit(
             event_type="agent.tool",
@@ -100,11 +102,26 @@ def ollama_health() -> dict:
 
 @router.get("/building-insight")
 def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
-    """Read-only one-liner for the home dashboard (fixed interval cache).
+    """Read-only briefing for the home dashboard (fixed interval cache).
 
     Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
     """
     return building_insight.get_building_insight(force=force)
+
+
+@router.get("/operational-brief")
+def operational_brief(force: bool = Query(default=False)) -> dict:
+    """Structured zone-temp, device poll health, and fault lines (same window as home insight)."""
+    return building_insight.get_operational_brief(force=force)
+
+
+@router.get("/device-poll-health")
+def device_poll_health_snapshot(
+    force: bool = Query(default=False),
+    site_id: str | None = Query(default=None),
+) -> dict:
+    """Per-equipment online/flaky status from feather poll timestamps (+ FDD bindings)."""
+    return device_poll_health.get_device_poll_snapshot(site_id=site_id, force=force)
 
 
 @router.get("/zone-temps")
@@ -119,6 +136,8 @@ def zone_temps_snapshot(
 @router.post("/chat")
 def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
     """Local operator chat — always Ollama (configured via workspace/ollama.env.local)."""
+    from ..brick_model_context import build_agent_system_extra
+
     return ollama_client.chat(
         body.message,
         model=body.model or ollama_client.configured_model(),
@@ -126,4 +145,5 @@ def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
         gpu_mode=body.gpu_mode or os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
         think=body.think,
         history=body.history,
+        system=ollama_client.build_system_prompt(extra=build_agent_system_extra()),
     )

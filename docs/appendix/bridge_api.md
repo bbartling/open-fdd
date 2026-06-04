@@ -12,7 +12,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 **Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission + [write guard](../security_hardening). Dev: `OFDD_AUTH_DISABLED` on trusted localhost only.
 
-**WebSocket:** live dashboard refresh — pass `?token=` when auth enabled.
+**WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket` then `?ticket=` (short-lived; not the Bearer token).
 
 ---
 
@@ -20,8 +20,9 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
-| GET | `/health` | public* | Liveness, poll worker hint |
-| GET | `/health/stack` | auth | Compose-level probes (model SPARQL, Ollama, MCP) |
+| GET | `/health` | public | Minimal liveness (`ok`, `service`, `version`, `auth_required`) |
+| GET | `/health/stack` | auth | Stack traffic-light (verbose URLs/bind with `OFDD_DEBUG_DIAGNOSTICS`) |
+| POST | `/api/auth/ws-ticket` | auth | Short-lived WebSocket ticket |
 | GET | `/api/audit/summary` | auth | Audit counters |
 | GET | `/api/audit/events` | auth | Audit log (query params) |
 | GET | `/api/audit/errors` | auth | Recent API errors |

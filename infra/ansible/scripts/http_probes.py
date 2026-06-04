@@ -10,6 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -32,8 +33,18 @@ def fetch(url: str, *, timeout: float = 20.0, headers: dict[str, str] | None = N
         body = exc.read().decode("utf-8", errors="replace")
         hdrs = {k.lower(): v for k, v in exc.headers.items()}
         return exc.code, body, hdrs
+    except TimeoutError as exc:
+        raise RuntimeError(f"request timed out after {timeout}s") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(str(exc.reason)) from exc
+
+
+def _agent_fetch_timeout_s() -> float:
+    raw = os.environ.get("OPENFDD_PROBE_AGENT_TIMEOUT_S", "45").strip()
+    try:
+        return max(5.0, float(raw))
+    except ValueError:
+        return 45.0
 
 
 def post_json(url: str, payload: dict[str, Any], *, timeout: float = 20.0, headers: dict[str, str] | None = None) -> tuple[int, str]:
@@ -45,8 +56,13 @@ def post_json(url: str, payload: dict[str, Any], *, timeout: float = 20.0, heade
             return resp.status, resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode("utf-8", errors="replace")
+    except TimeoutError as exc:
+        raise RuntimeError(f"request timed out after {timeout}s") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(str(exc.reason)) from exc
+        reason = getattr(exc, "reason", exc)
+        if isinstance(reason, TimeoutError):
+            raise RuntimeError(f"request timed out after {timeout}s") from exc
+        raise RuntimeError(str(reason)) from exc
 
 
 def auth_headers(token: str) -> dict[str, str]:
@@ -74,7 +90,6 @@ def _stack_services(body: str) -> list[dict[str, Any]]:
 
 
 PUBLIC_CHECK_ENGINE_PATHS = (
-    "/health/stack",
     "/api/faults/status",
     "/api/building/status",
     "/openfdd-agent/building-insight",
@@ -127,6 +142,102 @@ def check_integrator_ui_api(base: str, token: str, *, site_id: str = "demo") -> 
     return out
 
 
+def check_building_dashboard_health(
+    base: str,
+    token: str,
+    *,
+    site_id: str = "demo",
+    poll_fresh_max_s: float = 180.0,
+) -> dict[str, Any]:
+    """Detect false offline poll_health alerts and feather lag while BACnet poll is live."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "site_id": site_id}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+
+    poll_url = f"{root}/api/bacnet/poll/status"
+    try:
+        poll_status, poll_body, _ = fetch(poll_url, headers=headers, timeout=_bacnet_fetch_timeout_s())
+    except RuntimeError as exc:
+        out["warnings"].append(f"building health: poll status unreachable: {exc}")
+        return out
+    poll_age_s: float | None = None
+    if poll_status == 200:
+        try:
+            poll = json.loads(poll_body)
+            at_raw = str(poll.get("at_utc") or poll.get("at") or "").strip()
+            if at_raw:
+                ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                poll_age_s = (datetime.now(timezone.utc) - ts).total_seconds()
+                out["poll_age_seconds"] = round(poll_age_s, 1)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    faults_url = f"{root}/api/faults/status"
+    try:
+        f_status, f_body, _ = fetch(faults_url, headers=headers, timeout=30.0)
+    except RuntimeError as exc:
+        out["warnings"].append(f"building health: faults/status unreachable: {exc}")
+        return out
+    if f_status != 200:
+        out["warnings"].append(f"/api/faults/status HTTP {f_status}")
+        return out
+    try:
+        faults = json.loads(f_body)
+    except json.JSONDecodeError:
+        out["warnings"].append("/api/faults/status not JSON")
+        return out
+
+    families = faults.get("families") or []
+    poll_offline = 0
+    poll_historian = 0
+    bld_d_badges = 0
+    for fam in families:
+        if not isinstance(fam, dict):
+            continue
+        for alert in fam.get("faults") or []:
+            if not isinstance(alert, dict):
+                continue
+            src = str(alert.get("source") or "")
+            title = str(alert.get("title") or "")
+            if alert.get("code") == "BLD-D" and src in {"poll_health", "model_health"}:
+                bld_d_badges += 1
+            if src != "poll_health":
+                continue
+            if "device offline" in title.lower():
+                poll_offline += 1
+            if "historian behind" in title.lower():
+                poll_historian += 1
+    out["poll_health_offline_alerts"] = poll_offline
+    out["poll_health_historian_lag_alerts"] = poll_historian
+    if bld_d_badges:
+        out["errors"].append(
+            f"Dashboard shows {bld_d_badges} poll/model alert(s) with BLD-D code badge "
+            "(should show device names only)"
+        )
+    if poll_age_s is not None and poll_age_s <= poll_fresh_max_s and poll_offline >= 3:
+        out["errors"].append(
+            f"False offline: {poll_offline} poll_health 'device offline' alerts while BACnet poll "
+            f"is fresh ({int(poll_age_s)}s ago) — check feather ingest"
+        )
+    if poll_historian:
+        out["warnings"].append(
+            f"{poll_historian} device(s) historian behind live poll — bridge ingest may be slow"
+        )
+
+    scope_url = f"{root}/api/model/scope?site_id={site_id}"
+    try:
+        scope_status, scope_body, _ = fetch(scope_url, headers=headers, timeout=60.0)
+        out["model_scope_status"] = scope_status
+        if scope_status == 503:
+            out["errors"].append(f"/api/model/scope HTTP 503 for site {site_id!r} (Rule Lab / plots broken)")
+    except RuntimeError as exc:
+        out["warnings"].append(f"model scope probe failed: {exc}")
+
+    return out
+
+
 def check_public_check_engine(base: str) -> dict[str, Any]:
     """Anonymous read probes for home / faults traffic-light UI (no Bearer token)."""
     out: dict[str, Any] = {"errors": [], "warnings": [], "endpoints": {}}
@@ -145,14 +256,7 @@ def check_public_check_engine(base: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             out["errors"].append(f"{path} not JSON")
             continue
-        if path == "/health/stack":
-            services = payload.get("services") or []
-            if not services:
-                out["errors"].append("/health/stack missing services[]")
-            bridge = next((s for s in services if s.get("id") == "bridge"), None)
-            if bridge and bridge.get("status") not in ("green", "yellow"):
-                out["errors"].append(f"bridge stack status={bridge.get('status')}")
-        elif path == "/openfdd-agent/building-insight":
+        if path == "/openfdd-agent/building-insight":
             if not (payload.get("sentence") or payload.get("ok")):
                 out["warnings"].append("/openfdd-agent/building-insight empty sentence")
         elif path in ("/api/faults/status", "/api/building/status"):
@@ -212,10 +316,10 @@ def check_entry(
     out["stack_status"] = status
     out["stack_services"] = {}
     if status == 401:
-        if stack_headers:
-            out["errors"].append("/health/stack HTTP 401 with Bearer token")
+        if not stack_headers:
+            out["warnings"].append("/health/stack HTTP 401 without auth (expected — use integrator login)")
         else:
-            out["errors"].append("/health/stack HTTP 401 — must be public for check-engine dashboard")
+            out["errors"].append("/health/stack HTTP 401 with Bearer token")
     elif status != 200:
         out["errors"].append(f"/health/stack HTTP {status}")
     else:
@@ -276,6 +380,121 @@ def _min_model_equipment() -> int:
         return max(0, int(os.environ.get("OPENFDD_HEALTH_MIN_MODEL_EQUIPMENT", "0")))
     except ValueError:
         return 0
+
+
+def _bacnet_fetch_timeout_s() -> float:
+    raw = os.environ.get("OPENFDD_PROBE_BACNET_TIMEOUT_S", "60").strip()
+    try:
+        return max(10.0, float(raw))
+    except ValueError:
+        return 60.0
+
+
+def check_bacnet_driver(
+    base: str,
+    token: str,
+    *,
+    min_devices: int = 1,
+    min_enabled_points: int = 1,
+    max_poll_age_s: float | None = None,
+) -> dict[str, Any]:
+    """BACnet poll driver: device tree inventory + fresh poll samples."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+    bacnet_to = _bacnet_fetch_timeout_s()
+    if max_poll_age_s is None:
+        raw = os.environ.get("OPENFDD_HEALTH_MAX_POLL_AGE_S", "900").strip()
+        try:
+            max_poll_age_s = float(raw)
+        except ValueError:
+            max_poll_age_s = 900.0
+
+    tree_url = f"{root}/api/bacnet/driver/tree"
+    try:
+        status, body, _ = fetch(tree_url, headers=headers, timeout=bacnet_to)
+    except RuntimeError as exc:
+        out["errors"].append(f"/api/bacnet/driver/tree unreachable: {exc}")
+        return out
+    out["bacnet_tree_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/bacnet/driver/tree HTTP {status}: {body[:200]}")
+        return out
+    try:
+        tree = json.loads(body)
+    except json.JSONDecodeError:
+        out["errors"].append("/api/bacnet/driver/tree not JSON")
+        return out
+
+    devices = tree.get("devices") or []
+    out["bacnet_device_count"] = len(devices)
+    out["bacnet_inventory_source"] = tree.get("inventory_source") or ""
+    enabled = sum(int(d.get("poll_count") or 0) for d in devices)
+    out["bacnet_enabled_points"] = enabled
+    if len(devices) < min_devices:
+        out["errors"].append(
+            f"BACnet driver tree has {len(devices)} device(s) (need >={min_devices}); "
+            "points_discovered.csv may be missing on edge — run edge_site_backup then redeploy"
+        )
+    if enabled < min_enabled_points:
+        out["errors"].append(
+            f"BACnet driver has {enabled} enabled point(s) in tree (need >={min_enabled_points})"
+        )
+    if out["bacnet_inventory_source"] == "empty":
+        out["errors"].append("BACnet inventory_source=empty (no points.csv / points_discovered.csv)")
+
+    poll_url = f"{root}/api/bacnet/poll/status"
+    try:
+        status, body, _ = fetch(poll_url, headers=headers, timeout=bacnet_to)
+    except RuntimeError as exc:
+        out["errors"].append(f"/api/bacnet/poll/status unreachable: {exc}")
+        return out
+    out["bacnet_poll_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/bacnet/poll/status HTTP {status}: {body[:200]}")
+        return out
+    try:
+        poll = json.loads(body)
+    except json.JSONDecodeError:
+        out["errors"].append("/api/bacnet/poll/status not JSON")
+        return out
+
+    out["poll_enabled_points"] = poll.get("enabled_points")
+    out["poll_samples"] = poll.get("samples")
+    out["poll_at_utc"] = poll.get("at_utc") or poll.get("at")
+    out["poll_at_local_display"] = poll.get("at_local_display")
+    out["poll_site_timezone"] = poll.get("site_timezone")
+    poll_err = str(poll.get("error") or "").strip()
+    if poll_err:
+        out["errors"].append(f"BACnet poll driver error: {poll_err}")
+
+    at_raw = str(poll.get("at_utc") or poll.get("at") or "").strip()
+    if not at_raw and enabled >= min_enabled_points:
+        out["warnings"].append("BACnet poll enabled but no last sample timestamp yet")
+    elif at_raw:
+        try:
+            ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            age_s = (datetime.now(timezone.utc) - ts).total_seconds()
+            out["poll_age_seconds"] = round(age_s, 1)
+            if max_poll_age_s > 0 and age_s > max_poll_age_s:
+                out["errors"].append(
+                    f"BACnet poll last sample {int(age_s)}s old (max {int(max_poll_age_s)}s); "
+                    f"UTC {at_raw}"
+                )
+        except ValueError:
+            out["warnings"].append(f"Could not parse poll timestamp: {at_raw!r}")
+
+    comm_url = f"{root}/api/bacnet/commission/status"
+    try:
+        comm_status, _body, _ = fetch(comm_url, headers=headers, timeout=bacnet_to)
+        out["bacnet_commission_status"] = comm_status
+        if comm_status not in (200, 503):
+            out["warnings"].append(f"/api/bacnet/commission/status HTTP {comm_status}")
+    except RuntimeError as exc:
+        out["warnings"].append(f"/api/bacnet/commission/status skipped: {exc}")
+    return out
 
 
 def check_model_sparql_health(base: str, token: str) -> dict[str, Any]:
@@ -433,7 +652,11 @@ def check_agent_stack(
     out: dict[str, Any] = {"errors": [], "warnings": []}
     headers = auth_headers(token)
     ctx_url = f"{base.rstrip('/')}/openfdd-agent/context"
-    status, body, _ = fetch(ctx_url, headers=headers)
+    try:
+        status, body, _ = fetch(ctx_url, headers=headers, timeout=_agent_fetch_timeout_s())
+    except RuntimeError as exc:
+        out["errors"].append(f"/openfdd-agent/context unreachable: {exc}")
+        return out
     out["agent_context_status"] = status
     if status != 200:
         out["errors"].append(f"/openfdd-agent/context HTTP {status}")
@@ -452,7 +675,14 @@ def check_agent_stack(
         out["errors"].append("/openfdd-agent/context not JSON")
 
     ollama_url = f"{base.rstrip('/')}/openfdd-agent/ollama/health"
-    status, body, _ = fetch(ollama_url, headers=headers)
+    try:
+        status, body, _ = fetch(ollama_url, headers=headers, timeout=15.0)
+    except RuntimeError as exc:
+        if require_ollama:
+            out["errors"].append(f"/openfdd-agent/ollama/health unreachable: {exc}")
+        else:
+            out["warnings"].append(f"Ollama health probe skipped: {exc}")
+        return out
     out["ollama_health_status"] = status
     if status == 200:
         try:
@@ -541,7 +771,7 @@ def check_agent_chat(
 def main() -> int:
     if len(sys.argv) < 2:
         print(
-            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama]\n"
+            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama] [--site-id SITE]\n"
             "       http_probes.py check-public <base_url>",
             file=sys.stderr,
         )
@@ -558,7 +788,18 @@ def main() -> int:
         args = sys.argv[2:]
         require_mcp = "--require-mcp" in args
         require_ollama = "--require-ollama" in args
-        args = [a for a in args if not a.startswith("--require-")]
+        site_id = os.environ.get("OFDD_PROBE_SITE_ID", "demo")
+        filtered: list[str] = []
+        i = 0
+        while i < len(args):
+            if args[i] == "--site-id" and i + 1 < len(args):
+                site_id = args[i + 1]
+                i += 2
+                continue
+            if not args[i].startswith("--require-"):
+                filtered.append(args[i])
+            i += 1
+        args = filtered
         base = args[0]
         if len(args) >= 3:
             login = check_login(base, args[1], args[2])
@@ -576,28 +817,76 @@ def main() -> int:
             result["errors"].extend(entry.get("errors", []))
             result["warnings"].extend(entry.get("warnings", []))
             if login.get("token"):
-                model = check_model_api(base, login["token"])
+                def _run_probe(name: str, fn: Any) -> dict[str, Any]:
+                    try:
+                        return fn()
+                    except RuntimeError as exc:
+                        return {
+                            "errors": [f"{name} probe failed: {exc}"],
+                            "warnings": [],
+                        }
+                    except Exception as exc:  # noqa: BLE001 — keep deploy checks running
+                        return {
+                            "errors": [f"{name} probe failed: {exc}"],
+                            "warnings": [],
+                        }
+
+                model = _run_probe("model_api", lambda: check_model_api(base, login["token"]))
                 result["model_api"] = model
                 result["errors"].extend(model.get("errors", []))
                 result["warnings"].extend(model.get("warnings", []))
-                agent = check_agent_stack(
-                    base,
-                    login["token"],
-                    require_ollama=require_ollama,
-                    require_mcp=require_mcp,
+                agent = _run_probe(
+                    "agent",
+                    lambda: check_agent_stack(
+                        base,
+                        login["token"],
+                        require_ollama=require_ollama,
+                        require_mcp=require_mcp,
+                    ),
                 )
                 result["agent"] = agent
                 result["errors"].extend(agent.get("errors", []))
                 result["warnings"].extend(agent.get("warnings", []))
                 if require_mcp:
-                    chat = check_agent_chat(base, login["token"], require_mcp=require_mcp)
+                    chat = _run_probe(
+                        "agent_chat",
+                        lambda: check_agent_chat(base, login["token"], require_mcp=require_mcp),
+                    )
+                    if chat.get("errors") and "skipped" not in chat:
+                        chat.setdefault("warnings", []).append(
+                            "agent chat probe had errors (Ollama may be off)"
+                        )
                     result["agent_chat"] = chat
-                    result["errors"].extend(chat.get("errors", []))
+                    for chat_err in chat.get("errors", []):
+                        low = str(chat_err).lower()
+                        if any(x in low for x in ("timeout", "timed out", "slow", "ollama")):
+                            result["warnings"].append(f"agent chat probe: {chat_err}")
+                        else:
+                            result["errors"].append(f"agent chat probe: {chat_err}")
                     result["warnings"].extend(chat.get("warnings", []))
-                ui = check_integrator_ui_api(base, login["token"], site_id="demo")
+                probe_site = site_id
+                if not probe_site or probe_site == "demo":
+                    probe_site = str(model.get("active_site_id") or site_id or "demo")
+                ui = _run_probe(
+                    "integrator_ui",
+                    lambda: check_integrator_ui_api(base, login["token"], site_id=probe_site),
+                )
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
                 result["warnings"].extend(ui.get("warnings", []))
+                bacnet = _run_probe("bacnet", lambda: check_bacnet_driver(base, login["token"]))
+                result["bacnet"] = bacnet
+                result["errors"].extend(bacnet.get("errors", []))
+                result["warnings"].extend(bacnet.get("warnings", []))
+                dash = _run_probe(
+                    "building_dashboard",
+                    lambda: check_building_dashboard_health(
+                        base, login["token"], site_id=probe_site
+                    ),
+                )
+                result["building_dashboard"] = dash
+                result["errors"].extend(dash.get("errors", []))
+                result["warnings"].extend(dash.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

@@ -10,6 +10,7 @@ import {
   type AssignmentsPoint,
   type SavedRule,
 } from "../lib/ruleBindings";
+import FddRuleTestPanel from "../components/FddRuleTestPanel";
 import { formatRuleLabel } from "../lib/ruleDisplay";
 
 type SiteRow = { id: string; name: string };
@@ -106,6 +107,8 @@ export default function FddAssignmentsPage() {
         }
       />
       <TabDebugPanel tab="fdd-assignments" />
+
+      <FddRuleTestPanel rules={rules} disabled={loading} />
 
       <section className="panel fdd-assign-panel">
         <h3 className="panel-title">Pin rules by device</h3>

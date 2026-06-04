@@ -19,7 +19,7 @@ Pass **BACpypes3** device args after the module options:
 ```bash
 python -m bacnet_toolshed.discover 0 4194303 \
   --site-id demo --building-id plant1 \
-  --name OpenFddEdge --instance 599999 \
+  --name OpenFDD --instance 599999 \
   --address 192.168.1.50/24:47808
 ```
 
@@ -44,11 +44,11 @@ MS/TP via IP router:
 ```bash
 # 1) Discover devices (fast)
 python -m bacnet_toolshed.discover_devices 0 4194303 \
-  --name OpenFddEdge --instance 599999 --address 192.168.1.50/24:47808
+  --name OpenFDD --instance 599999 --address 192.168.1.50/24:47808
 
 # 2) Discover points per device (or full discover in one shot)
 python -m bacnet_toolshed.discover 0 4194303 -o workspace/bacnet/commissioning/points_discovered.csv \
-  --name OpenFddEdge --instance 599999 --address 192.168.1.50/24:47808
+  --name OpenFDD --instance 599999 --address 192.168.1.50/24:47808
 
 # 3) Enable points for polling (edit brick_class in CSV or use --match)
 python -m bacnet_toolshed.enable_points \
@@ -60,7 +60,7 @@ python -m bacnet_toolshed.enable_points \
 python -m bacnet_toolshed.poll_driver \
   --config workspace/bacnet/commissioning/points.csv \
   --interval 60 --once \
-  --name OpenFddEdge --instance 599999 --address 192.168.1.50/24:47808
+  --name OpenFDD --instance 599999 --address 192.168.1.50/24:47808
 ```
 
 ## Commission HTTP agent (optional)

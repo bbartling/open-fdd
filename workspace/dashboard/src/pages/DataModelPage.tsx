@@ -5,7 +5,6 @@ import { copyToClipboard } from "../lib/clipboard";
 import { buildLlmModelBundle } from "../lib/llmModelBundle";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
 import { ModelPayload } from "../lib/modelImport";
-import ModelGraphExplorer from "../components/ModelGraphExplorer";
 import ModelImportExportPanel from "../components/ModelImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
@@ -120,12 +119,11 @@ export default function DataModelPage() {
       {activeTab === "explorer" ? (
         <>
           <ModelSyncBar refreshKey={refreshKey} onStatus={setOut} />
-          <ModelGraphExplorer
-            siteId={activeSiteId}
-            refreshKey={refreshKey}
-            onStatus={setOut}
-            onModelChange={() => void refreshMeta()}
-          />
+          <p className="muted panel">
+            Equipment and BACnet point bindings are managed via sync above,{" "}
+            <a href="/fdd-assignments">FDD assignments</a>, and <a href="/plot">Trend plot</a>. Use Import / export
+            for bulk model edits; Advanced for LLM-assisted redesign.
+          </p>
         </>
       ) : null}
 

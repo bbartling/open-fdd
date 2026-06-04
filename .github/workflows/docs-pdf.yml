@@ -1,9 +1,15 @@
-# Regenerate pdf/open-fdd-docs.pdf (+ .txt) and open a PR when you run this workflow manually.
-# (No automatic runs on push — avoids extra PR noise; use Actions → Docs PDF → Run workflow.)
+# Regenerate pdf/open-fdd-docs.pdf (+ .txt) when docs change on master/main.
+# Opens a PR (protected default branch cannot take direct GITHUB_TOKEN pushes).
 
 name: Docs PDF
 
 on:
+  push:
+    branches: [master, main]
+    paths:
+      - "docs/**"
+      - "scripts/build_docs_pdf.py"
+      - ".github/workflows/docs-pdf.yml"
   workflow_dispatch:
 
 permissions:
@@ -23,7 +29,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: master
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
@@ -48,10 +53,13 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           branch: chore/docs-pdf-refresh
+          base: ${{ github.event.repository.default_branch }}
           commit-message: "chore(docs): regenerate PDF and text bundle"
           title: "chore(docs): regenerate PDF and text bundle"
           body: |
             Automated refresh from **Docs PDF** workflow ([`.github/workflows/docs-pdf.yml`](.github/workflows/docs-pdf.yml)).
+
+            Triggered by: ${{ github.event_name }} on `${{ github.ref_name }}`.
 
             Merge when ready so `pdf/open-fdd-docs.pdf` and `pdf/open-fdd-docs.txt` stay current on `master`.
           add-paths: |

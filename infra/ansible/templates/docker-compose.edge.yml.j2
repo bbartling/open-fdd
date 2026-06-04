@@ -10,11 +10,13 @@ services:
       - "127.0.0.1:{{ openfdd_bridge_port }}:8765"
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+      - {{ openfdd_remote_dir }}/workspace/api:/app/workspace/api:ro
 {% if openfdd_docker_bridge_secret | default(true) | bool %}
       - /etc/openfdd/bridge.secret.env:/etc/openfdd/bridge.secret.env:ro
 {% endif %}
     environment:
       OPENFDD_BACNET_COMMISSION_URL: "{% if bacnet_commission_network_host | default(false) | bool %}http://host.docker.internal:8767{% else %}http://commission:8767{% endif %}"
+      OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
       OFDD_MCP_REST_BASE: http://mcp-rag:{{ mcp_listen_port | default(8090) }}
       OFDD_OLLAMA_BASE_URL: "{% if enable_ollama | default(false) | bool and not (openfdd_docker_ollama | default(true) | bool) %}http://host.docker.internal:11434{% elif openfdd_docker_ollama | default(true) | bool and enable_ollama | default(false) | bool %}http://ollama:11434{% else %}{{ ollama_base_url | default('http://127.0.0.1:11434') }}{% endif %}"
     env_file:

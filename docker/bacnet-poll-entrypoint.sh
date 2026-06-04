@@ -26,7 +26,7 @@ while IFS='=' read -r key value; do
   CFG["$key"]="$value"
 done < "$ENV_FILE"
 
-NAME="${CFG[BACNET_NAME]:-OpenFddEdge}"
+NAME="${CFG[BACNET_NAME]:-OpenFDD}"
 INSTANCE="${CFG[BACNET_INSTANCE]:-599999}"
 BIND="${CFG[BACNET_BIND]:-0.0.0.0/24:47808}"
 

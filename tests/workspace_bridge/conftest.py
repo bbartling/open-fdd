@@ -67,11 +67,14 @@ class _AuthedClient:
         return self._inner.delete(url, headers=self._headers(kwargs.pop("headers", None)), **kwargs)
 
     def websocket_connect(self, url: str, **kwargs):
-        return self._inner.websocket_connect(
-            url,
-            headers=self._headers(kwargs.pop("headers", None)),
-            **kwargs,
-        )
+        headers = self._headers(kwargs.pop("headers", None))
+        if url.startswith("/ws/dashboard") and "ticket=" not in url:
+            ticket_resp = self._inner.post("/api/auth/ws-ticket", headers=headers)
+            if ticket_resp.status_code == 200:
+                ticket = ticket_resp.json().get("ticket", "")
+                sep = "&" if "?" in url else "?"
+                url = f"{url}{sep}ticket={ticket}"
+        return self._inner.websocket_connect(url, headers=headers, **kwargs)
 
 
 @pytest.fixture

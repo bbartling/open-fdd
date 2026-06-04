@@ -38,6 +38,10 @@ def commissioning_dir() -> Path:
 
 
 def static_dashboard_dir() -> Path:
+    """Prefer mounted workspace build output over image-baked assets (edge + dev compose)."""
+    ws_app = workspace_dir() / "api" / "static" / "app"
+    if (ws_app / "index.html").is_file():
+        return ws_app
     return Path(__file__).resolve().parents[1] / "static" / "app"
 
 

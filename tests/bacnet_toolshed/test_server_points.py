@@ -19,7 +19,8 @@ def test_openfdd_server_point_specs():
     names = {spec["name"] for spec in OPENFDD_SERVER_POINT_SPECS}
     assert "openfdd-edge-online" in names
     assert "openfdd-poll-sample-count" in names
-    assert len(OPENFDD_SERVER_POINT_SPECS) >= 4
+    assert "openfdd-active-fault-count" in names
+    assert len(OPENFDD_SERVER_POINT_SPECS) >= 5
 
 
 def test_binary_server_point_uses_bacpypes3_enums():

@@ -54,6 +54,25 @@ if [[ -n "$LIMIT" && -f "$INV" ]] && command -v ansible-inventory >/dev/null 2>&
     inv_user="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("ansible_user",""))' 2>/dev/null || true)"
     [[ -n "$inv_user" ]] && SSH_USER="$inv_user"
     INVENTORY_DOCKER_STACK="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("openfdd_docker_stack") else 0)' 2>/dev/null || echo 0)"
+    PROBE_SITE_ID="$(echo "$inv_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("site_id","demo") or "demo")' 2>/dev/null || echo demo)"
+    POST_CHECK_REQUIRE_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("post_check_require_ollama") else 0)' 2>/dev/null || echo 0)"
+    INV_ENABLE_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("enable_ollama") else 0)' 2>/dev/null || echo 0)"
+    INV_DOCKER_OLLAMA="$(echo "$inv_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(0 if d.get("openfdd_docker_ollama") is False else 1)' 2>/dev/null || echo 1)"
+    INV_OLLAMA_REQUIRED="$(echo "$inv_json" | python3 -c 'import json,sys; print(1 if json.load(sys.stdin).get("ollama_required") else 0)' 2>/dev/null || echo 0)"
+  fi
+fi
+PROBE_SITE_ID="${PROBE_SITE_ID:-demo}"
+INV_ENABLE_OLLAMA="${INV_ENABLE_OLLAMA:-0}"
+INV_DOCKER_OLLAMA="${INV_DOCKER_OLLAMA:-1}"
+INV_OLLAMA_REQUIRED="${INV_OLLAMA_REQUIRED:-0}"
+# Host Ollama (compose ollama=false) is not probed as required — only in-stack compose Ollama.
+if [[ "${INV_DOCKER_OLLAMA}" == "0" ]]; then
+  POST_CHECK_REQUIRE_OLLAMA=0
+elif [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" != "1" ]]; then
+  if [[ "${INV_OLLAMA_REQUIRED}" == "1" && "${INV_ENABLE_OLLAMA}" == "1" ]]; then
+    POST_CHECK_REQUIRE_OLLAMA=1
+  else
+    POST_CHECK_REQUIRE_OLLAMA=0
   fi
 fi
 [[ -n "$HOST" ]] || { echo "Need --host IP or --limit NAME with inventory." >&2; usage 1; }
@@ -66,19 +85,23 @@ if [[ -f "$AUTH_ENV" ]]; then
   # shellcheck disable=SC1090
   set -a && source "$AUTH_ENV" && set +a
 fi
-LOGIN_USER="${OFDD_OPERATOR_USER:-}"
-LOGIN_PASS="${OFDD_OPERATOR_PASSWORD:-}"
+LOGIN_USER="${OFDD_INTEGRATOR_USER:-${OFDD_OPERATOR_USER:-}}"
+LOGIN_PASS="${OFDD_INTEGRATOR_PASSWORD:-${OFDD_OPERATOR_PASSWORD:-}}"
 
 echo "Open-FDD post-deploy check → ${HOST}"
 
 [[ -f "$HTTP_PROBES" ]] || { log_fail "Missing ${HTTP_PROBES}"; exit 1; }
 
-probe_args=(check "$BASE" --require-mcp)
+probe_args=(check "$BASE" --require-mcp --site-id "$PROBE_SITE_ID")
 [[ "${POST_CHECK_REQUIRE_OLLAMA:-0}" == "1" ]] && probe_args+=(--require-ollama)
 if [[ -n "$LOGIN_USER" && -n "$LOGIN_PASS" ]]; then
   probe_args+=("$LOGIN_USER" "$LOGIN_PASS")
 fi
-probe_json="$(python3 "$HTTP_PROBES" "${probe_args[@]}")" || probe_json='{"errors":["http_probes.py exited with error"]}'
+# Capture JSON even when probes return exit 1 (errors in payload); do not use cmd || fallback (loses stdout).
+probe_json="$(python3 "$HTTP_PROBES" "${probe_args[@]}" 2>/dev/null)" || true
+if ! echo "$probe_json" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+  probe_json='{"errors":["http_probes.py produced no JSON"]}'
+fi
 
 while IFS= read -r err; do
   [[ -n "$err" ]] && log_fail "$err"
@@ -119,6 +142,19 @@ fi
 
 if echo "$probe_json" | python3 -c 'import json,sys; d=json.load(sys.stdin).get("agent",{}); sys.exit(0 if d.get("agent_context_status")==200 and d.get("mcp_enabled_in_context") else 1)'; then
   log_ok "Agent context + MCP hints for AI-assisted modeling"
+fi
+
+if echo "$probe_json" | python3 -c '
+import json,sys
+b=json.load(sys.stdin).get("bacnet",{})
+sys.exit(0 if b.get("bacnet_tree_status")==200 and b.get("bacnet_device_count",0)>=1 and not b.get("errors") else 1)
+'; then
+  devs="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("bacnet_device_count",0))')"
+  pts="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("bacnet_enabled_points",0))')"
+  poll="$(echo "$probe_json" | python3 -c 'import json,sys; b=json.load(sys.stdin).get("bacnet",{}); print(b.get("poll_at_local_display") or b.get("poll_at_utc") or "—")')"
+  log_ok "BACnet driver tree (${devs} devices, ${pts} enabled points); last poll ${poll}"
+else
+  log_fail "BACnet driver tree or poll health failed (see http_probes bacnet errors)"
 fi
 
 while IFS= read -r warn; do

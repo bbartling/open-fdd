@@ -18,7 +18,7 @@ Environment=PYTHONPATH=/opt/open-fdd
 ExecStart=/opt/open-fdd/.venv/bin/python -m bacnet_toolshed.poll_driver \
   --config /opt/open-fdd/workspace/bacnet/commissioning/points.csv \
   --interval 60 \
-  --name OpenFddEdge --instance 599999 --address 192.168.1.50/24:47808
+  --name OpenFDD --instance 599999 --address 192.168.1.50/24:47808
 Restart=on-failure
 RestartSec=10
 

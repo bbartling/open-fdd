@@ -122,7 +122,11 @@
         force: false
       loop:
         - { name: "mcp.env.local", content: "OFDD_MCP_ENABLED=1" }
-        - { name: "ollama.env.local", content: "# ollama env" }
+        - name: "ollama.env.local"
+          content: |
+            # Host Ollama (not compose) — bridge reaches host via host.docker.internal
+            OFDD_OLLAMA_BASE_URL=http://host.docker.internal:11434
+            OFDD_OLLAMA_MODEL=qwen3:4b
         - { name: "data.env.local", content: "# feather env" }
 
     - name: Build workspace data sync archive (skip live historian + unreadable model.json)
@@ -186,7 +190,7 @@
     - name: Push site BRICK model.json
       tags: [data]
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('acme_gl36_model.json') }}"
+        src: "{{ playbook_dir }}/../../workspace/data/{{ edge_model_json | default('model.json') }}"
         dest: "{{ openfdd_remote_dir }}/workspace/data/model.json"
         mode: "0644"
         owner: "{{ ansible_user }}"
@@ -225,6 +229,22 @@
         dest: "{{ points_csv_path }}"
         mode: "0644"
       when: local_commission_csv.stat.exists | default(false)
+
+    - name: Stat points_discovered.csv on control machine
+      tags: [commission, data]
+      ansible.builtin.stat:
+        path: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points_discovered.csv"
+      delegate_to: localhost
+      become: false
+      register: local_discovered_csv
+
+    - name: Push points_discovered.csv to edge (device tree inventory)
+      tags: [commission, data]
+      ansible.builtin.copy:
+        src: "{{ edge_backup_dir }}/{{ site_id }}/{{ building_id }}/points_discovered.csv"
+        dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/points_discovered.csv"
+        mode: "0644"
+      when: local_discovered_csv.stat.exists | default(false)
 
     - name: Stat device_poll_profiles.csv on control machine
       tags: [commission, config]

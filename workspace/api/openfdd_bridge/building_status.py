@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from .building_alerts import load_alerts, merge_auto_issues
+from .device_poll_health import get_device_poll_snapshot, poll_health_alerts
 from .fault_catalog import family_for_code, family_label
 from .fdd_results import fdd_issues
 from .model_health import model_health_summary
@@ -29,12 +30,17 @@ def collect_status() -> dict[str, Any]:
     stored = load_alerts()
     merged = merge_auto_issues(model_issues=model_issues, stored=stored)
     fdd_alerts = fdd_issues()
+    try:
+        poll_snap = get_device_poll_snapshot(force=False)
+        poll_alerts = poll_health_alerts(poll_snap)
+    except Exception:
+        poll_alerts = []
 
-    all_alerts = merged["alerts"] + fdd_alerts
+    all_alerts = merged["alerts"] + fdd_alerts + poll_alerts
     status = merged["status"]
-    if fdd_alerts and status == "ok":
+    if (fdd_alerts or poll_alerts) and status == "ok":
         status = "warning"
-    if any(a.get("severity") == "critical" for a in fdd_alerts):
+    if any(a.get("severity") == "critical" for a in all_alerts):
         status = "critical"
 
     return {
@@ -49,13 +55,35 @@ def collect_status() -> dict[str, Any]:
 
 
 def _family_of(alert: dict[str, Any]) -> str:
+    source = str(alert.get("source") or "").strip()
+    if source == "poll_health":
+        eid = str(alert.get("equipment_id") or "").strip()
+        if eid:
+            return f"POLL:{eid}"
+        name = str(alert.get("equipment_name") or "").strip()
+        if name:
+            return f"POLL:{name}"
+    if source == "model_health":
+        return "MODEL"
     explicit = str(alert.get("equipment_family") or "").strip().upper()
-    if explicit:
+    if explicit and explicit not in {"BUILDING", "POLL"}:
         return explicit
     by_code = family_for_code(alert.get("code"))
     if by_code:
         return by_code
     return "GENERAL"
+
+
+def _family_group_label(family: str, alerts: list[dict[str, Any]]) -> str:
+    if family.startswith("POLL:"):
+        for alert in alerts:
+            name = str(alert.get("equipment_name") or "").strip()
+            if name:
+                return name
+        return family.split(":", 1)[-1] or "Device poll health"
+    if family == "MODEL":
+        return "Data model"
+    return "General / system" if family == "GENERAL" else family_label(family)
 
 
 def _worst(severities: list[str]) -> str:
@@ -84,7 +112,7 @@ def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
         families.append(
             {
                 "family": family,
-                "label": "General / system" if family == "GENERAL" else family_label(family),
+                "label": _family_group_label(family, alerts),
                 "worst": worst,
                 "traffic": TRAFFIC.get(traffic_key, "green"),
                 "count": len(alerts),
@@ -101,10 +129,33 @@ def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def dashboard_snapshot() -> dict[str, Any]:
+def dashboard_snapshot(*, redacted: bool = False) -> dict[str, Any]:
     """Single payload for dashboard polling / WebSocket push."""
     status = collect_status()
-    return {
-        "stack": status["stack"],
-        "faults": faults_by_family(status),
-    }
+    stack = status["stack"]
+    if redacted:
+        stack = {
+            "ok": stack.get("ok"),
+            "overall": stack.get("overall"),
+            "services": [
+                {
+                    "id": s.get("id"),
+                    "label": s.get("label"),
+                    "status": s.get("status"),
+                    "configured": s.get("configured"),
+                }
+                for s in stack.get("services", [])
+                if isinstance(s, dict)
+            ],
+        }
+        faults = {
+            "status": status["status"],
+            "traffic": status["traffic"],
+            "check_engine": status["status"] != "ok",
+            "alert_count": len(status.get("alerts", [])),
+            "model_configured": bool(status.get("model_configured")),
+            "families": [],
+        }
+    else:
+        faults = faults_by_family(status)
+    return {"stack": stack, "faults": faults}

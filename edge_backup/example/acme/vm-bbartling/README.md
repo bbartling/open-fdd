@@ -24,9 +24,12 @@ Real BACnet discovery CSVs live under `edge_backup/local/acme/vm-bbartling/` (gi
 ## Site model + validation
 
 ```bash
-PYTHONPATH=workspace/api python3 scripts/acme_gl36_site_model.py
-PYTHONPATH=workspace/api python3 scripts/setup_acme_fdd.py
-python3 scripts/acme_gl36_mechanical_validate.py --samples /path/to/samples.csv
+SITE=acme BUILDING=vm-bbartling
+PYTHONPATH=workspace/api python3 scripts/gl36_site_model.py --site-id "$SITE" --building-id "$BUILDING"
+python3 scripts/setup_gl36_fdd.py --site-id "$SITE" --building-id "$BUILDING" \
+  --ahu-system-id rtu-01 --fan-point-id 1100-analog-output-1
+python3 scripts/gl36_mechanical_validate.py --site-id "$SITE" --building-id "$BUILDING" \
+  --samples /path/to/samples.csv
 ```
 
 Reference: [GL36 Trim & Respond](https://github.com/bbartling/niagara4-vibe-code-addict/blob/develop/README_TRIM_RESPOND.md)

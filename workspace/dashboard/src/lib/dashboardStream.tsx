@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, getBridgeBase } from "./api";
+import { apiFetch, fetchWsTicket, getBridgeBase } from "./api";
 import type { Traffic } from "../components/TrafficLight";
 
 export type ServiceStatus = "green" | "yellow" | "red" | "gray";
@@ -46,6 +46,9 @@ export type FaultAlert = {
   code?: string;
   rule_id?: string;
   rule_name?: string;
+  equipment_id?: string;
+  equipment_name?: string;
+  equipment_family?: string;
   analytics?: FaultAnalytics;
 };
 
@@ -84,7 +87,7 @@ const DashboardStreamContext = createContext<DashboardStreamValue>({
   live: false,
 });
 
-function wsUrl(): string {
+function wsBaseUrl(): string {
   const base = getBridgeBase();
   if (base) {
     const parsed = new URL(base);
@@ -142,25 +145,33 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
       }
     };
 
-    try {
-      ws = new WebSocket(wsUrl());
-      ws.onopen = () => {
-        if (!cancelled) setLive(true);
-      };
-      ws.onmessage = (ev) => {
-        try {
-          apply(JSON.parse(ev.data) as DashboardSnapshot);
-        } catch {
-          /* ignore malformed frame */
-        }
-      };
-      ws.onerror = () => ws?.close();
-      ws.onclose = () => {
+    const connectWs = async () => {
+      if (cancelled) return;
+      const ticket = await fetchWsTicket();
+      if (cancelled) return;
+      try {
+        const url = new URL(wsBaseUrl());
+        if (ticket) url.searchParams.set("ticket", ticket);
+        ws = new WebSocket(url.toString());
+        ws.onopen = () => {
+          if (!cancelled) setLive(true);
+        };
+        ws.onmessage = (ev) => {
+          try {
+            apply(JSON.parse(ev.data) as DashboardSnapshot);
+          } catch {
+            /* ignore malformed frame */
+          }
+        };
+        ws.onerror = () => ws?.close();
+        ws.onclose = () => {
+          if (!cancelled) startPolling();
+        };
+      } catch {
         if (!cancelled) startPolling();
-      };
-    } catch {
-      startPolling();
-    }
+      }
+    };
+    void connectWs();
 
     const fallbackTimer = window.setTimeout(() => {
       if (!cancelled && !gotData) startPolling();

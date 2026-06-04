@@ -81,3 +81,13 @@ def status() -> dict:
         **public_auth_status(),
         "roles": auth.user_roles(),
     }
+
+
+@router.post("/ws-ticket")
+def ws_ticket(user: dict = Depends(require_user)) -> dict:
+    """Issue a short-lived WebSocket ticket (use query ?ticket= or Sec-WebSocket-Protocol)."""
+    role = user.get("role")
+    if role not in auth.ROLES:
+        role = "operator"
+    ticket, expires_in = auth.issue_ws_ticket(str(user.get("sub") or "user"), role)
+    return {"ok": True, "ticket": ticket, "expires_in": expires_in}

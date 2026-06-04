@@ -17,8 +17,13 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .fault_catalog import normalize_code
 from .paths import data_dir
 from .rule_source import read_source, write_source
+
+
+def _normalize_fault_code(raw: Any) -> str:
+    return (normalize_code(str(raw or "")) or "")[:32]
 
 _LOCK = threading.RLock()
 
@@ -208,7 +213,7 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
         "description": str(entry.get("description") or "")[:1000],
         "mode": mode,
         "code": code,
-        "fault_code": str(entry.get("fault_code") or "").strip().upper()[:32],
+        "fault_code": _normalize_fault_code(entry.get("fault_code")),
         "config": config,
         "column_map": column_map,
         "applies_to": {

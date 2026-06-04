@@ -7,7 +7,7 @@ def test_bacnet_argv_from_cfg(monkeypatch):
     monkeypatch.setenv("OFDD_BACNET_BIND_STRICT", "1")
     argv = bacnet_argv_from_cfg(
         {
-            "BACNET_NAME": "OpenFddEdge",
+            "BACNET_NAME": "OpenFDD",
             "BACNET_INSTANCE": "599999",
             "BACNET_BIND": "192.168.204.12/24",
             "BACNET_VENDOR_ID": "1234",
@@ -15,7 +15,7 @@ def test_bacnet_argv_from_cfg(monkeypatch):
     )
     assert argv == [
         "--name",
-        "OpenFddEdge",
+        "OpenFDD",
         "--instance",
         "599999",
         "--address",
@@ -29,7 +29,7 @@ def test_bacnet_argv_route_aware(monkeypatch):
     monkeypatch.setenv("OFDD_BACNET_BIND_STRICT", "1")
     argv = bacnet_argv_from_cfg(
         {
-            "BACNET_NAME": "OpenFddEdge",
+            "BACNET_NAME": "OpenFDD",
             "BACNET_INSTANCE": "599999",
             "BACNET_BIND": "192.168.1.50/24:47808",
             "ROUTER_IP": "192.168.1.1",

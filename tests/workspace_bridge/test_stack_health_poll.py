@@ -18,7 +18,7 @@ def test_commission_agent_cfg_resolves(monkeypatch: pytest.MonkeyPatch, tmp_path
     comm.mkdir()
     (comm / "commission.env").write_text(
         "SITE_ID=demo\nBUILDING_ID=local\nBACNET_BIND=192.168.1.10/24\n"
-        "BACNET_NAME=OpenFddEdge\nBACNET_INSTANCE=599999\n",
+        "BACNET_NAME=OpenFDD\nBACNET_INSTANCE=599999\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))

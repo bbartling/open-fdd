@@ -19,7 +19,9 @@ services:
       - "127.0.0.1:8765:8765"
     volumes:
       - ../workspace:/var/openfdd/workspace
+      - ../workspace/api:/app/workspace/api:ro
     environment:
+      OFDD_ALLOW_LAN_INTERNAL_INGEST: "1"
       OPENFDD_BACNET_COMMISSION_URL: http://commission:8767
       OFDD_MCP_REST_BASE: http://mcp-rag:8090
       # Prefer in-compose Ollama (--profile ai); fall back to host Ollama via host-gateway.
@@ -54,6 +56,7 @@ services:
       target: commission
     volumes:
       - ../workspace:/var/openfdd/workspace
+      - ../workspace/api:/app/workspace/api:ro
     environment:
       OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
       OPENFDD_REPO_ROOT: /app
@@ -69,6 +72,7 @@ services:
       target: mcp-rag
     volumes:
       - ../workspace:/var/openfdd/workspace
+      - ../workspace/api:/app/workspace/api:ro
     expose:
       - "8090"
     restart: unless-stopped
@@ -83,6 +87,7 @@ services:
     network_mode: host
     volumes:
       - ../workspace:/var/openfdd/workspace
+      - ../workspace/api:/app/workspace/api:ro
     environment:
       OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
       OPENFDD_REPO_ROOT: /app

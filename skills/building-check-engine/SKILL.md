@@ -7,9 +7,10 @@ description: "Drive the building check-engine light (GREEN/YELLOW/RED) using the
 
 ## The one rule
 
-**Codes are fixed. Pick from the catalog; never invent one.** The catalog lives
-in `fault_catalog.py` and is served at `GET /api/faults/catalog` (also in the
-agent context as `fault_codes`). Any API taking a `code` rejects unknowns (400).
+**Codes are fixed. Pick from the catalog; never invent one.** Format is **letter suffix**
+(`VAV-C`, `AHU-B`) — never numeric (`VAV-03`) which collides with equipment names.
+Catalog: `GET /api/faults/catalog`, link graph `GET /api/faults/graph`, agent context
+`fault_codes` + `fault_code_graph`. Any API taking a `code` rejects unknowns (400).
 
 ## Scope
 

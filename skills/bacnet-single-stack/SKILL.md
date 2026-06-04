@@ -37,7 +37,7 @@ Open-FDD config: `workspace/bacnet/commissioning/commission.env`
 
 ```bash
 BACNET_BIND=192.168.204.18/24:47808   # your edge NIC — not 127.0.0.1
-BACNET_NAME=OpenFddEdge
+BACNET_NAME=OpenFDD
 BACNET_INSTANCE=599999
 ```
 
@@ -104,7 +104,7 @@ pkill -f bacnet_toolshed.commission_agent 2>/dev/null || true
 Commission agent builds the same argv as playground apps:
 
 ```text
---name OpenFddEdge --instance 599999 --address 192.168.204.18/24:47808
+--name OpenFDD --instance 599999 --address 192.168.204.18/24:47808
 ```
 
 Implementation: `bacnet_toolshed/stack_args.py`, `bacnet_toolshed/nic_bind.py`.

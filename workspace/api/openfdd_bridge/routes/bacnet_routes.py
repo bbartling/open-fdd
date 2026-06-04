@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import csv
+import logging
+import os
 import re
+import threading
+from datetime import datetime, timezone
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -50,6 +55,9 @@ from ..bacnet_write_guard import (
 )
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
+
+_log = logging.getLogger(__name__)
+_ingest_lock = threading.Lock()
 from ..commission_client import commission_poll_once, commission_poll_status
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
@@ -401,11 +409,34 @@ def bacnet_job_status(job_id: str) -> dict:
     return payload  # type: ignore[return-value]
 
 
+def _enrich_poll_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Add browser-friendly local time alongside UTC poll timestamp."""
+    out = dict(payload)
+    at_raw = str(payload.get("at") or "").strip()
+    tz_name = os.environ.get("OFDD_SITE_TIMEZONE", "America/Chicago").strip() or "America/Chicago"
+    out["site_timezone"] = tz_name
+    if not at_raw:
+        return out
+    try:
+        ts = datetime.fromisoformat(at_raw.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        local = ts.astimezone(ZoneInfo(tz_name))
+        out["at_utc"] = at_raw
+        out["at_local"] = local.isoformat()
+        out["at_local_display"] = local.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        out["at_utc"] = at_raw
+    return out
+
+
 @router.get("/api/bacnet/poll/status", dependencies=[_READ])
 def bacnet_poll_status() -> dict:
     code, payload = commission_poll_status()
     if code != 200:
         raise _proxy_error(code, payload)
+    if isinstance(payload, dict):
+        return _enrich_poll_status(payload)
     return payload  # type: ignore[return-value]
 
 
@@ -418,12 +449,52 @@ def bacnet_trigger_poll() -> dict:
     return {"poll": payload, "ingest": ingest}
 
 
+def _lan_internal_ingest_allowed() -> bool:
+    raw = os.environ.get("OFDD_ALLOW_LAN_INTERNAL_INGEST", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _internal_ingest_client_allowed(request: Request) -> bool:
+    """Loopback always allowed; RFC1918 only when OFDD_ALLOW_LAN_INTERNAL_INGEST is set."""
+    host = (request.client.host if request.client else "").strip()
+    if host in {"127.0.0.1", "::1"}:
+        return True
+    if not _lan_internal_ingest_allowed():
+        return False
+    if host.startswith(("10.", "192.168.")):
+        return True
+    if host.startswith("172."):
+        parts = host.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+                return 16 <= second <= 31
+            except ValueError:
+                return False
+    return False
+
+
+def _run_ingest_background() -> None:
+    if not _ingest_lock.acquire(blocking=False):
+        return
+    try:
+        result = ingest_poll_samples_to_feather()
+        if not result.get("ok"):
+            _log.warning("bacnet poll ingest: %s", result.get("reason") or result)
+    except Exception:
+        _log.exception("bacnet poll ingest failed")
+    finally:
+        _ingest_lock.release()
+
+
 @router.post("/internal/bacnet/ingest-samples")
 def internal_ingest_poll_samples(request: Request) -> dict:
-    host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1"}:
+    if not _internal_ingest_client_allowed(request):
         raise HTTPException(status_code=403, detail="localhost only")
-    return ingest_poll_samples_to_feather()
+    if _ingest_lock.locked():
+        return {"ok": True, "queued": False, "reason": "ingest already running"}
+    threading.Thread(target=_run_ingest_background, name="bacnet-ingest", daemon=True).start()
+    return {"ok": True, "queued": True}
 
 
 @router.post("/ingest/bacnet", dependencies=[_READ])

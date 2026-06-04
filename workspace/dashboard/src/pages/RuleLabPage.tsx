@@ -3,12 +3,12 @@ import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
-import ModelScopePicker from "../components/ModelScopePicker";
+import FaultCodeSelect from "../components/FaultCodeSelect";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
-import { useModelScope } from "../lib/useModelScope";
+import { useActiveSiteId } from "../lib/useActiveSiteId";
 import {
   formatBatchSummary,
   formatLintIssues,
@@ -58,6 +58,7 @@ function syntaxPillClass(ok: boolean | null, busy: boolean): string {
 
 export default function RuleLabPage() {
   const { theme, toggleTheme } = useTheme();
+  const activeSiteId = useActiveSiteId();
   const [mode, setMode] = useState<Mode>("rule");
   const [code, setCode] = useState(DEFAULT_RULE);
   const [sourcePath, setSourcePath] = useState("");
@@ -69,17 +70,12 @@ export default function RuleLabPage() {
   const [lintIssues, setLintIssues] = useState<LintIssue[]>([]);
   const [ruleName, setRuleName] = useState("Supply air temp high");
   const [severity, setSeverity] = useState("warning");
-  const [brickClass, setBrickClass] = useState("");
-  const [brickTypes, setBrickTypes] = useState<string[]>([]);
   const [saved, setSaved] = useState<SavedRule[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string>("");
   const [authRole, setAuthRole] = useState<string | null>(null);
-  const [testLimit, setTestLimit] = useState("120");
-  const [lookbackHours, setLookbackHours] = useState("24");
-  const [testSensorKey, setTestSensorKey] = useState("");
+  const [faultCode, setFaultCode] = useState("");
   const [dirty, setDirty] = useState(false);
   const lintTimer = useRef<number | null>(null);
-  const scope = useModelScope("demo", brickClass);
 
   useEffect(() => {
     fetchAuthMe()
@@ -93,12 +89,6 @@ export default function RuleLabPage() {
     return res.rules || [];
   }, []);
 
-  const loadBrickTypes = useCallback(async () => {
-    const tree = await apiFetch<{ brick_types?: string[] }>("/api/model/tree");
-    const types = (tree.brick_types || []).filter((t) => String(t).trim());
-    setBrickTypes(types.sort((a, b) => a.localeCompare(b)));
-  }, []);
-
   const loadRuleSource = useCallback(async (ruleId: string) => {
     const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${ruleId}/source`);
     setCode(res.code || DEFAULT_RULE);
@@ -107,32 +97,7 @@ export default function RuleLabPage() {
 
   useEffect(() => {
     void refreshSaved();
-    void loadBrickTypes();
-  }, [refreshSaved, loadBrickTypes]);
-
-  useEffect(() => {
-    if (!scope.equipmentId) {
-      setTestSensorKey("");
-      return;
-    }
-    if (!scope.sensors.length) {
-      setTestSensorKey("");
-      return;
-    }
-    if (!scope.sensors.some((s) => s.point_id === testSensorKey)) {
-      setTestSensorKey(scope.sensors[0].point_id);
-    }
-  }, [scope.equipmentId, scope.sensors, brickClass]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const activeSensor = scope.sensors.find((s) => s.point_id === testSensorKey);
-
-  const testScopeLabel = useMemo(() => {
-    const eq = scope.activeEquipment;
-    if (eq?.name) {
-      return `${scope.siteId} · ${eq.name}${eq.bacnet_device_instance != null ? ` (dev ${eq.bacnet_device_instance})` : ""}`;
-    }
-    return scope.siteId || "site";
-  }, [scope.siteId, scope.activeEquipment]);
+  }, [refreshSaved]);
 
   useEffect(() => {
     if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsoleText(formatApiError(e)));
@@ -216,28 +181,24 @@ export default function RuleLabPage() {
       appendConsole("Fix syntax errors before test (see pill above editor).");
       return;
     }
+    const rule = saved.find((r) => r.id === activeRuleId);
+    const pointId = rule?.bindings?.point_ids?.[0];
+    if (mode === "rule" && !pointId) {
+      appendConsole(
+        "Quick test needs one bound point — use FDD assignments → Test rule against one sensor, or add point_ids to this rule's bindings.",
+      );
+      return;
+    }
     setBusy(true);
     setConsoleText("");
     try {
-      const limit = Number(testLimit);
       if (mode === "rule") {
-        if (!testSensorKey) {
-          setConsoleText("Pick a site, device, and sensor before testing.");
-          return;
-        }
-        const pointKeys = [testSensorKey];
-        const sensor = activeSensor;
         const res = await apiFetch<{
-          ok?: boolean;
           rows: number;
           flagged: number;
           data_source?: string;
-          site_id?: string;
-          equipment_id?: string;
           value_column?: string;
-          scope_columns?: string[];
-          scope_warning?: string;
-          events: { type: string; text?: string; status?: string; row?: number; trace?: string }[];
+          events: { type: string; text?: string }[];
           trace?: string;
           error?: string;
           ms?: number;
@@ -246,54 +207,38 @@ export default function RuleLabPage() {
           body: JSON.stringify({
             code,
             config: configFromRecord(cfg),
-            site_id: scope.siteId || undefined,
-            equipment_id: scope.equipmentId || undefined,
-            point_keys: pointKeys,
-            lookback_hours: Number(lookbackHours) || 24,
-            limit: Number.isFinite(limit) ? limit : 120,
+            site_id: activeSiteId || undefined,
+            point_keys: [pointId],
+            lookback_hours: 24,
+            limit: 120,
             chunk_hours: 0,
           }),
         });
-        const header = [
-          `>>> Test — ${testScopeLabel}`,
-          sensor ? `sensor: ${sensor.label} (${sensor.timeseries_column})` : "",
-          res.value_column ? `feather column: ${res.value_column}` : "",
-          `rows=${res.rows} flagged=${res.flagged} · ${res.data_source} (${res.ms ?? 0} ms)`,
-          res.scope_warning ? `⚠ ${res.scope_warning}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        const body = formatRuleTestEvents(res.events || [], { maxLines: 28 });
-        const trace = res.trace || res.error || "";
-        setConsoleText([header, body, trace].filter(Boolean).join("\n\n"));
+        setConsoleText(
+          [
+            `>>> Quick test (first bound point) rows=${res.rows} flagged=${res.flagged} · ${res.data_source}`,
+            res.value_column ? `column: ${res.value_column}` : "",
+            formatRuleTestEvents(res.events || [], { maxLines: 28 }),
+            res.trace || res.error || "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        );
       } else {
         const res = await apiFetch<{
           ok: boolean;
           stdout?: string;
           error?: string;
           trace?: string;
-          data_source?: string;
-          site_id?: string;
-          flag_columns?: string[];
-          preview?: Record<string, unknown>[];
         }>("/api/playground/run-script", {
           method: "POST",
-          body: JSON.stringify({ code, limit: Number.isFinite(limit) ? limit : 500 }),
+          body: JSON.stringify({ code, limit: 500 }),
         });
-        if (!res.ok) {
-          setConsoleText([res.error || "script failed", res.trace || ""].filter(Boolean).join("\n\n"));
-        } else {
-          setConsoleText(
-            [
-              `>>> Script test — site=${res.site_id} source=${res.data_source}`,
-              res.stdout,
-              `flag_columns: ${(res.flag_columns || []).join(", ")}`,
-              `preview rows: ${res.preview?.length ?? 0}`,
-            ]
-              .filter(Boolean)
-              .join("\n"),
-          );
-        }
+        setConsoleText(
+          res.ok
+            ? [res.stdout, res.trace].filter(Boolean).join("\n\n")
+            : [res.error, res.trace].filter(Boolean).join("\n\n"),
+        );
       }
     } catch (e) {
       setConsoleText(formatApiError(e));
@@ -302,25 +247,21 @@ export default function RuleLabPage() {
     }
   }
 
-  async function saveRule() {
+  async function saveRule(options?: { suppressBusy?: boolean }) {
+    const suppressBusy = options?.suppressBusy === true;
     if (syntaxOk === false) {
       appendConsole("Cannot save — fix syntax errors first.");
       return;
     }
-    setBusy(true);
+    if (!suppressBusy) setBusy(true);
     try {
       let bindingsSource: SavedRule["bindings"] | undefined;
-      let faultCode = "";
       if (activeRuleId) {
         try {
           const fresh = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
-          const live = fresh.rules?.find((r) => r.id === activeRuleId);
-          bindingsSource = live?.bindings;
-          faultCode = live?.fault_code || "";
+          bindingsSource = fresh.rules?.find((r) => r.id === activeRuleId)?.bindings;
         } catch {
-          const existing = saved.find((r) => r.id === activeRuleId);
-          bindingsSource = existing?.bindings;
-          faultCode = existing?.fault_code || "";
+          bindingsSource = saved.find((r) => r.id === activeRuleId)?.bindings;
         }
       }
       const payload = {
@@ -351,43 +292,29 @@ export default function RuleLabPage() {
         });
         setActiveRuleId(res.rule.id);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Map points on FDD assignments.`);
+        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`);
       }
       setDirty(false);
       await refreshSaved();
     } catch (e) {
       appendConsole(formatApiError(e));
+      if (suppressBusy) throw e;
     } finally {
-      setBusy(false);
+      if (!suppressBusy) setBusy(false);
     }
   }
 
   async function updateAllRecords() {
-    if (syntaxOk === false && activeRuleId) {
-      appendConsole("Save a valid rule before batch update.");
-      return;
-    }
     setBusy(true);
     try {
-      if (dirty && activeRuleId) {
-        await saveRule();
-      }
+      if (dirty && activeRuleId) await saveRule({ suppressBusy: true });
       const res = await apiFetch<{
         rules_run?: number;
-        site_runs?: number;
         flagged_runs?: number;
-        error_runs?: number;
-        ms?: number;
-        lookback_hours?: number | null;
-        runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string; error?: string; rows?: number }[];
+        runs?: { rule_name?: string; site_id?: string; flagged?: number; status?: string }[];
       }>("/api/rules/batch", {
         method: "POST",
-        body: JSON.stringify({
-          limit: 50000,
-          chunk_hours: 0,
-          lookback_hours: 1,
-          use_chunks: false,
-        }),
+        body: JSON.stringify({ limit: 50000, chunk_hours: 0, lookback_hours: 1, use_chunks: false }),
       });
       setConsoleText(formatBatchSummary(res));
     } catch (e) {
@@ -402,7 +329,7 @@ export default function RuleLabPage() {
     setRuleName(displayRuleName(rule.name));
     setMode(rule.mode);
     setSeverity(rule.severity);
-    setBrickClass("");
+    setFaultCode(rule.fault_code || "");
     setSourcePath(rule.source_path || "");
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
@@ -415,7 +342,7 @@ export default function RuleLabPage() {
     setCode(DEFAULT_RULE);
     setCfg({ high: "75" });
     setSourcePath("");
-    setBrickClass("");
+    setFaultCode("");
     setDirty(true);
   }
 
@@ -451,10 +378,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Edit on-disk <code>.py</code> rules. Map points on{" "}
-            <a href="/fdd-assignments">FDD assignments</a>, <a href="/data-model">Data Model</a>, or{" "}
-            <a href="/plot">Trend plot</a> (right-click). <strong>Test</strong> uses one sensor from feather
-            data (same historian as <a href="/plot">Trend plot</a>).
+            Author and lint <code>.py</code> rules. Map points and run full sensor tests on{" "}
+            <a href="/fdd-assignments">FDD assignments</a>.
           </>
         }
       />
@@ -490,13 +415,11 @@ export default function RuleLabPage() {
                   addRule();
                   return;
                 }
-                const rule = saved.find((r) => r.id === id);
-                if (rule) selectRule(rule);
+                const r = saved.find((x) => x.id === id);
+                if (r) selectRule(r);
               }}
             >
-              {!activeRuleId ? (
-                <option value="">New rule (unsaved)</option>
-              ) : null}
+              {!activeRuleId ? <option value="">New rule (unsaved)</option> : null}
               {saved.map((r) => (
                 <option key={r.id} value={r.id}>
                   {formatRuleLabel(r.name)}
@@ -527,29 +450,6 @@ export default function RuleLabPage() {
             />
           </div>
           <div className="field">
-            <label className="field-label" htmlFor="rule-brick-class">
-              Test filter (BRICK class)
-            </label>
-            <select
-              id="rule-brick-class"
-              value={brickClass}
-              onChange={(e) => {
-                setBrickClass(e.target.value);
-                markDirty();
-              }}
-            >
-              <option value="">— Select class —</option>
-              {brickClass && !brickTypes.includes(brickClass) ? (
-                <option value={brickClass}>{brickClass}</option>
-              ) : null}
-              {brickTypes.map((bt) => (
-                <option key={bt} value={bt}>
-                  {bt}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
             <label className="field-label" htmlFor="rule-mode">
               Mode
             </label>
@@ -567,6 +467,16 @@ export default function RuleLabPage() {
               <option value="script">DataFrame script</option>
             </select>
           </div>
+          <div className="field form-grid-span">
+            <FaultCodeSelect
+              value={faultCode}
+              disabled={busy || authRole === "operator"}
+              onChange={(c) => {
+                setFaultCode(c);
+                markDirty();
+              }}
+            />
+          </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-severity">
               Severity
@@ -577,58 +487,6 @@ export default function RuleLabPage() {
               <option value="critical">critical</option>
             </select>
           </div>
-          <div className="field">
-            <label className="field-label" htmlFor="test-limit">
-              Test rows
-            </label>
-            <input id="test-limit" value={testLimit} onChange={(e) => setTestLimit(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="test-lookback">
-              Lookback (h)
-            </label>
-            <input id="test-lookback" value={lookbackHours} onChange={(e) => setLookbackHours(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="panel rule-lab-test-scope">
-          <h3 className="panel-title">Test against one sensor</h3>
-          {scope.error ? <p className="error">{scope.error}</p> : null}
-          <div className="form-row model-scope-row">
-            <ModelScopePicker
-              idPrefix="rule-test"
-              sites={scope.sites}
-              siteId={scope.siteId}
-              onSiteChange={scope.setSiteId}
-              equipment={scope.equipment}
-              equipmentId={scope.equipmentId}
-              onEquipmentChange={scope.setEquipmentId}
-              sensors={scope.sensors}
-              sensorPointId={testSensorKey}
-              onSensorChange={setTestSensorKey}
-              disabled={scope.loading}
-              queryEngine={scope.queryEngine}
-            />
-            <div className="form-row-actions">
-              <a
-                className="secondary-btn"
-                href={`/plot?site=${encodeURIComponent(scope.siteId)}&device=${encodeURIComponent(scope.equipmentId)}`}
-              >
-                Trend plot
-              </a>
-            </div>
-          </div>
-          {activeSensor ? (
-            <p className="muted">
-              Timeseries column: <code>{activeSensor.timeseries_column}</code>
-              {activeSensor.series_id ? (
-                <>
-                  {" "}
-                  · series <code>{activeSensor.series_id}</code>
-                </>
-              ) : null}
-            </p>
-          ) : null}
         </div>
 
         {mode === "rule" ? <RuleConfigPanel config={cfg} onChange={onCfgChange} /> : null}
@@ -638,7 +496,7 @@ export default function RuleLabPage() {
             Lint
           </button>
           <button type="button" disabled={busy || syntaxOk === false} onClick={() => void testRun()}>
-            Test
+            Quick test
           </button>
           <button type="button" disabled={busy || authRole === "operator"} onClick={() => void saveRule()}>
             {activeRuleId ? "Update rule .py" : "Save rule .py"}
@@ -648,7 +506,6 @@ export default function RuleLabPage() {
             className="primary"
             disabled={busy || authRole === "operator"}
             onClick={() => void updateAllRecords()}
-            title="Run all saved rules against feather data and update check-engine records"
           >
             Update all records
           </button>
@@ -666,12 +523,12 @@ export default function RuleLabPage() {
       ) : null}
 
       <div className="panel rule-lab-editor-panel">
-        <PythonCodeEditor value={code} onChange={onCodeChange} height="420px" lintIssues={lintIssues} />
+        <PythonCodeEditor value={code} onChange={onCodeChange} height="480px" lintIssues={lintIssues} />
       </div>
 
       <RuleLabConsole
         lines={consoleLines}
-        placeholder="Lint or Test — errors and tracebacks appear here."
+        placeholder="Lint, quick test, or batch output."
         footer={
           <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
             Clear

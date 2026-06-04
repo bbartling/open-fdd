@@ -5,7 +5,7 @@ site_id: demo
 building_id: bens-office
 
 bacnet_instance_id: 599999
-bacnet_device_name: OpenFddPiBench
+bacnet_device_name: OpenFDD
 bacnet_bind_address: "127.0.0.1/24:47809"
 # Opt-in to LAN BACnet bind only when intentional, e.g. bacnet_bind_address: "{{ ansible_host }}/24:47809"
 bacnet_route_aware: true

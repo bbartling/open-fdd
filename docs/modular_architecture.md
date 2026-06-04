@@ -14,6 +14,7 @@ The **`open_fdd`** package is a small library: **rules on pandas**, optional **r
 | Module | Role |
 |--------|------|
 | **`open_fdd.engine`** | YAML rules, checks, **`RuleRunner`**, **`column_map`** resolvers |
+| **`open_fdd.playground`** | Portable **`evaluate()`** rules: cookbook thresholds/windows, sandbox lint/sweep, row builders (Rule Lab / lambda parity) |
 | **`open_fdd.reports`** | Episode summaries, matplotlib plots, optional Word export |
 | **`open_fdd.schema`** | pydantic fault result/event models (engine dependency) |
 
@@ -42,7 +43,9 @@ After **`RuleRunner.run`**, use **`open_fdd.reports`** for:
 
 ## See also
 
+- [PyPI — engine, reports, and playground](open_fdd_playground_pypi) — full PyPI surface (end of doc site)
 - [Engine API](api/engine)
 - [Reports API](api/reports)
 - [YAML expression cookbook](expression_rule_cookbook_yaml)
+- [Python expression cookbook](expression_rule_cookbook_python) — edge Rule Lab (uses `open_fdd.playground` in-repo)
 - [Column map resolvers](column_map_resolvers)

@@ -2,7 +2,7 @@
 
 Tools let the agent build the BRICK model, author/run FDD rules, and (only when
 explicitly opted in) edit application files and rebuild the dashboard. Every
-call is gated by the ``agent`` role at the route layer and written to the audit
+Read-only tools are available to the ``operator`` role; writes require integrator/agent. Calls are audited.
 log. App-editing tools additionally require ``OFDD_AGENT_ALLOW_APP_EDIT=1`` so
 self-modification is off by default on an OT box.
 """
@@ -15,9 +15,24 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .building_alerts import replace_alerts
+from .device_poll_health import get_device_poll_snapshot
+from .operational_analytics import (
+    analytics_lookback_days,
+    analytics_methodology,
+    methodology_prompt_blurb,
+    trim_frame_to_lookback,
+)
 from .zone_temp_analytics import get_zone_temp_snapshot
-from .data_loader import load_demo_dataframe
-from .fault_catalog import all_codes, is_valid_code
+from .data_loader import load_demo_dataframe, load_frame_for_run
+from .site_defaults import ensure_default_site
+from .timeseries_api import resolve_plot_columns
+from .ttl_service import TtlService
+from .brick_model_context import (
+    api_query_guide,
+    catalog_entries_for_codes,
+    slim_brick_graph,
+)
+from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
 from .fdd_runner import run_batch
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -113,12 +128,112 @@ def _tool_building_zone_temps(args: dict[str, Any]) -> dict[str, Any]:
         "summary_sentence": snap.get("summary_sentence"),
         "topology_mode": snap.get("topology_mode"),
         "zone_sensor_count": snap.get("zone_sensor_count"),
+        "lookback_days": snap.get("lookback_days"),
+        "methodology": snap.get("methodology"),
+        "worst_zones": snap.get("worst_zones") or [],
         "struggling_zones": snap.get("struggling_zones") or [],
         "systems": snap.get("systems") or [],
         "zones": snap.get("zones") or [],
         "generated_at": snap.get("generated_at"),
         "data_source": snap.get("data_source"),
     }
+
+
+def _tool_building_device_health(args: dict[str, Any]) -> dict[str, Any]:
+    """Refresh per-equipment poll/FDD health from feather (online, flaky, offline)."""
+    force = str(args.get("force") or "true").strip().lower() in {"1", "true", "yes"}
+    site_id = str(args.get("site_id") or "").strip() or None
+    snap = get_device_poll_snapshot(site_id=site_id, force=force)
+    return {
+        "summary_sentence": snap.get("summary_sentence"),
+        "lookback_days": snap.get("lookback_days"),
+        "healthy_count": snap.get("healthy_count"),
+        "offline_equipment": snap.get("offline_equipment") or [],
+        "flaky_equipment": snap.get("flaky_equipment") or [],
+        "degraded_equipment": snap.get("degraded_equipment") or [],
+        "equipment": snap.get("equipment") or [],
+        "generated_at": snap.get("generated_at"),
+        "data_source": snap.get("data_source"),
+    }
+
+
+def _tool_building_operational_brief(args: dict[str, Any]) -> dict[str, Any]:
+    from .building_insight import get_operational_brief
+
+    force = str(args.get("force") or "false").strip().lower() in {"1", "true", "yes"}
+    return get_operational_brief(force=force)
+
+
+def _tool_model_graph(args: dict[str, Any]) -> dict[str, Any]:
+    """BRICK site graph: equipment, brick:feeds chains, sensors (SPARQL / TTL)."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    return slim_brick_graph(site_id, max_equipment=32, max_feeds=24, max_points_per_equipment=12)
+
+
+def _tool_model_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """BRICK scope for one equipment — sensors with historian column names."""
+    from .model_sparql import scope_bundle
+
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    equipment_id = str(args.get("equipment_id") or "").strip() or None
+    brick_type = str(args.get("brick_type") or "").strip() or None
+    return scope_bundle(site_id, equipment_id=equipment_id, brick_type=brick_type)
+
+
+def _tool_timeseries_snapshot(args: dict[str, Any]) -> dict[str, Any]:
+    """Summarize feather historian columns (mean/min/max/last) — not full traces."""
+    import pandas as pd
+
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    raw_cols = args.get("columns")
+    if isinstance(raw_cols, list):
+        columns = [str(c).strip() for c in raw_cols if str(c).strip()]
+    else:
+        columns = [c.strip() for c in str(raw_cols or "").split(",") if c.strip()]
+    if args.get("hours") is None:
+        hours = analytics_lookback_days() * 24
+    else:
+        try:
+            hours = int(args.get("hours"))
+        except (TypeError, ValueError) as exc:
+            raise ToolError(f"invalid hours value: {args.get('hours')!r}") from exc
+    hours = max(1, min(hours, 24 * 90))
+    df, origin = load_frame_for_run(site_id)
+    df = trim_frame_to_lookback(df, hours=float(hours))
+    if not columns:
+        model = ModelService().load()
+        columns = resolve_plot_columns([], model, site_id)[:8]
+    if df.empty:
+        return {"site_id": site_id, "hours": hours, "data_source": origin, "series": [], "note": "no data"}
+    series: list[dict[str, Any]] = []
+    for col in columns:
+        if col not in df.columns:
+            continue
+        s = pd.to_numeric(df[col], errors="coerce").dropna()
+        if s.empty:
+            continue
+        series.append(
+            {
+                "column": col,
+                "samples": int(len(s)),
+                "last": round(float(s.iloc[-1]), 3),
+                "mean": round(float(s.mean()), 3),
+                "min": round(float(s.min()), 3),
+                "max": round(float(s.max()), 3),
+            }
+        )
+    return {"site_id": site_id, "hours": hours, "data_source": origin, "series": series}
+
+
+def _tool_faults_lookup(args: dict[str, Any]) -> dict[str, Any]:
+    """Official fault catalog entry for one code (VAV-C, AHU-B, …)."""
+    code = str(args.get("code") or "").strip()
+    if not code:
+        raise ToolError("code is required")
+    entries = catalog_entries_for_codes([code], limit=1)
+    if not entries:
+        raise ToolError(f"unknown fault code: {code}")
+    return entries[0]
 
 
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
@@ -221,18 +336,55 @@ def _tool_app_rebuild_dashboard(_args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_READ_ONLY_TOOLS = frozenset(
+    {
+        "model.graph",
+        "model.scope",
+        "timeseries.snapshot",
+        "faults.lookup",
+        "building.zone_temps",
+        "building.device_health",
+        "building.operational_brief",
+    }
+)
+
+_WRITE_TOOLS = frozenset(
+    {
+        "model.add_site",
+        "model.add_equipment",
+        "model.add_point",
+        "rules.save",
+        "rules.bind",
+        "rules.run_batch",
+        "building.set_alerts",
+        "app.edit_file",
+        "app.rebuild_dashboard",
+    }
+)
+
+
 _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "model.add_site": _tool_model_add_site,
     "model.add_equipment": _tool_model_add_equipment,
     "model.add_point": _tool_model_add_point,
+    "model.graph": _tool_model_graph,
+    "model.scope": _tool_model_scope,
+    "timeseries.snapshot": _tool_timeseries_snapshot,
+    "faults.lookup": _tool_faults_lookup,
     "rules.save": _tool_rules_save,
     "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
     "building.set_alerts": _tool_building_set_alerts,
     "building.zone_temps": _tool_building_zone_temps,
+    "building.device_health": _tool_building_device_health,
+    "building.operational_brief": _tool_building_operational_brief,
     "app.edit_file": _tool_app_edit_file,
     "app.rebuild_dashboard": _tool_app_rebuild_dashboard,
 }
+
+
+def tool_requires_write_role(name: str) -> bool:
+    return name in _WRITE_TOOLS or (name.startswith("app.") and name not in _READ_ONLY_TOOLS)
 
 
 def tool_specs() -> list[dict[str, Any]]:
@@ -264,8 +416,34 @@ def tool_specs() -> list[dict[str, Any]]:
         {
             "name": "building.zone_temps",
             "args": ["site_id?", "force?"],
-            "writes": "in-memory cache only — refreshes pandas zone lever snapshot",
+            "writes": "in-memory cache — zone day/night + fan-on recovery (OFDD_ANALYTICS_LOOKBACK_DAYS)",
         },
+        {
+            "name": "building.device_health",
+            "args": ["site_id?", "force?"],
+            "writes": "in-memory cache — equipment online/flaky from feather poll gaps",
+        },
+        {
+            "name": "building.operational_brief",
+            "args": ["force?"],
+            "writes": "read-only — zone temps + device health + fault sentences JSON",
+        },
+        {
+            "name": "model.graph",
+            "args": ["site_id?"],
+            "writes": "read-only — BRICK equipment, feeds, sensors (SPARQL)",
+        },
+        {
+            "name": "model.scope",
+            "args": ["site_id?", "equipment_id?", "brick_type?"],
+            "writes": "read-only — sensors + plot columns for equipment",
+        },
+        {
+            "name": "timeseries.snapshot",
+            "args": ["site_id?", "columns", "hours?"],
+            "writes": "read-only — historian mean/min/max/last",
+        },
+        {"name": "faults.lookup", "args": ["code"], "writes": "read-only — fault catalog definition"},
         {
             "name": "app.edit_file",
             "args": ["path", "contents"],
@@ -279,10 +457,12 @@ def tool_specs() -> list[dict[str, Any]]:
     ]
 
 
-def run_tool(name: str, args: dict[str, Any] | None) -> dict[str, Any]:
+def run_tool(name: str, args: dict[str, Any] | None, *, role: str | None = None) -> dict[str, Any]:
     fn = _TOOLS.get(name)
     if fn is None:
         raise ToolError(f"unknown tool: {name}")
+    if tool_requires_write_role(name) and role not in ("integrator", "agent"):
+        raise ToolError(f"tool {name} requires integrator or agent role (got {role!r})")
     return fn(args or {})
 
 
@@ -301,6 +481,8 @@ def model_context() -> dict[str, Any]:
             "summary_sentence": zone.get("summary_sentence"),
             "topology_mode": zone.get("topology_mode"),
             "zone_sensor_count": zone.get("zone_sensor_count"),
+            "lookback_days": zone.get("lookback_days"),
+            "worst_zones": (zone.get("worst_zones") or [])[:6],
             "struggling_zones": (zone.get("struggling_zones") or [])[:6],
             "refresh_tool": "building.zone_temps",
         }
@@ -309,12 +491,40 @@ def model_context() -> dict[str, Any]:
             "summary_sentence": None,
             "topology_mode": None,
             "zone_sensor_count": None,
+            "worst_zones": [],
             "struggling_zones": [],
             "refresh_tool": "building.zone_temps",
             "error": str(exc)[:200],
         }
+    try:
+        devices = get_device_poll_snapshot(force=False)
+        device_levers = {
+            "summary_sentence": devices.get("summary_sentence"),
+            "healthy_count": devices.get("healthy_count"),
+            "offline": (devices.get("offline_equipment") or [])[:6],
+            "flaky": (devices.get("flaky_equipment") or [])[:6],
+            "refresh_tool": "building.device_health",
+        }
+    except Exception as exc:  # noqa: BLE001
+        device_levers = {
+            "summary_sentence": None,
+            "healthy_count": None,
+            "offline": [],
+            "flaky": [],
+            "refresh_tool": "building.device_health",
+            "error": str(exc)[:200],
+        }
     return {
+        "analytics_methodology": analytics_methodology(),
+        "methodology_blurb": methodology_prompt_blurb(),
+        "data_pipeline": [
+            "BACnet poll → feather_store/",
+            "load_frame_for_run → zone_temp_analytics + zone_energy_research + device_poll_health",
+            "building_insight / operational-brief for dashboard (LLM uses zone_research tasks)",
+        ],
         "zone_temp_levers": zone_levers,
+        "device_poll_health": device_levers,
+        "operational_brief_tool": "building.operational_brief",
         "model_summary": {
             "sites": health["counts"]["sites"],
             "equipment": health["counts"]["equipment"],
@@ -328,9 +538,20 @@ def model_context() -> dict[str, Any]:
             for r in rules
         ],
         "fault_codes": [
-            {"code": c, "family": e["family"], "category": e["category"], "title": e["title"]}
+            {
+                "code": c,
+                "family": e["family"],
+                "category": e["category"],
+                "title": e["title"],
+                "suffix": e.get("suffix"),
+                "cookbook_patterns": e.get("cookbook_patterns") or [],
+            }
             for c, e in all_codes().items()
         ],
+        "fault_code_graph": catalog_graph(),
+        "brick_model": slim_brick_graph(max_equipment=12, max_feeds=10),
+        "api_query_guide": api_query_guide(),
         "tools": tool_specs(),
+        "read_only_tools": sorted(_READ_ONLY_TOOLS),
         "app_edit_enabled": app_edit_enabled(),
     }

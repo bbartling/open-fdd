@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+API_ROOT = REPO / "workspace" / "api"
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+from openfdd_bridge.device_poll_health import (  # noqa: E402
+    compute_device_poll_health,
+    poll_health_alerts,
+)
+
+
+def _model_two_vavs() -> dict:
+    return {
+        "sites": [{"id": "s1"}],
+        "equipment": [
+            {"id": "vav1", "site_id": "s1", "name": "VAV-1", "equipment_type": "Variable_Air_Volume_Box"},
+            {"id": "vav2", "site_id": "s1", "name": "VAV-2", "equipment_type": "Variable_Air_Volume_Box"},
+        ],
+        "points": [
+            {
+                "id": "p1",
+                "site_id": "s1",
+                "equipment_id": "vav1",
+                "external_id": "zn-t-1",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+            },
+            {
+                "id": "p2",
+                "site_id": "s1",
+                "equipment_id": "vav2",
+                "external_id": "zn-t-2",
+                "brick_type": "Zone_Air_Temperature_Sensor",
+            },
+        ],
+    }
+
+
+def test_offline_when_all_points_stale():
+    model = _model_two_vavs()
+    ts = pd.date_range("2020-01-01", periods=5, freq="1h", tz="UTC")
+    df = pd.DataFrame({"timestamp": ts, "zn-t-1": [72.0] * 5, "zn-t-2": [71.0] * 5})
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        poll_csv_fresh_override=False,
+        live_poll_age_s_override=999_999.0,
+    )
+    vav1 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav1")
+    assert vav1["status"] == "offline"
+    assert snap["offline_equipment"]
+
+
+def test_degraded_when_one_point_stale():
+    model = _model_two_vavs()
+    end = pd.Timestamp.now(tz="UTC")
+    ts_fresh = pd.date_range(end=end, periods=120, freq="5min")
+    ts_stale = pd.date_range("2020-01-01", periods=120, freq="5min", tz="UTC")
+    fresh = [72.0 + (i % 3) * 0.1 for i in range(120)]
+    df = pd.DataFrame(
+        {
+            "timestamp": ts_fresh,
+            "zn-t-1": fresh,
+            "zn-t-2": [71.0] * 120,
+        }
+    )
+    df = df.set_index("timestamp")
+    df["zn-t-2"] = pd.Series([71.0] * 120, index=ts_stale).reindex(df.index).values
+    df = df.reset_index()
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        poll_csv_fresh_override=False,
+        live_poll_age_s_override=999_999.0,
+    )
+    vav2 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav2")
+    assert vav2["status"] in {"degraded", "offline", "historian_lag"}, f"got {vav2['status']!r}"
+    vav1 = next(e for e in snap["equipment"] if e["equipment_id"] == "vav1")
+    assert vav1["status"] != "offline"
+
+
+def test_poll_health_alerts_offline():
+    snap = {
+        "lookback_days": 14,
+        "offline_equipment": [
+            {
+                "equipment_id": "vav1",
+                "equipment_name": "VAV-1",
+                "equipment_family": "VARIABLE",
+                "points_polled": 2,
+                "points_stale": 2,
+            }
+        ],
+        "flaky_equipment": [],
+    }
+    alerts = poll_health_alerts(snap)
+    assert alerts
+    assert "VAV-1" in alerts[0]["title"]
+    assert alerts[0].get("code") in (None, "")
+    assert alerts[0]["source"] == "poll_health"
+
+
+def test_historian_lag_when_poll_fresh():
+    model = _model_two_vavs()
+    ts = pd.date_range("2020-01-01", periods=5, freq="1h", tz="UTC")
+    df = pd.DataFrame({"timestamp": ts, "zn-t-1": [72.0] * 5, "zn-t-2": [71.0] * 5})
+    snap = compute_device_poll_health(
+        model,
+        "s1",
+        df,
+        fdd_by_point={},
+        poll_csv_fresh_override=True,
+        live_poll_age_s_override=30.0,
+    )
+    assert snap["historian_lag_equipment"]
+    assert not snap["offline_equipment"]

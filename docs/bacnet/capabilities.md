@@ -129,7 +129,9 @@ Enable points: `bacnet_toolshed.enable_points` or bridge `PATCH /api/bacnet/driv
 
 ## Local BACnet server points (edge identity)
 
-Commission agent exposes read-only **BV/AV** on the edge device instance (`server_points.py`): e.g. edge online, commission OK, poll row count, devices discovered — for BACnet supervisors that read the head-end.
+Commission agent exposes read-only **BV/AV** on the edge device instance (`server_points.py`): edge online, commission OK, poll row count, devices discovered, **active FDD fault count** — for BACnet supervisors that read the head-end.
+
+The local BACnet **Device** defaults to object name **`OpenFDD`** and instance **`599999`**. Set per deployment in Ansible `host_vars` (`bacnet_device_name`, `bacnet_instance_id`) or `workspace/bacnet/commissioning/commission.env` (`BACNET_NAME`, `BACNET_INSTANCE`). Environment overrides: `OFDD_BACNET_DEVICE_NAME`, `OFDD_BACNET_INSTANCE`.
 
 `GET /api/bacnet/server/points` returns the snapshot.
 
@@ -140,7 +142,8 @@ Commission agent exposes read-only **BV/AV** on the edge device instance (`serve
 | Setting | Purpose |
 |---------|---------|
 | `BACNET_BIND` | `ip/mask:47808` — OT interface (required) |
-| `BACNET_NAME` / `BACNET_INSTANCE` | Local virtual device |
+| `BACNET_NAME` / `BACNET_INSTANCE` | Local virtual device (default **OpenFDD** / **599999**) |
+| `OFDD_BACNET_DEVICE_NAME` / `OFDD_BACNET_INSTANCE` | Optional env overrides (Docker/systemd) |
 | `ROUTER_IP` + `MSTP_NET` + `--route-aware` | MS/TP behind IP router |
 | `DISCOVER_TIMEOUT` | Who-Is / discover wait (seconds) |
 | Host network poll | Poll image must share host routing to reach `device_address` |

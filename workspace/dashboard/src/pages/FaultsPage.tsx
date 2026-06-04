@@ -10,6 +10,8 @@ type Code = {
   description: string;
   likely_causes: string[];
   suggested_checks: string[];
+  cookbook_patterns?: string[];
+  suffix?: string;
 };
 
 type CategoryNode = { category: string; label: string; codes: Code[] };
@@ -36,10 +38,9 @@ export default function FaultsPage() {
         title="Building fault catalog"
         subtitle={
           <>
-            The fixed &quot;check-engine&quot; codes for this building — like a car&apos;s OBD-II list. FDD focuses on
-            performance degradation, simultaneous heating &amp; cooling, sensor faults, and HVAC I/O faults. This is{" "}
-            <strong>not</strong> classic BAS nuisance alarming/dial-out. The local AI agent must reuse these codes; it
-            cannot invent new ones.
+            Letter-suffix codes (e.g. <strong>VAV-C</strong>, <strong>AHU-B</strong>) — not numeric tags like
+            VAV-03 that collide with equipment names on retrofit sites. Each code links to FDD categories and Rule Lab
+            cookbook patterns. The Ollama agent and building insight use this catalog only.
           </>
         }
       />
@@ -65,6 +66,7 @@ export default function FaultsPage() {
                     <tr>
                       <th>Code</th>
                       <th>Fault</th>
+                      <th>Cookbook</th>
                       <th>Likely causes</th>
                       <th>Suggested checks</th>
                     </tr>
@@ -79,6 +81,7 @@ export default function FaultsPage() {
                           <strong>{c.title}</strong>
                           <div className="muted">{c.description}</div>
                         </td>
+                        <td className="muted">{(c.cookbook_patterns || []).join(", ") || "—"}</td>
                         <td className="muted">{c.likely_causes.join("; ")}</td>
                         <td className="muted">{c.suggested_checks.join("; ")}</td>
                       </tr>

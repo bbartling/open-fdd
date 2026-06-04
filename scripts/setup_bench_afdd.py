@@ -60,7 +60,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "bench-oa-t-flatline-1h",
         "name": "Bench OA-T flatline 1h",
-        "fault_code": "VAV-03",
+        "fault_code": "VAV-C",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
@@ -68,7 +68,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "bench-oa-t-oob",
         "name": "Bench OA-T out of bounds",
-        "fault_code": "VAV-03",
+        "fault_code": "VAV-C",
         "code_file": "oob_rolling.py",
         "config": {"bounds_low": 65, "bounds_high": 85, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": ["5007-analog-input-1173"], "equipment_ids": [], "brick_types": []},
@@ -76,7 +76,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "bench-stat-zn-t-flatline-1h",
         "name": "Bench stat ZN-T flatline 1h",
-        "fault_code": "VAV-03",
+        "fault_code": "VAV-C",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": ["5007-analog-input-10014"], "equipment_ids": [], "brick_types": []},
@@ -84,7 +84,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "duct-t-flatline-1h",
         "name": "Duct-T flatline 1h",
-        "fault_code": "DC-03",
+        "fault_code": "DC-C",
         "code_file": "flatline_1h.py",
         "config": {"flatline_tolerance": 0.10, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
@@ -92,7 +92,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "duct-t-spread-1h",
         "name": "Duct-T spread 1h",
-        "fault_code": "DC-03",
+        "fault_code": "DC-C",
         "code_file": "spread_1h.py",
         "config": {"max_spread": 4.0, "temp_unit": "imperial", "rolling_avg_minutes": 1},
         "bindings": {"point_ids": ["5007-analog-input-1192"], "equipment_ids": [], "brick_types": []},
@@ -100,7 +100,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "bench-oa-h-flatline-1h",
         "name": "Bench humidity flatline 1h",
-        "fault_code": "BLD-02",
+        "fault_code": "BLD-B",
         "code_file": "flatline_1h.py",
         "config": {
             "flatline_tolerance_rh": 1.0,
@@ -113,7 +113,7 @@ BENCH_RULES: list[dict] = [
     {
         "id": "bench-oa-h-oob",
         "name": "Bench humidity out of bounds",
-        "fault_code": "BLD-02",
+        "fault_code": "BLD-B",
         "code_file": "oob_rolling.py",
         "config": {
             "bounds_low_rh": 15,

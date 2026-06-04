@@ -120,8 +120,8 @@ x86 Ubuntu VM on OT BACnet (bind address in private `host_vars` / `secrets/acme.
 ```bash
 ./scripts/acme_commission_gl36.sh          # GL36 + economizer poll set @ 60s
 ./acme_go_live.sh --limit acme_vm_bbartling
-PYTHONPATH=../../workspace/api python3 ../../scripts/acme_gl36_site_model.py
-python3 ../../scripts/acme_gl36_mechanical_validate.py --samples /path/to/samples.csv
+PYTHONPATH=../../workspace/api python3 ../../scripts/gl36_site_model.py --site-id acme --building-id vm-bbartling
+python3 ../../scripts/gl36_mechanical_validate.py --site-id acme --building-id vm-bbartling --samples /path/to/samples.csv
 ```
 
 | Fact | Value |

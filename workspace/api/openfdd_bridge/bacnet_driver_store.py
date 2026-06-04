@@ -302,9 +302,49 @@ def merge_commission_rows(
     }
 
 
+def _ensure_discovered_from_poll_rows() -> bool:
+    """Rebuild points_discovered.csv from points.csv when discovery inventory was lost on deploy."""
+    discovered_path = _discovered_path()
+    points_path = _points_path()
+    poll_rows = _load_csv(points_path)
+    if not poll_rows:
+        return False
+    discovered = _load_csv(discovered_path)
+    had_discovered = bool(discovered)
+    by_pid = {str(r.get("point_id") or "").strip(): r for r in discovered if r.get("point_id")}
+    defaults = _commission_defaults()
+    added = 0
+    for poll in poll_rows:
+        pid = str(poll.get("point_id") or "").strip()
+        if not pid or pid in by_pid:
+            continue
+        try:
+            inst = int(str(poll.get("device_instance") or "0"))
+        except ValueError:
+            continue
+        obj_type = str(poll.get("object_type") or "").strip()
+        obj_inst = str(poll.get("object_instance") or "").strip()
+        oid = f"{obj_type},{obj_inst}" if obj_type and obj_inst else ""
+        row = _object_row(
+            device_instance=inst,
+            device_address=str(poll.get("device_address") or ""),
+            object_identifier=oid,
+            object_name=str(poll.get("object_name") or poll.get("description") or oid),
+            defaults=defaults,
+        )
+        row["point_id"] = pid
+        row["series_id"] = str(poll.get("series_id") or row.get("series_id") or "")
+        by_pid[pid] = row
+        added += 1
+    if added:
+        _save_csv(discovered_path, list(by_pid.values()))
+    return bool(added) or (not had_discovered and bool(poll_rows))
+
+
 def driver_tree() -> dict[str, Any]:
     """Device tree from discovered CSV merged with points.csv poll flags."""
     with _DRIVER_LOCK:
+        rebuilt_from_poll = _ensure_discovered_from_poll_rows()
         discovered = _load_csv(_discovered_path())
         enabled_rows = {r.get("point_id", ""): r for r in _load_csv(_points_path()) if r.get("point_id")}
     latest_pv = _latest_poll_values()
@@ -365,6 +405,11 @@ def driver_tree() -> dict[str, Any]:
         "discovered_path": str(_discovered_path()),
         "points_path": str(_points_path()),
         "poll_intervals": [{"seconds": s, "label": POLL_LABELS[s]} for s in POLL_INTERVALS_S],
+        "inventory_source": (
+            "poll_csv"
+            if rebuilt_from_poll
+            else ("discovered" if discovered else ("poll_csv" if enabled_rows else "empty"))
+        ),
     }
 
 
@@ -375,10 +420,28 @@ def _ensure_poll_interval(interval_s: int) -> int:
 
 
 def _apply_point_poll_row(*, point_id: str, enabled: bool, poll_interval_s: int) -> None:
+    with _DRIVER_LOCK:
+        _ensure_discovered_from_poll_rows()
     discovered = _load_csv(_discovered_path())
     src = next((r for r in discovered if r.get("point_id") == point_id), None)
     if src is None:
-        raise ValueError(f"unknown point_id: {point_id}")
+        poll_src = next((r for r in _load_csv(_points_path()) if r.get("point_id") == point_id), None)
+        if poll_src is None:
+            raise ValueError(f"unknown point_id: {point_id}")
+        try:
+            inst = int(str(poll_src.get("device_instance") or "0"))
+        except ValueError as exc:
+            raise ValueError(f"unknown point_id: {point_id}") from exc
+        obj_type = str(poll_src.get("object_type") or "").strip()
+        obj_inst = str(poll_src.get("object_instance") or "").strip()
+        src = _object_row(
+            device_instance=inst,
+            device_address=str(poll_src.get("device_address") or ""),
+            object_identifier=f"{obj_type},{obj_inst}" if obj_type and obj_inst else "",
+            object_name=str(poll_src.get("object_name") or poll_src.get("description") or point_id),
+            defaults=_commission_defaults(),
+        )
+        src["point_id"] = point_id
     points = _load_csv(_points_path())
     by_pid = {r.get("point_id", ""): r for r in points if r.get("point_id")}
     row = dict(src)

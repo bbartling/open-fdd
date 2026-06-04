@@ -14,7 +14,7 @@
 | Variable | Purpose |
 |----------|---------|
 | `BACNET_BIND` | In `commission.env`; NIC IP/prefix:port |
-| `BACNET_NAME` | Local device name (default `OpenFddEdge`) |
+| `BACNET_NAME` | Local device name (default `OpenFDD`) |
 | `BACNET_INSTANCE` | Local device instance (default `599999`) |
 | `OFDD_BACNET_BIND` | Runtime override for bind resolution |
 | `OFDD_BACNET_BIND_STRICT=1` | Disable auto-replace of 127.0.0.1 with LAN IP |

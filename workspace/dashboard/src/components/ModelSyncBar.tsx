@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
+import Spinner from "./Spinner";
 
 type SyncStatus = {
   in_sync: boolean;
@@ -28,15 +29,22 @@ export default function ModelSyncBar({ onStatus, refreshKey = 0 }: Props) {
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [s, h] = await Promise.all([
-      apiFetch<SyncStatus>("/api/model/bacnet-sync"),
-      apiFetch<Health>("/api/model/health"),
-    ]);
-    setSync(s);
-    setHealth(h);
+    setLoading(true);
+    try {
+      const [s, h] = await Promise.all([
+        apiFetch<SyncStatus>("/api/model/bacnet-sync"),
+        apiFetch<Health>("/api/model/health"),
+      ]);
+      setSync(s);
+      setHealth(h);
+      setError("");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -79,6 +87,7 @@ export default function ModelSyncBar({ onStatus, refreshKey = 0 }: Props) {
 
   return (
     <div className="dm-sync-bar panel">
+      {loading && !sync ? <Spinner label="Loading BACnet ↔ model sync status…" /> : null}
       <div className="dm-sync-row">
         <span className={pillClass}>
           <span className="status-dot" />

@@ -18,7 +18,9 @@ _PACK_FILES = (
     "model.json",
     "rules_store.json",
     "points.csv",
+    "points_discovered.csv",
     "commission.env",
+    "device_poll_profiles.csv",
 )
 
 
@@ -51,20 +53,21 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _validate_points_csv(path: Path, ref: SitePackRef) -> list[str]:
+def _validate_points_csv(path: Path, ref: SitePackRef, *, label: str | None = None) -> list[str]:
     import csv
 
     errors: list[str] = []
     if not path.is_file():
         return errors
+    name = label or path.name
     with path.open(newline="", encoding="utf-8") as f:
         for i, row in enumerate(csv.DictReader(f), start=2):
             sid = str(row.get("site_id") or "").strip()
             bid = str(row.get("building_id") or "").strip()
             if sid and sid != ref.site_id:
-                errors.append(f"points.csv line {i}: site_id={sid!r} expected {ref.site_id!r}")
+                errors.append(f"{name} line {i}: site_id={sid!r} expected {ref.site_id!r}")
             if bid and bid != ref.building_id:
-                errors.append(f"points.csv line {i}: building_id={bid!r} expected {ref.building_id!r}")
+                errors.append(f"{name} line {i}: building_id={bid!r} expected {ref.building_id!r}")
     return errors
 
 
@@ -105,6 +108,15 @@ def validate_pack(ref: SitePackRef, pack_root: Path, *, forbid_acme_rules: bool 
         errors.extend(_validate_model(_read_json(model_path), ref))
     points_path = pack_root / "points.csv"
     errors.extend(_validate_points_csv(points_path, ref))
+    errors.extend(_validate_points_csv(pack_root / "points_discovered.csv", ref, label="points_discovered.csv"))
+    profiles = pack_root / "device_poll_profiles.csv"
+    if profiles.is_file():
+        import csv
+
+        with profiles.open(newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            if not reader.fieldnames or "device_instance" not in (reader.fieldnames or []):
+                errors.append("device_poll_profiles.csv missing device_instance column")
     rules_path = pack_root / "rules_store.json"
     if rules_path.is_file():
         raw = _read_json(rules_path)
@@ -121,15 +133,21 @@ def backup_site(ref: SitePackRef, dest: Path | None = None) -> Path:
     src_model = data_dir() / "model.json"
     src_rules = data_dir() / "rules_store.json"
     src_points = commissioning_dir() / "points.csv"
+    src_discovered = commissioning_dir() / "points_discovered.csv"
     src_comm = commissioning_dir() / "commission.env"
+    src_profiles = commissioning_dir() / "device_poll_profiles.csv"
     if src_model.is_file():
         shutil.copy2(src_model, dest / "model.json")
     if src_rules.is_file():
         shutil.copy2(src_rules, dest / "rules_store.json")
     if src_points.is_file():
         shutil.copy2(src_points, dest / "points.csv")
+    if src_discovered.is_file():
+        shutil.copy2(src_discovered, dest / "points_discovered.csv")
     if src_comm.is_file():
         shutil.copy2(src_comm, dest / "commission.env")
+    if src_profiles.is_file():
+        shutil.copy2(src_profiles, dest / "device_poll_profiles.csv")
     meta = {
         "site_id": ref.site_id,
         "building_id": ref.building_id,
@@ -180,6 +198,20 @@ def apply_site(
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(comm_path, dest)
         applied["commission.env"] = str(dest)
+
+    disc_path = root / "points_discovered.csv"
+    if disc_path.is_file():
+        dest = commissioning_dir() / "points_discovered.csv"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(disc_path, dest)
+        applied["points_discovered.csv"] = str(dest)
+
+    profiles_path = root / "device_poll_profiles.csv"
+    if profiles_path.is_file():
+        dest = commissioning_dir() / "device_poll_profiles.csv"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(profiles_path, dest)
+        applied["device_poll_profiles.csv"] = str(dest)
 
     if sync_ttl and applied.get("model.json"):
         TtlService().sync()

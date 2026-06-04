@@ -19,6 +19,9 @@ def test_context_includes_model_and_tools(agent_client: TestClient):
     assert "tools" in body
     assert body["app_edit_enabled"] is False
     assert any(t["name"] == "model.add_site" for t in body["tools"])
+    assert "brick_model" in body
+    assert "api_query_guide" in body
+    assert "model.graph" in body.get("read_only_tools", [])
 
 
 def test_tool_builds_model(agent_client: TestClient):

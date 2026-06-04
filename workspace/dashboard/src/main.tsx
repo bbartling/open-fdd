@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import { ThemeProvider } from "./contexts/theme-context";
 import App from "./App";
 import "./styles.css";
+import "./styles/bis-dashboard.css";
 
 const queryClient = new QueryClient();
 

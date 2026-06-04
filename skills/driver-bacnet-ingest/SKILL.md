@@ -16,13 +16,13 @@ description: "Builds BACnet polling ingest and commissioning UI for site timeser
 ```bash
 export OPENFDD_REPO_ROOT=$PWD
 python -m bacnet_toolshed.discover 0 4194303 \
-  --name OpenFddEdge --instance 599999 --address <OT-NIC>/24:47808
+  --name OpenFDD --instance 599999 --address <OT-NIC>/24:47808
 python -m bacnet_toolshed.enable_points \
   --input workspace/bacnet/commissioning/points_discovered.csv \
   --output workspace/bacnet/commissioning/points.csv --all
 python -m bacnet_toolshed.poll_driver \
   --config workspace/bacnet/commissioning/points.csv --interval 60 --once \
-  --name OpenFddEdge --instance 599999 --address <OT-NIC>/24:47808
+  --name OpenFDD --instance 599999 --address <OT-NIC>/24:47808
 ```
 
 Poll output: `workspace/bacnet/polls/samples.csv` (long format). Ingest into Feather via bridge when implemented.

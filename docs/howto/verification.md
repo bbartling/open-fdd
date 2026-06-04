@@ -79,3 +79,22 @@ runner = RuleRunner(rules_path=Path("path/to/rules"))
 out = runner.run(df, timestamp_col="timestamp", column_map={"Supply_Air_Temperature_Sensor": "SAT"})
 assert any(c.endswith("_flag") for c in out.columns)
 ```
+
+---
+
+## 5. Post-deploy check (edge / Acme)
+
+After Ansible docker deploy:
+
+```bash
+./scripts/post_deploy_check.sh --limit acme_vm_bbartling
+```
+
+Uses `infra/ansible/scripts/http_probes.py` (BACnet tree, model SPARQL, agent context). **Ollama is required only** when inventory has in-stack Ollama (`enable_ollama` + `openfdd_docker_ollama: true`) or `post_check_require_ollama: true`. Deploys with `-e openfdd_docker_ollama=false` should set `openfdd_docker_ollama: false` in host vars so post-check does not fail on missing Ollama.
+
+PyPI rule parity (no HTTP):
+
+```bash
+PYTHONPATH=. python scripts/validate_acme_rules_pypi.py
+pytest open_fdd/tests/playground -q
+```

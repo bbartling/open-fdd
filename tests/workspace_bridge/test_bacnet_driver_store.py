@@ -126,6 +126,27 @@ def test_delete_point_and_device(driver_tmp):
         assert list(csv.DictReader(fh)) == []
 
 
+def test_tree_rebuilt_from_poll_csv_when_discovered_missing(driver_tmp):
+    """Deploy may push points.csv without points_discovered.csv — tree must still populate."""
+    store, discovered, points = driver_tmp
+    assert not discovered.is_file()
+    points.write_text(
+        "point_id,device_instance,device_address,object_type,object_instance,object_name,enabled,poll_interval_s,series_id\n"
+        "5007-analog-input-1,5007,192.168.1.10,analog-input,1,Zone Temp,1,60,5007-analog-input-1\n"
+        "5007-analog-input-2,5007,192.168.1.10,analog-input,2,SAT,1,300,5007-analog-input-2\n",
+        encoding="utf-8",
+    )
+    tree = store.driver_tree()
+    assert tree["inventory_source"] in ("discovered", "poll_csv")
+    assert len(tree["devices"]) == 1
+    assert tree["devices"][0]["point_count"] == 2
+    assert tree["devices"][0]["poll_count"] == 2
+    assert discovered.is_file()
+    with discovered.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 2
+
+
 def test_clear_registry_syncs_model(driver_tmp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     store, discovered, points = driver_tmp
     data = tmp_path / "data"

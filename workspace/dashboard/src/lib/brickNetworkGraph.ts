@@ -54,12 +54,48 @@ type LayoutNode = {
 };
 
 const EQUIP_PALETTE: Record<string, string> = {
+  Chiller: "#1e6f8e",
+  Cooling_Tower: "#2a8f6a",
+  Boiler: "#b84a32",
+  Plant: "#5c6b82",
   Laboratory_Equipment: "#4f78e8",
   Air_Duct: "#e8a84f",
   AHU: "#6b8e23",
+  Rooftop_Unit: "#6b8e23",
+  DOAS: "#3d8b6e",
   VAV: "#9370db",
+  Fan_Coil_Unit: "#7b5ea8",
+  FCU: "#7b5ea8",
+  Damper: "#c9870a",
+  Reheat_Coil: "#d45d79",
   BACnet_Device: "#708090",
 };
+
+/** Left-to-right mechanical hierarchy (plant → distribution → terminal → zone). */
+const MECH_LAYER_LABELS: { maxRank: number; label: string }[] = [
+  { maxRank: 4, label: "Plant / central" },
+  { maxRank: 14, label: "Air handling" },
+  { maxRank: 24, label: "Terminal / VAV" },
+  { maxRank: 34, label: "Duct / coils / dampers" },
+  { maxRank: 99, label: "Zones / sensors" },
+];
+
+function mechanicalRank(eq: NetworkGraphEquipment): number {
+  const hay = `${eq.equipment_type || ""} ${eq.brick_type || ""} ${eq.name || ""} ${eq.label || ""}`.toLowerCase();
+  if (/chiller|cooling.?tower|condenser|boiler|plant|heat.?pump/.test(hay)) return 0;
+  if (/ahu|air.?handler|rtu|rooftop|doas|maau|packaged/.test(hay)) return 10;
+  if (/vav|fan.?coil|fcu|terminal|box/.test(hay)) return 20;
+  if (/damper|reheat|coil|duct|mixed.?air|discharge|supply.?fan/.test(hay)) return 30;
+  if (/zone|room|space|leaving.?air|entering.?air/.test(hay)) return 40;
+  return 50;
+}
+
+function layerLabelForRank(rank: number): string {
+  for (const row of MECH_LAYER_LABELS) {
+    if (rank <= row.maxRank) return row.label;
+  }
+  return "Other";
+}
 
 const POINT_PALETTE: Record<string, string> = {
   Outside_Air_Humidity_Sensor: "#2d9a52",
@@ -103,55 +139,142 @@ function themeColors(theme: Theme) {
 function layerEquipment(
   equipment: NetworkGraphEquipment[],
   feeds: NetworkFeedEdge[],
-): NetworkGraphEquipment[][] {
-  const byId = new Map(equipment.map((e) => [e.equipment_id, e]));
-  const incoming = new Map<string, number>();
-  for (const eq of equipment) incoming.set(eq.equipment_id, 0);
-  for (const edge of feeds) {
-    const dst = edge.to_equipment_id;
-    incoming.set(dst, (incoming.get(dst) ?? 0) + 1);
+): { layers: NetworkGraphEquipment[][]; layerTitles: string[] } {
+  const byRank = new Map<number, NetworkGraphEquipment[]>();
+  for (const eq of equipment) {
+    const rank = mechanicalRank(eq);
+    if (!byRank.has(rank)) byRank.set(rank, []);
+    byRank.get(rank)!.push(eq);
   }
-  const layers: NetworkGraphEquipment[][] = [];
-  const placed = new Set<string>();
-  let frontier = equipment.filter((e) => (incoming.get(e.equipment_id) ?? 0) === 0);
-  if (!frontier.length) frontier = [...equipment];
-  while (frontier.length) {
-    layers.push(frontier);
-    for (const eq of frontier) placed.add(eq.equipment_id);
-    const nextIds = new Set<string>();
-    for (const eq of frontier) {
-      for (const edge of feeds) {
-        if (edge.from_equipment_id === eq.equipment_id && !placed.has(edge.to_equipment_id)) {
-          nextIds.add(edge.to_equipment_id);
-        }
+  const ranks = [...byRank.keys()].sort((a, b) => a - b);
+  const layers = ranks.map((r) => {
+    const layer = byRank.get(r)!;
+    layer.sort((a, b) => eqLabel(a).localeCompare(eqLabel(b)));
+    return layer;
+  });
+  const layerTitles = ranks.map((r) => layerLabelForRank(r));
+
+  // Nudge feed children one column right of their parent when BRICK feeds exist.
+  if (feeds.length) {
+    const byId = new Map(equipment.map((e) => [e.equipment_id, e]));
+    const layerIndex = new Map<string, number>();
+    layers.forEach((layer, idx) => {
+      for (const eq of layer) layerIndex.set(eq.equipment_id, idx);
+    });
+    for (const edge of feeds) {
+      const parentIdx = layerIndex.get(edge.from_equipment_id);
+      const child = byId.get(edge.to_equipment_id);
+      if (parentIdx === undefined || !child) continue;
+      const want = parentIdx + 1;
+      const cur = layerIndex.get(edge.to_equipment_id) ?? parentIdx;
+      if (want <= cur) continue;
+      const fromLayer = layers[cur];
+      const toLayer = layers[want] ?? [];
+      const i = fromLayer.findIndex((e) => e.equipment_id === edge.to_equipment_id);
+      if (i >= 0) {
+        fromLayer.splice(i, 1);
+        toLayer.push(child);
+        if (!layers[want]) layers[want] = toLayer;
+        layerIndex.set(edge.to_equipment_id, want);
       }
     }
-    frontier = [...nextIds].map((id) => byId.get(id)).filter(Boolean) as NetworkGraphEquipment[];
-    if (!frontier.length) {
-      frontier = equipment.filter((e) => !placed.has(e.equipment_id));
-    }
-    if (frontier.every((e) => placed.has(e.equipment_id))) break;
+    layers.forEach((layer) => layer.sort((a, b) => eqLabel(a).localeCompare(eqLabel(b))));
   }
-  for (const eq of equipment) {
-    if (!placed.has(eq.equipment_id)) {
-      if (!layers.length) layers.push([]);
-      layers[layers.length - 1].push(eq);
-    }
-  }
-  return layers;
+
+  return { layers, layerTitles };
 }
 
-function buildLayout(graph: BrickNetworkInput, theme: Theme): LayoutNode[] {
+/** Force-directed layout (NetworkX spring_layout style) for equipment nodes. */
+function springLayoutEquipment(
+  equipment: NetworkGraphEquipment[],
+  feeds: NetworkFeedEdge[],
+  iterations = 60,
+): Map<string, { x: number; y: number }> {
+  const ids = equipment.map((e) => e.equipment_id);
+  const pos = new Map<string, { x: number; y: number }>();
+  const n = Math.max(ids.length, 1);
+  ids.forEach((id, i) => {
+    const angle = (2 * Math.PI * i) / n;
+    pos.set(id, { x: Math.cos(angle) * 4, y: Math.sin(angle) * 4 });
+  });
+  const repulsion = 1.8;
+  const attraction = 0.08;
+  for (let iter = 0; iter < iterations; iter += 1) {
+    for (let i = 0; i < ids.length; i += 1) {
+      for (let j = i + 1; j < ids.length; j += 1) {
+        const a = pos.get(ids[i])!;
+        const b = pos.get(ids[j])!;
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let dist = Math.hypot(dx, dy) || 0.05;
+        const force = repulsion / (dist * dist);
+        dx = (dx / dist) * force;
+        dy = (dy / dist) * force;
+        a.x += dx;
+        a.y += dy;
+        b.x -= dx;
+        b.y -= dy;
+      }
+    }
+    for (const edge of feeds) {
+      const a = pos.get(edge.from_equipment_id);
+      const b = pos.get(edge.to_equipment_id);
+      if (!a || !b) continue;
+      let dx = b.x - a.x;
+      let dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.05;
+      const force = dist * attraction;
+      dx = (dx / dist) * force;
+      dy = (dy / dist) * force;
+      a.x += dx * 0.5;
+      a.y += dy * 0.5;
+      b.x -= dx * 0.5;
+      b.y -= dy * 0.5;
+    }
+  }
+  return pos;
+}
+
+function buildSpringLayout(
+  graph: BrickNetworkInput,
+  theme: Theme,
+): { nodes: LayoutNode[]; layerAnnotations: Partial<Plotly.Annotations>[] } {
   const colors = themeColors(theme);
-  const layers = layerEquipment(graph.equipment, graph.feeds);
+  const positions = springLayoutEquipment(graph.equipment, graph.feeds);
   const nodes: LayoutNode[] = [];
-  const layerGap = 2.4;
-  const rowGap = 1.35;
+  for (const eq of graph.equipment) {
+    const p = positions.get(eq.equipment_id) ?? { x: 0, y: 0 };
+    const et = eq.equipment_type || eq.brick_type || "";
+    nodes.push({
+      id: eq.equipment_id,
+      kind: "equipment",
+      label: eqLabel(eq),
+      sublabel: et,
+      equipmentType: et,
+      x: p.x,
+      y: p.y,
+      size: 32,
+      color: EQUIP_PALETTE[et] || colors.equipDefault,
+    });
+  }
+  return { nodes, layerAnnotations: [] };
+}
+
+function buildLayout(
+  graph: BrickNetworkInput,
+  theme: Theme,
+): { nodes: LayoutNode[]; layerAnnotations: Partial<Plotly.Annotations>[] } {
+  const colors = themeColors(theme);
+  const { layers, layerTitles } = layerEquipment(graph.equipment, graph.feeds);
+  const nodes: LayoutNode[] = [];
+  const layerGap = 3.2;
+  const rowGap = 1.55;
+  const layerAnnotations: Partial<Plotly.Annotations>[] = [];
 
   layers.forEach((layer, layerIdx) => {
     const x = layerIdx * layerGap;
     layer.forEach((eq, rowIdx) => {
-      const y = rowIdx * rowGap;
+      const y = rowIdx * rowGap - (layer.length - 1) * (rowGap / 2);
       const et = eq.equipment_type || eq.brick_type || "";
       nodes.push({
         id: eq.equipment_id,
@@ -164,11 +287,13 @@ function buildLayout(graph: BrickNetworkInput, theme: Theme): LayoutNode[] {
         size: 36,
         color: EQUIP_PALETTE[et] || colors.equipDefault,
       });
-      const pts = graph.points_by_equipment[eq.equipment_id] ?? [];
-      const span = Math.max(1.2, (pts.length - 1) * 0.55);
+      const pts = [...(graph.points_by_equipment[eq.equipment_id] ?? [])].sort((a, b) =>
+        pointLabel(a).localeCompare(pointLabel(b)),
+      );
+      const span = Math.max(1.4, (pts.length - 1) * 0.62);
       pts.forEach((p, pi) => {
-        const px = x - 0.35 + (pi / Math.max(pts.length - 1, 1)) * span;
-        const py = y - 0.95 - (pi % 2) * 0.15;
+        const px = x - 0.45 + (pi / Math.max(pts.length - 1, 1)) * span;
+        const py = y - 1.15 - (pi % 3) * 0.22;
         const bt = p.brick_type || "";
         nodes.push({
           id: p.point_id,
@@ -184,16 +309,35 @@ function buildLayout(graph: BrickNetworkInput, theme: Theme): LayoutNode[] {
         });
       });
     });
+    if (layer.length) {
+      const ys = layer.map((_, rowIdx) => rowIdx * rowGap - (layer.length - 1) * (rowGap / 2));
+      const yMid = (Math.min(...ys) + Math.max(...ys)) / 2;
+      layerAnnotations.push({
+        x: layerIdx * layerGap - 0.55,
+        y: yMid,
+        text: `<b>${layerTitles[layerIdx] || "Equipment"}</b>`,
+        showarrow: false,
+        xanchor: "right",
+        font: { size: 11, color: colors.muted },
+        bgcolor: "rgba(0,0,0,0)",
+      });
+    }
   });
-  return nodes;
+  return { nodes, layerAnnotations };
 }
+
+export type BrickNetworkLayoutMode = "hierarchy" | "spring";
 
 export function buildBrickNetworkPlot(
   graph: BrickNetworkInput,
   theme: Theme,
+  layoutMode: BrickNetworkLayoutMode = "hierarchy",
 ): { data: Plotly.Data[]; layout: Partial<Plotly.Layout>; nodeByIndex: LayoutNode[] } {
   const colors = themeColors(theme);
-  const nodes = buildLayout(graph, theme);
+  const useSpring = layoutMode === "spring" || graph.equipment.length > 24;
+  const { nodes, layerAnnotations } = useSpring
+    ? buildSpringLayout(graph, theme)
+    : buildLayout(graph, theme);
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
   const edgeX: (number | null)[] = [];
@@ -216,16 +360,18 @@ export function buildBrickNetworkPlot(
     });
   }
 
-  for (const node of nodes) {
-    if (node.kind !== "point" || !node.equipmentId) continue;
-    const parent = nodeById.get(node.equipmentId);
-    if (!parent) continue;
-    edgeX.push(parent.x, node.x, null);
-    edgeY.push(parent.y, node.y, null);
+  if (!useSpring) {
+    for (const node of nodes) {
+      if (node.kind !== "point" || !node.equipmentId) continue;
+      const parent = nodeById.get(node.equipmentId);
+      if (!parent) continue;
+      edgeX.push(parent.x, node.x, null);
+      edgeY.push(parent.y, node.y, null);
+    }
   }
 
   const equipNodes = nodes.filter((n) => n.kind === "equipment");
-  const pointNodes = nodes.filter((n) => n.kind === "point");
+  const pointNodes = useSpring ? [] : nodes.filter((n) => n.kind === "point");
 
   const edgeTrace: Plotly.Data = {
     type: "scatter",
@@ -286,12 +432,12 @@ export function buildBrickNetworkPlot(
 
   const xs = nodes.map((n) => n.x);
   const ys = nodes.map((n) => n.y);
-  const pad = 0.8;
+  const pad = 1.2;
 
   const layout: Partial<Plotly.Layout> = {
     paper_bgcolor: colors.paper,
     plot_bgcolor: colors.bg,
-    margin: { l: 24, r: 24, t: 24, b: 24 },
+    margin: { l: 88, r: 32, t: 36, b: 32 },
     xaxis: {
       visible: false,
       range: [Math.min(...xs, 0) - pad, Math.max(...xs, 1) + pad],
@@ -306,7 +452,7 @@ export function buildBrickNetworkPlot(
     },
     showlegend: true,
     legend: { orientation: "h", y: 1.08, font: { color: colors.text } },
-    annotations,
+    annotations: [...layerAnnotations, ...annotations],
     hovermode: "closest",
   };
 

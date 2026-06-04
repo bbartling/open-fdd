@@ -161,3 +161,13 @@ export async function login(username: string, password: string) {
     body: JSON.stringify({ username, password }),
   });
 }
+
+/** Short-lived ticket for /ws/dashboard (not the long-lived Bearer token). */
+export async function fetchWsTicket(): Promise<string | null> {
+  try {
+    const body = await apiFetch<{ ticket: string }>("/api/auth/ws-ticket", { method: "POST" });
+    return body.ticket?.trim() || null;
+  } catch {
+    return null;
+  }
+}

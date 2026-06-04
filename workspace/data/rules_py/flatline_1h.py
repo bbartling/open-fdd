@@ -1,6 +1,6 @@
 """Cookbook Recipe 1 — flatline over 1 hour (temp or RH via row['temp'])."""
 
-from bench_fdd_common import hour_window_ready, window_rows_1h
+from open_fdd.playground.cookbook import cfg_threshold, hour_window_ready, temp_unit_symbol, window_rows_1h
 
 
 def evaluate(row, cfg, prev_row=None, rows=None):

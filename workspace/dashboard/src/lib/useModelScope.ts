@@ -50,6 +50,7 @@ type ScopeResponse = {
 export function useModelScope(initialSiteId?: string, brickTypeFilter?: string): ModelScope {
   const [sites, setSites] = useState<ModelSite[]>([]);
   const [siteId, setSiteId] = useState(initialSiteId || "");
+  const [siteBootstrapped, setSiteBootstrapped] = useState(Boolean(initialSiteId));
   const [equipment, setEquipment] = useState<ModelEquipment[]>([]);
   const [equipmentId, setEquipmentId] = useState("");
   const [sensors, setSensors] = useState<ModelSensor[]>([]);
@@ -82,6 +83,27 @@ export function useModelScope(initialSiteId?: string, brickTypeFilter?: string):
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (siteBootstrapped) return;
+    let cancelled = false;
+    apiFetch<{ active_site_id?: string; sites?: ModelSite[] }>("/api/model/sites")
+      .then((res) => {
+        if (cancelled) return;
+        const first = res.sites?.[0] as { site_id?: string; id?: string } | undefined;
+        const sid = res.active_site_id || first?.site_id || first?.id || initialSiteId || "";
+        if (sid) setSiteId(sid);
+        if (res.sites?.length) setSites(res.sites);
+        setSiteBootstrapped(true);
+      })
+      .catch((err) => {
+        setError(formatApiError(err));
+        setSiteBootstrapped(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteBootstrapped, initialSiteId]);
 
   useEffect(() => {
     if (!siteId) return;

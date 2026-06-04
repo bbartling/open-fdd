@@ -16,6 +16,11 @@ import pandas as pd
 from .data_loader import load_frame_for_run
 from .model_feeds import _is_ahu, _is_vav
 from .model_service import ModelService
+from .operational_analytics import (
+    analytics_lookback_days,
+    analytics_methodology,
+    trim_frame_to_lookback,
+)
 from .site_defaults import ensure_default_site
 from .timeseries_api import plot_column_name
 from .ttl_service import TtlService
@@ -25,7 +30,6 @@ _CACHE: dict[str, Any] = {"generated_at": 0.0, "next_refresh_at": 0.0, "payload"
 ZONE_BRICK_MARKERS = ("zone_air_temperature", "zone temperature")
 FAN_BRICK_MARKERS = ("supply_fan", "fan_speed", "fan_command", "fan_status", "fan_start")
 DEFAULT_INTERVAL_S = 3600
-LOOKBACK_HOURS = 48
 
 
 def refresh_interval_s() -> int:
@@ -228,6 +232,16 @@ def discover_topology(model: dict[str, Any], site_id: str) -> dict[str, Any]:
     }
 
 
+def _column_series(frame: pd.DataFrame, col: str) -> pd.Series:
+    """One numeric series for ``col`` even when the frame has duplicate column labels."""
+    if col not in frame.columns:
+        return pd.Series(dtype=float)
+    data = frame[col]
+    if isinstance(data, pd.DataFrame):
+        data = data.iloc[:, 0]
+    return pd.to_numeric(data, errors="coerce")
+
+
 def _fan_on_series(series: pd.Series, *, threshold: float = 5.0) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce")
     if s.dropna().empty:
@@ -248,12 +262,13 @@ def _recovery_rates(
 ) -> dict[str, float]:
     if fan_col not in df.columns or "timestamp" not in df.columns:
         return {}
-    work = df[["timestamp", fan_col, *zone_columns]].copy()
+    pick = list(dict.fromkeys(["timestamp", fan_col, *[c for c in zone_columns if c in df.columns]]))
+    work = df.loc[:, pick].copy()
     work["timestamp"] = pd.to_datetime(work["timestamp"], utc=True, errors="coerce")
     work = work.dropna(subset=["timestamp"]).sort_values("timestamp")
     if len(work) < 10:
         return {}
-    fan_on = _fan_on_series(work[fan_col])
+    fan_on = _fan_on_series(_column_series(work, fan_col))
     prev = fan_on.shift(1, fill_value=False)
     starts = work.index[fan_on & ~prev]
     if starts.empty:
@@ -274,7 +289,9 @@ def _recovery_rates(
         if minutes < 5:
             continue
         for col in zone_columns:
-            vals = pd.to_numeric(seg[col], errors="coerce").dropna()
+            if col not in seg.columns:
+                continue
+            vals = _column_series(seg, col).dropna()
             if len(vals) < 2:
                 continue
             delta = float(vals.iloc[-1] - vals.iloc[0])
@@ -334,7 +351,7 @@ def compute_zone_metrics(
         col = zp["column"]
         if col not in zone_df.columns:
             continue
-        s = pd.to_numeric(zone_df[col], errors="coerce")
+        s = _column_series(zone_df, col)
         day = s[occupied].dropna()
         night = s[~occupied].dropna()
         zones_out.append(
@@ -353,7 +370,11 @@ def compute_zone_metrics(
         if not zone_cols:
             continue
         fan_col = _fan_column_on_equipment(model, site_id, str(sys.get("ahu_id") or ""), available)
-        recoveries = _recovery_rates(df, zone_cols, fan_col) if fan_col else {}
+        recoveries = {}
+        if fan_col and fan_col in available:
+            rate_cols = list(dict.fromkeys(["timestamp", fan_col, *zone_cols]))
+            rate_df = df.loc[:, [c for c in rate_cols if c in df.columns]].copy()
+            recoveries = _recovery_rates(rate_df, zone_cols, fan_col)
         sys_zones = []
         rates = [r for r in recoveries.values() if r is not None]
         median_rate = sorted(rates)[len(rates) // 2] if rates else None
@@ -370,6 +391,8 @@ def compute_zone_metrics(
                 "recovery_f_per_min": round(rec, 4) if rec is not None else None,
             }
             sys_zones.append(entry)
+            if zrow is not None and rec is not None:
+                zrow["recovery_f_per_min"] = round(rec, 4)
             if rec is not None and median_rate is not None and median_rate > 0.02:
                 if rec < 0.5 * median_rate:
                     struggling.append(
@@ -393,6 +416,7 @@ def compute_zone_metrics(
             }
         )
 
+    worst_zones = _worst_zones(zones_out, systems_out, struggling)
     sentence = _summary_sentence(zones_out, systems_out, struggling, topology.get("mode"))
     preview = zone_df.tail(120).copy()
     for c in preview.columns:
@@ -401,13 +425,49 @@ def compute_zone_metrics(
     return {
         "mode": topology.get("mode"),
         "site_id": site_id,
+        "lookback_days": analytics_lookback_days(),
+        "methodology": analytics_methodology(),
         "zones": zones_out,
         "systems": systems_out,
         "struggling_zones": struggling,
+        "worst_zones": worst_zones,
         "dataframe_rows": len(zone_df),
         "dataframe_preview": preview.to_dict(orient="records"),
         "summary_sentence": sentence,
     }
+
+
+def _worst_zones(
+    zones_out: list[dict[str, Any]],
+    systems_out: list[dict[str, Any]],
+    struggling: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rank zones for operator/LLM focus (slow recovery, large day/night spread)."""
+    recovery_by_col: dict[str, float] = {}
+    for sys in systems_out:
+        for z in sys.get("zones") or []:
+            col = z.get("column")
+            rec = z.get("recovery_f_per_min")
+            if col and rec is not None:
+                recovery_by_col[col] = float(rec)
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for z in zones_out:
+        col = z.get("column")
+        score = 0.0
+        day = z.get("day_avg_f")
+        night = z.get("night_avg_f")
+        if day is not None and night is not None:
+            score += abs(float(day) - float(night))
+        rec = recovery_by_col.get(col or "")
+        if rec is not None and rec < 0.03:
+            score += 5.0
+        for s in struggling:
+            if s.get("column") == col:
+                score += 10.0
+        if score > 0:
+            scored.append((score, {**z, "recovery_f_per_min": rec}))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:8]]
 
 
 def _summary_sentence(
@@ -459,15 +519,24 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     model = model_svc.load()
     topology = discover_topology(model, sid)
     df, origin = load_frame_for_run(sid)
-    if lookback_hours() > 0 and not df.empty and "timestamp" in df.columns:
-        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=lookback_hours())
-        ts = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
-        trimmed = df.loc[ts >= cutoff]
-        if not trimmed.empty:
-            df = trimmed
+    df = trim_frame_to_lookback(df)
 
     site_tz = _site_timezone(model, sid)
     metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
+    from .device_poll_health import get_device_poll_snapshot
+    from .zone_energy_research import build_zone_energy_research
+
+    device_snapshot = get_device_poll_snapshot(site_id=sid, force=force)
+    zone_df = build_zone_dataframe(df, topology)
+    occupied_mask = None
+    if not zone_df.empty and "timestamp" in zone_df.columns:
+        occupied_mask = _occupied_mask(zone_df["timestamp"], site_tz)
+    research = build_zone_energy_research(
+        metrics,
+        device_snapshot,
+        zone_df=zone_df if not zone_df.empty else None,
+        occupied_mask=occupied_mask,
+    )
     payload = {
         "ok": True,
         "cached": False,
@@ -478,6 +547,7 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
         "site_timezone": site_tz,
         "topology_mode": metrics.get("mode"),
         "zone_sensor_count": len(topology.get("zone_points") or []),
+        "research": research,
         **metrics,
     }
     stored = dict(cached) if isinstance(cached, dict) else {}
@@ -487,26 +557,28 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
     return payload
 
 
-def lookback_hours() -> float:
-    try:
-        return max(6.0, float(os.environ.get("OFDD_ZONE_TEMP_LOOKBACK_HOURS", str(LOOKBACK_HOURS))))
-    except ValueError:
-        return float(LOOKBACK_HOURS)
-
-
-def compact_for_llm(snapshot: dict[str, Any]) -> str:
-    """Small JSON blob for building-insight / agent prompts."""
-    slim = {
+def slim_zone_for_llm(
+    snapshot: dict[str, Any],
+    *,
+    max_zones: int = 16,
+    max_systems: int = 6,
+    max_zones_per_system: int = 12,
+    max_struggling: int = 8,
+) -> dict[str, Any]:
+    """Compact zone snapshot for LLM context (dict — never slice JSON mid-string)."""
+    summary = str(snapshot.get("summary_sentence") or "")[:400]
+    return {
         "topology_mode": snapshot.get("topology_mode") or snapshot.get("mode"),
         "zone_sensor_count": snapshot.get("zone_sensor_count"),
-        "summary_sentence": snapshot.get("summary_sentence"),
+        "summary_sentence": summary,
         "zones": [
             {
                 "label": z.get("label"),
                 "day_avg_f": z.get("day_avg_f"),
                 "night_avg_f": z.get("night_avg_f"),
             }
-            for z in (snapshot.get("zones") or [])[:16]
+            for z in (snapshot.get("zones") or [])[:max_zones]
+            if isinstance(z, dict)
         ],
         "systems": [
             {
@@ -520,11 +592,91 @@ def compact_for_llm(snapshot: dict[str, Any]) -> str:
                         "day_avg_f": z.get("day_avg_f"),
                         "night_avg_f": z.get("night_avg_f"),
                     }
-                    for z in (s.get("zones") or [])[:12]
+                    for z in (s.get("zones") or [])[:max_zones_per_system]
+                    if isinstance(z, dict)
                 ],
             }
-            for s in (snapshot.get("systems") or [])[:6]
+            for s in (snapshot.get("systems") or [])[:max_systems]
+            if isinstance(s, dict)
         ],
-        "struggling_zones": (snapshot.get("struggling_zones") or [])[:8],
+        "struggling_zones": [
+            z
+            for z in (snapshot.get("struggling_zones") or [])[:max_struggling]
+            if isinstance(z, dict)
+        ],
+        "worst_zones": [
+            {
+                "label": z.get("label"),
+                "day_avg_f": z.get("day_avg_f"),
+                "night_avg_f": z.get("night_avg_f"),
+                "recovery_f_per_min": z.get("recovery_f_per_min"),
+            }
+            for z in (snapshot.get("worst_zones") or [])[:6]
+            if isinstance(z, dict)
+        ],
+        "lookback_days": snapshot.get("lookback_days"),
+        "research": _slim_research(snapshot.get("research")),
     }
-    return json.dumps(slim, separators=(",", ":"))[:2800]
+
+
+def _slim_research(research: Any) -> dict[str, Any] | None:
+    if not isinstance(research, dict):
+        return None
+    from .zone_energy_research import slim_research_for_llm
+
+    return slim_research_for_llm(research)
+
+
+def compact_for_llm(snapshot: dict[str, Any], *, max_bytes: int = 2800) -> str:
+    """Small JSON blob for building-insight / agent prompts (always valid JSON)."""
+    limits = [
+        (16, 6, 12, 8),
+        (12, 4, 8, 6),
+        (8, 3, 6, 4),
+        (4, 2, 4, 2),
+    ]
+    for max_z, max_sys, max_zps, max_str in limits:
+        slim = slim_zone_for_llm(
+            snapshot,
+            max_zones=max_z,
+            max_systems=max_sys,
+            max_zones_per_system=max_zps,
+            max_struggling=max_str,
+        )
+        text = json.dumps(slim, separators=(",", ":"))
+        if len(text.encode("utf-8")) <= max_bytes:
+            return text
+    slim = slim_zone_for_llm(snapshot, max_zones=2, max_systems=1, max_zones_per_system=2, max_struggling=2)
+    return _compact_json_under_bytes(slim, max_bytes=max_bytes, summary_cap=120)
+
+
+def _compact_json_under_bytes(
+    slim: dict[str, Any],
+    *,
+    max_bytes: int,
+    summary_cap: int = 120,
+) -> str:
+    """Trim string fields until JSON fits max_bytes (valid JSON guaranteed)."""
+    slim = dict(slim)
+    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[:summary_cap]
+    cap = 80
+    while cap >= 8:
+        text = json.dumps(slim, separators=(",", ":"))
+        if len(text.encode("utf-8")) <= max_bytes:
+            return text
+        for key, val in list(slim.items()):
+            if isinstance(val, str) and len(val) > cap:
+                slim[key] = val[:cap]
+            elif isinstance(val, list):
+                slim[key] = [
+                    {
+                        k: (v[:cap] if isinstance(v, str) and len(v) > cap else v)
+                        for k, v in (item.items() if isinstance(item, dict) else [])
+                    }
+                    if isinstance(item, dict)
+                    else item
+                    for item in val
+                ]
+        cap //= 2
+    slim["summary_sentence"] = str(slim.get("summary_sentence") or "")[: min(summary_cap, 40)]
+    return json.dumps(slim, separators=(",", ":"))
