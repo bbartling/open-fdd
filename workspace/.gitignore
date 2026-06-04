@@ -4,6 +4,10 @@
 !*.env.example
 !api/
 !api/**
+!mcp_rag/
+!mcp_rag/**
+**/mcp_rag/**/__pycache__/
+**/mcp_rag/**/*.py[cod]
 **/api/**/__pycache__/
 **/api/**/*.py[cod]
 !dashboard/
