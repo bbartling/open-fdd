@@ -5,7 +5,7 @@ nav_exclude: true
 
 # Publish Docker addons to GHCR (when ready)
 
-**Status:** Deferred. Edge deploy today uses **`./scripts/docker_build.sh --save`** + Ansible tar load. Registry publish is wired but not required until edges can `docker pull`.
+**Status:** Edge deploy defaults to **`docker compose pull`** from **`ghcr.io/bbartling/`** after you publish a tag. Tar load remains for lab/air-gap (`OPENFDD_DOCKER_PULL_FROM_GHCR=0`).
 
 **For AI agents:** Run this only when the operator explicitly asks to publish images or cut an edge release tag. Do not publish on every PR merge.
 
@@ -38,19 +38,25 @@ docker login ghcr.io
 OPENFDD_IMAGE_TAG=2026.06.01-edge ./scripts/docker_publish.sh
 ```
 
-## After publish (future edge path)
+## After publish — deploy Acme (GHCR pull)
 
-Not implemented yet on Acme:
-
-1. Pin tag in `supervisor/manifest.yaml` / host_vars (`openfdd_docker_image_tag`).
-2. Replace tar load in Ansible with `docker compose pull` + `up`.
-3. See [Edge stack layout](../architecture/edge_stack.md) and `os/Documentation/roadmap.md`.
-
-Until then, keep:
+1. GitHub Actions **Publish Docker addons** finishes with your tag (e.g. `2026.06.04-edge`).
+2. Set the same tag in `host_vars/acme_vm_bbartling.yml` (`openfdd_docker_image_tag`) or pass `-e` / `OPENFDD_IMAGE_TAG`.
+3. GHCR packages must be **public**, or set `openfdd_ghcr_token` in host_vars for `docker login` on the edge.
 
 ```bash
-./scripts/docker_build.sh --save
-cd infra/ansible && ./deploy.sh docker --limit <host>
+cd infra/ansible
+export SSHPASS='…'   # or secrets/acme.env.local
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
+```
+
+Ansible renders `docker-compose.yml` with `ghcr.io/bbartling/openfdd-*:<tag>`, runs **`docker compose pull`**, then **`up -d`**.
+
+Legacy tar (no registry):
+
+```bash
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=2026.06.04-edge ./scripts/docker_build.sh --save
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit <host>
 ```
 
 ## Related files

@@ -1,11 +1,18 @@
 # Rendered on edge host by deploy_docker.yml — do not edit on VM by hand.
 # Host Caddy (:80) → bridge on 127.0.0.1:{{ openfdd_bridge_port }}
+{% macro ofdd_image(short_name) -%}
+{%- if openfdd_docker_pull_from_ghcr | default(false) | bool -%}
+{{ openfdd_docker_registry | default('ghcr.io') }}/{{ openfdd_docker_registry_org | default('bbartling') }}/{{ short_name }}:{{ openfdd_docker_image_tag }}
+{%- else -%}
+{{ short_name }}:{{ openfdd_docker_image_tag | default('local') }}
+{%- endif -%}
+{%- endmacro %}
 
 name: openfdd-edge
 
 services:
   bridge:
-    image: openfdd-bridge:{{ openfdd_docker_image_tag | default('local') }}
+    image: {{ ofdd_image('openfdd-bridge') }}
     ports:
       - "127.0.0.1:{{ openfdd_bridge_port }}:8765"
     volumes:
@@ -36,7 +43,7 @@ services:
     restart: unless-stopped
 
   commission:
-    image: openfdd-commission:{{ openfdd_docker_image_tag | default('local') }}
+    image: {{ ofdd_image('openfdd-commission') }}
 {% if bacnet_commission_network_host | default(false) | bool %}
     network_mode: host
 {% endif %}
@@ -49,7 +56,7 @@ services:
 
 {% if enable_mcp | default(true) | bool %}
   mcp-rag:
-    image: openfdd-mcp-rag:{{ openfdd_docker_image_tag | default('local') }}
+    image: {{ ofdd_image('openfdd-mcp-rag') }}
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
     restart: unless-stopped
@@ -57,7 +64,7 @@ services:
 
 {% if enable_bacnet_poll_driver | default(false) | bool %}
   bacnet-poll:
-    image: openfdd-bacnet-poll:{{ openfdd_docker_image_tag | default('local') }}
+    image: {{ ofdd_image('openfdd-bacnet-poll') }}
     network_mode: host
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace

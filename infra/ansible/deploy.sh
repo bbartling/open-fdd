@@ -98,12 +98,12 @@ Components:
   mcp | ai    MCP RAG sidecar (+ edge_ai_stack.yml); ai also runs Ollama bootstrap
   os          apt update + safe upgrade (os_update.yml; -e os_upgrade_reboot=true)
   check       Post-deploy insurance probes only (no file sync)
-  docker      Docker Compose stack (build images locally first — see docs/edge_deploy_docker.md)
+  docker      Docker Compose (default: pull ghcr.io/bbartling/* — set OPENFDD_IMAGE_TAG)
   maintain    Safe Docker prune on edge only (images/networks/containers; never volumes)
   ops         Full Docker deploy + maintenance + TTL sync + SPARQL/feather/log health (edge_operational_sync.yml)
 
 Examples:
-  ./scripts/docker_build.sh --save && ./deploy.sh docker --limit acme_vm_bbartling
+  OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
   ./scripts/build_and_test.sh && ./deploy.sh ui --limit acme_vm_bbartling
   ./deploy.sh backend --limit acme_vm_bbartling
   ./deploy.sh drivers --limit acme_vm_bbartling -e enable_bacnet_poll_driver=true
@@ -123,13 +123,30 @@ Secrets (gitignored): infra/ansible/secrets/README.md
 EOF
 }
 
-require_docker_bundle() {
-  local tag="${OPENFDD_IMAGE_TAG:-local}"
+require_docker_deploy() {
+  local tag="${OPENFDD_IMAGE_TAG:-}"
+  local pull="${OPENFDD_DOCKER_PULL_FROM_GHCR:-1}"
+  case "$pull" in
+    0|false|no|off) pull=0 ;;
+    *) pull=1 ;;
+  esac
+  if [[ "$pull" == "1" ]]; then
+    if [[ -z "$tag" || "$tag" == "local" ]]; then
+      echo "GHCR deploy: set OPENFDD_IMAGE_TAG to the tag published by GitHub Actions." >&2
+      echo "  Example: OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling" >&2
+      echo "Legacy tar path: OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./scripts/docker_build.sh --save" >&2
+      exit 1
+    fi
+    ANSIBLE_EXTRA+=(-e "openfdd_docker_pull_from_ghcr=true" -e "openfdd_docker_image_tag=${tag}")
+    return 0
+  fi
+  tag="${tag:-local}"
+  ANSIBLE_EXTRA+=(-e "openfdd_docker_pull_from_ghcr=false" -e "openfdd_docker_image_tag=${tag}")
   local tar="${ROOT}/docker/dist/openfdd-images-${tag}.tar.gz"
   if [[ ! -f "$tar" ]]; then
     echo "Missing Docker image bundle: $tar" >&2
-    echo "Run: ./scripts/docker_build.sh --save" >&2
-    echo "Or: OPENFDD_IMAGE_TAG=yourtag ./scripts/docker_build.sh --save" >&2
+    echo "Run: OPENFDD_IMAGE_TAG=${tag} ./scripts/docker_build.sh --save" >&2
+    echo "Or GHCR: OPENFDD_IMAGE_TAG=yourtag ./deploy.sh docker --limit <host>" >&2
     exit 1
   fi
 }
@@ -238,10 +255,7 @@ case "$COMPONENT" in
 esac
 
 if [[ "$COMPONENT" == "docker" || "$COMPONENT" == "ops" ]]; then
-  require_docker_bundle
-  if [[ -n "${OPENFDD_IMAGE_TAG:-}" ]]; then
-    ANSIBLE_EXTRA+=(-e "openfdd_docker_image_tag=${OPENFDD_IMAGE_TAG}")
-  fi
+  require_docker_deploy
 fi
 
 if [[ "$NEEDS_UI" == true ]]; then
