@@ -22,7 +22,7 @@ Merged examples (delete if still on disk): `deploy/ghcr-pull-acme` (PR #190), `f
 
 1. **Code on `master`** — feature PRs merged; CI green.
 2. **Publish images** — Actions → **Publish Docker addons** → input tag (e.g. `2026.06.04-edge`). Wait for success.
-3. **Deploy edge** — `OPENFDD_IMAGE_TAG=<same-tag> ./deploy.sh docker --limit acme_vm_bbartling` (see [Publish Docker addons](publish_docker_addons.md)).
+3. **Deploy edge** — from `infra/ansible`: `OPENFDD_IMAGE_TAG=<same-tag> ./deploy.sh docker --limit acme_vm_bbartling` (see [Publish Docker addons](publish_docker_addons.md)).
 4. **Docs PDF (optional same day)** — If **Docs PDF** opened PR #189-style branch, merge the bot PR so `pdf/open-fdd-docs.pdf` / `.txt` match `docs/`.
 5. **Cleanup** — Delete merged feature branches locally and on `origin`.
 

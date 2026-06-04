@@ -54,6 +54,7 @@ See [Publish Docker addons](howto/publish_docker_addons.md) and [GitHub branches
 
 ```bash
 OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=local ./scripts/docker_build.sh --save
+cd infra/ansible
 OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit acme_vm_bbartling
 ```
 
