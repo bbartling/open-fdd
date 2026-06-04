@@ -1,5 +1,7 @@
 """Flag RTU supply fan running outside office hours when zone temps are satisfied."""
 
+from open_fdd.playground.cookbook import temp_unit_symbol
+
 _fault_streak = 0
 
 

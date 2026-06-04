@@ -1,5 +1,8 @@
 """Cookbook Recipe 6 — out of bounds on rolling avg."""
 
+from open_fdd.playground.cookbook import cfg_threshold, temp_unit_symbol
+
+
 def evaluate(row, cfg, prev_row=None, rows=None):
     sym = temp_unit_symbol(cfg)
     is_rh = row.get("value_kind") == "rh"

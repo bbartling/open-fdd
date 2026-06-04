@@ -93,6 +93,8 @@ Acme examples: `acme_mixed_air_temp_oob_economizer_diagnostic.py`, `acme_zone_te
 
 Test: **Lint** → **Test rule** in Rule Lab (`POST /api/playground/test-rule`).
 
+**PyPI (portable rules):** helpers and `compile_evaluate` / `sweep_rule` live in `open_fdd.playground` — see [open_fdd_playground_pypi.md](open_fdd_playground_pypi.md). Acme production rules import `from open_fdd.playground.cookbook import …`.
+
 ---
 
 ## Shared helpers

@@ -2,68 +2,24 @@
 
 from __future__ import annotations
 
-import statistics
 from typing import Any
 
 import pandas as pd
 
+from open_fdd.playground.cookbook import (
+    DEFAULT_ROLLING_AVG_MINUTES,
+    DEFAULT_THRESHOLDS_F,
+    ROLLING_AVG_MINUTES_ALLOWED,
+    attach_rolling_avg,
+    cfg_threshold,
+    inject_cookbook_helpers,
+    normalize_rolling_avg_minutes,
+    temp_unit_symbol,
+)
+from open_fdd.playground.rows import timestamp_to_ts_ms
+
 from .data_loader import column_map_for_rule, enrich_rows_with_column_map
 from .timeseries_api import plot_column_name
-
-# Trailing time-mean windows (playground_core / web_lambda parity; 5 & 15 min for BACnet poll grids).
-ROLLING_AVG_MINUTES_ALLOWED = (1, 5, 15)
-DEFAULT_ROLLING_AVG_MINUTES = 5
-
-DEFAULT_THRESHOLDS_F: dict[str, float] = {
-    "flatline_tolerance": 0.10,
-    "max_temp_per_hour": 5.0,
-    "max_temp_per_15min": 2.0,
-    "max_spread": 4.0,
-    "max_spread_15min": 2.5,
-    "max_spread_24h": 12.0,
-    "bounds_low": 65.0,
-    "bounds_high": 80.0,
-    "flatline_window": 18.0,
-    "rolling_window": 6.0,
-    "flatline_tolerance_rh": 1.0,
-    "bounds_low_rh": 20.0,
-    "bounds_high_rh": 70.0,
-}
-
-
-def temp_unit_symbol(cfg: dict[str, Any] | None) -> str:
-    unit = str((cfg or {}).get("temp_unit") or "imperial").lower()
-    return "°C" if unit in {"metric", "c", "celsius"} else "°F"
-
-
-def normalize_rolling_avg_minutes(value: Any) -> int:
-    """Clamp to allowed windows: 1, 5, or 15 minutes."""
-    try:
-        m = int(value)
-    except (TypeError, ValueError):
-        m = DEFAULT_ROLLING_AVG_MINUTES
-    if m not in ROLLING_AVG_MINUTES_ALLOWED:
-        return min(ROLLING_AVG_MINUTES_ALLOWED, key=lambda x: abs(x - m))
-    return m
-
-
-def cfg_threshold(cfg: dict[str, Any] | None, key: str) -> float:
-    cfg = cfg or {}
-    if key in cfg and cfg[key] is not None and str(cfg[key]).strip() != "":
-        return float(cfg[key])
-    return float(DEFAULT_THRESHOLDS_F.get(key, 0.0))
-
-
-def _ts_ms_from_value(raw: Any) -> int | None:
-    if raw is None:
-        return None
-    try:
-        ts = pd.to_datetime(raw, utc=True, errors="coerce")
-        if pd.isna(ts):
-            return None
-        return int(ts.value // 1_000_000)
-    except (TypeError, ValueError):
-        return None
 
 
 def resolve_value_column(rule: dict[str, Any], model: dict[str, Any], site_id: str) -> tuple[str, str]:
@@ -109,41 +65,6 @@ def resolve_value_column(rule: dict[str, Any], model: dict[str, Any], site_id: s
     return "temp", kind
 
 
-def _median_sample_ms(rows: list[dict[str, Any]]) -> int:
-    if len(rows) < 2:
-        return 60_000
-    dts = [
-        int(rows[i]["ts_ms"]) - int(rows[i - 1]["ts_ms"])
-        for i in range(1, len(rows))
-        if int(rows[i]["ts_ms"]) > int(rows[i - 1]["ts_ms"])
-    ]
-    return int(statistics.median(dts)) if dts else 60_000
-
-
-def attach_rolling_avg(rows: list[dict[str, Any]], *, minutes: int = DEFAULT_ROLLING_AVG_MINUTES) -> None:
-    if not rows:
-        return
-    minutes = normalize_rolling_avg_minutes(minutes)
-    window_ms = minutes * 60_000
-    period_ms = _median_sample_ms(rows)
-    j_start = 0
-    for i, row in enumerate(rows):
-        ts = int(row["ts_ms"])
-        cutoff = ts - window_ms
-        while j_start < i and int(rows[j_start]["ts_ms"]) < cutoff:
-            j_start += 1
-        window = rows[j_start : i + 1]
-        vals = [float(r["temp"]) for r in window if r.get("temp") is not None]
-        avg = sum(vals) / len(vals) if vals else row.get("temp")
-        row["temp_rolling_avg"] = avg
-        row["degF_rolling_avg"] = avg
-        row["temp_raw"] = row.get("temp")
-        row["sample_period_ms"] = period_ms
-        row["rolling_avg_minutes"] = minutes
-        row["samples_in_avg"] = len(window)
-        row["rolling_window_ms"] = window_ms
-
-
 def rolling_avg_values_for_column(
     df: pd.DataFrame,
     column: str,
@@ -158,7 +79,7 @@ def rolling_avg_values_for_column(
     prep_rows: list[dict[str, Any]] = []
     index_map: list[int] = []
     for idx, (_, series_row) in enumerate(df.iterrows()):
-        ts_ms = _ts_ms_from_value(series_row.get("timestamp") or series_row.get("ts"))
+        ts_ms = timestamp_to_ts_ms(series_row.get("timestamp") or series_row.get("ts"))
         if ts_ms is None:
             continue
         raw_val = series_row.get(column)
@@ -229,7 +150,7 @@ def prepare_fdd_rows(
         item = series_row.to_dict()
         if "timestamp" in item and hasattr(item["timestamp"], "isoformat"):
             item["timestamp"] = item["timestamp"].isoformat()
-        ts_ms = _ts_ms_from_value(item.get("timestamp") or item.get("ts"))
+        ts_ms = timestamp_to_ts_ms(item.get("timestamp") or item.get("ts"))
         if ts_ms is None:
             continue
         raw_val = item.get(value_col)
@@ -260,5 +181,4 @@ def prepare_fdd_rows(
 
 
 def inject_rule_helpers(globals_dict: dict[str, Any]) -> None:
-    globals_dict["temp_unit_symbol"] = temp_unit_symbol
-    globals_dict["cfg_threshold"] = cfg_threshold
+    inject_cookbook_helpers(globals_dict)

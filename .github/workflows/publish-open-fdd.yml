@@ -52,6 +52,32 @@ jobs:
           /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
           /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
 
+      - name: Verify wheel playground + Acme rule smoke
+        run: |
+          python -m venv /tmp/ofdd-playground-smoke
+          wheel="$(ls -1t dist/*.whl | head -n 1)"
+          /tmp/ofdd-playground-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-playground-smoke/bin/python -c "
+          from open_fdd.playground import compile_evaluate, sweep_rule, cfg_threshold
+          from open_fdd.playground.cookbook import window_rows_1h
+          assert cfg_threshold({}, 'bounds_low') == 65.0
+          code = '''from open_fdd.playground.cookbook import cfg_threshold, temp_unit_symbol
+          def evaluate(row, cfg, prev_row=None, rows=None):
+              v = row.get(\"temp_rolling_avg\") or row.get(\"temp\")
+              if v is None: return False
+              return v > cfg_threshold(cfg, \"bounds_high\")
+          '''
+          rows = [{\"row\": 0, \"ts_ms\": 1, \"ts\": \"t\", \"temp\": 90, \"temp_rolling_avg\": 90}]
+          flags, _ = sweep_rule(code, {\"bounds_high\": 80}, rows, capture_print=False)
+          assert flags[0]
+          "
+          PYTHONPATH=. /tmp/ofdd-playground-smoke/bin/python scripts/validate_acme_rules_pypi.py
+
+      - name: Pytest playground (source tree)
+        run: |
+          python -m pip install pytest
+          python -m pytest open_fdd/tests/playground -q
+
       # PyPI Trusted Publishing (OIDC) — no TWINE_PASSWORD secret required.
       # Configure each PyPI project: Publishing → add GitHub trusted publisher for this workflow file.
       - name: Publish to PyPI

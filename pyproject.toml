@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "open-fdd"
 version = "2.4.0"
-description = "Open-FDD: YAML fault rules on pandas (open_fdd.engine) and optional fault reporting (open_fdd.reports)."
+description = "Open-FDD: YAML engine (open_fdd.engine), portable Python evaluate() sandbox (open_fdd.playground), and optional reports."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -26,7 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas"]
+keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "evaluate", "bacnet"]
 
 dependencies = [
     "pandas",
@@ -63,7 +63,7 @@ Documentation = "https://bbartling.github.io/open-fdd/"
 Repository = "https://github.com/bbartling/open-fdd"
 
 [tool.setuptools.packages.find]
-include = ["open_fdd", "open_fdd.engine*", "open_fdd.schema*", "open_fdd.reports*"]
+include = ["open_fdd", "open_fdd.engine*", "open_fdd.schema*", "open_fdd.reports*", "open_fdd.playground*"]
 
 [tool.black]
 line-length = 88
