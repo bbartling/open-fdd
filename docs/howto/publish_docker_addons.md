@@ -1,13 +1,15 @@
 ---
-title: Publish Docker addons (GHCR) — deferred
-nav_exclude: true
+title: Publish Docker addons (GHCR)
+nav_order: 11
 ---
 
-# Publish Docker addons to GHCR (when ready)
+# Publish Docker addons to GHCR
 
-**Status:** Edge deploy defaults to **`docker compose pull`** from **`ghcr.io/bbartling/`** after you publish a tag. Tar load remains for lab/air-gap (`OPENFDD_DOCKER_PULL_FROM_GHCR=0`).
+Production edges (Acme, Pi) **pull** images from **`ghcr.io/bbartling/`** after you publish a tag. Ansible runs `docker compose pull` on the host — no image tar over SSH unless you opt into the legacy path.
 
-**For AI agents:** Run this only when the operator explicitly asks to publish images or cut an edge release tag. Do not publish on every PR merge.
+**For AI agents:** Publish only when the operator asks to cut an edge release tag. Do not publish on every PR merge.
+
+Branch hygiene and bot PRs: [GitHub branches and release automation](github_branches_and_release.md).
 
 ## Prerequisites
 
@@ -41,16 +43,19 @@ OPENFDD_IMAGE_TAG=2026.06.01-edge ./scripts/docker_publish.sh
 ## After publish — deploy Acme (GHCR pull)
 
 1. GitHub Actions **Publish Docker addons** finishes with your tag (e.g. `2026.06.04-edge`).
-2. Set the same tag in `host_vars/acme_vm_bbartling.yml` (`openfdd_docker_image_tag`) or pass `-e` / `OPENFDD_IMAGE_TAG`.
-3. GHCR packages must be **public**, or set `openfdd_ghcr_token` in host_vars for `docker login` on the edge.
+2. Pin the same tag in `infra/ansible/host_vars/acme_vm_bbartling.yml` (`openfdd_docker_image_tag`) and/or pass `OPENFDD_IMAGE_TAG` on the command line.
+3. Ensure `openfdd_docker_pull_from_ghcr: true` (default via `./deploy.sh docker`).
+4. GHCR packages must be **public**, or set `openfdd_ghcr_token` in host_vars for `docker login` on the edge.
 
 ```bash
 cd infra/ansible
-export SSHPASS='…'   # or secrets/acme.env.local
-OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
+set -a && source secrets/acme.env.local && set +a
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_ollama=false
 ```
 
-Ansible renders `docker-compose.yml` with `ghcr.io/bbartling/openfdd-*:<tag>`, runs **`docker compose pull`**, then **`up -d`**.
+Ansible renders `docker-compose.yml` with `ghcr.io/bbartling/openfdd-*:<tag>`, runs **`docker compose pull`**, then **`up -d`**. Workspace/API files and env still sync from the control machine; only **images** come from GHCR.
+
+**Ops pass** (TTL sync, probes, feather check): same tag — `OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh ops --limit acme_vm_bbartling`.
 
 Legacy tar (no registry):
 
@@ -74,5 +79,5 @@ OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit <host>
 - [ ] `./scripts/build_and_test.sh` green
 - [ ] Choose `OPENFDD_IMAGE_TAG` (semver or date-edge)
 - [ ] Run Actions workflow or local publish
-- [ ] Smoke one host with tar path OR registry pull (when wired)
+- [ ] Smoke one host with `OPENFDD_IMAGE_TAG=… ./deploy.sh docker` (GHCR pull)
 - [ ] Note tag in PR / release notes

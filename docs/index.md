@@ -56,9 +56,9 @@ It should **not** be treated as a substitute for locked-down production credenti
 | Channel | Status |
 |---------|--------|
 | **Operator web app** | This repo — Docker bridge + dashboard ([Getting started](getting_started)) |
-| **Git + Docker tar** | `./scripts/docker_build.sh --save`, Ansible load on edge |
+| **GHCR edge images** | [Publish Docker addons](howto/publish_docker_addons) → `ghcr.io/bbartling/openfdd-*:<tag>` → `OPENFDD_IMAGE_TAG=… ./deploy.sh docker` |
+| **Docker tar (legacy)** | `OPENFDD_DOCKER_PULL_FROM_GHCR=0` + `docker_build.sh --save` — lab / air-gap |
 | **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | `engine`, `playground`, `reports` — [PyPI packages](open_fdd_playground_pypi) (library; not the full edge UI) |
-| **GHCR images** | Coming soon — [Publish Docker addons](howto/publish_docker_addons) |
 
 ---
 

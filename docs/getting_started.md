@@ -40,10 +40,22 @@ cd open-fdd
 
 Details: [System overview](overview). Production push: [Edge deploy (Docker)](edge_deploy_docker).
 
+**Production (GHCR — default):** publish a tag in GitHub Actions, then:
+
 ```bash
-./scripts/docker_build.sh --save
-cd infra/ansible && ./deploy.sh docker --limit acme_vm_bbartling
-./deploy.sh ops --limit acme_vm_bbartling    # sync TTL, SPARQL probe, feather check
+cd infra/ansible
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh ops --limit acme_vm_bbartling
+```
+
+See [Publish Docker addons](howto/publish_docker_addons.md) and [GitHub branches / release](howto/github_branches_and_release.md).
+
+**Lab / air-gap (tar):**
+
+```bash
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=local ./scripts/docker_build.sh --save
+cd infra/ansible
+OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit acme_vm_bbartling
 ```
 
 ---
