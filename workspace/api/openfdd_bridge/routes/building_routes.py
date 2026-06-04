@@ -33,6 +33,7 @@ def building_status() -> dict:
     status = collect_status()
     health = status["model_health"]
     configured = bool(status.get("model_configured"))
+    counts = health.get("counts") if isinstance(health.get("counts"), dict) else {}
     return {
         "ok": True,
         "status": status["status"],
@@ -40,6 +41,12 @@ def building_status() -> dict:
         "model_configured": configured,
         "model_score": health.get("score") if configured else None,
         "model_summary": health.get("summary") if configured else None,
+        "model_counts": {
+            "equipment": counts.get("equipment"),
+            "points": counts.get("points"),
+        }
+        if configured
+        else None,
         "alert_count": len(status["alerts"]),
         "alerts": status["alerts"],
         "fdd_alert_count": status["fdd_alert_count"],

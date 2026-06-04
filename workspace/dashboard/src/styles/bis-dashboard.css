@@ -1,0 +1,656 @@
+/* Building Insight Services — home dashboard (comfort-first layout) */
+
+.home-bis {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.bis-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+:root {
+  --bis-navy: #0e1e35;
+  --bis-navy-2: #1a2842;
+  --bis-orange: #f0651e;
+  --bis-orange-soft: rgba(240, 101, 30, 0.12);
+  --bis-green: #2a9d4e;
+  --bis-green-soft: rgba(42, 157, 78, 0.15);
+  --bis-yellow: #e6a500;
+  --bis-yellow-soft: rgba(230, 165, 0, 0.15);
+  --bis-red: #d94545;
+  --bis-red-soft: rgba(217, 69, 69, 0.12);
+  --bis-card-bg: var(--panel, #fff);
+  --bis-border: var(--border, #e3e7ef);
+  --bis-muted: var(--text-muted, #5a6378);
+}
+
+[data-theme="dark"] {
+  --bis-card-bg: var(--panel);
+  --bis-orange-soft: rgba(240, 101, 30, 0.2);
+  --bis-yellow-soft: rgba(230, 165, 0, 0.18);
+  --bis-red-soft: rgba(217, 69, 69, 0.2);
+  --bis-green-soft: rgba(42, 157, 78, 0.18);
+}
+
+.bis-building-strip {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 20px 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--bis-navy-2) 0%, var(--bis-navy) 100%);
+  color: #e8edf5;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 1100px) {
+  .bis-building-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.bis-b-name {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.bis-b-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bis-orange);
+  background: var(--bis-orange-soft);
+  border: 1px solid rgba(240, 101, 30, 0.35);
+}
+
+.bis-b-name h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.bis-b-name p {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  color: #a8b3cb;
+}
+
+.bis-b-stat .label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a8b3cb;
+}
+
+.bis-b-stat .value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.bis-b-stat .sub {
+  font-size: 0.68rem;
+  color: #8892a6;
+  margin-top: 2px;
+}
+
+.bis-warn-value {
+  color: #ff9a6b;
+}
+
+.bis-live-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bis-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+  animation: bis-pulse 2s infinite;
+}
+
+@keyframes bis-pulse {
+  70% {
+    box-shadow: 0 0 0 8px rgba(74, 222, 128, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0);
+  }
+}
+
+.bis-row {
+  display: grid;
+  gap: 20px;
+}
+
+.bis-row-2 {
+  grid-template-columns: 1.55fr 1fr;
+}
+
+.bis-row-mt {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .bis-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bis-card {
+  background: var(--bis-card-bg);
+  border: 1px solid var(--bis-border);
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 1px 3px rgba(14, 30, 53, 0.04);
+}
+
+.bis-health-card {
+  background: linear-gradient(180deg, var(--bis-card-bg) 0%, var(--panel-soft, #f7f9fc) 100%);
+}
+
+.bis-card h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bis-muted);
+}
+
+.bis-card h2 {
+  margin: 4px 0 12px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.bis-card-sub {
+  margin: -6px 0 14px;
+  font-size: 0.8rem;
+  color: var(--bis-muted);
+}
+
+.bis-card-head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.bis-hint {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--bis-muted);
+}
+
+.bis-overall-pill {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 18px;
+  border: 1px solid var(--bis-border);
+}
+
+.bis-pill-ok {
+  background: var(--bis-green-soft);
+  border-color: rgba(42, 157, 78, 0.35);
+}
+
+.bis-pill-warning {
+  background: var(--bis-yellow-soft);
+  border-color: rgba(230, 165, 0, 0.4);
+}
+
+.bis-pill-critical {
+  background: var(--bis-red-soft);
+  border-color: rgba(217, 69, 69, 0.35);
+}
+
+.bis-pill-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bis-yellow);
+}
+
+.bis-pill-ok .bis-pill-dot {
+  background: var(--bis-green);
+}
+
+.bis-pill-critical .bis-pill-dot {
+  background: var(--bis-red);
+}
+
+.bis-pill-txt {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  flex: 1;
+}
+
+.bis-pill-grade {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--bis-yellow);
+}
+
+.bis-pill-ok .bis-pill-grade {
+  color: var(--bis-green);
+}
+
+.bis-pill-critical .bis-pill-grade {
+  color: var(--bis-red);
+}
+
+.bis-gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 700px) {
+  .bis-gauge-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.bis-gauge {
+  text-align: center;
+  padding: 12px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--bis-border);
+  background: var(--bis-card-bg);
+}
+
+.bis-gauge-ring {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  margin: 0 auto;
+}
+
+.bis-ring-bg {
+  stroke: var(--panel-soft, #eef1f6);
+}
+
+.bis-gauge-score {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.bis-gauge-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bis-muted);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.bis-gauge-delta {
+  font-size: 0.65rem;
+  color: var(--bis-muted);
+  margin-top: 2px;
+}
+
+.bis-insight-one-liner {
+  margin: 16px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--bis-muted);
+}
+
+.bis-lead {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.bis-muted-line {
+  font-size: 0.85rem;
+  color: var(--bis-muted);
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.bis-ok-text {
+  color: var(--bis-green);
+}
+
+.bis-zone-table-wrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.bis-zone-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.bis-zone-table th,
+.bis-zone-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--bis-border);
+}
+
+.bis-zone-table th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--bis-muted);
+  font-weight: 600;
+}
+
+.bis-opp-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bis-opp-list li {
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.bis-opp-list strong {
+  display: block;
+  text-transform: capitalize;
+}
+
+.bis-fault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bis-fault {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--bis-border);
+  border-left-width: 5px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  background: var(--bis-card-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.bis-fault:hover {
+  box-shadow: 0 4px 14px rgba(14, 30, 53, 0.08);
+  transform: translateY(-1px);
+}
+
+.bis-fault-critical {
+  border-left-color: var(--bis-red);
+}
+
+.bis-fault-high {
+  border-left-color: var(--bis-orange);
+}
+
+.bis-fault-medium {
+  border-left-color: var(--bis-yellow);
+}
+
+.bis-fault-info {
+  border-left-color: var(--bis-muted);
+}
+
+.bis-fault-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.bis-severity-pill {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.bis-sev-critical {
+  background: var(--bis-red-soft);
+  color: var(--bis-red);
+}
+
+.bis-sev-high {
+  background: var(--bis-orange-soft);
+  color: var(--bis-orange);
+}
+
+.bis-sev-medium {
+  background: var(--bis-yellow-soft);
+  color: #a87a00;
+}
+
+.bis-sev-info {
+  background: var(--panel-soft);
+  color: var(--bis-muted);
+}
+
+.bis-fault-eq {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--bis-muted);
+}
+
+.bis-fault-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.bis-fault-desc {
+  font-size: 0.82rem;
+  color: var(--bis-muted);
+  line-height: 1.45;
+}
+
+.bis-fault-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 0.75rem;
+}
+
+.bis-fault-meta strong {
+  margin-right: 4px;
+}
+
+.bis-fault-meta-label {
+  color: var(--bis-muted);
+  margin-left: 4px;
+}
+
+.bis-linked-faults {
+  margin: 10px 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.bis-code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--bis-orange);
+}
+
+.bis-foot-meta {
+  font-size: 0.78rem;
+  color: var(--bis-muted);
+  margin: 14px 0 0;
+}
+
+.bis-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  border: none;
+}
+
+.bis-btn-primary {
+  background: var(--bis-orange);
+  color: #fff;
+}
+
+.bis-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.bis-btn-secondary {
+  background: var(--panel-soft);
+  color: inherit;
+  border: 1px solid var(--bis-border);
+}
+
+.bis-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 30, 53, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.bis-modal {
+  background: var(--bis-card-bg);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(14, 30, 53, 0.25);
+}
+
+.bis-modal-head {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--bis-border);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bis-modal-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.bis-modal-head h2 {
+  margin: 4px 0 6px;
+  font-size: 1.1rem;
+}
+
+.bis-modal-eq {
+  font-size: 0.75rem;
+  color: var(--bis-muted);
+}
+
+.bis-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--bis-muted);
+  line-height: 1;
+}
+
+.bis-modal-body {
+  padding: 20px 22px;
+}
+
+.bis-modal-section {
+  margin-bottom: 18px;
+}
+
+.bis-modal-section h4 {
+  margin: 0 0 8px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--bis-muted);
+  font-weight: 600;
+}
+
+.bis-modal-section p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.bis-modal-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.bis-technical {
+  background: var(--panel-soft);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  border-left: 3px solid var(--bis-muted);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.bis-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.bis-meta-grid dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--bis-muted);
+}
+
+.bis-meta-grid dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.bis-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}

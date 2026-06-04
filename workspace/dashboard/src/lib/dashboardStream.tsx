@@ -46,6 +46,9 @@ export type FaultAlert = {
   code?: string;
   rule_id?: string;
   rule_name?: string;
+  equipment_id?: string;
+  equipment_name?: string;
+  equipment_family?: string;
   analytics?: FaultAnalytics;
 };
 

@@ -1,11 +1,9 @@
-import BuildingCheckEngine from "../components/BuildingCheckEngine";
-import HomeBuildingInsight from "../components/HomeBuildingInsight";
+import BuildingInsightDashboard from "../components/BuildingInsightDashboard";
 
 export default function HomePage() {
   return (
-    <div className="home-check-engine">
-      <BuildingCheckEngine />
-      <HomeBuildingInsight />
+    <div className="home-bis">
+      <BuildingInsightDashboard />
     </div>
   );
 }

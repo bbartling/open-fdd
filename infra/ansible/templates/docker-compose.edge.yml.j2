@@ -10,6 +10,7 @@ services:
       - "127.0.0.1:{{ openfdd_bridge_port }}:8765"
     volumes:
       - {{ openfdd_remote_dir }}/workspace:/var/openfdd/workspace
+      - {{ openfdd_remote_dir }}/workspace/api:/app/workspace/api:ro
 {% if openfdd_docker_bridge_secret | default(true) | bool %}
       - /etc/openfdd/bridge.secret.env:/etc/openfdd/bridge.secret.env:ro
 {% endif %}
