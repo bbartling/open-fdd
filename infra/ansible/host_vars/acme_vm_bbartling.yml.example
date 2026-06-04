@@ -9,8 +9,9 @@ building_id: vm-bbartling
 edge_model_json: acme_vm-bbartling_gl36_model.json
 openfdd_docker_stack: true
 
+# BACnet Device instance (Who-Is / bind). Change only if the OT network requires a fixed ID.
 bacnet_instance_id: 3456791
-bacnet_device_name: OpenFddVmBbartling
+bacnet_device_name: OpenFDD
 # Dedicated OT NIC — not Tailscale
 bacnet_bind_address: "10.200.200.185/24:47808"
 bacnet_commission_network_host: true

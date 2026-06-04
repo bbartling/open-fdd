@@ -34,6 +34,7 @@ from bacnet_toolshed.models import (
     SingleReadRequest,
     WritePropertyRequest,
 )
+from bacnet_toolshed.fdd_fault_count import active_fdd_fault_count
 from bacnet_toolshed.server_points import (
     install_openfdd_server_points,
     server_points_snapshot,
@@ -130,7 +131,7 @@ def _discover_cmd(cfg: dict[str, str], output: Path) -> list[str]:
         "--building-id",
         cfg.get("BUILDING_ID", "building"),
         "--name",
-        cfg.get("BACNET_NAME", "OpenFddEdge"),
+        cfg.get("BACNET_NAME", "OpenFDD"),
         "--instance",
         cfg.get("BACNET_INSTANCE", "599999"),
         "--address",
@@ -541,9 +542,11 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                         poll_rows = sum(1 for _ in csv.DictReader(fh))
                 except OSError:
                     poll_rows = 0
+            fault_count = active_fdd_fault_count(repo_root())
             update_openfdd_server_points(
                 poll_rows=poll_rows,
                 devices_discovered=devices_discovered,
+                active_fault_count=fault_count,
                 commission_ok=True,
                 bridge_ok=True,
             )
@@ -555,7 +558,7 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                     "building_id": cfg.get("BUILDING_ID"),
                     "bacnet_bind": cfg.get("BACNET_BIND"),
                     "bacnet_instance": cfg.get("BACNET_INSTANCE", "599999"),
-                    "bacnet_name": cfg.get("BACNET_NAME", "OpenFddEdge"),
+                    "bacnet_name": cfg.get("BACNET_NAME", "OpenFDD"),
                     "server_points": server_points_snapshot(),
                     "discover_range": [
                         cfg.get("DISCOVER_LOW", "1"),

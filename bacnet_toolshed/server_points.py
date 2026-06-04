@@ -44,6 +44,14 @@ OPENFDD_SERVER_POINT_SPECS: tuple[dict[str, Any], ...] = (
         "units": EngineeringUnits.noUnits,
         "description": "Unique devices in points_discovered.csv",
     },
+    {
+        "name": "openfdd-active-fault-count",
+        "kind": "analogValue",
+        "instance": 9003,
+        "present_value": 0.0,
+        "units": EngineeringUnits.noUnits,
+        "description": "Active FDD rules with flagged samples (fdd_results.json)",
+    },
 )
 
 point_map: dict[str, Any] = {}
@@ -98,6 +106,7 @@ def update_openfdd_server_points(
     *,
     poll_rows: int | None = None,
     devices_discovered: int | None = None,
+    active_fault_count: int | None = None,
     commission_ok: bool | None = None,
     bridge_ok: bool | None = None,
 ) -> None:
@@ -106,6 +115,8 @@ def update_openfdd_server_points(
         point_map["openfdd-poll-sample-count"].presentValue = Real(float(poll_rows))
     if "openfdd-devices-discovered" in point_map and devices_discovered is not None:
         point_map["openfdd-devices-discovered"].presentValue = Real(float(devices_discovered))
+    if "openfdd-active-fault-count" in point_map and active_fault_count is not None:
+        point_map["openfdd-active-fault-count"].presentValue = Real(float(max(0, active_fault_count)))
     if "openfdd-commission-agent" in point_map and commission_ok is not None:
         point_map["openfdd-commission-agent"].presentValue = _binary_present(commission_ok)
     if "openfdd-edge-online" in point_map and bridge_ok is not None:

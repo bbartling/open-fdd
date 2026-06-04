@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from bacnet_toolshed.device_identity import apply_device_identity_defaults
 from bacnet_toolshed.nic_bind import resolve_bacnet_bind
 
 
 def bacnet_argv_from_cfg(cfg: dict[str, str]) -> list[str]:
     """Argv for BACpypes3 Application.from_args — no discover-only flags."""
+    cfg = apply_device_identity_defaults(cfg)
     bind = resolve_bacnet_bind(cfg.get("BACNET_BIND"))
-    name = cfg.get("BACNET_NAME", "OpenFddEdge").strip() or "OpenFddEdge"
-    instance = str(cfg.get("BACNET_INSTANCE", "599999")).strip() or "599999"
+    name = cfg["BACNET_NAME"]
+    instance = cfg["BACNET_INSTANCE"]
     argv = [
         "--name",
         name,

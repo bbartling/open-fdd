@@ -146,6 +146,6 @@ def resolve_commission_cfg(cfg: dict[str, str]) -> dict[str, str]:
     """Apply bind + name defaults in-place on a commission config dict."""
     out = dict(cfg)
     out["BACNET_BIND"] = resolve_bacnet_bind(out.get("BACNET_BIND"))
-    out.setdefault("BACNET_NAME", "OpenFddEdge")
-    out.setdefault("BACNET_INSTANCE", "599999")
-    return out
+    from bacnet_toolshed.device_identity import apply_device_identity_defaults
+
+    return apply_device_identity_defaults(out)
