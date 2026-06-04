@@ -14,7 +14,7 @@ Three layers on a field host (today: **Ubuntu + Docker CE**; future: thin image 
 | **Supervisor** | `supervisor/` | Manifest, compose contracts, health — `./scripts/openfdd_stack.sh` |
 | **Apps** | `docker/` images | bridge, commission, poll, mcp-rag |
 | **State** | `workspace/` | Feather, rules, BRICK model, BACnet config (bind-mounted) |
-| **Deploy** | `infra/ansible/` | Image tar + workspace sync — `deploy.sh docker` |
+| **Deploy** | `infra/ansible/` | GHCR `compose pull` + workspace sync — `deploy.sh docker` (tar optional) |
 
 ```text
   [Caddy :80]
