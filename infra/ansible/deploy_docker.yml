@@ -275,6 +275,17 @@
         dest: "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning/commission.env"
         mode: "0644"
 
+    - name: Sync workspace/api for Docker bridge mount (required after fresh edge wipe)
+      tags: [docker, config]
+      ansible.builtin.synchronize:
+        src: "{{ playbook_dir }}/../../workspace/api/"
+        dest: "{{ openfdd_remote_dir }}/workspace/api/"
+        delete: false
+        rsync_opts:
+          - "--exclude=__pycache__"
+          - "--exclude=.pytest_cache"
+          - "--exclude=*.pyc"
+
     - name: Ensure /etc/openfdd exists on edge
       tags: [config]
       ansible.builtin.file:
