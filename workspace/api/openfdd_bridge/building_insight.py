@@ -69,7 +69,7 @@ def _compact_context(status: dict[str, Any], zone_snapshot: dict[str, Any] | Non
     stack = status.get("stack") or {}
     services = []
     if isinstance(stack, dict):
-        for svc in stack.get("services") or []:
+        for svc in (stack.get("services") or [])[:8]:
             if isinstance(svc, dict):
                 services.append(
                     {
@@ -108,8 +108,14 @@ def _compact_context(status: dict[str, Any], zone_snapshot: dict[str, Any] | Non
         "stack_services": services,
     }
     if zone_snapshot:
-        payload["zone_temps"] = slim_zone_for_llm(zone_snapshot)
-    return json.dumps(payload, separators=(",", ":"))[:4500]
+        payload["zone_temps"] = slim_zone_for_llm(
+            zone_snapshot,
+            max_zones=8,
+            max_systems=3,
+            max_zones_per_system=6,
+            max_struggling=4,
+        )
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def _ollama_sentence(context: str) -> tuple[str, str]:

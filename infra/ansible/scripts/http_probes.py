@@ -619,8 +619,7 @@ def main() -> int:
                     result["warnings"].extend(chat.get("warnings", []))
                 probe_site = site_id
                 if not probe_site or probe_site == "demo":
-                    sites = check_model_api(base, login["token"])
-                    probe_site = str(sites.get("active_site_id") or site_id or "demo")
+                    probe_site = str(model.get("active_site_id") or site_id or "demo")
                 ui = check_integrator_ui_api(base, login["token"], site_id=probe_site)
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
