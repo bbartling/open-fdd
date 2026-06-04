@@ -1938,21 +1938,27 @@ pytest open_fdd/tests/playground -q
 
 # PyPI releases (`open-fdd`)
 
-**Canonical public install for the 2.x rules engine:**
+**One PyPI project** — canonical install:
 
 ```bash
 pip install open-fdd
 ```
 
-That distribution ships **`open_fdd.engine`** (`RuleRunner`, YAML rules, same stack as the platform FDD loop). **Why does PyPI “Release history” mix `0.1.x` and `2.x`?** That is still **one** project, **`open-fdd`**: older **0.1.x** uploads were the legacy, hard-coded pandas era; **2.x** is the current config-driven engine + platform-capable tree. Pip resolves the latest **2.x** unless you pin an old version.
+That wheel ships:
 
----
+| Module | Role |
+|--------|------|
+| **`open_fdd.engine`** | YAML **`RuleRunner`** on pandas (PyYAML + Pydantic in core deps) |
+| **`open_fdd.playground`** | Portable **`evaluate(row, cfg, …)`** sandbox (Rule Lab / lambda style) |
+| **`open_fdd.reports`** | Optional — `pip install "open-fdd[reports]"` |
 
-## `openfdd-engine` (optional second PyPI name)
+**`pip install "open-fdd[engine]"`** still works (empty extra; engine deps are in the base install since 2.4.x).
 
-The repo also contains **`packages/openfdd-engine/`** (import name **`openfdd_engine`**): a thin re-export that **depends on `open-fdd`**. Its **`version` is kept the same as `open-fdd` 2.x** (e.g. both `2.0.13`) so release numbers stay easy to reason about, even though it is a **separate** PyPI project name.
+**Why does PyPI “Release history” mix `0.1.x` and `2.x`?** Still **one** project: **0.1.x** was the legacy era; **2.x** is the current tree. Pip resolves latest **2.x** unless pinned.
 
-Publishing uses **`.github/workflows/publish-openfdd-engine.yml`**: push tag **`openfdd-engine-vX.Y.Z`** after the **`openfdd-engine`** PyPI project has a **trusted publisher** for that workflow (same OIDC idea as `open-fdd`). **`workflow_dispatch`** builds only; upload runs on matching tags.
+**CI:** only **`.github/workflows/publish-open-fdd.yml`** — tag **`open-fdd-vX.Y.Z`** to upload. No separate `openfdd-engine` publish workflow.
+
+The repo folder **`packages/openfdd-engine/`** is a **deprecated local shim** (`import openfdd_engine`); do not publish it to PyPI on new releases.
 
 ---
 
@@ -1968,8 +1974,8 @@ curl -s https://pypi.org/pypi/open-fdd/json | python3 -c "import sys, json; prin
 
 ## 1) Before a release of `open-fdd`
 
-1. **Version** — Root **`pyproject.toml`** → `[project] version` (e.g. `2.0.11`).
-2. **`openfdd-engine`** — Bump **`packages/openfdd-engine/pyproject.toml`** `version` to the **same `X.Y.Z`** as `open-fdd`, and set **`open-fdd>=X.Y.Z`** in dependencies. Tag **`openfdd-engine-vX.Y.Z`** if you publish that project.
+1. **Version** — Root **`pyproject.toml`** → `[project] version` (e.g. `2.4.1`).
+2. **Tests** — `pytest open_fdd/tests` green; optional `workflow_dispatch` on **Publish open-fdd** for a dry run before tagging.
 
 ### Transition checklist (legacy 0.1.x → 2.x on PyPI)
 
@@ -2034,20 +2040,12 @@ git push origin open-fdd-v2.0.11
 
 ---
 
-## 3) Publish `openfdd-engine` (second PyPI project)
-
-1. Create project **`openfdd-engine`** on PyPI (if it does not exist).
-2. Add a **trusted publisher** pointing at workflow **`publish-openfdd-engine.yml`** (same repository as `open-fdd`).
-3. Tag **`openfdd-engine-vX.Y.Z`** (same numbers as **`open-fdd-vX.Y.Z`**) and push — only after PyPI is configured, or OIDC fails with `invalid-publisher`.
-
----
-
 ## Scope policy
 
-- **PyPI** ships the **Python packages** (**`open-fdd`** is the supported public name for 2.x).
-- This repository is the **rules engine** only — YAML rules, **`RuleRunner`**, and **`column_map`** on pandas.
+- **PyPI** = **`open-fdd`** only (engine + playground in one wheel).
+- **GHCR** = edge operator images (`openfdd-bridge`, etc.) — separate workflow; see [Publish Docker addons](publish_docker_addons.md).
 
-See also: [Engine-only deployment and external IoT pipelines](engine_only_iot).
+See also: [PyPI playground](open_fdd_playground_pypi.md), [Engine-only deployment and external IoT pipelines](engine_only_iot).
 
 
 # Engine-only deployment and external IoT pipelines
@@ -2120,72 +2118,6 @@ pip install -e ".[dev]"
 For package layout, see [Modular architecture](../modular_architecture).
 
 
-# The optional openfdd-engine package
-
-# The optional `openfdd-engine` package (`openfdd_engine`)
-
-Open-FDD has **one rules implementation**: YAML files evaluated on **pandas** via **`RuleRunner`** in **`open_fdd.engine`**. The **`packages/openfdd-engine/`** tree (PyPI name **`openfdd-engine`**, import **`openfdd_engine`**) is a **thin re-export** of selected symbols from **`open_fdd.engine`** — useful when procurement or legacy imports expect the **`openfdd_engine`** package name.
-
----
-
-## Re-exports only
-
-**`openfdd_engine` does not duplicate engine logic.** Its **`__init__.py`** imports from **`open_fdd.engine`** and lists them in **`__all__`**. New public APIs belong in **`open_fdd.engine`** first; the shim gains them through re-export.
-
-- **Versioning:** **`open-fdd`** on PyPI is authoritative; **`openfdd-engine`** pins **`open-fdd>=…`** when published.
-
----
-
-## Mental model
-
-| Layer | What it is | Typical import |
-|-------|------------|----------------|
-| **Core engine** | Loads YAML rules, runs checks on a `DataFrame` | `from open_fdd.engine.runner import RuleRunner` |
-| **Optional shim** | Same classes, different package name | `from openfdd_engine import RuleRunner` |
-
----
-
-## When to use `pip install open-fdd` vs `openfdd-engine`
-
-**Default:**
-
-```bash
-pip install open-fdd
-```
-
-```python
-from open_fdd.engine.runner import RuleRunner, load_rule, load_rules_from_dir
-from open_fdd.engine.column_map_resolver import load_column_map_manifest
-```
-
-**Optional `openfdd-engine`** — only if you need the separate PyPI project or editable shim:
-
-```bash
-cd packages/openfdd-engine
-pip install -e .
-```
-
-See [PyPI releases (`open-fdd`)](openfdd_engine_pypi).
-
----
-
-## Summary
-
-| Goal | Install | Import |
-|------|---------|--------|
-| Normal use | `pip install open-fdd` | `open_fdd.engine.*` |
-| Optional second package | published `openfdd-engine` or editable shim | `openfdd_engine.*` |
-
----
-
-## See also
-
-- [Engine-only deployment and external IoT pipelines](engine_only_iot)
-- [Modular architecture](../modular_architecture)
-- [Expression rule cookbook](../expression_rule_cookbook)
-- `packages/openfdd-engine/README.md`
-
-
 # Mode-aware runbooks
 
 # Mode-aware runbooks
@@ -2224,7 +2156,7 @@ On every PR and push to **`main`**, **`master`**, or **`develop`**:
 1. Install **`pip install -e ".[dev]"`**
 2. Build combined docs text (`python scripts/build_docs_pdf.py --no-pdf`) for consistency checks
 3. Run **`pytest`** on `open_fdd/tests`
-4. Dry-run **`python -m build`** + **`twine check`** for **`open-fdd`** and **`packages/openfdd-engine`**
+4. Dry-run **`python -m build`** + **`twine check`** for **`open-fdd`** (engine + playground in one wheel)
 
 ---
 
@@ -3291,8 +3223,8 @@ The **front-runner product** is the **operator web app** in this repo: Docker br
 **PyPI** ships library wheels for notebooks, CI, AWS lambda, and offline CSV work:
 
 ```bash
-pip install open-fdd
-pip install "open-fdd[engine]"   # YAML RuleRunner (pyyaml, pydantic)
+pip install open-fdd             # engine (YAML RuleRunner) + playground
+pip install "open-fdd[engine]"   # same as base since 2.4.x (alias)
 pip install "open-fdd[reports]"  # matplotlib summaries (optional)
 ```
 
@@ -3391,8 +3323,7 @@ See [Fault rules (engine)](rules/) and [YAML expression cookbook](expression_rul
 
 | Package | PyPI |
 |---------|------|
-| `open-fdd` | [open-fdd](https://pypi.org/project/open-fdd/) |
-| `openfdd-engine` | Thin re-export of `open_fdd.engine` (tag `openfdd-engine-v*`) |
+| `open-fdd` | [open-fdd](https://pypi.org/project/open-fdd/) — engine + playground (tag `open-fdd-v*`) |
 
 Docker images (`openfdd-bridge`, commission, MCP) are built from this repo — see [Publish Docker addons](howto/publish_docker_addons).
 
