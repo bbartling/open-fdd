@@ -30,13 +30,13 @@ keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "
 
 dependencies = [
     "pandas",
-]
-
-[project.optional-dependencies]
-engine = [
     "pyyaml",
     "pydantic>=2.4,<3",
 ]
+
+[project.optional-dependencies]
+# Back-compat alias; engine deps are in core dependencies since 2.4.x.
+engine = []
 reports = [
     "matplotlib",
 ]

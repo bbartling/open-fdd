@@ -56,15 +56,8 @@ jobs:
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; import open_fdd; assert open_fdd.__version__"
-
-      - name: Build openfdd-engine package (dry run)
-        working-directory: packages/openfdd-engine
-        run: |
-          python -m pip install build==1.2.2 twine==6.1.0
-          python -m build
-          twine check dist/*
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; from open_fdd.playground import compile_evaluate; import open_fdd; assert open_fdd.__version__"
 
   agent-shell:
     runs-on: ubuntu-latest
