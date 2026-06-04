@@ -24,7 +24,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+if [[ "${SSH_STRICT_MODE:-}" == "0" ]]; then
+  SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+else
+  SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
+fi
 
 PACK="${ROOT}/edge_backup/local/${SITE}/${BLDG}"
 DISC="${PACK}/points_discovered.csv"
@@ -53,7 +57,9 @@ REMOTE_DIR="${OPENFDD_REMOTE_DIR:-/home/ben/open-fdd}"
 
 echo "Copying BACnet inventory to ${REMOTE}..."
 scp "${SSH_OPTS[@]}" "$DISC" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points_discovered.csv"
-[[ -f "$PTS" ]] && scp "${SSH_OPTS[@]}" "$PTS" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points.csv" || true
+if [[ -f "$PTS" ]]; then
+  scp "${SSH_OPTS[@]}" "$PTS" "${REMOTE}:${REMOTE_DIR}/workspace/bacnet/commissioning/points.csv"
+fi
 
 echo "Restarting bridge + commission containers..."
 ssh "${SSH_OPTS[@]}" "$REMOTE" "cd ${REMOTE_DIR} && docker compose -f docker/compose.edge.yml restart bridge commission 2>/dev/null || docker compose restart bridge commission"

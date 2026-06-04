@@ -53,20 +53,21 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _validate_points_csv(path: Path, ref: SitePackRef) -> list[str]:
+def _validate_points_csv(path: Path, ref: SitePackRef, *, label: str | None = None) -> list[str]:
     import csv
 
     errors: list[str] = []
     if not path.is_file():
         return errors
+    name = label or path.name
     with path.open(newline="", encoding="utf-8") as f:
         for i, row in enumerate(csv.DictReader(f), start=2):
             sid = str(row.get("site_id") or "").strip()
             bid = str(row.get("building_id") or "").strip()
             if sid and sid != ref.site_id:
-                errors.append(f"points.csv line {i}: site_id={sid!r} expected {ref.site_id!r}")
+                errors.append(f"{name} line {i}: site_id={sid!r} expected {ref.site_id!r}")
             if bid and bid != ref.building_id:
-                errors.append(f"points.csv line {i}: building_id={bid!r} expected {ref.building_id!r}")
+                errors.append(f"{name} line {i}: building_id={bid!r} expected {ref.building_id!r}")
     return errors
 
 
@@ -107,7 +108,7 @@ def validate_pack(ref: SitePackRef, pack_root: Path, *, forbid_acme_rules: bool 
         errors.extend(_validate_model(_read_json(model_path), ref))
     points_path = pack_root / "points.csv"
     errors.extend(_validate_points_csv(points_path, ref))
-    errors.extend(_validate_points_csv(pack_root / "points_discovered.csv", ref))
+    errors.extend(_validate_points_csv(pack_root / "points_discovered.csv", ref, label="points_discovered.csv"))
     profiles = pack_root / "device_poll_profiles.csv"
     if profiles.is_file():
         import csv

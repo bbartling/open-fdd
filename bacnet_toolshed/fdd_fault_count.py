@@ -25,6 +25,11 @@ def active_fdd_fault_count(repo_root: Path) -> int:
         if run.get("status") == "error":
             count += 1
             continue
-        if int(run.get("flagged") or 0) > 0:
+        flagged_raw = run.get("flagged")
+        try:
+            flagged_n = int(flagged_raw) if flagged_raw is not None and str(flagged_raw).strip() != "" else 0
+        except (TypeError, ValueError):
+            flagged_n = 0
+        if flagged_n > 0:
             count += 1
     return count

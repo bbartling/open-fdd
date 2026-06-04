@@ -93,7 +93,8 @@ def _point_health(
     work = frame.loc[:, ["timestamp", column]].copy()
     work["timestamp"] = pd.to_datetime(work["timestamp"], utc=True, errors="coerce")
     work = work.dropna(subset=["timestamp"]).sort_values("timestamp")
-    valid = work["timestamp"].notna()
+    has_value = work[column].notna()
+    valid = work["timestamp"].notna() & has_value
     samples = int(len(work))
     valid_n = int(valid.sum())
     valid_ratio = round(valid_n / samples, 3) if samples else 0.0

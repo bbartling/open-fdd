@@ -96,7 +96,10 @@ export function useModelScope(initialSiteId?: string, brickTypeFilter?: string):
         if (res.sites?.length) setSites(res.sites);
         setSiteBootstrapped(true);
       })
-      .catch(() => setSiteBootstrapped(true));
+      .catch((err) => {
+        setError(formatApiError(err));
+        setSiteBootstrapped(true);
+      });
     return () => {
       cancelled = true;
     };

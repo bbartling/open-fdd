@@ -454,8 +454,17 @@ def _internal_ingest_client_allowed(request: Request) -> bool:
     host = (request.client.host if request.client else "").strip()
     if host in {"127.0.0.1", "::1"}:
         return True
-    # Same-host Docker publish / LAN edge — not exposed on WAN when Caddy only fronts :80
-    return host.startswith(("172.", "10.", "192.168."))
+    if host.startswith(("10.", "192.168.")):
+        return True
+    if host.startswith("172."):
+        parts = host.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+                return 16 <= second <= 31
+            except ValueError:
+                return False
+    return False
 
 
 def _run_ingest_background() -> None:
@@ -475,6 +484,8 @@ def _run_ingest_background() -> None:
 def internal_ingest_poll_samples(request: Request) -> dict:
     if not _internal_ingest_client_allowed(request):
         raise HTTPException(status_code=403, detail="localhost only")
+    if _ingest_lock.locked():
+        return {"ok": True, "queued": False, "reason": "ingest already running"}
     threading.Thread(target=_run_ingest_background, name="bacnet-ingest", daemon=True).start()
     return {"ok": True, "queued": True}
 

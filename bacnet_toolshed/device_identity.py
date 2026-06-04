@@ -35,12 +35,14 @@ def normalize_bacnet_instance_id(raw: str | int | None) -> int:
 
 def device_name_from_cfg(cfg: dict[str, str]) -> str:
     env = os.environ.get("OFDD_BACNET_DEVICE_NAME", "").strip()
-    return normalize_bacnet_device_name(cfg.get("BACNET_NAME") or env or None)
+    raw = env or str(cfg.get("BACNET_NAME") or "").strip() or None
+    return normalize_bacnet_device_name(raw)
 
 
 def instance_id_from_cfg(cfg: dict[str, str]) -> int:
     env = os.environ.get("OFDD_BACNET_INSTANCE", "").strip()
-    return normalize_bacnet_instance_id(cfg.get("BACNET_INSTANCE") or env or None)
+    raw = env or str(cfg.get("BACNET_INSTANCE") or "").strip() or None
+    return normalize_bacnet_instance_id(raw)
 
 
 def apply_device_identity_defaults(cfg: dict[str, str]) -> dict[str, str]:

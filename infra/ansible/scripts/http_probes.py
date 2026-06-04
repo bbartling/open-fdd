@@ -858,7 +858,11 @@ def main() -> int:
                         )
                     result["agent_chat"] = chat
                     for chat_err in chat.get("errors", []):
-                        result["warnings"].append(f"agent chat probe: {chat_err}")
+                        low = str(chat_err).lower()
+                        if any(x in low for x in ("timeout", "timed out", "slow", "ollama")):
+                            result["warnings"].append(f"agent chat probe: {chat_err}")
+                        else:
+                            result["errors"].append(f"agent chat probe: {chat_err}")
                     result["warnings"].extend(chat.get("warnings", []))
                 probe_site = site_id
                 if not probe_site or probe_site == "demo":

@@ -8,7 +8,11 @@ export function formatPollSampleAt(
     if (!Number.isNaN(d.getTime())) {
       const opts: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "medium" };
       if (poll.site_timezone) {
-        return d.toLocaleString(undefined, { ...opts, timeZone: poll.site_timezone });
+        try {
+          return d.toLocaleString(undefined, { ...opts, timeZone: poll.site_timezone });
+        } catch {
+          return d.toLocaleString(undefined, opts);
+        }
       }
       return d.toLocaleString(undefined, opts);
     }
