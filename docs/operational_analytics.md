@@ -52,6 +52,30 @@ If Ollama is down, the deterministic sentence still includes zone + poll summari
 
 Agent tools: `building.zone_temps`, `building.device_health`, `building.operational_brief`.
 
+## BRICK + fault catalog (Ollama interlink)
+
+Building insight and Agent chat inject a compact **BRICK** snapshot (`brick_model`: equipment, `feeds_chains`, sensors by type) and **fault catalog** entries for every active alert code (official description, likely causes, suggested checks).
+
+| Surface | BRICK / faults |
+|---------|----------------|
+| Home **Building insight** | Ollama uses `fault_catalog` + `faults_linked` + `brick_model.feeds_chains` in the JSON context |
+| **Agent** tab chat | Same snapshot in the system prompt each turn; use **tools** for live queries |
+| `GET /openfdd-agent/context` | `brick_model`, `api_query_guide`, `read_only_tools` |
+
+### Read-only agent tools (operator+)
+
+| Tool | Purpose |
+|------|---------|
+| `model.graph` | SPARQL site graph — AHU→VAV feeds, sensors |
+| `model.scope` | Sensors + historian columns for one equipment |
+| `timeseries.snapshot` | Feather mean/min/max/last for columns |
+| `faults.lookup` | Full catalog entry for one code |
+| `building.operational_brief` | Full analytics JSON |
+
+`POST /openfdd-agent/tool` with Bearer token: `{"tool":"model.graph","args":{"site_id":"acme"}}`.
+
+REST equivalents: `GET /api/model/graph`, `GET /api/timeseries/readings` (see `api_query_guide` in operational-brief).
+
 ## Environment levers
 
 | Variable | Default | Role |

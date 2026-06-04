@@ -21,6 +21,14 @@ type InsightResponse = {
     device_poll_health?: string;
   };
   fault_sentences?: string[];
+  fault_catalog?: {
+    code?: string;
+    title?: string;
+    description?: string;
+    suggested_checks?: string[];
+  }[];
+  faults_linked?: { code?: string; title?: string; equipment_name?: string }[];
+  brick_model?: { feeds_chains?: string[]; equipment_count?: number };
   worst_zones?: { label?: string; day_avg_f?: number; night_avg_f?: number; recovery_f_per_min?: number }[];
   zone_temps?: {
     topology_mode?: string;
@@ -140,6 +148,22 @@ export default function HomeBuildingInsight() {
             <li key={line.slice(0, 80)}>{line}</li>
           ))}
         </ul>
+      ) : null}
+      {insight?.fault_catalog?.length ? (
+        <ul className="home-insight-faults muted">
+          {insight.fault_catalog.slice(0, 4).map((f) => (
+            <li key={f.code}>
+              <strong>{f.code}</strong> — {f.title}
+              {f.description ? `: ${f.description.slice(0, 140)}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {insight?.brick_model?.feeds_chains?.length ? (
+        <p className="muted home-insight-meta">
+          BRICK feeds: {insight.brick_model.feeds_chains.slice(0, 4).join("; ")}
+          {(insight.brick_model.feeds_chains.length ?? 0) > 4 ? " …" : ""}
+        </p>
       ) : null}
       {insight?.zone_temps?.struggling_zones?.length ? (
         <p className="muted home-insight-meta">

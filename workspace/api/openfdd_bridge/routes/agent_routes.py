@@ -16,6 +16,7 @@ from ..security import debug_diagnostics_enabled
 router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
 
 _AGENT_ROLES = Depends(require_roles("operator", "integrator", "agent"))
+_TOOL_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 
 
 class ChatBody(BaseModel):
@@ -62,11 +63,11 @@ def list_tools(_user: dict = _AGENT_ROLES) -> dict:
 def run_tool(
     body: ToolBody,
     request: Request,
-    user: dict = Depends(require_roles("agent")),
+    user: dict = _TOOL_ROLES,
 ) -> dict:
-    """Execute an agent maintenance tool. Restricted to the `agent` role, audited."""
+    """Execute agent tools. Read-only tools allowed for operator; writes need integrator/agent."""
     try:
-        result = agent_tools.run_tool(body.tool, body.args)
+        result = agent_tools.run_tool(body.tool, body.args, role=str(user.get("role") or ""))
     except ToolError as exc:
         audit.write_audit(
             event_type="agent.tool",
@@ -134,6 +135,8 @@ def zone_temps_snapshot(
 @router.post("/chat")
 def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
     """Local operator chat — always Ollama (configured via workspace/ollama.env.local)."""
+    from ..brick_model_context import build_agent_system_extra
+
     return ollama_client.chat(
         body.message,
         model=body.model or ollama_client.configured_model(),
@@ -141,4 +144,5 @@ def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
         gpu_mode=body.gpu_mode or os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
         think=body.think,
         history=body.history,
+        system=ollama_client.build_system_prompt(extra=build_agent_system_extra()),
     )

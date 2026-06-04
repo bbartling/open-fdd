@@ -19,6 +19,7 @@ from .building_status import collect_status
 from . import ollama_client
 from .device_poll_health import get_device_poll_snapshot, slim_devices_for_llm
 from .operational_analytics import analytics_lookback_days, analytics_methodology, methodology_prompt_blurb
+from .brick_model_context import build_insight_brick_payload
 from .zone_temp_analytics import get_zone_temp_snapshot, slim_zone_for_llm
 from .zone_energy_research import build_zone_energy_research, slim_research_for_llm
 
@@ -152,6 +153,11 @@ def _compact_context(
         payload["worst_zones"] = zone_snapshot.get("worst_zones") or []
     if device_snapshot:
         payload["device_poll_health"] = slim_devices_for_llm(device_snapshot)
+    brick = build_insight_brick_payload(status)
+    payload["brick_model"] = brick.get("brick_model")
+    payload["fault_catalog"] = brick.get("fault_catalog")
+    payload["faults_linked"] = brick.get("faults_linked")
+    payload["api_query_guide"] = brick.get("api_query_guide")
     return json.dumps(payload, separators=(",", ":"))
 
 
@@ -171,8 +177,10 @@ def _ollama_sentence(context: str) -> tuple[str, str]:
         "(1) zone overnight vs occupied averages and recovery rate — interpret ~0.00°F/min honestly; "
         "(2) sensor/poll health for zone temps (stale, FDD, flat sensors); "
         "(3) energy or HVAC efficiency opportunities only when research flags support them; "
-        "(4) active fault codes from fault_sentences; "
-        "(5) device poll offline/flaky counts. Do not invent equipment IDs or passwords."
+        "(4) active faults: use fault_catalog (official meaning, causes, checks) and faults_linked "
+        "(BRICK equipment names); quote the code (e.g. VAV-C) and what it implies for operators; "
+        "(5) brick_model feeds_chains — describe HVAC hierarchy (plant/AHU/VAV/zone sensors) when present; "
+        "(6) device poll offline/flaky counts. Do not invent equipment IDs or passwords."
     )
     user = f"Snapshot JSON:\n{context}\n\nOperator briefing:"
     result = ollama_client.chat(
@@ -292,6 +300,10 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
     )
     payload["ollama_ok"] = ollama_ok
     payload["fault_sentences"] = fault_lines
+    brick_extra = build_insight_brick_payload(status)
+    payload["fault_catalog"] = brick_extra.get("fault_catalog") or []
+    payload["faults_linked"] = brick_extra.get("faults_linked") or []
+    payload["brick_model"] = brick_extra.get("brick_model") or {}
 
     _CACHE.update(
         {
@@ -311,10 +323,15 @@ def get_operational_brief(*, force: bool = False) -> dict[str, Any]:
     status = collect_status()
     zone_snapshot = get_zone_temp_snapshot(force=force)
     device_snapshot = get_device_poll_snapshot(force=force)
+    brick_extra = build_insight_brick_payload(status)
     return {
         "ok": True,
         "methodology": analytics_methodology(),
         "lookback_days": analytics_lookback_days(),
+        "brick_model": brick_extra.get("brick_model"),
+        "fault_catalog": brick_extra.get("fault_catalog"),
+        "faults_linked": brick_extra.get("faults_linked"),
+        "api_query_guide": brick_extra.get("api_query_guide"),
         "building_status": {
             "status": status.get("status"),
             "traffic": status.get("traffic"),

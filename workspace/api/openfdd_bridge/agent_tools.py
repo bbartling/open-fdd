@@ -2,7 +2,7 @@
 
 Tools let the agent build the BRICK model, author/run FDD rules, and (only when
 explicitly opted in) edit application files and rebuild the dashboard. Every
-call is gated by the ``agent`` role at the route layer and written to the audit
+Read-only tools are available to the ``operator`` role; writes require integrator/agent. Calls are audited.
 log. App-editing tools additionally require ``OFDD_AGENT_ALLOW_APP_EDIT=1`` so
 self-modification is off by default on an OT box.
 """
@@ -16,10 +16,23 @@ from typing import Any, Callable
 
 from .building_alerts import replace_alerts
 from .device_poll_health import get_device_poll_snapshot
-from .operational_analytics import analytics_methodology, methodology_prompt_blurb
+from .operational_analytics import (
+    analytics_lookback_days,
+    analytics_methodology,
+    methodology_prompt_blurb,
+    trim_frame_to_lookback,
+)
 from .zone_temp_analytics import get_zone_temp_snapshot
-from .data_loader import load_demo_dataframe
-from .fault_catalog import all_codes, catalog_graph, is_valid_code
+from .data_loader import load_demo_dataframe, load_frame_for_run
+from .site_defaults import ensure_default_site
+from .timeseries_api import resolve_plot_columns
+from .ttl_service import TtlService
+from .brick_model_context import (
+    api_query_guide,
+    catalog_entries_for_codes,
+    slim_brick_graph,
+)
+from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
 from .fdd_runner import run_batch
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -151,6 +164,72 @@ def _tool_building_operational_brief(args: dict[str, Any]) -> dict[str, Any]:
     return get_operational_brief(force=force)
 
 
+def _tool_model_graph(args: dict[str, Any]) -> dict[str, Any]:
+    """BRICK site graph: equipment, brick:feeds chains, sensors (SPARQL / TTL)."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    return slim_brick_graph(site_id, max_equipment=32, max_feeds=24, max_points_per_equipment=12)
+
+
+def _tool_model_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """BRICK scope for one equipment — sensors with historian column names."""
+    from .model_sparql import scope_bundle
+
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    equipment_id = str(args.get("equipment_id") or "").strip() or None
+    brick_type = str(args.get("brick_type") or "").strip() or None
+    return scope_bundle(site_id, equipment_id=equipment_id, brick_type=brick_type)
+
+
+def _tool_timeseries_snapshot(args: dict[str, Any]) -> dict[str, Any]:
+    """Summarize feather historian columns (mean/min/max/last) — not full traces."""
+    import pandas as pd
+
+    site_id = str(args.get("site_id") or "").strip() or ensure_default_site(ModelService(), TtlService())
+    raw_cols = args.get("columns")
+    if isinstance(raw_cols, list):
+        columns = [str(c).strip() for c in raw_cols if str(c).strip()]
+    else:
+        columns = [c.strip() for c in str(raw_cols or "").split(",") if c.strip()]
+    hours = int(args.get("hours") or analytics_lookback_days() * 24)
+    hours = max(1, min(hours, 24 * 90))
+    df, origin = load_frame_for_run(site_id)
+    df = trim_frame_to_lookback(df, hours=float(hours))
+    if not columns:
+        model = ModelService().load()
+        columns = resolve_plot_columns([], model, site_id)[:8]
+    if df.empty:
+        return {"site_id": site_id, "hours": hours, "data_source": origin, "series": [], "note": "no data"}
+    series: list[dict[str, Any]] = []
+    for col in columns:
+        if col not in df.columns:
+            continue
+        s = pd.to_numeric(df[col], errors="coerce").dropna()
+        if s.empty:
+            continue
+        series.append(
+            {
+                "column": col,
+                "samples": int(len(s)),
+                "last": round(float(s.iloc[-1]), 3),
+                "mean": round(float(s.mean()), 3),
+                "min": round(float(s.min()), 3),
+                "max": round(float(s.max()), 3),
+            }
+        )
+    return {"site_id": site_id, "hours": hours, "data_source": origin, "series": series}
+
+
+def _tool_faults_lookup(args: dict[str, Any]) -> dict[str, Any]:
+    """Official fault catalog entry for one code (VAV-C, AHU-B, …)."""
+    code = str(args.get("code") or "").strip()
+    if not code:
+        raise ToolError("code is required")
+    entries = catalog_entries_for_codes([code], limit=1)
+    if not entries:
+        raise ToolError(f"unknown fault code: {code}")
+    return entries[0]
+
+
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
     """Replace the agent-managed building alerts. Every code must exist in the catalog."""
     alerts = args.get("alerts")
@@ -251,10 +330,41 @@ def _tool_app_rebuild_dashboard(_args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_READ_ONLY_TOOLS = frozenset(
+    {
+        "model.graph",
+        "model.scope",
+        "timeseries.snapshot",
+        "faults.lookup",
+        "building.zone_temps",
+        "building.device_health",
+        "building.operational_brief",
+    }
+)
+
+_WRITE_TOOLS = frozenset(
+    {
+        "model.add_site",
+        "model.add_equipment",
+        "model.add_point",
+        "rules.save",
+        "rules.bind",
+        "rules.run_batch",
+        "building.set_alerts",
+        "app.edit_file",
+        "app.rebuild_dashboard",
+    }
+)
+
+
 _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "model.add_site": _tool_model_add_site,
     "model.add_equipment": _tool_model_add_equipment,
     "model.add_point": _tool_model_add_point,
+    "model.graph": _tool_model_graph,
+    "model.scope": _tool_model_scope,
+    "timeseries.snapshot": _tool_timeseries_snapshot,
+    "faults.lookup": _tool_faults_lookup,
     "rules.save": _tool_rules_save,
     "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
@@ -265,6 +375,10 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "app.edit_file": _tool_app_edit_file,
     "app.rebuild_dashboard": _tool_app_rebuild_dashboard,
 }
+
+
+def tool_requires_write_role(name: str) -> bool:
+    return name in _WRITE_TOOLS or (name.startswith("app.") and name not in _READ_ONLY_TOOLS)
 
 
 def tool_specs() -> list[dict[str, Any]]:
@@ -309,6 +423,22 @@ def tool_specs() -> list[dict[str, Any]]:
             "writes": "read-only — zone temps + device health + fault sentences JSON",
         },
         {
+            "name": "model.graph",
+            "args": ["site_id?"],
+            "writes": "read-only — BRICK equipment, feeds, sensors (SPARQL)",
+        },
+        {
+            "name": "model.scope",
+            "args": ["site_id?", "equipment_id?", "brick_type?"],
+            "writes": "read-only — sensors + plot columns for equipment",
+        },
+        {
+            "name": "timeseries.snapshot",
+            "args": ["site_id?", "columns", "hours?"],
+            "writes": "read-only — historian mean/min/max/last",
+        },
+        {"name": "faults.lookup", "args": ["code"], "writes": "read-only — fault catalog definition"},
+        {
             "name": "app.edit_file",
             "args": ["path", "contents"],
             "writes": "workspace/* (requires OFDD_AGENT_ALLOW_APP_EDIT=1)",
@@ -321,10 +451,12 @@ def tool_specs() -> list[dict[str, Any]]:
     ]
 
 
-def run_tool(name: str, args: dict[str, Any] | None) -> dict[str, Any]:
+def run_tool(name: str, args: dict[str, Any] | None, *, role: str | None = None) -> dict[str, Any]:
     fn = _TOOLS.get(name)
     if fn is None:
         raise ToolError(f"unknown tool: {name}")
+    if role == "operator" and tool_requires_write_role(name):
+        raise ToolError(f"tool {name} requires integrator or agent role")
     return fn(args or {})
 
 
@@ -411,6 +543,9 @@ def model_context() -> dict[str, Any]:
             for c, e in all_codes().items()
         ],
         "fault_code_graph": catalog_graph(),
+        "brick_model": slim_brick_graph(max_equipment=12, max_feeds=10),
+        "api_query_guide": api_query_guide(),
         "tools": tool_specs(),
+        "read_only_tools": sorted(_READ_ONLY_TOOLS),
         "app_edit_enabled": app_edit_enabled(),
     }

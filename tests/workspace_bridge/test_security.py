@@ -185,13 +185,24 @@ def test_integrator_route_rejects_operator(raw_client: TestClient, operator_head
     assert r.status_code == 403
 
 
-def test_agent_tool_rejects_integrator(raw_client: TestClient, integrator_headers: dict[str, str]):
+def test_operator_read_tool_allowed(raw_client: TestClient, operator_headers: dict[str, str]):
     r = raw_client.post(
         "/openfdd-agent/tool",
-        json={"tool": "rules.list", "args": {}},
-        headers=integrator_headers,
+        json={"tool": "faults.lookup", "args": {"code": "VAV-C"}},
+        headers=operator_headers,
     )
-    assert r.status_code == 403
+    assert r.status_code == 200
+    assert r.json()["result"]["code"] == "VAV-C"
+
+
+def test_operator_write_tool_blocked(raw_client: TestClient, operator_headers: dict[str, str]):
+    r = raw_client.post(
+        "/openfdd-agent/tool",
+        json={"tool": "model.add_site", "args": {"name": "X"}},
+        headers=operator_headers,
+    )
+    assert r.status_code == 400
+    assert "integrator or agent" in r.json()["detail"].lower()
 
 
 def test_cors_origins_default_no_lan_auto(monkeypatch: pytest.MonkeyPatch):
