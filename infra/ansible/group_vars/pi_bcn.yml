@@ -80,6 +80,10 @@ post_check_require_mcp: true
 post_check_require_ollama: false
 
 # Docker Compose deploy (./deploy.sh docker) — see docs/edge_deploy_docker.md
+# GHCR pull is default; set tag via OPENFDD_IMAGE_TAG=… or host_vars. Tar: OPENFDD_DOCKER_PULL_FROM_GHCR=0
+openfdd_docker_pull_from_ghcr: true
+openfdd_docker_registry: ghcr.io
+openfdd_docker_registry_org: bbartling
 openfdd_docker_image_tag: "local"
 openfdd_docker_disable_systemd: true
 openfdd_docker_ollama: true

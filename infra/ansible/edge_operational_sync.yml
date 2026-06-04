@@ -1,8 +1,7 @@
 ---
 # Operational sync: latest Docker stack + maintenance + SPARQL/TTL + feather/log health.
 #
-#   ./scripts/docker_build.sh --save
-#   export SSHPASS='...' && ./deploy.sh ops --limit acme_vm_bbartling
+#   OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh ops --limit acme_vm_bbartling
 #
 - ansible.builtin.import_playbook: deploy_docker.yml
 

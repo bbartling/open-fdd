@@ -1,14 +1,14 @@
 ---
 # Docker-based edge deploy — app stack in Compose; host Caddy + FDD/retention timers only.
 #
-#   ./scripts/docker_build.sh --save
-#   ./deploy.sh docker --limit acme_vm_bbartling
-#   ./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_image_tag=2026.06.01
+# GHCR (default after Actions publish):
+#   OPENFDD_IMAGE_TAG=2026.06.04-edge ./deploy.sh docker --limit acme_vm_bbartling
+#
+# Legacy tar load (lab / air-gap):
+#   OPENFDD_DOCKER_PULL_FROM_GHCR=0 OPENFDD_IMAGE_TAG=2026.06.04-edge ./scripts/docker_build.sh --save
+#   OPENFDD_DOCKER_PULL_FROM_GHCR=0 ./deploy.sh docker --limit acme_vm_bbartling
 #
 # Tags: docker, preflight, config, data, commission, maintain, verify
-#
-# Disk maintenance (prune old images, remove image tar) runs after compose up when
-# openfdd_docker_prune_on_deploy is true (default). Standalone: ./deploy.sh maintain
 #
 # Does NOT rsync Python/API source — only Docker images + workspace state (data/, env).
 # Image-only refresh: -e openfdd_docker_sync_workspace_data=false
@@ -62,21 +62,25 @@
         - "{{ openfdd_remote_dir }}/workspace/bacnet/commissioning"
         - "{{ openfdd_remote_dir }}/workspace/bacnet/polls"
 
-    - name: Stat image bundle on control machine
+    - name: Stat image bundle on control machine (tar deploy path)
       tags: [docker]
       ansible.builtin.stat:
         path: "{{ openfdd_docker_tar_local }}"
       delegate_to: localhost
       become: false
       register: local_docker_tar
+      when: not (openfdd_docker_pull_from_ghcr | default(false) | bool)
 
     - name: Fail when image bundle missing (run scripts/docker_build.sh --save)
       tags: [docker]
       ansible.builtin.fail:
         msg: >-
           Missing {{ openfdd_docker_tar_local }} on control machine.
-          Run: ./scripts/docker_build.sh --save
-      when: not local_docker_tar.stat.exists | default(false)
+          Run: OPENFDD_IMAGE_TAG={{ openfdd_docker_image_tag | default('local') }} ./scripts/docker_build.sh --save
+          Or use GHCR: OPENFDD_IMAGE_TAG=your-tag ./deploy.sh docker --limit <host>
+      when:
+        - not (openfdd_docker_pull_from_ghcr | default(false) | bool)
+        - not local_docker_tar.stat.exists | default(false)
 
     - name: Copy image bundle to edge
       tags: [docker]
@@ -84,8 +88,9 @@
         src: "{{ openfdd_docker_tar_local }}"
         dest: "{{ openfdd_docker_tar_remote }}"
         mode: "0644"
+      when: not (openfdd_docker_pull_from_ghcr | default(false) | bool)
 
-    - name: Load Docker images on edge
+    - name: Load Docker images on edge from tar
       tags: [docker]
       ansible.builtin.command:
         argv:
@@ -94,6 +99,7 @@
           - gunzip -c "{{ openfdd_docker_tar_remote }}" | docker load
       register: docker_load
       changed_when: "'Loaded image' in docker_load.stdout"
+      when: not (openfdd_docker_pull_from_ghcr | default(false) | bool)
 
     - name: Stat workspace auth.env.local on control machine
       tags: [config]
@@ -291,6 +297,39 @@
         src: templates/docker-compose.edge.yml.j2
         dest: "{{ openfdd_remote_dir }}/docker-compose.yml"
         mode: "0644"
+
+    - name: Log in to GHCR on edge (private packages)
+      tags: [docker]
+      ansible.builtin.shell:
+        cmd: >-
+          set -euo pipefail;
+          echo "$TOKEN" | docker login {{ openfdd_docker_registry | default('ghcr.io') }}
+          -u "$USER" --password-stdin
+      environment:
+        TOKEN: "{{ openfdd_ghcr_token }}"
+        USER: "{{ openfdd_ghcr_username | default(openfdd_docker_registry_org | default('bbartling')) }}"
+      no_log: true
+      changed_when: false
+      when:
+        - openfdd_docker_pull_from_ghcr | default(false) | bool
+        - openfdd_ghcr_token | default('') | length > 0
+
+    - name: Pull Open-FDD images from GHCR
+      tags: [docker]
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ openfdd_remote_dir }}/docker-compose.yml"
+          - pull
+      register: compose_pull
+      changed_when: >-
+        (compose_pull.stdout ~ compose_pull.stderr) is search(
+          '(Pulling|Downloading|Extracting|Pulled|Downloaded|Already|up to date)',
+          ignorecase=True
+        )
+      when: openfdd_docker_pull_from_ghcr | default(false) | bool
 
     - name: Stop legacy systemd Open-FDD app units (Docker replaces them)
       tags: [docker]

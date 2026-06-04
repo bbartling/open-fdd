@@ -1,7 +1,7 @@
 # Published Open-FDD container images (addons).
 # Build: ./scripts/docker_build.sh
 # Publish: ./scripts/docker_publish.sh
-# Deploy: infra/ansible/deploy.sh docker (tar load) or future registry pull
+# Deploy: OPENFDD_IMAGE_TAG=tag ./infra/ansible/deploy.sh docker (GHCR pull) or tar with OPENFDD_DOCKER_PULL_FROM_GHCR=0
 
 registry: ghcr.io
 org: bbartling
