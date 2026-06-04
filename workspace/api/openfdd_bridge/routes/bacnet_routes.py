@@ -449,11 +449,18 @@ def bacnet_trigger_poll() -> dict:
     return {"poll": payload, "ingest": ingest}
 
 
+def _lan_internal_ingest_allowed() -> bool:
+    raw = os.environ.get("OFDD_ALLOW_LAN_INTERNAL_INGEST", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def _internal_ingest_client_allowed(request: Request) -> bool:
-    """Host-network commission hits bridge via published 127.0.0.1 — client IP may be docker0."""
+    """Loopback always allowed; RFC1918 only when OFDD_ALLOW_LAN_INTERNAL_INGEST is set."""
     host = (request.client.host if request.client else "").strip()
     if host in {"127.0.0.1", "::1"}:
         return True
+    if not _lan_internal_ingest_allowed():
+        return False
     if host.startswith(("10.", "192.168.")):
         return True
     if host.startswith("172."):

@@ -62,8 +62,8 @@ export default function ComfortZonePanel({
       ) : null}
       {opportunities?.length ? (
         <ul className="bis-opp-list">
-          {opportunities.slice(0, 3).map((o) => (
-            <li key={o.topic}>
+          {opportunities.slice(0, 3).map((o, i) => (
+            <li key={`${o.topic ?? "tip"}-${i}`}>
               <strong>{(o.topic || "tip").replace(/_/g, " ")}</strong>
               <span>{o.suggestion || o.signal}</span>
             </li>

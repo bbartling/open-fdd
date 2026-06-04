@@ -66,12 +66,12 @@ export default function BuildingInsightDashboard() {
   const sevCounts = useMemo(() => countBySeverity(displayFaults), [displayFaults]);
 
   const poll = insight?.device_poll_health;
+  const deviceSentenceMatch = insight?.device_sentence?.match(/(\d+)\/(\d+)/);
+  const parsedTotal = deviceSentenceMatch ? Number(deviceSentenceMatch[2]) : NaN;
   const totalDevices =
-    (poll?.healthy_count ?? 0) +
-    (poll?.offline_equipment?.length ?? 0) +
-    (insight?.device_sentence?.match(/(\d+)\/(\d+)/)
-      ? Number(insight.device_sentence.match(/(\d+)\/(\d+)/)?.[2] || 0)
-      : 0);
+    Number.isFinite(parsedTotal) && parsedTotal > 0
+      ? parsedTotal
+      : (poll?.healthy_count ?? 0) + (poll?.offline_equipment?.length ?? 0) + (poll?.flaky_equipment?.length ?? 0);
   const healthyRatio =
     totalDevices > 0 && poll?.healthy_count != null ? poll.healthy_count / totalDevices : undefined;
 

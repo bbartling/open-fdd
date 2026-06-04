@@ -42,7 +42,6 @@ describe("buildDisplayFaults", () => {
     const group = cards.find((c) => c.id === "group-historian-lag");
     expect(group).toBeDefined();
     expect(group?.underlying.length).toBe(2);
-    expect(cards.some((c) => c.id === "group-historian-lag")).toBe(true);
     expect(cards.filter((c) => c.source === "poll_health").length).toBe(1);
   });
 });

@@ -23,6 +23,12 @@ type Props = {
   disabled?: boolean;
 };
 
+function clampInt(raw: string, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 export default function FddRuleTestPanel({ rules, disabled }: Props) {
   const activeSiteId = useActiveSiteId();
   const [brickClass, setBrickClass] = useState("");
@@ -77,7 +83,8 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
     setConsoleText("");
     try {
       const code = await loadRuleSource(ruleId);
-      const limit = Number(testLimit);
+      const lookback = clampInt(lookbackHours, 24, 1, 168);
+      const limit = clampInt(testLimit, 120, 1, 10_000);
       const res = await apiFetch<{
         rows: number;
         flagged: number;
@@ -96,8 +103,8 @@ export default function FddRuleTestPanel({ rules, disabled }: Props) {
           site_id: scope.siteId || undefined,
           equipment_id: scope.equipmentId || undefined,
           point_keys: [testSensorKey],
-          lookback_hours: Number(lookbackHours) || 24,
-          limit: Number.isFinite(limit) ? limit : 120,
+          lookback_hours: lookback,
+          limit,
           chunk_hours: 0,
         }),
       });

@@ -17,6 +17,7 @@ from .feather_store import FeatherStore, maintain_storage_if_needed
 from .model_service import ModelService
 from .paths import bacnet_poll_csv, data_dir, workspace_dir
 from .site_defaults import ensure_default_site
+from .timeseries_api import plot_column_name
 from .ttl_service import TtlService
 
 _log = logging.getLogger(__name__)
@@ -60,6 +61,9 @@ def _tail_csv_lines(path: Path, *, max_data_rows: int) -> list[str]:
     need = max(1, max_data_rows) + 1
     block = 256 * 1024
     with path.open("rb") as fh:
+        header_line = fh.readline().decode("utf-8", errors="replace").rstrip("\r\n")
+        if not header_line:
+            return []
         fh.seek(0, os.SEEK_END)
         pos = fh.tell()
         chunks: list[bytes] = []
@@ -69,14 +73,10 @@ def _tail_csv_lines(path: Path, *, max_data_rows: int) -> list[str]:
             fh.seek(pos)
             chunks.insert(0, fh.read(read_size))
     text = b"".join(chunks).decode("utf-8", errors="replace")
-    lines = text.splitlines()
-    if not lines:
-        return []
-    header = lines[0]
-    data = lines[1:]
+    data = [ln for ln in text.splitlines() if ln and ln != header_line]
     if len(data) <= max_data_rows:
-        return [header, *data]
-    return [header, *data[-max_data_rows:]]
+        return [header_line, *data]
+    return [header_line, *data[-max_data_rows:]]
 
 
 def _read_poll_csv_incremental(
@@ -125,12 +125,7 @@ def _column_for_point(point_id: str, model: dict[str, Any], discovered: dict[str
         if not isinstance(pt, dict):
             continue
         if str(pt.get("id") or "") == point_id or str(pt.get("metadata", {}).get("point_id") or "") == point_id:
-            ext = str(pt.get("external_id") or "").strip()
-            if ext:
-                return ext
-            fdd = str(pt.get("fdd_input") or "").strip()
-            if fdd:
-                return fdd
+            return plot_column_name(pt)
     disc = discovered.get(point_id) or {}
     name = str(disc.get("object_name") or disc.get("description") or "").strip()
     if name:
@@ -214,9 +209,19 @@ def _wide_rows_for_chunk(
     return pd.DataFrame(rows).sort_values("timestamp")
 
 
+def _feather_maintain_every_n() -> int:
+    raw = os.environ.get("OFDD_FEATHER_MAINTAIN_EVERY_N", "12").strip()
+    if not raw:
+        return 12
+    try:
+        return max(1, int(raw))
+    except (TypeError, ValueError):
+        return 12
+
+
 def _should_run_storage_maintain() -> bool:
     global _MAINTAIN_COUNTER  # noqa: PLW0603
-    every = max(1, int(os.environ.get("OFDD_FEATHER_MAINTAIN_EVERY_N", "12") or 12))
+    every = _feather_maintain_every_n()
     _MAINTAIN_COUNTER += 1
     return _MAINTAIN_COUNTER % every == 0
 

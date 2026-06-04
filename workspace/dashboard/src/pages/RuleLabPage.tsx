@@ -247,12 +247,13 @@ export default function RuleLabPage() {
     }
   }
 
-  async function saveRule() {
+  async function saveRule(options?: { suppressBusy?: boolean }) {
+    const suppressBusy = options?.suppressBusy === true;
     if (syntaxOk === false) {
       appendConsole("Cannot save — fix syntax errors first.");
       return;
     }
-    setBusy(true);
+    if (!suppressBusy) setBusy(true);
     try {
       let bindingsSource: SavedRule["bindings"] | undefined;
       if (activeRuleId) {
@@ -297,15 +298,16 @@ export default function RuleLabPage() {
       await refreshSaved();
     } catch (e) {
       appendConsole(formatApiError(e));
+      if (suppressBusy) throw e;
     } finally {
-      setBusy(false);
+      if (!suppressBusy) setBusy(false);
     }
   }
 
   async function updateAllRecords() {
     setBusy(true);
     try {
-      if (dirty && activeRuleId) await saveRule();
+      if (dirty && activeRuleId) await saveRule({ suppressBusy: true });
       const res = await apiFetch<{
         rules_run?: number;
         flagged_runs?: number;
