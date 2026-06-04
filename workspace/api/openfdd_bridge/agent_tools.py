@@ -381,8 +381,8 @@ def model_context() -> dict[str, Any]:
         "methodology_blurb": methodology_prompt_blurb(),
         "data_pipeline": [
             "BACnet poll → feather_store/",
-            "load_frame_for_run → zone_temp_analytics + device_poll_health",
-            "building_insight / operational-brief for dashboard",
+            "load_frame_for_run → zone_temp_analytics + zone_energy_research + device_poll_health",
+            "building_insight / operational-brief for dashboard (LLM uses zone_research tasks)",
         ],
         "zone_temp_levers": zone_levers,
         "device_poll_health": device_levers,

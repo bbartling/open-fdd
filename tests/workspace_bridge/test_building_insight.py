@@ -44,6 +44,25 @@ def test_fault_sentences_from_alerts():
     assert "VAV-C" in lines[0]
 
 
+def test_compact_context_includes_zone_research(monkeypatch):
+    import openfdd_bridge.building_insight as mod
+
+    zone = {
+        "summary_sentence": "Zone temps: test.",
+        "research": {
+            "site_flags": ["site_near_zero_recovery"],
+            "site_median_recovery_f_per_min": 0.01,
+            "minimal_setback_zone_count": 10,
+            "llm_research_tasks": ["Check setback."],
+            "opportunities": [{"topic": "energy_setback", "signal": "x", "suggestion": "y"}],
+        },
+    }
+    ctx = mod._compact_context({"alerts": []}, zone, {"summary_sentence": "ok"})
+    parsed = __import__("json").loads(ctx)
+    assert "zone_research" in parsed
+    assert parsed["zone_research"]["site_flags"]
+
+
 def test_get_building_insight_deterministic_when_ollama_down(monkeypatch):
     import openfdd_bridge.building_insight as mod
 

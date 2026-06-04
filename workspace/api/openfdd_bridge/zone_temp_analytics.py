@@ -523,6 +523,20 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
 
     site_tz = _site_timezone(model, sid)
     metrics = compute_zone_metrics(df, topology, model, sid, site_tz=site_tz)
+    from .device_poll_health import get_device_poll_snapshot
+    from .zone_energy_research import build_zone_energy_research
+
+    device_snapshot = get_device_poll_snapshot(site_id=sid, force=force)
+    zone_df = build_zone_dataframe(df, topology)
+    occupied_mask = None
+    if not zone_df.empty and "timestamp" in zone_df.columns:
+        occupied_mask = _occupied_mask(zone_df["timestamp"], site_tz)
+    research = build_zone_energy_research(
+        metrics,
+        device_snapshot,
+        zone_df=zone_df if not zone_df.empty else None,
+        occupied_mask=occupied_mask,
+    )
     payload = {
         "ok": True,
         "cached": False,
@@ -533,6 +547,7 @@ def get_zone_temp_snapshot(*, site_id: str | None = None, force: bool = False) -
         "site_timezone": site_tz,
         "topology_mode": metrics.get("mode"),
         "zone_sensor_count": len(topology.get("zone_points") or []),
+        "research": research,
         **metrics,
     }
     stored = dict(cached) if isinstance(cached, dict) else {}
@@ -600,7 +615,16 @@ def slim_zone_for_llm(
             if isinstance(z, dict)
         ],
         "lookback_days": snapshot.get("lookback_days"),
+        "research": _slim_research(snapshot.get("research")),
     }
+
+
+def _slim_research(research: Any) -> dict[str, Any] | None:
+    if not isinstance(research, dict):
+        return None
+    from .zone_energy_research import slim_research_for_llm
+
+    return slim_research_for_llm(research)
 
 
 def compact_for_llm(snapshot: dict[str, Any], *, max_bytes: int = 2800) -> str:

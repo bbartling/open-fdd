@@ -20,6 +20,7 @@ from . import ollama_client
 from .device_poll_health import get_device_poll_snapshot, slim_devices_for_llm
 from .operational_analytics import analytics_lookback_days, analytics_methodology, methodology_prompt_blurb
 from .zone_temp_analytics import get_zone_temp_snapshot, slim_zone_for_llm
+from .zone_energy_research import build_zone_energy_research, slim_research_for_llm
 
 _CACHE: dict[str, Any] = {
     "generated_at": 0.0,
@@ -31,7 +32,7 @@ _CACHE: dict[str, Any] = {
 }
 
 DEFAULT_INTERVAL_S = 900  # 15 minutes
-MAX_SENTENCE_LEN = 480
+MAX_SENTENCE_LEN = 720
 INSIGHT_CHAT_TIMEOUT_S = 45.0
 
 
@@ -144,6 +145,10 @@ def _compact_context(
             max_zones_per_system=6,
             max_struggling=4,
         )
+        research = zone_snapshot.get("research")
+        if not isinstance(research, dict):
+            research = build_zone_energy_research(zone_snapshot, device_snapshot)
+        payload["zone_research"] = slim_research_for_llm(research)
         payload["worst_zones"] = zone_snapshot.get("worst_zones") or []
     if device_snapshot:
         payload["device_poll_health"] = slim_devices_for_llm(device_snapshot)
@@ -157,11 +162,17 @@ def _ollama_sentence(context: str) -> tuple[str, str]:
         f"All zone temperature and recovery metrics use the last {days} days of feather poll data "
         "(see methodology in the JSON). Recovery °F/min is averaged only during supply-fan-on periods. "
         "Device poll health uses the same window: all points stale/FDD = offline device; one bad point = sensor issue. "
-        "Reply with 2–4 short sentences of plain English (no markdown): "
-        "(1) zone overnight vs occupied averages and typical recovery rate, naming worst zones if any; "
-        "(2) how many devices are healthy vs offline/flaky; "
-        "(3) briefly reference active fault codes from fault_sentences. "
-        "Do not invent equipment IDs or passwords."
+        "When zone_research is present, you MUST follow llm_research_tasks: cross-check zone_research flags with "
+        "device_poll_health before conclusions. If site_median_recovery_f_per_min is near zero and "
+        "minimal_setback_zone_count is high, explain that zones likely do not set back overnight and mention a "
+        "possible energy savings opportunity (wider night setback / schedule review) — unless suspicious_sensors "
+        "or stale/FDD flags suggest bad data first. Comment on unoccupied heat gain vs loss when flagged. "
+        "Reply with 3–5 short sentences of plain English (no markdown): "
+        "(1) zone overnight vs occupied averages and recovery rate — interpret ~0.00°F/min honestly; "
+        "(2) sensor/poll health for zone temps (stale, FDD, flat sensors); "
+        "(3) energy or HVAC efficiency opportunities only when research flags support them; "
+        "(4) active fault codes from fault_sentences; "
+        "(5) device poll offline/flaky counts. Do not invent equipment IDs or passwords."
     )
     user = f"Snapshot JSON:\n{context}\n\nOperator briefing:"
     result = ollama_client.chat(
@@ -203,6 +214,7 @@ def _response_payload(
             "topology_mode": zone_snapshot.get("topology_mode"),
             "zone_sensor_count": zone_snapshot.get("zone_sensor_count"),
             "struggling_zones": zone_snapshot.get("struggling_zones") or [],
+            "research": zone_snapshot.get("research"),
             "lookback_days": zone_snapshot.get("lookback_days"),
             "generated_at": zone_snapshot.get("generated_at"),
             "next_refresh_at": zone_snapshot.get("next_refresh_at"),

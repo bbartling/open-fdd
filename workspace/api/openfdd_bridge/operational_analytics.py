@@ -57,6 +57,11 @@ def analytics_methodology() -> dict[str, Any]:
         "flaky_devices": (
             "Flaky = frequent online/offline transitions (stale↔fresh) per day inferred from poll timestamps."
         ),
+        "zone_energy_research": (
+            "Deterministic flags (minimal_setback, near_zero_recovery, unoccupied heat drift, stale/FDD sensors) "
+            "feed the building-insight LLM via zone_temps.research — the model must cross-check poll health before "
+            "claiming energy savings or broken sensors."
+        ),
     }
 
 

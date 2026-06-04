@@ -26,6 +26,11 @@ type InsightResponse = {
     topology_mode?: string;
     zone_sensor_count?: number;
     struggling_zones?: { label?: string; ahu_name?: string; reason?: string }[];
+    research?: {
+      site_flags?: string[];
+      opportunities?: { topic?: string; suggestion?: string; signal?: string }[];
+      suspicious_sensors?: string[];
+    };
     refresh_interval_s?: number;
   };
   device_poll_health?: {
@@ -143,6 +148,15 @@ export default function HomeBuildingInsight() {
             .map((z) => `${z.label || "?"} (${z.ahu_name || "AHU"})`)
             .join(", ")}
         </p>
+      ) : null}
+      {insight?.zone_temps?.research?.opportunities?.length ? (
+        <ul className="home-insight-faults muted">
+          {insight.zone_temps.research.opportunities.slice(0, 3).map((o) => (
+            <li key={o.topic}>
+              <strong>{o.topic?.replace(/_/g, " ")}:</strong> {o.suggestion || o.signal}
+            </li>
+          ))}
+        </ul>
       ) : null}
       <p className="muted home-insight-meta">
         {insight?.source === "ollama" ? "AI summary" : "Rule-based summary"}
