@@ -387,6 +387,51 @@ def tool_requires_write_role(name: str) -> bool:
     return name in _WRITE_TOOLS or (name.startswith("app.") and name not in _READ_ONLY_TOOLS)
 
 
+def tool_specs_for_role(role: str | None) -> list[dict[str, Any]]:
+    specs = tool_specs()
+    if role in ("integrator", "agent"):
+        return specs
+    allowed = _READ_ONLY_TOOLS
+    return [s for s in specs if s.get("name") in allowed]
+
+
+def operator_model_context() -> dict[str, Any]:
+    """Slim building summary for operator role (no write tool specs or repo detail)."""
+    model = ModelService().load()
+    health = model_health_summary(model)
+    try:
+        zone = get_zone_temp_snapshot(force=False)
+        zone_summary = {
+            "summary_sentence": zone.get("summary_sentence"),
+            "topology_mode": zone.get("topology_mode"),
+            "zone_sensor_count": zone.get("zone_sensor_count"),
+        }
+    except Exception:
+        zone_summary = {"summary_sentence": None, "topology_mode": None, "zone_sensor_count": None}
+    try:
+        devices = get_device_poll_snapshot(force=False)
+        device_summary = {
+            "summary_sentence": devices.get("summary_sentence"),
+            "healthy_count": devices.get("healthy_count"),
+        }
+    except Exception:
+        device_summary = {"summary_sentence": None, "healthy_count": None}
+    return {
+        "model_summary": {
+            "sites": health["counts"]["sites"],
+            "equipment": health["counts"]["equipment"],
+            "points": health["counts"]["points"],
+            "score": health["score"],
+            "status": health["status"],
+        },
+        "zone_temp_levers": zone_summary,
+        "device_poll_health": device_summary,
+        "tools": tool_specs_for_role("operator"),
+        "read_only_tools": sorted(_READ_ONLY_TOOLS),
+        "app_edit_enabled": False,
+    }
+
+
 def tool_specs() -> list[dict[str, Any]]:
     """Human/LLM-readable description of the available tools."""
     return [

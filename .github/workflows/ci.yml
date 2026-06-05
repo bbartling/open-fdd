@@ -101,6 +101,15 @@ jobs:
         run: pip-audit -r workspace/api/requirements.txt
       - name: bandit bridge (high severity)
         run: bandit -r workspace/api/openfdd_bridge -lll -q
+      - name: gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: semgrep security scan
+        run: |
+          python -m pip install semgrep
+          semgrep scan --config p/default --sarif --output semgrep.sarif workspace/api/openfdd_bridge workspace/dashboard/src
+          semgrep scan --config p/default --severity ERROR workspace/api/openfdd_bridge workspace/dashboard/src
       - name: npm audit dashboard (high+)
         working-directory: workspace/dashboard
         run: |

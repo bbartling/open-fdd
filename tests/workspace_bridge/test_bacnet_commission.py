@@ -31,10 +31,10 @@ def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
-def test_operator_can_bacnet_whois(authed_client: TestClient):
+def test_integrator_can_bacnet_whois(authed_client: TestClient):
     login = authed_client.post(
         "/api/auth/login",
-        json={"username": "operator", "password": "changeme"},
+        json={"username": "integrator", "password": "msi"},
     )
     token = login.json()["token"]
     with patch(

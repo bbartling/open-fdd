@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -206,6 +207,62 @@ def _sanitize_value(key: str, val: Any, blocked: frozenset[str]) -> Any | None:
                 out_list.append(item)
         return out_list
     return val
+
+
+def _content_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+def _truncate_text(val: str, *, limit: int = 200) -> str:
+    if len(val) <= limit:
+        return val
+    return val[:limit] + f"...({len(val)} chars)"
+
+
+def sanitize_agent_tool_args(tool_name: str, args: dict[str, Any] | None) -> dict[str, Any]:
+    """Redact sensitive tool payloads before audit persistence."""
+    from .security import audit_log_prompts_enabled
+
+    raw = args or {}
+    name = (tool_name or "").strip()
+    if name == "app.edit_file":
+        contents = str(raw.get("contents") or "")
+        return {
+            "path": _truncate_text(str(raw.get("path") or ""), limit=256),
+            "content_bytes": len(contents.encode("utf-8", errors="replace")),
+            "content_hash": _content_hash(contents) if contents else "",
+        }
+    if name == "rules.save":
+        code = str(raw.get("code") or "")
+        return {
+            "name": _truncate_text(str(raw.get("name") or ""), limit=128),
+            "fault_code": _truncate_text(str(raw.get("fault_code") or ""), limit=64),
+            "mode": _truncate_text(str(raw.get("mode") or ""), limit=32),
+            "code_len": len(code),
+            "code_hash": _content_hash(code) if code else "",
+        }
+    if not audit_log_prompts_enabled():
+        for key in ("message", "prompt", "system", "user_prompt"):
+            if key in raw and isinstance(raw[key], str):
+                text = raw[key]
+                return {
+                    key: _truncate_text(text, limit=80),
+                    f"{key}_len": len(text),
+                    f"{key}_hash": _content_hash(text) if text else "",
+                }
+    out: dict[str, Any] = {}
+    for key, val in raw.items():
+        if isinstance(val, str) and len(val) > 240:
+            out[key] = _truncate_text(val, limit=120)
+            out[f"{key}_len"] = len(val)
+            out[f"{key}_hash"] = _content_hash(val)
+        elif isinstance(val, (int, float, bool)) or val is None:
+            out[key] = val
+        elif isinstance(val, str):
+            out[key] = _truncate_text(val)
+        else:
+            out[key] = _sanitize_detail(val) if isinstance(val, dict) else str(val)[:120]
+    return out
 
 
 def _sanitize_detail(detail: dict[str, Any]) -> dict[str, Any]:

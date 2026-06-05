@@ -12,7 +12,7 @@ from fastapi import HTTPException, Request
 
 from .audit import write_audit
 from .paths import workspace_dir
-from .security import bacnet_writes_enabled
+from .security import bacnet_write_allow_any, bacnet_writes_enabled
 
 _log = logging.getLogger(__name__)
 
@@ -60,6 +60,93 @@ def _device_allowlist(devices: list[Any]) -> set[int]:
     return allowed
 
 
+def _normalize_entries(allowlist: dict[str, Any]) -> list[dict[str, Any]]:
+    writes = allowlist.get("writes")
+    if isinstance(writes, list) and writes:
+        out: list[dict[str, Any]] = []
+        for entry in writes:
+            if isinstance(entry, dict):
+                out.append(entry)
+        if out:
+            return out
+    devices = allowlist.get("device_instances")
+    objects = allowlist.get("object_identifiers")
+    dev_list = devices if isinstance(devices, list) else []
+    obj_list = objects if isinstance(objects, list) else []
+    if not dev_list and not obj_list:
+        return []
+    legacy: list[dict[str, Any]] = []
+    for dev in dev_list:
+        try:
+            di = int(dev)
+        except (TypeError, ValueError):
+            continue
+        for obj in obj_list or [None]:
+            row: dict[str, Any] = {"device_instance": di}
+            if obj is not None:
+                row["object_identifier"] = str(obj).strip()
+            legacy.append(row)
+    if not legacy and dev_list:
+        for dev in dev_list:
+            try:
+                legacy.append({"device_instance": int(dev)})
+            except (TypeError, ValueError):
+                continue
+    return legacy
+
+
+def _value_in_allowed(value: Any, allowed_values: list[Any]) -> bool:
+    if value in allowed_values:
+        return True
+    sval = str(value).strip().lower()
+    return any(str(v).strip().lower() == sval for v in allowed_values)
+
+
+def _match_write_entry(
+    entry: dict[str, Any],
+    *,
+    device_instance: int,
+    object_identifier: str,
+    property_identifier: str,
+    priority: int | None,
+    value: Any,
+) -> bool:
+    try:
+        if int(entry.get("device_instance")) != device_instance:
+            return False
+    except (TypeError, ValueError):
+        return False
+    obj = str(entry.get("object_identifier") or "").strip().lower()
+    if obj and obj != object_identifier.strip().lower():
+        return False
+    prop = str(entry.get("property_identifier") or "").strip().lower()
+    if prop and prop != property_identifier.strip().lower():
+        return False
+    pmin = entry.get("priority_min")
+    pmax = entry.get("priority_max")
+    if priority is not None:
+        if pmin is not None and priority < int(pmin):
+            return False
+        if pmax is not None and priority > int(pmax):
+            return False
+    vmin = entry.get("value_min")
+    vmax = entry.get("value_max")
+    if vmin is not None or vmax is not None:
+        try:
+            fval = float(value)
+        except (TypeError, ValueError):
+            return False
+        if vmin is not None and fval < float(vmin):
+            return False
+        if vmax is not None and fval > float(vmax):
+            return False
+    allowed_values = entry.get("allowed_values")
+    if isinstance(allowed_values, list) and allowed_values:
+        if not _value_in_allowed(value, allowed_values):
+            return False
+    return True
+
+
 def validate_priority(priority: int | None) -> int:
     if priority is None:
         raise HTTPException(
@@ -71,23 +158,92 @@ def validate_priority(priority: int | None) -> int:
     return priority
 
 
-def validate_write_target(*, device_instance: int, object_identifier: str) -> None:
+def validate_write_target(
+    *,
+    device_instance: int,
+    object_identifier: str,
+    property_identifier: str = "present-value",
+    priority: int | None = None,
+    value: Any = None,
+    request: Request | None = None,
+    user: dict | None = None,
+) -> None:
     oid = object_identifier.strip()
     if not _OBJECT_ID_RE.match(oid):
         raise HTTPException(status_code=400, detail="invalid object_identifier (e.g. analog-value,1)")
     allowlist = load_write_allowlist()
     if allowlist is None:
+        if bacnet_write_allow_any():
+            write_audit(
+                event_type="bacnet.command",
+                action="write allow-any",
+                outcome="success",
+                severity="warning",
+                request=request,
+                user=user,
+                resource_type="bacnet",
+                resource_id=oid,
+                detail={
+                    "device_instance": device_instance,
+                    "property_identifier": property_identifier,
+                    "reason": "OFDD_BACNET_WRITE_ALLOW_ANY",
+                },
+            )
+            return
+        write_audit(
+            event_type="bacnet.command",
+            action="write denied (no allowlist)",
+            outcome="failure",
+            severity="warning",
+            request=request,
+            user=user,
+            resource_type="bacnet",
+            resource_id=oid,
+            detail={"device_instance": device_instance, "reason": "missing write_allowlist.json"},
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="BACnet writes require workspace/bacnet/write_allowlist.json when OFDD_ENABLE_BACNET_WRITE=1",
+        )
+    entries = _normalize_entries(allowlist)
+    if not entries:
+        write_audit(
+            event_type="bacnet.command",
+            action="write denied (empty allowlist)",
+            outcome="failure",
+            severity="warning",
+            request=request,
+            user=user,
+            resource_type="bacnet",
+            resource_id=oid,
+            detail={"device_instance": device_instance},
+        )
+        raise HTTPException(status_code=403, detail="write allowlist has no valid entries")
+    if any(_match_write_entry(
+        entry,
+        device_instance=device_instance,
+        object_identifier=oid,
+        property_identifier=property_identifier,
+        priority=priority,
+        value=value,
+    ) for entry in entries):
         return
-    devices = allowlist.get("device_instances")
-    if isinstance(devices, list) and devices:
-        allowed = _device_allowlist(devices)
-        if device_instance not in allowed:
-            raise HTTPException(status_code=403, detail=f"device {device_instance} not in write allowlist")
-    objects = allowlist.get("object_identifiers")
-    if isinstance(objects, list) and objects:
-        allowed_objs = {str(x).strip().lower() for x in objects}
-        if oid.lower() not in allowed_objs:
-            raise HTTPException(status_code=403, detail=f"object {oid} not in write allowlist")
+    write_audit(
+        event_type="bacnet.command",
+        action="write denied (not in allowlist)",
+        outcome="failure",
+        severity="warning",
+        request=request,
+        user=user,
+        resource_type="bacnet",
+        resource_id=oid,
+        detail={
+            "device_instance": device_instance,
+            "property_identifier": property_identifier,
+            "priority": priority,
+        },
+    )
+    raise HTTPException(status_code=403, detail="write target not in allowlist")
 
 
 def ensure_writes_enabled(*, request: Request, user: dict | None, body: dict[str, Any]) -> None:

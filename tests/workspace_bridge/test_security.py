@@ -230,9 +230,11 @@ def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
     assert raw_client.get("/api/host/stats").status_code == 401
 
 
-def test_anonymous_can_read_public_check_engine(raw_client: TestClient):
+def test_anonymous_cannot_read_agent_insights(raw_client: TestClient):
     assert raw_client.get("/health/stack").status_code == 401
-    assert raw_client.get("/openfdd-agent/building-insight").status_code == 200
+    assert raw_client.get("/openfdd-agent/building-insight").status_code == 401
+    assert raw_client.get("/openfdd-agent/operational-brief").status_code == 401
+    assert raw_client.get("/openfdd-agent/ollama/health").status_code == 401
 
 
 def test_health_minimal_public(raw_client: TestClient):
@@ -265,10 +267,24 @@ def test_ws_ticket_and_connect(raw_client: TestClient, integrator_headers: dict[
     assert ticket_r.status_code == 200
     ticket = ticket_r.json()["ticket"]
     assert ticket
-    with raw_client.websocket_connect(f"/ws/dashboard?ticket={ticket}") as ws:
+    with raw_client.websocket_connect(
+        "/ws/dashboard",
+        headers={**integrator_headers, "sec-websocket-protocol": f"ofdd.ws, {ticket}"},
+    ) as ws:
         payload = ws.receive_json()
         assert "stack" in payload
         assert "faults" in payload
+
+
+def test_ws_query_ticket_rejected_by_default(raw_client: TestClient, integrator_headers: dict[str, str]):
+    ticket_r = raw_client.post("/api/auth/ws-ticket", headers=integrator_headers)
+    ticket = ticket_r.json()["ticket"]
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with raw_client.websocket_connect(f"/ws/dashboard?ticket={ticket}"):
+            pass
+    assert excinfo.value.code == 1008
 
 
 def test_ws_rejected_without_ticket(raw_client: TestClient):
@@ -373,8 +389,20 @@ def test_bacnet_write_allowlist_skips_bad_device_entries(tmp_path: Path, monkeyp
     assert exc.value.status_code == 403
 
 
-def test_bacnet_write_bad_priority(client: TestClient, integrator_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch):
+def test_bacnet_write_bad_priority(
+    client: TestClient,
+    integrator_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
     monkeypatch.setenv("OFDD_ENABLE_BACNET_WRITE", "1")
+    allow = tmp_path / "bacnet"
+    allow.mkdir(parents=True)
+    (allow / "write_allowlist.json").write_text(
+        '{"writes":[{"device_instance":1001,"object_identifier":"analog-value,1","property_identifier":"present-value"}]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("openfdd_bridge.bacnet_write_guard.workspace_dir", lambda: tmp_path)
     r = client.post(
         "/api/bacnet/write",
         json={

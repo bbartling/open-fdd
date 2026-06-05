@@ -72,8 +72,8 @@ class _AuthedClient:
             ticket_resp = self._inner.post("/api/auth/ws-ticket", headers=headers)
             if ticket_resp.status_code == 200:
                 ticket = ticket_resp.json().get("ticket", "")
-                sep = "&" if "?" in url else "?"
-                url = f"{url}{sep}ticket={ticket}"
+                if ticket:
+                    headers = {**headers, "sec-websocket-protocol": f"ofdd.ws, {ticket}"}
         return self._inner.websocket_connect(url, headers=headers, **kwargs)
 
 

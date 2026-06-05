@@ -8,6 +8,7 @@ import hmac
 import json
 import os
 import time
+import uuid
 from typing import Any, Literal
 
 Role = Literal["operator", "integrator", "agent"]
@@ -17,6 +18,12 @@ _SECRET = os.environ.get("OFDD_AUTH_SECRET", "").strip()
 ROLES: tuple[Role, ...] = ("operator", "integrator", "agent")
 
 _DEV_USER = {"sub": "dev", "role": "operator", "exp": 0}
+
+_BEARER_TYP = "bearer"
+_BEARER_VER = 1
+_WS_TICKET_TYP = "ws"
+
+_used_ws_tickets: dict[str, float] = {}
 
 
 def _parse_token_ttl() -> int:
@@ -99,7 +106,15 @@ def check_credentials(username: str, password: str) -> Role | None:
 def issue_token(username: str, role: Role) -> str:
     if not credentials_configured():
         raise RuntimeError("cannot issue token without OFDD_AUTH_SECRET and user passwords")
-    payload = {"sub": username, "role": role, "exp": int(time.time()) + _TOKEN_TTL_SEC}
+    now = int(time.time())
+    payload = {
+        "sub": username,
+        "role": role,
+        "typ": _BEARER_TYP,
+        "ver": _BEARER_VER,
+        "iat": now,
+        "exp": now + _TOKEN_TTL_SEC,
+    }
     body = (
         base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
         .rstrip(b"=")
@@ -134,13 +149,22 @@ def verify_token(token: str | None) -> dict[str, Any] | None:
         return None
     if int(payload.get("exp", 0)) < int(time.time()):
         return None
+    typ = payload.get("typ")
+    if typ == _WS_TICKET_TYP:
+        return None
+    if typ is not None and typ != _BEARER_TYP:
+        return None
     role = payload.get("role")
     if role not in ROLES:
         payload["role"] = "operator"
     return payload
 
 
-_WS_TICKET_TYP = "ws"
+def _prune_used_ws_tickets(now: float | None = None) -> None:
+    ts = now if now is not None else time.time()
+    expired = [jti for jti, exp in _used_ws_tickets.items() if exp < ts]
+    for jti in expired:
+        _used_ws_tickets.pop(jti, None)
 
 
 def _ws_ticket_ttl_sec() -> int:
@@ -164,11 +188,14 @@ def issue_ws_ticket(username: str, role: Role) -> tuple[str, int]:
         if auth_dev_bypass_enabled():
             return "dev", ttl
         raise RuntimeError("cannot issue WebSocket ticket without OFDD_AUTH_SECRET")
+    now = int(time.time())
     payload = {
         "sub": username,
         "role": role,
         "typ": _WS_TICKET_TYP,
-        "exp": int(time.time()) + ttl,
+        "jti": uuid.uuid4().hex,
+        "iat": now,
+        "exp": now + ttl,
     }
     body = (
         base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode())
@@ -207,8 +234,15 @@ def verify_ws_ticket(ticket: str | None) -> dict[str, Any] | None:
         return None
     if payload.get("typ") != _WS_TICKET_TYP:
         return None
-    if int(payload.get("exp", 0)) < int(time.time()):
+    now = int(time.time())
+    if int(payload.get("exp", 0)) < now:
         return None
+    jti = str(payload.get("jti") or "").strip()
+    if jti:
+        _prune_used_ws_tickets(now)
+        if jti in _used_ws_tickets:
+            return None
+        _used_ws_tickets[jti] = float(payload.get("exp", now))
     role = payload.get("role")
     if role not in ROLES:
         payload["role"] = "operator"

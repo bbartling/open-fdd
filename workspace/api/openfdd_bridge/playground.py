@@ -288,7 +288,7 @@ def _run_dataframe_script_impl(
         g["out"] = {"df": g["df"], "events": []}
         stdout = _CappedStdout()
         with redirect_stdout(stdout):
-            exec(code, g, g)  # noqa: S102
+            exec(code, g, g)  # noqa: S102  # nosemgrep: python.lang.security.audit.exec-detected.exec-detected
         out = g.get("out")
         if not isinstance(out, dict):
             out = {"df": g.get("df", df), "events": [{"type": "note", "text": "no out dict; using df"}]}

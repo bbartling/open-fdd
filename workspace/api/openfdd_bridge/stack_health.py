@@ -23,7 +23,7 @@ Status = Literal["green", "yellow", "red", "gray"]
 def _probe_url(url: str, timeout: float = 2.0) -> tuple[bool, str, int | None]:
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
             return True, "ok", resp.status
     except urllib.error.HTTPError as exc:
         return False, str(exc.reason), exc.code

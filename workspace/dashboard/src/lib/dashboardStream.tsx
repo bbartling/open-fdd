@@ -151,8 +151,9 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
       if (cancelled) return;
       try {
         const url = new URL(wsBaseUrl());
-        if (ticket) url.searchParams.set("ticket", ticket);
-        ws = new WebSocket(url.toString());
+        ws = ticket
+          ? new WebSocket(url.toString(), ["ofdd.ws", ticket])
+          : new WebSocket(url.toString());
         ws.onopen = () => {
           if (!cancelled) setLive(true);
         };

@@ -93,8 +93,70 @@ def startup_auth_error_message() -> str:
     )
 
 
+_AUTH_SECRET_MIN_LEN = 32
+
+
+def validate_auth_secret_strength() -> None:
+    """Reject weak secrets on LAN/edge binds; warn on localhost dev."""
+    from . import auth
+
+    secret = os.environ.get("OFDD_AUTH_SECRET", "").strip()
+    if not secret or not auth.credentials_configured():
+        return
+    if len(secret) >= _AUTH_SECRET_MIN_LEN:
+        return
+    msg = (
+        f"OFDD_AUTH_SECRET is shorter than {_AUTH_SECRET_MIN_LEN} characters — "
+        "use a long random secret for LAN/edge deployments."
+    )
+    if bridge_bind_is_public() or not bridge_bind_is_localhost_only():
+        raise RuntimeError(msg)
+    _log.warning(msg)
+
+
+def inprocess_playground_allowed() -> bool:
+    if not _env_flag("OFDD_PLAYGROUND_INPROCESS"):
+        return False
+    if bridge_bind_is_localhost_only():
+        return True
+    return insecure_lan_dev_allowed()
+
+
+def ws_allow_query_ticket() -> bool:
+    return _env_flag("OFDD_WS_ALLOW_QUERY_TICKET")
+
+
+def bacnet_write_allow_any() -> bool:
+    return _env_flag("OFDD_BACNET_WRITE_ALLOW_ANY")
+
+
+def operator_can_bacnet_discover() -> bool:
+    return _env_flag("OFDD_OPERATOR_CAN_BACNET_DISCOVER")
+
+
+def agent_can_bacnet_mutate() -> bool:
+    return _env_flag("OFDD_AGENT_CAN_BACNET_MUTATE")
+
+
+def bacnet_discovery_mutations_enabled() -> bool:
+    return _env_flag("OFDD_ENABLE_BACNET_DISCOVERY_MUTATIONS")
+
+
+def operator_can_edit_model() -> bool:
+    return _env_flag("OFDD_OPERATOR_CAN_EDIT_MODEL")
+
+
+def agent_public_insight_allowed() -> bool:
+    return _env_flag("OFDD_AGENT_PUBLIC_INSIGHT") or _env_flag("OFDD_AGENT_PUBLIC_DEMO")
+
+
+def audit_log_prompts_enabled() -> bool:
+    return _env_flag("OFDD_AUDIT_LOG_PROMPTS")
+
+
 def validate_startup_auth() -> None:
     """Fail closed when a LAN-facing bridge has no auth configured."""
+    validate_auth_secret_strength()
     if auth_strict_configured():
         return
     if auth_dev_bypass_enabled():

@@ -9,14 +9,24 @@ from pydantic import BaseModel, Field
 from ..deps import require_roles, require_user
 from .. import agent_tools, audit, building_insight, ollama_client, device_poll_health, zone_temp_analytics
 from ..agent_tools import ToolError
+from ..audit import sanitize_agent_tool_args
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
-from ..security import debug_diagnostics_enabled
+from ..security import agent_public_insight_allowed, debug_diagnostics_enabled
 
 router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
 
 _AGENT_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 _TOOL_ROLES = Depends(require_roles("operator", "integrator", "agent"))
+
+
+def require_insight_access(request: Request) -> dict:
+    if agent_public_insight_allowed():
+        return {"sub": "anonymous", "role": "none"}
+    return require_user(request)
+
+
+_INSIGHT = Depends(require_insight_access)
 
 
 class ChatBody(BaseModel):
@@ -34,7 +44,7 @@ class ToolBody(BaseModel):
 
 
 @router.get("/context")
-def agent_context(user: dict = Depends(require_user)) -> dict:
+def agent_context(user: dict = _AGENT_ROLES) -> dict:
     # Cap total Ollama probe time so /context stays under reverse-proxy health budgets.
     ollama = ollama_client.health(timeout=2.0, max_total_s=6.0)
     tier = ollama_client.configured_ram_tier()
@@ -48,7 +58,11 @@ def agent_context(user: dict = Depends(require_user)) -> dict:
         "ollama_thinking_models": thinking_models_payload(),
         "ollama_think": ollama_client.configured_think(),
         "mcp": ollama_client.mcp_agent_hints(),
-        **agent_tools.model_context(),
+        **(
+            agent_tools.operator_model_context()
+            if user.get("role") == "operator"
+            else agent_tools.model_context()
+        ),
     }
     if debug_diagnostics_enabled() and user.get("role") in {"integrator", "agent"}:
         payload["repo_root"] = str(repo_root())
@@ -56,8 +70,12 @@ def agent_context(user: dict = Depends(require_user)) -> dict:
 
 
 @router.get("/tools")
-def list_tools(_user: dict = _AGENT_ROLES) -> dict:
-    return {"tools": agent_tools.tool_specs(), "app_edit_enabled": agent_tools.app_edit_enabled()}
+def list_tools(user: dict = _AGENT_ROLES) -> dict:
+    role = str(user.get("role") or "operator")
+    return {
+        "tools": agent_tools.tool_specs_for_role(role),
+        "app_edit_enabled": agent_tools.app_edit_enabled() and role in {"integrator", "agent"},
+    }
 
 
 @router.post("/tool")
@@ -79,7 +97,7 @@ def run_tool(
             user=user,
             resource_type="agent_tool",
             resource_id=body.tool,
-            detail={"args": body.args, "error": str(exc)},
+            detail={"args": sanitize_agent_tool_args(body.tool, body.args), "error": str(exc)},
         )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     audit.write_audit(
@@ -90,18 +108,18 @@ def run_tool(
         user=user,
         resource_type="agent_tool",
         resource_id=body.tool,
-        detail={"args": body.args},
+        detail={"args": sanitize_agent_tool_args(body.tool, body.args)},
     )
     return {"ok": True, "tool": body.tool, "result": result}
 
 
 @router.get("/ollama/health")
-def ollama_health() -> dict:
+def ollama_health(_user: dict = _INSIGHT) -> dict:
     return {"ok": True, **ollama_client.health()}
 
 
 @router.get("/building-insight")
-def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
+def building_insight_snapshot(force: bool = Query(default=False), _user: dict = _INSIGHT) -> dict:
     """Read-only briefing for the home dashboard (fixed interval cache).
 
     Do NOT add chat POST handlers on the home page — use ``/chat`` on the Agent tab only.
@@ -110,7 +128,7 @@ def building_insight_snapshot(force: bool = Query(default=False)) -> dict:
 
 
 @router.get("/operational-brief")
-def operational_brief(force: bool = Query(default=False)) -> dict:
+def operational_brief(force: bool = Query(default=False), _user: dict = _INSIGHT) -> dict:
     """Structured zone-temp, device poll health, and fault lines (same window as home insight)."""
     return building_insight.get_operational_brief(force=force)
 
@@ -119,6 +137,7 @@ def operational_brief(force: bool = Query(default=False)) -> dict:
 def device_poll_health_snapshot(
     force: bool = Query(default=False),
     site_id: str | None = Query(default=None),
+    _user: dict = _INSIGHT,
 ) -> dict:
     """Per-equipment online/flaky status from feather poll timestamps (+ FDD bindings)."""
     return device_poll_health.get_device_poll_snapshot(site_id=site_id, force=force)
@@ -128,6 +147,7 @@ def device_poll_health_snapshot(
 def zone_temps_snapshot(
     force: bool = Query(default=False),
     site_id: str | None = Query(default=None),
+    _user: dict = _INSIGHT,
 ) -> dict:
     """Prebuilt zone temperature levers (day/night averages, recovery rates)."""
     return zone_temp_analytics.get_zone_temp_snapshot(site_id=site_id, force=force)
