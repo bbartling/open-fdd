@@ -33,6 +33,7 @@ from .brick_model_context import (
     slim_brick_graph,
 )
 from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
+from .fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 from .fdd_runner import run_batch
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -236,6 +237,27 @@ def _tool_faults_lookup(args: dict[str, Any]) -> dict[str, Any]:
     return entries[0]
 
 
+def _tool_faults_applicable_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """Fault catalog families applicable to BRICK equipment on a site (SPARQL-scoped)."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    payload = build_applicable_payload(site_id)
+    return {
+        "site_id": payload["site_id"],
+        "query_engine": payload["query_engine"],
+        "equipment_count": payload["equipment_count"],
+        "applicable_families": payload["applicable_families"],
+        "hidden_families": payload["hidden_families"],
+        "assigned_rules": payload["assigned_rules"],
+        "family_count": payload.get("family_count"),
+    }
+
+
+def _tool_faults_validate_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """Ollama sanity-check of applicable fault families for the site."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    return validate_scope_with_ollama(site_id)
+
+
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
     """Replace the agent-managed building alerts. Every code must exist in the catalog."""
     alerts = args.get("alerts")
@@ -342,6 +364,8 @@ _READ_ONLY_TOOLS = frozenset(
         "model.scope",
         "timeseries.snapshot",
         "faults.lookup",
+        "faults.applicable_scope",
+        "faults.validate_scope",
         "building.zone_temps",
         "building.device_health",
         "building.operational_brief",
@@ -371,6 +395,8 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "model.scope": _tool_model_scope,
     "timeseries.snapshot": _tool_timeseries_snapshot,
     "faults.lookup": _tool_faults_lookup,
+    "faults.applicable_scope": _tool_faults_applicable_scope,
+    "faults.validate_scope": _tool_faults_validate_scope,
     "rules.save": _tool_rules_save,
     "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
@@ -489,6 +515,16 @@ def tool_specs() -> list[dict[str, Any]]:
             "writes": "read-only — historian mean/min/max/last",
         },
         {"name": "faults.lookup", "args": ["code"], "writes": "read-only — fault catalog definition"},
+        {
+            "name": "faults.applicable_scope",
+            "args": ["site_id?"],
+            "writes": "read-only — SPARQL-scoped fault families for site",
+        },
+        {
+            "name": "faults.validate_scope",
+            "args": ["site_id?"],
+            "writes": "read-only — Ollama validates fault family scope",
+        },
         {
             "name": "app.edit_file",
             "args": ["path", "contents"],

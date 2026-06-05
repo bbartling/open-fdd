@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..building_status import faults_by_family
 from ..deps import require_user
 from ..fault_catalog import catalog_graph, catalog_payload, catalog_tree, entry_for_code
+from ..fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
@@ -25,6 +26,21 @@ def get_catalog() -> dict:
 def get_catalog_tree() -> dict:
     """Reference tree: equipment family -> category -> fault codes (what CAN go wrong)."""
     return {"ok": True, **catalog_tree()}
+
+
+@router.get("/applicable")
+def get_applicable_catalog(site_id: str | None = None) -> dict:
+    """Fault catalog scoped to BRICK equipment on a site (SPARQL + assigned rules)."""
+    return build_applicable_payload(site_id)
+
+
+@router.post("/validate-scope")
+def post_validate_scope(body: dict | None = None) -> dict:
+    """Ollama sanity-check of applicable fault families for the active site."""
+    site_id = None
+    if isinstance(body, dict):
+        site_id = body.get("site_id")
+    return validate_scope_with_ollama(site_id)
 
 
 @router.get("/graph")
