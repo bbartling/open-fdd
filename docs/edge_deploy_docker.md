@@ -176,11 +176,14 @@ Unlike legacy `./deploy.sh all` (`deploy.yml`), the docker playbook does **not**
 | Env / secrets | `auth.env.local`, templates | Same |
 | Compose file | Template → `~/open-fdd/docker-compose.yml` | Same |
 
-Skip state sync on image-only deploy:
+Skip state sync on **image-only upgrade** (feather + historian preserved on host):
 
 ```bash
-./deploy.sh docker --limit acme_vm_bbartling -e openfdd_docker_sync_workspace_data=false
+OPENFDD_IMAGE_TAG=2026.06.04-edge ./scripts/upgrade_edge_ghcr.sh --limit acme_vm_bbartling
+# or: ./deploy.sh docker ... -e openfdd_docker_sync_workspace_data=false
 ```
+
+See [Docker image upgrade (no feather loss)](howto/docker_image_upgrade.md).
 
 ## Host services (not Compose app containers)
 
