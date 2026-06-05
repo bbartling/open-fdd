@@ -3,6 +3,7 @@ import { apiFetch, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
+import BacnetTreeLegend from "../components/BacnetTreeLegend";
 import { formatBacnetValue, type PrioritySlot } from "../lib/bacnetTreeMenu";
 import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
@@ -792,7 +793,8 @@ export default function BacnetPage() {
 
       <div className="panel">
         <h3 className="panel-title">Devices &amp; points</h3>
-        <div className="row row-spread">
+        <BacnetTreeLegend />
+        <div className="row row-spread" style={{ marginTop: "0.65rem" }}>
           <p className="muted" style={{ flex: 1, margin: 0 }}>
             Right-click for Actions (refresh PV, priority array) and Polling. Present value updates on demand or from poll.
           </p>

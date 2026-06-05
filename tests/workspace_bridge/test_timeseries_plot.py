@@ -189,3 +189,34 @@ def test_readings_api_accepts_string_rolling_avg_minutes(
     body = r.json()
     assert body.get("rolling_avg_minutes") == 5
     assert body.get("ok") is True
+
+
+def test_build_plot_csv_text(plot_env: Path):
+    _reload_bridge()
+    from openfdd_bridge.plot_readings import build_plot_csv_text, read_plot_readings as read_plots  # noqa: E402
+
+    payload = read_plots("demo", ["oa-t", "duct-t"], hours=24, include_faults=True)
+    csv_text = build_plot_csv_text(payload)
+    lines = csv_text.strip().splitlines()
+    assert lines[0].startswith("timestamp_utc,")
+    assert "oa-t" in lines[0]
+    assert "FDD:" in lines[0]
+    assert len(lines) == len(payload["timestamps"]) + 1
+
+
+def test_export_csv_api(plot_env: Path, integrator_headers: dict[str, str]):
+    _reload_bridge()
+    from openfdd_bridge.main import create_app as make_app  # noqa: E402
+
+    client = TestClient(make_app())
+    r = client.get(
+        "/api/timeseries/export.csv",
+        params={"site_id": "demo", "columns": "oa-t,oa-h", "hours": 24, "include_faults": "true"},
+        headers=integrator_headers,
+    )
+    assert r.status_code == 200
+    assert "text/csv" in r.headers.get("content-type", "")
+    assert "attachment" in r.headers.get("content-disposition", "")
+    body = r.text
+    assert body.startswith("timestamp_utc,")
+    assert "FDD:" in body.splitlines()[0]

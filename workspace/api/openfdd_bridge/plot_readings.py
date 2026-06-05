@@ -204,6 +204,46 @@ def _prepare_frame(site_id: str, *, source: str, hours: int, limit: int) -> pd.D
     return df
 
 
+def build_plot_csv_text(data: dict[str, Any]) -> str:
+    """Wide time-series CSV for Excel — telemetry columns plus FDD fault flags (0/1)."""
+    import csv
+    import io
+
+    timestamps = data.get("timestamps") or []
+    series = data.get("series") or {}
+    fault_plots = data.get("fault_plots") or {}
+    fault_panels = data.get("fault_panels") or []
+    labels = data.get("labels") or {}
+    fault_meta = {str(p.get("key") or ""): p for p in fault_panels if isinstance(p, dict)}
+
+    series_cols = sorted(series.keys())
+    fault_cols = sorted(fault_plots.keys())
+    headers = ["timestamp_utc"]
+    for col in series_cols:
+        label = str(labels.get(col) or col).strip()
+        headers.append(f"{label} ({col})" if label != col else col)
+    for key in fault_cols:
+        meta = fault_meta.get(key) or {}
+        title = str(meta.get("title") or key).strip()
+        code = str(meta.get("fault_code") or "").strip()
+        headers.append(f"FDD: {title} [{code}]" if code else f"FDD: {title}")
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(headers)
+    for i, ts in enumerate(timestamps):
+        row: list[Any] = [ts]
+        for col in series_cols:
+            vals = series.get(col) or []
+            v = vals[i] if i < len(vals) else None
+            row.append("" if v is None else v)
+        for key in fault_cols:
+            flags = fault_plots.get(key) or []
+            row.append(flags[i] if i < len(flags) else "")
+        writer.writerow(row)
+    return buf.getvalue()
+
+
 def read_plot_readings(
     site_id: str,
     columns: list[str],
@@ -211,6 +251,7 @@ def read_plot_readings(
     source: str = "bacnet",
     hours: int = 24,
     limit: int = CHART_MAX_POINTS,
+    max_chart_points: int | None = None,
     include_faults: bool = True,
     rule_ids: list[str] | None = None,
     rolling_avg_minutes: int | None = DEFAULT_ROLLING_AVG_MINUTES,
@@ -297,8 +338,9 @@ def read_plot_readings(
         chart_guides = chart_guides_from_rules(RuleStore().list_rules())
 
     n = len(ts_col)
+    chart_cap = max_chart_points if max_chart_points is not None else CHART_MAX_POINTS
     ts_col, series, fault_plots, aux_series, stride, truncated = downsample_aligned_plot(
-        n, CHART_MAX_POINTS, ts_col, series, fault_plots, aux_series
+        n, chart_cap, ts_col, series, fault_plots, aux_series
     )
 
     _log.info(

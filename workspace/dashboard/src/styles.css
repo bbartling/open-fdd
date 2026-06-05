@@ -1011,6 +1011,37 @@ textarea {
   border: 1px solid color-mix(in srgb, #3fb950 35%, transparent);
 }
 
+.bacnet-tree-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1.25rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel-soft) 70%, var(--panel));
+  font-size: 0.82rem;
+}
+
+.bacnet-tree-legend-title {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.bacnet-tree-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.bacnet-tree-legend-desc {
+  color: var(--muted);
+}
+
 .muted-badge {
   opacity: 0.55;
 }

@@ -5,7 +5,7 @@ import PageHeader from "../components/PageHeader";
 import { TabDebugPanel } from "../components/TabDebugPanel";
 import TelemetryScopePicker from "../components/TelemetryScopePicker";
 import { useTheme } from "../contexts/theme-context";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getBridgeBase } from "../lib/api";
 import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
 import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
@@ -262,6 +262,35 @@ export default function PlotPage() {
     }
   }
 
+  async function downloadPlotCsv() {
+    if (!siteId || !selected.size) return;
+    const keys = [...selected];
+    const qs = new URLSearchParams({
+      site_id: siteId,
+      columns: keys.join(","),
+      hours: String(hours),
+      include_faults: String(includeFaults),
+    });
+    const base = getBridgeBase();
+    const token = sessionStorage.getItem("ofdd_token");
+    const res = await fetch(`${base}/api/timeseries/export.csv?${qs}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`CSV export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `openfdd_timeseries_${siteId}_${hours}h.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setStatus(
+      includeFaults
+        ? "CSV downloaded — telemetry + FDD fault columns (0/1) for Excel."
+        : "CSV downloaded — telemetry columns for Excel.",
+    );
+  }
+
   return (
     <div className="page page-wide">
       <PageHeader
@@ -342,6 +371,15 @@ export default function PlotPage() {
           <div className="form-row-actions">
             <button type="button" disabled={chartLoading || !selected.size} onClick={() => void refreshChart()}>
               {chartLoading ? "Loading…" : "Refresh chart"}
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={chartLoading || !selected.size || !siteId}
+              title="Wide CSV for Excel — timestamp, selected points, and FDD fault columns (0/1)"
+              onClick={() => void downloadPlotCsv().catch((e) => setError(formatApiError(e)))}
+            >
+              Export CSV
             </button>
           </div>
         </div>

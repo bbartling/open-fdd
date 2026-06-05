@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from ..deps import require_user
 from ..fdd_row_prep import normalize_rolling_avg_minutes
-from ..plot_readings import read_plot_readings
+from ..plot_readings import build_plot_csv_text, read_plot_readings
 from ..timeseries_api import list_plot_series, list_plot_sites, read_plot_series
 
 router = APIRouter(prefix="/api/timeseries", tags=["timeseries"])
@@ -69,3 +69,39 @@ def timeseries_readings(
             show_rolling_avg=show_rolling_avg,
         ),
     }
+
+
+@router.get("/export.csv")
+def timeseries_export_csv(
+    site_id: str = Query(..., min_length=1),
+    columns: str = Query(default="", description="Comma-separated column names"),
+    hours: int = Query(default=24, ge=1, le=168),
+    source: str = Query(default="bacnet"),
+    limit: int = Query(default=8000, ge=100, le=8000),
+    include_faults: bool = Query(default=True),
+    fault_rules: str = Query(default="", description="Comma-separated rule ids"),
+    _user: dict = Depends(require_user),
+) -> Response:
+    """Download wide time-series CSV (telemetry + FDD fault columns) for Excel."""
+    cols = [c.strip() for c in columns.split(",") if c.strip()]
+    rule_ids = [r.strip() for r in fault_rules.split(",") if r.strip()]
+    data = read_plot_readings(
+        site_id,
+        cols,
+        source=source,
+        hours=hours,
+        limit=limit,
+        max_chart_points=limit,
+        include_faults=include_faults,
+        rule_ids=rule_ids or None,
+        rolling_avg_minutes=0,
+        show_rolling_avg=False,
+    )
+    body = build_plot_csv_text(data)
+    safe_site = site_id.replace("/", "-")[:40]
+    filename = f"openfdd_timeseries_{safe_site}_{hours}h.csv"
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
