@@ -1,73 +1,56 @@
 ---
 title: Home
 nav_order: 1
-description: "Deploy Open-FDD on a building edge — Docker, Ansible, BACnet, Rule Lab, local check-engine AI."
+description: "Open-FDD — open-source HVAC fault detection and building data platform."
 ---
 
 # Open-FDD
 
-Deploy a **building operator stack** on an edge VM or lab host (Acme, bensserver, field Pi): BACnet commission → feather historian → **Python Rule Lab** FDD → dashboard with a **check-engine light**.
+Open-FDD is an open-source platform for **fault detection**, **BACnet integration**, and **operator analytics** at the building edge. It combines a React dashboard, FastAPI Operator Bridge, Python Rule Lab, local feather historian, and optional Brick/RDF modeling.
 
-The same repo also ships **`open-fdd` on PyPI** — a pandas YAML rules engine for offline CSV/notebook work. That library is documented in the back of this site under [Fault rules (engine)](rules/).
+**Who it is for**
 
----
+| Audience | Start here |
+|----------|------------|
+| IT / controls engineer trying the stack | [Quick Start — Docker](quick-start/) |
+| Developer contributing or customizing | [Developer Guide](developer/) |
+| Integrator wiring APIs | [Appendix — API routes](appendix/bridge_api) |
+| Analyst authoring FDD rules | [Rule Cookbook](rule-cookbook/) · [Fault Codes](fault-codes/) |
 
-## Start here
+## What you get
 
-| Step | Doc |
-|------|-----|
-| 1 | [Getting started](getting_started) — deploy checklist, **what AI can / cannot do**, BACnet NIC bind |
-| 2 | [System overview](overview) — containers, data flow, Acme-style topology |
-| 3 | [Docker edge deploy](edge_deploy_docker) — build images, Ansible `deploy.sh docker`, health |
-| 4 | [Local Ollama (check-engine)](local_ollama) — on-box AI vs your deployment AI |
-| 5 | [Operator dashboard](howto/operator_dashboard) — Rule Lab, trends, faults |
-| 6 | [BACnet driver capabilities](bacnet/capabilities) — discover, read, write, poll, mapping |
-| 7 | [Arrow data plane](architecture/arrow_data_plane) — Feather/Arrow historian: what is and is not columnar |
-| 8 | [Bridge HTTP API](appendix/bridge_api) — REST reference for integrators |
+| Component | Purpose |
+|-----------|---------|
+| **Operator Bridge** | Web API + dashboard (trends, faults, Rule Lab, model tools) |
+| **BACnet tools** | Discover, read, poll, optional supervised writes |
+| **Rule Lab** | Test Python `evaluate(row, cfg, …)` rules on live or historical data |
+| **Local historian** | Feather-based telemetry store on the edge host |
+| **Brick / RDF model** | Equipment and point semantics for bindings and analytics |
+| **Docker images** | Published on GHCR — pull and run without building from source |
+| **Python package** | `pip install open-fdd` for offline CSV/notebook and YAML engine use |
 
-**Quick local stack:**
+## Two paths
 
-```bash
-git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-./scripts/docker_build.sh
-./scripts/openfdd_stack.sh up
-./scripts/stack_health_check.sh
-```
+### Try it with Docker (recommended)
 
-Open `http://<host>/` (Caddy :80 → bridge :8765). Auth: `workspace/auth.env.local` (see [Security hardening](security_hardening)).
+Pull published images from `ghcr.io/bbartling/`, configure auth and BACnet env files, start the stack, open the dashboard.
 
----
+→ [Quick Start](quick-start/)
 
-## AI-assisted bootstrap
+### Develop locally
 
-Works well with **Cursor**, **Claude Code**, or the repo **agent shell** (`openfdd.toml`, `skills/`, `AGENTS.md`). A deployment assistant can:
+Clone the repo, create `workspace/auth.env.local`, build images, run tests, submit a PR.
 
-- Run tests, build images, and drive Ansible from your laptop
-- Discover BACnet (Who-Is, point reads) when the OT NIC is bound correctly
-- Import inventory → **BRICK** `model.json`, wire `fdd_input` bindings, draft Rule Lab Python
-- Tune thresholds and explain fault episodes from feather + `fdd_results.json`
-
-It should **not** be treated as a substitute for locked-down production credentials, unchecked BACnet writes on live plant, or sign-off on life-safety interlocks. See the full checklist in [Getting started](getting_started).
-
----
+→ [Developer Guide](developer/)
 
 ## Distribution
 
-| Channel | Status |
-|---------|--------|
-| **Operator web app** | This repo — Docker bridge + dashboard ([Getting started](getting_started)) |
-| **GHCR edge images** | [Publish Docker addons](howto/publish_docker_addons) → `ghcr.io/bbartling/openfdd-*:<tag>` → `OPENFDD_IMAGE_TAG=… ./deploy.sh docker` |
-| **Docker tar (legacy)** | `OPENFDD_DOCKER_PULL_FROM_GHCR=0` + `docker_build.sh --save` — lab / air-gap |
-| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | `engine`, `playground`, `reports` — [PyPI packages](open_fdd_playground_pypi) (library; not the full edge UI) |
-
----
-
-## Inspiration
-
-Open-FDD’s packaging (supervisor, versioned container images, bind-mounted `workspace/` state on a thin host) is **inspired by** the [Home Assistant](https://www.home-assistant.io/) project and [Home Assistant OS](https://github.com/home-assistant/operating-system). This is an independent BACnet/FDD operator product, not a Home Assistant add-on.
-
----
+| Channel | Use when |
+|---------|----------|
+| **GHCR images** `ghcr.io/bbartling/openfdd-*` | Production or trial edge deploy |
+| **This repository** | Custom builds, BACnet commissioning, Rule Lab development |
+| **PyPI** [`open-fdd`](https://pypi.org/project/open-fdd/) | Library-only pandas/YAML workflows (no full UI) |
 
 ## License
 
-MIT — repository `LICENSE`.
+MIT — see repository `LICENSE`.

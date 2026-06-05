@@ -1,16 +1,16 @@
 ---
-title: Operator Bridge API
+title: API routes
 parent: Appendix
 nav_order: 1
 ---
 
-# Operator Bridge API
+# API routes
 
-REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy terminates TLS/HTTP on `:80` and proxies to the bridge.
+REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Production: Caddy on `:80` proxies to the bridge.
 
 **OpenAPI:** `GET /docs` and `GET /redoc` when the bridge runs.
 
-**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission + [write guard](../security_hardening). Dev: `OFDD_AUTH_DISABLED` on trusted localhost only.
+**Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety](../bacnet/write-safety). Dev: `OFDD_AUTH_DISABLED` on loopback only.
 
 **WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket` then `?ticket=` (short-lived; not the Bearer token).
 
@@ -105,7 +105,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 | GET | `/api/bacnet/poll/status` | read | Poll worker status |
 | POST | `/ingest/bacnet` | read | Ingest samples into feather |
 
-Bind address: `BACNET_BIND` in commission env (see [Getting started](../getting_started#3-bacnet-lab-bind-see-devices-on-ot-nic)). Feature matrix: [BACnet driver capabilities](../bacnet/capabilities).
+Bind address: `BACNET_BIND` in commission env — see [BACnet network setup](../bacnet/network-setup). Operator guide: [Discover and read](../bacnet/discover-read).
 
 | PATCH | `/api/bacnet/driver/point` | commission | Enable poll + interval on point |
 | PATCH | `/api/bacnet/driver/device` | commission | Enable poll for all points on device |
@@ -164,7 +164,7 @@ Prefix **`/openfdd-agent`**. Role **`agent`** for tool execution.
 | GET | `/openfdd-agent/zone-temps` | Zone temperature insight |
 | POST | `/openfdd-agent/chat` | Chat completion (catalog-bound) |
 
-See [Local Ollama](../local_ollama).
+Optional host Ollama for building insight — not required for core FDD. Configure via compose profile or host service; see [Architecture overview](../architecture/overview).
 
 ---
 
@@ -178,10 +178,10 @@ See [Local Ollama](../local_ollama).
 
 ## PyPI engine API (separate)
 
-Library-only HTTP is **not** bundled. See [Engine API](../api/engine) and [Reports API](../api/reports) for `RuleRunner` and `open_fdd.reports`.
+Library-only HTTP is **not** bundled. See [Python package](python-package) for `RuleRunner` and `open_fdd.reports`.
 
 ---
 
 ## Errors
 
-JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [Security hardening](../security_hardening).
+JSON error bodies; stack traces hidden unless `OFDD_DEBUG_TRACEBACKS=1`. See [LAN hardening](../security/lan-hardening).
