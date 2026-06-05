@@ -102,9 +102,9 @@ jobs:
       - name: bandit bridge (high severity)
         run: bandit -r workspace/api/openfdd_bridge -lll -q
       - name: gitleaks secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks detect --source . --no-git --redact --exit-code 1
       - name: semgrep security scan
         run: |
           python -m pip install semgrep
