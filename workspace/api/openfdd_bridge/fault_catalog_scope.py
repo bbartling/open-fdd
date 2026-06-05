@@ -122,13 +122,10 @@ def _applicable_rules(rules: list[dict[str, Any]], families: set[str], site_id: 
         rule_codes = _normalize_fault_codes(rule)
         if not rule_codes:
             continue
-        matched_fams = {family_for_code(c) for c in rule_codes} & families
-        if not matched_fams:
+        matched_codes = [c for c in rule_codes if family_for_code(c) in families]
+        if not matched_codes:
             continue
-        code = next(
-            (c for c in rule_codes if family_for_code(c) in matched_fams),
-            rule_codes[0],
-        )
+        code = matched_codes[0]
         applies = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
         site_ids = [str(s) for s in applies.get("site_ids", []) if str(s).strip()]
         if site_ids and site_id and site_id not in site_ids:
@@ -138,7 +135,7 @@ def _applicable_rules(rules: list[dict[str, Any]], families: set[str], site_id: 
                 "rule_id": str(rule.get("id") or ""),
                 "rule_name": str(rule.get("name") or ""),
                 "fault_code": code,
-                "fault_codes": rule_codes,
+                "fault_codes": matched_codes,
                 "family": family_for_code(code) or "",
                 "severity": str(rule.get("severity") or "warning"),
                 "enabled": rule.get("enabled") is not False,

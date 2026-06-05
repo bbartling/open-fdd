@@ -20,7 +20,7 @@ export function formatFaultInferenceBlock(inf: FaultInference | null | undefined
   if (!inf) return "";
   const lines: string[] = [">>> Fault catalog mapping (local Ollama + BRICK scope)"];
   if (inf.narrative) lines.push(inf.narrative);
-  const codes = inf.fault_codes ?? [];
+  const codes = inf.fault_codes ?? (inf.fault_code ? [inf.fault_code] : []);
   if (codes.length) {
     lines.push(`Suggested codes: ${codes.join(", ")} (${inf.source ?? "inference"})`);
   }

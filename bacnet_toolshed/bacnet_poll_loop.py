@@ -84,7 +84,13 @@ async def poll_enabled_points(app, *, output_csv: Path | None = None) -> int:
 def run_poll_cycle(run_bacnet_sync) -> dict[str, Any]:
     """Run one BACnet poll cycle using commission agent BACnet I/O."""
     if enabled_point_count() == 0:
-        _set_last_poll(ok=True, samples=0, error="", at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        _set_last_poll(
+            ok=True,
+            samples=0,
+            error="",
+            interrupted=False,
+            at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        )
         return last_poll_status()
     try:
         n = run_bacnet_sync(lambda app: poll_enabled_points(app))
@@ -111,6 +117,7 @@ def run_poll_cycle(run_bacnet_sync) -> dict[str, Any]:
             ok=False,
             samples=0,
             error=str(exc)[:500],
+            interrupted=False,
             at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
         print(f"BACnet poll cycle failed: {exc}", file=sys.stderr)

@@ -18,7 +18,11 @@ def test_stack_revisions_reads_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OPENFDD_IMAGE_TAG", "2026.06.05-edge")
     monkeypatch.setenv("OPENFDD_BUILD_GIT_SHA", "abc1234")
     monkeypatch.setenv("OPENFDD_BUILD_TIME", "2026-06-05T12:00:00Z")
-    monkeypatch.setattr(container_revisions, "commission_health", lambda: (200, {"ok": True}))
+    monkeypatch.setattr(
+        container_revisions,
+        "commission_health",
+        lambda timeout=None: (200, {"ok": True}),
+    )
     payload = container_revisions.stack_revisions()
     assert payload["image_tag"] == "2026.06.05-edge"
     assert payload["git_sha"] == "abc1234"

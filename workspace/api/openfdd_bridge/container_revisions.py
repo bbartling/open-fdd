@@ -79,7 +79,7 @@ def stack_revisions(*, include_image_ids: bool = False) -> dict[str, Any]:
         },
     ]
 
-    code, payload = commission_health()
+    code, payload = commission_health(timeout=2.0)
     if code == 200 and isinstance(payload, dict):
         for svc in services:
             if svc["id"] == "commission":

@@ -34,10 +34,12 @@ class _Point:
 def test_interruptible_poll_checks_cancel_between_devices(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     calls: list[str] = []
     hold_second = asyncio.Event()
+    second_started = asyncio.Event()
 
     async def fake_rpm(app, dev_addr, rpm_objects):
         calls.append(dev_addr)
         if dev_addr == "2000:8":
+            second_started.set()
             await hold_second.wait()
         return {k: 1.0 for k in rpm_objects}
 
@@ -53,7 +55,7 @@ def test_interruptible_poll_checks_cancel_between_devices(monkeypatch: pytest.Mo
         task = asyncio.create_task(
             poll_once(object(), points_by_device, output_csv=out, dry_run=False, interruptible=True)
         )
-        await asyncio.sleep(0.01)
+        await second_started.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task

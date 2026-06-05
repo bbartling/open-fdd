@@ -184,6 +184,7 @@ def test_should_use_ollama(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_AI_BACKEND", "codex")
     assert ollama_client.should_use_ollama() is False
     monkeypatch.setenv("OFDD_AI_BACKEND", "ollama")
+    monkeypatch.setattr(ollama_client, "health", lambda timeout=3.0: {"ok": True})
     assert ollama_client.should_use_ollama() is True
     monkeypatch.setenv("OFDD_AI_BACKEND", "auto")
     monkeypatch.setattr(ollama_client, "health", lambda timeout=3.0: {"ok": True})

@@ -58,8 +58,8 @@ def _request(
         }
 
 
-def commission_health() -> tuple[int, Any]:
-    return _request("GET", "/api/health")
+def commission_health(*, timeout: float | None = None) -> tuple[int, Any]:
+    return _request("GET", "/api/health", timeout=timeout)
 
 
 def commission_status() -> tuple[int, Any]:

@@ -396,8 +396,18 @@ def _override_index() -> dict[str, dict[str, Any]]:
                 if not oid:
                     continue
                 slots = pt.get("overrides") or []
-                levels = [int(s.get("priority_level") or 0) for s in slots if isinstance(s, dict)]
-                op_slots = [s for s in slots if isinstance(s, dict) and int(s.get("priority_level") or 0) == op_pri]
+                levels: list[int] = []
+                op_slots: list[dict[str, Any]] = []
+                for slot in slots:
+                    if not isinstance(slot, dict):
+                        continue
+                    try:
+                        level = int(slot.get("priority_level"))
+                    except (TypeError, ValueError):
+                        continue
+                    levels.append(level)
+                    if level == op_pri:
+                        op_slots.append(slot)
                 index[f"{inst}:{oid}"] = {
                     "override_priorities": sorted(set(levels)),
                     "has_override": bool(levels),
@@ -623,15 +633,25 @@ def delete_point(*, point_id: str) -> dict[str, Any]:
         for path in (_discovered_path(), _points_path()):
             rows = [r for r in _load_csv(path) if r.get("point_id") != point_id]
             _save_csv(path, rows)
+        _ONDEMAND_PV.pop(point_id, None)
     return {"ok": True, "point_id": point_id}
 
 
 def delete_device(*, device_instance: int) -> dict[str, Any]:
     inst = str(device_instance)
     with _DRIVER_LOCK:
+        stale_pids: set[str] = set()
         for path in (_discovered_path(), _points_path()):
-            rows = [r for r in _load_csv(path) if str(r.get("device_instance") or "") != inst]
+            rows = _load_csv(path)
+            stale_pids.update(
+                str(r.get("point_id") or "")
+                for r in rows
+                if str(r.get("device_instance") or "") == inst and r.get("point_id")
+            )
+            rows = [r for r in rows if str(r.get("device_instance") or "") != inst]
             _save_csv(path, rows)
+        for pid in stale_pids:
+            _ONDEMAND_PV.pop(pid, None)
     try:
         from .bacnet_poll_model_sync import remove_device_from_model
 
@@ -670,6 +690,7 @@ def clear_registry(*, sync_model: bool = True, sync_ttl: bool = True) -> dict[st
         _save_csv(_discovered_path(), [])
         _save_csv(_points_path(), [])
         _clear_poll_samples()
+        _ONDEMAND_PV.clear()
     model_result: dict[str, Any] | None = None
     if sync_model:
         from .bacnet_poll_model_sync import clear_bacnet_from_model

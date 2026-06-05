@@ -40,6 +40,10 @@ from ..commission_client import (
     bacnet_read_multiple as commission_read_multiple,
     bacnet_write as commission_write,
     commission_health,
+    commission_override_scan_once,
+    commission_override_status,
+    commission_poll_once,
+    commission_poll_status,
     commission_status,
     get_job,
     server_points as commission_server_points,
@@ -59,12 +63,6 @@ from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 
 _log = logging.getLogger(__name__)
 _ingest_lock = threading.Lock()
-from ..commission_client import (
-    commission_override_scan_once,
-    commission_override_status,
-    commission_poll_once,
-    commission_poll_status,
-)
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
@@ -93,8 +91,10 @@ class BridgeSingleReadRequest(BaseModel):
     @field_validator("property_identifier")
     @classmethod
     def validate_property_identifier(cls, value: str) -> str:
-        if value not in PropertyIdentifier._enum_map:
-            raise ValueError(f"Invalid property identifier: {value}")
+        try:
+            PropertyIdentifier(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid property identifier: {value}") from None
         return value
 
 
