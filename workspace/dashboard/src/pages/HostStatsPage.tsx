@@ -58,6 +58,8 @@ type HostStats = {
     configured_model?: string;
     configured_ram_tier?: string;
     gpu_mode?: string;
+    gpu_available?: boolean;
+    interactive_chat_enabled?: boolean;
     health_timeout_s?: number;
     chat_timeout_s?: number;
     error?: string;
@@ -65,6 +67,21 @@ type HostStats = {
     rss_bytes?: number;
     command?: string;
     process?: { pid?: number; rss_bytes?: number };
+  };
+  container_revisions?: {
+    image_tag?: string;
+    git_sha?: string;
+    built_at?: string;
+    services?: {
+      id: string;
+      label: string;
+      image: string;
+      image_tag?: string;
+      git_sha?: string;
+      built_at?: string;
+      api_version?: string;
+      note?: string;
+    }[];
   };
 };
 
@@ -334,6 +351,18 @@ export default function HostStatsPage() {
                   </span>
                 </div>
               ) : null}
+              <div className="status-kv">
+                <span className="status-kv-label">GPU</span>
+                <span className={`status-kv-value ${stats.ollama.gpu_available ? "ok" : ""}`}>
+                  {stats.ollama.gpu_available ? "available" : "not detected"}
+                </span>
+              </div>
+              <div className="status-kv">
+                <span className="status-kv-label">Agent chat</span>
+                <span className={`status-kv-value ${stats.ollama.interactive_chat_enabled ? "ok" : ""}`}>
+                  {stats.ollama.interactive_chat_enabled ? "enabled" : "disabled (CPU-only)"}
+                </span>
+              </div>
               {stats.ollama.health_timeout_s != null ? (
                 <div className="status-kv">
                   <span className="status-kv-label">Health probe</span>
@@ -366,6 +395,39 @@ export default function HostStatsPage() {
               </p>
             ) : null}
           </div>
+
+          {stats.container_revisions?.services?.length ? (
+            <div className="panel">
+              <h3 className="panel-title">Container revisions</h3>
+              <p className="muted">
+                Image tag <code>{stats.container_revisions.image_tag}</code>
+                {stats.container_revisions.git_sha ? (
+                  <> · git <code>{stats.container_revisions.git_sha}</code></>
+                ) : null}
+                {stats.container_revisions.built_at ? <> · built {stats.container_revisions.built_at}</> : null}
+              </p>
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Image</th>
+                    <th>Rev</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.container_revisions.services.map((svc) => (
+                    <tr key={svc.id}>
+                      <td>{svc.label}</td>
+                      <td className="mono">{svc.image}</td>
+                      <td className="mono">
+                        {svc.api_version ? `api ${svc.api_version}` : svc.git_sha || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
 
           <div className="panel">
             <h3 className="panel-title">System</h3>

@@ -36,6 +36,13 @@ RUN pip install -e ".[engine]" \
 
 FROM python-base AS bridge
 
+ARG OPENFDD_IMAGE_TAG=local
+ARG OPENFDD_BUILD_GIT_SHA=unknown
+ARG OPENFDD_BUILD_TIME=
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
+
 COPY workspace/api/requirements.txt /tmp/bridge-requirements.txt
 RUN pip install -r /tmp/bridge-requirements.txt
 
@@ -73,14 +80,37 @@ COPY docker/bacnet-commission-entrypoint.sh /usr/local/bin/bacnet-commission-ent
 RUN chmod +x /usr/local/bin/bacnet-poll-entrypoint.sh /usr/local/bin/bacnet-commission-entrypoint.sh
 
 FROM bacnet AS bacnet-poll
+
+ARG OPENFDD_IMAGE_TAG=local
+ARG OPENFDD_BUILD_GIT_SHA=unknown
+ARG OPENFDD_BUILD_TIME=
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
+
 ENTRYPOINT ["/usr/local/bin/bacnet-poll-entrypoint.sh"]
 
 FROM bacnet AS commission
+
+ARG OPENFDD_IMAGE_TAG=local
+ARG OPENFDD_BUILD_GIT_SHA=unknown
+ARG OPENFDD_BUILD_TIME=
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
+
 ENV OPENFDD_BACNET_COMMISSION_BIND=0.0.0.0 \
     OPENFDD_BACNET_COMMISSION_PORT=8767
 ENTRYPOINT ["/usr/local/bin/bacnet-commission-entrypoint.sh"]
 
 FROM python-base AS mcp-rag
+
+ARG OPENFDD_IMAGE_TAG=local
+ARG OPENFDD_BUILD_GIT_SHA=unknown
+ARG OPENFDD_BUILD_TIME=
+ENV OPENFDD_IMAGE_TAG=${OPENFDD_IMAGE_TAG} \
+    OPENFDD_BUILD_GIT_SHA=${OPENFDD_BUILD_GIT_SHA} \
+    OPENFDD_BUILD_TIME=${OPENFDD_BUILD_TIME}
 
 COPY workspace/api/requirements.txt /tmp/mcp-requirements.txt
 RUN pip install -r /tmp/mcp-requirements.txt

@@ -43,6 +43,39 @@ function isHistorianLag(a: FaultAlert): boolean {
   return String(a.source || "") === "poll_health" && t.includes("historian");
 }
 
+function isBacnetOperatorOverride(a: FaultAlert): boolean {
+  return String(a.source || "") === "bacnet_override";
+}
+
+function groupBacnetOverrides(alerts: FaultAlert[]): DisplayFault | null {
+  const hits = alerts.filter(isBacnetOperatorOverride);
+  if (!hits.length) return null;
+  const lines = hits.slice(0, 6).map((a) => String(a.title || "").replace(/^OVERRIDE\s*/i, ""));
+  const extra = hits.length > 6 ? ` (+${hits.length - 6} more)` : "";
+  const worst = hits.some((a) => a.severity === "critical") ? "critical" : "medium";
+  return {
+    id: "group-bacnet-overrides",
+    severity: worst,
+    severityLabel: severityLabel(worst),
+    title: `BACnet operator overrides (P8) — ${hits.length} active`,
+    detail: lines.join("; ") + extra,
+    equipmentLabel: "Overrides",
+    source: "bacnet_override",
+    meta: [
+      { label: "Override count", value: String(hits.length) },
+      { label: "Priority", value: "P8 (operator manual)" },
+      { label: "Fix", value: "Review BACnet tab → relinquish when done" },
+    ],
+    underlying: hits,
+    plainEnglish:
+      "One or more commandable BACnet points have a manual operator write at priority 8. Present value may not match the schedule until those overrides are released.",
+    technical: hits
+      .slice(0, 8)
+      .map((a) => a.title)
+      .join("\n"),
+  };
+}
+
 function isModelFddInput(a: FaultAlert): boolean {
   const t = String(a.title || "").toLowerCase();
   const d = String(a.detail || "").toLowerCase();
@@ -165,12 +198,18 @@ export function buildDisplayFaults(families: FaultFamily[]): DisplayFault[] {
     flat.filter(isModelFddInput).forEach((a) => used.add(String(a.id || a.title)));
   }
 
+  const overrides = groupBacnetOverrides(flat);
+  if (overrides) {
+    cards.push(overrides);
+    flat.filter(isBacnetOperatorOverride).forEach((a) => used.add(String(a.id || a.title)));
+  }
+
   for (const fam of families) {
     const eqLabel = fam.label;
     for (const a of fam.faults) {
       const key = String(a.id || a.title);
       if (used.has(key)) continue;
-      if (isHistorianLag(a) || isModelFddInput(a)) continue;
+      if (isHistorianLag(a) || isModelFddInput(a) || isBacnetOperatorOverride(a)) continue;
       cards.push(alertToDisplay(a, eqLabel));
     }
   }

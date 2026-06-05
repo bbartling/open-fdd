@@ -24,6 +24,8 @@ services:
   commission:
     network_mode: host
     ports: !reset []
+    environment:
+      OPENFDD_BRIDGE_INGEST_URL: http://127.0.0.1:8765/internal/bacnet/ingest-samples
 
   mcp-rag:
     ports:

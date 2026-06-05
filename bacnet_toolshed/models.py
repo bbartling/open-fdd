@@ -76,11 +76,13 @@ class ReadMultiplePropertiesRequest(BaseModel):
 
 class ReadMultiplePropertiesRequestWrapper(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
     requests: List[ReadMultiplePropertiesRequest]
 
 
 class SingleReadRequest(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
     object_identifier: str
     property_identifier: str = "present-value"
 
@@ -100,6 +102,7 @@ class SingleReadRequest(BaseModel):
 
 class ReadPriorityArrayRequest(BaseModel):
     device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
     object_identifier: str
 
     @field_validator("object_identifier")

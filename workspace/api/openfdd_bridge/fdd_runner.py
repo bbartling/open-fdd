@@ -140,7 +140,10 @@ def _run_one(
         origin = origin or "feather"
     if lookback_hours > 0 and frame is not None:
         frame = _trim_lookback(frame, lookback_hours)
-    fault_code = str(rule.get("fault_code") or "")
+    from .rule_store import _normalize_fault_codes
+
+    fault_codes = _normalize_fault_codes(rule)
+    fault_code = fault_codes[0] if fault_codes else str(rule.get("fault_code") or "")
     code = _rule_code(rule)
     base = {
         "rule_id": rule.get("id"),
@@ -149,6 +152,7 @@ def _run_one(
         "severity": rule.get("severity", "warning"),
         "source": origin,
         "fault_code": fault_code,
+        "fault_codes": fault_codes,
         "equipment_family": family_for_code(fault_code) or "",
     }
     try:

@@ -33,6 +33,7 @@ from .brick_model_context import (
     slim_brick_graph,
 )
 from .fault_catalog import all_codes, catalog_graph, entry_for_code, is_valid_code
+from .fault_catalog_scope import build_applicable_payload, validate_scope_with_ollama
 from .fdd_runner import run_batch
 from .model_health import model_health_summary
 from .model_service import ModelService
@@ -106,12 +107,20 @@ def _tool_model_add_point(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_rules_save(args: dict[str, Any]) -> dict[str, Any]:
-    fault_code = str(args.get("fault_code") or "").strip()
-    if fault_code and not is_valid_code(fault_code):
-        raise ToolError(
-            f"unknown fault code '{fault_code}'. Pick a fixed code from the fault catalog "
-            "(model_context().fault_codes); do not invent codes."
-        )
+    codes_raw: list[str] = []
+    if isinstance(args.get("fault_codes"), list):
+        codes_raw.extend(str(c).strip() for c in args["fault_codes"] if str(c).strip())
+    if not codes_raw and args.get("fault_code"):
+        codes_raw.append(str(args.get("fault_code") or "").strip())
+    for raw in codes_raw:
+        code = raw.upper()
+        if not is_valid_code(code):
+            raise ToolError(
+                f"unknown fault code '{raw}'. Pick a fixed code from the fault catalog "
+                "(model_context().fault_codes); do not invent codes."
+            )
+    if codes_raw:
+        args = {**args, "fault_codes": [c.upper() for c in codes_raw]}
     try:
         entry = RuleStore().upsert(args, saved_by="agent")
     except ValueError as exc:
@@ -236,6 +245,27 @@ def _tool_faults_lookup(args: dict[str, Any]) -> dict[str, Any]:
     return entries[0]
 
 
+def _tool_faults_applicable_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """Fault catalog families applicable to BRICK equipment on a site (SPARQL-scoped)."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    payload = build_applicable_payload(site_id)
+    return {
+        "site_id": payload["site_id"],
+        "query_engine": payload["query_engine"],
+        "equipment_count": payload["equipment_count"],
+        "applicable_families": payload["applicable_families"],
+        "hidden_families": payload["hidden_families"],
+        "assigned_rules": payload["assigned_rules"],
+        "family_count": payload.get("family_count"),
+    }
+
+
+def _tool_faults_validate_scope(args: dict[str, Any]) -> dict[str, Any]:
+    """Ollama sanity-check of applicable fault families for the site."""
+    site_id = str(args.get("site_id") or "").strip() or None
+    return validate_scope_with_ollama(site_id)
+
+
 def _tool_building_set_alerts(args: dict[str, Any]) -> dict[str, Any]:
     """Replace the agent-managed building alerts. Every code must exist in the catalog."""
     alerts = args.get("alerts")
@@ -342,6 +372,8 @@ _READ_ONLY_TOOLS = frozenset(
         "model.scope",
         "timeseries.snapshot",
         "faults.lookup",
+        "faults.applicable_scope",
+        "faults.validate_scope",
         "building.zone_temps",
         "building.device_health",
         "building.operational_brief",
@@ -371,6 +403,8 @@ _TOOLS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "model.scope": _tool_model_scope,
     "timeseries.snapshot": _tool_timeseries_snapshot,
     "faults.lookup": _tool_faults_lookup,
+    "faults.applicable_scope": _tool_faults_applicable_scope,
+    "faults.validate_scope": _tool_faults_validate_scope,
     "rules.save": _tool_rules_save,
     "rules.bind": _tool_rules_bind,
     "rules.run_batch": _tool_rules_run_batch,
@@ -387,6 +421,51 @@ def tool_requires_write_role(name: str) -> bool:
     return name in _WRITE_TOOLS or (name.startswith("app.") and name not in _READ_ONLY_TOOLS)
 
 
+def tool_specs_for_role(role: str | None) -> list[dict[str, Any]]:
+    specs = tool_specs()
+    if role in ("integrator", "agent"):
+        return specs
+    allowed = _READ_ONLY_TOOLS
+    return [s for s in specs if s.get("name") in allowed]
+
+
+def operator_model_context() -> dict[str, Any]:
+    """Slim building summary for operator role (no write tool specs or repo detail)."""
+    model = ModelService().load()
+    health = model_health_summary(model)
+    try:
+        zone = get_zone_temp_snapshot(force=False)
+        zone_summary = {
+            "summary_sentence": zone.get("summary_sentence"),
+            "topology_mode": zone.get("topology_mode"),
+            "zone_sensor_count": zone.get("zone_sensor_count"),
+        }
+    except Exception:
+        zone_summary = {"summary_sentence": None, "topology_mode": None, "zone_sensor_count": None}
+    try:
+        devices = get_device_poll_snapshot(force=False)
+        device_summary = {
+            "summary_sentence": devices.get("summary_sentence"),
+            "healthy_count": devices.get("healthy_count"),
+        }
+    except Exception:
+        device_summary = {"summary_sentence": None, "healthy_count": None}
+    return {
+        "model_summary": {
+            "sites": health["counts"]["sites"],
+            "equipment": health["counts"]["equipment"],
+            "points": health["counts"]["points"],
+            "score": health["score"],
+            "status": health["status"],
+        },
+        "zone_temp_levers": zone_summary,
+        "device_poll_health": device_summary,
+        "tools": tool_specs_for_role("operator"),
+        "read_only_tools": sorted(_READ_ONLY_TOOLS),
+        "app_edit_enabled": False,
+    }
+
+
 def tool_specs() -> list[dict[str, Any]]:
     """Human/LLM-readable description of the available tools."""
     return [
@@ -399,7 +478,17 @@ def tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "rules.save",
-            "args": ["name", "code", "fault_code?", "mode?", "config?", "applies_to?", "severity?", "bindings?"],
+            "args": [
+                "name",
+                "code",
+                "fault_code?",
+                "fault_codes?",
+                "mode?",
+                "config?",
+                "applies_to?",
+                "severity?",
+                "bindings?",
+            ],
             "writes": "rules_store.json",
         },
         {
@@ -444,6 +533,16 @@ def tool_specs() -> list[dict[str, Any]]:
             "writes": "read-only — historian mean/min/max/last",
         },
         {"name": "faults.lookup", "args": ["code"], "writes": "read-only — fault catalog definition"},
+        {
+            "name": "faults.applicable_scope",
+            "args": ["site_id?"],
+            "writes": "read-only — SPARQL-scoped fault families for site",
+        },
+        {
+            "name": "faults.validate_scope",
+            "args": ["site_id?"],
+            "writes": "read-only — Ollama validates fault family scope",
+        },
         {
             "name": "app.edit_file",
             "args": ["path", "contents"],

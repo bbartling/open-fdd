@@ -33,6 +33,10 @@ def jobs_dir() -> Path:
     return bacnet_root() / "jobs"
 
 
+def overrides_dir() -> Path:
+    return bacnet_root() / "overrides"
+
+
 def default_points_discovered() -> Path:
     return commissioning_dir() / "points_discovered.csv"
 
@@ -46,5 +50,5 @@ def default_devices_discovered() -> Path:
 
 
 def ensure_layout() -> None:
-    for d in (commissioning_dir(), polls_dir(), jobs_dir()):
+    for d in (commissioning_dir(), polls_dir(), jobs_dir(), overrides_dir()):
         d.mkdir(parents=True, exist_ok=True)

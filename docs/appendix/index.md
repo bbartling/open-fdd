@@ -1,19 +1,16 @@
 ---
 title: Appendix
-nav_order: 99
+nav_order: 10
 has_children: true
 ---
 
 # Appendix
 
-Integrator and maintainer reference.
+Reference material for integrators and library users.
 
-| Page | Description |
-|------|-------------|
-| [Operator Bridge API](bridge_api) | REST routes (auth, BACnet, rules, faults, agent) |
-| [BACnet driver capabilities](../bacnet/capabilities) | What discovery, read, write, poll, and mapping cover |
-| [API reference (index)](api_reference) | Bridge vs PyPI engine |
-| [Engine API](../api/engine) | `RuleRunner`, YAML loaders |
-| [Reports API](../api/reports) | Summaries, plots, `.docx` |
-| [Technical reference](technical_reference) | Repo layout, tests |
-| [Developer guide](developer_guide) | Contributing to `open_fdd` |
+| Page | Content |
+|------|---------|
+| [API routes](bridge_api) | Operator Bridge REST/WebSocket |
+| [Python package](python-package) | PyPI `open-fdd` |
+| [Configuration reference](configuration) | Key env variables |
+| [Glossary](glossary) | Terms |

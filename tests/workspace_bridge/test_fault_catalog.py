@@ -11,7 +11,7 @@ REPO = Path(__file__).resolve().parents[2]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from openfdd_bridge import fault_catalog  # noqa: E402
+from openfdd_bridge import fault_catalog, fault_catalog_scope  # noqa: E402
 
 RULE_CODE = (
     "def evaluate(row, cfg, prev_row=None, rows=None):\n"
@@ -85,6 +85,50 @@ def test_tree_api(client: TestClient):
     assert "simultaneous_heat_cool" in ahu_cats
 
 
+def test_families_for_equipment_detection():
+    assert "AHU" in fault_catalog_scope.families_for_equipment("Air_Handler_Unit", "AHU-1")
+    assert "AHU" in fault_catalog_scope.families_for_equipment("", "AHU-1")
+    assert "VAV" in fault_catalog_scope.families_for_equipment("Fan_Coil_Unit", "FCU-12")
+    assert "HEATPUMP" in fault_catalog_scope.families_for_equipment("Heat_Pump", "HP roof")
+    assert not fault_catalog_scope.families_for_equipment("Laboratory_Equipment", "Lab bench")
+
+
+def test_detect_applicable_families_hides_heatpump_without_equipment():
+    scope = fault_catalog_scope.detect_applicable_families(
+        [{"equipment_id": "vav-1", "name": "VAV-3", "equipment_type": "Variable_Air_Volume_Box"}]
+    )
+    assert "VAV" in scope["applicable_families"]
+    assert "BUILDING" in scope["applicable_families"]
+    assert "HEATPUMP" in scope["hidden_families"]
+    assert "AHU" in scope["hidden_families"]
+
+
+def test_applicable_rules_pick_matched_fault_code():
+    rules = [
+        {
+            "id": "r1",
+            "name": "Multi",
+            "enabled": True,
+            "fault_codes": ["AHU-B", "VAV-C"],
+        }
+    ]
+    out = fault_catalog_scope._applicable_rules(rules, {"VAV", "BUILDING"}, "site-a")
+    assert len(out) == 1
+    assert out[0]["fault_code"] == "VAV-C"
+    assert out[0]["family"] == "VAV"
+
+
+def test_applicable_api(client: TestClient):
+    r = client.get("/api/faults/applicable")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert "families" in body
+    assert "query_engine" in body
+    assert "hidden_families" in body
+    assert "assigned_rules" in body
+
+
 def test_graph_api(client: TestClient):
     r = client.get("/api/faults/graph")
     assert r.status_code == 200
@@ -97,8 +141,12 @@ def test_graph_api(client: TestClient):
 def test_public_check_engine_endpoints_no_auth_header(raw_client: TestClient):
     for path in (
         "/api/building/status",
+        "/api/building/snapshot",
         "/api/faults/status",
         "/openfdd-agent/building-insight",
+        "/openfdd-agent/operational-brief",
+        "/openfdd-agent/zone-temps",
+        "/openfdd-agent/device-poll-health",
     ):
         r = raw_client.get(path)
         assert r.status_code == 200, path

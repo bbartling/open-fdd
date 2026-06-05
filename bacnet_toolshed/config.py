@@ -27,6 +27,7 @@ CSV_FIELDNAMES = [
     "poll_interval_s",
     "point_id",
     "series_id",
+    "commandable",
 ]
 
 
@@ -48,6 +49,7 @@ class PointConfig:
     point_id: str
     series_id: str
     object_id: str
+    commandable: bool = False
 
     def rpm_key(self) -> str:
         return self.object_id
@@ -101,6 +103,7 @@ def row_to_point(row: dict[str, Any], defaults: dict[str, str] | None = None) ->
         point_id=n["point_id"],
         series_id=n["series_id"],
         object_id=_object_id(n["object_type"], n["object_instance"]),
+        commandable=_truthy(n.get("commandable")),
     )
 
 

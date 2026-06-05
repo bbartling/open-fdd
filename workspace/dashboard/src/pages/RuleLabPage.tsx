@@ -3,11 +3,11 @@ import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
-import FaultCodeSelect from "../components/FaultCodeSelect";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
+import { formatFaultInferenceBlock, type FaultInference } from "../lib/ruleFaultInference";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import {
   formatBatchSummary,
@@ -31,6 +31,8 @@ df["custom_flag"] = 0
 out = {"df": df, "events": [{"type": "note", "text": "edit me"}]}
 `;
 
+const NEW_RULE_VALUE = "__new__";
+
 type Mode = "rule" | "script";
 
 type SavedRule = {
@@ -41,6 +43,8 @@ type SavedRule = {
   enabled: boolean;
   source_path?: string;
   fault_code?: string;
+  fault_codes?: string[];
+  code?: string;
   config?: Record<string, unknown>;
   bindings?: {
     point_ids?: string[];
@@ -72,9 +76,10 @@ export default function RuleLabPage() {
   const [severity, setSeverity] = useState("warning");
   const [saved, setSaved] = useState<SavedRule[]>([]);
   const [activeRuleId, setActiveRuleId] = useState<string>("");
+  const [creatingNew, setCreatingNew] = useState(false);
   const [authRole, setAuthRole] = useState<string | null>(null);
-  const [faultCode, setFaultCode] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const lintTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -85,23 +90,58 @@ export default function RuleLabPage() {
 
   const refreshSaved = useCallback(async () => {
     const res = await apiFetch<{ rules: SavedRule[] }>("/api/rules/saved");
-    setSaved(res.rules || []);
-    return res.rules || [];
+    const rules = res.rules || [];
+    setSaved(rules);
+    return rules;
   }, []);
 
-  const loadRuleSource = useCallback(async (ruleId: string) => {
-    const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${ruleId}/source`);
-    setCode(res.code || DEFAULT_RULE);
-    setSourcePath(res.path || "");
+  const loadRuleIntoEditor = useCallback(async (rule: SavedRule) => {
+    setCreatingNew(false);
+    setActiveRuleId(rule.id);
+    setRuleName(displayRuleName(rule.name));
+    setMode(rule.mode);
+    setSeverity(rule.severity);
+    setCfg(configToRecord(rule.config || {}));
+    setDirty(false);
+    try {
+      const res = await apiFetch<{ code: string; path: string }>(`/api/rules/saved/${rule.id}/source`);
+      setCode(
+        res.code?.trim()
+          ? res.code
+          : rule.code?.trim()
+            ? rule.code
+            : rule.mode === "script"
+              ? DEFAULT_SCRIPT
+              : DEFAULT_RULE,
+      );
+      setSourcePath(res.path || rule.source_path || "");
+    } catch (e) {
+      if (rule.code?.trim()) {
+        setCode(rule.code);
+        setSourcePath(rule.source_path || "");
+      } else {
+        setConsoleText(formatApiError(e));
+      }
+    }
   }, []);
 
   useEffect(() => {
-    void refreshSaved();
-  }, [refreshSaved]);
-
-  useEffect(() => {
-    if (activeRuleId) void loadRuleSource(activeRuleId).catch((e) => setConsoleText(formatApiError(e)));
-  }, [activeRuleId, loadRuleSource]);
+    void (async () => {
+      try {
+        const rules = await refreshSaved();
+        if (rules.length > 0) {
+          await loadRuleIntoEditor(rules[0]);
+        } else {
+          setCreatingNew(true);
+          setActiveRuleId("");
+        }
+      } catch (e) {
+        setConsoleText(formatApiError(e));
+      } finally {
+        setInitialLoadDone(true);
+      }
+    })();
+  }, [refreshSaved, loadRuleIntoEditor]);
 
   const runDebouncedLint = useCallback(
     (source: string, lintMode: Mode) => {
@@ -159,6 +199,25 @@ export default function RuleLabPage() {
     };
   }
 
+  async function analyzeFaultMapping(): Promise<FaultInference | null> {
+    try {
+      const res = await apiFetch<FaultInference>("/api/rules/infer-fault-codes", {
+        method: "POST",
+        body: JSON.stringify({
+          name: ruleName,
+          code,
+          mode,
+          config: configFromRecord(cfg),
+          severity,
+          site_id: activeSiteId || undefined,
+        }),
+      });
+      return res;
+    } catch {
+      return null;
+    }
+  }
+
   async function lintNow() {
     setBusy(true);
     try {
@@ -168,7 +227,13 @@ export default function RuleLabPage() {
       });
       setSyntaxOk(res.ok);
       setLintIssues(res.issues || []);
-      appendConsole(formatLintIssues(res.issues || []));
+      const parts = [formatLintIssues(res.issues || [])];
+      if (mode === "rule" && res.ok) {
+        const inf = await analyzeFaultMapping();
+        const block = formatFaultInferenceBlock(inf);
+        if (block) parts.push(block);
+      }
+      appendConsole(parts.filter(Boolean).join("\n\n"));
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -185,7 +250,7 @@ export default function RuleLabPage() {
     const pointId = rule?.bindings?.point_ids?.[0];
     if (mode === "rule" && !pointId) {
       appendConsole(
-        "Quick test needs one bound point — use FDD assignments → Test rule against one sensor, or add point_ids to this rule's bindings.",
+        "Quick test needs one bound point — pin this rule to a sensor on FDD assignments first.",
       );
       return;
     }
@@ -271,31 +336,54 @@ export default function RuleLabPage() {
         code,
         config: configFromRecord(cfg),
         severity,
-        fault_code: faultCode,
         bindings: preservedBindings(bindingsSource),
       };
       if (activeRuleId) {
-        const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
-          method: "PUT",
-          body: JSON.stringify({ code }),
-        });
-        const saveRes = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
-          method: "POST",
-          body: JSON.stringify({ ...payload, id: activeRuleId }),
-        });
-        setSourcePath(putRes.path || saveRes.rule.source_path || sourcePath);
-        appendConsole(`>>> Updated rule .py — ${putRes.path || sourcePath}`);
+        const saveRes = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
+          "/api/rules/save",
+          {
+            method: "POST",
+            body: JSON.stringify({ ...payload, id: activeRuleId }),
+          },
+        );
+        setSourcePath(saveRes.rule.source_path || sourcePath);
+        const infBlock = formatFaultInferenceBlock(saveRes.fault_inference);
+        appendConsole(
+          [`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`, infBlock]
+            .filter(Boolean)
+            .join("\n\n"),
+        );
       } else {
-        const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        setActiveRuleId(res.rule.id);
+        const res = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
+          "/api/rules/save",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
+        const newId = res.rule.id;
+        setActiveRuleId(newId);
+        setCreatingNew(false);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`);
+        const infBlock = formatFaultInferenceBlock(res.fault_inference);
+        appendConsole(
+          [
+            `>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`,
+            infBlock,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        );
+        setDirty(false);
+        const rules = await refreshSaved();
+        const current = rules.find((r) => r.id === newId);
+        if (current) await loadRuleIntoEditor(current);
+        return;
       }
       setDirty(false);
-      await refreshSaved();
+      const rules = await refreshSaved();
+      const current = rules.find((r) => r.id === activeRuleId);
+      if (current) await loadRuleIntoEditor(current);
     } catch (e) {
       appendConsole(formatApiError(e));
       if (suppressBusy) throw e;
@@ -324,25 +412,14 @@ export default function RuleLabPage() {
     }
   }
 
-  function selectRule(rule: SavedRule) {
-    setActiveRuleId(rule.id);
-    setRuleName(displayRuleName(rule.name));
-    setMode(rule.mode);
-    setSeverity(rule.severity);
-    setFaultCode(rule.fault_code || "");
-    setSourcePath(rule.source_path || "");
-    setCfg(configToRecord(rule.config || {}));
-    setDirty(false);
-  }
-
-  function addRule() {
+  function beginNewRule() {
+    setCreatingNew(true);
     setActiveRuleId("");
     setRuleName("New rule");
     setMode("rule");
     setCode(DEFAULT_RULE);
     setCfg({ high: "75" });
     setSourcePath("");
-    setFaultCode("");
     setDirty(true);
   }
 
@@ -353,8 +430,8 @@ export default function RuleLabPage() {
     try {
       await apiFetch(`/api/rules/saved/${activeRuleId}`, { method: "DELETE" });
       const list = await refreshSaved();
-      if (list[0]) selectRule(list[0]);
-      else addRule();
+      if (list[0]) await loadRuleIntoEditor(list[0]);
+      else beginNewRule();
       appendConsole(`>>> Deleted rule ${activeRuleId}`);
     } catch (e) {
       appendConsole(formatApiError(e));
@@ -362,6 +439,17 @@ export default function RuleLabPage() {
       setBusy(false);
     }
   }
+
+  async function onRuleSelectChange(id: string) {
+    if (id === NEW_RULE_VALUE) {
+      beginNewRule();
+      return;
+    }
+    const rule = saved.find((r) => r.id === id);
+    if (rule) await loadRuleIntoEditor(rule);
+  }
+
+  const selectValue = creatingNew ? NEW_RULE_VALUE : activeRuleId || saved[0]?.id || "";
 
   const syntaxTitle = useMemo(() => {
     if (lintBusy) return "Checking syntax…";
@@ -371,6 +459,7 @@ export default function RuleLabPage() {
   }, [lintBusy, syntaxOk, lintIssues]);
 
   const consoleLines = useMemo(() => consoleTextToLines(consoleText), [consoleText]);
+  const editorKey = creatingNew ? "new" : activeRuleId || "empty";
 
   return (
     <div className="page page-wide rule-lab-page">
@@ -378,8 +467,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Author and lint <code>.py</code> rules. Map points and run full sensor tests on{" "}
-            <a href="/fdd-assignments">FDD assignments</a>.
+            Author and lint <code>.py</code> rules. Fault codes are inferred via local Ollama + BRICK-scoped
+            catalog on save/lint. Pin rules to points on <a href="/fdd-assignments">FDD assignments</a>.
           </>
         }
       />
@@ -396,37 +485,40 @@ export default function RuleLabPage() {
           <label className="field-label" htmlFor="rule-select">
             Rule
           </label>
-          <div className="rule-switcher">
+          <div className="rule-switcher-group">
             <button
               type="button"
-              className="secondary icon-btn"
-              disabled={!activeRuleId || busy}
+              className="rule-step-btn rule-step-remove"
+              disabled={!activeRuleId || busy || creatingNew}
               onClick={() => void removeRule()}
-              title="Remove rule"
+              title="Delete selected rule"
+              aria-label="Delete rule"
             >
               −
             </button>
             <select
               id="rule-select"
-              value={activeRuleId}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (!id) {
-                  addRule();
-                  return;
-                }
-                const r = saved.find((x) => x.id === id);
-                if (r) selectRule(r);
-              }}
+              className="rule-switcher-select"
+              value={selectValue}
+              disabled={!initialLoadDone || (saved.length === 0 && creatingNew)}
+              onChange={(e) => void onRuleSelectChange(e.target.value)}
             >
-              {!activeRuleId ? <option value="">New rule (unsaved)</option> : null}
+              {creatingNew ? <option value={NEW_RULE_VALUE}>New rule (draft)</option> : null}
               {saved.map((r) => (
                 <option key={r.id} value={r.id}>
                   {formatRuleLabel(r.name)}
+                  {dirty && r.id === activeRuleId ? " *" : ""}
                 </option>
               ))}
             </select>
-            <button type="button" className="secondary icon-btn" disabled={busy} onClick={addRule} title="Add rule">
+            <button
+              type="button"
+              className="rule-step-btn rule-step-add"
+              disabled={busy}
+              onClick={beginNewRule}
+              title="Create new rule"
+              aria-label="Add rule"
+            >
               +
             </button>
           </div>
@@ -459,23 +551,13 @@ export default function RuleLabPage() {
               onChange={(e) => {
                 const m = e.target.value as Mode;
                 setMode(m);
-                if (!activeRuleId) setCode(m === "rule" ? DEFAULT_RULE : DEFAULT_SCRIPT);
+                if (creatingNew) setCode(m === "rule" ? DEFAULT_RULE : DEFAULT_SCRIPT);
                 markDirty();
               }}
             >
               <option value="rule">Per-row evaluate()</option>
               <option value="script">DataFrame script</option>
             </select>
-          </div>
-          <div className="field form-grid-span">
-            <FaultCodeSelect
-              value={faultCode}
-              disabled={busy || authRole === "operator"}
-              onChange={(c) => {
-                setFaultCode(c);
-                markDirty();
-              }}
-            />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-severity">
@@ -499,7 +581,7 @@ export default function RuleLabPage() {
             Quick test
           </button>
           <button type="button" disabled={busy || authRole === "operator"} onClick={() => void saveRule()}>
-            {activeRuleId ? "Update rule .py" : "Save rule .py"}
+            {activeRuleId && !creatingNew ? "Update rule .py" : "Save rule .py"}
           </button>
           <button
             type="button"
@@ -523,12 +605,18 @@ export default function RuleLabPage() {
       ) : null}
 
       <div className="panel rule-lab-editor-panel">
-        <PythonCodeEditor value={code} onChange={onCodeChange} height="480px" lintIssues={lintIssues} />
+        <PythonCodeEditor
+          key={editorKey}
+          value={code}
+          onChange={onCodeChange}
+          height="480px"
+          lintIssues={lintIssues}
+        />
       </div>
 
       <RuleLabConsole
         lines={consoleLines}
-        placeholder="Lint, quick test, or batch output."
+        placeholder="Lint, Ollama fault-code mapping, quick test, or batch output."
         footer={
           <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
             Clear

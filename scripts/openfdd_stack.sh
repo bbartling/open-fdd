@@ -11,6 +11,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 COMPOSE=(docker compose -f docker/compose.dev.yml)
+if [[ -f docker/compose.bench.yml ]]; then
+  COMPOSE+=(-f docker/compose.bench.yml)
+fi
 PROFILES=()
 if [[ "${OPENFDD_COMPOSE_PROFILES:-ai}" == *ai* ]]; then
   PROFILES+=(--profile ai)

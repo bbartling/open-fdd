@@ -5,7 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from ..audit import write_audit
 from ..deps import require_roles, require_user
+from ..model_access import require_model_mutation
+from ..security import debug_diagnostics_enabled, operator_can_edit_model
 from ..model_health import model_health_summary
 from ..model_service import ModelService
 from ..model_sparql import list_model_sites, query_model_graph, query_model_tree, scope_bundle
@@ -14,6 +17,8 @@ from ..site_defaults import ensure_default_site
 from ..ttl_service import TtlService
 
 router = APIRouter(prefix="/api/model", tags=["model"])
+
+_MODEL_MUTATION = Depends(require_model_mutation)
 
 
 class ImportBody(BaseModel):
@@ -108,7 +113,7 @@ def model_tree(_user: dict = Depends(require_user)) -> dict:
 
 
 @router.post("/sites")
-def upsert_site(body: SiteBody, _user: dict = Depends(require_roles("operator", "integrator", "agent"))) -> dict:
+def upsert_site(body: SiteBody, user: dict = _MODEL_MUTATION) -> dict:
     sid = body.id.strip()
     with _model().transaction() as model:
         sites = model.setdefault("sites", [])
@@ -119,7 +124,18 @@ def upsert_site(body: SiteBody, _user: dict = Depends(require_roles("operator", 
         else:
             sites.insert(0, {"id": sid, "name": body.name.strip()})
     path = _ttl().sync()
-    return {"ok": True, "site_id": sid, "ttl_path": str(path)}
+    write_audit(
+        event_type="model.write",
+        action="upsert_site",
+        outcome="success",
+        user=user,
+        resource_type="site",
+        resource_id=sid,
+    )
+    payload = {"ok": True, "site_id": sid, "ttl_synced": True}
+    if debug_diagnostics_enabled():
+        payload["ttl_path"] = str(path)
+    return payload
 
 
 @router.post("/import")
@@ -140,14 +156,29 @@ def model_health(_user: dict = Depends(require_user)) -> dict:
     health = model_health_summary(model)
     ttl = _ttl()
     ttl_exists = ttl.ttl_path.is_file()
-    return {"ok": True, "ttl_exists": ttl_exists, "ttl_path": str(ttl.ttl_path), **health}
+    payload: dict = {"ok": True, "ttl_exists": ttl_exists, "ttl_configured": ttl_exists, **health}
+    if debug_diagnostics_enabled():
+        payload["ttl_path"] = str(ttl.ttl_path)
+    return payload
 
 
 @router.get("/ttl")
-def view_ttl(save: bool = False, _user: dict = Depends(require_user)) -> Response:
+def view_ttl(
+    save: bool = False,
+    user: dict = Depends(require_user),
+) -> Response:
     ttl = _ttl()
     if save:
+        if user.get("role") != "integrator" and not operator_can_edit_model():
+            raise HTTPException(status_code=403, detail="saving TTL requires integrator role")
         path = ttl.sync()
+        write_audit(
+            event_type="model.write",
+            action="save_ttl",
+            outcome="success",
+            user=user,
+            resource_type="ttl",
+        )
         text = path.read_text(encoding="utf-8")
     else:
         text = ttl.build_ttl()
@@ -155,9 +186,19 @@ def view_ttl(save: bool = False, _user: dict = Depends(require_user)) -> Respons
 
 
 @router.post("/sync-ttl")
-def sync_ttl(_user: dict = Depends(require_roles("integrator", "operator", "agent"))) -> dict:
+def sync_ttl(user: dict = _MODEL_MUTATION) -> dict:
     path = _ttl().sync()
-    return {"ok": True, "path": str(path)}
+    write_audit(
+        event_type="model.write",
+        action="sync_ttl",
+        outcome="success",
+        user=user,
+        resource_type="ttl",
+    )
+    payload = {"ok": True, "ttl_synced": True}
+    if debug_diagnostics_enabled():
+        payload["path"] = str(path)
+    return payload
 
 
 @router.get("/bacnet-sync")
@@ -170,18 +211,26 @@ def bacnet_sync_status(_user: dict = Depends(require_user)) -> dict:
 
 
 @router.post("/bacnet-sync")
-def bacnet_sync_run(_user: dict = Depends(require_roles("integrator", "operator", "agent"))) -> dict:
+def bacnet_sync_run(user: dict = _MODEL_MUTATION) -> dict:
     from ..bacnet_poll_model_sync import sync_enabled_polling_to_model
 
     ensure_default_site(_model(), _ttl())
-    return sync_enabled_polling_to_model(sync_ttl=True)
+    result = sync_enabled_polling_to_model(sync_ttl=True)
+    write_audit(
+        event_type="model.write",
+        action="bacnet_sync",
+        outcome="success",
+        user=user,
+        resource_type="model",
+    )
+    return result
 
 
 @router.delete("/points/{point_id}")
 def delete_point(
     point_id: str,
     disable_poll: bool = True,
-    user: dict = Depends(require_roles("integrator", "operator", "agent")),
+    user: dict = _MODEL_MUTATION,
 ) -> dict:
     removed = _model().delete_point(point_id)
     if not removed:
@@ -199,19 +248,30 @@ def delete_point(
 
     bindings_pruned = RuleStore().prune_bindings(point_ids=[point_id])
     path = _ttl().sync()
-    return {
+    write_audit(
+        event_type="model.write",
+        action="delete_point",
+        outcome="success",
+        user=user,
+        resource_type="point",
+        resource_id=point_id,
+    )
+    payload = {
         "ok": True,
         "deleted": point_id,
         "poll_disabled": poll_disabled,
         "bindings_pruned": bindings_pruned,
-        "ttl_path": str(path),
+        "ttl_synced": True,
     }
+    if debug_diagnostics_enabled():
+        payload["ttl_path"] = str(path)
+    return payload
 
 
 @router.delete("/equipment/{equipment_id}")
 def delete_equipment(
     equipment_id: str,
-    user: dict = Depends(require_roles("integrator", "operator", "agent")),
+    user: dict = _MODEL_MUTATION,
 ) -> dict:
     svc = _model()
     model = svc.load()
@@ -230,10 +290,21 @@ def delete_equipment(
         equipment_ids=[equipment_id],
     )
     path = _ttl().sync()
-    return {
+    write_audit(
+        event_type="model.write",
+        action="delete_equipment",
+        outcome="success",
+        user=user,
+        resource_type="equipment",
+        resource_id=equipment_id,
+    )
+    payload = {
         "ok": True,
         "equipment_id": equipment_id,
         **counts,
         "bindings_pruned": bindings_pruned,
-        "ttl_path": str(path),
+        "ttl_synced": True,
     }
+    if debug_diagnostics_enabled():
+        payload["ttl_path"] = str(path)
+    return payload

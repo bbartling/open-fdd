@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 import PageHeader from "../components/PageHeader";
 import { TabDebugPanel } from "../components/TabDebugPanel";
 import FddRulePinMenu, { type RulePinTarget } from "../components/FddRulePinMenu";
+import RuleAssignmentMultiSelect from "../components/RuleAssignmentMultiSelect";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import {
@@ -10,9 +11,6 @@ import {
   type AssignmentsPoint,
   type SavedRule,
 } from "../lib/ruleBindings";
-import FddRuleTestPanel from "../components/FddRuleTestPanel";
-import { formatRuleLabel } from "../lib/ruleDisplay";
-
 type SiteRow = { id: string; name: string };
 
 type PinMenu = RulePinTarget & { x: number; y: number };
@@ -100,21 +98,18 @@ export default function FddAssignmentsPage() {
         title="FDD assignments"
         subtitle={
           <>
-            Map which saved rules run on which BACnet points. Right-click a point to pin or unpin a rule. Rule Lab
-            edits Python only — assignments live here and on{" "}
-            <a href="/data-model">Data Model</a> / <a href="/plot">Trend plot</a> (right-click).
+            Map which saved rules run on which BACnet points. Use the multi-select on each row (or right-click for
+            the same picker). Rule Lab edits Python only — assignments live here.
           </>
         }
       />
       <TabDebugPanel tab="fdd-assignments" />
 
-      <FddRuleTestPanel rules={rules} disabled={loading} />
-
       <section className="panel fdd-assign-panel">
         <h3 className="panel-title">Pin rules by device</h3>
         <p className="muted">
-          Choose a BACnet device, then right-click a point row to open the rule picker (same menu as Trend plot
-          series chips).
+          Choose a BACnet device, then use the <strong>Pinned rules</strong> dropdown on each point. Right-click
+          still works for the legacy pin menu.
         </p>
 
         <div className="form-row fdd-assign-filters">
@@ -195,17 +190,15 @@ export default function FddAssignmentsPage() {
                     <td className="muted">{p.unit || "—"}</td>
                     <td className="muted">{p.equipment_name || p.equipment_id || "—"}</td>
                     <td>
-                      {p.bound_rules?.length ? (
-                        <span className="dm-point-rules">
-                          {p.bound_rules.map((r) => (
-                            <span key={r.rule_id} className="badge poll-badge" title={r.rule_name}>
-                              {formatRuleLabel(r.rule_name)}
-                            </span>
-                          ))}
-                        </span>
-                      ) : (
-                        <span className="muted">Right-click to pin…</span>
-                      )}
+                      <RuleAssignmentMultiSelect
+                        pointId={p.point_id}
+                        pointLabel={p.name || p.point_id}
+                        rules={rules}
+                        boundRuleIds={(p.bound_rules ?? []).map((r) => r.rule_id)}
+                        disabled={loading}
+                        onChanged={() => setRefreshKey((k) => k + 1)}
+                        onStatus={setStatus}
+                      />
                     </td>
                   </tr>
                 ))}

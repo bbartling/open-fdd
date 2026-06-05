@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from bacnet_toolshed.bacnet_io_priority import BacnetIoInterrupted
 from bacnet_toolshed.config import group_by_device, load_enabled_points, validate_points
 from bacnet_toolshed.paths import default_points_enabled, polls_dir
 from bacnet_toolshed.poll_driver import poll_once
@@ -71,24 +72,52 @@ async def poll_enabled_points(app, *, output_csv: Path | None = None) -> int:
     if errors:
         raise RuntimeError(errors[0])
     out = output_csv or (polls_dir() / "samples.csv")
-    return await poll_once(app, group_by_device(points), output_csv=out, dry_run=False)
+    return await poll_once(
+        app,
+        group_by_device(points),
+        output_csv=out,
+        dry_run=False,
+        interruptible=True,
+    )
 
 
 def run_poll_cycle(run_bacnet_sync) -> dict[str, Any]:
     """Run one BACnet poll cycle using commission agent BACnet I/O."""
     if enabled_point_count() == 0:
-        _set_last_poll(ok=True, samples=0, error="", at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        _set_last_poll(
+            ok=True,
+            samples=0,
+            error="",
+            interrupted=False,
+            at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        )
         return last_poll_status()
     try:
         n = run_bacnet_sync(lambda app: poll_enabled_points(app))
-        _set_last_poll(ok=True, samples=int(n), error="", at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        _set_last_poll(
+            ok=True,
+            samples=int(n),
+            error="",
+            interrupted=False,
+            at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        )
         _notify_bridge_ingest()
+        return last_poll_status()
+    except BacnetIoInterrupted:
+        _set_last_poll(
+            ok=True,
+            samples=0,
+            error="interrupted for operator request",
+            interrupted=True,
+            at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        )
         return last_poll_status()
     except Exception as exc:
         _set_last_poll(
             ok=False,
             samples=0,
             error=str(exc)[:500],
+            interrupted=False,
             at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
         print(f"BACnet poll cycle failed: {exc}", file=sys.stderr)
@@ -100,8 +129,11 @@ def _notify_bridge_ingest() -> None:
     import urllib.error
     import urllib.request
 
-    port = os.environ.get("OFDD_BRIDGE_PORT", "8765").strip() or "8765"
-    url = f"http://127.0.0.1:{port}/internal/bacnet/ingest-samples"
+    url = os.environ.get("OFDD_BRIDGE_INGEST_URL", "").strip()
+    if not url:
+        port = os.environ.get("OFDD_BRIDGE_PORT", "8765").strip() or "8765"
+        host = os.environ.get("OFDD_BRIDGE_INGEST_HOST", "127.0.0.1").strip() or "127.0.0.1"
+        url = f"http://{host}:{port}/internal/bacnet/ingest-samples"
     try:
         timeout_s = float(os.environ.get("OFDD_BRIDGE_INGEST_TIMEOUT_S", "180") or 180)
     except ValueError:

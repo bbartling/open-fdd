@@ -11,16 +11,16 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from bacnet_toolshed.models import (
     DeviceInstanceRequest,
     DiscoverRequest,
-    ReadMultiplePropertiesRequestWrapper,
-    ReadPriorityArrayRequest,
-    SingleReadRequest,
+    ReadMultiplePropertiesRequest,
     WritePropertyRequest,
+    parse_object_identifier_parts,
 )
+from bacpypes3.primitivedata import PropertyIdentifier
 
 from ..bacnet_driver_store import (
     clear_registry,
@@ -40,6 +40,10 @@ from ..commission_client import (
     bacnet_read_multiple as commission_read_multiple,
     bacnet_write as commission_write,
     commission_health,
+    commission_override_scan_once,
+    commission_override_status,
+    commission_poll_once,
+    commission_poll_status,
     commission_status,
     get_job,
     server_points as commission_server_points,
@@ -53,20 +57,63 @@ from ..bacnet_write_guard import (
     validate_priority,
     validate_write_target,
 )
+from ..bacnet_access import require_bacnet_discovery, require_bacnet_mutation
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 
 _log = logging.getLogger(__name__)
 _ingest_lock = threading.Lock()
-from ..commission_client import commission_poll_once, commission_poll_status
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
 
 _READ = Depends(require_roles("operator", "integrator", "agent"))
-_COMMISSION = Depends(require_roles("operator", "integrator", "agent"))
+_DISCOVERY = Depends(require_bacnet_discovery)
+_MUTATION = Depends(require_bacnet_mutation)
 _WRITE = Depends(require_roles("integrator"))
 _INTEGRATOR = Depends(require_roles("integrator"))
+
+
+class BridgeSingleReadRequest(BaseModel):
+    """Bridge API body — includes device_address even when image bacnet_toolshed lags."""
+
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    object_identifier: str
+    property_identifier: str = "present-value"
+
+    @field_validator("object_identifier")
+    @classmethod
+    def validate_object_identifier(cls, value: str) -> str:
+        parse_object_identifier_parts(value)
+        return value
+
+    @field_validator("property_identifier")
+    @classmethod
+    def validate_property_identifier(cls, value: str) -> str:
+        try:
+            PropertyIdentifier(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid property identifier: {value}") from None
+        return value
+
+
+class BridgeReadPriorityArrayRequest(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    object_identifier: str
+
+    @field_validator("object_identifier")
+    @classmethod
+    def validate_object_identifier(cls, value: str) -> str:
+        parse_object_identifier_parts(value)
+        return value
+
+
+class BridgeReadMultipleRequest(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    requests: list[ReadMultiplePropertiesRequest]
 
 
 class ImportToModelBody(BaseModel):
@@ -232,7 +279,7 @@ def bacnet_driver_tree() -> dict:
     return driver_tree()
 
 
-@router.post("/api/bacnet/driver/sync-discovery", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/driver/sync-discovery", dependencies=[_MUTATION])
 def bacnet_sync_discovery(body: SyncDiscoveryBody) -> dict:
     try:
         return sync_discovery(
@@ -255,7 +302,7 @@ def bacnet_merge_commission_rows(body: MergeCommissionRowsBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.patch("/api/bacnet/driver/point", dependencies=[_COMMISSION])
+@router.patch("/api/bacnet/driver/point", dependencies=[_MUTATION])
 def bacnet_set_point_poll(body: PointPollBody) -> dict:
     try:
         return set_point_poll(
@@ -267,7 +314,7 @@ def bacnet_set_point_poll(body: PointPollBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.patch("/api/bacnet/driver/device", dependencies=[_COMMISSION])
+@router.patch("/api/bacnet/driver/device", dependencies=[_MUTATION])
 def bacnet_set_device_poll(body: DevicePollBody) -> dict:
     try:
         return set_device_poll(
@@ -279,23 +326,23 @@ def bacnet_set_device_poll(body: DevicePollBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.delete("/api/bacnet/driver/point/{point_id}", dependencies=[_COMMISSION])
+@router.delete("/api/bacnet/driver/point/{point_id}", dependencies=[_MUTATION])
 def bacnet_delete_point(point_id: str) -> dict:
     return delete_point(point_id=point_id)
 
 
-@router.delete("/api/bacnet/driver/device/{device_instance}", dependencies=[_COMMISSION])
+@router.delete("/api/bacnet/driver/device/{device_instance}", dependencies=[_MUTATION])
 def bacnet_delete_device(device_instance: int) -> dict:
     return delete_device(device_instance=device_instance)
 
 
-@router.delete("/api/bacnet/driver/registry", dependencies=[_COMMISSION])
+@router.delete("/api/bacnet/driver/registry", dependencies=[_MUTATION])
 def bacnet_clear_registry() -> dict:
     """Clear all BACnet devices from driver CSVs, poll samples, and data model."""
     return clear_registry(sync_model=True, sync_ttl=True)
 
 
-@router.patch("/api/bacnet/driver/device/remap", dependencies=[_COMMISSION])
+@router.patch("/api/bacnet/driver/device/remap", dependencies=[_MUTATION])
 def bacnet_remap_device(body: RemapDeviceBody) -> dict:
     if body.new_device_instance is None and not (body.new_device_address or "").strip():
         raise HTTPException(status_code=400, detail="provide new_device_instance and/or new_device_address")
@@ -309,7 +356,7 @@ def bacnet_remap_device(body: RemapDeviceBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/api/bacnet/discover", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/discover", dependencies=[_DISCOVERY])
 def bacnet_discover_devices(body: DiscoverRequest) -> dict:
     if body.range_low > body.range_high:
         raise HTTPException(status_code=400, detail="range_low must be <= range_high")
@@ -319,7 +366,7 @@ def bacnet_discover_devices(body: DiscoverRequest) -> dict:
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/whois", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/whois", dependencies=[_DISCOVERY])
 def bacnet_whois(body: DiscoverRequest) -> dict:
     status_code, payload = commission_whois(body.range_low, body.range_high)
     if status_code != 200:
@@ -327,41 +374,56 @@ def bacnet_whois(body: DiscoverRequest) -> dict:
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/read", dependencies=[_COMMISSION])
-def bacnet_read_property(body: SingleReadRequest) -> dict:
+@router.post("/api/bacnet/read", dependencies=[_READ])
+def bacnet_read_property(body: BridgeSingleReadRequest) -> dict:
     status_code, payload = commission_read(
         body.device_instance,
         body.object_identifier,
         body.property_identifier,
+        device_address=body.device_address,
     )
     if status_code != 200:
         raise _proxy_error(status_code, payload)
+    if body.property_identifier == "present-value" and isinstance(payload, dict):
+        from ..bacnet_driver_store import record_ondemand_present_value
+
+        val = payload.get("value")
+        formatted = "—" if val is None else (str(val) if not isinstance(val, (dict, list)) else str(val))
+        record_ondemand_present_value(
+            device_instance=body.device_instance,
+            object_identifier=body.object_identifier,
+            present_value=formatted,
+        )
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/read-multiple", dependencies=[_COMMISSION])
-def bacnet_read_multiple_properties(body: ReadMultiplePropertiesRequestWrapper) -> dict:
+@router.post("/api/bacnet/read-multiple", dependencies=[_READ])
+def bacnet_read_multiple_properties(body: BridgeReadMultipleRequest) -> dict:
     requests = [
         {"object_identifier": r.object_identifier, "property_identifier": r.property_identifier}
         for r in body.requests
     ]
-    status_code, payload = commission_read_multiple(body.device_instance, requests)
-    if status_code != 200:
-        raise _proxy_error(status_code, payload)
-    return payload  # type: ignore[return-value]
-
-
-@router.post("/api/bacnet/priority-array", dependencies=[_COMMISSION])
-def bacnet_read_priority_array(body: ReadPriorityArrayRequest) -> dict:
-    status_code, payload = commission_priority_array(
-        body.device_instance, body.object_identifier
+    status_code, payload = commission_read_multiple(
+        body.device_instance, requests, device_address=body.device_address
     )
     if status_code != 200:
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/point-discovery", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/priority-array", dependencies=[_READ])
+def bacnet_read_priority_array(body: BridgeReadPriorityArrayRequest) -> dict:
+    status_code, payload = commission_priority_array(
+        body.device_instance,
+        body.object_identifier,
+        device_address=body.device_address,
+    )
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/point-discovery", dependencies=[_DISCOVERY])
 def bacnet_point_discovery(body: DeviceInstanceRequest) -> dict:
     status_code, payload = start_point_discovery(body.device_instance, body.device_address)
     if status_code not in (200, 202):
@@ -369,9 +431,9 @@ def bacnet_point_discovery(body: DeviceInstanceRequest) -> dict:
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/supervisory-check", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/supervisory-check", dependencies=[_DISCOVERY])
 def bacnet_supervisory_check(body: DeviceInstanceRequest) -> dict:
-    status_code, payload = start_supervisory_check(body.device_instance)
+    status_code, payload = start_supervisory_check(body.device_instance, body.device_address)
     if status_code not in (200, 202):
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
@@ -386,6 +448,11 @@ def bacnet_write_property(body: WritePropertyRequest, request: Request) -> dict:
     validate_write_target(
         device_instance=body.device_instance,
         object_identifier=body.object_identifier,
+        property_identifier=body.property_identifier,
+        priority=priority,
+        value=body.value,
+        request=request,
+        user=user,
     )
     status_code, payload = commission_write(
         body.device_instance,
@@ -399,7 +466,7 @@ def bacnet_write_property(body: WritePropertyRequest, request: Request) -> dict:
     return payload  # type: ignore[return-value]
 
 
-@router.get("/api/bacnet/jobs/{job_id}", dependencies=[_COMMISSION])
+@router.get("/api/bacnet/jobs/{job_id}", dependencies=[_READ])
 def bacnet_job_status(job_id: str) -> dict:
     if not re.match(r"^[a-f0-9]{8,32}$", job_id):
         raise HTTPException(status_code=400, detail="invalid job_id")
@@ -430,6 +497,45 @@ def _enrich_poll_status(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+@router.get("/api/bacnet/overrides/status", dependencies=[_READ])
+def bacnet_override_status() -> dict:
+    code, payload = commission_override_status()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    try:
+        from bacnet_toolshed.override_registry import export_csv_text, scan_status
+
+        if isinstance(payload, dict):
+            payload = {**scan_status(), **payload}
+        payload["export_row_count"] = max(0, export_csv_text().count("\n") - 1)
+    except Exception:
+        pass
+    return payload  # type: ignore[return-value]
+
+
+@router.get("/api/bacnet/overrides/export", dependencies=[_READ])
+def bacnet_override_export() -> Response:
+    try:
+        from bacnet_toolshed.override_registry import export_csv_text
+
+        body = export_csv_text()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="bacnet_overrides_export.csv"'},
+    )
+
+
+@router.post("/api/bacnet/overrides/scan-once", dependencies=[_READ])
+def bacnet_override_scan_once() -> dict:
+    code, payload = commission_override_scan_once()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    return payload  # type: ignore[return-value]
+
+
 @router.get("/api/bacnet/poll/status", dependencies=[_READ])
 def bacnet_poll_status() -> dict:
     code, payload = commission_poll_status()
@@ -440,7 +546,7 @@ def bacnet_poll_status() -> dict:
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/poll/once", dependencies=[_COMMISSION])
+@router.post("/api/bacnet/poll/once", dependencies=[_DISCOVERY])
 def bacnet_trigger_poll() -> dict:
     code, payload = commission_poll_once()
     if code != 200:

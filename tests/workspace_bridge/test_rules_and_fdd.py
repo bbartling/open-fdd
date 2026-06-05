@@ -40,6 +40,28 @@ def test_save_list_delete_rule(client: TestClient):
     assert client.get("/api/rules/saved").json()["rules"] == []
 
 
+def test_save_rule_with_multiple_fault_codes(client: TestClient):
+    r = client.post(
+        "/api/rules/save",
+        json={
+            "name": "Multi code",
+            "mode": "rule",
+            "code": RULE_CODE,
+            "fault_codes": ["VAV-C", "AHU-C"],
+        },
+    )
+    assert r.status_code == 200
+    rule = r.json()["rule"]
+    assert rule["fault_codes"] == ["VAV-C", "AHU-C"]
+    assert rule["fault_code"] == "VAV-C"
+
+    src = client.get(f"/api/rules/saved/{rule['id']}/source")
+    assert src.status_code == 200
+    assert "def evaluate" in src.json()["code"]
+
+    client.delete(f"/api/rules/saved/{rule['id']}")
+
+
 def test_batch_run_lights_check_engine(client: TestClient):
     save = client.post(
         "/api/rules/save",

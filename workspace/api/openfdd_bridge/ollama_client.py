@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -349,10 +351,50 @@ def chat(
         }
 
 
+def gpu_available() -> bool:
+    """True when an NVIDIA GPU is present (interactive local chat target)."""
+    override = os.environ.get("OFDD_GPU_AVAILABLE", "").strip().lower()
+    if override in {"1", "true", "yes", "on"}:
+        return True
+    if override in {"0", "false", "no", "off"}:
+        return False
+    if Path("/dev/nvidia0").is_char_device():
+        return True
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "-L"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return True
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return False
+
+
+def interactive_chat_enabled() -> bool:
+    """Agent tab chat — disabled on CPU-only hosts (too slow for operators)."""
+    if os.environ.get("OFDD_AGENT_CHAT_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:
+        return health(timeout=4.0).get("ok") is True
+    return gpu_available() and health(timeout=4.0).get("ok") is True
+
+
 def should_use_ollama() -> bool:
     pref = ai_backend_preference()
     if pref == "codex":
         return False
     if pref == "ollama":
-        return True
+        return health().get("ok") is True
     return health().get("ok") is True
+
+
+def should_use_ollama_for_insight() -> bool:
+    """Home dashboard one-liner — skip slow CPU inference; analytics still refresh."""
+    if not health(timeout=6.0).get("ok"):
+        return False
+    if os.environ.get("OFDD_INSIGHT_USE_OLLAMA_WITHOUT_GPU", "").strip().lower() in {"1", "true", "yes"}:
+        return True
+    return gpu_available()

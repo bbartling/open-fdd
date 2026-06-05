@@ -224,6 +224,8 @@ def _ollama_payload() -> dict[str, Any]:
         "configured_model": health.get("configured_model"),
         "configured_ram_tier": health.get("configured_ram_tier") or ollama_client.configured_ram_tier(),
         "gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
+        "gpu_available": ollama_client.gpu_available(),
+        "interactive_chat_enabled": ollama_client.interactive_chat_enabled(),
         "health_timeout_s": health.get("health_timeout_s"),
         "chat_timeout_s": chat_timeout,
         "error": health.get("error"),
@@ -342,6 +344,12 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
 
     net = _network_totals()
     ollama = _ollama_payload()
+    try:
+        from .container_revisions import stack_revisions
+
+        revisions = stack_revisions(include_image_ids=False)
+    except Exception:
+        revisions = None
 
     return {
         "ok": True,
@@ -362,4 +370,5 @@ def collect_host_stats(*, cpu_sample_interval: float = 0.08) -> dict[str, Any]:
         "network": net or {"available": False},
         "processes": {"count": _process_count()},
         "ollama": ollama,
+        "container_revisions": revisions,
     }

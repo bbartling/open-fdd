@@ -60,6 +60,8 @@ services:
     environment:
       OPENFDD_WORKSPACE_DIR: /var/openfdd/workspace
       OPENFDD_REPO_ROOT: /app
+      # Bridge service name on default compose network (bench overlay uses 127.0.0.1 via compose.bench.yml).
+      OPENFDD_BRIDGE_INGEST_URL: http://bridge:8765/internal/bacnet/ingest-samples
     expose:
       - "8767"
     restart: unless-stopped

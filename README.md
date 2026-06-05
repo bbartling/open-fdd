@@ -49,9 +49,10 @@ Everything you need to run the **operator bridge**, BACnet commissioning, Rule L
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-./scripts/docker_build.sh
-./scripts/openfdd_stack.sh up
-./scripts/stack_health_check.sh
+
+./scripts/build_and_test.sh
+./scripts/docker_maintenance.sh --prune --rebuild
+./scripts/openfdd_stack.sh health
 ```
 
 See [Getting started](https://bbartling.github.io/open-fdd/getting_started/) and `AGENTS.md` for contributor layout.

@@ -13,6 +13,12 @@ from typing import Any
 
 from .building_alerts import load_alerts, merge_auto_issues
 from .device_poll_health import get_device_poll_snapshot, poll_health_alerts
+
+try:
+    from bacnet_toolshed.override_registry import override_alerts as bacnet_override_alerts
+except ImportError:
+    def bacnet_override_alerts(*, operator_only: bool = False):  # type: ignore[misc]
+        return []
 from .fault_catalog import family_for_code, family_label
 from .fdd_results import fdd_issues
 from .model_health import model_health_summary
@@ -35,10 +41,14 @@ def collect_status() -> dict[str, Any]:
         poll_alerts = poll_health_alerts(poll_snap)
     except Exception:
         poll_alerts = []
+    try:
+        override_alerts = bacnet_override_alerts(operator_only=True)
+    except Exception:
+        override_alerts = []
 
-    all_alerts = merged["alerts"] + fdd_alerts + poll_alerts
+    all_alerts = merged["alerts"] + fdd_alerts + poll_alerts + override_alerts
     status = merged["status"]
-    if (fdd_alerts or poll_alerts) and status == "ok":
+    if (fdd_alerts or poll_alerts or override_alerts) and status == "ok":
         status = "warning"
     if any(a.get("severity") == "critical" for a in all_alerts):
         status = "critical"
@@ -129,25 +139,36 @@ def faults_by_family(status: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def redact_stack_health(stack: dict[str, Any]) -> dict[str, Any]:
+    """Strip internal URLs/bind detail from stack probes for unauthenticated clients."""
+    return {
+        "ok": stack.get("ok"),
+        "overall": stack.get("overall"),
+        "services": [
+            {
+                "id": s.get("id"),
+                "label": s.get("label"),
+                "status": s.get("status"),
+                "configured": s.get("configured"),
+            }
+            for s in stack.get("services", [])
+            if isinstance(s, dict)
+        ],
+    }
+
+
+def public_dashboard_snapshot() -> dict[str, Any]:
+    """Stack traffic lights + live fault tree — no auth (building status / wall display)."""
+    status = collect_status()
+    return {"stack": redact_stack_health(status["stack"]), "faults": faults_by_family(status)}
+
+
 def dashboard_snapshot(*, redacted: bool = False) -> dict[str, Any]:
     """Single payload for dashboard polling / WebSocket push."""
     status = collect_status()
     stack = status["stack"]
     if redacted:
-        stack = {
-            "ok": stack.get("ok"),
-            "overall": stack.get("overall"),
-            "services": [
-                {
-                    "id": s.get("id"),
-                    "label": s.get("label"),
-                    "status": s.get("status"),
-                    "configured": s.get("configured"),
-                }
-                for s in stack.get("services", [])
-                if isinstance(s, dict)
-            ],
-        }
+        stack = redact_stack_health(stack)
         faults = {
             "status": status["status"],
             "traffic": status["traffic"],

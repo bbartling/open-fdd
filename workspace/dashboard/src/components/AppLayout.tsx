@@ -7,10 +7,10 @@ import StackStatusStrip from "./StackStatusStrip";
 const NAV = [
   { to: "/", end: true, icon: "🏠", label: "Building status" },
   { to: "/bacnet", icon: "📡", label: "BACnet", protected: true },
-  { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/data-model", icon: "🧱", label: "Data Model", protected: true },
   { to: "/rule-lab", icon: "🐍", label: "Rule Lab", protected: true },
   { to: "/fdd-assignments", icon: "📌", label: "FDD assignments", protected: true },
+  { to: "/faults", icon: "🚦", label: "Fault catalog" },
   { to: "/plot", icon: "📈", label: "Trend plot", protected: true },
   { to: "/agent", icon: "🤖", label: "AI Agent", protected: true },
   { to: "/host", icon: "📊", label: "Host stats", protected: true },

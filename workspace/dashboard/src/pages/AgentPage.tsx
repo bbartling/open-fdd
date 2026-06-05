@@ -22,6 +22,9 @@ type ThinkingModel = { model: string; label: string; think: "boolean" | "level";
 
 type Context = {
   ollama: { ok?: boolean; error?: string; models_installed?: string[] };
+  gpu_available?: boolean;
+  interactive_chat_enabled?: boolean;
+  interactive_chat_disabled_reason?: string;
   ollama_ram_tier: string;
   ollama_model: string;
   ollama_gpu_mode: string;
@@ -146,7 +149,7 @@ export default function AgentPage() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    if (!ctx || !chat.draft.trim() || chat.busy) return;
+    if (!ctx || !chat.draft.trim() || chat.busy || !chatEnabled) return;
     const text = chat.draft.trim();
     const history = buildChatHistoryPayload(chat.messages);
     let next = appendUserMessage(chat, text);
@@ -190,6 +193,7 @@ export default function AgentPage() {
   }
 
   const ollamaOk = ctx?.ollama?.ok === true;
+  const chatEnabled = ctx?.interactive_chat_enabled !== false && ollamaOk;
   const thinkingModels = ctx?.ollama_thinking_models || [];
   const installed = ctx?.ollama?.models_installed || [];
   const modelOptions = [...new Set([...installed, ...thinkingModels.map((m) => m.model)])];
@@ -202,9 +206,13 @@ export default function AgentPage() {
           subtitle="Local operator assistant. Right-click a message to delete; recent turns are sent within a token budget."
         />
         <TabDebugPanel tab="agent" />
-        {ctx && !ollamaOk ? (
+        {ctx && !chatEnabled ? (
           <p className="agent-offline-banner">
-            Ollama is not running — open <strong>Host stats</strong> for model/runtime details or restart the local stack.
+            {ctx.interactive_chat_disabled_reason ||
+              (ollamaOk
+                ? "Local chat is disabled on this host."
+                : "Ollama is not running — open Host stats for model/runtime details or restart the local stack.")}{" "}
+            Use the home dashboard <strong>Refresh</strong> for building analytics (zone temps, poll health, overrides).
           </p>
         ) : null}
       </div>
@@ -306,7 +314,7 @@ export default function AgentPage() {
               </select>
             </div>
             <div className="agent-compose-actions">
-              <button type="submit" disabled={chat.busy || !ollamaOk}>
+              <button type="submit" disabled={chat.busy || !chatEnabled}>
                 {chat.busy ? "Waiting…" : "Send"}
               </button>
               <button

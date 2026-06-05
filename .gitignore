@@ -1,3 +1,6 @@
+# Jekyll build output (CI builds to repo-root _site; local builds often land here)
+docs/_site/
+
 # Docker image bundles (build with scripts/docker_build.sh --save)
 docker/dist/
 

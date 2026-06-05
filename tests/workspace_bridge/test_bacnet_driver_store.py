@@ -53,6 +53,76 @@ def test_sync_discovery_and_tree(driver_tmp):
     assert not points.is_file() or points.stat().st_size == 0
 
 
+def test_sync_discovery_persists_commandable(driver_tmp):
+    store, discovered, _points = driver_tmp
+    store.sync_discovery(
+        device_instance=100,
+        device_address="10.0.0.1",
+        objects=[
+            {"object_identifier": "analog-input,1", "name": "SAT", "commandable": False},
+            {"object_identifier": "analog-value,2", "name": "Setpoint", "commandable": True},
+        ],
+    )
+    with discovered.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    by_oid = {f"{r['object_type']},{r['object_instance']}": r for r in rows}
+    assert by_oid["analog-input,1"]["commandable"] == "0"
+    assert by_oid["analog-value,2"]["commandable"] == "1"
+    tree = store.driver_tree()
+    pts = {p["object_identifier"]: p for p in tree["devices"][0]["points"]}
+    assert pts["analog-input,1"]["commandable"] is False
+    assert pts["analog-value,2"]["commandable"] is True
+
+    store.sync_discovery(
+        device_instance=100,
+        device_address="10.0.0.1",
+        objects=[{"object_identifier": "analog-input,1", "name": "SAT", "commandable": True}],
+        replace=True,
+    )
+    tree2 = store.driver_tree()
+    ai = next(p for p in tree2["devices"][0]["points"] if p["object_identifier"] == "analog-input,1")
+    assert ai["commandable"] is True
+
+
+def test_driver_tree_pv_only_for_enabled_poll_points(driver_tmp):
+    store, discovered, points = driver_tmp
+    store.sync_discovery(
+        device_instance=100,
+        device_address="2000:7",
+        objects=[
+            {"object_identifier": "analog-input,1", "name": "Polled"},
+            {"object_identifier": "analog-input,2", "name": "Idle"},
+        ],
+    )
+    with discovered.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    for row in rows:
+        if row["object_instance"] == "1":
+            row["present_value"] = "72.5"
+        if row["object_instance"] == "2":
+            row["present_value"] = "68.0"
+    with discovered.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+    tree = store.driver_tree()
+    polled = next(p for p in tree["devices"][0]["points"] if p["object_identifier"] == "analog-input,1")
+    idle = next(p for p in tree["devices"][0]["points"] if p["object_identifier"] == "analog-input,2")
+    assert polled["present_value"] == ""
+    assert idle["present_value"] == ""
+    store.set_point_poll(point_id=polled["point_id"], enabled=True, poll_interval_s=60)
+    store.record_ondemand_present_value(
+        device_instance=100,
+        object_identifier="analog-input,1",
+        present_value="73.1",
+    )
+    tree2 = store.driver_tree()
+    polled2 = next(p for p in tree2["devices"][0]["points"] if p["object_identifier"] == "analog-input,1")
+    idle2 = next(p for p in tree2["devices"][0]["points"] if p["object_identifier"] == "analog-input,2")
+    assert polled2["present_value"] == "73.1"
+    assert idle2["present_value"] == ""
+
+
 def test_set_point_poll_intervals(driver_tmp):
     store, _, points = driver_tmp
     store.sync_discovery(

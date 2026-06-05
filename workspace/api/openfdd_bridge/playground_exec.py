@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from .security import inprocess_playground_allowed
+
 
 def subprocess_enabled() -> bool:
-    if os.environ.get("OFDD_PLAYGROUND_INPROCESS", "").strip() in {"1", "true", "yes"}:
+    if inprocess_playground_allowed():
         return False
     if os.environ.get("OFDD_PLAYGROUND_SUBPROCESS", "").strip() in {"0", "false", "no"}:
         return False
@@ -107,6 +110,70 @@ def _read_result_json(result_path: Path) -> dict[str, Any]:
     return raw
 
 
+def _minimal_worker_env(api_root: Path, work_dir: Path) -> dict[str, str]:
+    """Pass only safe runtime variables — never auth secrets or arbitrary OFDD_* vars."""
+    repo_root = os.environ.get("OPENFDD_REPO_ROOT", "").strip()
+    py_path = os.environ.get("PYTHONPATH", "")
+    roots = [str(api_root), repo_root] if repo_root else [str(api_root)]
+    env: dict[str, str] = {
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": os.pathsep.join(p for p in (*roots, py_path) if p),
+        "OFDD_PLAYGROUND_SUBPROCESS": "1",
+        "TMPDIR": str(work_dir),
+    }
+    if repo_root:
+        env["OPENFDD_REPO_ROOT"] = repo_root
+    return env
+
+
+def _apply_resource_limits() -> None:
+    """Best-effort POSIX limits; no-op when unavailable."""
+    if not hasattr(os, "setrlimit"):
+        return
+    try:
+        import resource
+
+        mem_mb = _memory_limit_mb()
+        limit = mem_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    except Exception:
+        return
+
+
+def _run_worker(cmd: list[str], *, env: dict[str, str], cwd: Path, timeout_s: float) -> subprocess.CompletedProcess[bytes]:
+    grace = max(15.0, timeout_s * 0.5 + 10.0)
+    total = timeout_s + grace
+    preexec = os.setsid if hasattr(os, "setsid") else None
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(cwd),
+        preexec_fn=preexec,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=total)
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired:
+        if hasattr(os, "killpg") and preexec is not None:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+        else:
+            proc.kill()
+        proc.communicate()
+        raise
+
+
 def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
     """Spawn ``playground_worker``; return parsed result.json (pickle-free IPC)."""
     job = dict(job)
@@ -120,30 +187,15 @@ def run_pickled_job(job: dict[str, Any], *, timeout_s: float) -> dict[str, Any]:
 
         result_path = td / "result.json"
         api_root = Path(__file__).resolve().parent.parent
-        env = os.environ.copy()
-        env["OFDD_PLAYGROUND_SUBPROCESS"] = "1"
-        env.pop("OFDD_PLAYGROUND_INPROCESS", None)
-        repo_root = os.environ.get("OPENFDD_REPO_ROOT", "").strip()
-        if repo_root:
-            env.setdefault("OPENFDD_REPO_ROOT", repo_root)
-        py_path = env.get("PYTHONPATH", "")
-        roots = [str(api_root), repo_root] if repo_root else [str(api_root)]
-        env["PYTHONPATH"] = os.pathsep.join(p for p in (*roots, py_path) if p)
+        env = _minimal_worker_env(api_root, td)
         cmd = [
             sys.executable,
             "-m",
             "openfdd_bridge.playground_worker",
             str(td),
         ]
-        grace = max(15.0, timeout_s * 0.5 + 10.0)
         try:
-            proc = subprocess.run(
-                cmd,
-                timeout=timeout_s + grace,
-                capture_output=True,
-                env=env,
-                cwd=str(api_root),
-            )
+            proc = _run_worker(cmd, env=env, cwd=td, timeout_s=timeout_s)
         except subprocess.TimeoutExpired:
             return {
                 "ok": False,

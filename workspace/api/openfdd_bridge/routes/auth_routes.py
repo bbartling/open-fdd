@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, SecretStr
 
 from .. import auth
-from ..audit import write_audit
+from ..audit import client_from_request, write_audit
 from ..deps import public_auth_status, require_user
+from ..login_rate_limit import check_lockout, record_failure, record_success
 from ..security import auth_dev_bypass_enabled, auth_strict_configured, clients_must_authenticate
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -32,8 +33,24 @@ def login(body: LoginBody, request: Request) -> dict:
             status_code=503,
             detail="authentication not configured — set OFDD_AUTH_SECRET and role passwords",
         )
+    client = client_from_request(request)
+    ip = client.get("ip") or "unknown"
+    locked, retry_after = check_lockout(ip, body.username)
+    if locked:
+        write_audit(
+            event_type="auth.login.lockout",
+            action="login",
+            outcome="failure",
+            severity="warning",
+            request=request,
+            user={"sub": body.username, "role": "unknown"},
+            resource_type="session",
+            detail={"reason": "rate_limited", "retry_after_sec": retry_after},
+        )
+        raise HTTPException(status_code=429, detail=f"too many login attempts — retry in {retry_after}s")
     role = auth.check_credentials(body.username, body.password.get_secret_value())
     if role is None:
+        failures = record_failure(ip, body.username)
         write_audit(
             event_type="auth.login.failure",
             action="login",
@@ -42,9 +59,10 @@ def login(body: LoginBody, request: Request) -> dict:
             request=request,
             user={"sub": body.username, "role": "unknown"},
             resource_type="session",
-            detail={"reason": "invalid_credentials"},
+            detail={"reason": "invalid_credentials", "failures_in_window": failures},
         )
         raise HTTPException(status_code=401, detail="invalid credentials")
+    record_success(ip, body.username)
     token = auth.issue_token(body.username, role)
     user = {"sub": body.username, "role": role}
     request.state.user = user

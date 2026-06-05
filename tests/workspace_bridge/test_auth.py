@@ -37,9 +37,15 @@ def test_operator_can_use_agent_chat(authed_client: TestClient):
         json={"username": "operator", "password": "changeme"},
     )
     token = login.json()["token"]
-    with patch(
-        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
-        return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
+    with (
+        patch(
+            "openfdd_bridge.routes.agent_routes.ollama_client.interactive_chat_enabled",
+            return_value=True,
+        ),
+        patch(
+            "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+            return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "hi"},
+        ),
     ):
         r = authed_client.post(
             "/openfdd-agent/chat",

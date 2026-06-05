@@ -31,10 +31,10 @@ def authed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
-def test_operator_can_bacnet_whois(authed_client: TestClient):
+def test_integrator_can_bacnet_whois(authed_client: TestClient):
     login = authed_client.post(
         "/api/auth/login",
-        json={"username": "operator", "password": "changeme"},
+        json={"username": "integrator", "password": "msi"},
     )
     token = login.json()["token"]
     with patch(
@@ -94,6 +94,40 @@ def test_bacnet_read_property(authed_client: TestClient):
         )
     assert r.status_code == 200
     assert r.json()["value"] == 72.5
+
+
+def test_bacnet_read_priority_array(authed_client: TestClient):
+    login = authed_client.post(
+        "/api/auth/login",
+        json={"username": "operator", "password": "changeme"},
+    )
+    token = login.json()["token"]
+    with patch(
+        "openfdd_bridge.routes.bacnet_routes.commission_priority_array",
+        return_value=(
+            200,
+            {
+                "device_instance": 100,
+                "object_identifier": "analog-value,1",
+                "priority_array": [
+                    {"priority_level": 1, "type": "real", "value": 72.0},
+                    {"priority_level": 16, "type": "null", "value": None},
+                ],
+            },
+        ),
+    ):
+        r = authed_client.post(
+            "/api/bacnet/priority-array",
+            json={
+                "device_instance": 100,
+                "object_identifier": "analog-value,1",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["priority_array"]) == 2
+    assert body["priority_array"][0]["priority_level"] == 1
 
 
 def test_bacnet_read_multiple(authed_client: TestClient):
