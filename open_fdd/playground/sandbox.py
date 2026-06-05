@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from contextlib import nullcontext, redirect_stdout
 from typing import Any, Callable
 
-from open_fdd.playground.cookbook import inject_cookbook_helpers
+from open_fdd.playground.cookbook import attach_rolling_avg, inject_cookbook_helpers, normalize_rolling_avg_minutes
 
 try:
     import numpy as np
@@ -221,10 +221,23 @@ def sweep_rule(
     rows: list[dict[str, Any]],
     *,
     capture_print: bool = True,
+    rolling_avg_minutes: int | None = None,
+    series_ctx: dict[str, Any] | None = None,
     exec_timeout_s: float = DEFAULT_EXEC_TIMEOUT_S,
     row_timeout_s: float = DEFAULT_ROW_TIMEOUT_S,
 ) -> tuple[list[bool], list[dict[str, Any]]]:
     """Run ``evaluate`` on each row; return per-row flags and diagnostic events."""
+    if rows:
+        minutes = normalize_rolling_avg_minutes(
+            rolling_avg_minutes
+            if rolling_avg_minutes is not None
+            else cfg.get("rolling_avg_minutes", 5)
+        )
+        explicit_window = rolling_avg_minutes is not None or cfg.get("rolling_avg_minutes") is not None
+        missing_avg = "temp_rolling_avg" not in rows[0]
+        stale_window = rows[0].get("rolling_avg_minutes") != minutes
+        if series_ctx is not None or missing_avg or (explicit_window and stale_window):
+            attach_rolling_avg(rows, minutes=minutes)
     lint = lint_python(code, strict_imports=True)
     if not lint["ok"]:
         lines = [
@@ -255,6 +268,11 @@ def sweep_rule(
         def _eval_row() -> Any:
             ctx = redirect_stdout(buf) if capture_print else nullcontext()
             with ctx:
+                if series_ctx is not None:
+                    try:
+                        return evaluate(row, cfg, prev_row=prev, rows=rows, series=series_ctx)
+                    except TypeError:
+                        return evaluate(row, cfg, prev_row=prev, rows=rows)
                 return evaluate(row, cfg, prev_row=prev, rows=rows)
 
         try:
