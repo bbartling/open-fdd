@@ -87,6 +87,7 @@ def test_tree_api(client: TestClient):
 
 def test_families_for_equipment_detection():
     assert "AHU" in fault_catalog_scope.families_for_equipment("Air_Handler_Unit", "AHU-1")
+    assert "AHU" in fault_catalog_scope.families_for_equipment("", "AHU-1")
     assert "VAV" in fault_catalog_scope.families_for_equipment("Fan_Coil_Unit", "FCU-12")
     assert "HEATPUMP" in fault_catalog_scope.families_for_equipment("Heat_Pump", "HP roof")
     assert not fault_catalog_scope.families_for_equipment("Laboratory_Equipment", "Lab bench")
@@ -100,6 +101,21 @@ def test_detect_applicable_families_hides_heatpump_without_equipment():
     assert "BUILDING" in scope["applicable_families"]
     assert "HEATPUMP" in scope["hidden_families"]
     assert "AHU" in scope["hidden_families"]
+
+
+def test_applicable_rules_pick_matched_fault_code():
+    rules = [
+        {
+            "id": "r1",
+            "name": "Multi",
+            "enabled": True,
+            "fault_codes": ["AHU-B", "VAV-C"],
+        }
+    ]
+    out = fault_catalog_scope._applicable_rules(rules, {"VAV", "BUILDING"}, "site-a")
+    assert len(out) == 1
+    assert out[0]["fault_code"] == "VAV-C"
+    assert out[0]["family"] == "VAV"
 
 
 def test_applicable_api(client: TestClient):

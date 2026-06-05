@@ -42,16 +42,8 @@ export default function FaultCodeMultiSelect({ values, siteId, onChange, disable
           setFamilies(scoped);
           return;
         }
-        return apiFetch<{ families: { family: string; label: string; codes: CatalogCode[] }[] }>(
-          "/api/faults/catalog",
-        ).then((full) => {
-          setFamilies(
-            (full.families || []).map((f) => ({
-              family: f.family,
-              label: f.label,
-              categories: [{ category: "all", label: "Codes", codes: f.codes || [] }],
-            })),
-          );
+        return apiFetch<ApplicableResponse>("/api/faults/tree").then((full) => {
+          setFamilies(full.families || []);
         });
       })
       .catch((e) => setError(String(e)));

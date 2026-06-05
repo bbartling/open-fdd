@@ -32,7 +32,7 @@ def families_for_equipment(equipment_type: str, name: str = "") -> set[str]:
 
     if any(tok in et for tok in ("AHU", "AIR_HANDLER", "RTU", "DOAS", "MAU", "PACKAGED")) or any(
         tok in nm for tok in (" ahu", "ahu ", "rtu", "doas", "air handler", "air-handler")
-    ):
+    ) or nm.startswith("ahu") or "ahu-" in nm or "ahu_" in nm:
         found.add("AHU")
     if any(tok in et for tok in ("VAV", "VARIABLE_AIR", "TERMINAL", "FCU", "FAN_COIL", "FANCOIL")) or any(
         tok in nm for tok in ("vav", "fan coil", "fan-coil", "fcu", "fan coil unit")
@@ -122,10 +122,13 @@ def _applicable_rules(rules: list[dict[str, Any]], families: set[str], site_id: 
         rule_codes = _normalize_fault_codes(rule)
         if not rule_codes:
             continue
-        fams = {family_for_code(c) for c in rule_codes}
-        if not fams.intersection(families):
+        matched_fams = {family_for_code(c) for c in rule_codes} & families
+        if not matched_fams:
             continue
-        code = rule_codes[0]
+        code = next(
+            (c for c in rule_codes if family_for_code(c) in matched_fams),
+            rule_codes[0],
+        )
         applies = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
         site_ids = [str(s) for s in applies.get("site_ids", []) if str(s).strip()]
         if site_ids and site_id and site_id not in site_ids:

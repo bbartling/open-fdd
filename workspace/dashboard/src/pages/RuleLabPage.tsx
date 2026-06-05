@@ -319,16 +319,12 @@ export default function RuleLabPage() {
         bindings: preservedBindings(bindingsSource),
       };
       if (activeRuleId) {
-        const putRes = await apiFetch<{ path: string }>(`/api/rules/saved/${activeRuleId}/source`, {
-          method: "PUT",
-          body: JSON.stringify({ code }),
-        });
         const saveRes = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
           method: "POST",
           body: JSON.stringify({ ...payload, id: activeRuleId }),
         });
-        setSourcePath(putRes.path || saveRes.rule.source_path || sourcePath);
-        appendConsole(`>>> Updated rule .py — ${putRes.path || sourcePath}`);
+        setSourcePath(saveRes.rule.source_path || sourcePath);
+        appendConsole(`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`);
       } else {
         const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
           method: "POST",
