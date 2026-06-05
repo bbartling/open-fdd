@@ -230,11 +230,19 @@ def test_anonymous_cannot_read_host_stats(raw_client: TestClient):
     assert raw_client.get("/api/host/stats").status_code == 401
 
 
-def test_anonymous_cannot_read_agent_insights(raw_client: TestClient):
+def test_anonymous_can_read_public_building_insights(raw_client: TestClient):
+    for path in (
+        "/openfdd-agent/building-insight",
+        "/openfdd-agent/operational-brief",
+        "/openfdd-agent/zone-temps",
+        "/openfdd-agent/device-poll-health",
+        "/openfdd-agent/ollama/health",
+    ):
+        assert raw_client.get(path).status_code == 200, path
+
+
+def test_anonymous_cannot_read_authenticated_stack_health(raw_client: TestClient):
     assert raw_client.get("/health/stack").status_code == 401
-    assert raw_client.get("/openfdd-agent/building-insight").status_code == 401
-    assert raw_client.get("/openfdd-agent/operational-brief").status_code == 401
-    assert raw_client.get("/openfdd-agent/ollama/health").status_code == 401
 
 
 def test_health_minimal_public(raw_client: TestClient):

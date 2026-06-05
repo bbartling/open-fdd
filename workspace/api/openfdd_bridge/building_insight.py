@@ -153,6 +153,12 @@ def _compact_context(
         payload["worst_zones"] = zone_snapshot.get("worst_zones") or []
     if device_snapshot:
         payload["device_poll_health"] = slim_devices_for_llm(device_snapshot)
+    try:
+        from bacnet_toolshed.override_registry import slim_overrides_for_llm
+
+        payload["bacnet_overrides"] = slim_overrides_for_llm(limit=48)
+    except Exception:
+        payload["bacnet_overrides"] = {"override_count": 0, "overrides": []}
     brick = build_insight_brick_payload(status)
     payload["brick_model"] = brick.get("brick_model")
     payload["fault_catalog"] = brick.get("fault_catalog")
@@ -180,7 +186,9 @@ def _ollama_sentence(context: str) -> tuple[str, str]:
         "(4) active faults: use fault_catalog (official meaning, causes, checks) and faults_linked "
         "(BRICK equipment names); quote the code (e.g. VAV-C) and what it implies for operators; "
         "(5) brick_model feeds_chains — describe HVAC hierarchy (plant/AHU/VAV/zone sensors) when present; "
-        "(6) device poll offline/flaky counts. Do not invent equipment IDs or passwords."
+        "(6) device poll offline/flaky counts; "
+        "(7) bacnet_overrides — operator P8 manual writes and other priority-array slots; "
+        "call out stuck operator overrides vs supervisory BAS writes. Do not invent equipment IDs or passwords."
     )
     user = f"Snapshot JSON:\n{context}\n\nOperator briefing:"
     result = ollama_client.chat(
@@ -273,7 +281,7 @@ def get_building_insight(*, force: bool = False) -> dict[str, Any]:
 
     health = ollama_client.health(timeout=8.0)
     ollama_ok = health.get("ok") is True
-    if ollama_ok and ollama_client.should_use_ollama():
+    if ollama_ok and ollama_client.should_use_ollama_for_insight():
         context = _compact_context(status, zone_snapshot, device_snapshot)
         sentence, err = _ollama_sentence(context)
         if sentence:

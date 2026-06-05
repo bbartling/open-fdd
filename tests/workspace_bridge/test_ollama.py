@@ -193,9 +193,15 @@ def test_should_use_ollama(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_agent_chat_ollama_backend(raw_client: TestClient, operator_headers: dict[str, str]):
-    with patch(
-        "openfdd_bridge.routes.agent_routes.ollama_client.chat",
-        return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "ok"},
+    with (
+        patch(
+            "openfdd_bridge.routes.agent_routes.ollama_client.interactive_chat_enabled",
+            return_value=True,
+        ),
+        patch(
+            "openfdd_bridge.routes.agent_routes.ollama_client.chat",
+            return_value={"ok": True, "mode": "ollama", "model": "tinyllama", "reply": "ok"},
+        ),
     ):
         r = raw_client.post(
             "/openfdd-agent/chat",

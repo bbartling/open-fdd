@@ -11,16 +11,16 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from bacnet_toolshed.models import (
     DeviceInstanceRequest,
     DiscoverRequest,
-    ReadMultiplePropertiesRequestWrapper,
-    ReadPriorityArrayRequest,
-    SingleReadRequest,
+    ReadMultiplePropertiesRequest,
     WritePropertyRequest,
+    parse_object_identifier_parts,
 )
+from bacpypes3.primitivedata import PropertyIdentifier
 
 from ..bacnet_driver_store import (
     clear_registry,
@@ -59,7 +59,12 @@ from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 
 _log = logging.getLogger(__name__)
 _ingest_lock = threading.Lock()
-from ..commission_client import commission_poll_once, commission_poll_status
+from ..commission_client import (
+    commission_override_scan_once,
+    commission_override_status,
+    commission_poll_once,
+    commission_poll_status,
+)
 from ..paths import bacnet_poll_csv, data_dir, workspace_dir
 
 router = APIRouter(tags=["bacnet"])
@@ -69,6 +74,46 @@ _DISCOVERY = Depends(require_bacnet_discovery)
 _MUTATION = Depends(require_bacnet_mutation)
 _WRITE = Depends(require_roles("integrator"))
 _INTEGRATOR = Depends(require_roles("integrator"))
+
+
+class BridgeSingleReadRequest(BaseModel):
+    """Bridge API body — includes device_address even when image bacnet_toolshed lags."""
+
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    object_identifier: str
+    property_identifier: str = "present-value"
+
+    @field_validator("object_identifier")
+    @classmethod
+    def validate_object_identifier(cls, value: str) -> str:
+        parse_object_identifier_parts(value)
+        return value
+
+    @field_validator("property_identifier")
+    @classmethod
+    def validate_property_identifier(cls, value: str) -> str:
+        if value not in PropertyIdentifier._enum_map:
+            raise ValueError(f"Invalid property identifier: {value}")
+        return value
+
+
+class BridgeReadPriorityArrayRequest(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    object_identifier: str
+
+    @field_validator("object_identifier")
+    @classmethod
+    def validate_object_identifier(cls, value: str) -> str:
+        parse_object_identifier_parts(value)
+        return value
+
+
+class BridgeReadMultipleRequest(BaseModel):
+    device_instance: int = Field(ge=0, le=4194303)
+    device_address: str = ""
+    requests: list[ReadMultiplePropertiesRequest]
 
 
 class ImportToModelBody(BaseModel):
@@ -330,33 +375,48 @@ def bacnet_whois(body: DiscoverRequest) -> dict:
 
 
 @router.post("/api/bacnet/read", dependencies=[_READ])
-def bacnet_read_property(body: SingleReadRequest) -> dict:
+def bacnet_read_property(body: BridgeSingleReadRequest) -> dict:
     status_code, payload = commission_read(
         body.device_instance,
         body.object_identifier,
         body.property_identifier,
+        device_address=body.device_address,
+    )
+    if status_code != 200:
+        raise _proxy_error(status_code, payload)
+    if body.property_identifier == "present-value" and isinstance(payload, dict):
+        from ..bacnet_driver_store import record_ondemand_present_value
+
+        val = payload.get("value")
+        formatted = "—" if val is None else (str(val) if not isinstance(val, (dict, list)) else str(val))
+        record_ondemand_present_value(
+            device_instance=body.device_instance,
+            object_identifier=body.object_identifier,
+            present_value=formatted,
+        )
+    return payload  # type: ignore[return-value]
+
+
+@router.post("/api/bacnet/read-multiple", dependencies=[_READ])
+def bacnet_read_multiple_properties(body: BridgeReadMultipleRequest) -> dict:
+    requests = [
+        {"object_identifier": r.object_identifier, "property_identifier": r.property_identifier}
+        for r in body.requests
+    ]
+    status_code, payload = commission_read_multiple(
+        body.device_instance, requests, device_address=body.device_address
     )
     if status_code != 200:
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
 
 
-@router.post("/api/bacnet/read-multiple", dependencies=[_READ])
-def bacnet_read_multiple_properties(body: ReadMultiplePropertiesRequestWrapper) -> dict:
-    requests = [
-        {"object_identifier": r.object_identifier, "property_identifier": r.property_identifier}
-        for r in body.requests
-    ]
-    status_code, payload = commission_read_multiple(body.device_instance, requests)
-    if status_code != 200:
-        raise _proxy_error(status_code, payload)
-    return payload  # type: ignore[return-value]
-
-
 @router.post("/api/bacnet/priority-array", dependencies=[_READ])
-def bacnet_read_priority_array(body: ReadPriorityArrayRequest) -> dict:
+def bacnet_read_priority_array(body: BridgeReadPriorityArrayRequest) -> dict:
     status_code, payload = commission_priority_array(
-        body.device_instance, body.object_identifier
+        body.device_instance,
+        body.object_identifier,
+        device_address=body.device_address,
     )
     if status_code != 200:
         raise _proxy_error(status_code, payload)
@@ -373,7 +433,7 @@ def bacnet_point_discovery(body: DeviceInstanceRequest) -> dict:
 
 @router.post("/api/bacnet/supervisory-check", dependencies=[_DISCOVERY])
 def bacnet_supervisory_check(body: DeviceInstanceRequest) -> dict:
-    status_code, payload = start_supervisory_check(body.device_instance)
+    status_code, payload = start_supervisory_check(body.device_instance, body.device_address)
     if status_code not in (200, 202):
         raise _proxy_error(status_code, payload)
     return payload  # type: ignore[return-value]
@@ -435,6 +495,45 @@ def _enrich_poll_status(payload: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError, ZoneInfoNotFoundError):
         out["at_utc"] = at_raw
     return out
+
+
+@router.get("/api/bacnet/overrides/status", dependencies=[_READ])
+def bacnet_override_status() -> dict:
+    code, payload = commission_override_status()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    try:
+        from bacnet_toolshed.override_registry import export_csv_text, scan_status
+
+        if isinstance(payload, dict):
+            payload = {**scan_status(), **payload}
+        payload["export_row_count"] = max(0, export_csv_text().count("\n") - 1)
+    except Exception:
+        pass
+    return payload  # type: ignore[return-value]
+
+
+@router.get("/api/bacnet/overrides/export", dependencies=[_READ])
+def bacnet_override_export() -> Response:
+    try:
+        from bacnet_toolshed.override_registry import export_csv_text
+
+        body = export_csv_text()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return Response(
+        content=body,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="bacnet_overrides_export.csv"'},
+    )
+
+
+@router.post("/api/bacnet/overrides/scan-once", dependencies=[_READ])
+def bacnet_override_scan_once() -> dict:
+    code, payload = commission_override_scan_once()
+    if code != 200:
+        raise _proxy_error(code, payload)
+    return payload  # type: ignore[return-value]
 
 
 @router.get("/api/bacnet/poll/status", dependencies=[_READ])

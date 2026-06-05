@@ -94,12 +94,19 @@ def start_point_discovery(device_instance: int, device_address: str = "") -> tup
     )
 
 
-def start_supervisory_check(device_instance: int) -> tuple[int, Any]:
-    return _request(
-        "POST",
-        "/api/jobs/supervisory-check",
-        {"device_instance": device_instance},
-    )
+def start_supervisory_check(device_instance: int, device_address: str = "") -> tuple[int, Any]:
+    body: dict[str, Any] = {"device_instance": device_instance}
+    if device_address.strip():
+        body["device_address"] = device_address.strip()
+    return _request("POST", "/api/jobs/supervisory-check", body)
+
+
+def commission_override_status() -> tuple[int, Any]:
+    return _request("GET", "/api/bacnet/overrides/status")
+
+
+def commission_override_scan_once() -> tuple[int, Any]:
+    return _request("POST", "/api/bacnet/overrides/scan-once", {})
 
 
 def bacnet_write(
@@ -124,38 +131,41 @@ def bacnet_read(
     device_instance: int,
     object_identifier: str,
     property_identifier: str = "present-value",
+    device_address: str = "",
 ) -> tuple[int, Any]:
-    return _request(
-        "POST",
-        "/api/bacnet/read",
-        {
-            "device_instance": device_instance,
-            "object_identifier": object_identifier,
-            "property_identifier": property_identifier,
-        },
-    )
+    body: dict[str, Any] = {
+        "device_instance": device_instance,
+        "object_identifier": object_identifier,
+        "property_identifier": property_identifier,
+    }
+    if device_address.strip():
+        body["device_address"] = device_address.strip()
+    return _request("POST", "/api/bacnet/read", body)
 
 
 def bacnet_read_multiple(
     device_instance: int,
     requests: list[dict[str, str]],
+    device_address: str = "",
 ) -> tuple[int, Any]:
-    return _request(
-        "POST",
-        "/api/bacnet/read-multiple",
-        {"device_instance": device_instance, "requests": requests},
-    )
+    body: dict[str, Any] = {"device_instance": device_instance, "requests": requests}
+    if device_address.strip():
+        body["device_address"] = device_address.strip()
+    return _request("POST", "/api/bacnet/read-multiple", body)
 
 
 def bacnet_priority_array(
     device_instance: int,
     object_identifier: str,
+    device_address: str = "",
 ) -> tuple[int, Any]:
-    return _request(
-        "POST",
-        "/api/bacnet/priority-array",
-        {"device_instance": device_instance, "object_identifier": object_identifier},
-    )
+    body: dict[str, Any] = {
+        "device_instance": device_instance,
+        "object_identifier": object_identifier,
+    }
+    if device_address.strip():
+        body["device_address"] = device_address.strip()
+    return _request("POST", "/api/bacnet/priority-array", body)
 
 
 def server_points() -> tuple[int, Any]:

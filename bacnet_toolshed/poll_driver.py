@@ -54,12 +54,18 @@ def _append_poll_rows(path: Path, rows: list[dict[str, str]]) -> None:
             writer.writerow(row)
 
 
+def _poll_cancel_requested() -> bool:
+    task = asyncio.current_task()
+    return bool(task and task.cancelling())
+
+
 async def poll_once(
     app,
     points_by_device,
     *,
     output_csv: Path,
     dry_run: bool,
+    interruptible: bool = False,
 ) -> int:
     ts = datetime.now(timezone.utc).isoformat()
     rows: list[dict[str, str]] = []
@@ -94,17 +100,29 @@ async def poll_once(
             count += 1
         return count
 
-    results = await asyncio.gather(
-        *[_poll_device(k, points_by_device[k]) for k in device_keys],
-        return_exceptions=True,
-    )
     total = 0
-    for r in results:
-        if isinstance(r, Exception):
-            _log.warning("poll device error: %s", r)
-            print(f"poll error: {r}", file=sys.stderr)
-        elif isinstance(r, int):
-            total += r
+    if interruptible:
+        for device_key in device_keys:
+            if _poll_cancel_requested():
+                raise asyncio.CancelledError()
+            try:
+                count = await _poll_device(device_key, points_by_device[device_key])
+            except Exception as exc:
+                _log.warning("poll device error: %s", exc)
+                print(f"poll error: {exc}", file=sys.stderr)
+            else:
+                total += count
+    else:
+        results = await asyncio.gather(
+            *[_poll_device(k, points_by_device[k]) for k in device_keys],
+            return_exceptions=True,
+        )
+        for r in results:
+            if isinstance(r, Exception):
+                _log.warning("poll device error: %s", r)
+                print(f"poll error: {r}", file=sys.stderr)
+            elif isinstance(r, int):
+                total += r
 
     if rows and not dry_run:
         _append_poll_rows(output_csv, rows)

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..building_alerts import load_alerts, replace_alerts
-from ..building_status import collect_status
+from ..building_status import collect_status, public_dashboard_snapshot
 from ..deps import require_roles, require_user
 from ..fault_catalog import is_valid_code
 
@@ -26,6 +26,13 @@ class AlertItem(BaseModel):
 class AlertsBody(BaseModel):
     alerts: list[AlertItem] = Field(default_factory=list)
     status: str | None = None
+
+
+@router.get("/snapshot")
+def building_snapshot() -> dict:
+    """Public dashboard payload: stack status strip + live fault tree (no login)."""
+    snap = public_dashboard_snapshot()
+    return {"ok": True, **snap}
 
 
 @router.get("/status")

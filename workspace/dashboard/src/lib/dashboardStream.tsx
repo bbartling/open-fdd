@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, fetchWsTicket, getBridgeBase } from "./api";
+import { apiFetch, fetchWsTicket, getBridgeBase, hasToken } from "./api";
 import type { Traffic } from "../components/TrafficLight";
 
 export type ServiceStatus = "green" | "yellow" | "red" | "gray";
@@ -101,7 +101,12 @@ function wsBaseUrl(): string {
   return `${proto}//${window.location.host}/ws/dashboard`;
 }
 
-async function fetchSnapshot(): Promise<DashboardSnapshot> {
+async function fetchSnapshot(authenticated: boolean): Promise<DashboardSnapshot> {
+  if (!authenticated) {
+    const snap = await apiFetch<DashboardSnapshot & { ok?: boolean }>("/api/building/snapshot");
+    const { ok: _ok, ...body } = snap;
+    return body as DashboardSnapshot;
+  }
   const [stack, faults] = await Promise.all([
     apiFetch<StackHealth>("/health/stack"),
     apiFetch<FaultsStatus & { ok?: boolean }>("/api/faults/status"),
@@ -114,6 +119,14 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [error, setError] = useState("");
   const [live, setLive] = useState(false);
+  const [authenticated, setAuthenticated] = useState(hasToken());
+
+  useEffect(() => {
+    const sync = () => setAuthenticated(hasToken());
+    sync();
+    window.addEventListener("ofdd-auth", sync);
+    return () => window.removeEventListener("ofdd-auth", sync);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +143,7 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
     };
 
     const poll = () => {
-      fetchSnapshot()
+      fetchSnapshot(authenticated)
         .then(apply)
         .catch((e) => {
           if (!cancelled) setError(String(e));
@@ -172,19 +185,26 @@ export function DashboardStreamProvider({ children, pollMs = 15000 }: { children
         if (!cancelled) startPolling();
       }
     };
-    void connectWs();
 
-    const fallbackTimer = window.setTimeout(() => {
-      if (!cancelled && !gotData) startPolling();
-    }, 2500);
+    if (authenticated) {
+      void connectWs();
+    } else {
+      startPolling();
+    }
+
+    const fallbackTimer = authenticated
+      ? window.setTimeout(() => {
+          if (!cancelled && !gotData) startPolling();
+        }, 2500)
+      : 0;
 
     return () => {
       cancelled = true;
       ws?.close();
       window.clearInterval(pollId);
-      window.clearTimeout(fallbackTimer);
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
     };
-  }, [pollMs]);
+  }, [pollMs, authenticated]);
 
   const value = useMemo(() => ({ snapshot, error, live }), [snapshot, error, live]);
   return <DashboardStreamContext.Provider value={value}>{children}</DashboardStreamContext.Provider>;

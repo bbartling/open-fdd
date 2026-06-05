@@ -41,6 +41,11 @@ from bacnet_toolshed.server_points import (
     update_openfdd_server_points,
 )
 from bacnet_toolshed.stack_args import bacnet_argv_from_cfg, discover_timeout_s, route_discovery_kwargs
+from bacnet_toolshed.bacnet_io_priority import BacnetPriority, init_loop_state, run_bacnet_op
+from bacnet_toolshed.bacnet_override_scan_loop import (
+    run_override_scan_cycle,
+    start_override_scan_loop,
+)
 from bacnet_toolshed.bacnet_poll_loop import (
     enabled_point_count,
     last_poll_status,
@@ -48,6 +53,7 @@ from bacnet_toolshed.bacnet_poll_loop import (
     run_poll_cycle,
     start_poll_loop,
 )
+from bacnet_toolshed.override_registry import scan_status as override_scan_status
 
 from bacnet_toolshed.nic_bind import resolve_commission_cfg
 from bacnet_toolshed.paths import (
@@ -67,7 +73,7 @@ _bacnet_app: Application | None = None
 _bacnet_app_cfg_key: tuple[tuple[str, str], ...] | None = None
 _bacnet_app_lock = threading.Lock()
 _bacnet_op_lock = threading.Lock()
-_bacnet_async_lock: asyncio.Lock | None = None
+_bacnet_serial_lock: asyncio.Lock | None = None
 _bacnet_loop: asyncio.AbstractEventLoop | None = None
 _bacnet_loop_ready = threading.Event()
 
@@ -257,11 +263,12 @@ def _bacnet_app_from_cfg(cfg: dict[str, str]) -> Application:
 
 
 def _bacnet_loop_thread_main() -> None:
-    global _bacnet_loop, _bacnet_async_lock
+    global _bacnet_loop, _bacnet_serial_lock
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     _bacnet_loop = loop
-    _bacnet_async_lock = asyncio.Lock()
+    _bacnet_serial_lock = asyncio.Lock()
+    init_loop_state(_bacnet_serial_lock)
     _bacnet_loop_ready.set()
     loop.run_forever()
 
@@ -283,22 +290,35 @@ def _ensure_bacnet_loop() -> asyncio.AbstractEventLoop:
         return _bacnet_loop
 
 
-def _run_bacnet_sync(coro_factory, timeout: float = 180.0) -> Any:
-    """Run BACnet coroutine on a single dedicated asyncio loop (BACpypes3 requirement)."""
+def _get_bacnet_app_locked() -> Application:
+    with _bacnet_op_lock:
+        return _bacnet_app_from_cfg(_cfg())
+
+
+def _run_bacnet_sync(
+    coro_factory,
+    *,
+    priority: BacnetPriority = BacnetPriority.INTERACTIVE,
+    timeout: float = 180.0,
+) -> Any:
+    """Run BACnet coroutine on the dedicated loop; interactive ops preempt background scrape."""
     loop = _ensure_bacnet_loop()
 
     async def _inner() -> Any:
-        with _bacnet_op_lock:
-            cfg = _cfg()
-            app = _bacnet_app_from_cfg(cfg)
-        lock = _bacnet_async_lock
-        if lock is None:
-            raise RuntimeError("BACnet async lock missing")
-        async with lock:
-            return await coro_factory(app)
+        if _bacnet_serial_lock is None:
+            raise RuntimeError("BACnet serial lock missing")
+        return await run_bacnet_op(
+            coro_factory,
+            _get_bacnet_app_locked,
+            priority=priority,
+        )
 
     future = asyncio.run_coroutine_threadsafe(_inner(), loop)
     return future.result(timeout=timeout)
+
+
+def _run_bacnet_background(coro_factory, timeout: float = 180.0) -> Any:
+    return _run_bacnet_sync(coro_factory, priority=BacnetPriority.BACKGROUND, timeout=timeout)
 
 
 def _run_async_bacnet_job(job_id: str, kind: str, coro_factory) -> None:
@@ -360,11 +380,16 @@ def _start_point_discovery(device_instance: int, device_address: str = "") -> di
     return out
 
 
-def _start_supervisory_check(device_instance: int) -> dict[str, Any]:
+def _start_supervisory_check(device_instance: int, device_address: str = "") -> dict[str, Any]:
     job_id = uuid.uuid4().hex[:12]
+    addr = device_address.strip()
 
     async def _run(app: Application) -> dict[str, Any]:
-        return await supervisory_logic_check(app, device_instance)
+        return await supervisory_logic_check(
+            app,
+            device_instance,
+            device_address=addr or None,
+        )
 
     thread = threading.Thread(
         target=_run_async_bacnet_job, args=(job_id, "supervisory_check", _run), daemon=True
@@ -430,11 +455,13 @@ def _sync_bacnet_read(body: dict[str, Any]) -> dict[str, Any]:
     req = SingleReadRequest.model_validate(body)
 
     async def _run(app: Application) -> dict[str, Any]:
+        addr = str(req.device_address or "").strip() or None
         return await bacnet_read(
             app,
             req.device_instance,
             req.object_identifier,
             req.property_identifier,
+            device_address=addr,
         )
 
     return _run_bacnet_sync(_run)
@@ -445,7 +472,8 @@ def _sync_bacnet_read_multiple(body: dict[str, Any]) -> dict[str, Any]:
     requests = [(r.object_identifier, r.property_identifier) for r in req.requests]
 
     async def _run(app: Application) -> dict[str, Any]:
-        return await bacnet_read_multiple(app, req.device_instance, requests)
+        addr = str(req.device_address or "").strip() or None
+        return await bacnet_read_multiple(app, req.device_instance, requests, device_address=addr)
 
     return _run_bacnet_sync(_run)
 
@@ -454,8 +482,9 @@ def _sync_read_priority_array(body: dict[str, Any]) -> dict[str, Any]:
     req = ReadPriorityArrayRequest.model_validate(body)
 
     async def _run(app: Application) -> dict[str, Any]:
+        addr = str(req.device_address or "").strip() or None
         return await read_point_priority_array(
-            app, req.device_instance, req.object_identifier
+            app, req.device_instance, req.object_identifier, device_address=addr
         )
 
     return _run_bacnet_sync(_run)
@@ -592,6 +621,9 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
                 },
             )
 
+        if path == "/api/bacnet/overrides/status":
+            return _json_response(self, 200, override_scan_status())
+
         if path == "/api/jobs":
             return _json_response(self, 200, {"jobs": _list_jobs(30)})
 
@@ -633,12 +665,17 @@ class CommissionAgentHandler(BaseHTTPRequestHandler):
             inst = body.get("device_instance")
             if inst is None:
                 return _json_response(self, 400, {"error": "device_instance required"})
-            started = _start_supervisory_check(int(inst))
+            addr = str(body.get("device_address") or "").strip()
+            started = _start_supervisory_check(int(inst), device_address=addr)
             return _json_response(self, 202, started)
 
         if path == "/api/bacnet/poll/once":
-            result = run_poll_cycle(_run_bacnet_sync)
+            result = run_poll_cycle(_run_bacnet_background)
             return _json_response(self, 200, {"ok": bool(result.get("ok")), **result})
+
+        if path == "/api/bacnet/overrides/scan-once":
+            result = run_override_scan_cycle(_run_bacnet_background)
+            return _json_response(self, 200, result)
 
         if path == "/api/bacnet/whois":
             low = int(body.get("range_low", _cfg().get("DISCOVER_LOW", 1)))
@@ -703,9 +740,16 @@ def main() -> int:
         f"bind={cfg.get('BACNET_BIND')}",
         flush=True,
     )
-    start_poll_loop(_run_bacnet_sync)
+    start_poll_loop(_run_bacnet_background)
+    start_override_scan_loop(_run_bacnet_background)
     print(
         f"BACnet poll loop started (enabled points={enabled_point_count()}, interval={poll_interval_s()}s)",
+        flush=True,
+    )
+    ostat = override_scan_status()
+    print(
+        f"BACnet override scan loop started (devices={ostat.get('device_count')}, "
+        f"interval={ostat.get('scan_interval_s')}s, operator_priority=P{ostat.get('operator_priority')})",
         flush=True,
     )
     try:

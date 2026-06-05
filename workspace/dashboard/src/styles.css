@@ -1148,6 +1148,24 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+.badge.override-badge {
+  background: rgba(255, 170, 0, 0.2);
+  color: #ffb84d;
+  border: 1px solid rgba(255, 170, 0, 0.35);
+}
+
+.badge.operator-override-badge {
+  background: rgba(255, 90, 90, 0.18);
+  color: #ff8a8a;
+  border: 1px solid rgba(255, 90, 90, 0.4);
+}
+
+.bacnet-tree-override-scan {
+  border-left: 2px solid rgba(255, 170, 0, 0.45);
+  margin-left: 0.5rem;
+  padding-left: 0.5rem;
+}
+
 .bacnet-tree-priority-value {
   font-family: ui-monospace, monospace;
 }

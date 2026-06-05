@@ -249,10 +249,18 @@ def stack_health(*, verbose: bool = False) -> dict[str, Any]:
         if svc["status"] == "yellow" and overall == "green":
             overall = "yellow"
 
+    try:
+        from .container_revisions import stack_revisions
+
+        revisions = stack_revisions(include_image_ids=False)
+    except Exception:
+        revisions = None
+
     out: dict[str, Any] = {
         "ok": overall in {"green", "yellow"},
         "overall": overall,
         "services": services,
+        "container_revisions": revisions,
     }
     if verbose:
         out["bacnet_bind"] = bacnet_bind

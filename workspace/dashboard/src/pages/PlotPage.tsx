@@ -6,6 +6,7 @@ import { TabDebugPanel } from "../components/TabDebugPanel";
 import TelemetryScopePicker from "../components/TelemetryScopePicker";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch } from "../lib/api";
+import { copyToClipboard } from "../lib/clipboard";
 import { formatApiError } from "../lib/formatApiError";
 import { buildPlotTraces, type PlotReadingsResponse } from "../lib/plot-chart";
 import {
@@ -246,10 +247,20 @@ export default function PlotPage() {
     return "";
   }
 
-  const plotLink =
+  const plotScopePath =
     siteId && equipmentId
       ? `/plot?site=${encodeURIComponent(siteId)}&device=${encodeURIComponent(equipmentId)}`
       : "/plot";
+
+  async function copyScopeLink() {
+    const url = `${window.location.origin}${plotScopePath}`;
+    try {
+      await copyToClipboard(url);
+      setStatus("Scope link copied to clipboard.");
+    } catch {
+      setStatus("Could not copy link — copy from the address bar.");
+    }
+  }
 
   return (
     <div className="page page-wide">
@@ -358,9 +369,15 @@ export default function PlotPage() {
               <button type="button" className="secondary-btn" onClick={clearVisible}>
                 Clear
               </button>
-              <a className="secondary-btn" href={plotLink}>
-                Link this scope
-              </a>
+              <button
+                type="button"
+                className="secondary-btn"
+                disabled={!siteId || !equipmentId}
+                title="Copy bookmark URL for this site and device"
+                onClick={() => void copyScopeLink()}
+              >
+                Copy scope link
+              </button>
             </div>
             <div className="plot-series-chips">
               {visibleOptions.map((opt) => (

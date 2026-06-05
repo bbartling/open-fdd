@@ -24,6 +24,9 @@ def test_openfdd_server_point_specs():
 
 
 def test_binary_server_point_uses_bacpypes3_enums():
+    import asyncio
+
+    asyncio.set_event_loop(asyncio.new_event_loop())
     from bacpypes3.basetypes import BinaryPV
     from bacpypes3.local.binary import BinaryValueObject
 

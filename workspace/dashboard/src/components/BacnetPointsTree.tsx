@@ -7,6 +7,12 @@ import {
   type PrioritySlot,
 } from "../lib/bacnetTreeMenu";
 
+export type OverrideSlot = {
+  priority_level: number;
+  type?: string;
+  value?: unknown;
+};
+
 export type DriverPoint = {
   point_id: string;
   object_identifier: string;
@@ -18,6 +24,11 @@ export type DriverPoint = {
   present_value?: string;
   series_id?: string;
   commandable?: boolean;
+  has_override?: boolean;
+  override_priorities?: number[];
+  operator_override?: boolean;
+  operator_override_value?: string;
+  override_slots?: OverrideSlot[];
 };
 
 export type DriverDevice = {
@@ -25,6 +36,9 @@ export type DriverDevice = {
   device_address: string;
   point_count: number;
   poll_count: number;
+  override_point_count?: number;
+  operator_override_count?: number;
+  last_override_scan_at?: string;
   points: DriverPoint[];
 };
 
@@ -60,6 +74,12 @@ function groupPoints(points: DriverPoint[]): Map<string, DriverPoint[]> {
 function prioritySlotLabel(slot: PrioritySlot): string {
   if (slot.type === "null" || slot.value == null) return "null (relinquished)";
   return `${slot.type}: ${formatBacnetValue(slot.value)}`;
+}
+
+function overrideSlotLabel(slot: OverrideSlot): string {
+  const val = slot.value;
+  if (val == null || slot.type === "null") return "active";
+  return `${slot.type ?? "value"}: ${formatBacnetValue(val)}`;
 }
 
 export default function BacnetPointsTree({
@@ -166,6 +186,16 @@ export default function BacnetPointsTree({
               {dev.poll_count > 0 ? (
                 <span className="badge poll-badge">{dev.poll_count} polling</span>
               ) : null}
+              {(dev.override_point_count ?? 0) > 0 ? (
+                <span className="badge override-badge" title="Priority-array overrides detected">
+                  ⚠ {dev.override_point_count} ovrd
+                </span>
+              ) : null}
+              {(dev.operator_override_count ?? 0) > 0 ? (
+                <span className="badge operator-override-badge" title="Operator priority (P8) overrides">
+                  P8×{dev.operator_override_count}
+                </span>
+              ) : null}
             </button>
             {devOpen ? (
               <div className="bacnet-tree-device-body">
@@ -184,7 +214,10 @@ export default function BacnetPointsTree({
                           {pts.map((p) => {
                             const priorityOpen = expandedPriorityPoints.has(p.point_id);
                             const prioritySlots = priorityByPointId[p.point_id] ?? [];
-                            const showPv = String(p.present_value ?? "") !== "";
+                            const scanSlots = (p.override_slots ?? []) as OverrideSlot[];
+                            const showOverrideTree = scanSlots.length > 0;
+                            const showPv =
+                              p.enabled && String(p.present_value ?? "") !== "";
                             return (
                               <li key={p.point_id}>
                                 <div
@@ -196,6 +229,18 @@ export default function BacnetPointsTree({
                                   {p.commandable ? (
                                     <span className="badge commandable-badge" title="Commandable (priority-array)">
                                       cmd
+                                    </span>
+                                  ) : null}
+                                  {p.has_override ? (
+                                    <span
+                                      className={`badge override-badge${p.operator_override ? " operator-override-badge" : ""}`}
+                                      title={
+                                        p.override_priorities?.length
+                                          ? `Overrides at P${p.override_priorities.join(", P")}`
+                                          : "Priority override active"
+                                      }
+                                    >
+                                      ovrd P{p.override_priorities?.join("/P") ?? "?"}
                                     </span>
                                   ) : null}
                                   {showPv ? (
@@ -215,6 +260,16 @@ export default function BacnetPointsTree({
                                     <span className="badge muted-badge">idle</span>
                                   )}
                                 </div>
+                                {showOverrideTree ? (
+                                  <ul className="bacnet-tree-priority bacnet-tree-override-scan">
+                                    {scanSlots.map((slot) => (
+                                      <li key={`${p.point_id}-scan-p${slot.priority_level}`}>
+                                        <span className="bacnet-tree-priority-level">P{slot.priority_level}</span>
+                                        <span className="bacnet-tree-priority-value">{overrideSlotLabel(slot)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
                                 {priorityOpen && prioritySlots.length ? (
                                   <ul className="bacnet-tree-priority">
                                     {prioritySlots.map((slot) => (

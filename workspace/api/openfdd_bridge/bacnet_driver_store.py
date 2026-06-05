@@ -16,6 +16,33 @@ from .paths import workspace_dir
 _DRIVER_LOCK = threading.RLock()
 POLL_INTERVALS_S = (60, 300, 600, 900)
 POLL_LABELS = {60: "1 min", 300: "5 min", 600: "10 min", 900: "15 min"}
+# Last on-demand present-value read per point (Refresh PV) until poll sample arrives.
+_ONDEMAND_PV: dict[str, str] = {}
+
+
+def record_ondemand_present_value(
+    *,
+    device_instance: int,
+    object_identifier: str,
+    present_value: str,
+) -> None:
+    """Cache a manual BACnet read for polled points (shown until next poll sample)."""
+    from bacnet_toolshed.models import parse_object_identifier_parts
+
+    obj_type, obj_inst = parse_object_identifier_parts(object_identifier)
+    pid = make_point_id(str(device_instance), obj_type, str(obj_inst))
+    text = str(present_value or "").strip()
+    if not text:
+        return
+    with _DRIVER_LOCK:
+        _ONDEMAND_PV[pid] = text
+
+
+def _present_value_for_point(*, point_id: str, enabled: bool, latest_pv: dict[str, str]) -> str:
+    """Poll samples + manual reads only for points enabled in points.csv."""
+    if not enabled:
+        return ""
+    return latest_pv.get(point_id) or _ONDEMAND_PV.get(point_id, "")
 
 
 def _discovered_path() -> Path:
@@ -352,6 +379,37 @@ def _ensure_discovered_from_poll_rows() -> bool:
     return bool(added) or (not had_discovered and bool(poll_rows))
 
 
+def _override_index() -> dict[str, dict[str, Any]]:
+    try:
+        from bacnet_toolshed.override_registry import overrides_by_device, operator_override_priority
+
+        op_pri = operator_override_priority()
+        by_dev = overrides_by_device()
+        index: dict[str, dict[str, Any]] = {}
+        for inst, dev in by_dev.items():
+            if not isinstance(dev, dict) or not dev.get("ok", True):
+                continue
+            for pt in dev.get("points_with_overrides") or []:
+                if not isinstance(pt, dict):
+                    continue
+                oid = str(pt.get("object_identifier") or "").strip().lower()
+                if not oid:
+                    continue
+                slots = pt.get("overrides") or []
+                levels = [int(s.get("priority_level") or 0) for s in slots if isinstance(s, dict)]
+                op_slots = [s for s in slots if isinstance(s, dict) and int(s.get("priority_level") or 0) == op_pri]
+                index[f"{inst}:{oid}"] = {
+                    "override_priorities": sorted(set(levels)),
+                    "has_override": bool(levels),
+                    "operator_override": bool(op_slots),
+                    "operator_override_value": str(op_slots[0].get("value")) if op_slots else "",
+                    "override_slots": slots,
+                }
+        return index
+    except Exception:
+        return {}
+
+
 def driver_tree() -> dict[str, Any]:
     """Device tree from discovered CSV merged with points.csv poll flags."""
     with _DRIVER_LOCK:
@@ -359,6 +417,17 @@ def driver_tree() -> dict[str, Any]:
         discovered = _load_csv(_discovered_path())
         enabled_rows = {r.get("point_id", ""): r for r in _load_csv(_points_path()) if r.get("point_id")}
     latest_pv = _latest_poll_values()
+    override_idx = _override_index()
+    try:
+        from bacnet_toolshed.override_registry import overrides_by_device, operator_override_priority, scan_status
+
+        override_meta = scan_status()
+        override_by_dev = overrides_by_device()
+        op_pri = operator_override_priority()
+    except Exception:
+        override_meta = {}
+        override_by_dev = {}
+        op_pri = 8
     devices: dict[str, dict[str, Any]] = {}
     for raw in discovered:
         inst = str(raw.get("device_instance") or "").strip()
@@ -398,6 +467,8 @@ def driver_tree() -> dict[str, Any]:
             "true",
             "yes",
         }
+        okey = f"{inst}:{oid.lower()}" if oid else ""
+        oinfo = override_idx.get(okey, {})
         dev["points"].append(
             {
                 "point_id": pid,
@@ -407,18 +478,30 @@ def driver_tree() -> dict[str, Any]:
                 "enabled": enabled,
                 "poll_interval_s": interval if enabled else 0,
                 "poll_label": POLL_LABELS.get(interval, "") if enabled else "",
-                "present_value": latest_pv.get(pid, "") if enabled else str(raw.get("present_value") or ""),
+                "present_value": _present_value_for_point(point_id=pid, enabled=enabled, latest_pv=latest_pv),
                 "series_id": str(poll_row.get("series_id") or raw.get("series_id") or ""),
                 "commandable": commandable,
+                "has_override": bool(oinfo.get("has_override")),
+                "override_priorities": oinfo.get("override_priorities") or [],
+                "operator_override": bool(oinfo.get("operator_override")),
+                "operator_override_value": str(oinfo.get("operator_override_value") or ""),
+                "override_slots": oinfo.get("override_slots") or [],
             }
         )
     device_list = sorted(devices.values(), key=lambda d: int(d["device_instance"]))
     for dev in device_list:
         dev["point_count"] = len(dev["points"])
         dev["poll_count"] = sum(1 for p in dev["points"] if p["enabled"])
+        inst_key = str(dev["device_instance"])
+        dev_scan = override_by_dev.get(inst_key) if isinstance(override_by_dev, dict) else None
+        dev["override_point_count"] = sum(1 for p in dev["points"] if p.get("has_override"))
+        dev["operator_override_count"] = sum(1 for p in dev["points"] if p.get("operator_override"))
+        dev["last_override_scan_at"] = str((dev_scan or {}).get("scanned_at") or "")
     return {
         "ok": True,
         "devices": device_list,
+        "override_scan": override_meta,
+        "operator_override_priority": op_pri,
         "discovered_path": str(_discovered_path()),
         "points_path": str(_points_path()),
         "poll_intervals": [{"seconds": s, "label": POLL_LABELS[s]} for s in POLL_INTERVALS_S],

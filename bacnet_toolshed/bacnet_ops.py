@@ -284,8 +284,40 @@ def _flatten_priority_slot(value: Any) -> tuple[str | None, Any] | None:
     return type_name, value
 
 
-async def supervisory_logic_check(app: Application, instance_id: int) -> dict[str, Any]:
-    result = await point_discovery(app, instance_id)
+async def _priority_array_override_slots(
+    app: Application,
+    address: Union[str, Address],
+    object_identifier: str,
+) -> list[tuple[int, Any]]:
+    """Read priority-array via read_property (RPM unwrap loses PriorityValue slots)."""
+    address_obj = Address(str(address))
+    obj_id = ObjectIdentifier(object_identifier)
+    try:
+        response = await app.read_property(address_obj, obj_id, "priority-array")
+    except ErrorRejectAbortNack:
+        return []
+    slots: list[tuple[int, Any]] = []
+    if not response:
+        return slots
+    for index, priority_value in enumerate(response):
+        value_type = priority_value._choice
+        if value_type == "null":
+            continue
+        raw = getattr(priority_value, value_type, None)
+        if raw is None:
+            continue
+        encoded = encode_rpm_value(raw)
+        slots.append((index, {value_type: encoded}))
+    return slots
+
+
+async def supervisory_logic_check(
+    app: Application,
+    instance_id: int,
+    device_address: str | None = None,
+) -> dict[str, Any]:
+    addr = str(device_address or "").strip() or None
+    result = await point_discovery(app, instance_id, device_address=addr)
     device_address = result["device_address"]
     objects = result["objects"]
     if not device_address or not objects:
@@ -316,19 +348,25 @@ async def supervisory_logic_check(app: Application, instance_id: int) -> dict[st
     ]
     by_oid: dict[str, list[tuple[int | None, Any]]] = {}
     if commandable_list:
-        rpm_requests = [(oid, "priority-array") for oid, _ in commandable_list]
-        rpm_results = await rpm_chunked(app, device_address, rpm_requests)
-        for r in rpm_results:
-            if "error" in r:
+
+        async def _read_pa(oid_name: tuple[str, str]) -> tuple[str, list[tuple[int, Any]]]:
+            oid, _ = oid_name
+            slots = await _priority_array_override_slots(app, device_address, oid)
+            return normalize_oid(oid), slots
+
+        import asyncio
+
+        pa_results = await asyncio.gather(
+            *[_read_pa(item) for item in commandable_list],
+            return_exceptions=True,
+        )
+        for r in pa_results:
+            if isinstance(r, Exception):
+                logger.warning("priority-array read error: %s", r)
                 continue
-            oid = normalize_oid(r.get("object_identifier", ""))
-            idx = r.get("property_array_index")
-            val = r.get("value")
-            if idx is None and isinstance(val, list):
-                for i, slot in enumerate(val):
-                    by_oid.setdefault(oid, []).append((i, slot))
-            else:
-                by_oid.setdefault(oid, []).append((idx if idx is not None else 0, val))
+            oid, slots = r
+            if slots:
+                by_oid[oid] = list(slots)
 
     for obj in objects:
         if not obj.get("commandable", False):
@@ -400,8 +438,9 @@ async def bacnet_read(
     device_instance: int,
     object_identifier: str,
     property_identifier: str,
+    device_address: str | None = None,
 ) -> dict[str, Any]:
-    address = await get_device_address(app, device_instance)
+    address, _, _ = await _resolve_device_target(app, device_instance, device_address)
     obj_id = ObjectIdentifier(object_identifier)
     value = await app.read_property(address, obj_id, property_identifier)
     if isinstance(value, AnyAtomic):
@@ -426,10 +465,11 @@ async def bacnet_read_multiple(
     app: Application,
     device_instance: int,
     requests: List[Tuple[str, str]],
+    device_address: str | None = None,
 ) -> dict[str, Any]:
     if not requests:
         return {"device_instance": device_instance, "results": []}
-    address = await get_device_address(app, device_instance)
+    address, _, _ = await _resolve_device_target(app, device_instance, device_address)
     results = await rpm_chunked(app, address, requests)
     return {"device_instance": device_instance, "results": results}
 
@@ -438,8 +478,9 @@ async def read_point_priority_array(
     app: Application,
     device_instance: int,
     object_identifier: str,
+    device_address: str | None = None,
 ) -> dict[str, Any]:
-    address = await get_device_address(app, device_instance)
+    address, _, _ = await _resolve_device_target(app, device_instance, device_address)
     obj_id = ObjectIdentifier(object_identifier)
     try:
         response = await app.read_property(address, obj_id, "priority-array")

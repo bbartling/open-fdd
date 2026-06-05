@@ -23,7 +23,10 @@ def _reload_bridge_modules() -> None:
 def bridge_test_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     data = tmp_path / "data"
     data.mkdir(parents=True, exist_ok=True)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
+    monkeypatch.setenv("OPENFDD_WORKSPACE_DIR", str(workspace))
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
     monkeypatch.setenv("OFDD_BRIDGE_HOST", "127.0.0.1")
     monkeypatch.setenv("OFDD_AUTH_SECRET", "test-secret-key-32chars-minimum!!")

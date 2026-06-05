@@ -12,7 +12,8 @@ from ..agent_tools import ToolError
 from ..audit import sanitize_agent_tool_args
 from ..ollama_profiles import thinking_models_payload, tiers_payload
 from ..paths import repo_root
-from ..security import agent_public_insight_allowed, debug_diagnostics_enabled
+from .. import auth
+from ..security import debug_diagnostics_enabled
 
 router = APIRouter(prefix="/openfdd-agent", tags=["agent"])
 
@@ -21,9 +22,16 @@ _TOOL_ROLES = Depends(require_roles("operator", "integrator", "agent"))
 
 
 def require_insight_access(request: Request) -> dict:
-    if agent_public_insight_allowed():
-        return {"sub": "anonymous", "role": "none"}
-    return require_user(request)
+    """Read-only home-dashboard briefings — public like /api/faults/status (auth optional)."""
+    header = request.headers.get("authorization") or ""
+    token = header[7:].strip() if header.lower().startswith("bearer ") else None
+    payload = auth.verify_token(token) if token else None
+    if payload is not None:
+        request.state.user = payload
+        return payload
+    user = {"sub": "anonymous", "role": "none"}
+    request.state.user = user
+    return user
 
 
 _INSIGHT = Depends(require_insight_access)
@@ -48,8 +56,21 @@ def agent_context(user: dict = _AGENT_ROLES) -> dict:
     # Cap total Ollama probe time so /context stays under reverse-proxy health budgets.
     ollama = ollama_client.health(timeout=2.0, max_total_s=6.0)
     tier = ollama_client.configured_ram_tier()
+    gpu_ok = ollama_client.gpu_available()
+    chat_enabled = ollama_client.interactive_chat_enabled()
     payload: dict = {
         "ollama": ollama,
+        "gpu_available": gpu_ok,
+        "interactive_chat_enabled": chat_enabled,
+        "interactive_chat_disabled_reason": (
+            ""
+            if chat_enabled
+            else (
+                "No NVIDIA GPU detected — local Agent chat is disabled (CPU inference is too slow)."
+                if not gpu_ok
+                else str(ollama.get("error") or "Ollama unreachable")
+            )
+        ),
         "ollama_ram_tier": tier,
         "ollama_model": ollama_client.configured_model(),
         "ollama_gpu_mode": os.environ.get("OFDD_OLLAMA_GPU_MODE", "cpu"),
@@ -155,7 +176,20 @@ def zone_temps_snapshot(
 
 @router.post("/chat")
 def agent_chat(body: ChatBody, _user: dict = _AGENT_ROLES) -> dict:
-    """Local operator chat — always Ollama (configured via workspace/ollama.env.local)."""
+    """Local operator chat — Ollama with GPU; disabled on CPU-only hosts."""
+    if not ollama_client.interactive_chat_enabled():
+        reason = (
+            "Local Agent chat requires a GPU (CPU-only Ollama is too slow)."
+            if not ollama_client.gpu_available()
+            else "Ollama is not reachable."
+        )
+        return {
+            "ok": False,
+            "mode": "disabled",
+            "reply": "",
+            "error": reason,
+            "hint": "Use the home dashboard Refresh for building analytics, or enable a GPU / OFDD_AGENT_CHAT_WITHOUT_GPU=1.",
+        }
     from ..brick_model_context import build_agent_system_extra
 
     return ollama_client.chat(

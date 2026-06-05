@@ -10,7 +10,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 TAG="${OPENFDD_IMAGE_TAG:-local}"
+GIT_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 DOCKERFILE="${ROOT}/docker/Dockerfile"
+BUILD_ARGS=(
+  --build-arg "OPENFDD_IMAGE_TAG=${TAG}"
+  --build-arg "OPENFDD_BUILD_GIT_SHA=${GIT_SHA}"
+  --build-arg "OPENFDD_BUILD_TIME=${BUILD_TIME}"
+)
 SAVE=false
 SKIP_UI=false
 
@@ -35,7 +42,7 @@ build_one() {
   local target="$1"
   local image="$2"
   echo "==> docker build --target $target -> $image:$TAG"
-  docker build -f "$DOCKERFILE" --target "$target" -t "${image}:${TAG}" .
+  docker build -f "$DOCKERFILE" "${BUILD_ARGS[@]}" --target "$target" -t "${image}:${TAG}" .
 }
 
 build_one bridge openfdd-bridge

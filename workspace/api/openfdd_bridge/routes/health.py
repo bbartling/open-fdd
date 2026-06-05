@@ -54,6 +54,18 @@ def health_stack(user: dict = Depends(require_user)) -> dict:
     return stack_health(verbose=verbose)
 
 
+@router.get("/health/revisions")
+def health_revisions(user: dict = Depends(require_user)) -> dict:
+    """Docker image tags and build SHAs for troubleshooting."""
+    from ..container_revisions import stack_revisions
+
+    include_ids = debug_diagnostics_enabled() and auth.role_allows(
+        user.get("role"),
+        ("integrator", "agent"),
+    )
+    return stack_revisions(include_image_ids=include_ids)
+
+
 def _ws_ticket_from_websocket(websocket: WebSocket) -> str | None:
     proto = (websocket.headers.get("sec-websocket-protocol") or "").strip()
     if proto:
@@ -88,7 +100,15 @@ async def ws_dashboard(websocket: WebSocket) -> None:
     if not allowed:
         await websocket.close(code=1008, reason="unauthorized")
         return
-    await websocket.accept()
+    subprotocol: str | None = None
+    proto_header = (websocket.headers.get("sec-websocket-protocol") or "").strip()
+    if proto_header:
+        offered = [p.strip() for p in proto_header.split(",") if p.strip()]
+        if "ofdd.ws" in offered:
+            subprotocol = "ofdd.ws"
+        elif "ofdd-ticket" in offered:
+            subprotocol = "ofdd-ticket"
+    await websocket.accept(subprotocol=subprotocol)
     try:
         while True:
             await websocket.send_json(dashboard_snapshot(redacted=redacted))

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getBridgeBase } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
 import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
@@ -81,6 +81,19 @@ export default function BacnetPage() {
   const [activeJobLabel, setActiveJobLabel] = useState("");
   const [priorityByPointId, setPriorityByPointId] = useState<Record<string, PrioritySlot[]>>({});
   const [expandedPriorityPoints, setExpandedPriorityPoints] = useState<Set<string>>(() => new Set());
+  const [overrideStatus, setOverrideStatus] = useState<{
+    device_count?: number;
+    scan_interval_s?: number;
+    full_rotation_hours?: number;
+    operator_priority?: number;
+    operator_override_points?: number;
+    total_override_points?: number;
+    last_scan_at?: string;
+    last_scan_device?: number;
+    next_device_instance?: number;
+    export_row_count?: number;
+  } | null>(null);
+  const [overrideScanPending, setOverrideScanPending] = useState(false);
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -112,7 +125,49 @@ export default function BacnetPage() {
 
   useEffect(() => {
     refresh().catch((e) => setLoadError(String(e)));
+    apiFetch<typeof overrideStatus>("/api/bacnet/overrides/status")
+      .then((s) => setOverrideStatus(s))
+      .catch(() => undefined);
   }, [refresh]);
+
+  async function downloadOverrideExport() {
+    const base = getBridgeBase();
+    const token = sessionStorage.getItem("ofdd_token");
+    const res = await fetch(`${base}/api/bacnet/overrides/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bacnet_overrides_export.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function runOverrideScanOnce() {
+    setOverrideScanPending(true);
+    setActionError("");
+    try {
+      const res = await apiFetch<{ scanned_device?: number; override_points?: number; error?: string }>(
+        "/api/bacnet/overrides/scan-once",
+        { method: "POST" },
+      );
+      setStatusMsg(
+        res.scanned_device
+          ? `Override scan device ${res.scanned_device}: ${res.override_points ?? 0} point(s) with overrides`
+          : res.error || "Override scan skipped",
+      );
+      await loadDriverTree();
+      const st = await apiFetch<typeof overrideStatus>("/api/bacnet/overrides/status");
+      setOverrideStatus(st);
+    } catch (e) {
+      setActionError(formatApiError(e));
+    } finally {
+      setOverrideScanPending(false);
+    }
+  }
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -121,6 +176,9 @@ export default function BacnetPage() {
         "/api/bacnet/poll/status",
       )
         .then(setPollStatus)
+        .catch(() => undefined);
+      apiFetch<typeof overrideStatus>("/api/bacnet/overrides/status")
+        .then((s) => setOverrideStatus(s))
         .catch(() => undefined);
     }, 20000);
     return () => window.clearInterval(tick);
@@ -428,6 +486,7 @@ export default function BacnetPage() {
         method: "POST",
         body: JSON.stringify({
           device_instance: Number(device.device_instance),
+          device_address: device.device_address || "",
           object_identifier: point.object_identifier,
           property_identifier: "present-value",
         }),
@@ -450,6 +509,7 @@ export default function BacnetPage() {
         method: "POST",
         body: JSON.stringify({
           device_instance: Number(device.device_instance),
+          device_address: device.device_address || "",
           object_identifier: point.object_identifier,
         }),
       });
@@ -687,6 +747,47 @@ export default function BacnetPage() {
             ))}
           </ul>
         ) : null}
+      </div>
+
+      <div className="panel">
+        <h3 className="panel-title">Priority overrides (supervisory scan)</h3>
+        <p className="muted">
+          Rotates one BACnet device per hour (or full site in{" "}
+          {overrideStatus?.full_rotation_hours ?? "—"}h for {overrideStatus?.device_count ?? 0} devices).
+          Dashboard shows operator P{overrideStatus?.operator_priority ?? 8} overrides; tree shows all active
+          priority slots from the last scan per device.
+        </p>
+        <div className="row row-spread" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+          <span className="badge">
+            {overrideStatus?.operator_override_points ?? 0} operator /{" "}
+            {overrideStatus?.total_override_points ?? 0} total overrides
+          </span>
+          {overrideStatus?.last_scan_at ? (
+            <span className="muted">
+              Last scan: device {overrideStatus.last_scan_device ?? "—"} at {overrideStatus.last_scan_at}
+            </span>
+          ) : (
+            <span className="muted">No override scan completed yet</span>
+          )}
+          {overrideStatus?.next_device_instance ? (
+            <span className="muted">Next: device {overrideStatus.next_device_instance}</span>
+          ) : null}
+        </div>
+        <div className="row" style={{ gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+          <ActionButton
+            label={overrideScanPending ? "Scanning overrides…" : "Scan next device now"}
+            disabled={!agentOk || anyPending || overrideScanPending}
+            onClick={() => void runOverrideScanOnce()}
+          />
+          <button
+            type="button"
+            className="secondary-btn"
+            disabled={anyPending}
+            onClick={() => void downloadOverrideExport().catch((e) => setActionError(formatApiError(e)))}
+          >
+            Export override CSV ({overrideStatus?.export_row_count ?? 0} rows)
+          </button>
+        </div>
       </div>
 
       <div className="panel">

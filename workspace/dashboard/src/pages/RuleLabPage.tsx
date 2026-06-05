@@ -3,12 +3,11 @@ import PythonCodeEditor from "../components/PythonCodeEditor";
 import PageHeader from "../components/PageHeader";
 import RuleConfigPanel, { configFromRecord, configToRecord } from "../components/RuleConfigPanel";
 import RuleLabConsole, { consoleTextToLines } from "../components/RuleLabConsole";
-import FaultCodeMultiSelect from "../components/FaultCodeMultiSelect";
 import { useTheme } from "../contexts/theme-context";
 import { apiFetch, fetchAuthMe } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import { displayRuleName, formatRuleLabel } from "../lib/ruleDisplay";
-import { faultCodesFromRule, primaryFaultCode } from "../lib/ruleFaultCodes";
+import { formatFaultInferenceBlock, type FaultInference } from "../lib/ruleFaultInference";
 import { useActiveSiteId } from "../lib/useActiveSiteId";
 import {
   formatBatchSummary,
@@ -79,7 +78,6 @@ export default function RuleLabPage() {
   const [activeRuleId, setActiveRuleId] = useState<string>("");
   const [creatingNew, setCreatingNew] = useState(false);
   const [authRole, setAuthRole] = useState<string | null>(null);
-  const [faultCodes, setFaultCodes] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const lintTimer = useRef<number | null>(null);
@@ -103,7 +101,6 @@ export default function RuleLabPage() {
     setRuleName(displayRuleName(rule.name));
     setMode(rule.mode);
     setSeverity(rule.severity);
-    setFaultCodes(faultCodesFromRule(rule));
     setCfg(configToRecord(rule.config || {}));
     setDirty(false);
     try {
@@ -202,6 +199,25 @@ export default function RuleLabPage() {
     };
   }
 
+  async function analyzeFaultMapping(): Promise<FaultInference | null> {
+    try {
+      const res = await apiFetch<FaultInference>("/api/rules/infer-fault-codes", {
+        method: "POST",
+        body: JSON.stringify({
+          name: ruleName,
+          code,
+          mode,
+          config: configFromRecord(cfg),
+          severity,
+          site_id: activeSiteId || undefined,
+        }),
+      });
+      return res;
+    } catch {
+      return null;
+    }
+  }
+
   async function lintNow() {
     setBusy(true);
     try {
@@ -211,7 +227,13 @@ export default function RuleLabPage() {
       });
       setSyntaxOk(res.ok);
       setLintIssues(res.issues || []);
-      appendConsole(formatLintIssues(res.issues || []));
+      const parts = [formatLintIssues(res.issues || [])];
+      if (mode === "rule" && res.ok) {
+        const inf = await analyzeFaultMapping();
+        const block = formatFaultInferenceBlock(inf);
+        if (block) parts.push(block);
+      }
+      appendConsole(parts.filter(Boolean).join("\n\n"));
     } catch (e) {
       appendConsole(formatApiError(e));
     } finally {
@@ -228,7 +250,7 @@ export default function RuleLabPage() {
     const pointId = rule?.bindings?.point_ids?.[0];
     if (mode === "rule" && !pointId) {
       appendConsole(
-        "Quick test needs one bound point — use FDD assignments → Test rule against one sensor, or add point_ids to this rule's bindings.",
+        "Quick test needs one bound point — pin this rule to a sensor on FDD assignments first.",
       );
       return;
     }
@@ -314,27 +336,44 @@ export default function RuleLabPage() {
         code,
         config: configFromRecord(cfg),
         severity,
-        fault_codes: faultCodes,
-        fault_code: primaryFaultCode(faultCodes),
         bindings: preservedBindings(bindingsSource),
       };
       if (activeRuleId) {
-        const saveRes = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
-          method: "POST",
-          body: JSON.stringify({ ...payload, id: activeRuleId }),
-        });
+        const saveRes = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
+          "/api/rules/save",
+          {
+            method: "POST",
+            body: JSON.stringify({ ...payload, id: activeRuleId }),
+          },
+        );
         setSourcePath(saveRes.rule.source_path || sourcePath);
-        appendConsole(`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`);
+        const infBlock = formatFaultInferenceBlock(saveRes.fault_inference);
+        appendConsole(
+          [`>>> Updated rule .py — ${saveRes.rule.source_path || sourcePath}`, infBlock]
+            .filter(Boolean)
+            .join("\n\n"),
+        );
       } else {
-        const res = await apiFetch<{ rule: SavedRule }>("/api/rules/save", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        const res = await apiFetch<{ rule: SavedRule; fault_inference?: FaultInference }>(
+          "/api/rules/save",
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
         const newId = res.rule.id;
         setActiveRuleId(newId);
         setCreatingNew(false);
         setSourcePath(res.rule.source_path || "");
-        appendConsole(`>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`);
+        const infBlock = formatFaultInferenceBlock(res.fault_inference);
+        appendConsole(
+          [
+            `>>> Created rule "${formatRuleLabel(res.rule.name)}". Assign points on FDD assignments.`,
+            infBlock,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        );
         setDirty(false);
         const rules = await refreshSaved();
         const current = rules.find((r) => r.id === newId);
@@ -381,7 +420,6 @@ export default function RuleLabPage() {
     setCode(DEFAULT_RULE);
     setCfg({ high: "75" });
     setSourcePath("");
-    setFaultCodes([]);
     setDirty(true);
   }
 
@@ -429,8 +467,8 @@ export default function RuleLabPage() {
         title="Rule Lab"
         subtitle={
           <>
-            Author and lint <code>.py</code> rules. Map points and run full sensor tests on{" "}
-            <a href="/fdd-assignments">FDD assignments</a>.
+            Author and lint <code>.py</code> rules. Fault codes are inferred via local Ollama + BRICK-scoped
+            catalog on save/lint. Pin rules to points on <a href="/fdd-assignments">FDD assignments</a>.
           </>
         }
       />
@@ -521,17 +559,6 @@ export default function RuleLabPage() {
               <option value="script">DataFrame script</option>
             </select>
           </div>
-          <div className="field form-grid-span">
-            <FaultCodeMultiSelect
-              values={faultCodes}
-              siteId={activeSiteId || undefined}
-              disabled={busy || authRole === "operator"}
-              onChange={(codes) => {
-                setFaultCodes(codes);
-                markDirty();
-              }}
-            />
-          </div>
           <div className="field">
             <label className="field-label" htmlFor="rule-severity">
               Severity
@@ -589,7 +616,7 @@ export default function RuleLabPage() {
 
       <RuleLabConsole
         lines={consoleLines}
-        placeholder="Lint, quick test, or batch output."
+        placeholder="Lint, Ollama fault-code mapping, quick test, or batch output."
         footer={
           <button type="button" className="secondary small-btn" onClick={() => setConsoleText("")}>
             Clear

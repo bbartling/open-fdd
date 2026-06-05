@@ -72,21 +72,26 @@ class BatchBody(BaseModel):
     use_chunks: bool | None = None
 
 
+class InferFaultCodesBody(BaseModel):
+    name: str = "Untitled rule"
+    code: str
+    mode: str = "rule"
+    config: dict[str, Any] = Field(default_factory=dict)
+    severity: str = "warning"
+    site_id: str | None = None
+
+
 @router.get("/saved")
 def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
     return {"rules": RuleStore().list_rules()}
 
 
-@router.post("/save")
-def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
-    saved_by = str(user.get("sub") or user.get("role") or "operator")
-    payload = body.model_dump()
-    codes_raw = [str(c).strip() for c in (body.fault_codes or []) if str(c).strip()]
-    if not codes_raw and body.fault_code:
-        codes_raw = [str(body.fault_code).strip()]
+def _validate_fault_codes(codes_raw: list[str]) -> list[str]:
     validated: list[str] = []
     for raw in codes_raw:
-        code = raw.upper()
+        code = str(raw).strip().upper()
+        if not code:
+            continue
         if not is_valid_code(code):
             raise HTTPException(
                 status_code=400,
@@ -97,13 +102,70 @@ def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator
             )
         if code not in validated:
             validated.append(code)
+    return validated
+
+
+@router.post("/infer-fault-codes")
+def infer_fault_codes_route(
+    body: InferFaultCodesBody,
+    _user: dict = Depends(require_roles("integrator", "agent")),
+) -> dict:
+    """Ollama + BRICK-scoped catalog — suggest fault codes and HVAC narrative for a rule."""
+    from ..rule_fault_inference import infer_fault_codes_for_rule
+
+    svc = ModelService()
+    ttl = TtlService()
+    site_id = (body.site_id or "").strip() or ensure_default_site(svc, ttl)
+    return {
+        "ok": True,
+        **infer_fault_codes_for_rule(
+            name=body.name,
+            code=body.code,
+            mode=body.mode,
+            config=body.config,
+            severity=body.severity,
+            site_id=site_id,
+        ),
+    }
+
+
+@router.post("/save")
+def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
+    saved_by = str(user.get("sub") or user.get("role") or "operator")
+    payload = body.model_dump()
+    codes_raw = [str(c).strip() for c in (body.fault_codes or []) if str(c).strip()]
+    if not codes_raw and body.fault_code:
+        codes_raw = [str(body.fault_code).strip()]
+    validated = _validate_fault_codes(codes_raw) if codes_raw else []
+    fault_inference: dict[str, Any] | None = None
+    if not validated:
+        from ..rule_fault_inference import infer_fault_codes_for_rule
+
+        svc = ModelService()
+        ttl = TtlService()
+        site_id = ensure_default_site(svc, ttl)
+        applies = body.applies_to.site_ids if body.applies_to else []
+        if applies:
+            site_id = str(applies[0]).strip() or site_id
+        fault_inference = infer_fault_codes_for_rule(
+            name=body.name,
+            code=body.code,
+            mode=body.mode,
+            config=body.config,
+            severity=body.severity,
+            site_id=site_id,
+        )
+        validated = _validate_fault_codes(fault_inference.get("fault_codes") or [])
     payload["fault_codes"] = validated
     payload["fault_code"] = validated[0] if validated else ""
     try:
         entry = RuleStore().upsert(payload, saved_by=saved_by)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True, "rule": entry}
+    out: dict[str, Any] = {"ok": True, "rule": entry}
+    if fault_inference:
+        out["fault_inference"] = fault_inference
+    return out
 
 
 @router.get("/saved/{rule_id}/source")
