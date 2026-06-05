@@ -34,6 +34,7 @@ class SaveRuleBody(BaseModel):
     mode: str = "rule"
     code: str
     fault_code: str = ""
+    fault_codes: list[str] = Field(default_factory=list)
     config: dict[str, Any] = Field(default_factory=dict)
     column_map: dict[str, str] = Field(default_factory=dict)
     applies_to: AppliesTo = Field(default_factory=AppliesTo)
@@ -80,17 +81,24 @@ def list_saved_rules(_user: dict = Depends(require_user)) -> dict:
 def save_rule(body: SaveRuleBody, user: dict = Depends(require_roles("integrator", "agent"))) -> dict:
     saved_by = str(user.get("sub") or user.get("role") or "operator")
     payload = body.model_dump()
-    if body.fault_code:
-        code = str(body.fault_code).strip().upper()
+    codes_raw = [str(c).strip() for c in (body.fault_codes or []) if str(c).strip()]
+    if not codes_raw and body.fault_code:
+        codes_raw = [str(body.fault_code).strip()]
+    validated: list[str] = []
+    for raw in codes_raw:
+        code = raw.upper()
         if not is_valid_code(code):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"unknown fault code '{body.fault_code}'. Use a letter-suffix code from "
+                    f"unknown fault code '{raw}'. Use a letter-suffix code from "
                     "/api/faults/catalog (e.g. VAV-C, AHU-B) — not equipment names like VAV-03."
                 ),
             )
-        payload["fault_code"] = code
+        if code not in validated:
+            validated.append(code)
+    payload["fault_codes"] = validated
+    payload["fault_code"] = validated[0] if validated else ""
     try:
         entry = RuleStore().upsert(payload, saved_by=saved_by)
     except ValueError as exc:

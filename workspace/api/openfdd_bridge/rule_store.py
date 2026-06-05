@@ -25,6 +25,24 @@ from .rule_source import read_source, write_source
 def _normalize_fault_code(raw: Any) -> str:
     return (normalize_code(str(raw or "")) or "")[:32]
 
+
+def _normalize_fault_codes(entry: dict[str, Any]) -> list[str]:
+    """Deduped catalog codes; supports fault_codes list or legacy fault_code string."""
+    out: list[str] = []
+    seen: set[str] = set()
+    raw_list = entry.get("fault_codes")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            code = _normalize_fault_code(item)
+            if code and code not in seen:
+                seen.add(code)
+                out.append(code)
+    if not out:
+        single = _normalize_fault_code(entry.get("fault_code"))
+        if single:
+            out.append(single)
+    return out
+
 _LOCK = threading.RLock()
 
 VALID_MODES = frozenset({"rule", "script"})
@@ -207,13 +225,15 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     applies_to = entry.get("applies_to")
     if not isinstance(applies_to, dict):
         applies_to = {}
+    fault_codes = _normalize_fault_codes(entry)
     return {
         "id": str(entry.get("id") or uuid4()),
         "name": str(entry.get("name") or "Untitled rule")[:200],
         "description": str(entry.get("description") or "")[:1000],
         "mode": mode,
         "code": code,
-        "fault_code": _normalize_fault_code(entry.get("fault_code")),
+        "fault_codes": fault_codes,
+        "fault_code": fault_codes[0] if fault_codes else "",
         "config": config,
         "column_map": column_map,
         "applies_to": {

@@ -9,7 +9,7 @@ from typing import Any
 from .fault_catalog import FAULT_CATALOG, catalog_tree, family_for_code
 from .model_service import ModelService
 from .model_sparql import _json_equipment_rows, query_equipment
-from .rule_store import RuleStore
+from .rule_store import RuleStore, _normalize_fault_codes
 from .site_defaults import ensure_default_site
 from .ttl_graph import TtlGraphError
 from .ttl_service import TtlService
@@ -119,12 +119,13 @@ def _applicable_rules(rules: list[dict[str, Any]], families: set[str], site_id: 
     for rule in rules:
         if rule.get("enabled") is False:
             continue
-        code = str(rule.get("fault_code") or "").strip().upper()
-        if not code:
+        rule_codes = _normalize_fault_codes(rule)
+        if not rule_codes:
             continue
-        fam = family_for_code(code)
-        if not fam or fam not in families:
+        fams = {family_for_code(c) for c in rule_codes}
+        if not fams.intersection(families):
             continue
+        code = rule_codes[0]
         applies = rule.get("applies_to") if isinstance(rule.get("applies_to"), dict) else {}
         site_ids = [str(s) for s in applies.get("site_ids", []) if str(s).strip()]
         if site_ids and site_id and site_id not in site_ids:
@@ -134,7 +135,8 @@ def _applicable_rules(rules: list[dict[str, Any]], families: set[str], site_id: 
                 "rule_id": str(rule.get("id") or ""),
                 "rule_name": str(rule.get("name") or ""),
                 "fault_code": code,
-                "family": fam,
+                "fault_codes": rule_codes,
+                "family": family_for_code(code) or "",
                 "severity": str(rule.get("severity") or "warning"),
                 "enabled": rule.get("enabled") is not False,
             }

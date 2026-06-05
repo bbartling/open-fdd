@@ -2150,17 +2150,127 @@ textarea {
   gap: 10px;
 }
 
-.rule-switcher {
+.rule-switcher-group {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
   flex: 1;
-  min-width: 220px;
+  min-width: 260px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--input-bg);
 }
 
-.rule-switcher select {
+.rule-switcher-select {
   flex: 1;
   min-width: 160px;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent;
+}
+
+.rule-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 0 12px;
+  border: none;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rule-step-btn:hover:not(:disabled) {
+  background: var(--nav-hover-bg);
+}
+
+.rule-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rule-step-remove {
+  border-right: 1px solid var(--border);
+  color: var(--danger);
+}
+
+.rule-step-add {
+  border-left: 1px solid var(--border);
+  color: var(--ok);
+}
+
+.fault-code-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  position: relative;
+}
+
+.fault-code-multi-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.fault-code-multi-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fault-code-multi-chevron {
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.fault-code-multi-panel {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.fault-code-multi-family-head {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 4px 4px;
+  color: var(--muted);
+}
+
+.fault-code-multi-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.fault-code-multi-option:hover {
+  background: var(--nav-hover-bg);
+  border-radius: 6px;
 }
 
 .icon-btn {

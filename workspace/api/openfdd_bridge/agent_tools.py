@@ -107,12 +107,20 @@ def _tool_model_add_point(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_rules_save(args: dict[str, Any]) -> dict[str, Any]:
-    fault_code = str(args.get("fault_code") or "").strip()
-    if fault_code and not is_valid_code(fault_code):
-        raise ToolError(
-            f"unknown fault code '{fault_code}'. Pick a fixed code from the fault catalog "
-            "(model_context().fault_codes); do not invent codes."
-        )
+    codes_raw: list[str] = []
+    if isinstance(args.get("fault_codes"), list):
+        codes_raw.extend(str(c).strip() for c in args["fault_codes"] if str(c).strip())
+    if not codes_raw and args.get("fault_code"):
+        codes_raw.append(str(args.get("fault_code") or "").strip())
+    for raw in codes_raw:
+        code = raw.upper()
+        if not is_valid_code(code):
+            raise ToolError(
+                f"unknown fault code '{raw}'. Pick a fixed code from the fault catalog "
+                "(model_context().fault_codes); do not invent codes."
+            )
+    if codes_raw:
+        args = {**args, "fault_codes": [c.upper() for c in codes_raw]}
     try:
         entry = RuleStore().upsert(args, saved_by="agent")
     except ValueError as exc:
@@ -470,7 +478,17 @@ def tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "rules.save",
-            "args": ["name", "code", "fault_code?", "mode?", "config?", "applies_to?", "severity?", "bindings?"],
+            "args": [
+                "name",
+                "code",
+                "fault_code?",
+                "fault_codes?",
+                "mode?",
+                "config?",
+                "applies_to?",
+                "severity?",
+                "bindings?",
+            ],
             "writes": "rules_store.json",
         },
         {
