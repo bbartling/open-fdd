@@ -65,8 +65,8 @@ jobs:
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; from open_fdd.playground import compile_evaluate; import open_fdd; assert open_fdd.__version__"
+          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; from open_fdd.playground import compile_evaluate; from open_fdd.arrow_runtime import run_arrow_rule; import open_fdd; assert open_fdd.__version__"
 
   agent-shell:
     runs-on: ubuntu-latest
