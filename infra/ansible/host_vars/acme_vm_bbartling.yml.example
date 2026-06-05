@@ -11,7 +11,7 @@ openfdd_docker_stack: true
 
 # Pin to tag from GitHub Actions → Publish Docker addons (ghcr.io/bbartling/*)
 openfdd_docker_pull_from_ghcr: true
-openfdd_docker_image_tag: "2026.06.04-edge"
+openfdd_docker_image_tag: "2026.06.06-edge"
 
 # BACnet Device instance (Who-Is / bind). Change only if the OT network requires a fixed ID.
 bacnet_instance_id: 3456791

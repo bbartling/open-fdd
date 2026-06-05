@@ -1,88 +1,40 @@
-"""BRICK model queries must use rdflib SPARQL on synced TTL (not JSON/grep fallbacks)."""
-
 from __future__ import annotations
 
-import json
-from pathlib import Path
 
-import pytest
-
-REPO = Path(__file__).resolve().parents[2]
-
-
-@pytest.fixture
-def sparql_model_env(tmp_path, monkeypatch):
-    data = tmp_path / "data"
-    data.mkdir(parents=True, exist_ok=True)
-    model = {
-        "sites": [{"id": "demo", "name": "Bench"}],
-        "equipment": [
-            {
-                "id": "bench-ahu",
-                "name": "Bench AHU",
-                "brick_type": "AHU",
-                "site_id": "demo",
-                "bacnet_device_instance": 5007,
-                "feeds": ["bench-vav"],
-            },
-            {
-                "id": "bench-vav",
-                "name": "Bench VAV",
-                "brick_type": "VAV",
-                "site_id": "demo",
-                "bacnet_device_instance": 42,
-            },
-        ],
-        "points": [
-            {
-                "id": "bench-sat",
-                "name": "SAT",
-                "brick_type": "Supply_Air_Temperature_Sensor",
-                "equipment_id": "bench-ahu",
-                "site_id": "demo",
-                "external_id": "demo#local#bacnet#5007-analog-input-1",
-                "fdd_input": "Supply_Air_Temperature_Sensor",
-            },
-        ],
-    }
-    (data / "model.json").write_text(json.dumps(model), encoding="utf-8")
-    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(data))
-    monkeypatch.setenv("OPENFDD_REPO_ROOT", str(REPO))
-    from openfdd_bridge.ttl_service import TtlService
-
-    TtlService().sync()
-    return data
+def test_sparql_predefined_catalog(client):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    r = client.get("/api/model/sparql/predefined")
+    assert r.status_code == 200
+    body = r.json()
+    assert "default_query" in body
+    assert "queries" in body
+    assert len(body["queries"]) >= 5
+    assert any(q["id"] == "sites" for q in body["queries"])
 
 
-def test_query_equipment_via_sparql(sparql_model_env):
-    from openfdd_bridge.model_sparql import query_equipment, query_model_graph
-
-    rows = query_equipment("demo")
-    assert len(rows) >= 2
-    ids = {r["equipment_id"] for r in rows}
-    assert "bench-ahu" in ids or "bench_ahu" in ids or any("ahu" in i.lower() for i in ids)
-
-    graph = query_model_graph("demo")
-    assert graph["query_engine"] == "sparql"
-    assert graph["feeds"]
-    assert graph["points_by_equipment"].get("bench-ahu") or graph["points_by_equipment"].get("bench_ahu")
-
-
-def test_query_model_tree_sparql(sparql_model_env):
-    from openfdd_bridge.model_sparql import query_model_tree
-
-    tree = query_model_tree()
-    assert tree["query_engine"] == "sparql"
-    assert len(tree["points"]) >= 1
-    assert "Supply_Air_Temperature_Sensor" in tree["brick_types"]
+def test_sparql_run_select(client):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    client.post("/api/model/sync-ttl")
+    query = """PREFIX brick: <https://brickschema.org/schema/Brick#>
+SELECT (COUNT(?s) AS ?count) WHERE { ?s a brick:Site . }"""
+    r = client.post("/api/model/sparql", json={"query": query})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "bindings" in body
+    assert body["bindings"]
+    assert "count" in body["bindings"][0]
 
 
-def test_load_graph_from_disk_not_build_only(sparql_model_env):
-    from openfdd_bridge.ttl_graph import load_graph
-    from openfdd_bridge.ttl_service import TtlService
+def test_sparql_rejects_update(client):
+    client.post("/api/model/sites", json={"id": "s1", "name": "Demo Site"})
+    r = client.post(
+        "/api/model/sparql",
+        json={"query": "DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }"},
+    )
+    assert r.status_code == 400
+    assert "read-only" in r.json()["detail"].lower()
 
-    ttl = TtlService()
-    path = ttl.ttl_path
-    assert path.is_file()
-    graph = load_graph(ttl)
-    assert len(graph) > 0
+
+def test_sparql_requires_auth(raw_client):
+    r = raw_client.post("/api/model/sparql", json={"query": "SELECT ?x WHERE { ?x ?y ?z } LIMIT 1"})
+    assert r.status_code == 401

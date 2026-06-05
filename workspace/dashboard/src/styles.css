@@ -1871,6 +1871,58 @@ textarea {
   box-sizing: border-box;
 }
 
+.dm-sparql h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.dm-sparql-presets,
+.dm-sparql-custom {
+  margin-top: 16px;
+}
+
+.dm-sparql-bacnet-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.dm-sparql-categories {
+  margin-bottom: 10px;
+}
+
+.dm-sparql-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.dm-sparql-running {
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.dm-sparql-editor {
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.dm-sparql-error {
+  color: var(--danger, #e55);
+  margin-top: 8px;
+}
+
+.dm-sparql-table td,
+.dm-sparql-table th {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
 .dm-advanced {
   display: flex;
   flex-direction: column;

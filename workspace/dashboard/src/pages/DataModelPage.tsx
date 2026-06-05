@@ -5,6 +5,7 @@ import { copyToClipboard } from "../lib/clipboard";
 import { buildLlmModelBundle } from "../lib/llmModelBundle";
 import { DATA_MODEL_REDESIGN_PROMPT } from "../lib/llm-prompts";
 import { ModelPayload } from "../lib/modelImport";
+import DataModelSparqlPanel from "../components/DataModelSparqlPanel";
 import ModelImportExportPanel from "../components/ModelImportExportPanel";
 import ModelSyncBar from "../components/ModelSyncBar";
 import PageHeader from "../components/PageHeader";
@@ -13,7 +14,7 @@ import { apiFetch } from "../lib/api";
 type SiteRow = { id: string; name: string };
 
 export default function DataModelPage() {
-  const [activeTab, setActiveTab] = useState<"explorer" | "import" | "advanced">("explorer");
+  const [activeTab, setActiveTab] = useState<"explorer" | "import" | "sparql" | "advanced">("explorer");
   const [out, setOut] = useState("");
   const [ttlLoading, setTtlLoading] = useState(false);
   const [copiedKey, setCopiedKey] = useState("");
@@ -109,6 +110,13 @@ export default function DataModelPage() {
         </button>
         <button
           type="button"
+          className={activeTab === "sparql" ? "" : "secondary-btn"}
+          onClick={() => setActiveTab("sparql")}
+        >
+          SPARQL
+        </button>
+        <button
+          type="button"
           className={activeTab === "advanced" ? "" : "secondary-btn"}
           onClick={() => setActiveTab("advanced")}
         >
@@ -133,6 +141,8 @@ export default function DataModelPage() {
           onImported={() => void refreshMeta()}
         />
       ) : null}
+
+      {activeTab === "sparql" ? <DataModelSparqlPanel onStatus={setOut} /> : null}
 
       {activeTab === "advanced" ? (
         <div className="dm-advanced panel">
