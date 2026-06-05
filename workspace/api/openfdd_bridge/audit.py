@@ -241,17 +241,17 @@ def sanitize_agent_tool_args(tool_name: str, args: dict[str, Any] | None) -> dic
             "code_len": len(code),
             "code_hash": _content_hash(code) if code else "",
         }
+    out: dict[str, Any] = {}
     if not audit_log_prompts_enabled():
         for key in ("message", "prompt", "system", "user_prompt"):
             if key in raw and isinstance(raw[key], str):
                 text = raw[key]
-                return {
-                    key: _truncate_text(text, limit=80),
-                    f"{key}_len": len(text),
-                    f"{key}_hash": _content_hash(text) if text else "",
-                }
-    out: dict[str, Any] = {}
+                out[key] = _truncate_text(text, limit=80)
+                out[f"{key}_len"] = len(text)
+                out[f"{key}_hash"] = _content_hash(text) if text else ""
     for key, val in raw.items():
+        if key in out:
+            continue
         if isinstance(val, str) and len(val) > 240:
             out[key] = _truncate_text(val, limit=120)
             out[f"{key}_len"] = len(val)

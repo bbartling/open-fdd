@@ -9,7 +9,8 @@ nav_order: 2
 Install from PyPI:
 
 ```bash
-pip install open-fdd
+pip install "open-fdd[engine]"   # YAML RuleRunner + pandas
+pip install open-fdd             # playground sandbox only
 ```
 
 ## Modules

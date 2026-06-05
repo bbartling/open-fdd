@@ -125,20 +125,23 @@ def _match_write_entry(
     pmin = entry.get("priority_min")
     pmax = entry.get("priority_max")
     if priority is not None:
-        if pmin is not None and priority < int(pmin):
-            return False
-        if pmax is not None and priority > int(pmax):
+        try:
+            if pmin is not None and priority < int(pmin):
+                return False
+            if pmax is not None and priority > int(pmax):
+                return False
+        except (TypeError, ValueError):
             return False
     vmin = entry.get("value_min")
     vmax = entry.get("value_max")
     if vmin is not None or vmax is not None:
         try:
             fval = float(value)
+            if vmin is not None and fval < float(vmin):
+                return False
+            if vmax is not None and fval > float(vmax):
+                return False
         except (TypeError, ValueError):
-            return False
-        if vmin is not None and fval < float(vmin):
-            return False
-        if vmax is not None and fval > float(vmax):
             return False
     allowed_values = entry.get("allowed_values")
     if isinstance(allowed_values, list) and allowed_values:

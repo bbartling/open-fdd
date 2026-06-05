@@ -12,7 +12,7 @@ REST API served by **`openfdd-bridge`** (default `http://127.0.0.1:8765`). Produ
 
 **Auth:** JWT via `POST /api/auth/login`. Most routes require `Authorization: Bearer <token>`. Roles: `viewer`, `operator`, `integrator`, `commission`, `agent`, `admin`. BACnet writes require commission role + [write safety](../bacnet/write-safety). Dev: `OFDD_AUTH_DISABLED` on loopback only.
 
-**WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket` then `?ticket=` (short-lived; not the Bearer token).
+**WebSocket:** `WS /ws/dashboard` — `POST /api/auth/ws-ticket`, then pass the ticket via `Sec-WebSocket-Protocol: ofdd.ws, <ticket>`. Query `?ticket=` is dev-only when `OFDD_WS_ALLOW_QUERY_TICKET=1`. Tickets are short-lived and not interchangeable with the Bearer token.
 
 ---
 

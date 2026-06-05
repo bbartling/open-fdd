@@ -9,7 +9,7 @@ nav_order: 2
 For **offline** pandas workflows with `open_fdd.engine.RuleRunner` (no Operator Bridge).
 
 ```bash
-pip install open-fdd
+pip install "open-fdd[engine]"
 ```
 
 ## Minimal rule file

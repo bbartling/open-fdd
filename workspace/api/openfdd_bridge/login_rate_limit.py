@@ -48,15 +48,17 @@ def check_lockout(ip: str, username: str) -> tuple[bool, int]:
     """Return (locked_out, retry_after_seconds)."""
     now = time.time()
     window = float(_failure_window_sec())
+    lockout = float(_lockout_sec())
+    prune_window = max(window, lockout)
     max_fail = _max_failures()
     key = _key(ip, username)
     with _lock:
-        recent = _prune(_failures.get(key, []), now=now, window=window)
+        recent = _prune(_failures.get(key, []), now=now, window=prune_window)
         _failures[key] = recent
         if len(recent) < max_fail:
             return False, 0
         oldest = min(recent)
-        retry = int(max(1, _lockout_sec() - (now - oldest)))
+        retry = int(max(1, lockout - (now - oldest)))
         return True, retry
 
 

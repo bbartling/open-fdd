@@ -6,7 +6,7 @@ has_children: true
 
 # Rule Cookbook
 
-Practical patterns for **Python Rule Lab** (`evaluate(row, cfg, …)`) and optional **YAML** engine rules (`pip install open-fdd`).
+Practical patterns for **Python Rule Lab** (`evaluate(row, cfg, …)`) and optional **YAML** engine rules (`pip install "open-fdd[engine]"`).
 
 | Page | Audience |
 |------|----------|

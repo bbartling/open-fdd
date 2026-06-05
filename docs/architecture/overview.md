@@ -39,4 +39,4 @@ nav_order: 1
 
 ## Optional PyPI-only path
 
-`pip install open-fdd` runs the YAML/pandas engine and playground sandbox **without** the Operator Bridge UI. Use for notebooks, CSV backfills, or cloud lambdas. See [Appendix — Python package](../appendix/python-package).
+`pip install "open-fdd[engine]"` runs the YAML/pandas engine; `pip install open-fdd` covers the playground sandbox **without** the Operator Bridge UI. Use for notebooks, CSV backfills, or cloud lambdas. See [Appendix — Python package](../appendix/python-package).
