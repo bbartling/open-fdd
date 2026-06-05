@@ -2273,6 +2273,68 @@ textarea {
   border-radius: 6px;
 }
 
+.rule-assign-multi {
+  position: relative;
+  min-width: 180px;
+}
+
+.rule-assign-multi-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.rule-assign-multi-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rule-assign-multi-chevron {
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.rule-assign-multi-panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 220px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.rule-assign-multi-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.rule-assign-multi-option:hover {
+  background: var(--nav-hover-bg);
+  border-radius: 6px;
+}
+
 .icon-btn {
   min-width: 36px;
   padding: 0.35rem 0.55rem;
