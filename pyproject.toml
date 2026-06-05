@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.4.0"
+version = "2.4.1"
 description = "Open-FDD: YAML engine (open_fdd.engine), portable Python evaluate() sandbox (open_fdd.playground), and optional reports."
 readme = "README.md"
 license = { text = "MIT" }
