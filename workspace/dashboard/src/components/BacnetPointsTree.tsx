@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import ContextMenu, { type ContextMenuItem } from "./ContextMenu";
+import ContextMenu from "./ContextMenu";
+import {
+  buildDeviceContextMenuItems,
+  buildPointContextMenuItems,
+  formatBacnetValue,
+  type PrioritySlot,
+} from "../lib/bacnetTreeMenu";
 
 export type DriverPoint = {
   point_id: string;
@@ -11,6 +17,7 @@ export type DriverPoint = {
   poll_label: string;
   present_value?: string;
   series_id?: string;
+  commandable?: boolean;
 };
 
 export type DriverDevice = {
@@ -21,13 +28,6 @@ export type DriverDevice = {
   points: DriverPoint[];
 };
 
-const POLL_OPTIONS = [
-  { seconds: 60, label: "1 min" },
-  { seconds: 300, label: "5 min" },
-  { seconds: 600, label: "10 min" },
-  { seconds: 900, label: "15 min" },
-] as const;
-
 type ContextTarget =
   | { kind: "device"; device: DriverDevice }
   | { kind: "point"; device: DriverDevice; point: DriverPoint }
@@ -35,7 +35,11 @@ type ContextTarget =
 
 type Props = {
   devices: DriverDevice[];
+  priorityByPointId?: Record<string, PrioritySlot[]>;
+  expandedPriorityPoints?: Set<string>;
   onRefreshDevice?: (instance: number) => void;
+  onRefreshPointPv?: (device: DriverDevice, point: DriverPoint) => void;
+  onReadPriorityArray?: (device: DriverDevice, point: DriverPoint) => void;
   onSetPointPoll?: (pointId: string, enabled: boolean, intervalS: number) => void;
   onSetDevicePoll?: (instance: number, enabled: boolean, intervalS: number) => void;
   onDeletePoint?: (pointId: string) => void;
@@ -53,9 +57,18 @@ function groupPoints(points: DriverPoint[]): Map<string, DriverPoint[]> {
   return new Map([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
 
+function prioritySlotLabel(slot: PrioritySlot): string {
+  if (slot.type === "null" || slot.value == null) return "null (relinquished)";
+  return `${slot.type}: ${formatBacnetValue(slot.value)}`;
+}
+
 export default function BacnetPointsTree({
   devices,
+  priorityByPointId = {},
+  expandedPriorityPoints = new Set(),
   onRefreshDevice,
+  onRefreshPointPv,
+  onReadPriorityArray,
   onSetPointPoll,
   onSetDevicePoll,
   onDeletePoint,
@@ -95,78 +108,28 @@ export default function BacnetPointsTree({
     setMenu({ x: e.clientX, y: e.clientY, target });
   }
 
-  function pollItemsForPoint(point: DriverPoint): ContextMenuItem[] {
-    const items: ContextMenuItem[] = POLL_OPTIONS.map((opt) => ({
-      id: `poll-${opt.seconds}`,
-      label: `Poll every ${opt.label}`,
-      onClick: () => onSetPointPoll?.(point.point_id, true, opt.seconds),
-    }));
-    if (point.enabled) {
-      items.push({
-        id: "poll-off",
-        label: "Stop polling",
-        onClick: () => onSetPointPoll?.(point.point_id, false, 0),
-      });
-    }
-    return items;
-  }
-
-  function menuItems(): ContextMenuItem[] {
+  function menuItems() {
     if (!menu?.target) return [];
     const t = menu.target;
     if (t.kind === "device") {
-      const inst = Number(t.device.device_instance);
-      const pollItems: ContextMenuItem[] = POLL_OPTIONS.map((opt) => ({
-        id: `dev-poll-${opt.seconds}`,
-        label: `Poll all — ${opt.label}`,
-        disabled: t.device.point_count === 0,
-        onClick: () => onSetDevicePoll?.(inst, true, opt.seconds),
-      }));
-      return [
-        {
-          id: "refresh",
-          label: "Refresh points from device",
-          onClick: () => onRefreshDevice?.(inst),
-        },
-        {
-          id: "remap",
-          label: "Edit instance / address…",
-          onClick: () => onRemapDevice?.(t.device),
-        },
-        ...pollItems,
-        {
-          id: "poll-off-all",
-          label: "Stop polling (all points)",
-          disabled: t.device.poll_count === 0,
-          onClick: () => onSetDevicePoll?.(inst, false, 0),
-        },
-        {
-          id: "copy-inst",
-          label: "Copy device instance",
-          onClick: () => onCopy?.(t.device.device_instance),
-        },
-        {
-          id: "delete-dev",
-          label: "Remove device",
-          danger: true,
-          onClick: () => onDeleteDevice?.(inst),
-        },
-      ];
+      return buildDeviceContextMenuItems({
+        device: t.device,
+        onRefreshDevice,
+        onRemapDevice,
+        onSetDevicePoll,
+        onDeleteDevice,
+        onCopy,
+      });
     }
-    return [
-      ...pollItemsForPoint(t.point),
-      {
-        id: "copy-oid",
-        label: "Copy object id",
-        onClick: () => onCopy?.(t.point.object_identifier),
-      },
-      {
-        id: "delete-pt",
-        label: "Remove point",
-        danger: true,
-        onClick: () => onDeletePoint?.(t.point.point_id),
-      },
-    ];
+    return buildPointContextMenuItems({
+      device: t.device,
+      point: t.point,
+      onRefreshPointPv,
+      onReadPriorityArray,
+      onSetPointPoll,
+      onDeletePoint,
+      onCopy,
+    });
   }
 
   if (!sorted.length) {
@@ -218,31 +181,53 @@ export default function BacnetPointsTree({
                       </button>
                       {typeOpen ? (
                         <ul className="bacnet-tree-points">
-                          {pts.map((p) => (
-                            <li
-                              key={p.point_id}
-                              onContextMenu={(e) => openMenu(e, { kind: "point", device: dev, point: p })}
-                            >
-                              <code>{p.object_identifier}</code>
-                              <span className="bacnet-tree-point-name">{p.object_name}</span>
-                              {p.enabled && String(p.present_value ?? "") !== "" ? (
-                                <span className="badge pv-badge" title="Last present value">
-                                  {p.present_value}
-                                </span>
-                              ) : p.enabled ? (
-                                <span className="badge muted-badge" title="Polling — no successful read yet">
-                                  no sample
-                                </span>
-                              ) : null}
-                              {p.enabled ? (
-                                <span className="badge poll-badge" title="Polling enabled">
-                                  ⏱ {p.poll_label || `${p.poll_interval_s}s`}
-                                </span>
-                              ) : (
-                                <span className="badge muted-badge">idle</span>
-                              )}
-                            </li>
-                          ))}
+                          {pts.map((p) => {
+                            const priorityOpen = expandedPriorityPoints.has(p.point_id);
+                            const prioritySlots = priorityByPointId[p.point_id] ?? [];
+                            const showPv = String(p.present_value ?? "") !== "";
+                            return (
+                              <li key={p.point_id}>
+                                <div
+                                  className="bacnet-tree-point-row"
+                                  onContextMenu={(e) => openMenu(e, { kind: "point", device: dev, point: p })}
+                                >
+                                  <code>{p.object_identifier}</code>
+                                  <span className="bacnet-tree-point-name">{p.object_name}</span>
+                                  {p.commandable ? (
+                                    <span className="badge commandable-badge" title="Commandable (priority-array)">
+                                      cmd
+                                    </span>
+                                  ) : null}
+                                  {showPv ? (
+                                    <span className="badge pv-badge" title="Present value">
+                                      {p.present_value}
+                                    </span>
+                                  ) : p.enabled ? (
+                                    <span className="badge muted-badge" title="Polling — no successful read yet">
+                                      no sample
+                                    </span>
+                                  ) : null}
+                                  {p.enabled ? (
+                                    <span className="badge poll-badge" title="Polling enabled">
+                                      ⏱ {p.poll_label || `${p.poll_interval_s}s`}
+                                    </span>
+                                  ) : (
+                                    <span className="badge muted-badge">idle</span>
+                                  )}
+                                </div>
+                                {priorityOpen && prioritySlots.length ? (
+                                  <ul className="bacnet-tree-priority">
+                                    {prioritySlots.map((slot) => (
+                                      <li key={`${p.point_id}-p${slot.priority_level}`}>
+                                        <span className="bacnet-tree-priority-level">P{slot.priority_level}</span>
+                                        <span className="bacnet-tree-priority-value">{prioritySlotLabel(slot)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </li>
+                            );
+                          })}
                         </ul>
                       ) : null}
                     </div>

@@ -27,6 +27,7 @@ CSV_FIELDNAMES = [
     "poll_interval_s",
     "point_id",
     "series_id",
+    "commandable",
 ]
 
 

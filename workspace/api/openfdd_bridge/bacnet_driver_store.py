@@ -77,6 +77,12 @@ def _parse_oid(oid: str) -> tuple[str, str]:
     return parts[0].strip(), parts[1].strip()
 
 
+def _commandable_str(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    return "1" if str(value or "").strip().lower() in ("1", "true", "yes", "y", "on") else "0"
+
+
 def _object_row(
     *,
     device_instance: int,
@@ -84,6 +90,7 @@ def _object_row(
     object_identifier: str,
     object_name: str,
     defaults: dict[str, str],
+    commandable: Any = False,
 ) -> dict[str, str]:
     obj_type, obj_inst = _parse_oid(object_identifier)
     raw = {
@@ -102,6 +109,7 @@ def _object_row(
         "brick_tag": "",
         "enabled": "0",
         "poll_interval_s": "60",
+        "commandable": _commandable_str(commandable),
     }
     row = normalize_row(raw, defaults)
     if not row.get("point_id"):
@@ -206,6 +214,7 @@ def sync_discovery(
                 object_identifier=oid,
                 object_name=str(obj.get("name") or oid),
                 defaults=defaults,
+                commandable=obj.get("commandable", False),
             )
             pid = row["point_id"]
             if pid in by_pid:
@@ -214,6 +223,8 @@ def sync_discovery(
                     existing["device_address"] = device_address
                 if row.get("object_name"):
                     existing["object_name"] = row["object_name"]
+                if "commandable" in obj:
+                    existing["commandable"] = row["commandable"]
             else:
                 rows.append(row)
                 by_pid[pid] = row
@@ -382,6 +393,11 @@ def driver_tree() -> dict[str, Any]:
         )
         if raw.get("device_address"):
             dev["device_address"] = str(raw["device_address"])
+        commandable = str(raw.get("commandable") or "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         dev["points"].append(
             {
                 "point_id": pid,
@@ -393,6 +409,7 @@ def driver_tree() -> dict[str, Any]:
                 "poll_label": POLL_LABELS.get(interval, "") if enabled else "",
                 "present_value": latest_pv.get(pid, "") if enabled else str(raw.get("present_value") or ""),
                 "series_id": str(poll_row.get("series_id") or raw.get("series_id") or ""),
+                "commandable": commandable,
             }
         )
     device_list = sorted(devices.values(), key=lambda d: int(d["device_instance"]))

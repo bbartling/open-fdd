@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { formatApiError } from "../lib/formatApiError";
 import ActionButton from "../components/ActionButton";
-import BacnetPointsTree, { type DriverDevice } from "../components/BacnetPointsTree";
+import BacnetPointsTree, { type DriverDevice, type DriverPoint } from "../components/BacnetPointsTree";
+import { formatBacnetValue, type PrioritySlot } from "../lib/bacnetTreeMenu";
 import PageHeader from "../components/PageHeader";
 import Spinner from "../components/Spinner";
 import { TabDebugPanel } from "../components/TabDebugPanel";
@@ -78,6 +79,8 @@ export default function BacnetPage() {
     error?: string;
   } | null>(null);
   const [activeJobLabel, setActiveJobLabel] = useState("");
+  const [priorityByPointId, setPriorityByPointId] = useState<Record<string, PrioritySlot[]>>({});
+  const [expandedPriorityPoints, setExpandedPriorityPoints] = useState<Set<string>>(() => new Set());
 
   const loadDriverTree = useCallback(async () => {
     setTreeLoading(true);
@@ -407,6 +410,60 @@ export default function BacnetPage() {
     await runAddDevice(instance, dev?.device_address ?? whoisAddress(instance), true);
   }
 
+  function patchPointPresentValue(pointId: string, presentValue: string) {
+    setDriverDevices((prev) =>
+      prev.map((dev) => ({
+        ...dev,
+        points: dev.points.map((p) =>
+          p.point_id === pointId ? { ...p, present_value: presentValue } : p,
+        ),
+      })),
+    );
+  }
+
+  async function refreshPointPv(device: DriverDevice, point: DriverPoint) {
+    setActionError("");
+    try {
+      const res = await apiFetch<{ value?: unknown }>("/api/bacnet/read", {
+        method: "POST",
+        body: JSON.stringify({
+          device_instance: Number(device.device_instance),
+          object_identifier: point.object_identifier,
+          property_identifier: "present-value",
+        }),
+      });
+      const formatted = formatBacnetValue(res.value);
+      patchPointPresentValue(point.point_id, formatted);
+      setLog(
+        `Refresh PV ${point.object_identifier} @ device ${device.device_instance}: ${formatted}`,
+      );
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  }
+
+  async function readPriorityArray(device: DriverDevice, point: DriverPoint) {
+    if (!point.commandable) return;
+    setActionError("");
+    try {
+      const res = await apiFetch<{ priority_array?: PrioritySlot[] }>("/api/bacnet/priority-array", {
+        method: "POST",
+        body: JSON.stringify({
+          device_instance: Number(device.device_instance),
+          object_identifier: point.object_identifier,
+        }),
+      });
+      const slots = res.priority_array ?? [];
+      setPriorityByPointId((prev) => ({ ...prev, [point.point_id]: slots }));
+      setExpandedPriorityPoints((prev) => new Set(prev).add(point.point_id));
+      setLog(
+        `Priority array ${point.object_identifier} @ device ${device.device_instance}: ${slots.length} slot(s)`,
+      );
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  }
+
   async function selectAllAndAddDevices() {
     const list: number[] = [];
     const inTreeSet = new Set(driverDevices.map((d) => d.device_instance));
@@ -636,7 +693,7 @@ export default function BacnetPage() {
         <h3 className="panel-title">Devices &amp; points</h3>
         <div className="row row-spread">
           <p className="muted" style={{ flex: 1, margin: 0 }}>
-            Right-click to poll, remap, refresh, or remove. Last present value shows when polling is enabled.
+            Right-click for Actions (refresh PV, priority array) and Polling. Present value updates on demand or from poll.
           </p>
           <button
             type="button"
@@ -652,7 +709,11 @@ export default function BacnetPage() {
         ) : (
           <BacnetPointsTree
             devices={driverDevices}
+            priorityByPointId={priorityByPointId}
+            expandedPriorityPoints={expandedPriorityPoints}
             onRefreshDevice={refreshDevicePoints}
+            onRefreshPointPv={refreshPointPv}
+            onReadPriorityArray={readPriorityArray}
             onSetPointPoll={setPointPoll}
             onSetDevicePoll={setDevicePoll}
             onDeletePoint={deletePoint}

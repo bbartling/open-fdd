@@ -1098,6 +1098,60 @@ textarea {
   color: var(--danger);
 }
 
+.context-menu-submenu {
+  position: relative;
+}
+
+.context-menu-item-parent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.context-menu-chevron {
+  opacity: 0.55;
+  font-size: 0.75rem;
+}
+
+.context-menu-flyout {
+  position: absolute;
+  left: calc(100% - 4px);
+  top: -6px;
+  min-width: 200px;
+}
+
+.bacnet-tree-point-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.bacnet-tree-priority {
+  list-style: none;
+  margin: 4px 0 8px 1.25rem;
+  padding: 0;
+  border-left: 2px solid var(--border);
+}
+
+.bacnet-tree-priority li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0 3px 10px;
+  font-size: 0.82rem;
+}
+
+.bacnet-tree-priority-level {
+  min-width: 1.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bacnet-tree-priority-value {
+  font-family: ui-monospace, monospace;
+}
+
 .badge.ok {
   background: color-mix(in srgb, var(--ok) 20%, var(--panel-soft));
   color: var(--ok);
