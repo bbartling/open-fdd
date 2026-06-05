@@ -42,7 +42,7 @@ export OFDD_DESKTOP_DATA_DIR="$TEST_DATA"
 unset OFDD_AUTH_SECRET OFDD_OPERATOR_USER OFDD_OPERATOR_PASSWORD \
   OFDD_INTEGRATOR_USER OFDD_INTEGRATOR_PASSWORD OFDD_AGENT_USER OFDD_AGENT_PASSWORD \
   OFDD_WEB_USER OFDD_WEB_PASSWORD 2>/dev/null || true
-"${VENV}/bin/pytest" tests/bacnet_toolshed/ tests/workspace_bridge/ -q
+"${VENV}/bin/pytest" open_fdd/tests/arrow_runtime open_fdd/tests/playground tests/bacnet_toolshed/ tests/workspace_bridge/ -q
 
 echo "==> Smoke: compiled SPA present"
 test -f workspace/api/static/app/index.html

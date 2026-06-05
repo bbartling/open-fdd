@@ -15,7 +15,7 @@ nav_order: 1
 | `ghcr.io/bbartling/openfdd-bacnet-poll` | Historian poll driver (host network) |
 | `ghcr.io/bbartling/openfdd-mcp-rag` | Optional doc-search sidecar |
 
-Check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) for current tags (e.g. `2026.06.04-edge`).
+Check [GitHub Packages](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-bridge) for current tags (e.g. `2026.06.07-edge`).
 
 ## Option A — Ansible deploy (edge VM)
 
@@ -28,7 +28,7 @@ git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
 ./scripts/build_operator_dashboard.sh prod
 
 # Set image tag from a published GHCR release
-export OPENFDD_IMAGE_TAG=2026.06.04-edge
+export OPENFDD_IMAGE_TAG=2026.06.07-edge
 
 # Deploy (requires inventory + host_vars — see infra/ansible/inventory.example.yml)
 cd infra/ansible
@@ -41,7 +41,7 @@ Host vars should set `openfdd_docker_pull_from_ghcr: true`. Site BACnet bind, mo
 **Bootstrap helper** (docker → Caddy → optional AI → ops check):
 
 ```bash
-OPENFDD_IMAGE_TAG=2026.06.04-edge ./scripts/bootstrap_edge_ghcr.sh --limit <inventory_host>
+OPENFDD_IMAGE_TAG=2026.06.07-edge ./scripts/bootstrap_edge_ghcr.sh --limit <inventory_host>
 ```
 
 ## Option B — Local trial (compose on one machine)

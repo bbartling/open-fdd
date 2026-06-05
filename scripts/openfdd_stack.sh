@@ -14,6 +14,8 @@ COMPOSE=(docker compose -f docker/compose.dev.yml)
 if [[ -f docker/compose.bench.yml ]]; then
   COMPOSE+=(-f docker/compose.bench.yml)
 fi
+PROD_TAG="${OPENFDD_IMAGE_TAG:-2026.06.07-edge}"
+PROD_COMPOSE=("${COMPOSE[@]}" -f docker/compose.prod.yml)
 PROFILES=()
 if [[ "${OPENFDD_COMPOSE_PROFILES:-ai}" == *ai* ]]; then
   PROFILES+=(--profile ai)
@@ -71,11 +73,34 @@ case "$ACTION" in
         "${ROOT}/scripts/stack_health_check.sh"
     fi
     ;;
+  prod)
+    ./scripts/run_local.sh stop 2>/dev/null || true
+    export OPENFDD_IMAGE_TAG="${PROD_TAG}"
+    echo "==> Pull GHCR production images (tag ${OPENFDD_IMAGE_TAG})"
+    docker pull "ghcr.io/bbartling/openfdd-bridge:${OPENFDD_IMAGE_TAG}"
+    docker pull "ghcr.io/bbartling/openfdd-commission:${OPENFDD_IMAGE_TAG}"
+    docker pull "ghcr.io/bbartling/openfdd-mcp-rag:${OPENFDD_IMAGE_TAG}"
+    "${PROD_COMPOSE[@]}" "${PROFILES[@]}" up -d --force-recreate --pull always
+    wait_for_health
+    chmod +x "${ROOT}/scripts/start_caddy_front.sh"
+    "${ROOT}/scripts/start_caddy_front.sh" || true
+    LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    echo ""
+    echo "Production stack (GHCR ${OPENFDD_IMAGE_TAG}) — OWASP ZAP targets from your LAN:"
+    echo "  Primary (edge-like):  http://${LAN_IP}/"
+    echo "  Direct bridge (dev):  http://${LAN_IP}:8765/  (if firewall allows)"
+    echo "  Login API:            POST http://${LAN_IP}/api/auth/login"
+    echo "  Health:               curl -sf http://${LAN_IP}/health"
+    if [[ "$RUN_FULL_HEALTH" == 1 ]] && [[ -x "${ROOT}/scripts/stack_health_check.sh" ]]; then
+      OPENFDD_BASE_URL="${OPENFDD_BASE_URL:-http://127.0.0.1:8765}" \
+        "${ROOT}/scripts/stack_health_check.sh"
+    fi
+    ;;
   -h|--help)
     sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
     ;;
   *)
-    echo "Unknown action: $ACTION (up|down|health|rebuild)" >&2
+    echo "Unknown action: $ACTION (up|down|health|rebuild|prod)" >&2
     exit 1
     ;;
 esac

@@ -156,6 +156,68 @@ def _run_one(
         "equipment_family": family_for_code(fault_code) or "",
     }
     try:
+        from open_fdd.arrow_runtime.rules import detect_rule_backend, legacy_row_allowed
+
+        backend = detect_rule_backend(code, rule)
+        if backend == "arrow":
+            from .data_loader import load_arrow_table_for_run
+
+            import pyarrow as pa
+
+            if frame is not None:
+                if hasattr(frame, "num_rows"):
+                    table = frame
+                else:
+                    table = pa.Table.from_pandas(frame)
+            else:
+                table, origin = load_arrow_table_for_run(site_id)
+                frame = table
+            if lookback_hours > 0 and table is not None and "timestamp" in table.column_names:
+                from open_fdd.arrow_runtime.features import arrow_time_filter
+                import datetime as _dt
+
+                cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=lookback_hours)
+                table = arrow_time_filter(table, "timestamp", cutoff, None)
+            if limit and table.num_rows > limit:
+                table = table.slice(max(0, table.num_rows - limit), min(limit, table.num_rows))
+            cfg = dict(rule.get("config") or {})
+            cfg.setdefault("site_id", site_id)
+            arrow_result = playground.run_arrow_table(
+                code,
+                table,
+                cfg,
+                rule_id=str(rule.get("id") or ""),
+                site_id=site_id,
+            )
+            if not arrow_result.get("ok"):
+                return {
+                    **base,
+                    "status": "error",
+                    "rows": int(arrow_result.get("rows") or 0),
+                    "flagged": 0,
+                    "error": arrow_result.get("error", "arrow rule failed"),
+                    "backend": "arrow",
+                }
+            return {
+                **base,
+                "status": "ok",
+                "rows": int(arrow_result.get("rows") or 0),
+                "flagged": int(arrow_result.get("flagged") or 0),
+                "backend": "arrow",
+                "duration_ms": arrow_result.get("summary", {}).get("duration_ms"),
+            }
+        if backend == "legacy_row" and not legacy_row_allowed(rule):
+            return {
+                **base,
+                "status": "error",
+                "rows": 0,
+                "flagged": 0,
+                "error": (
+                    "legacy evaluate() rule blocked — set backend=legacy_row on the rule or "
+                    "OPEN_FDD_FDD_BACKEND=legacy_row; migrate to apply_faults_arrow()"
+                ),
+                "backend": "legacy_row",
+            }
         if rule.get("mode") == "script":
             df = frame.head(limit) if limit and len(frame) > limit else frame
             script_cfg = dict(rule.get("config") or {})

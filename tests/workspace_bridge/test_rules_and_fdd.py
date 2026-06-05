@@ -65,7 +65,14 @@ def test_save_rule_with_multiple_fault_codes(client: TestClient):
 def test_batch_run_lights_check_engine(client: TestClient):
     save = client.post(
         "/api/rules/save",
-        json={"name": "SAT high", "mode": "rule", "code": RULE_CODE, "config": {"high": 50}, "severity": "warning"},
+        json={
+            "name": "SAT high",
+            "mode": "rule",
+            "backend": "legacy_row",
+            "code": RULE_CODE,
+            "config": {"high": 50},
+            "severity": "warning",
+        },
     )
     assert save.status_code == 200
 

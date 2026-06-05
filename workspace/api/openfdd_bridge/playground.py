@@ -416,6 +416,78 @@ def sweep_dataframe_chunked(
     return len(work), flagged, events
 
 
+def lint_arrow_python(code: str) -> dict[str, Any]:
+    from open_fdd.arrow_runtime.backend import lint_arrow_rule
+
+    return lint_arrow_rule(code, strict_imports=True)
+
+
+def run_arrow_table(
+    code: str,
+    table: Any,
+    cfg: dict[str, Any] | None = None,
+    *,
+    rule_id: str = "",
+    site_id: str = "",
+    limit: int = 0,
+) -> dict[str, Any]:
+    """Execute Arrow-native rule against a PyArrow Table; JSON-safe response."""
+    import pyarrow as pa
+
+    from open_fdd.arrow_runtime.backend import run_arrow_rule, run_arrow_rule_chunked
+    from open_fdd.arrow_runtime.config import get_arrow_runtime_config
+    from open_fdd.arrow_runtime.rules import detect_rule_backend, legacy_row_allowed, migrate_legacy_threshold_hint
+
+    started = time.time()
+    backend = detect_rule_backend(code, {"backend": cfg.get("backend") if cfg else None})
+    if backend == "legacy_row" and not legacy_row_allowed({"backend": "legacy_row"}):
+        hint = migrate_legacy_threshold_hint(code, cfg or {})
+        return {
+            "ok": False,
+            "backend": "legacy_row",
+            "error": "legacy row rules require backend=legacy_row or OPEN_FDD_FDD_BACKEND=legacy_row",
+            "migration_hint": hint,
+            "migration_message": (
+                "This is a legacy row rule. Convert it to apply_faults_arrow(table, cfg, context=None) "
+                "for the Arrow-native runtime."
+            ),
+            "ms": int((time.time() - started) * 1000),
+        }
+    if not isinstance(table, pa.Table):
+        table = pa.Table.from_pandas(table)
+    if limit and table.num_rows > limit:
+        table = table.slice(table.num_rows - limit, limit)
+    rt = get_arrow_runtime_config()
+    if table.num_rows > rt.batch_rows:
+        result = run_arrow_rule_chunked(code, table, cfg or {}, rule_id=rule_id)
+    else:
+        result = run_arrow_rule(code, table, cfg or {}, rule_id=rule_id)
+    payload = result.as_dict()
+    payload["ok"] = not result.errors
+    payload["site_id"] = site_id
+    payload["batch_count"] = max(1, (table.num_rows + rt.batch_rows - 1) // rt.batch_rows)
+    payload["arrow_runtime"] = rt.as_dict()
+    payload["ms"] = int((time.time() - started) * 1000)
+    if result.errors:
+        payload["error"] = result.errors[0]
+        payload["events"] = sanitize_events([{"type": "error", "text": result.errors[0]}])
+    else:
+        payload["flagged"] = result.true_count
+        payload["rows"] = result.row_count
+        payload["events"] = sanitize_events(
+            [
+                {
+                    "type": "summary",
+                    "rows": result.row_count,
+                    "flagged": result.true_count,
+                    "sweep_mode": "arrow",
+                    "duration_ms": result.duration_ms,
+                }
+            ]
+        )
+    return payload
+
+
 def dataframe_from_records(records: list[dict[str, Any]]) -> pd.DataFrame:
     df = pd.DataFrame(records)
     if "timestamp" in df.columns:

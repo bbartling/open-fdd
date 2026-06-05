@@ -23,7 +23,7 @@ GitHub Actions workflow **Publish Docker addons** — manual dispatch with a ver
 Maintainer checklist:
 
 1. Green CI on `master`
-2. Run workflow with tag e.g. `2026.06.04-edge`
+2. Run workflow with tag e.g. `2026.06.06-edge`
 3. Verify packages at `ghcr.io/bbartling/openfdd-*`
 4. Deploy to a demo edge with `OPENFDD_IMAGE_TAG=<tag>`
 

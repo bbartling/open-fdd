@@ -12,6 +12,7 @@ from ..security import debug_diagnostics_enabled, operator_can_edit_model
 from ..model_health import model_health_summary
 from ..model_service import ModelService
 from ..model_sparql import list_model_sites, query_model_graph, query_model_tree, scope_bundle
+from ..sparql_queries import execute_model_sparql, predefined_catalog
 from ..ttl_graph import TtlGraphError
 from ..site_defaults import ensure_default_site
 from ..ttl_service import TtlService
@@ -29,6 +30,10 @@ class ImportBody(BaseModel):
 class SiteBody(BaseModel):
     id: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=128)
+
+
+class SparqlBody(BaseModel):
+    query: str = Field(min_length=1, max_length=200_000)
 
 
 def _model() -> ModelService:
@@ -146,6 +151,18 @@ def import_model(body: ImportBody, user: dict = Depends(require_roles("integrato
     counts = svc.import_json(body.payload, replace=body.replace)
     _ttl().sync()
     return {"ok": True, **counts}
+
+
+@router.get("/sparql/predefined")
+def sparql_predefined(_user: dict = Depends(require_user)) -> dict:
+    ensure_default_site(_model(), _ttl())
+    return predefined_catalog()
+
+
+@router.post("/sparql")
+def run_model_sparql(body: SparqlBody, _user: dict = Depends(require_user)) -> dict:
+    ensure_default_site(_model(), _ttl())
+    return execute_model_sparql(body.query, _ttl())
 
 
 @router.get("/health")

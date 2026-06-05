@@ -1,5 +1,9 @@
 # Open-FDD
 
+The Open-FDD runtime is now **Arrow-native by default**. Rules operate over Arrow Tables and return Arrow BooleanArrays or ChunkedArrays. This avoids Python row loops and enables columnar, threaded, batch-oriented execution for large HVAC histories.
+
+See [Arrow-native runtime](docs/developer/arrow-native-runtime.md).
+
 <p align="center">
   <a href="https://discord.gg/Ta48yQF8fC"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI"></a>
@@ -13,7 +17,7 @@
 </p>
 
 <p align="center">
-  <strong>pandas-first</strong> HVAC fault detection for building operators — Python rules in the dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
+  <strong>Arrow-native</strong> rule-based HVAC fault detection — columnar Python rules in the dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>
 </p>
 
 <p align="center">

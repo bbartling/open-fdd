@@ -9,14 +9,16 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from .. import playground
-from ..data_loader import load_frame_for_run, records_from_dataframe
+from ..data_loader import load_arrow_table_for_run, load_frame_for_run, records_from_dataframe
 from ..fdd_row_prep import prepare_fdd_rows
 from ..deps import require_roles
 from ..model_service import ModelService
 from ..site_defaults import ensure_default_site
 from ..timeseries_api import resolve_plot_columns
 from ..ttl_service import TtlService
+from open_fdd.arrow_runtime.rules import detect_rule_backend, migrate_legacy_threshold_hint
 from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+from open_fdd.playground.arrow_templates import ARROW_TEMPLATES, DEFAULT_ARROW_RULE, LEGACY_MIGRATION_MESSAGE
 
 _log = logging.getLogger(__name__)
 
@@ -109,13 +111,29 @@ def _apply_lookback(df, lookback_hours: float):
 
 @router.post("/lint")
 def lint_code(body: LintBody) -> dict:
+    if body.mode == "arrow":
+        return playground.lint_arrow_python(body.code)
+    backend = detect_rule_backend(body.code, {})
+    if backend == "arrow":
+        return playground.lint_arrow_python(body.code)
     return playground.lint_python(body.code, require_evaluate=body.mode != "script")
+
+
+@router.get("/arrow-templates")
+def arrow_templates() -> dict:
+    return {
+        "default_rule": DEFAULT_ARROW_RULE,
+        "templates": ARROW_TEMPLATES,
+        "legacy_migration_message": LEGACY_MIGRATION_MESSAGE,
+    }
 
 
 @router.post("/test-rule")
 def test_rule(body: RuleBody) -> dict:
     started = time.time()
-    lint = playground.lint_python(body.code, strict_imports=True)
+    backend = detect_rule_backend(body.code, {"config": body.config})
+    lint_fn = playground.lint_arrow_python if backend == "arrow" else playground.lint_python
+    lint = lint_fn(body.code) if backend == "arrow" else lint_fn(body.code, strict_imports=True)
     if not lint["ok"]:
         return {
             "ok": False,
@@ -123,11 +141,49 @@ def test_rule(body: RuleBody) -> dict:
             "events": playground._lint_error_events(lint),  # noqa: SLF001
             "rows": 0,
             "flagged": 0,
+            "backend": backend,
             "ms": int((time.time() - started) * 1000),
         }
     try:
         model_svc = ModelService()
         site_id = (body.site_id or "").strip() or ensure_default_site(model_svc, TtlService())
+        if backend == "arrow":
+            table, origin = load_arrow_table_for_run(site_id)
+            import pyarrow as pa
+
+            if not isinstance(table, pa.Table):
+                table = pa.Table.from_pandas(table)
+            if body.lookback_hours and "timestamp" in table.column_names:
+                from open_fdd.arrow_runtime.features import arrow_time_filter
+                import datetime as _dt
+
+                cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=body.lookback_hours)
+                table = arrow_time_filter(table, "timestamp", cutoff, None)
+            cfg = dict(body.config)
+            cfg["backend"] = "arrow"
+            cfg.setdefault("site_id", site_id)
+            arrow_out = playground.run_arrow_table(
+                body.code,
+                table,
+                cfg,
+                rule_id="test",
+                site_id=site_id,
+                limit=body.limit,
+            )
+            return {
+                **arrow_out,
+                "site_id": site_id,
+                "data_source": origin,
+                "backend": "arrow",
+                "fully_arrow_native": arrow_out.get("fully_arrow_native", True),
+                "migration_message": None,
+            }
+        if backend == "legacy_row":
+            hint = migrate_legacy_threshold_hint(body.code, body.config)
+            migration_message = LEGACY_MIGRATION_MESSAGE
+        else:
+            hint = None
+            migration_message = None
         df, origin = load_frame_for_run(site_id)
         df = _apply_lookback(df, body.lookback_hours or 24)
         model = model_svc.load()
@@ -192,6 +248,7 @@ def test_rule(body: RuleBody) -> dict:
             "ok": ok,
             "site_id": site_id,
             "data_source": origin,
+            "backend": backend,
             "equipment_id": body.equipment_id or "",
             "point_keys": point_keys,
             "value_column": value_column,
@@ -203,6 +260,9 @@ def test_rule(body: RuleBody) -> dict:
             "events": trimmed_events,
             "column_map": column_map,
             "chunked": use_chunked,
+            "migration_message": migration_message,
+            "migration_hint": hint,
+            "fully_arrow_native": False,
         }
     except Exception as exc:
         err = playground.sanitize_traceback_text(str(exc)) or "rule test failed"

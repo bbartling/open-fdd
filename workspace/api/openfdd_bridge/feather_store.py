@@ -108,15 +108,33 @@ def _column_list(columns: list[str] | str | None) -> list[str] | None:
 
 
 def _apply_arrow_thread_env() -> None:
-    n = _env_int("OFDD_ARROW_IO_THREADS", 0)
-    if n <= 0 or not _USE_FEATHER:
+    if not _USE_FEATHER:
         return
     try:
-        import pyarrow as pa
+        from open_fdd.arrow_runtime.config import configure_arrow_runtime
 
-        pa.set_cpu_count(n)
+        configure_arrow_runtime()
     except Exception:
-        pass
+        n = _env_int("OPEN_FDD_ARROW_THREADS", 0) or _env_int("OFDD_ARROW_IO_THREADS", 0)
+        if n <= 0:
+            return
+        try:
+            import pyarrow as pa
+
+            pa.set_cpu_count(n)
+        except Exception:
+            pass
+
+
+def read_site_arrow(
+    store: FeatherStore,
+    site_id: str,
+    source: str = "bacnet",
+    *,
+    columns: list[str] | str | None = None,
+) -> Any | None:
+    """Preferred Arrow-native read — returns ``pyarrow.Table`` without pandas."""
+    return store.read_site_table(site_id, source=source, columns=columns)
 
 
 def feather_compact_workers_from_env() -> int:

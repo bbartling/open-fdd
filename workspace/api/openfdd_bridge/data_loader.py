@@ -47,6 +47,30 @@ def load_site_frame(
     return FeatherStore().read_site(site_id, source=source, columns=columns)
 
 
+def load_arrow_table_for_run(
+    site_id: str | None = None,
+    *,
+    source: str = "bacnet",
+    columns: list[str] | str | None = None,
+) -> tuple[Any, str]:
+    """Arrow-native frame load for FDD execution (preferred path)."""
+    import pyarrow as pa
+
+    from .feather_store import FeatherStore, _dedupe_sort
+
+    if site_id:
+        table = FeatherStore().read_site_table(site_id, source=source, columns=columns)
+        if table is not None:
+            if hasattr(table, "num_rows") and table.num_rows > 0:
+                return table, "feather"
+            if hasattr(table, "empty") and not table.empty:
+                return pa.Table.from_pandas(_dedupe_sort(table)), "feather"
+    demo = load_demo_dataframe(site_id)
+    if demo.empty and site_id:
+        demo = load_demo_dataframe(None)
+    return pa.Table.from_pandas(demo), "demo"
+
+
 def load_frame_for_run(
     site_id: str | None = None,
     *,
