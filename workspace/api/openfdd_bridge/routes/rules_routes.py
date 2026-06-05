@@ -32,6 +32,7 @@ class SaveRuleBody(BaseModel):
     name: str = "Untitled rule"
     description: str = ""
     mode: str = "rule"
+    backend: str = ""
     code: str
     fault_code: str = ""
     fault_codes: list[str] = Field(default_factory=list)

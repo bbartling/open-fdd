@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Open-FDD Operator Bridge",
         description="Local REST bridge: Python Rule Lab, BRICK data model, BACnet ingest, agent context.",
-        version="0.1.1",
+        version="0.2.0",
         lifespan=_lifespan,
     )
 

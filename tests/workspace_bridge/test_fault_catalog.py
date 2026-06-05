@@ -203,6 +203,7 @@ def test_fault_code_groups_into_family_tree(client: TestClient):
         json={
             "name": "SAT high",
             "mode": "rule",
+            "backend": "legacy_row",
             "code": RULE_CODE,
             "config": {"high": 50},
             "severity": "critical",

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "2.4.2"
-description = "Open-FDD: YAML engine (open_fdd.engine), portable Python evaluate() sandbox (open_fdd.playground), and optional reports."
+version = "3.0.0"
+description = "Open-FDD: Arrow-native rule-based HVAC fault detection on a columnar execution engine."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -26,17 +26,18 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
-keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pandas", "evaluate", "bacnet"]
+keywords = ["hvac", "fdd", "fault-detection", "building-automation", "pyarrow", "arrow", "bacnet"]
 
 dependencies = [
-    "pandas",
+    "pyarrow>=17.0.0",
     "pyyaml",
     "pydantic>=2.4,<3",
 ]
 
 [project.optional-dependencies]
-# Back-compat alias; engine deps are in core dependencies since 2.4.x.
-engine = []
+# YAML vectorized engine still uses pandas.
+engine = ["pandas"]
+legacy = ["pandas"]
 reports = [
     "matplotlib",
 ]
@@ -49,6 +50,7 @@ dev = [
     "pytest-timeout>=2.3.0",
     "pyyaml",
     "pydantic>=2.4,<3",
+    "pandas",
     "black[jupyter]>=25.11.0",
     "pre-commit",
 ]
@@ -63,7 +65,14 @@ Documentation = "https://bbartling.github.io/open-fdd/"
 Repository = "https://github.com/bbartling/open-fdd"
 
 [tool.setuptools.packages.find]
-include = ["open_fdd", "open_fdd.engine*", "open_fdd.schema*", "open_fdd.reports*", "open_fdd.playground*"]
+include = [
+    "open_fdd",
+    "open_fdd.engine*",
+    "open_fdd.schema*",
+    "open_fdd.reports*",
+    "open_fdd.playground*",
+    "open_fdd.arrow_runtime*",
+]
 
 [tool.black]
 line-length = 88

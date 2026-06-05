@@ -14,7 +14,7 @@ COMPOSE=(docker compose -f docker/compose.dev.yml)
 if [[ -f docker/compose.bench.yml ]]; then
   COMPOSE+=(-f docker/compose.bench.yml)
 fi
-PROD_TAG="${OPENFDD_IMAGE_TAG:-2026.06.06-edge}"
+PROD_TAG="${OPENFDD_IMAGE_TAG:-2026.06.07-edge}"
 PROD_COMPOSE=("${COMPOSE[@]}" -f docker/compose.prod.yml)
 PROFILES=()
 if [[ "${OPENFDD_COMPOSE_PROFILES:-ai}" == *ai* ]]; then

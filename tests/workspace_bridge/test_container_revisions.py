@@ -15,7 +15,7 @@ if str(REPO) not in sys.path:
 def test_stack_revisions_reads_env(monkeypatch: pytest.MonkeyPatch):
     from openfdd_bridge import container_revisions
 
-    monkeypatch.setenv("OPENFDD_IMAGE_TAG", "2026.06.06-edge")
+    monkeypatch.setenv("OPENFDD_IMAGE_TAG", "2026.06.07-edge")
     monkeypatch.setenv("OPENFDD_BUILD_GIT_SHA", "abc1234")
     monkeypatch.setenv("OPENFDD_BUILD_TIME", "2026-06-05T12:00:00Z")
     monkeypatch.setattr(
@@ -24,8 +24,8 @@ def test_stack_revisions_reads_env(monkeypatch: pytest.MonkeyPatch):
         lambda timeout=None: (200, {"ok": True}),
     )
     payload = container_revisions.stack_revisions()
-    assert payload["image_tag"] == "2026.06.06-edge"
+    assert payload["image_tag"] == "2026.06.07-edge"
     assert payload["git_sha"] == "abc1234"
     assert len(payload["services"]) >= 3
     bridge = next(s for s in payload["services"] if s["id"] == "bridge")
-    assert bridge["image"] == "openfdd-bridge:2026.06.06-edge"
+    assert bridge["image"] == "openfdd-bridge:2026.06.07-edge"

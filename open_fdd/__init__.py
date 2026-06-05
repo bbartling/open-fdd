@@ -6,6 +6,6 @@ Config-driven, pandas-based. Define fault rules in YAML, run against DataFrames.
 
 from open_fdd.engine import RuleRunner
 
-__version__ = "2.4.2"
+__version__ = "3.0.0"
 
 __all__ = ["RuleRunner", "__version__"]

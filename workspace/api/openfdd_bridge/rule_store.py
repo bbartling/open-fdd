@@ -226,11 +226,15 @@ def normalize_rule(entry: dict[str, Any], *, saved_by: str = "operator") -> dict
     if not isinstance(applies_to, dict):
         applies_to = {}
     fault_codes = _normalize_fault_codes(entry)
+    backend = str(entry.get("backend") or "").strip()
+    if backend not in {"arrow", "legacy_row"}:
+        backend = ""
     return {
         "id": str(entry.get("id") or uuid4()),
         "name": str(entry.get("name") or "Untitled rule")[:200],
         "description": str(entry.get("description") or "")[:1000],
         "mode": mode,
+        "backend": backend,
         "code": code,
         "fault_codes": fault_codes,
         "fault_code": fault_codes[0] if fault_codes else "",
