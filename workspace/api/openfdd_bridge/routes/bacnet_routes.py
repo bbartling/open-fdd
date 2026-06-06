@@ -57,7 +57,7 @@ from ..bacnet_write_guard import (
     validate_priority,
     validate_write_target,
 )
-from ..bacnet_access import require_bacnet_discovery, require_bacnet_mutation
+from ..bacnet_access import require_bacnet_discovery, require_bacnet_mutation, require_bacnet_poll_config
 from ..deps import require_roles
 from ..bacnet_poll_ingest import ingest_poll_samples_to_feather
 
@@ -70,6 +70,7 @@ router = APIRouter(tags=["bacnet"])
 _READ = Depends(require_roles("operator", "integrator", "agent"))
 _DISCOVERY = Depends(require_bacnet_discovery)
 _MUTATION = Depends(require_bacnet_mutation)
+_POLL = Depends(require_bacnet_poll_config)
 _WRITE = Depends(require_roles("integrator"))
 _INTEGRATOR = Depends(require_roles("integrator"))
 
@@ -302,7 +303,7 @@ def bacnet_merge_commission_rows(body: MergeCommissionRowsBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.patch("/api/bacnet/driver/point", dependencies=[_MUTATION])
+@router.patch("/api/bacnet/driver/point", dependencies=[_POLL])
 def bacnet_set_point_poll(body: PointPollBody) -> dict:
     try:
         return set_point_poll(
@@ -314,7 +315,7 @@ def bacnet_set_point_poll(body: PointPollBody) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.patch("/api/bacnet/driver/device", dependencies=[_MUTATION])
+@router.patch("/api/bacnet/driver/device", dependencies=[_POLL])
 def bacnet_set_device_poll(body: DevicePollBody) -> dict:
     try:
         return set_device_poll(

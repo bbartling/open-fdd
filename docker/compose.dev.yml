@@ -27,6 +27,10 @@ services:
       # Prefer in-compose Ollama (--profile ai); fall back to host Ollama via host-gateway.
       OFDD_OLLAMA_BASE_URL: http://ollama:11434
       OFDD_OLLAMA_FALLBACK_URLS: http://host.docker.internal:11434,http://127.0.0.1:11434
+      # Dev bench: smallest local model — override in workspace/ollama.env.local if needed.
+      OFDD_OLLAMA_MODEL: tinyllama
+      OFDD_OLLAMA_GPU_MODE: cpu
+      OFDD_OLLAMA_NUM_GPU: "0"
     env_file:
       - path: ../workspace/auth.env.local
         required: false
