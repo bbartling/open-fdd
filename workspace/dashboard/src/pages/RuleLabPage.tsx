@@ -25,13 +25,6 @@ def apply_faults_arrow(table, cfg, context=None):
     return pc.greater(table[col], high)
 `;
 
-function ruleBackend(source: string, ruleMode: Mode): "arrow" | "legacy_row" | "script" {
-  if (ruleMode === "script") return "script";
-  if (source.includes("apply_faults_arrow")) return "arrow";
-  if (source.includes("def evaluate")) return "legacy_row";
-  return "arrow";
-}
-
 const DEFAULT_SCRIPT = `# df script — set out = {"df": df, "events": [...]}
 df = df.copy()
 df["custom_flag"] = 0
@@ -271,7 +264,6 @@ export default function RuleLabPage() {
           data_source?: string;
           value_column?: string;
           backend?: string;
-          duration_ms?: number;
           fully_arrow_native?: boolean;
           migration_message?: string;
           events: { type: string; text?: string }[];
@@ -293,7 +285,7 @@ export default function RuleLabPage() {
         setConsoleText(
           [
             `>>> Quick test (first bound point) rows=${res.rows} flagged=${res.flagged} · ${res.data_source}`,
-            res.backend ? `backend: ${res.backend}${res.duration_ms != null ? ` · ${res.duration_ms} ms` : ""}` : "",
+            res.backend ? `backend: ${res.backend}${res.ms != null ? ` · ${res.ms} ms` : ""}` : "",
             res.migration_message || "",
             res.value_column ? `column: ${res.value_column}` : "",
             formatRuleTestEvents(res.events || [], { maxLines: 28 }),
@@ -342,12 +334,10 @@ export default function RuleLabPage() {
           bindingsSource = saved.find((r) => r.id === activeRuleId)?.bindings;
         }
       }
-      const backend = ruleBackend(code, mode);
       const payload = {
         id: activeRuleId || undefined,
         name: ruleName,
         mode,
-        backend: backend === "script" ? "" : backend,
         code,
         config: configFromRecord(cfg),
         severity,
