@@ -217,7 +217,9 @@ else
 fi
 
 log_info "Arrow rule lint (reject legacy evaluate / pandas)"
-for label code in "legacy:def evaluate(row,cfg): return True" "pandas:import pandas as pd"; do
+for case in "legacy|def evaluate(row,cfg): return True" "pandas|import pandas as pd"; do
+  label="${case%%|*}"
+  code="${case#*|}"
   lint_body="$(python3 -c 'import json,sys; print(json.dumps({"code": sys.argv[1]}))' "$code")"
   lint_resp="$(api_post "/api/playground/lint" "$lint_body")"
   if echo "$lint_resp" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("ok") is False else 1)'; then
