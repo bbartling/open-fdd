@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <strong>Arrow-native</strong> HVAC fault detection — columnar Python rules in the dashboard, optional YAML via <code>open_fdd.engine</code>, summaries via <code>open_fdd.reports</code>.
+  <strong>Arrow-native</strong> HVAC fault detection — PyArrow columnar rules in Rule Lab, optional graph ML sidecar (sklearn / PyG).
 </p>
 
 <p align="center">

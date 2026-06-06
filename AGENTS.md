@@ -1,69 +1,51 @@
 # Open-FDD agent policy
 
-This repository is **Arrow-native FDD first** (3.0+). The published PyPI wheel (`open-fdd`) provides `open_fdd.arrow_runtime` (PyArrow columnar rules) plus optional pandas YAML engine (`open_fdd.engine` via `[engine]` extra). The **operator stack** under `workspace/` uses **Arrow-native Python rules in Rule Lab**, not hot-reloaded YAML files.
+This repository is **Arrow-native FDD only** (3.0.1+). The published PyPI wheel (`open-fdd`) ships `open_fdd.arrow_runtime` (PyArrow columnar rules) and `open_fdd.playground` (Rule Lab lint/compile). **No YAML engine, no pandas in Rule Lab.** Optional graph ML (numpy/sklearn, later PyG) runs outside the sandbox — [issue #211](https://github.com/bbartling/open-fdd/issues/211).
 
 ## Default path
 
-- Rules-only library work: `pip install "open-fdd[engine]"` (or editable install) and use `open_fdd.engine.RuleRunner` on pandas DataFrames in notebooks.
-- Operator **Rule Lab** work: extend `workspace/api/` and `workspace/dashboard/` — Python rules only; no YAML hot-reload directory.
-- Edge **containers**: register addons in `supervisor/manifest.yaml` + `docker/images.yaml`; build with `scripts/docker_build.sh`; local stack `scripts/openfdd_stack.sh`. Future OS: `os/` (Buildroot). See `docs/architecture/edge_stack.md`.
+- Operator **Rule Lab**: extend `workspace/api/` and `workspace/dashboard/` — Python `apply_faults_arrow(table, cfg)` rules only.
+- Edge **containers**: register addons in `supervisor/manifest.yaml` + `docker/images.yaml`; build with `scripts/docker_build.sh`; local stack `scripts/openfdd_stack.sh`.
+- Offline rule lint: `pip install open-fdd` → `open_fdd.arrow_runtime.run_arrow_rule`.
 - Do **not** add new top-level services beyond the manifest `[build]` section or `supervisor/manifest.yaml` without updating compose + Ansible templates.
 
 ## Workspace writes
 
 - Put all generated application code under `workspace/` (see `openfdd.toml` `workspace_dir` and `scratch_dir`).
 - Durable portfolio context belongs in `workspace/MEMORY.md` and `workspace/memory/` (see [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md)).
-- When working `workspace/` code or automation diverges from skills or this file, append to `workspace/memory/architecture/working-divergence.md` (see `workspace/memory/architecture/README.md`).
 - Recurring automation belongs in `workspace/cron/jobs.json` (see [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md)).
-- Ordered mini work belongs in `workspace/BUILD_CHECKPOINTS.md`; scheduled wakes use `openfdd-wake` or cron service `wake`.
-- Do **not** modify `open_fdd/`, `packages/openfdd-engine/`, or `skills/` unless the operator explicitly asks for engine or skill maintenance.
-- Experiments stay in `workspace/scratch/`; promote reviewed helpers into the relevant `skills/<domain>/scripts/` folder via PR.
+- Do **not** modify `open_fdd/`, `packages/`, or `skills/` unless the operator explicitly asks for package or skill maintenance.
+- Experiments stay in `workspace/scratch/` or `experiments/`; promote reviewed helpers via PR.
 
 ## FDD execution
 
 - Author Python rules in **Rule Lab** (`apply_faults_arrow(table, cfg, context)` on PyArrow tables only); persist via `POST /api/rules/save` → **`workspace/data/rules_py/*.py`** + `rules_store.json`.
-- Humans and AI share the same `.py` files: browser save and `POST /openfdd-agent/tool` (`rules.save`) both call `RuleStore.upsert()`. Doc: [docs/operator-bridge/rule-lab.md](docs/operator-bridge/rule-lab.md).
-- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner`; local/edge app stack: `./scripts/openfdd_stack.sh up` or `./deploy.sh docker`. Legacy Pi path: `./scripts/run_local.sh start` (host systemd app units).
-- Use `open_fdd.engine.column_map_from_model` (and playground sandbox) on the bridge — not a separate YAML rule runner in generated apps.
-- For standalone **library** use outside the operator stack, `open_fdd.engine.RuleRunner` with YAML files remains available via `pip install "open-fdd[engine]"` (see [engine-pandas-fdd](skills/engine-pandas-fdd/SKILL.md)).
+- Run batches with `POST /api/rules/batch` or `python -m openfdd_bridge.fdd_runner`; local/edge stack: `./scripts/openfdd_stack.sh up`.
+- Column maps: `open_fdd.arrow_runtime.build_column_map_from_model_points` (BRICK model → historian columns).
+- **Retired:** `open_fdd.engine.RuleRunner`, YAML rule files, `evaluate(row, cfg)` in new rules.
 
 ## Security
 
 - Bind services to `127.0.0.1` by default; require explicit operator opt-in for LAN (`0.0.0.0`) or Caddy ingress.
 - Secrets via environment variables or local env files — never commit credentials.
-- **Edge SSH / site facts:** `infra/ansible/secrets/<host>.env.local` (gitignored) — see [infra/ansible/secrets/README.md](infra/ansible/secrets/README.md). Examples only on GitHub (`*.example`). `deploy.sh` auto-sources `acme.env.local` for `--limit acme_vm_bbartling`.
-- **Web login:** `workspace/auth.env.local` (integrator/operator) — not SSH; also gitignored.
-- **Commissioning CSVs:** `edge_backup/local/` — gitignored.
-- Public deploy guide: [docs/quick-start/](docs/quick-start/) (GHCR) and [docs/developer/](docs/developer/) (local build).
 - API reference: [docs/appendix/bridge_api.md](docs/appendix/bridge_api.md). Prefer `skills/` for agent automation detail.
 
 ## Edge deploy (maintainer lab)
 
-Before Ansible or SSH to a field VM, read gitignored secrets (local only): `infra/ansible/secrets/<host>.env.local`, `inventory.yml`, `host_vars/<host>.yml`. Tracked templates use `*.example` suffixes. Public docs: [docs/quick-start/](docs/quick-start/) — do not put site-specific hostnames in published pages.
-
-**Docker GHCR:** Images published at `ghcr.io/bbartling/openfdd-*`. Edge deploy: `OPENFDD_IMAGE_TAG=<tag> ./scripts/bootstrap_edge_ghcr.sh`. Maintainer publish: GitHub Actions **Publish Docker addons**. Doc: [docs/quick-start/docker.md](docs/quick-start/docker.md).
+**Docker GHCR:** Images at `ghcr.io/bbartling/openfdd-*`. Doc: [docs/quick-start/docker.md](docs/quick-start/docker.md).
 
 ## Skill routing
 
 | Operator intent | Start with |
 |-----------------|------------|
 | Python rules in Rule Lab / batch FDD | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
-| YAML rules on CSV/DataFrames (library only) | [skills/engine-pandas-fdd/SKILL.md](skills/engine-pandas-fdd/SKILL.md) |
 | Column map / manifest | [skills/column-map-and-manifests/SKILL.md](skills/column-map-and-manifests/SKILL.md) |
+| Graph ML (offline) | [skills/ml-lab-sklearn/SKILL.md](skills/ml-lab-sklearn/SKILL.md) · issue #211 |
 | HTTP bridge API | [skills/fastapi-bridge-api/SKILL.md](skills/fastapi-bridge-api/SKILL.md) |
 | React dashboard | [skills/react-operator-dashboard/SKILL.md](skills/react-operator-dashboard/SKILL.md) |
 | Local feather storage | [skills/feather-local-storage/SKILL.md](skills/feather-local-storage/SKILL.md) |
-| CSV / weather / BACnet ingest | `skills/driver-*-ingest/` |
-| BACnet single-stack / 47808 exclusivity | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
-| Rules CRUD + batch run | [skills/rules-crud-and-batch-run/SKILL.md](skills/rules-crud-and-batch-run/SKILL.md) |
-| Building check-engine light + fault codes | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
-| Plots / cleaning | [skills/timeseries-plots-and-cleaning/SKILL.md](skills/timeseries-plots-and-cleaning/SKILL.md) |
+| BACnet single-stack | [skills/bacnet-single-stack/SKILL.md](skills/bacnet-single-stack/SKILL.md) |
+| Building check-engine | [skills/building-check-engine/SKILL.md](skills/building-check-engine/SKILL.md) |
 | BRICK TTL model | [skills/brick-ttl-data-model/SKILL.md](skills/brick-ttl-data-model/SKILL.md) |
-| MCP doc retrieval | [skills/mcp-doc-retrieval/SKILL.md](skills/mcp-doc-retrieval/SKILL.md) |
-| Codex on bridge host | [skills/codex-agent-on-bridge/SKILL.md](skills/codex-agent-on-bridge/SKILL.md) |
-| Workspace memory | [skills/workspace-memory/SKILL.md](skills/workspace-memory/SKILL.md) |
-| Workspace cron | [skills/workspace-cron/SKILL.md](skills/workspace-cron/SKILL.md) |
-| Local multi-process dev | [skills/local-dev-orchestration/SKILL.md](skills/local-dev-orchestration/SKILL.md) |
-| Docker edge / Caddy / Ansible | `docs/quick-start/`, `skills/caddy-*`, `skills/ansible-*` |
 
-Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables, env catalogs, and legacy source maps.
+Load each selected skill's `SKILL.md` and follow linked `references/REFERENCE.md` for route tables and env catalogs.

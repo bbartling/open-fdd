@@ -33,4 +33,4 @@ def test_repl_engine_check_reports_import(repo_root, tmp_path, monkeypatch, caps
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
     assert run_repl(manifest, dry_run=True) == 0
     out = capsys.readouterr().out
-    assert "open_fdd.engine import OK" in out
+    assert "open_fdd.arrow_runtime import OK" in out

@@ -39,4 +39,4 @@ nav_order: 1
 
 ## Optional PyPI-only path
 
-`pip install "open-fdd[engine]"` runs the YAML/pandas engine; `pip install open-fdd` covers the playground sandbox **without** the Operator Bridge UI. Use for notebooks, CSV backfills, or cloud lambdas. See [Appendix — Python package](../appendix/python-package).
+`pip install open-fdd` ships `arrow_runtime` + playground lint helpers **without** the Operator Bridge UI. Use for offline Arrow rule tests or CI smoke. Graph ML experiments use optional `[ml]` (numpy/sklearn) per [issue #211](https://github.com/bbartling/open-fdd/issues/211). See [Appendix — Python package](../appendix/python-package).

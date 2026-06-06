@@ -111,11 +111,11 @@ def run_repl(manifest: Manifest, *, dry_run: bool = False) -> int:
             continue
         if line == "/engine-check":
             try:
-                import open_fdd.engine  # noqa: F401
+                from open_fdd.arrow_runtime import run_arrow_rule  # noqa: F401
 
-                print("open_fdd.engine import OK")
+                print("open_fdd.arrow_runtime import OK")
             except ImportError as exc:
-                print(f"engine import failed: {exc}")
+                print(f"arrow_runtime import failed: {exc}")
             continue
         if line == "/open-workspace":
             print(manifest.workspace_dir)

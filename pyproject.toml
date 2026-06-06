@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "3.0.0"
+version = "3.0.1"
 description = "Open-FDD: Arrow-native rule-based HVAC fault detection on a columnar execution engine."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,11 +35,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# YAML vectorized engine still uses pandas.
-engine = ["pandas"]
-legacy = ["pandas"]
-reports = [
-    "matplotlib",
+# Future graph ML (Layer B/C) — not used in Rule Lab sandbox.
+ml = [
+    "numpy>=1.26.0",
+    "scikit-learn>=1.4.0",
 ]
 test = [
     "pytest>=7.0",
@@ -50,7 +49,6 @@ dev = [
     "pytest-timeout>=2.3.0",
     "pyyaml",
     "pydantic>=2.4,<3",
-    "pandas",
     "black[jupyter]>=25.11.0",
     "pre-commit",
 ]
@@ -67,9 +65,7 @@ Repository = "https://github.com/bbartling/open-fdd"
 [tool.setuptools.packages.find]
 include = [
     "open_fdd",
-    "open_fdd.engine*",
     "open_fdd.schema*",
-    "open_fdd.reports*",
     "open_fdd.playground*",
     "open_fdd.arrow_runtime*",
 ]

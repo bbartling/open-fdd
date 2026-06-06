@@ -1,5 +1,5 @@
-# Single PyPI distribution: open-fdd (open_fdd.engine + open_fdd.playground + schema/reports).
-# Tag open-fdd-vX.Y.Z to publish. Do not use the retired openfdd-engine workflow.
+# PyPI distribution: open-fdd (arrow_runtime + playground). Arrow-native 3.0.1+.
+# Tag open-fdd-vX.Y.Z to publish.
 
 name: Publish open-fdd
 
@@ -46,28 +46,29 @@ jobs:
           python -m build
           twine check dist/*
 
-      - name: Verify wheel (engine + playground)
+      - name: Verify wheel (Arrow runtime + playground)
         run: |
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
           /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
           /tmp/ofdd-wheel-smoke/bin/python -c "
-          from open_fdd.engine import RuleRunner
           import open_fdd
+          import pyarrow as pa
+          from open_fdd.arrow_runtime import run_arrow_rule, build_column_map_from_model_points
+          from open_fdd.playground.sandbox import lint_python
           assert open_fdd.__version__
-          from open_fdd.playground import compile_evaluate, sweep_rule, cfg_threshold
-          from open_fdd.playground.cookbook import window_rows_1h
-          assert cfg_threshold({}, 'bounds_low') == 65.0
-          code = '''from open_fdd.playground.cookbook import cfg_threshold, temp_unit_symbol
-          def evaluate(row, cfg, prev_row=None, rows=None):
-              v = row.get(\"temp_rolling_avg\") or row.get(\"temp\")
-              if v is None: return False
-              return v > cfg_threshold(cfg, \"bounds_high\")
+          code = '''import pyarrow.compute as pc
+          def apply_faults_arrow(table, cfg, context=None):
+              return pc.greater(table[\"SAT\"], float(cfg[\"high\"]))
           '''
-          rows = [{\"row\": 0, \"ts_ms\": 1, \"ts\": \"t\", \"temp\": 90, \"temp_rolling_avg\": 90}]
-          flags, _ = sweep_rule(code, {\"bounds_high\": 80}, rows, capture_print=False)
-          assert flags[0]
+          lint = lint_python(code)
+          assert lint['ok'], lint
+          table = pa.table({'SAT': [70.0, 90.0, 88.0]})
+          out = run_arrow_rule(code, table, {'high': 85})
+          assert not out.errors and out.true_count >= 1
+          cmap = build_column_map_from_model_points({'points': [{'site_id': 'demo', 'brick_type': 'SAT', 'external_id': 'sat-1'}]}, 'demo')
+          assert cmap['SAT'] == 'sat-1'
           "
           env -u PYTHONPATH OFDD_WHEEL_SMOKE=1 /tmp/ofdd-wheel-smoke/bin/python scripts/validate_acme_rules_pypi.py
 
@@ -75,6 +76,7 @@ jobs:
         run: |
           python -m pip install pytest
           python -m pip install -e .
+          python -m pytest open_fdd/tests/arrow_runtime -q
           python -m pytest open_fdd/tests/playground -q
 
       - name: Publish to PyPI

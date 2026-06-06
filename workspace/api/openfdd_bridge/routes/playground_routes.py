@@ -17,7 +17,7 @@ from ..site_defaults import ensure_default_site
 from ..timeseries_api import resolve_plot_columns
 from ..ttl_service import TtlService
 from open_fdd.arrow_runtime.rules import detect_rule_backend, migrate_legacy_threshold_hint
-from open_fdd.engine.column_map_from_model import build_column_map_from_model_points
+from open_fdd.arrow_runtime.column_map_from_model import build_column_map_from_model_points
 from open_fdd.playground.arrow_templates import ARROW_TEMPLATES, DEFAULT_ARROW_RULE, LEGACY_MIGRATION_MESSAGE
 
 _log = logging.getLogger(__name__)

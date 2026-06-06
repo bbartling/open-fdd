@@ -1,4 +1,4 @@
-# open-fdd: engine tests (open_fdd/tests). PyPI release is the open_fdd package only.
+# open-fdd: Arrow runtime + playground tests. PyPI release is the open_fdd package only.
 
 name: CI
 
@@ -37,16 +37,16 @@ jobs:
       - name: Install package (dev deps for tests)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,engine]"
+          pip install -e ".[dev]"
 
       - name: Build combined docs text bundle
         run: python scripts/build_docs_pdf.py --no-pdf
 
-      - name: Run engine tests (pytest)
+      - name: Run package tests (pytest)
         run: |
-          python -m pytest open_fdd/tests/engine -q
           python -m pytest open_fdd/tests/arrow_runtime -q
           python -m pytest open_fdd/tests/playground -q
+          # Separate invocations — both dirs have test_cookbook.py
 
       - name: Arrow benchmark smoke
         run: |
@@ -54,19 +54,19 @@ jobs:
           python benchmarks/bench_arrow_native.py --rows 10000 --repeats 1 --output .bench/arrow_native.json
           python benchmarks/bench_arrow_end_to_end.py --sites 1 --rows-per-site 10000 --repeats 1 --output .bench/arrow_end_to_end.json
 
-      - name: Build open-fdd sdist/wheel (engine only; dry run)
+      - name: Build open-fdd sdist/wheel (dry run)
         run: |
           python -m pip install build==1.2.2 twine==6.1.0
           python -m build
           twine check dist/*
 
-      - name: Verify wheel imports engine with extras
+      - name: Verify wheel imports Arrow runtime
         run: |
           python -m venv /tmp/ofdd-wheel-smoke
           wheel="$(ls -1t dist/*.whl | head -n 1)"
           test -n "$wheel"
-          /tmp/ofdd-wheel-smoke/bin/pip install "${wheel}[engine]"
-          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.engine import RuleRunner; from open_fdd.playground import compile_evaluate; from open_fdd.arrow_runtime import run_arrow_rule; import open_fdd; assert open_fdd.__version__"
+          /tmp/ofdd-wheel-smoke/bin/pip install "$wheel"
+          /tmp/ofdd-wheel-smoke/bin/python -c "from open_fdd.arrow_runtime import run_arrow_rule; import open_fdd; assert open_fdd.__version__"
 
   agent-shell:
     runs-on: ubuntu-latest
@@ -138,7 +138,7 @@ jobs:
       - name: Install bridge dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,engine]"
+          pip install -e ".[dev]"
           pip install -r workspace/api/requirements.txt
           pip install -r bacnet_toolshed/requirements.txt
           pip install httpx

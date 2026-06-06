@@ -12,7 +12,10 @@ Practical patterns for **Arrow-native Rule Lab** (`apply_faults_arrow`) on feath
 | [Arrow recipes](arrow-recipes) | **Default** — thresholds, flatline, spread, OOB, fan/schedule faults |
 | [Python recipes](python-recipes) | Same Arrow patterns with shared `open_fdd.arrow_runtime.cookbook` imports |
 | [Windowing & debugging](windowing-debugging) | Rolling windows, batch runtime, Rule Lab console |
-| [YAML recipes](yaml-recipes) | Optional offline `open-fdd[engine]` workflows (no Operator Bridge) |
+
+All expression rules are **PyArrow columnar** — no YAML rule files, no pandas DataFrames in Rule Lab.
+
+Future graph ML (sklearn / PyG) runs in a separate training service — see [GitHub issue #211](https://github.com/bbartling/open-fdd/issues/211).
 
 ```python
 import pyarrow.compute as pc

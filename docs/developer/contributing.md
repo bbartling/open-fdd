@@ -26,7 +26,7 @@ nav_order: 4
 |------|----------|
 | `workspace/api/` | Operator Bridge (FastAPI) |
 | `workspace/dashboard/` | React SPA |
-| `open_fdd/` | PyPI package (`engine`, `playground`, `reports`) |
+| `open_fdd/` | PyPI package (`arrow_runtime`, `playground`) |
 | `docker/` | Compose files and image contexts |
 | `infra/ansible/` | Edge deploy playbooks |
 | `docs/` | This site (Jekyll + Just the Docs) |
