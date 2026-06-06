@@ -175,7 +175,9 @@ def get_rule_source(rule_id: str, _user: dict = Depends(require_user)) -> dict:
     if not rule:
         raise HTTPException(status_code=404, detail=f"rule not found: {rule_id}")
     path = str(rule.get("source_path") or "")
-    code = read_source(path) if path else str(rule.get("code") or "")
+    code = str(rule.get("code") or "")
+    if not code.strip() and path:
+        code = read_source(path)
     return {"ok": True, "rule_id": rule_id, "path": path, "code": code}
 
 

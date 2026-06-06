@@ -730,6 +730,160 @@ def check_ollama_hello_chat(base: str, token: str) -> dict[str, Any]:
     return out
 
 
+def check_stack_revision(
+    base: str,
+    token: str,
+    *,
+    expected_image_tag: str = "",
+) -> dict[str, Any]:
+    """Bridge/compose image tag from /health/stack revisions."""
+    out: dict[str, Any] = {"errors": [], "warnings": []}
+    headers = auth_headers(token)
+    url = f"{base.rstrip('/')}/health/stack"
+    try:
+        status, body, _ = fetch(url, headers=headers, timeout=30.0)
+    except RuntimeError as exc:
+        out["warnings"].append(f"/health/stack revisions unreachable: {exc}")
+        return out
+    out["stack_revision_status"] = status
+    if status != 200:
+        out["warnings"].append(f"/health/stack HTTP {status} (image tag probe skipped)")
+        return out
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        out["warnings"].append("/health/stack not JSON")
+        return out
+    rev = payload.get("container_revisions")
+    tag = git_sha = ""
+    built_at = None
+    if isinstance(rev, dict):
+        tag = str(rev.get("image_tag") or "").strip()
+        git_sha = str(rev.get("git_sha") or "").strip()
+        built_at = rev.get("built_at")
+        if not tag:
+            for svc in rev.get("services") or []:
+                if isinstance(svc, dict) and svc.get("id") == "bridge":
+                    tag = str(svc.get("image_tag") or "").strip()
+                    git_sha = git_sha or str(svc.get("git_sha") or "").strip()
+                    built_at = built_at or svc.get("built_at")
+                    break
+    if not tag:
+        tag = str(payload.get("image_tag") or "").strip()
+        git_sha = git_sha or str(payload.get("git_sha") or "").strip()
+        built_at = built_at or payload.get("built_at")
+    out["image_tag"] = tag
+    out["git_sha"] = git_sha
+    out["built_at"] = built_at
+    expected = str(expected_image_tag or os.environ.get("OPENFDD_EXPECTED_IMAGE_TAG", "")).strip()
+    if expected and tag and tag != expected:
+        out["warnings"].append(f"image_tag={tag!r} (inventory expected {expected!r})")
+    elif not tag or tag == "local":
+        out["warnings"].append(f"bridge image_tag={tag!r} — confirm GHCR pull on edge")
+    return out
+
+
+def check_fdd_operational(
+    base: str,
+    token: str,
+    *,
+    site_id: str = "demo",
+    min_saved_rules: int = 1,
+    min_bound_points: int = 0,
+) -> dict[str, Any]:
+    """FDD rules, assignments, building insight, and commissioning export (HTTP-only)."""
+    out: dict[str, Any] = {"errors": [], "warnings": [], "site_id": site_id}
+    headers = auth_headers(token)
+    root = base.rstrip("/")
+
+    saved_url = f"{root}/api/rules/saved"
+    status, body, _ = fetch(saved_url, headers=headers, timeout=45.0)
+    out["rules_saved_status"] = status
+    if status != 200:
+        out["errors"].append(f"/api/rules/saved HTTP {status}")
+    else:
+        try:
+            rules = json.loads(body).get("rules") or []
+            enabled = [r for r in rules if isinstance(r, dict) and r.get("enabled") is not False]
+            bound = 0
+            for r in enabled:
+                b = r.get("bindings") if isinstance(r.get("bindings"), dict) else {}
+                bound += len(b.get("point_ids") or [])
+            out["rules_saved_count"] = len(rules)
+            out["rules_enabled_count"] = len(enabled)
+            out["rules_bound_point_refs"] = bound
+            if len(enabled) < min_saved_rules:
+                out["errors"].append(
+                    f"only {len(enabled)} enabled saved rule(s) (need >={min_saved_rules})"
+                )
+            if min_bound_points > 0 and bound < min_bound_points:
+                out["warnings"].append(
+                    f"FDD bindings cover {bound} point ref(s) (expected >={min_bound_points} on Acme)"
+                )
+        except json.JSONDecodeError:
+            out["errors"].append("/api/rules/saved not JSON")
+
+    assign_qs = urllib.parse.urlencode({"site_id": site_id})
+    assign_url = f"{root}/api/rules/assignments?{assign_qs}"
+    status, body, _ = fetch(assign_url, headers=headers, timeout=60.0)
+    out["rules_assignments_status"] = status
+    if status != 200:
+        out["warnings"].append(f"/api/rules/assignments HTTP {status}")
+    else:
+        try:
+            payload = json.loads(body)
+            out["assignment_point_rows"] = len(payload.get("points") or [])
+            out["assignment_device_count"] = len(payload.get("devices") or [])
+        except json.JSONDecodeError:
+            out["warnings"].append("/api/rules/assignments not JSON")
+
+    insight_url = f"{root}/openfdd-agent/building-insight"
+    try:
+        status, body, _ = fetch(insight_url, headers=headers, timeout=45.0)
+    except RuntimeError as exc:
+        out["warnings"].append(f"building-insight unreachable: {exc}")
+        status = 0
+    out["building_insight_status"] = status
+    if status == 200:
+        try:
+            ins = json.loads(body)
+            out["building_insight_ok"] = ins.get("ok")
+            out["zone_sentence"] = str(ins.get("zone_sentence") or "")[:200]
+            out["insight_source"] = ins.get("source")
+            if not (ins.get("sentence") or ins.get("zone_sentence")):
+                out["warnings"].append("building-insight empty briefing (Ollama may be slow/off)")
+        except json.JSONDecodeError:
+            out["warnings"].append("building-insight not JSON")
+    elif status:
+        out["warnings"].append(f"/openfdd-agent/building-insight HTTP {status}")
+
+    comm_url = f"{root}/api/model/commissioning-export"
+    status, body, _ = fetch(comm_url, headers=headers, timeout=60.0)
+    out["commissioning_export_status"] = status
+    if status == 404:
+        out["warnings"].append(
+            "/api/model/commissioning-export HTTP 404 — edge image predates Model & assignments bundle "
+            "(upgrade bridge container)"
+        )
+    elif status != 200:
+        out["warnings"].append(f"/api/model/commissioning-export HTTP {status}")
+    else:
+        try:
+            bundle = json.loads(body)
+            out["commissioning_point_count"] = len(bundle.get("points") or [])
+            out["commissioning_fdd_rules_count"] = len(bundle.get("fdd_rules") or [])
+            tagged = sum(
+                1
+                for p in (bundle.get("points") or [])
+                if isinstance(p, dict) and p.get("fdd_rule_ids")
+            )
+            out["commissioning_points_with_rules"] = tagged
+        except json.JSONDecodeError:
+            out["warnings"].append("commissioning-export not JSON")
+
+    return out
+
+
 def check_agent_chat(
     base: str,
     token: str,
@@ -771,7 +925,7 @@ def check_agent_chat(
 def main() -> int:
     if len(sys.argv) < 2:
         print(
-            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama] [--site-id SITE]\n"
+            "usage: http_probes.py check <base_url> [user pass] [--require-mcp] [--require-ollama] [--full] [--site-id SITE]\n"
             "       http_probes.py check-public <base_url>",
             file=sys.stderr,
         )
@@ -788,6 +942,7 @@ def main() -> int:
         args = sys.argv[2:]
         require_mcp = "--require-mcp" in args
         require_ollama = "--require-ollama" in args
+        full_probe = "--full" in args
         site_id = os.environ.get("OFDD_PROBE_SITE_ID", "demo")
         filtered: list[str] = []
         i = 0
@@ -796,7 +951,10 @@ def main() -> int:
                 site_id = args[i + 1]
                 i += 2
                 continue
-            if not args[i].startswith("--require-"):
+            if args[i] in {"--require-mcp", "--require-ollama", "--full"}:
+                i += 1
+                continue
+            if not args[i].startswith("--"):
                 filtered.append(args[i])
             i += 1
         args = filtered
@@ -874,7 +1032,17 @@ def main() -> int:
                 result["integrator_ui"] = ui
                 result["errors"].extend(ui.get("errors", []))
                 result["warnings"].extend(ui.get("warnings", []))
-                bacnet = _run_probe("bacnet", lambda: check_bacnet_driver(base, login["token"]))
+                min_bacnet_devs = int(os.environ.get("OPENFDD_HEALTH_MIN_BACNET_DEVICES", "1") or "1")
+                min_bacnet_pts = int(os.environ.get("OPENFDD_HEALTH_MIN_BACNET_POINTS", "1") or "1")
+                bacnet = _run_probe(
+                    "bacnet",
+                    lambda: check_bacnet_driver(
+                        base,
+                        login["token"],
+                        min_devices=min_bacnet_devs,
+                        min_enabled_points=min_bacnet_pts,
+                    ),
+                )
                 result["bacnet"] = bacnet
                 result["errors"].extend(bacnet.get("errors", []))
                 result["warnings"].extend(bacnet.get("warnings", []))
@@ -887,6 +1055,33 @@ def main() -> int:
                 result["building_dashboard"] = dash
                 result["errors"].extend(dash.get("errors", []))
                 result["warnings"].extend(dash.get("warnings", []))
+                if full_probe:
+                    pub = _run_probe("public_check_engine", lambda: check_public_check_engine(base))
+                    result["public_check_engine"] = pub
+                    result["errors"].extend(pub.get("errors", []))
+                    result["warnings"].extend(pub.get("warnings", []))
+                    rev = _run_probe(
+                        "stack_revision",
+                        lambda: check_stack_revision(base, login["token"]),
+                    )
+                    result["stack_revision"] = rev
+                    result["errors"].extend(rev.get("errors", []))
+                    result["warnings"].extend(rev.get("warnings", []))
+                    min_rules = int(os.environ.get("OPENFDD_POST_CHECK_MIN_RULES", "1") or "1")
+                    min_bound = int(os.environ.get("OPENFDD_POST_CHECK_MIN_BOUND_POINTS", "0") or "0")
+                    fdd = _run_probe(
+                        "fdd_operational",
+                        lambda: check_fdd_operational(
+                            base,
+                            login["token"],
+                            site_id=probe_site,
+                            min_saved_rules=min_rules,
+                            min_bound_points=min_bound,
+                        ),
+                    )
+                    result["fdd_operational"] = fdd
+                    result["errors"].extend(fdd.get("errors", []))
+                    result["warnings"].extend(fdd.get("warnings", []))
         else:
             result = check_entry(base, require_mcp=require_mcp, require_ollama=require_ollama)
         print(json.dumps(result, indent=2))

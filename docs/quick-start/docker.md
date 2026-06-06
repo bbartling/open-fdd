@@ -78,6 +78,8 @@ cd ~/open-fdd/docker && docker compose up -d
 ./scripts/openfdd_stack.sh down
 ```
 
-## Next
+## After first deploy
 
-→ [First login and health check](health-check)
+→ [First login and health check](health-check)  
+→ [Updating the stack](updating) — Ansible from control machine  
+→ [Live site update (SSH)](../ops/live_site_update) — tag bump on minimal `~/open-fdd/` folder

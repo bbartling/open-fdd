@@ -61,3 +61,26 @@ def test_main_continues_bacnet_when_agent_context_times_out():
         rc = http_probes.main()
     assert rc == 1
     mock_bacnet.assert_called()
+
+
+def test_check_stack_revision_reads_container_revisions():
+    stack_body = json.dumps(
+        {
+            "ok": True,
+            "container_revisions": {
+                "image_tag": "2026.06.06-edge",
+                "git_sha": "abc123def456",
+                "built_at": "2026-06-06T12:00:00Z",
+            },
+        }
+    )
+
+    def fake_fetch(url, *, timeout=20.0, headers=None):
+        assert "/health/stack" in url
+        return 200, stack_body, {}
+
+    with patch.object(http_probes, "fetch", side_effect=fake_fetch):
+        out = http_probes.check_stack_revision("http://edge", "token", expected_image_tag="2026.06.06-edge")
+    assert out["image_tag"] == "2026.06.06-edge"
+    assert out["git_sha"] == "abc123def456"
+    assert not out["warnings"]

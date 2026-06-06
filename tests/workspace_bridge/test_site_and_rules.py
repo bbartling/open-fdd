@@ -42,6 +42,21 @@ def test_rule_source_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     assert "evaluate" in read_source(path)
 
 
+def test_read_source_resolves_stale_host_absolute_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Docker bridge may see host paths in rules_store; load by basename under rules_py/."""
+    monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path))
+    for name in list(sys.modules):
+        if name == "openfdd_bridge" or name.startswith("openfdd_bridge."):
+            del sys.modules[name]
+    from openfdd_bridge.rule_source import read_source, write_source  # noqa: E402
+
+    path = write_source(rule_id="abc", name="SAT High", code="def evaluate(row, cfg, **kw):\n    return True\n")
+    stale = f"/home/ben/open-fdd/workspace/data/rules_py/{Path(path).name}"
+    assert Path(path).is_file()
+    assert not Path(stale).is_file()
+    assert "return True" in read_source(stale)
+
+
 def test_write_source_rejects_path_outside_rules_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OFDD_DESKTOP_DATA_DIR", str(tmp_path))
     for name in list(sys.modules):
